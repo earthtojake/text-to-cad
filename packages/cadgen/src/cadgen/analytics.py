@@ -35,10 +35,9 @@ It is sent by default once the person has been told, and never after their no. S
    ``settings.json`` in the state directory) and shared by both apps: either app's menu,
    ``cadgen analytics on|off``, or the agent's ``cad_analytics`` (off only). A yes sends all of
    the above; a no, nothing.
-3. Otherwise the default: all of the above but ``file`` codes, once the person has been told --
-   one line, said once by the first ``cadgen`` command that may (``notify``) -- and only from a
-   process started after that (``TOLD_SECONDS``: never one the telling command started), so
-   whoever objects can turn it off before anything is sent.
+3. Otherwise the default: all of the above but ``file`` codes, from the moment the person has
+   been told -- one line, said once by the first ``cadgen`` command that may (``notify``). What a
+   running app noted before that is never sent, and turning it off deletes what was.
    Nobody is told, so nothing is sent by default, in CI, from a development install, or where
    the telling could not be kept (it would be said again on every command).
 
@@ -107,13 +106,10 @@ DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
 NOTICE = 1
-NOTICE_TEXT = ("cadgen: from its next start, CAD shares anonymous usage data, never your files or prompts. "
+NOTICE_TEXT = ("cadgen: CAD now shares anonymous usage data, never your files or prompts. "
                f"Turn off: cadgen analytics off · {PRIVACY_URL}")
 # ``0``: what this command says reaches nobody -- a CAD app's own launch of one, its output thrown away.
 NOTICE_ENV = "CADGEN_ANALYTICS_NOTICE"
-# The default holds only in a process started at least this long after the person was told: never in one
-# the telling command started itself (a skill's first ``cadgen viewer --detach``), so there is time to object.
-TOLD_SECONDS = 60
 FLUSH_SECONDS = 60
 # How long a send waits for the receiver. Sends run in the background, so this delays nothing; a
 # shorter wait would give up on a batch a cold receiver was still storing, and send it twice.
@@ -205,20 +201,24 @@ def _told(kept: dict[str, Any]) -> float | None:
     return None
 
 
-def _decide(kept: dict[str, Any], forced: bool | None, since: float | None = None) -> tuple[bool, str | None]:
-    """Whether to share, and why (``None``: nothing decided and nobody told, so nothing is sent).
-    ``since``: when the asking process started. The default holds only in one started after the
-    person was told (``TOLD_SECONDS``), so whoever objects can turn it off before anything is sent."""
+def _decide(kept: dict[str, Any], forced: bool | None) -> tuple[bool, str | None]:
+    """Whether to share, and why (``None``: nothing decided and nobody told, so nothing is sent)."""
     if forced is not None:
         return forced, "environment"
     if kept.get("choice") == "off":
         return False, "choice"
     if kept.get("choice") == "on" and _disclosure(kept) >= DISCLOSURE:
         return True, "choice"
-    told = _told(kept)
-    if told is not None and (since is None or told + TOLD_SECONDS <= since):
+    if _told(kept) is not None:
         return True, "default"
     return False, None
+
+
+def _answer(kept: dict[str, Any]) -> tuple[Any, Any]:
+    """Which answer is in force: when the person chose, and when they were told. What a process noted
+    under one answer is never sent under another (``Recorder.flush``): not before a yes given in the
+    other app, and not from before the person was told."""
+    return kept.get("decidedAt"), kept.get("notifiedAt")
 
 
 def _files_too(found: dict[str, Any]) -> bool:
@@ -269,25 +269,25 @@ def _can_keep(path: Path) -> bool:
     return True
 
 
-def status(*, path: Path | None = None, since: float | None = None) -> dict[str, Any]:
+def status(*, path: Path | None = None) -> dict[str, Any]:
     """``{sharing, reason, id}``: whether counts are sent, why, and under which install id.
 
     ``reason`` is ``environment``, ``choice``, ``default`` (the person was told, chose nothing, and
-    counts go without file codes), ``untold`` (nothing is sent: nobody has been told yet, or not before
-    ``since``, the asking process's start) or ``unavailable`` (nothing is sent, and nothing said: no
-    answer could be kept). Sharing makes the install's id and file salt where they are missing.
+    counts go without file codes), ``untold`` (nothing is sent: nobody has been told yet) or
+    ``unavailable`` (nothing is sent, and nothing said: no answer could be kept). Sharing makes the
+    install's id and file salt where they are missing.
     """
     path = path or settings_path()
     forced = _environment()
     kept = _read(path)
     if kept is None:  # there, but unreadable now: neither sent under nor said
         return {"sharing": False, "reason": "environment", "id": None} if forced is False else dict(UNAVAILABLE)
-    sharing, reason = _decide(kept, forced, since)
+    sharing, reason = _decide(kept, forced)
     if reason is None:  # a telling that could not be kept would be said again on every command
         return {"sharing": False, "reason": "untold" if _can_keep(path) else "unavailable", "id": None}
     if sharing and not _identified(kept):
         def identify(section: dict[str, Any]) -> dict[str, Any]:
-            if not _decide(section, forced, since)[0] or _identified(section):  # changed meanwhile: as it is now
+            if not _decide(section, forced)[0] or _identified(section):  # changed meanwhile: as it is now
                 return section
             install_id = section["id"] if isinstance(section.get("id"), str) else str(uuid.uuid4())
             return {**section, "id": install_id, "salt": section["salt"] if _is_salt(section.get("salt")) else _new_salt()}
@@ -295,7 +295,7 @@ def status(*, path: Path | None = None, since: float | None = None) -> dict[str,
         kept = _update(path, identify)
         if kept is None:
             return dict(UNAVAILABLE)
-        sharing, reason = _decide(kept, forced, since)
+        sharing, reason = _decide(kept, forced)
         if sharing and not _identified(kept):
             return dict(UNAVAILABLE)
     return {"sharing": sharing, "reason": reason, "id": kept["id"] if sharing else None}
@@ -359,8 +359,8 @@ def forget_pending(*, path: Path | None = None, forget: Callable[[str], bool] | 
 
 def notify(stream: Any = None, *, path: Path | None = None) -> bool:
     """Tell the person, once, what is sent by default: ``NOTICE_TEXT``, a line on ``stream`` (stderr)
-    from the first ``cadgen`` command that may say it, kept as said (``notifiedAt``) so that the CAD
-    apps send it from their next start. Nothing is said where nothing would be sent by default: where
+    from the first ``cadgen`` command that may say it, kept as said (``notifiedAt``): the CAD apps send
+    it from then on, never what they noted before. Nothing is said where nothing would be sent by default: where
     the environment or the person decided, in CI, from a development install, from a launch whose
     output reaches nobody (``NOTICE_ENV``), or where it could not be kept as said -- it would be said
     on every command. ``True`` when it was said. Never raises: the command it rides on comes first."""
@@ -468,7 +468,6 @@ class Recorder:
         self._sent: set[str] = set()  # "day:code" of files sent today: each goes once a day
         self._basis: Any = _UNREAD  # the answer in force when what is noted now began to be noted
         self._off = False  # a no this process could not keep: nothing more is sent from it
-        self._began = time.time()  # the default holds only if the person was told before this
         self._timer: threading.Event | None = None
         self._describe()
 
@@ -482,8 +481,9 @@ class Recorder:
 
     @_guarded(lambda: None)
     def _decision(self) -> Any:
-        """When the answer in force now was given: which answer it is (``None``: none, or none readable)."""
-        return (_read(self.path or settings_path()) or {}).get("decidedAt")
+        """When the answer in force now was given, and when the person was told what is sent by default:
+        which answer it is (``(None, None)``: none, or none readable)."""
+        return _answer(_read(self.path or settings_path()) or {})
 
     def _first_use(self) -> Any:
         """The answer the first batch began under, read as its first use is noted -- not at start, where
@@ -498,7 +498,7 @@ class Recorder:
 
     @_guarded(lambda: dict(UNAVAILABLE))
     def status(self) -> dict[str, Any]:
-        return dict(UNAVAILABLE) if self._off else status(path=self.path, since=self._began)
+        return dict(UNAVAILABLE) if self._off else status(path=self.path)
 
     @_guarded(lambda: {"saved": False, "sharing": None})
     def choose(self, share: bool, *, by: str) -> dict[str, Any]:
@@ -572,9 +572,9 @@ class Recorder:
         kept = (_read(settings) or {}) if found["sharing"] else {}
         # File codes only with a yes; the default sends counts alone, and drops the files it noted.
         files_too = _files_too(found)
-        # The salt read with the id it belongs to; and when the person said yes.
+        # The salt read with the id it belongs to; and which answer is in force (``_answer``).
         salt = bytes.fromhex(kept["salt"]) if kept.get("id") == found["id"] and _is_salt(kept.get("salt")) else None
-        decided = kept.get("decidedAt")
+        decided = _answer(kept)
         day = _day()
         with self._lock:
             counts, views, files, basis = self._counts, self._views, self._files, self._basis
@@ -585,8 +585,9 @@ class Recorder:
             if not files_too:
                 files = {}
             # Noted under an earlier answer -- before a yes given in the other app (this one's own clears what
-            # it noted) -- or under one never read: never sent. Which answer, not whether it came later:
-            # Windows' clock moves in 16 ms steps, so a yes and the batch it lands in can share a time.
+            # it noted), before the person was told, or under one never read: never sent. Which answer, not
+            # whether it came later: Windows' clock moves in 16 ms steps, so a yes and the batch it lands in
+            # can share a time.
             if decided != basis:
                 return False
             self._sent = {entry for entry in self._sent if entry.startswith(f"{day}:")}

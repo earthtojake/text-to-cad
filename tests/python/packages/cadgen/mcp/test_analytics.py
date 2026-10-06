@@ -17,8 +17,8 @@ from pathlib import Path
 from unittest import mock
 
 from cadgen import cli
-from cadgen.analytics import (CLOSE_SECONDS, FILES_PER_BATCH, NOTICE_ENV, NOTICE_TEXT, PRIVACY_URL, TOLD_SECONDS, Recorder, _post,
-                              choose, file_code, file_salt, forget_pending, notify, status)
+from cadgen.analytics import (CLOSE_SECONDS, FILES_PER_BATCH, NOTICE_ENV, NOTICE_TEXT, PRIVACY_URL, Recorder, _post, choose,
+                              file_code, file_salt, forget_pending, notify, status)
 from cadgen.cli import analytics as analytics_cli
 from cadgen.mcp.protocol import RequestContext, RpcError
 from cadgen.mcp.server import Server
@@ -344,27 +344,25 @@ class ServerCountsTest(_Tmp):
         self.assertTrue(recorder.flush())
         self.assertEqual(len(sent[-1]["events"]), 1)
 
-    def test_once_told_counts_go_from_the_next_start_and_file_codes_only_with_a_yes(self) -> None:
-        running, before = self.serve("claude-github")
-        self.call(running, "cad_show", {"path": "a.step"})
-        self.assertEqual(self.consent(running), {"ask": False, "sharing": False, "reason": "untold", "policy": PRIVACY_URL})
-        began = running.analytics._began
-        with mock.patch.dict("os.environ", TOLD), mock.patch("cadgen.analytics.time.time", return_value=began + 1):
+    def test_counts_go_from_the_notice_on_without_a_restart_and_file_codes_only_with_a_yes(self) -> None:
+        server, sent = self.serve("claude-github")
+        self.call(server, "cad_show", {"path": "a.step"})
+        self.assertEqual(self.consent(server), {"ask": False, "sharing": False, "reason": "untold", "policy": PRIVACY_URL})
+        self.assertFalse(server.analytics.flush())
+        self.call(server, "cad_view")  # noted before anyone was told
+        with mock.patch.dict("os.environ", TOLD):
             self.assertTrue(notify(io.StringIO(), path=self.path))  # a skill's first `cadgen` command
-        # A CAD app that was running when the person was told sends nothing: whoever objects turns it off first.
-        self.assertEqual(self.consent(running)["reason"], "untold")
-        self.assertFalse(running.analytics.flush())
-        self.assertEqual(before, [])
-        # The next start sends counts by default, and never a file code.
-        with mock.patch("cadgen.analytics.time.time", return_value=began + 1 + TOLD_SECONDS):
-            server, sent = self.serve("claude-github")
+        # The running CAD app sends from the notice on, with no restart -- and never what it noted before.
         self.assertEqual(self.consent(server), {"ask": False, "sharing": True, "reason": "default", "policy": PRIVACY_URL})
+        self.assertFalse(server.analytics.flush())
+        self.assertEqual(sent, [])
         model = self.tmp / "bracket.step"
         model.write_text("ISO-10303-21;", encoding="utf-8")
         self.call(server, "cad_view")
         self.http(server, "POST", "/__cad/recents", {"action": "open", "path": str(model)})
         self.assertTrue(server.analytics.flush())
-        self.assertEqual([event["name"] for event in sent[0]["events"]], ["tool"])
+        # Counts by default, never a file code.
+        self.assertEqual([(event["name"], event.get("tool")) for event in sent[0]["events"]], [("tool", "cad_view")])
         self.assertEqual(sent[0]["install"], status(path=self.path)["id"])
         # A yes, in the menu or `cadgen analytics on`, adds the files' codes.
         self.consent(server, True)
@@ -397,10 +395,6 @@ class NoticeTest(_Tmp):
         self.assertEqual(said.getvalue(), NOTICE_TEXT + "\n")
         found = status(path=self.path)
         self.assertEqual((found["sharing"], found["reason"]), (True, "default"))
-        # Never in a process the telling command started itself (a skill's first `cadgen viewer --detach`).
-        told = json.loads(self.path.read_text(encoding="utf-8"))["analytics"]["notifiedAt"]
-        self.assertEqual(status(path=self.path, since=told + 1)["reason"], "untold")
-        self.assertEqual(status(path=self.path, since=told + TOLD_SECONDS)["reason"], "default")
         # A choice, either way, keeps when it was said: a yes to less than is sent later falls back to the default.
         choose(True, by="cli", path=self.path)
         with mock.patch("cadgen.analytics.DISCLOSURE", 2):

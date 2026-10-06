@@ -284,9 +284,9 @@ The CAD app (the plugin's `cad` server) and the browser viewer (`cadgen viewer`)
 default: a random install ID, versions, where you installed it from, your OS and agent app, and how often each CAD
 tool was called and views were used. Our server also counts installs per country, from each request's IP address,
 as weekly and monthly totals only. Never file names, paths, contents or prompts. The first `cadgen` command says so
-once, and nothing is sent until CAD next starts, so you can turn it off first: `uvx cadgen analytics off`,
-**Share anonymous usage data** in either app's menu (the logo at the top left, over any model), or ask your agent
-to turn it off. `uvx cadgen analytics on` also shares a one-way code and the format of each distinct file shown
+once, and sending starts then. Turn it off, which also deletes what was sent, with `uvx cadgen analytics off`,
+**Share anonymous usage data** in either app's menu (the logo at the top left, over any model), or by asking your
+agent. `uvx cadgen analytics on` also shares a one-way code and the format of each distinct file shown
 (to count files, not identify them). `DO_NOT_TRACK=1` keeps it off, and nothing is sent by default in CI or from a
 development install. See the [privacy policy](https://www.texttocad.dev/privacy-policy).
 

@@ -516,7 +516,7 @@ class Server:
         why = {"environment": "set by the environment (DO_NOT_TRACK or CADGEN_ANALYTICS)",
                "choice": "the user's choice",
                "default": "on by default: a cadgen command told the user once",
-               "untold": "not yet: no cadgen command has told the user, or not before this CAD app started"}.get(
+               "untold": "not yet: no cadgen command has told the user"}.get(
                    found["reason"], "off: the setting could not be read")
         state = "on" if found["sharing"] else "off"
         return _text(f"CAD's anonymous usage analytics are {state} ({why}). By default they count tool calls and view "
