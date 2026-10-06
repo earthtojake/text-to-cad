@@ -393,7 +393,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
                 return
             if is_artifact and inflight.get("result") is not None:
                 _JOBS.record_artifact_result(job, inflight["result"]["artifactResult"])
-            _JOBS.finish(job, code)
+            _JOBS.finish(job, code, error=inflight.get("error"))
             with contextlib.suppress(OSError), send_lock:
                 _send(conn, {"exit": code})
             return
@@ -414,7 +414,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         _log(f"{tool}: could not start a worker: {exc}")
         _JOBS.finish(job, 1, error=str(exc))
         if inflight is not None:
-            _BROKER.finish_entry(inflight, 1)
+            _BROKER.finish_entry(inflight, 1, error=str(exc))
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"stream": "stderr", "data": f"cadgen-daemon: could not start a worker: {exc}\n"})
             _send(conn, {"exit": 1})
@@ -550,7 +550,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         reason = failure_message("".join(stderr_tail))[0] if exit_code != 0 else None
         _JOBS.finish(job, exit_code, error=reason or None)
         if inflight is not None:
-            _BROKER.finish_entry(inflight, exit_code)
+            _BROKER.finish_entry(inflight, exit_code, error=reason or None)
 
     _REQUESTS_SERVED[0] += 1
     _log(f"{tool} {argv!r} -> exit {exit_code} in {time.perf_counter() - started:.2f}s "

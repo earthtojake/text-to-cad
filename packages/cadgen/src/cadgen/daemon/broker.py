@@ -139,6 +139,7 @@ class Broker:
                 "key": key,
                 "done": threading.Event(),
                 "exit": None,
+                "error": None,
                 "result": None,
                 "artifact": artifact,
                 "ownerActive": True,
@@ -213,12 +214,15 @@ class Broker:
     def orphaned(entry: dict[str, Any]) -> bool:
         return entry["orphaned"].is_set() and not entry["done"].is_set()
 
-    def finish_entry(self, entry: dict[str, Any], code: int) -> None:
+    def finish_entry(self, entry: dict[str, Any], code: int, *, error: str | None = None) -> None:
+        """Close the entry with the owner's exit code and, for a failure, its one-line
+        reason, which attached consumers record as their own."""
         with self._cv:
             key = entry["key"]
             if self._inflight.get(key) is entry:
                 self._inflight.pop(key, None)
             entry["exit"] = int(code)
+            entry["error"] = str(error) if code != 0 and error else None
             entry["ownerActive"] = False
             entry["done"].set()
             self._cv.notify_all()
