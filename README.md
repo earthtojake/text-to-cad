@@ -180,7 +180,7 @@ rm -rf ~/.cursor/plugins/local/text-to-cad
 
 Added the CAD server from cursor.directory? Remove its `cad` entry from
 `~/.cursor/mcp.json` before installing the plugin above, or Cursor runs both. To
-keep just the server instead, change the `cadgen==` version in that entry, then
+keep just the server instead, change that entry's pin to `"cadgen==0.7.15"`, then
 restart Cursor.
 
 ### Grok Build
