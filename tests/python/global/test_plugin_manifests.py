@@ -277,11 +277,10 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertFalse(logo.startswith(("/", "..")) or "://" in logo, logo)
         self.assertEqual(logo, ".claude-plugin/icon.png")
 
-    def test_cursor_directory_finds_the_server_in_the_standard_mcp_json(self) -> None:
-        # cursor.directory finds a plugin's servers in a root .mcp.json or mcp.json alone, never through a
-        # manifest, and copies them from main when the listing is submitted. mcp.json is the Agent Plugins
-        # standard's config (agent-plugins.org), which names its schema and each server's transport. Cursor
-        # reads it only when its manifest names no config of its own, so it never starts the server twice.
+    def test_the_standard_mcp_json_starts_claudes_server(self) -> None:
+        # mcp.json is the Agent Plugins standard's server config (agent-plugins.org), which names its schema
+        # and each server's transport, and its channel is the standard's, not an app's. Cursor reads it only
+        # when its manifest names no config of its own, so it never starts the server twice.
         config = load_json(MCP_PATH)
         self.assertEqual(config, {"$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
                                   "mcpServers": config["mcpServers"]})
@@ -341,7 +340,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-github"},
             "codex.mcp.json": {"CADGEN_INSTALL_CHANNEL": "codex-github"},
             "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-marketplace", "CADGEN_AUTO_UPDATED": "1"},
-            "mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-directory"},
+            "mcp.json": {"CADGEN_INSTALL_CHANNEL": "agent-plugins"},
             "gemini-extension.json": {"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"},
             "README.md": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"},
         })

@@ -15,7 +15,7 @@
         "mcp"
       ],
       "env": {
-        "CADGEN_INSTALL_CHANNEL": "cursor-directory"
+        "CADGEN_INSTALL_CHANNEL": "agent-plugins"
       }
     }
   }
