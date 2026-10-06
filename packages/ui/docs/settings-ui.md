@@ -481,7 +481,7 @@ what the host supplies:
   (`navigation.home`): it shows the home in this view. The home's own menu has none.
 - The host's own on/off settings (`appSettings`), a checkbox item each, in the order they
   come, checked at the right; a press turns one without closing the menu. **Share
-  anonymous usage data** and **Quick edit** — on until the person turns it off
+  usage stats** and **Quick edit** — on until the person turns it off
   ([Quick Edit](#quick-edit)) — in both apps.
 - **Send feedback**, where the host has a tracker (`links.issues`): a link to a new issue
   titled "Feedback: " for the person to finish, naming the version and the platform, with

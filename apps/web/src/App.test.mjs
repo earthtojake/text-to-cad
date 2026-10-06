@@ -111,7 +111,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/__cad/analytics')), [['/__cad/analytics', null]]);
     // The app menu: Analytics, then Features.
     assert.deepEqual(viewer().appSettings.map(setting => [setting.label, setting.checked]),
-      [['Share anonymous usage data', false], ['Quick edit', true]]);
+      [['Share usage stats', false], ['Quick edit', true]]);
     // The card goes to the viewer (it asks once a model is on screen), and its answer is a card's: the
     // server applies it only to an open question. Answered, it is gone.
     await act(() => viewer().notice.props.onAnswer(false));

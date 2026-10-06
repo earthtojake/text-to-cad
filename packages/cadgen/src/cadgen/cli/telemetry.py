@@ -1,11 +1,11 @@
-"""``cadgen analytics`` -- show or change what CAD's apps (``cadgen mcp`` and ``cadgen viewer``) send as
-anonymous usage analytics.
+"""``cadgen telemetry`` -- show or change the usage stats CAD's apps (``cadgen mcp`` and ``cadgen viewer``)
+send.
 
 By default they send counts, never file codes, once a ``cadgen`` command has said so (``cadgen/analytics.py``).
 ``status`` (the default) says what is sent and why, and says that notice itself if no command has yet;
 ``on`` and ``off`` keep the person's choice in the state directory, which every agent app's CAD server
 reads: ``on`` adds a one-way code of each distinct file shown, ``off`` sends nothing.
-``DO_NOT_TRACK=1`` or ``CADGEN_ANALYTICS=0`` in an app's environment still turns it off there.
+``DO_NOT_TRACK=1`` or ``CADGEN_TELEMETRY=0`` in an app's environment still turns it off there.
 """
 
 from __future__ import annotations
@@ -16,19 +16,19 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-DEFAULT_PROG = "cadgen analytics"
+DEFAULT_PROG = "cadgen telemetry"
 
 _REASONS = {
-    "environment": "set by DO_NOT_TRACK or CADGEN_ANALYTICS in this environment",
+    "environment": "set by DO_NOT_TRACK or CADGEN_TELEMETRY in this environment",
     "choice": "your choice",
     "default": "by default, since cadgen said so{when}",
     "untold": "no cadgen command has said so yet (none does in CI or from a development install)",
-    "unavailable": "the analytics setting could not be read",
+    "unavailable": "the telemetry setting could not be read",
 }
 
 
 def describe(found: dict[str, Any] | None = None, *, path: Path | None = None) -> str:
-    """``on`` or ``off``, and why: what ``cadgen analytics`` and ``cadgen doctor`` say."""
+    """``on`` or ``off``, and why: what ``cadgen telemetry`` and ``cadgen doctor`` say."""
     from cadgen.analytics import status, told_at
 
     found = found if found is not None else status(path=path)
@@ -41,10 +41,10 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog,
         description=(
-            "Show or change what CAD's apps (the CAD app in an agent app, and the CAD Viewer) send as anonymous "
-            "usage analytics. By default, once a cadgen command has said so: a random install id, versions, the OS "
-            "and agent app, and counts of CAD tool calls and view activity. `on` adds a one-way code and the format "
-            "of each distinct file shown; `off` sends nothing. Never file names, paths, contents or prompts."
+            "Show or change the usage stats CAD's apps (the CAD app in an agent app, and the CAD Viewer) send. "
+            "By default, once a cadgen command has said so: a random install id, versions, the OS and agent app, "
+            "and counts of CAD tool calls and view activity. `on` adds a one-way code and the format of each "
+            "distinct file shown; `off` sends nothing. Never file names, paths, contents or prompts."
         ),
     )
     parser.add_argument("action", nargs="?", choices=("status", "on", "off"), default="status")
@@ -61,24 +61,24 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
         chosen = choose(args.action == "on", by="cli", forget=request_deletion if args.action == "off" else None)
         if not chosen["saved"]:
             print(f"Could not save the choice: cadgen's state directory ({settings_path().parent}) could not be written. "
-                  "Analytics are unchanged; DO_NOT_TRACK=1 in an app's environment keeps them off there.")
+                  "Telemetry is unchanged; DO_NOT_TRACK=1 in an app's environment keeps it off there.")
             return 1
         if args.action == "off":
-            print("Analytics are off; the install id was deleted"
+            print("Telemetry is off; the install id was deleted"
                   + (" and the data sent under it was deleted." if chosen.get("forgotten")
-                     else ". The data sent under it will be deleted the next time CAD can reach its server."))
+                     else ". The data sent under it will be deleted the next time cadgen can reach its server."))
     else:
         notify()  # where a person looks for it: said here when no command has said it yet
     found = status()
     if args.action != "off":
-        print(f"Analytics are {describe(found)}.")
+        print(f"Telemetry is {describe(found)}.")
         if found["reason"] == "default":
-            print("By default they count CAD's tool calls and view activity, never files: `cadgen analytics on` "
-                  "adds a one-way code of each file shown, `cadgen analytics off` turns them off.")
+            print("By default it counts CAD's tool calls and view activity, never files: `cadgen telemetry on` "
+                  "adds a one-way code of each file shown, `cadgen telemetry off` turns it off.")
         if found["id"]:
             print(f"Install id: {found['id']}")
     if found["reason"] == "environment" and args.action in ("on", "off"):
-        print("Note: this environment's DO_NOT_TRACK or CADGEN_ANALYTICS overrides the choice here.")
+        print("Note: this environment's DO_NOT_TRACK or CADGEN_TELEMETRY overrides the choice here.")
     print(f"Privacy policy: {PRIVACY_URL}")
     return 0
 

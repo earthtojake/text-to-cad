@@ -29,7 +29,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.root = self.tmp / "models"
         (self.root / "parts").mkdir(parents=True)
         (self.root / "parts" / "a.stl").write_bytes(STL)
-        environment = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp / "state"), "DO_NOT_TRACK": "", "CADGEN_ANALYTICS": ""})
+        environment = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp / "state"), "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "", "CADGEN_ANALYTICS": ""})
         environment.start()
         self.addCleanup(environment.stop)
         self.state = self.tmp / "state" / "settings.json"
@@ -70,7 +70,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertEqual(self.request("GET", "/__cad/analytics")[1]["ask"], False)
         # The answer is the person's, in the state directory every CAD app reads: the CAD app's
         # server sees the same no.
-        self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["analytics"]["choice"], "off")
+        self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["telemetry"]["choice"], "off")
         # A card still up in another view answers nothing now; the app menu's toggle changes it whenever.
         self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True, "card": True})[1]["sharing"], False)
         self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True})[1]["sharing"], True)
@@ -101,7 +101,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
     def test_told_before_it_started_the_viewer_counts_by_default_and_codes_files_only_with_a_yes(self) -> None:
         # A `cadgen` command said it before this viewer started (``cadgen/analytics.py``: ``notify``).
         self.state.parent.mkdir(parents=True, exist_ok=True)
-        self.state.write_text(json.dumps({"analytics": {"notifiedAt": time.time() - 3600, "notice": 1}}), encoding="utf-8")
+        self.state.write_text(json.dumps({"telemetry": {"notifiedAt": time.time() - 3600, "notice": 1}}), encoding="utf-8")
         self.assertEqual(self.request("GET", "/__cad/analytics")[1]["reason"], "default")
         model = str(self.root / "parts" / "a.stl")
         self.request("POST", "/__cad/analytics/activity", {"touched": True})

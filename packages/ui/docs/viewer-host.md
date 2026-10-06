@@ -401,7 +401,7 @@ menu follows. `displayActions`
 passes host-owned appearance controls into the Display section beside Projection
 via `RendererViewProps`. `appSettings` (`{ id, section, label, checked, disabled?, onCheckedChange }[]`,
 a `CadViewer` prop) are the host's own on/off settings: checkbox items of the app menu, in the
-order they come (Share anonymous usage data, Quick edit, in both apps), the same in the
+order they come (Share usage stats, Quick edit, in both apps), the same in the
 logo's menu and the home's; nothing of them reaches a renderer, and Display holds none. The
 host owns what each one does and where it is kept. `@text-to-cad/ui/features` is the
 feature switches, which both apps share: `useFeatures(features)` turns the host's call — `features()`
@@ -416,7 +416,7 @@ reloads — a page's own storage would not, the web Viewer's origin changing wit
 `@text-to-cad/ui/consent` is the analytics
 prompt both apps share: `ConsentCard` (the card) and
 `useAnalyticsConsent(consent)`, which turns the host's consent call into the card's state, its
-answer and its `appSettings` row (Share anonymous usage data); the host supplies the call and
+answer and its `appSettings` row (Share usage stats); the host supplies the call and
 where the answer is kept.
 `@text-to-cad/ui/update` is the update button both apps share, from cadgen's version check:
 `UpdateButton`, the blue button a host hands the viewer as its `update` (`CadViewerProps.update`,

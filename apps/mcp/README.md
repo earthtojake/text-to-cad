@@ -96,17 +96,15 @@ reference host `basic-host` does.
   notes its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show (counted as a view adds one to
   the library), as salted one-way codes --
-  and, only with consent, sends it once a minute (`cadgen/analytics.py`): never a
-  path, an argument or a file. Every install is asked once by the page
-  (`/__cad/analytics`, the shared `ConsentCard` from `@text-to-cad/ui/consent`, the
-  viewer's `notice`: top-right once a model is on screen, Quick Edit under it,
-  never on the home; the browser viewer asks the same way, and one answer counts
-  for both), and nothing is sent before a yes; the app menu's **Share anonymous usage
-  data** (`appSettings`) changes the answer later. Its **Quick edit** (on until
+  and sends it once a minute (`cadgen/analytics.py`): never a path, an argument or
+  a file. It is on by default once a `cadgen` command has said so, once, and nothing
+  asks; file codes go only with the person's yes. The app menu's **Share usage
+  stats** (`appSettings`, through `/__cad/analytics`) changes the answer, one answer for
+  this app and the browser viewer. Its **Quick edit** (on until
   the person turns it off) is read and changed the same way, through `/__cad/features`, and kept
   beside the analytics answer (`cadgen/features.py`): one choice for the sidebar, every
   thread's tab, every inline card and the browser viewer. The channel is reported with the
-  counts; it decides nothing there. The agent's `cad_analytics` reports the
+  counts; it decides nothing there. The agent's `cad_telemetry` reports the
   setting and turns it off, never on.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"

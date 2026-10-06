@@ -1,4 +1,4 @@
-"""CAD's anonymous analytics: who decides whether they are sent -- by default once a ``cadgen`` command has
+"""cadgen's telemetry, CAD's usage stats: who decides whether they are sent -- by default once a ``cadgen`` command has
 said so, never after a no -- and that they carry counts, times and metadata -- how many people, how often,
 on how many files -- and nothing else."""
 
@@ -19,13 +19,13 @@ from unittest import mock
 from cadgen import cli
 from cadgen.analytics import (CLOSE_SECONDS, FILES_PER_BATCH, NOTICE_ENV, NOTICE_TEXT, PRIVACY_URL, Recorder, _post, choose,
                               file_code, file_salt, forget_pending, notify, status)
-from cadgen.cli import analytics as analytics_cli
+from cadgen.cli import telemetry as telemetry_cli
 from cadgen.mcp.protocol import RequestContext, RpcError
 from cadgen.mcp.server import Server
 from cadgen.mcp.ui import AppPage
 from cadgen.viewer.recents import RecentStore
 
-QUIET = {"DO_NOT_TRACK": "", "CADGEN_ANALYTICS": "", NOTICE_ENV: ""}
+QUIET = {"DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "", "CADGEN_ANALYTICS": "", NOTICE_ENV: ""}
 # Where the notice is said: an install a plugin made (a checkout is a development install, never told), outside CI.
 TOLD = {"CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""}
 
@@ -107,12 +107,12 @@ class ConsentTest(_Tmp):
         choose(True, by="cli", path=self.path)
         offline = status(path=self.path)["id"]
         self.assertEqual(choose(False, by="app", path=self.path, forget=lambda id: False)["forgotten"], False)
-        self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))["analytics"]["forget"], [offline])
+        self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))["telemetry"]["forget"], [offline])
         self.assertEqual(status(path=self.path)["id"], None)
         heard = []
         forget_pending(path=self.path, forget=lambda id: heard.append(id) or True)
         self.assertEqual(heard, [offline])
-        self.assertNotIn("forget", json.loads(self.path.read_text(encoding="utf-8"))["analytics"])
+        self.assertNotIn("forget", json.loads(self.path.read_text(encoding="utf-8"))["telemetry"])
         choose(True, by="cli", path=self.path)
         # A yes to less than is sent now counts as no answer; a no is never undone.
         with mock.patch("cadgen.analytics.DISCLOSURE", 2):
@@ -120,7 +120,7 @@ class ConsentTest(_Tmp):
             choose(False, by="app", path=self.path, forget=lambda id: True)
         with mock.patch("cadgen.analytics.DISCLOSURE", 3):
             self.assertEqual(status(path=self.path)["reason"], "choice")
-        for name, value in (("DO_NOT_TRACK", "1"), ("CADGEN_ANALYTICS", "off")):
+        for name, value in (("DO_NOT_TRACK", "1"), ("CADGEN_TELEMETRY", "off"), ("CADGEN_ANALYTICS", "0")):
             with self.subTest(name=name), mock.patch.dict("os.environ", {name: value}):
                 self.assertEqual(status(path=self.path)["reason"], "environment")
                 self.assertFalse(status(path=self.path)["sharing"])
@@ -160,7 +160,7 @@ class OneAnswerTest(_Tmp):
     """The answer is one, shared by every app and process: none of them undoes another's."""
 
     def section(self) -> dict:
-        return json.loads(self.path.read_text(encoding="utf-8"))["analytics"]
+        return json.loads(self.path.read_text(encoding="utf-8"))["telemetry"]
 
     def test_an_answer_given_meanwhile_is_never_undone(self) -> None:
         choose(True, by="cli", path=self.path)
@@ -230,7 +230,7 @@ class OneAnswerTest(_Tmp):
         self.assertFalse(status(path=self.path)["sharing"])
 
     def test_the_environment_turns_it_on_too(self) -> None:
-        with mock.patch.dict("os.environ", {"CADGEN_ANALYTICS": "1"}):
+        with mock.patch.dict("os.environ", {"CADGEN_TELEMETRY": "1"}):
             found = status(path=self.path)
         self.assertEqual((found["sharing"], found["reason"]), (True, "environment"))
         self.assertTrue(found["id"])
@@ -370,18 +370,38 @@ class ServerCountsTest(_Tmp):
         self.assertTrue(server.analytics.flush())
         self.assertEqual(sent[1]["events"], [{"name": "file", "file": file_code(file_salt(self.path), str(model)), "kind": "step"}])
 
-    def test_the_agent_can_turn_analytics_off_but_not_on(self) -> None:
+    def test_the_agent_can_turn_telemetry_off_but_not_on(self) -> None:
         server, sent = self.serve("claude-directory")
         self.consent(server, True)
-        off = self.call(server, "cad_analytics", {"action": "off"})
+        off = self.call(server, "cad_telemetry", {"action": "off"})
         self.assertEqual(off["structuredContent"], {"sharing": False})
         self.assertFalse(status(path=self.path)["sharing"])
-        tool = next(tool for tool in server.tools() if tool["name"] == "cad_analytics")
+        tool = next(tool for tool in server.tools() if tool["name"] == "cad_telemetry")
         self.assertEqual(tool["inputSchema"]["properties"]["action"]["enum"], ["status", "off"])
         self.call(server, "cad_show", {"path": "a.step"})
         server.analytics.flush()
         self.assertEqual(sent, [])
         self.assertIsNone(file_salt(self.path))
+
+
+class BeforeTelemetryTest(_Tmp):
+    """cadgen 0.7.7 to 0.7.15 kept the answer as `analytics`: only its no carries over."""
+
+    def legacy(self, section: dict) -> None:
+        self.path.write_text(json.dumps({"analytics": section}), encoding="utf-8")
+
+    def test_an_old_no_still_holds_until_the_person_answers_again(self) -> None:
+        self.legacy({"choice": "off", "disclosure": 1, "by": "app", "decidedAt": 1})
+        with mock.patch.dict("os.environ", TOLD):
+            self.assertFalse(notify(io.StringIO(), path=self.path))  # nothing to tell someone who said no
+        self.assertEqual(status(path=self.path), {"sharing": False, "reason": "choice", "id": None})
+        choose(True, by="cli", path=self.path)  # a yes given now, here, wins
+        self.assertEqual(status(path=self.path)["reason"], "choice")
+        self.assertTrue(status(path=self.path)["sharing"])
+
+    def test_an_old_yes_carries_nothing(self) -> None:
+        self.legacy({"choice": "on", "disclosure": 1, "by": "app", "decidedAt": 1, "id": "old", "salt": "0" * 64})
+        self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
 
 
 class NoticeTest(_Tmp):
@@ -400,7 +420,7 @@ class NoticeTest(_Tmp):
         with mock.patch("cadgen.analytics.DISCLOSURE", 2):
             self.assertEqual(status(path=self.path)["reason"], "default")
         choose(False, by="cli", path=self.path, forget=lambda id: True)
-        self.assertIn("notifiedAt", json.loads(self.path.read_text(encoding="utf-8"))["analytics"])
+        self.assertIn("notifiedAt", json.loads(self.path.read_text(encoding="utf-8"))["telemetry"])
 
     def test_a_larger_default_is_said_again_before_it_is_sent(self) -> None:
         with mock.patch.dict("os.environ", TOLD):
@@ -412,7 +432,8 @@ class NoticeTest(_Tmp):
 
     def test_nothing_is_said_where_nothing_would_be_sent_by_default(self) -> None:
         for name, value in (("CI", "true"), ("CADGEN_INSTALL_CHANNEL", "dev"), ("DO_NOT_TRACK", "1"),
-                            ("CADGEN_ANALYTICS", "0"), ("CADGEN_ANALYTICS", "1"), (NOTICE_ENV, "0")):
+                            ("CADGEN_TELEMETRY", "0"), ("CADGEN_TELEMETRY", "1"), ("CADGEN_ANALYTICS", "0"),
+                            (NOTICE_ENV, "0")):
             with self.subTest(name=name, value=value), mock.patch.dict("os.environ", {**TOLD, name: value}):
                 said = io.StringIO()
                 self.assertFalse(notify(said, path=self.path))
@@ -424,21 +445,27 @@ class NoticeTest(_Tmp):
             with self.subTest(share=share), mock.patch.dict("os.environ", TOLD):
                 self.assertFalse(notify(io.StringIO(), path=self.path))
 
-    def test_every_command_says_it_but_the_servers_and_analytics_itself(self) -> None:
+    def test_every_command_says_it_but_the_servers_and_telemetry_itself(self) -> None:
         with mock.patch("cadgen.analytics.notify") as told, mock.patch.object(cli, "_run", return_value=0), \
                 mock.patch("sys.stdout", io.StringIO()):
-            for argv in (["doctor"], ["step", "snapshot", "a.step"], ["viewer"], ["mcp"], ["daemon"], ["analytics", "off"]):
+            for argv in (["doctor"], ["step", "snapshot", "a.step"], ["viewer"], ["mcp"], ["daemon"], ["telemetry", "off"]):
                 cli.main(argv)
             cli.main(["--help"])
         self.assertEqual(told.call_count, 3)
 
-    def test_cadgen_analytics_says_it_where_a_person_looks(self) -> None:
+    def test_the_old_command_names_the_new_one(self) -> None:
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            self.assertEqual(cli.main(["analytics", "off"]), 2)
+        self.assertIn("cadgen telemetry", err.getvalue())
+
+    def test_cadgen_telemetry_says_it_where_a_person_looks(self) -> None:
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.dict("os.environ", {**TOLD, "CADGEN_STATE_DIR": str(self.tmp)}), \
                 mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
-            self.assertEqual(analytics_cli.main([]), 0)
+            self.assertEqual(telemetry_cli.main([]), 0)
         self.assertEqual(err.getvalue(), NOTICE_TEXT + "\n")
-        self.assertRegex(out.getvalue(), r"^Analytics are on: by default, since cadgen said so on \d{4}-\d{2}-\d{2}\.\n")
+        self.assertRegex(out.getvalue(), r"^Telemetry is on: by default, since cadgen said so on \d{4}-\d{2}-\d{2}\.\n")
 
 
 class NeverInTheWayTest(_Tmp):
@@ -447,7 +474,7 @@ class NeverInTheWayTest(_Tmp):
     serve = ServerCountsTest.serve
     call = ServerCountsTest.call
 
-    def test_a_broken_analytics_layer_fails_nothing_and_logs_nothing_a_host_shows(self) -> None:
+    def test_a_broken_telemetry_layer_fails_nothing_and_logs_nothing_a_host_shows(self) -> None:
         server, sent = self.serve("claude-directory")
         with mock.patch("cadgen.analytics.status", side_effect=RuntimeError("broken")), \
                 mock.patch("cadgen.analytics.choose", side_effect=RuntimeError("broken")), \
@@ -455,8 +482,8 @@ class NeverInTheWayTest(_Tmp):
             # The tools answer as if nothing were wrong: off, and nothing to ask.
             self.assertEqual(self.consent(server)["ask"], False)
             self.assertEqual(self.consent(server, True)["sharing"], False)
-            self.assertFalse(self.call(server, "cad_analytics").get("isError"))
-            self.assertFalse(self.call(server, "cad_analytics", {"action": "off"}).get("isError"))
+            self.assertFalse(self.call(server, "cad_telemetry").get("isError"))
+            self.assertFalse(self.call(server, "cad_telemetry", {"action": "off"}).get("isError"))
             # CAD's own tools are untouched, and the recorder's own methods return quietly.
             self.assertIn("isError", self.call(server, "cad_show", {"path": "missing.step"}))
             server.analytics.called("cad_show", True)

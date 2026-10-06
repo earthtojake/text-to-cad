@@ -355,14 +355,14 @@ cadgen build; the geometry it returns, and the answer to every `==` and
 ### 19. Nothing waits on the network
 
 Once installed, cadgen works offline: every command, build, snapshot, server
-and page. Its own requests are two, both anonymous: analytics
-(`analytics.py`, sent by default once a `cadgen` command has said so, and never
-after the person's no) and the daily version check
+and page. Its own requests are two: telemetry
+(`analytics.py`, usage stats under a random id, sent by default once a `cadgen`
+command has said so, and never after the person's no) and the daily version check
 (`updates.py`). Both run in the background and fail silently: no start,
 command, request or tool call waits on them, and one that fails changes
 nothing but what is counted or offered. Two waits remain, bounded, each for
 something only the network can do: a server's last analytics send as it exits
-(`analytics.CLOSE_SECONDS`), and `cadgen analytics off`, which waits for the
+(`analytics.CLOSE_SECONDS`), and `cadgen telemetry off`, which waits for the
 deletion it asks for (still owed, and asked again, when nobody answers). The
 pages load nothing from the internet: everything they show ships in the wheel.
 Installing needs the network (cadgen itself, and the headless browser the first
@@ -393,7 +393,7 @@ src/cadgen/
   settings.py            # the person's settings: settings.json in the state
                          #   directory, a section per feature, shared by
                          #   every app and version of cadgen
-  analytics.py           # the CAD apps' anonymous usage counts: on by default
+  analytics.py           # telemetry, the CAD apps' usage stats: on by default
                          #   once a command has said so, never after a no
                          #   (its answer: settings.json's `analytics` section)
   features.py            # the CAD views' features a person can turn off

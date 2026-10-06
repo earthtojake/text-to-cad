@@ -715,7 +715,7 @@ class CadApp:
         else:
             response.send_json(200, {"path": to_posix_path(os.path.abspath(chosen))})
 
-    # --- anonymous usage analytics -----------------------------------------
+    # --- usage stats (telemetry) --------------------------------------------
 
     def _consent(self, share=None, *, card: bool = False) -> dict:
         """The app menu's analytics toggle: whether sharing is on and why, and, from the person's click,

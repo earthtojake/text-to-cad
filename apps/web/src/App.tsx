@@ -90,9 +90,9 @@ export default function App({ client, server, tabStore, notice = null }: { clien
   const appearance = useTabAppearance(tabStore);
   const changeColorScheme = useCallback((value: string) => tabStore.settings.update({ appearance: value as Appearance }), [tabStore]);
   useEffect(() => { applyColorSchemeToDocument(appearance.colorScheme, document.documentElement); }, [appearance.colorScheme]);
-  // CAD's anonymous usage analytics, the same as the CAD app's: one card, asked once of everyone
-  // (unless their environment answered, or no answer could be kept) once a model is on screen, and
-  // the app menu's toggle after it. The answer is the person's, shared with the CAD app.
+  // The usage stats cadgen sends (its telemetry), the same as the CAD app's: nothing asks here (a
+  // cadgen command says it once), and the app menu's switch changes it. The answer is the person's,
+  // shared with the CAD app.
   const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(client.consent);
   // The app menu's features (Quick edit), on until the person turns one off: kept by this Viewer's
   // server beside the analytics answer, one choice with the CAD app's, whatever port this is.

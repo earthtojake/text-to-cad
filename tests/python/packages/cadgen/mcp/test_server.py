@@ -119,12 +119,12 @@ class TabServerTest(_Session):
                        if "entrypoints" in value.get("openai/ui", {})}
         self.assertEqual(entrypoints, {"cad_home": "global", "cad_tab": "thread", "cad_file": "file"})
         agent = {name for name, value in meta.items() if value.get("ui", {}).get("visibility") != ["app"]}
-        self.assertEqual(agent, {"cad_open", "cad_show", "cad_view", "cad_screenshot", "cad_analytics"})
+        self.assertEqual(agent, {"cad_open", "cad_show", "cad_view", "cad_screenshot", "cad_telemetry"})
         # The page's own: its sync, its answer to a capture, and the viewer's routes, which carry the rest.
         page = {name for name, value in meta.items() if value.get("ui", {}).get("visibility") == ["app"]} - set(entrypoints)
         self.assertEqual(page, {"cad_sync", "cad_capture_reply", "cad_http"})
-        # All but one read: cad_analytics turns the person's analytics off when they ask.
-        self.assertEqual([name for name, tool in tools.items() if not tool["annotations"]["readOnlyHint"]], ["cad_analytics"])
+        # All but one read: cad_telemetry turns the person's telemetry off when they ask.
+        self.assertEqual([name for name, tool in tools.items() if not tool["annotations"]["readOnlyHint"]], ["cad_telemetry"])
         uri = tools["cad_home"]["_meta"]["ui"]["resourceUri"]
         self.assertRegex(uri, r"^ui://cad/[0-9a-f]{16}/app\.html$")
         self.assertEqual(tools["cad_open"]["_meta"]["ui"]["resourceUri"], uri)
@@ -371,7 +371,7 @@ class InlineServerTest(_Session):
         tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
         agent = {name for name, tool in tools.items() if tool.get("_meta", {}).get("ui", {}).get("visibility") != ["app"]}
         # A chat shows files: no home.
-        self.assertEqual(agent, {"cad_show", "cad_view", "cad_screenshot", "cad_analytics"})
+        self.assertEqual(agent, {"cad_show", "cad_view", "cad_screenshot", "cad_telemetry"})
         uri = tools["cad_show"]["_meta"]["ui"]["resourceUri"]
         self.assertFalse(any(key.startswith("openai/") for tool in tools.values() for key in tool.get("_meta", {})))
         self.assertEqual((tools["cad_view"]["inputSchema"]["required"], tools["cad_screenshot"]["inputSchema"]["required"]), (["view"], ["view"]))
@@ -415,7 +415,7 @@ class TextServerTest(_Session):
 
     def test_cad_show_links_the_model_in_this_machines_viewer(self) -> None:
         tools = self.server.handle("tools/list", {}, None)["tools"]
-        self.assertEqual([(tool["name"], "_meta" in tool) for tool in tools], [("cad_show", False), ("cad_analytics", False)])
+        self.assertEqual([(tool["name"], "_meta" in tool) for tool in tools], [("cad_show", False), ("cad_telemetry", False)])
         self.assertIn("cannot show CAD views", self.initialized["instructions"])
         shown = self.call("cad_show", {"path": self.bracket})
         # Text alone: Claude Code shows a result's structured content in place of its text.

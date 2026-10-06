@@ -55,7 +55,7 @@ class DoctorTests(unittest.TestCase):
         state = TemporaryDirectory()
         self.addCleanup(state.cleanup)
         self.state = Path(state.name)
-        environment = mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": state.name, "DO_NOT_TRACK": "", "CADGEN_ANALYTICS": ""})
+        environment = mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": state.name, "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "", "CADGEN_ANALYTICS": ""})
         environment.start()
         self.addCleanup(environment.stop)
 
@@ -64,7 +64,7 @@ class DoctorTests(unittest.TestCase):
             _, out, _ = _run([tmp])
         self.assertIn("sharing  off: no cadgen command has said so yet", out)
         # Told, and nothing chosen: on by default, from the day it was said.
-        (self.state / "settings.json").write_text('{"analytics": {"notifiedAt": 1790000000, "notice": 1}}', encoding="utf-8")
+        (self.state / "settings.json").write_text('{"telemetry": {"notifiedAt": 1790000000, "notice": 1}}', encoding="utf-8")
         with TemporaryDirectory() as tmp:
             _, out, _ = _run([tmp])
         self.assertRegex(out, r"sharing  on: by default, since cadgen said so on \d{4}-\d{2}-\d{2}\n")

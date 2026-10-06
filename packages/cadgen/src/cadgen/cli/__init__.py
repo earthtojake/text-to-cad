@@ -79,7 +79,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "viewer stop": ("cadgen.cli.viewer_stop", "ask the CAD Viewer on a port to exit"),
     # CAD inside an agent host's panels. The host starts it, one process per thread.
     "mcp": ("cadgen.cli.mcp", "serve CAD to an agent host over MCP (stdio)"),
-    "analytics": ("cadgen.cli.analytics", "show or change CAD's anonymous usage analytics: status, on, off"),
+    "telemetry": ("cadgen.cli.telemetry", "show or change the usage stats CAD sends: status, on, off"),
 }
 
 # A skill's pin is the version in the launch command its SKILL.md teaches
@@ -188,6 +188,10 @@ _RETIRED: dict[tuple[str, ...], str] = {
         "cadgen step build IN.step OUT.step. A model's maintained meshes are declared "
         "with @stl/@threemf/@glb and written by python <model>.py."
     ),
+    ("analytics",): (
+        "cadgen analytics has been renamed: use cadgen telemetry status|on|off. DO_NOT_TRACK=1 or "
+        "CADGEN_TELEMETRY=0 in an app's environment turns it off there."
+    ),
     ("srdf", "snapshot"): (
         "cadgen srdf snapshot does not exist: an SRDF's geometry comes from the URDF "
         "beside it, so it has no snapshot door of its own. Use cadgen snapshot "
@@ -284,8 +288,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 # Commands that never carry the analytics notice: a CAD app's server, whose output only the host's log
-# reads; the daemon's supervisor, writing to its own log; and `analytics`, which says it its own way.
-_UNTOLD = frozenset({"mcp", "daemon", "analytics"})
+# reads; the daemon's supervisor, writing to its own log; and `telemetry`, which says it its own way.
+_UNTOLD = frozenset({"mcp", "daemon", "telemetry"})
 
 
 def _tell() -> None:

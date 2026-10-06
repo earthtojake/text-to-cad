@@ -16,7 +16,7 @@ from cadgen.mcp.browser import LAUNCH, ViewerUnavailable, model_link, viewer_url
 FAKE = r"""
 import json, os, pathlib, sys
 mode, marker = sys.argv[1], pathlib.Path(sys.argv[2])
-marker.write_text(f"{os.getpid()}\n{os.getcwd()}\n{os.environ.get('CADGEN_ANALYTICS_NOTICE', '')}", encoding="utf-8")
+marker.write_text(f"{os.getpid()}\n{os.getcwd()}\n{os.environ.get('CADGEN_TELEMETRY_NOTICE', '')}", encoding="utf-8")
 if mode == "reused":
     print("Reusing CAD Viewer at http://127.0.0.1:3245/ (pid 1, started in /somewhere)")
     print("CAD Viewer URL: http://127.0.0.1:3245/")

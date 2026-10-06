@@ -134,13 +134,13 @@ _VIEW = {"type": "string", "description": "A view id from cad_view; defaults to 
 _WATCH = _object({"file": {"type": ["string", "null"]}, "previews": {"type": "array", "items": {"type": "string"}, "maxItems": 4}})
 _SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned."}
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
-# Every client's: the agent reports CAD's analytics setting, or turns sharing off when the user asks.
-_ANALYTICS_TOOL = {
-    "name": "cad_analytics", "title": "CAD analytics", "icons": [ICON],
+# Every client's: the agent reports CAD's telemetry setting, or turns sharing off when the user asks.
+_TELEMETRY_TOOL = {
+    "name": "cad_telemetry", "title": "CAD telemetry", "icons": [ICON],
     "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
-    "description": ("Report whether CAD sends anonymous usage analytics (by default, counts of tool calls and view "
-                    "activity; with the user's yes, distinct files as one-way codes; never file names, contents or "
-                    "prompts), or turn them off. Call with action off only when the user asks."),
+    "description": ("Report whether cadgen sends usage stats (by default, counts of tool calls and view activity "
+                    "tagged with a random ID; with the user's yes, distinct files as one-way codes; never file names, "
+                    "paths, contents or prompts), or turn them off. Call with action off only when the user asks."),
     "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["status", "off"]}},
                     "additionalProperties": False},
 }
@@ -349,7 +349,7 @@ class Server:
             {"name": "cad_screenshot", "title": "Capture CAD view", "icons": [ICON], "annotations": _READ_ONLY,
              "description": "Capture a PNG of exactly what an open CAD viewer in this thread shows right now.",
              "inputSchema": _object({"view": _VIEW})},
-            _ANALYTICS_TOOL,
+            _TELEMETRY_TOOL,
             *self._page_tools(),
         ]
 
@@ -369,7 +369,7 @@ class Server:
             {"name": "cad_screenshot", "title": "Capture CAD view", "icons": [ICON], "annotations": _READ_ONLY,
              "description": "Capture a PNG of exactly what a CAD viewer in this chat shows right now.",
              "inputSchema": _object({"view": _SHOWN_VIEW}, ["view"])},
-            _ANALYTICS_TOOL,
+            _TELEMETRY_TOOL,
             *self._page_tools(),
         ]
 
@@ -381,7 +381,7 @@ class Server:
                              "Viewer in the user's browser; this app cannot show CAD views itself. The Viewer refreshes "
                              "when the file changes, so share a model's link once, not after every rebuild."),
              "inputSchema": _object({"path": _PATH}, ["path"])},
-            _ANALYTICS_TOOL,
+            _TELEMETRY_TOOL,
         ]
 
     def _page_tools(self) -> list[dict[str, Any]]:
@@ -501,28 +501,28 @@ class Server:
         launch = self._launch(model, surface="agent")
         return _text(f"{model} is open in a new CAD tab. From now on, use cad_show to show models in it.", {"launch": launch})
 
-    def _tool_cad_analytics(self, arguments, context):
+    def _tool_cad_telemetry(self, arguments, context):
         # The agent may report the setting or turn sharing off for the person; only the person turns it on.
         from cadgen.analytics import PRIVACY_URL
 
         if arguments.get("action") == "off":
             if not self.analytics.choose(False, by="agent").get("saved"):
-                return _text("CAD analytics could not be turned off for good: cadgen's state directory could not be "
+                return _text("CAD telemetry could not be turned off for good: cadgen's state directory could not be "
                              "written. This CAD app sends nothing more until it restarts; DO_NOT_TRACK=1 in the agent "
-                             "app's environment keeps analytics off.", {"sharing": False})
-            return _text("CAD analytics are off. The install id was deleted, and the data sent under it is being deleted.",
+                             "app's environment keeps telemetry off.", {"sharing": False})
+            return _text("CAD telemetry is off. The install id was deleted, and the data sent under it is being deleted.",
                          {"sharing": False})
         found = self.analytics.status()
-        why = {"environment": "set by the environment (DO_NOT_TRACK or CADGEN_ANALYTICS)",
+        why = {"environment": "set by the environment (DO_NOT_TRACK or CADGEN_TELEMETRY)",
                "choice": "the user's choice",
                "default": "on by default: a cadgen command told the user once",
                "untold": "not yet: no cadgen command has told the user"}.get(
                    found["reason"], "off: the setting could not be read")
         state = "on" if found["sharing"] else "off"
-        return _text(f"CAD's anonymous usage analytics are {state} ({why}). By default they count tool calls and view "
-                     "activity; with the user's yes, also distinct files (as one-way codes); never file names, contents "
-                     "or prompts. The user turns them off in the CAD app's menu (the logo at the top left of a view) or "
-                     f"with `cadgen analytics off`, and adds file codes with `cadgen analytics on`. Policy: {PRIVACY_URL}",
+        return _text(f"cadgen's usage stats are {state} ({why}). By default they count tool calls and view activity, "
+                     "tagged with a random ID; with the user's yes, also distinct files (as one-way codes); never file names, "
+                     "paths, contents or prompts. The user turns them off in the CAD app's menu (the logo at the top left "
+                     f"of a view) or with `cadgen telemetry off`, and adds file codes with `cadgen telemetry on`. Policy: {PRIVACY_URL}",
                      {"sharing": found["sharing"], "reason": found["reason"]})
 
     # the agent's tools ----------------------------------------------------------

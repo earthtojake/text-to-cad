@@ -288,7 +288,7 @@ is no Materials editor or persisted material override. See [View styles](docs/re
 [progressive detail](docs/lod.md).
 
 The navbar leads with the C logo, which opens the app's menu: Back to files where the host
-has a home, the person's settings (Share anonymous usage data, Quick edit), Send feedback
+has a home, the person's settings (Share usage stats, Quick edit), Send feedback
 (a new issue titled "Feedback: " where the host has a tracker), GitHub, Discord and, in
 gray, the version and who made it. It names the file — the name opens the explorer — and
 offers its ⋯ menu (Copy path, Reveal). The three share one look: transparent until the

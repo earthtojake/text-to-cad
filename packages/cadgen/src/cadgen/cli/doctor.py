@@ -58,9 +58,9 @@ def _daemon_name() -> str | None:
 
 
 def _sharing() -> str | None:
-    """``on`` or ``off`` for CAD's anonymous usage analytics, and why, or ``None`` if it cannot tell."""
+    """``on`` or ``off`` for the usage stats CAD sends, and why, or ``None`` if it cannot tell."""
     try:
-        from cadgen.cli.analytics import describe
+        from cadgen.cli.telemetry import describe
 
         return describe()
     except Exception:  # noqa: BLE001 - a report line, never a reason for the report to fail
@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
         sys.stdout.write(f"  daemon   {daemon}\n")
     sharing = _sharing()
     if sharing:
-        # What CAD's apps send as anonymous usage analytics, as `cadgen analytics` says it.
+        # Whether CAD's apps send usage stats, as `cadgen telemetry` says it.
         sys.stdout.write(f"  sharing  {sharing}\n")
 
     from cadgen._internal.kernel_load_hint import kernel_load_hint

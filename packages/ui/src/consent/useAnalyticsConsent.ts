@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppSetting } from "../file-viewer/types.js";
 
-/** What a CAD app's server says about anonymous usage analytics. */
+/** What a CAD app's server says about the usage stats cadgen sends (its telemetry). */
 export interface AnalyticsConsent {
   /** Show the card: nothing is chosen yet, and an answer could be kept. cadgen no longer asks: its
    * analytics are on by default once a `cadgen` command has said so. */
   ask: boolean;
   sharing: boolean;
-  /** Why: `environment` (DO_NOT_TRACK or CADGEN_ANALYTICS decided, and no click changes it), `choice`,
+  /** Why: `environment` (DO_NOT_TRACK or CADGEN_TELEMETRY decided, and no click changes it), `choice`,
    * `default` (on by default: the person was told), `untold` (nothing sent yet), `unavailable`. */
   reason?: "environment" | "choice" | "default" | "untold" | "unavailable";
   /** The privacy policy the card links. */
@@ -55,8 +55,8 @@ export function useAnalyticsConsent(consent: (share?: boolean, from?: AnswerFrom
   const appSettings = useMemo<AppSetting[] | undefined>(() => state ? [{
     id: "analytics", checked: state.sharing, onCheckedChange: (checked: boolean) => answer(checked, "settings"),
     ...(state.reason === "environment"
-      ? { label: "Share anonymous usage data (set by your environment)", disabled: true }
-      : { label: "Share anonymous usage data" }),
+      ? { label: "Share usage stats (set by your environment)", disabled: true }
+      : { label: "Share usage stats" }),
   }] : undefined, [state, answer]);
   return { consent: state && answered.current ? { ...state, ask: false } : state, answer, appSettings };
 }

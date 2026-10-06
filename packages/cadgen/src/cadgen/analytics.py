@@ -1,5 +1,5 @@
-"""Anonymous usage analytics for CAD's two apps -- ``cadgen mcp`` (the CAD app in an agent app) and
-``cadgen viewer`` (the browser viewer): how many people use CAD, how often, and on how many files --
+"""cadgen's telemetry: usage stats from CAD's two apps -- ``cadgen mcp`` (the CAD app in an agent app)
+and ``cadgen viewer`` (the browser viewer): how many people use CAD, how often, and on how many files --
 counts, times and metadata, never what anything says. Every CAD task shows its model in one or the
 other, so between them they see CAD's use; the CLI and the library send nothing (the CLI only says,
 once, what the two apps send: ``notify``).
@@ -7,7 +7,7 @@ once, what the two apps send: ``notify``).
 What is sent, at most once a minute while there is something new and once more as the server
 exits, each batch stamped with the time it arrives:
 
-- who, anonymously: a random install id, and a random id for this server process;
+- who, by random ids only: an install id made on this machine, and an id for this server process;
 - what runs: cadgen's version, where it was installed from (its channel, ``cadgen/_internal/channel.py``:
   a plugin directory, the Cursor Marketplace, GitHub, a development install, or ``unknown``), the
   operating system and processor, the agent app's name and version and how that app shows CAD
@@ -29,11 +29,11 @@ without a release.
 
 It is sent by default once the person has been told, and never after their no. Strongest first:
 
-1. The environment: ``DO_NOT_TRACK=1`` or ``CADGEN_ANALYTICS=0`` turns it off,
-   ``CADGEN_ANALYTICS=1`` on.
-2. The person's choice, kept as the ``analytics`` section of their settings (``cadgen/settings.py``:
+1. The environment: ``DO_NOT_TRACK=1`` or ``CADGEN_TELEMETRY=0`` turns it off,
+   ``CADGEN_TELEMETRY=1`` on.
+2. The person's choice, kept as the ``telemetry`` section of their settings (``cadgen/settings.py``:
    ``settings.json`` in the state directory) and shared by both apps: either app's menu,
-   ``cadgen analytics on|off``, or the agent's ``cad_analytics`` (off only). A yes sends all of
+   ``cadgen telemetry on|off``, or the agent's ``cad_telemetry`` (off only). A yes sends all of
    the above; a no, nothing.
 3. Otherwise the default: all of the above but ``file`` codes, from the moment the person has
    been told -- one line, said once by the first ``cadgen`` command that may (``notify``). What a
@@ -45,6 +45,11 @@ A no is kept and never undone: not by a restart, an update, or more being sent. 
 sent, a yes to less (``DISCLOSURE``) counts as no answer, and a default that grew (``NOTICE``)
 is said again before it is sent. Nothing in a CAD app asks: the telling is the CLI's.
 
+Before telemetry, cadgen 0.7.7 to 0.7.15 kept these answers as ``analytics`` (the settings section,
+``cadgen analytics``, ``CADGEN_ANALYTICS``). Nothing of that carries over but a no: an ``analytics``
+choice of off counts as off until the person answers here (``LEGACY``), and ``CADGEN_ANALYTICS=0``
+turns telemetry off as ``CADGEN_TELEMETRY=0`` does.
+
 Where CAD was installed from is only reported, as ``channel``: it decides nothing here.
 
 The install id and the file salt exist only while sharing is on: turning it off deletes both
@@ -52,7 +57,7 @@ here and asks the receiver to delete what it holds under the id -- again and aga
 hears back -- and turning it on again starts a new install with a new salt, so nothing links
 the two.
 
-Analytics never get in the way of CAD:
+Telemetry never gets in the way of CAD:
 
 - Nothing here raises into the server. Every ``Recorder`` method is guarded: a failure (an
   unreadable state directory, a broken receiver, a bug here) is logged at debug level, below
@@ -106,10 +111,10 @@ DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
 NOTICE = 1
-NOTICE_TEXT = ("cadgen: CAD now shares anonymous usage data, never your files or prompts. "
-               f"Turn off: cadgen analytics off · {PRIVACY_URL}")
+NOTICE_TEXT = ("cadgen now sends usage stats, tagged with a random ID — never your files, paths or prompts. "
+               f"Turn off: cadgen telemetry off · {PRIVACY_URL}")
 # ``0``: what this command says reaches nobody -- a CAD app's own launch of one, its output thrown away.
-NOTICE_ENV = "CADGEN_ANALYTICS_NOTICE"
+NOTICE_ENV = "CADGEN_TELEMETRY_NOTICE"
 FLUSH_SECONDS = 60
 # How long a send waits for the receiver. Sends run in the background, so this delays nothing; a
 # shorter wait would give up on a batch a cold receiver was still storing, and send it twice.
@@ -136,15 +141,21 @@ UNAVAILABLE = {"sharing": False, "reason": "unavailable", "id": None}
 _OFF, _ON = ("0", "off", "false", "no"), ("1", "on", "true", "yes")
 
 
-SECTION = "analytics"  # this module's part of the settings file
+SECTION = "telemetry"  # this module's part of the settings file
+# Where cadgen 0.7.7 to 0.7.15 kept the answer, and its environment variable: read for a no, and nothing else.
+LEGACY = "analytics"
 
 
 def _read(path: Path) -> dict[str, Any] | None:
-    """The analytics section, or ``None`` when the settings are there but cannot be read now."""
+    """The telemetry section, or ``None`` when the settings are there but cannot be read now. A no kept
+    before telemetry (``LEGACY``) counts as this section's until the person answers here."""
     try:
-        return read_section(SECTION, path=path)
+        kept = read_section(SECTION, path=path)
+        if "choice" not in kept and read_section(LEGACY, path=path).get("choice") == "off":
+            kept = {**kept, "choice": "off"}
+        return kept
     except OSError:
-        LOG.debug("could not read the analytics choice in %s", path, exc_info=True)
+        LOG.debug("could not read the telemetry choice in %s", path, exc_info=True)
         return None
 
 
@@ -153,12 +164,12 @@ _UNREAD = object()  # a process's first batch, before its first use: the answer 
 
 
 def _update(path: Path, change: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any] | None:
-    """Change the analytics section under the settings lock: what is kept, or ``None`` when it
+    """Change the telemetry section under the settings lock: what is kept, or ``None`` when it
     could not be read or written -- and then this process stops asking (``_can_keep``)."""
     try:
         return update_section(SECTION, change, path=path)
     except OSError:
-        LOG.debug("could not keep the analytics choice in %s", path, exc_info=True)
+        LOG.debug("could not keep the telemetry choice in %s", path, exc_info=True)
         _UNKEPT.add(path)
         return None
 
@@ -166,7 +177,9 @@ def _update(path: Path, change: Callable[[dict[str, Any]], dict[str, Any]]) -> d
 def _environment() -> bool | None:
     if str(os.environ.get("DO_NOT_TRACK") or "").strip().lower() in _ON:
         return False
-    value = str(os.environ.get("CADGEN_ANALYTICS") or "").strip().lower()
+    if str(os.environ.get("CADGEN_ANALYTICS") or "").strip().lower() in _OFF:  # a no set before telemetry (LEGACY)
+        return False
+    value = str(os.environ.get("CADGEN_TELEMETRY") or "").strip().lower()
     return False if value in _OFF else True if value in _ON else None
 
 
