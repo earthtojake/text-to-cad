@@ -1,7 +1,8 @@
 """Anonymous usage analytics for CAD's two apps -- ``cadgen mcp`` (the CAD app in an agent app) and
 ``cadgen viewer`` (the browser viewer): how many people use CAD, how often, and on how many files --
 counts, times and metadata, never what anything says. Every CAD task shows its model in one or the
-other, so between them they see CAD's use; the CLI and the library send nothing.
+other, so between them they see CAD's use; the CLI and the library send nothing (the CLI only says,
+once, what the two apps send: ``notify``).
 
 What is sent, at most once a minute while there is something new and once more as the server
 exits, each batch stamped with the time it arrives:
@@ -14,8 +15,8 @@ exits, each batch stamped with the time it arrives:
 - ``tool``: how many times each CAD tool was called, and how many of those failed;
 - ``view``: how many times a CAD view was touched by a person or switched models -- time spent
   looking at a model calls no tool, and is use all the same;
-- ``file``: each distinct file the agent showed or a person touched in a CAD view (a view left
-  open on a model notes nothing), once a day per server process, as a
+- ``file``, only with the person's yes: each distinct file the agent showed or a person touched in a
+  CAD view (a view left open on a model notes nothing), once a day per server process, as a
   16-character code (an HMAC of its absolute path keyed by a random salt made on this machine
   and never sent) and its format (``step``, ``stl``, ...). The receiver can count distinct
   files and see one come back on another day; it cannot learn a path, a name or what is in a
@@ -26,19 +27,24 @@ nothing used in it is never sent: a server the host started and nobody used coun
 nothing. The receiver (``cadgen/_internal/api.py``) is ours, so the service behind it can change
 without a release.
 
-Nothing is sent without the person's yes, however CAD was installed. Strongest first:
+It is sent by default once the person has been told, and never after their no. Strongest first:
 
 1. The environment: ``DO_NOT_TRACK=1`` or ``CADGEN_ANALYTICS=0`` turns it off,
    ``CADGEN_ANALYTICS=1`` on.
 2. The person's choice, kept as the ``analytics`` section of their settings (``cadgen/settings.py``:
-   ``settings.json`` in the state directory) and shared by both apps:
-   either app's card or its menu, ``cadgen analytics on|off``, or the agent's
-   ``cad_analytics`` (off only).
-3. Otherwise nothing is sent, and whichever app the person opens first asks once.
+   ``settings.json`` in the state directory) and shared by both apps: either app's menu,
+   ``cadgen analytics on|off``, or the agent's ``cad_analytics`` (off only). A yes sends all of
+   the above; a no, nothing.
+3. Otherwise the default: all of the above but ``file`` codes, once the person has been told --
+   one line, said once by the first ``cadgen`` command that may (``notify``) -- and only from a
+   process started after that (``TOLD_SECONDS``: never one the telling command started), so
+   whoever objects can turn it off before anything is sent.
+   Nobody is told, so nothing is sent by default, in CI, from a development install, or where
+   the telling could not be kept (it would be said again on every command).
 
-A no, or closing the card, is kept like a yes and never asked again: not after a restart, not
-after an update, not when what is sent grows (``DISCLOSURE`` re-asks only a yes). Where an answer
-could not be kept -- a state directory nothing can write -- the CAD app does not ask at all.
+A no is kept and never undone: not by a restart, an update, or more being sent. When more is
+sent, a yes to less (``DISCLOSURE``) counts as no answer, and a default that grew (``NOTICE``)
+is said again before it is sent. Nothing in a CAD app asks: the telling is the CLI's.
 
 Where CAD was installed from is only reported, as ``channel``: it decides nothing here.
 
@@ -52,7 +58,7 @@ Analytics never get in the way of CAD:
 - Nothing here raises into the server. Every ``Recorder`` method is guarded: a failure (an
   unreadable state directory, a broken receiver, a bug here) is logged at debug level, below
   what ``cadgen mcp`` prints, so nothing reaches a host's or an agent's logs, and answered
-  with a safe default: not sharing, nothing sent, nothing asked.
+  with a safe default: not sharing, nothing sent, nothing said.
 - No tool call waits on the network. Noting use is in memory; sending, and the deletion an
   opt-out asks for, run on a background thread. The one wait is the last send as the server
   exits, bounded by ``CLOSE_SECONDS``.
@@ -94,10 +100,20 @@ LOG = logging.getLogger("cadgen.analytics")
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
 SCHEMA = 2  # 2: the install's channel replaced how it was installed (`source`)
-# What a yes agreed to: the fields and events this module sends. Raise it when that grows, and the
-# CAD app asks again everyone whose yes was to less; a no stays a no. Restarts and updates that
-# send nothing new keep the answer: it lives in the person's state directory, not the install.
+# What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
+# to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
+# the answer: it lives in the person's state directory, not the install.
 DISCLOSURE = 1
+# What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
+# and the next ``cadgen`` command says it again; nothing is sent by default until it has.
+NOTICE = 1
+NOTICE_TEXT = ("cadgen: from its next start, CAD shares anonymous usage data, never your files or prompts. "
+               f"Turn off: cadgen analytics off · {PRIVACY_URL}")
+# ``0``: what this command says reaches nobody -- a CAD app's own launch of one, its output thrown away.
+NOTICE_ENV = "CADGEN_ANALYTICS_NOTICE"
+# The default holds only in a process started at least this long after the person was told: never in one
+# the telling command started itself (a skill's first ``cadgen viewer --detach``), so there is time to object.
+TOLD_SECONDS = 60
 FLUSH_SECONDS = 60
 # How long a send waits for the receiver. Sends run in the background, so this delays nothing; a
 # shorter wait would give up on a batch a cold receiver was still storing, and send it twice.
@@ -117,8 +133,8 @@ FILES_PER_BATCH = 32  # more wait for the next batch: the receiver takes 64 even
 # again: dropping it would lose counts, and a deletion an opt-out owes, for good.
 REFUSED = frozenset({400, 413, 415, 422})
 FILES_PENDING = 1024  # past this, a process notes no new file until a batch goes
-# What a status is when it cannot be read: not sharing, and not asking either (a broken state
-# directory must not nag on every view).
+# What a status is when it cannot be read: not sharing, and nothing said either (a broken state
+# directory must not say it on every command).
 UNAVAILABLE = {"sharing": False, "reason": "unavailable", "id": None}
 
 _OFF, _ON = ("0", "off", "false", "no"), ("1", "on", "true", "yes")
@@ -180,15 +196,39 @@ def _identified(kept: dict[str, Any]) -> bool:
     return isinstance(kept.get("id"), str) and _is_salt(kept.get("salt"))
 
 
-def _decide(kept: dict[str, Any], forced: bool | None) -> tuple[bool, str | None]:
-    """Whether to share, and why (``None``: nothing decided, so the question is still open)."""
+def _told(kept: dict[str, Any]) -> float | None:
+    """When the person was told what is sent by default (``notify``): ``None`` for never, or for a
+    telling of less than is sent by default now (``NOTICE``)."""
+    when, notice = kept.get("notifiedAt"), kept.get("notice")
+    if isinstance(when, (int, float)) and isinstance(notice, int) and notice >= NOTICE:
+        return float(when)
+    return None
+
+
+def _decide(kept: dict[str, Any], forced: bool | None, since: float | None = None) -> tuple[bool, str | None]:
+    """Whether to share, and why (``None``: nothing decided and nobody told, so nothing is sent).
+    ``since``: when the asking process started. The default holds only in one started after the
+    person was told (``TOLD_SECONDS``), so whoever objects can turn it off before anything is sent."""
     if forced is not None:
         return forced, "environment"
     if kept.get("choice") == "off":
         return False, "choice"
     if kept.get("choice") == "on" and _disclosure(kept) >= DISCLOSURE:
         return True, "choice"
+    told = _told(kept)
+    if told is not None and (since is None or told + TOLD_SECONDS <= since):
+        return True, "default"
     return False, None
+
+
+def _files_too(found: dict[str, Any]) -> bool:
+    """Whether a status sends file codes: only with a yes, the person's or their environment's."""
+    return bool(found["sharing"]) and found["reason"] in ("environment", "choice")
+
+
+def _in_ci() -> bool:
+    """Whether this runs in CI (``CI`` set, as the update check reads it): nobody there is told anything."""
+    return str(os.environ.get("CI") or "").strip().lower() not in ("", *_OFF)
 
 
 def _without(kept: dict[str, Any], done: list[str]) -> dict[str, Any]:
@@ -229,24 +269,25 @@ def _can_keep(path: Path) -> bool:
     return True
 
 
-def status(*, path: Path | None = None) -> dict[str, Any]:
+def status(*, path: Path | None = None, since: float | None = None) -> dict[str, Any]:
     """``{sharing, reason, id}``: whether counts are sent, why, and under which install id.
 
-    ``reason`` is ``environment``, ``choice``, ``unasked`` (nothing is sent, and the CAD app asks) or
-    ``unavailable`` (nothing is sent, and nobody is asked: no answer could be kept).
-    Sharing makes the install's id and file salt where they are missing.
+    ``reason`` is ``environment``, ``choice``, ``default`` (the person was told, chose nothing, and
+    counts go without file codes), ``untold`` (nothing is sent: nobody has been told yet, or not before
+    ``since``, the asking process's start) or ``unavailable`` (nothing is sent, and nothing said: no
+    answer could be kept). Sharing makes the install's id and file salt where they are missing.
     """
     path = path or settings_path()
     forced = _environment()
     kept = _read(path)
-    if kept is None:  # there, but unreadable now: neither sent under nor asked about
+    if kept is None:  # there, but unreadable now: neither sent under nor said
         return {"sharing": False, "reason": "environment", "id": None} if forced is False else dict(UNAVAILABLE)
-    sharing, reason = _decide(kept, forced)
-    if reason is None:  # an answer that could not be kept would be asked for again on every view
-        return {"sharing": False, "reason": "unasked" if _can_keep(path) else "unavailable", "id": None}
+    sharing, reason = _decide(kept, forced, since)
+    if reason is None:  # a telling that could not be kept would be said again on every command
+        return {"sharing": False, "reason": "untold" if _can_keep(path) else "unavailable", "id": None}
     if sharing and not _identified(kept):
         def identify(section: dict[str, Any]) -> dict[str, Any]:
-            if not _decide(section, forced)[0] or _identified(section):  # changed meanwhile: as it is now
+            if not _decide(section, forced, since)[0] or _identified(section):  # changed meanwhile: as it is now
                 return section
             install_id = section["id"] if isinstance(section.get("id"), str) else str(uuid.uuid4())
             return {**section, "id": install_id, "salt": section["salt"] if _is_salt(section.get("salt")) else _new_salt()}
@@ -254,7 +295,7 @@ def status(*, path: Path | None = None) -> dict[str, Any]:
         kept = _update(path, identify)
         if kept is None:
             return dict(UNAVAILABLE)
-        sharing, reason = _decide(kept, forced)
+        sharing, reason = _decide(kept, forced, since)
         if sharing and not _identified(kept):
             return dict(UNAVAILABLE)
     return {"sharing": sharing, "reason": reason, "id": kept["id"] if sharing else None}
@@ -287,12 +328,14 @@ def choose(share: bool, *, by: str, path: Path | None = None,
     def keep(section: dict[str, Any]) -> dict[str, Any]:
         previous = section["id"] if isinstance(section.get("id"), str) else None
         pending = _pending(section)
+        told = {key: section[key] for key in ("notifiedAt", "notice") if key in section}  # a fact, whatever the answer
         if share:
             salt = section["salt"] if previous and _is_salt(section.get("salt")) else _new_salt()
-            return {**choice, "id": previous or str(uuid.uuid4()), "salt": salt, **({"forget": pending} if pending else {})}
+            return {**told, **choice, "id": previous or str(uuid.uuid4()), "salt": salt,
+                    **({"forget": pending} if pending else {})}
         if previous and previous not in pending:
             pending.append(previous)
-        return {**choice, **({"forget": pending} if pending else {})}
+        return {**told, **choice, **({"forget": pending} if pending else {})}
 
     if _update(path, keep) is None:
         return {"saved": False, "sharing": None}
@@ -312,6 +355,42 @@ def forget_pending(*, path: Path | None = None, forget: Callable[[str], bool] | 
     done = [value for value in pending if (forget or request_deletion)(value)]
     if done:  # only the list changes, under the lock: an answer given meanwhile stays as given
         _update(path, lambda section: _without(section, done))
+
+
+def notify(stream: Any = None, *, path: Path | None = None) -> bool:
+    """Tell the person, once, what is sent by default: ``NOTICE_TEXT``, a line on ``stream`` (stderr)
+    from the first ``cadgen`` command that may say it, kept as said (``notifiedAt``) so that the CAD
+    apps send it from their next start. Nothing is said where nothing would be sent by default: where
+    the environment or the person decided, in CI, from a development install, from a launch whose
+    output reaches nobody (``NOTICE_ENV``), or where it could not be kept as said -- it would be said
+    on every command. ``True`` when it was said. Never raises: the command it rides on comes first."""
+    try:
+        from cadgen._internal.channel import DEV, channel
+
+        if _environment() is not None or _in_ci() or os.environ.get(NOTICE_ENV) == "0" or channel() == DEV:
+            return False
+        path = path or settings_path()
+        kept = _read(path)
+        if kept is None or _decide(kept, None)[1] is not None or not _can_keep(path):
+            return False
+        out = stream if stream is not None else sys.stderr
+        out.write(NOTICE_TEXT + "\n")
+        out.flush()
+
+        def tell(section: dict[str, Any]) -> dict[str, Any]:
+            if _decide(section, None)[1] is not None:  # decided or told meanwhile: as it is now
+                return section
+            return {**section, "notifiedAt": time.time(), "notice": NOTICE}
+
+        return _update(path, tell) is not None
+    except Exception:  # noqa: BLE001 - the notice never fails the command it rides on
+        LOG.debug("analytics notice failed", exc_info=True)
+        return False
+
+
+def told_at(path: Path | None = None) -> float | None:
+    """When the person was told what is sent by default (``notify``), or ``None``."""
+    return _told(_read(path or settings_path()) or {})
 
 
 def _post(url: str, payload: dict[str, Any] | None = None, *, method: str = "POST") -> str:
@@ -389,6 +468,7 @@ class Recorder:
         self._sent: set[str] = set()  # "day:code" of files sent today: each goes once a day
         self._basis: Any = _UNREAD  # the answer in force when what is noted now began to be noted
         self._off = False  # a no this process could not keep: nothing more is sent from it
+        self._began = time.time()  # the default holds only if the person was told before this
         self._timer: threading.Event | None = None
         self._describe()
 
@@ -418,7 +498,7 @@ class Recorder:
 
     @_guarded(lambda: dict(UNAVAILABLE))
     def status(self) -> dict[str, Any]:
-        return dict(UNAVAILABLE) if self._off else status(path=self.path)
+        return dict(UNAVAILABLE) if self._off else status(path=self.path, since=self._began)
 
     @_guarded(lambda: {"saved": False, "sharing": None})
     def choose(self, share: bool, *, by: str) -> dict[str, Any]:
@@ -490,6 +570,8 @@ class Recorder:
         forget_pending(path=settings)
         found = self.status()
         kept = (_read(settings) or {}) if found["sharing"] else {}
+        # File codes only with a yes; the default sends counts alone, and drops the files it noted.
+        files_too = _files_too(found)
         # The salt read with the id it belongs to; and when the person said yes.
         salt = bytes.fromhex(kept["salt"]) if kept.get("id") == found["id"] and _is_salt(kept.get("salt")) else None
         decided = kept.get("decidedAt")
@@ -498,8 +580,10 @@ class Recorder:
             counts, views, files, basis = self._counts, self._views, self._files, self._basis
             self._counts, self._views, self._files, self._basis = {}, 0, {}, decided
             context = dict(self._context)
-            if not found["sharing"] or salt is None:
+            if not found["sharing"] or (files_too and salt is None):
                 return False
+            if not files_too:
+                files = {}
             # Noted under an earlier answer -- before a yes given in the other app (this one's own clears what
             # it noted) -- or under one never read: never sent. Which answer, not whether it came later:
             # Windows' clock moves in 16 ms steps, so a yes and the batch it lands in can share a time.

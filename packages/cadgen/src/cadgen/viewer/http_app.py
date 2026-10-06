@@ -718,17 +718,16 @@ class CadApp:
     # --- anonymous usage analytics -----------------------------------------
 
     def _consent(self, share=None, *, card: bool = False) -> dict:
-        """The page's analytics card and the app menu's toggle: whether to ask (nothing chosen, and an answer
-        could be kept), whether sharing is on and why, and, from the person's click, their answer. A
-        card answers only an open question, so one still up in another view never undoes an answer
-        just given (``card``); the toggle changes it whenever."""
+        """The app menu's analytics toggle: whether sharing is on and why, and, from the person's click,
+        their answer. Nothing asks (``ask`` is always false): analytics are on by default once a ``cadgen``
+        command has said so (``cadgen/analytics.py``). A card a page still shows answers only while nothing
+        is chosen, so it never undoes an answer just given (``card``); the toggle changes it whenever."""
         from cadgen.analytics import PRIVACY_URL
 
-        if isinstance(share, bool) and (not card or self.analytics.status()["reason"] == "unasked"):
+        if isinstance(share, bool) and (not card or self.analytics.status()["reason"] in ("default", "untold")):
             self.analytics.choose(share, by=self.consent_by)
         found = self.analytics.status()
-        return {"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
-                "policy": PRIVACY_URL}
+        return {"ask": False, "sharing": found["sharing"], "reason": found["reason"], "policy": PRIVACY_URL}
 
     def _version(self) -> dict:
         """The page's update button (``cadgen/updates.py``): whether a newer text-to-cad is out, from

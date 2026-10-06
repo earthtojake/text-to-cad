@@ -146,7 +146,9 @@ class UpdatesTest(unittest.TestCase):
 
     def test_no_command_says_it_or_reads_the_feed(self) -> None:
         # A skill's command cannot tell which plugin, if any, it came with: the CAD app and the CAD
-        # Viewer say it, by their channel.
+        # Viewer say it, by their channel. (What a command does say once, analytics' notice, is not this
+        # test's: ``cadgen/analytics.py``.)
+        self.environment({"DO_NOT_TRACK": "1"})
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.object(updates, "_get") as get, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             self.assertEqual(cadgen_main(["analytics"]), 0)

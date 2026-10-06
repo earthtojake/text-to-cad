@@ -477,7 +477,7 @@
     "openWorldHint": true,
     "readOnlyHint": false
    },
-   "description": "Report whether CAD sends anonymous usage analytics (counts of tool calls, view activity and distinct files, never file names, contents or prompts), or turn them off. Call with action off only when the user asks.",
+   "description": "Report whether CAD sends anonymous usage analytics (by default, counts of tool calls and view activity; with the user's yes, distinct files as one-way codes; never file names, contents or prompts), or turn them off. Call with action off only when the user asks.",
    "icons": [
     {
      "mimeType": "image/svg+xml",

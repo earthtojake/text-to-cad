@@ -3,11 +3,13 @@ import type { AppSetting } from "../file-viewer/types.js";
 
 /** What a CAD app's server says about anonymous usage analytics. */
 export interface AnalyticsConsent {
-  /** Show the card: nothing is chosen yet, and an answer could be kept. */
+  /** Show the card: nothing is chosen yet, and an answer could be kept. cadgen no longer asks: its
+   * analytics are on by default once a `cadgen` command has said so. */
   ask: boolean;
   sharing: boolean;
-  /** Why: `environment` (DO_NOT_TRACK or CADGEN_ANALYTICS decided, and no click changes it), `choice`, `unasked`, `unavailable`. */
-  reason?: "environment" | "choice" | "unasked" | "unavailable";
+  /** Why: `environment` (DO_NOT_TRACK or CADGEN_ANALYTICS decided, and no click changes it), `choice`,
+   * `default` (on by default: the person was told), `untold` (nothing sent yet), `unavailable`. */
+  reason?: "environment" | "choice" | "default" | "untold" | "unavailable";
   /** The privacy policy the card links. */
   policy: string;
 }

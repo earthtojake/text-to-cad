@@ -138,9 +138,9 @@ _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": F
 _ANALYTICS_TOOL = {
     "name": "cad_analytics", "title": "CAD analytics", "icons": [ICON],
     "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
-    "description": ("Report whether CAD sends anonymous usage analytics (counts of tool calls, view activity and "
-                    "distinct files, never file names, contents or prompts), or turn them off. Call with action off "
-                    "only when the user asks."),
+    "description": ("Report whether CAD sends anonymous usage analytics (by default, counts of tool calls and view "
+                    "activity; with the user's yes, distinct files as one-way codes; never file names, contents or "
+                    "prompts), or turn them off. Call with action off only when the user asks."),
     "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["status", "off"]}},
                     "additionalProperties": False},
 }
@@ -238,7 +238,8 @@ class Server:
 
     @property
     def analytics(self):
-        """Anonymous counts of this process's tool calls, sent only with consent (``cadgen/analytics.py``)."""
+        """Anonymous counts of this process's tool calls, sent by default once the user was told, never after a
+        no (``cadgen/analytics.py``)."""
         if self._analytics is None:
             from cadgen.analytics import Recorder
             from cadgen.settings import FILE
@@ -513,11 +514,15 @@ class Server:
                          {"sharing": False})
         found = self.analytics.status()
         why = {"environment": "set by the environment (DO_NOT_TRACK or CADGEN_ANALYTICS)",
-               "choice": "the user's choice", "unasked": "off until the user answers the CAD app's prompt"}.get(
+               "choice": "the user's choice",
+               "default": "on by default: a cadgen command told the user once",
+               "untold": "not yet: no cadgen command has told the user, or not before this CAD app started"}.get(
                    found["reason"], "off: the setting could not be read")
         state = "on" if found["sharing"] else "off"
-        return _text(f"CAD's anonymous usage analytics are {state} ({why}). They count tool calls, view activity and "
-                     f"distinct files (as one-way codes), never file names, contents or prompts. The user turns them on in the CAD app's menu (the logo at the top left of a view) or with `cadgen analytics on`. Policy: {PRIVACY_URL}",
+        return _text(f"CAD's anonymous usage analytics are {state} ({why}). By default they count tool calls and view "
+                     "activity; with the user's yes, also distinct files (as one-way codes); never file names, contents "
+                     "or prompts. The user turns them off in the CAD app's menu (the logo at the top left of a view) or "
+                     f"with `cadgen analytics off`, and adds file codes with `cadgen analytics on`. Policy: {PRIVACY_URL}",
                      {"sharing": found["sharing"], "reason": found["reason"]})
 
     # the agent's tools ----------------------------------------------------------

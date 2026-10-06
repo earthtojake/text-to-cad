@@ -33,8 +33,8 @@ export interface CadRecent {
   /** The picture's name, for `thumbnail()`, and when it was taken. */
   thumbnail: string | null; pictured: number | null;
 }
-/** The person's analytics answer, and whether to ask (`/__cad/analytics`): `reason` says who decided. */
-export interface CadConsent { ask: boolean; sharing: boolean; reason: 'unasked' | 'choice' | 'environment' | 'unavailable'; policy: string }
+/** The person's analytics answer, and whether to ask (`/__cad/analytics`; cadgen no longer asks): `reason` says who decided. */
+export interface CadConsent { ask: boolean; sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string }
 /** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`). */
 export interface CadUpdateNotice { latest: string; version: string; text: string; prompt: string; instructions: string }
 export interface CadCatalog { entries: CadEntry[]; [key: string]: unknown }

@@ -276,8 +276,26 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # No command says a newer text-to-cad is out: it cannot tell which plugin, if any, it came
-    # with, so the CAD app and the CAD Viewer say it (`cadgen/updates.py`).
+    # with, so the CAD app and the CAD Viewer say it (`cadgen/updates.py`). What a command does say,
+    # once and before its work, is what those two send by default (`cadgen/analytics.py`).
+    if command not in _UNTOLD:
+        _tell()
     return _run(command, entry[0], rest)
+
+
+# Commands that never carry the analytics notice: a CAD app's server, whose output only the host's log
+# reads; the daemon's supervisor, writing to its own log; and `analytics`, which says it its own way.
+_UNTOLD = frozenset({"mcp", "daemon", "analytics"})
+
+
+def _tell() -> None:
+    """Say, once, what CAD's apps send by default (``cadgen.analytics.notify``): one line on stderr,
+    never in a command's output or its way."""
+    try:
+        from cadgen.analytics import notify
+    except Exception:  # noqa: BLE001 - the notice never fails the command it rides on
+        return
+    notify()
 
 
 def _run(command: str, module_name: str, rest: list[str]) -> int:

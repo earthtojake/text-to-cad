@@ -356,7 +356,8 @@ cadgen build; the geometry it returns, and the answer to every `==` and
 
 Once installed, cadgen works offline: every command, build, snapshot, server
 and page. Its own requests are two, both anonymous: analytics
-(`analytics.py`, sent only with the person's yes) and the daily version check
+(`analytics.py`, sent by default once a `cadgen` command has said so, and never
+after the person's no) and the daily version check
 (`updates.py`). Both run in the background and fail silently: no start,
 command, request or tool call waits on them, and one that fails changes
 nothing but what is counted or offered. Two waits remain, bounded, each for
@@ -392,7 +393,8 @@ src/cadgen/
   settings.py            # the person's settings: settings.json in the state
                          #   directory, a section per feature, shared by
                          #   every app and version of cadgen
-  analytics.py           # the CAD apps' anonymous usage counts, with consent
+  analytics.py           # the CAD apps' anonymous usage counts: on by default
+                         #   once a command has said so, never after a no
                          #   (its answer: settings.json's `analytics` section)
   features.py            # the CAD views' features a person can turn off
                          #   (Quick edit: settings.json's `features` section)

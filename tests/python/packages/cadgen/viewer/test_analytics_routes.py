@@ -1,4 +1,4 @@
-"""The browser viewer's cards: CAD's analytics -- the same card, the same saved answer, and what its
+"""The browser viewer's analytics -- the menu's toggle, the same saved answer as the CAD app's, and what its
 page did -- and the update notice the CAD app shows too."""
 
 from __future__ import annotations
@@ -62,9 +62,9 @@ class ViewerAnalyticsTest(unittest.TestCase):
         finally:
             connection.close()
 
-    def test_the_viewer_asks_once_and_a_no_is_kept_for_every_cad_app(self) -> None:
+    def test_the_viewer_never_asks_and_a_no_is_kept_for_every_cad_app(self) -> None:
         status, consent = self.request("GET", "/__cad/analytics")
-        self.assertEqual((status, consent["ask"], consent["sharing"]), (200, True, False))
+        self.assertEqual((status, consent["ask"], consent["sharing"], consent["reason"]), (200, False, False, "untold"))
         status, answered = self.request("POST", "/__cad/analytics", {"share": False})
         self.assertEqual((status, answered["ask"], answered["sharing"], answered["reason"]), (200, False, False, "choice"))
         self.assertEqual(self.request("GET", "/__cad/analytics")[1]["ask"], False)
@@ -78,7 +78,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
     def test_a_web_page_cannot_answer_for_the_person(self) -> None:
         # Without the viewer's own header (no page from another site can send it), a POST changes nothing.
         self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True}, guard=False)[0], 403)
-        self.assertEqual(self.request("GET", "/__cad/analytics")[1]["ask"], True)
+        self.assertEqual(self.request("GET", "/__cad/analytics")[1]["reason"], "untold")
         self.assertFalse(self.state.exists())
 
     def test_what_the_page_did_is_sent_only_with_consent_and_a_file_only_as_its_code(self) -> None:
@@ -86,7 +86,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         model = str(self.root / "parts" / "a.stl")
         self.request("POST", "/__cad/analytics/activity", {"touched": True})
         self.request("POST", "/__cad/recents", {"action": "open", "path": model})
-        self.assertFalse(self.app.analytics.flush())  # not asked yet: nothing goes
+        self.assertFalse(self.app.analytics.flush())  # nobody told yet: nothing goes
         self.request("POST", "/__cad/analytics", {"share": True})
         self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"touched": True})[0], 204)
         self.assertEqual(self.request("POST", "/__cad/recents", {"action": "open", "path": model})[0], 200)
@@ -97,6 +97,17 @@ class ViewerAnalyticsTest(unittest.TestCase):
         code = file_code(file_salt(self.state), str(self.root / "parts" / "a.stl"))
         self.assertEqual(payload["events"], [{"name": "view", "calls": 1}, {"name": "file", "file": code, "kind": "stl"}])
         self.assertNotIn("a.stl", json.dumps(payload))
+
+    def test_told_before_it_started_the_viewer_counts_by_default_and_codes_files_only_with_a_yes(self) -> None:
+        # A `cadgen` command said it before this viewer started (``cadgen/analytics.py``: ``notify``).
+        self.state.parent.mkdir(parents=True, exist_ok=True)
+        self.state.write_text(json.dumps({"analytics": {"notifiedAt": time.time() - 3600, "notice": 1}}), encoding="utf-8")
+        self.assertEqual(self.request("GET", "/__cad/analytics")[1]["reason"], "default")
+        model = str(self.root / "parts" / "a.stl")
+        self.request("POST", "/__cad/analytics/activity", {"touched": True})
+        self.request("POST", "/__cad/recents", {"action": "open", "path": model})
+        self.assertTrue(self.app.analytics.flush())
+        self.assertEqual(self.sent[0]["events"], [{"name": "view", "calls": 1}])
 
     def test_the_update_button_reads_whether_a_newer_release_is_out(self) -> None:
         # The CAD app's notice (`cadgen/updates.py`), from the same feed; this page copies its prompt,

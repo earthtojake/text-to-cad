@@ -684,9 +684,9 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     server.app = app
     server.RequestHandlerClass = make_handler_class(app)
 
-    # Anonymous usage analytics, sent only with consent (``cadgen/analytics.py``): this process's
-    # recorder, which the page asks about and reports to (``/__cad/analytics``). It never raises,
-    # and no request waits on it.
+    # Anonymous usage analytics, sent by default once a ``cadgen`` command has said so and never after a no
+    # (``cadgen/analytics.py``): this process's recorder, which the page asks about and reports to
+    # (``/__cad/analytics``). It never raises, and no request waits on it.
     from cadgen.analytics import Recorder  # noqa: PLC0415
 
     analytics = Recorder()

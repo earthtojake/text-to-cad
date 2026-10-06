@@ -27,9 +27,13 @@ class ViewerUnavailable(Exception):
 def viewer_url(*, cwd: str | None = None, command=LAUNCH, timeout: float = LAUNCH_SECONDS) -> str:
     """The URL of this machine's CAD Viewer: the running one, or one started now from ``cwd`` (the
     user's home folder by default)."""
+    from cadgen.analytics import NOTICE_ENV
+
     try:
+        # Its stderr is thrown away, so the analytics notice a command says once would reach nobody.
         process = subprocess.Popen(list(command), cwd=cwd or os.path.expanduser("~"), stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                   env={**os.environ, NOTICE_ENV: "0"})
     except OSError as error:
         raise ViewerUnavailable(str(error)) from error
     try:

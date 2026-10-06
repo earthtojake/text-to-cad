@@ -1,32 +1,50 @@
-"""``cadgen analytics`` -- show or change whether ``cadgen mcp`` sends anonymous usage analytics.
+"""``cadgen analytics`` -- show or change what CAD's apps (``cadgen mcp`` and ``cadgen viewer``) send as
+anonymous usage analytics.
 
-``status`` (the default) says whether counts are sent and why; ``on`` and ``off`` keep the
-person's choice in the state directory, which every agent app's CAD server reads.
+By default they send counts, never file codes, once a ``cadgen`` command has said so (``cadgen/analytics.py``).
+``status`` (the default) says what is sent and why, and says that notice itself if no command has yet;
+``on`` and ``off`` keep the person's choice in the state directory, which every agent app's CAD server
+reads: ``on`` adds a one-way code of each distinct file shown, ``off`` sends nothing.
 ``DO_NOT_TRACK=1`` or ``CADGEN_ANALYTICS=0`` in an app's environment still turns it off there.
 """
 
 from __future__ import annotations
 
 import argparse
+import time
 from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
 
 DEFAULT_PROG = "cadgen analytics"
 
 _REASONS = {
     "environment": "set by DO_NOT_TRACK or CADGEN_ANALYTICS in this environment",
     "choice": "your choice",
-    "unasked": "off until you answer the CAD app's prompt, or run `cadgen analytics on`",
-    "unavailable": "off: the analytics setting could not be read",
+    "default": "by default, since cadgen said so{when}",
+    "untold": "no cadgen command has said so yet (none does in CI or from a development install)",
+    "unavailable": "the analytics setting could not be read",
 }
+
+
+def describe(found: dict[str, Any] | None = None, *, path: Path | None = None) -> str:
+    """``on`` or ``off``, and why: what ``cadgen analytics`` and ``cadgen doctor`` say."""
+    from cadgen.analytics import status, told_at
+
+    found = found if found is not None else status(path=path)
+    told = told_at(path) if found["reason"] == "default" else None
+    when = time.strftime(" on %Y-%m-%d", time.localtime(told)) if told else ""
+    return f"{'on' if found['sharing'] else 'off'}: {_REASONS.get(found['reason'], _REASONS['unavailable']).format(when=when)}"
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog,
         description=(
-            "Show or change whether CAD's agent app (cadgen mcp) sends anonymous usage analytics: a random "
-            "install id, versions, the OS and agent app, counts of CAD tool calls and view activity, and a "
-            "one-way code and the format of each distinct file shown. Never file names, paths, contents or prompts."
+            "Show or change what CAD's apps (the CAD app in an agent app, and the CAD Viewer) send as anonymous "
+            "usage analytics. By default, once a cadgen command has said so: a random install id, versions, the OS "
+            "and agent app, and counts of CAD tool calls and view activity. `on` adds a one-way code and the format "
+            "of each distinct file shown; `off` sends nothing. Never file names, paths, contents or prompts."
         ),
     )
     parser.add_argument("action", nargs="?", choices=("status", "on", "off"), default="status")
@@ -35,7 +53,7 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     args = build_parser(prog).parse_args(argv)
-    from cadgen.analytics import PRIVACY_URL, choose, request_deletion, status
+    from cadgen.analytics import PRIVACY_URL, choose, notify, request_deletion, status
     from cadgen.settings import settings_path
 
     if args.action in ("on", "off"):
@@ -49,9 +67,14 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
             print("Analytics are off; the install id was deleted"
                   + (" and the data sent under it was deleted." if chosen.get("forgotten")
                      else ". The data sent under it will be deleted the next time CAD can reach its server."))
+    else:
+        notify()  # where a person looks for it: said here when no command has said it yet
     found = status()
     if args.action != "off":
-        print(f"Analytics are {'on' if found['sharing'] else 'off'}: {_REASONS[found['reason']]}.")
+        print(f"Analytics are {describe(found)}.")
+        if found["reason"] == "default":
+            print("By default they count CAD's tool calls and view activity, never files: `cadgen analytics on` "
+                  "adds a one-way code of each file shown, `cadgen analytics off` turns them off.")
         if found["id"]:
             print(f"Install id: {found['id']}")
     if found["reason"] == "environment" and args.action in ("on", "off"):

@@ -59,7 +59,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     const reply = url === '/__cad/features' ? kept : url === '/__cad/version' ? { notice }
       : url === '/__cad/recents' ? { recents: [] } : url === '/__cad/pick' ? { path: '/m/picked.step' }
       : url !== '/__cad/analytics' ? { ok: true }
-      : init.body ? { ask: false, sharing: false, reason: 'choice', policy: 'p' } : { ask: true, sharing: false, reason: 'unasked', policy: 'p' };
+      : init.body ? { ask: false, sharing: false, reason: 'choice', policy: 'p' } : { ask: true, sharing: false, reason: 'untold', policy: 'p' };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
   // The page's own client over this Viewer's routes, its server's description answered here.

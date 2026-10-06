@@ -51,6 +51,23 @@ class DoctorTests(unittest.TestCase):
         patcher = mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd"))
         patcher.start()
         self.addCleanup(patcher.stop)
+        # The report reads what CAD's apps share from the state directory: a fresh one, never this machine's.
+        state = TemporaryDirectory()
+        self.addCleanup(state.cleanup)
+        self.state = Path(state.name)
+        environment = mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": state.name, "DO_NOT_TRACK": "", "CADGEN_ANALYTICS": ""})
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def test_the_report_says_what_cads_apps_share(self) -> None:
+        with TemporaryDirectory() as tmp:
+            _, out, _ = _run([tmp])
+        self.assertIn("sharing  off: no cadgen command has said so yet", out)
+        # Told, and nothing chosen: on by default, from the day it was said.
+        (self.state / "settings.json").write_text('{"analytics": {"notifiedAt": 1790000000, "notice": 1}}', encoding="utf-8")
+        with TemporaryDirectory() as tmp:
+            _, out, _ = _run([tmp])
+        self.assertRegex(out, r"sharing  on: by default, since cadgen said so on \d{4}-\d{2}-\d{2}\n")
 
     def test_the_report_names_the_kernel_it_loaded(self) -> None:
         with TemporaryDirectory() as tmp:

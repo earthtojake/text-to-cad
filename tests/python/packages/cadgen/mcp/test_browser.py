@@ -16,7 +16,7 @@ from cadgen.mcp.browser import LAUNCH, ViewerUnavailable, model_link, viewer_url
 FAKE = r"""
 import json, os, pathlib, sys
 mode, marker = sys.argv[1], pathlib.Path(sys.argv[2])
-marker.write_text(f"{os.getpid()}\n{os.getcwd()}", encoding="utf-8")
+marker.write_text(f"{os.getpid()}\n{os.getcwd()}\n{os.environ.get('CADGEN_ANALYTICS_NOTICE', '')}", encoding="utf-8")
 if mode == "reused":
     print("Reusing CAD Viewer at http://127.0.0.1:3245/ (pid 1, started in /somewhere)")
     print("CAD Viewer URL: http://127.0.0.1:3245/")
@@ -54,6 +54,11 @@ class ViewerUrlTest(unittest.TestCase):
         self.assertIn("--detach", LAUNCH)
         command, _ = self.launch("started")
         self.assertEqual(viewer_url(command=command), "http://127.0.0.1:3245/")
+
+    def test_the_launch_never_says_the_analytics_notice_into_its_thrown_away_output(self) -> None:
+        command, marker = self.launch("started")
+        viewer_url(command=command)
+        self.assertEqual(marker.read_text(encoding="utf-8").splitlines()[2], "0")
 
     def test_a_launcher_that_prints_no_url_is_a_failure(self) -> None:
         command, _ = self.launch("silent")

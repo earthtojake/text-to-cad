@@ -280,16 +280,15 @@ never for a copy that something else updates. `CADGEN_UPDATE_CHECK=0` turns it o
 
 ### Usage analytics
 
-The CAD app (the plugin's `cad` server) and the browser viewer (`cadgen viewer`) can send anonymous usage counts: a
-random install ID, versions, where you installed it from, your OS and agent app, how often each CAD tool was
-called and views were used, and a one-way code and the format of each distinct
-file shown (to count files, not identify them). Our server also counts installs
-per country, from each request's IP address, as weekly and monthly totals only.
-Never file names, paths, contents or prompts. It is off until you allow it
-in either app's one-time prompt (one answer counts for both); change it later with
-**Share anonymous usage data** in either app's menu (the logo at the top left, over any model), `uvx cadgen analytics on|off`, or by asking your agent to
-turn it off. `DO_NOT_TRACK=1` keeps it off. See the
-[privacy policy](https://www.texttocad.dev/privacy-policy).
+The CAD app (the plugin's `cad` server) and the browser viewer (`cadgen viewer`) send anonymous usage counts by
+default: a random install ID, versions, where you installed it from, your OS and agent app, and how often each CAD
+tool was called and views were used. Our server also counts installs per country, from each request's IP address,
+as weekly and monthly totals only. Never file names, paths, contents or prompts. The first `cadgen` command says so
+once, and nothing is sent until CAD next starts, so you can turn it off first: `uvx cadgen analytics off`,
+**Share anonymous usage data** in either app's menu (the logo at the top left, over any model), or ask your agent
+to turn it off. `uvx cadgen analytics on` also shares a one-way code and the format of each distinct file shown
+(to count files, not identify them). `DO_NOT_TRACK=1` keeps it off, and nothing is sent by default in CI or from a
+development install. See the [privacy policy](https://www.texttocad.dev/privacy-policy).
 
 ### Windows 11: Smart App Control
 
