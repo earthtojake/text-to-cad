@@ -1,7 +1,8 @@
 """The CAD Viewer's backend and the CAD app's server are leaves of cadgen.
 
 Outside `cadgen/viewer/`, `cadgen/mcp/` and the commands that start them (`cli/viewer.py`,
-`cli/viewer_stop.py`, `cli/mcp.py`, which the CLI registry names by string), no cadgen module
+`cli/viewer_stop.py`, `cli/viewer_export.py`, `cli/mcp.py`, which the CLI registry names by
+string), no cadgen module
 imports either -- except `cadgen.viewer.recents`, the state directory's one definition. CI
 leans on this: a change confined to one of them runs only the tests that reach it
 (scripts/github-workflows/select_checks.py), so an import across the line has to move the
@@ -22,7 +23,7 @@ sys.modules.setdefault("select_checks", selector)
 _spec.loader.exec_module(selector)
 
 CADGEN = REPO_ROOT / selector.CADGEN_SRC
-SHELLS = {"cli/viewer.py", "cli/viewer_stop.py", "cli/mcp.py"}
+SHELLS = {"cli/viewer.py", "cli/viewer_stop.py", "cli/viewer_export.py", "cli/mcp.py"}
 ALLOWED = {"cadgen.viewer.recents"}
 
 

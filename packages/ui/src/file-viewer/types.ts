@@ -26,6 +26,12 @@ export interface FileSource {
   stat: (path: string, options: { signal: AbortSignal }) => Promise<FileMetadata>;
   list?: (directory: string, options: { signal: AbortSignal }) => Promise<readonly FileEntry[]>;
   search?: (directory: string, query: string, options: { signal: AbortSignal }) => Promise<{ paths: readonly string[]; truncated: boolean }>;
+  /**
+   * The address a copied reference, a Quick Edit and Copy link name a file by, where the host
+   * serves its files at one (an HTTP(S) URL: `https://host/b/<build>/STEP/a.step`). Absent, a
+   * file is named by its absolute path, as every view on a machine names it.
+   */
+  address?: (path: string) => string;
 }
 export interface FileViewerState {
   /**

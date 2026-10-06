@@ -260,6 +260,7 @@ diff content: a comment in a module selects what the module's code would.
 | core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it), the viewer-memory helpers | `@text-to-cad/core`'s units, the dependency and kit-boundary checks, the benchmark helper units |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to, `packages/cadgen` and `scripts/bundle`, `tests/browser`, the viewer scripts | the UI's units and browser specs (ui changes only), the client's units, then the bundle, the launch smoke test and the format/camera gates through the real backend (anything the served client or the backend reads) |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's host-adapter units (jsdom) and its one-file build |
+| cloud | `apps/cloud`, its runner tests, `packages/ui`, `packages/cadgen` and `scripts/bundle`, the test runners | the hosted CAD server's and viewer page's units, the page build, the sandbox runner's tests, a build through the local sandbox, and Chromium drawing a real export on the built page |
 | skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load cadgen or its runtime (`packages/cadgen`, `scripts/bundle`), the cad and dxf suites (the same, and each skill's documented examples), dfm and dfam-check (their skills) |
 | docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (static asset contract, the analytics receiver's tests, lint, Next build, icon verification) and the animated brand marks |
 | packaging | `packages/cadgen`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts | clean bundle, layout, wheel contents, installed CLI behavior |
@@ -388,6 +389,9 @@ Canonical source directories are:
   server is `cadgen mcp` (`cadgen/mcp` in `packages/cadgen`), and its one-file
   build ships inside the cadgen wheel as `cadgen/_runtime/mcp` — built at
   release time, never committed.
+- `apps/cloud/` for the hosted CAD server and its viewer page. It never imports cadgen:
+  builds, snapshots and inspection scripts run in single-use sandboxes on the released
+  wheel, through `apps/cloud/runner/`.
 - `apps/docs/` for the site.
 - `packages/cadgen/` for the Python distribution and bundled runtime assets.
 - `packages/core/` for non-React CAD/client code.
@@ -420,7 +424,7 @@ imports remain inside its directory.
 
 ## Viewer Development In This Repo
 
-The apps are `docs`, `web` and `codex`. Framework-independent CAD code lives
+The apps are `docs`, `web`, `codex` and `cloud`. Framework-independent CAD code lives
 in `@text-to-cad/core`; `@text-to-cad/ui` owns the complete FileViewer and injectable
 renderers. Apps consume compiled public exports. Apps never import another app,
 and packages never import apps. `npm run check:boundaries` checks the graph,

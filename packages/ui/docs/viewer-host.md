@@ -36,7 +36,7 @@ are for reading and maintaining the contracts.
 | Contract | Definition | Public entry point |
 | --- | --- | --- |
 | `ViewerHost`, `ClipboardPort`, `AttachmentStore` (where a copied prompt's picture is saved) | [Host types](../src/host/types.ts) | `@text-to-cad/ui/host` |
-| `FileSource` (`stat`, and `list` and `search` where the host has them), `FileActions`, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@text-to-cad/ui/file-viewer` |
+| `FileSource` (`stat`, `list` and `search` where the host has them, and `address` where its files are served at a URL), `FileActions`, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@text-to-cad/ui/file-viewer` |
 | `PromptContextPort` (`deliver`, `send`), bundles, references, delivery receipts and `formatPromptMessage` (the one message a Quick Edit is) | [Prompt types](../../core/src/prompt/types.ts) | `@text-to-cad/core/prompt` |
 | `CadWorkspaceService` (the catalog of the files on screen, `folder`, `search`), `createCadClient` (`{ origin, fetch, … }`), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@text-to-cad/core/client` |
 | `createHttpAttachmentStore` (the viewer server's `AttachmentStore`: it saves a PNG through `POST /__cad/sketches`) | [Attachment store](../../core/src/client/attachments.js) | `@text-to-cad/core/client` |
@@ -466,7 +466,15 @@ from its browser environment.
 
 A copied reference names its file by its absolute path (`<path>#<selector>`), and so
 does a copied Quick Edit: every view spells a file the same way, so a reference pasted
-into a chat or a tool says exactly which file it means.
+into a chat or a tool says exactly which file it means. A host whose files are served at
+an address gives it as `FileSource.address(path)` (an HTTP(S) URL), and then every
+spelling is that address instead — the Reference panel's copy, a Quick Edit's `File:` and
+`References:` lines, a captured view's reference, and the file menu's Copy path, which the
+menu calls Copy link (`entryMenu`'s `link`). The prompt grammar takes a CAD selector on a
+URL as on a path (`https://host/b/<build>/STEP/a.step#f45`, `@text-to-cad/core/prompt`).
+The view still identifies its file by path: the live state's `resource` is the path, the
+catalog's key is the path, and nothing but what a person copies or sends changes
+(`kit/shell/promptResource.js`). Without `address`, every spelling is the absolute path.
 
 Preview's playback bars centre on one line, `3.5rem` above the viewport's bottom
 edge; nothing else sits at the bottom centre. A host whose own control floats over

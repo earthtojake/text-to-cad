@@ -20,6 +20,12 @@ test('resolves aliases and extensionless transitive reexports',()=>fixture({
   'apps/desktop/src/renderer/bridge.ts':"export * from '../../../web/src/private';",
   'apps/web/src/private.ts':'export const secret = 1;',
 },result=>assert.ok(result.errors.some(error=>error.includes('app-to-app')))));
+test('checks the cloud app: its server never imports another app, its page never reaches the server',()=>fixture({
+  'apps/cloud/server/app.ts':"import '../../web/src/private';",
+  'apps/web/src/private.ts':'export const value = 1;',
+  'apps/cloud/web/main.ts':"import '../server/store';",
+  'apps/cloud/server/store.ts':"import fs from 'node:fs'; export const read = fs.readFileSync;",
+},result=>{assert.ok(result.errors.some(error=>error.includes('apps/cloud/server/app.ts') && error.includes('app-to-app')));assert.ok(result.errors.some(error=>error.includes('reaches Node-only')));}));
 test('rejects app imports from packages and undeclared exports',()=>fixture({
   'packages/ui/src/file-viewer/index.ts':"export * from '../../../../apps/web/src/private'; import '@text-to-cad/core/private';",
   'apps/web/src/private.ts':'export const value = 1;',

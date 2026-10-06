@@ -24,7 +24,8 @@ export function validatePromptReference(reference) {
     requireValue(position(target.start) && position(target.end), 'invalid text range');
     requireValue(target.end.line > target.start.line || (target.end.line === target.start.line && target.end.character >= target.start.character), 'range end precedes its start');
   } else if (target.kind === 'cad-selector') {
-    requireValue(resource.kind === 'workspace-file', 'CAD selectors require a workspace file');
+    // A selector names topology in a CAD file, whether the file is named by its path or, where a
+    // host serves it at an address, by its URL (`https://host/b/<build>/STEP/a.step#f1`).
     requireValue(Array.isArray(target.selectors) && target.selectors.length > 0 && target.selectors.every(selector => {
       const parsed = typeof selector === 'string' && selector === selector.trim() ? parseCadRefSelector(selector) : null;
       return parsed && parsed.selectorType !== 'opaque';

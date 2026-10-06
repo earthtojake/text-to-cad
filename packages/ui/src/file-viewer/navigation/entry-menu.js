@@ -32,9 +32,11 @@ export function revealLabel(platform) {
  *
  * @param {Platform} platform
  * @param {ReadonlySet<EntryAction>} capabilities What this host can perform.
+ * @param {{ link?: boolean }} [options] `link`: the host's files have an address (`FileSource.address`),
+ *   so what is copied is a link, and the item says so.
  * @returns {EntryMenuItem[]}
  */
-export function entryMenu(platform, capabilities) {
-  return [{ action: "copy-path", label: "Copy path" }, { action: "reveal", label: revealLabel(platform) }]
+export function entryMenu(platform, capabilities, { link = false } = {}) {
+  return [{ action: "copy-path", label: link ? "Copy link" : "Copy path" }, { action: "reveal", label: revealLabel(platform) }]
     .filter((item) => capabilities.has(item.action));
 }

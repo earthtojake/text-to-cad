@@ -8,6 +8,7 @@
     "packages/ui",
     "apps/web",
     "apps/mcp",
+    "apps/cloud",
     "apps/docs"
   ],
   "scripts": {
@@ -18,7 +19,8 @@
     "dev:docs": "npm run build -w @text-to-cad/core && npm run dev -w cad-skills-docs",
     "test": "scripts/test/test-js.sh",
     "check:boundaries": "node scripts/test/check-dependencies.mjs && node scripts/test/check-kit-boundaries.mjs",
-    "build:mcp": "npm run build:packages && npm run build -w @text-to-cad/mcp"
+    "build:mcp": "npm run build:packages && npm run build -w @text-to-cad/mcp",
+    "build:cloud": "npm run build:packages && npm run build -w @text-to-cad/cloud"
   },
   "overrides": {
     "postcss": "^8.5.14"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAD Cloud"
+  short_description: "Build and share CAD models on the hosted server."
+  default_prompt: "Use $cad-cloud to build this model on the hosted CAD server, check it with a snapshot and measurements, and return the link that opens it in the CAD viewer."

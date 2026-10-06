@@ -93,6 +93,7 @@ path, the rehearsal, and local/manual fallbacks.
 - `models/`: sample and durable CAD/robot-description fixtures.
 - `apps/web/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
 - `apps/mcp/`: the CAD app agent hosts render: tabs in Codex, cards in Claude Desktop (its server is `cadgen mcp`).
+- `apps/cloud/`: the hosted CAD server: agents send model code over MCP or REST, a single-use sandbox builds it, and each build opens in the same viewer at a link. Separate from `cadgen mcp`.
 - `packages/core`: `@text-to-cad/core`, shared CAD/runtime/client code without React.
 - `packages/ui`: `@text-to-cad/ui`, the shared FileViewer, renderers, controls and styles.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
@@ -107,7 +108,7 @@ path, the rehearsal, and local/manual fallbacks.
 
 - Boundaries and design laws live in each package's README: read
   `packages/cadgen/README.md` (the laws), `packages/core/README.md`, `packages/ui/README.md`,
-  `apps/web/README.md`, and `apps/docs/README.md` before changing
+  `apps/web/README.md`, `apps/cloud/README.md`, and `apps/docs/README.md` before changing
   generation, rendering, storage, layout, or public interfaces.
 - A README holds the laws; the mechanism each law constrains lives one link
   away, and the README names the link. Read the README, then follow the one
@@ -147,7 +148,7 @@ path, the rehearsal, and local/manual fallbacks.
   the first snapshot fetches its headless browser, so no skill has a browser step. cadgen carries
   the JavaScript it executes too (Node builders, the snapshot browser bundle,
   the CAD Viewer client), so a skill ships no runtime of its own. Not every
-  skill needs cadgen (bambu-labs, dfam-check, dfm, gcode, sendcutsend,
+  skill needs cadgen (bambu-labs, cad-cloud, dfam-check, dfm, gcode, sendcutsend,
   step-parts are cadgen-free); do not add the dependency to a skill that never invokes it.
 - Keep samples and manual CAD/robot-description validation artifacts under
   `models/`. Automated tests must not read, build or import that sample corpus:

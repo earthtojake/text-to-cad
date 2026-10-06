@@ -169,7 +169,8 @@ def _compact_json(payload) -> str:
 # argparse prefixes this with "usage: " itself.
 USAGE = """{prog} [--host HOST] [--port N | --new] [--json] [--detach]
        {pad} [--dist DIR] [--api-only]
-       {prog} stop [--port N]"""
+       {prog} stop [--port N]
+       {prog} export ROOT --out DIR [--file PATH ...] [--json]"""
 
 DESCRIPTION = """The CAD Viewer: one local server for every CAD file on this machine, opened by
 absolute path (`?file=/abs/part.step`), on port 3245 or the one --port names. A
@@ -467,17 +468,21 @@ def _harden_streams() -> None:
 
 
 def main(argv: list[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    """``python -m cadgen.viewer``: serve, or ``stop`` when argv[0] says so.
+    """``python -m cadgen.viewer``: serve, or ``stop`` or ``export`` when argv[0] says so.
 
     Only argv[0] is inspected, so ``--json stop`` is a SERVE invocation with an
-    unknown arg, not a stop. The ``cadgen`` front door reaches the two verbs
-    through ``cadgen.cli.viewer`` and ``viewer_stop`` instead, which call
-    :func:`serve` and :func:`stop_command`.
+    unknown arg, not a stop. The ``cadgen`` front door reaches the three verbs
+    through ``cadgen.cli.viewer``, ``viewer_stop`` and ``viewer_export`` instead,
+    which call :func:`serve`, :func:`stop_command` and ``cadgen.viewer.export.main``.
     """
     _harden_streams()
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "stop":
         return stop_command(argv[1:], prog=f"{prog} stop")
+    if argv and argv[0] == "export":
+        from .export import main as export_main
+
+        return export_main(argv[1:], prog=f"{prog} export")
     return serve(argv, prog=prog)
 
 

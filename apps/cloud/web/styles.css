@@ -1,0 +1,9 @@
+@import "tailwindcss" source("./");
+@import "@text-to-cad/ui/tokens.css";
+@import "@text-to-cad/ui/styles.css";
+@layer base {
+  html, body, #root { height: 100%; margin: 0; overflow: hidden; }
+  body { @apply bg-background text-foreground text-ui; font-family: var(--font-sans); font-weight: 400; }
+}
+
+.cloud-notice { display: grid; place-items: center; height: 100%; padding: 24px; box-sizing: border-box; }

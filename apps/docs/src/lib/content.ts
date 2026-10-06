@@ -129,6 +129,12 @@ export const skillGroups = [
       "Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB.",
   },
   {
+    name: "CAD Cloud",
+    path: "skills/cad-cloud",
+    summary:
+      "Builds, inspects and shares CAD models on a hosted CAD server, with nothing installed: send model code, get STEP files, snapshots and a viewer link.",
+  },
+  {
     name: "step.parts",
     path: "skills/step-parts",
     summary:

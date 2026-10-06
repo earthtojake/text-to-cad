@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd ../.. && npm run build:cloud",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 800,
+      "includeFiles": "{dist/index.html,server/db/schema.sql}"
+    }
+  },
+  "routes": [
+    { "src": "/", "dest": "/api" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/api" }
+  ],
+  "crons": [
+    { "path": "/internal/sweep", "schedule": "*/10 * * * *" }
+  ]
+}

@@ -7,6 +7,7 @@
       "description": "Model, draw, source, check and fabricate parts.",
       "skills": [
         "cad",
+        "cad-cloud",
         "dxf",
         "engineering-drawing",
         "step-parts",

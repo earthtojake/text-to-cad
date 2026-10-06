@@ -77,6 +77,9 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # same dispatch reason `daemon status` is.
     "viewer": ("cadgen.cli.viewer", "start, or reuse, this machine's CAD Viewer"),
     "viewer stop": ("cadgen.cli.viewer_stop", "ask the CAD Viewer on a port to exit"),
+    # A folder's CAD files recorded as a static copy of the viewer's API, for a server with no
+    # cadgen behind it (a hosted build's link). Two words for the same dispatch reason.
+    "viewer export": ("cadgen.cli.viewer_export", "record a folder's CAD files as a static viewer export"),
     # CAD inside an agent host's panels. The host starts it, one process per thread.
     "mcp": ("cadgen.cli.mcp", "serve CAD to an agent host over MCP (stdio)"),
     "analytics": ("cadgen.cli.analytics", "show or change CAD's anonymous usage analytics: status, on, off"),

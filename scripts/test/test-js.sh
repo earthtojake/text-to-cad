@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Shared JavaScript suites: @text-to-cad/core, @text-to-cad/ui, the web app and the CAD app.
+# Shared JavaScript suites: @text-to-cad/core, @text-to-cad/ui, the web app, the CAD app and the
+# hosted CAD server.
 # --select lets a small change run only the affected workspace and its build.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 SELECT=all
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --select) SELECT="${2:?--select wants core|ui|web|mcp|all}"; shift ;;
+    --select) SELECT="${2:?--select wants core|ui|web|mcp|cloud|all}"; shift ;;
     --select=*) SELECT="${1#--select=}" ;;
     *) echo "test-js.sh: unknown argument $1" >&2; exit 2 ;;
   esac
   shift
 done
 case "$SELECT" in
-  core|ui|web|mcp|all) ;;
-  *) echo "test-js.sh: --select wants core|ui|web|mcp|all, not '$SELECT'" >&2; exit 2 ;;
+  core|ui|web|mcp|cloud|all) ;;
+  *) echo "test-js.sh: --select wants core|ui|web|mcp|cloud|all, not '$SELECT'" >&2; exit 2 ;;
 esac
 cd "$REPO_ROOT"
 if [ "$SELECT" = core ]; then
@@ -46,4 +47,12 @@ if [ "$SELECT" = mcp ] || [ "$SELECT" = all ]; then
   npm --prefix apps/mcp run test
   # The build is the other half of the contract: one index.html with nothing outside it.
   npm --prefix apps/mcp run build
+fi
+if [ "$SELECT" = cloud ] || [ "$SELECT" = all ]; then
+  section "hosted CAD server tests"
+  npm --prefix apps/cloud run typecheck
+  npm --prefix apps/cloud run typecheck:server
+  # The viewer page is built first: the browser test draws a real export on it.
+  npm --prefix apps/cloud run build
+  npm --prefix apps/cloud test
 fi

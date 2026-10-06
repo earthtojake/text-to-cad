@@ -46,8 +46,8 @@ function LogoMenu({ onHome, menu }) {
 }
 
 /** The ⋯ after the file's name: what the host can do with the file. A host that can do nothing has none. */
-function FileMenu({ path, platform, capabilities, onAction }) {
-  const items = entryMenu(platform, capabilities);
+function FileMenu({ path, platform, capabilities, link = false, onAction }) {
+  const items = entryMenu(platform, capabilities, { link });
   if (!items.length) return null;
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild><button aria-label="File actions" data-testid="file-actions" type="button"

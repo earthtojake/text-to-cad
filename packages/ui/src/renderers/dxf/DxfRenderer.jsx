@@ -9,6 +9,7 @@ import { ViewportTopRight } from "../kit/shell/ViewportTopRight.jsx";
 import { attachLiveBinding } from "../kit/shell/liveBinding.js";
 import { useWhenSettled } from "../kit/shell/useWhenSettled.js";
 import { createViewPromptContext, promptDeliveryError } from "../kit/shell/promptContext.js";
+import { promptResourceFor } from "../kit/shell/promptResource.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
@@ -107,12 +108,12 @@ function DxfSurface({ view, data }) {
     const pixels = capture();
     void pixels.catch(() => {});
     let pending;
-    try { pending = host.promptContext.deliver(createViewPromptContext({ resource: resourceRef.current, capture: pixels })); }
+    try { pending = host.promptContext.deliver(createViewPromptContext({ resource: promptResourceFor(view.source, resourceRef.current), capture: pixels })); }
     catch (error) { pending = Promise.reject(error); }
     Promise.resolve(pending)
       .catch((error) => ({ status: "failed", message: error instanceof Error ? error.message : String(error) }))
       .then((result) => setActionError(promptDeliveryError(result)));
-  }, [capture, host.promptContext]);
+  }, [capture, host.promptContext, view.source]);
 
   // A host's own capture request is the same act, acknowledged.
   const snapshotRef = useRef(snapshot);

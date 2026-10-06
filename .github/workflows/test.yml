@@ -68,6 +68,7 @@ jobs:
       web_client: ${{ steps.select.outputs.web_client }}
       web_viewer: ${{ steps.select.outputs.web_viewer }}
       mcp: ${{ steps.select.outputs.mcp }}
+      cloud: ${{ steps.select.outputs.cloud }}
       skills: ${{ steps.select.outputs.skills }}
       light_policy: ${{ steps.select.outputs.light_policy }}
       light_tests: ${{ steps.select.outputs.light_tests }}
@@ -322,6 +323,41 @@ jobs:
 
       - name: Run the CAD app tests and build it
         run: scripts/test/test-js.sh --select mcp
+
+  # The hosted CAD server (apps/cloud): its server and viewer-page units, the page build, the
+  # sandbox runner's tests, and two end-to-end tests: the local sandbox building a box with
+  # this checkout's cadgen, and Chromium drawing a real export on the built page. The page is
+  # CadViewer and the sandbox runs cadgen, so ui and cadgen changes reach it too.
+  cloud:
+    name: cloud
+    needs: changes
+    if: needs.changes.outputs.cloud == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # setup-deps installs cadgen into the job's Python, not a .venv.
+      CLOUD_PYTHON: python
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/core packages/ui apps/cloud
+          ui-browser: "true"
+
+      - name: Bundle production outputs
+        run: scripts/bundle/bundle.sh
+
+      - name: Run the hosted CAD server tests
+        run: scripts/test/test-js.sh --select cloud
+
+      - name: Run the sandbox runner tests
+        run: scripts/test/test-python.sh --select cloud
 
   # The repository's policy gates and the skills' own suites, in two phases. The light
   # contracts -- policy and skill tests that read only the repository's text -- run on every

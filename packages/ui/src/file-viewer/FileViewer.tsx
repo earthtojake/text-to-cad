@@ -90,10 +90,11 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const fileMenu = useMemo(() => {
     const capabilities = new Set(Object.keys(perform ?? {}) as EntryAction[]);
     return capabilities.size ? {
-      platform: host.fileActions?.platform ?? "linux", capabilities,
+      // Where the host's files have an address, the path copied is a link, and the item says so.
+      platform: host.fileActions?.platform ?? "linux", capabilities, link: typeof source.address === "function",
       onAction: (action: EntryAction, target: string) => { void Promise.resolve(perform?.[action]?.({ path: target, kind: "file" })).catch(error => onError?.(error)); },
     } : null;
-  }, [perform, host.fileActions?.platform, onError]);
+  }, [perform, host.fileActions?.platform, source, onError]);
   // The name opens the explorer where the host's files can be browsed: a pick shows the file here.
   const explorer = useMemo(() => source.list && source.search ? { source, onOpen: (next: string) => onOpenFile(next) } : null, [source, onOpenFile]);
   // The logo's app menu: the host's links and the person's settings (Back to files is `onHome`).

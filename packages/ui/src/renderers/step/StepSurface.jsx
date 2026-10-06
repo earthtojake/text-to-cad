@@ -122,6 +122,7 @@ import {
 } from "./components/workbench/hooks/packageProgressiveLoad.js";
 import { meshLoadErrorForViewer, shouldStartMeshLoad } from "./components/workbench/hooks/meshLoadTarget.js";
 import { useViewerHost } from "../../host/context.js";
+import { promptResourceFor, referencePathFor } from "../kit/shell/promptResource.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { createCadPromptContext } from "./file-view/promptContext.js";
 import { modelMenuDescriptor, partMenuDescriptor, topologyMenuDescriptor } from "./file-view/stepMenus.js";
@@ -354,8 +355,8 @@ function StepSurfaceBody({ view, data }) {
   // generating — a stale frame must not outlive the build that produced it.
   const selectedArtifactProgress = selectedArtifactGenerating ? selectedArtifact.progress : null;
   // The name copied refs give this file, so they still say which file they belong to when
-  // pasted into a prompt spanning several: its absolute path.
-  const referencePath = view.file.path;
+  // pasted into a prompt spanning several: the host's address for it, else its absolute path.
+  const referencePath = referencePathFor(view.source, view.file.path);
   // While the artifact is missing/stale/building/broken, hide the (possibly stale) render assets so
   // the viewer shows a loading or error state and renders only the fresh artifact once ready.
   const selectedEntry = useMemo(
@@ -1768,12 +1769,16 @@ function StepSurfaceBody({ view, data }) {
       const label = referenceLabel(reference.selector, displayStepTreeRoot || stepTreeRoot);
       return { ...reference, ...(label ? { label } : {}) };
     }), [selectedEntry, displayStepTreeRoot, stepTreeRoot]);
-  // What is selected, in the prompt grammar: the references a Quick Edit attaches.
-  const promptSelection = useMemo(() => referencesForHost(canonicalCopySelectionLines.join("\n")).map(reference => ({
-    resource: { ...promptResource },
-    target: reference.selector ? { kind: 'cad-selector', selectors: reference.selector.split(',') } : { kind: 'whole-resource' },
-    ...(reference.label ? { label: reference.label } : {})
-  })), [referencesForHost, canonicalCopySelectionLines, promptResource]);
+  // What is selected, in the prompt grammar: the references a Quick Edit attaches, each naming
+  // the file as a prompt does (the host's address for it, else its path: `promptResource.js`).
+  const promptSelection = useMemo(() => {
+    const named = promptResourceFor(view.source, promptResource);
+    return referencesForHost(canonicalCopySelectionLines.join("\n")).map(reference => ({
+      resource: { ...named },
+      target: reference.selector ? { kind: 'cad-selector', selectors: reference.selector.split(',') } : { kind: 'whole-resource' },
+      ...(reference.label ? { label: reference.label } : {})
+    }));
+  }, [referencesForHost, canonicalCopySelectionLines, promptResource, view.source]);
   // Every request for a part's topology ends here, `onLoadTopology` included: the tree asks for
   // the parts on screen, as often as every scroll frame. A part already expanded and requested
   // costs a lookup; new parts are expanded (which is what requests them) together, at most every

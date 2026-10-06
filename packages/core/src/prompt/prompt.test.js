@@ -20,6 +20,17 @@ test('a message says what the person wrote, then the file, its references and a 
   // A picture sent beside the text is not named in it.
   assert.equal(formatPromptMessage(createPromptContext([textPart('Why?'), referencePart(file, 'file'), sketch])), 'Why?\n\nFile: "/work/STEP/my part.step"');
 });
+test('a file a host serves at an address is named by its URL, selectors and all', () => {
+  // A hosted build's viewer names its files by URL (`https://host/b/<build>/<path>`): a copied
+  // reference or a Quick Edit then says exactly which file, wherever it is pasted.
+  const url = { kind: 'url', url: 'https://cad.example/b/k7Qx2/STEP/bracket.step', revision: 'v1' };
+  const face = { resource: url, target: { kind: 'cad-selector', selectors: ['o1.2.f45'] } };
+  assert.equal(formatPromptReference(face), 'https://cad.example/b/k7Qx2/STEP/bracket.step#o1.2.f45');
+  const context = createPromptContext([textPart('Thicken this.'), referencePart({ resource: url, target: { kind: 'whole-resource' } }, 'file'), referencePart(face, 'face')]);
+  assert.equal(formatPromptMessage(context),
+    'Thicken this.\n\nFile: https://cad.example/b/k7Qx2/STEP/bracket.step\nReferences:\nhttps://cad.example/b/k7Qx2/STEP/bracket.step#o1.2.f45');
+  assert.throws(() => referencePart({ ...face, resource: { kind: 'url', url: 'ftp://cad.example/a.step' } }), /HTTP/);
+});
 test('code targets preserve explicit ranges rather than borrowing the CAD fragment grammar', () => {
   const code = { resource: { kind: 'workspace-file', path: '/work/src/bracket.py' }, target: { kind: 'text-range', start: { line: 4, character: 2 }, end: { line: 6, character: 0 } } };
   assert.equal(formatPromptReference(code), '/work/src/bracket.py:5:3-7:1');

@@ -12,7 +12,10 @@ platform.
 store, document assembly, kinematics, exports, validation, inspection,
 snapshots, the warm daemon and its build pool, the CAD Viewer
 (`cadgen viewer`: a local HTTP server over the built client, on port 3245 or the
-port `--port` names, serving every CAD file by its absolute path), and CAD beside an agent's chat (`cadgen mcp`: an MCP App server that
+port `--port` names, serving every CAD file by its absolute path; `cadgen viewer export
+ROOT --out DIR` records what those routes answer for the CAD files under a folder, with
+every byte the client may fetch, as a static export a server with no cadgen behind it
+serves to the same client), and CAD beside an agent's chat (`cadgen mcp`: an MCP App server that
 an agent host starts, over the viewer's own routes: tabs in Codex, viewer cards
 in the chat for every other MCP Apps host).
 

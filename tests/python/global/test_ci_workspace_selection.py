@@ -66,12 +66,14 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^packages/ui/src/.*\.test\.tsx?$",                        # packages/ui vitest.config.ts
             r"^apps/web/(src|scripts)/.*\.test\.[cm]?js$",              # apps/web/scripts/run-tests.mjs
             r"^apps/mcp/src/.*\.test\.tsx?$",                          # apps/mcp vitest.config.mjs
+            r"^apps/cloud/(server|web|test)/.*\.test\.tsx?$",          # apps/cloud vitest.config.mjs
             r"^apps/docs/src/lib/api/[^/]*\.test\.mjs$",          # apps/docs `check` (node --test)
             r"^scripts/brand/[^/]*\.test\.mjs$",                          # test-docs.sh
             r"^scripts/bench/viewer-memory/[^/]*\.test\.mjs$",          # test-js.sh --select core
             r"^scripts/test/check-(dependencies|kit-boundaries)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cadgen/(.*/)?test_[^/]*\.py$",      # test-python.sh cadgen
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
+            r"^tests/python/apps/cloud/test_[^/]*\.py$",                 # test-python.sh cloud
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
             r"^tests/browser/viewer-e2e\.mjs$",                          # test-viewer-browser.sh
         ]
@@ -227,6 +229,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for("skills/cad/references/positioning.md")["skills_tests"],
                          [f"{SKILLS}/cad/test_documented_models.py", f"{SKILLS}/cad/test_documented_project.py"])
         self.assertEqual(tests_for("skills/dxf/SKILL.md")["skills_tests"], [f"{SKILLS}/dxf/test_documented_commands.py"])
+        self.assertEqual(tests_for("skills/cad-cloud/SKILL.md")["skills_tests"], [f"{SKILLS}/cad-cloud/test_documented_models.py"])
         snapshot_review = tests_for("skills/cad/references/snapshot-review.md")
         self.assertEqual(snapshot_review["cadgen_tests"], [f"{CADGEN}/test_snapshot_requests.py"])
         self.assertEqual(jobs_for("skills/cad/references/snapshot-review.md"), {"cadgen-linux", "cadgen-windows", "skills"})
@@ -248,7 +251,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(jobs_for("packages/cadgen/src/cadgen/step.py"), GATED - {"core-js", "mcp", "docs"})
         chosen = tests_for("packages/cadgen/src/cadgen/step.py")
         self.assertEqual(chosen["cadgen_tests"], [CADGEN])
-        self.assertEqual(chosen["skills_tests"], [f"{SKILLS}/cad", f"{SKILLS}/dxf"])
+        self.assertEqual(chosen["skills_tests"], [f"{SKILLS}/cad", f"{SKILLS}/cad-cloud", f"{SKILLS}/dxf"])
         self.assertEqual(set(chosen["skills_policy"]), {f"{POLICY}/{name}" for name in selector.HEAVY_POLICY})
         self.assertEqual(route("packages/cadgen/src/cadgen/step.py")["web_ui"], "false")
 
@@ -261,7 +264,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertIn(f"{CADGEN}/test_atomic_replace.py", viewer["cadgen_tests"])  # reads every source
         self.assertEqual(viewer["skills_tests"], [])
         self.assertEqual(jobs_for("packages/cadgen/src/cadgen/viewer/scanner.py"),
-                         {"cadgen-linux", "cadgen-windows", "web", "skills", "packaging"})
+                         {"cadgen-linux", "cadgen-windows", "web", "cloud", "skills", "packaging"})
         mcp = tests_for("packages/cadgen/src/cadgen/mcp/server.py")
         self.assertIn(f"{CADGEN}/mcp/test_server.py", mcp["cadgen_tests"])
         self.assertNotIn(f"{CADGEN}/viewer/test_launcher.py", mcp["cadgen_tests"])
@@ -271,7 +274,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for("packages/cadgen/src/cadgen/viewer/recents.py")["cadgen_tests"], [CADGEN])
 
     def test_ui_reaches_both_hosts_and_the_wheel_not_the_engine(self):
-        self.assertEqual(jobs_for("packages/ui/src/index.ts"), {"web", "mcp", "skills", "packaging"})
+        self.assertEqual(jobs_for("packages/ui/src/index.ts"), {"web", "mcp", "cloud", "skills", "packaging"})
         selected = route("packages/ui/src/index.ts")
         self.assertEqual((selected["web_ui"], selected["web_client"], selected["web_viewer"]), ("true", "true", "true"))
         # ...but the DXF suite reads ui's fixture and its JavaScript.
@@ -284,6 +287,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(jobs_for("apps/web/src/main.tsx"), {"web", "skills", "packaging"})
         self.assertEqual(route("apps/web/src/main.tsx")["web_ui"], "false")
         self.assertEqual(jobs_for("apps/mcp/src/App.tsx"), {"mcp", "skills", "packaging"})
+        # The hosted CAD server ships nothing in the wheel: its own job and the contracts.
+        self.assertEqual(jobs_for("apps/cloud/server/app.ts"), {"cloud", "skills"})
+        self.assertEqual(jobs_for("tests/python/apps/cloud/test_runner.py"), {"cloud", "skills"})
+        self.assertEqual(jobs_for("apps/cloud/README.md"), {"skills"})
         self.assertEqual(jobs_for("apps/docs/src/app/page.tsx"), {"docs", "core-js", "skills"})
         self.assertEqual(jobs_for("apps/docs/public/brand/logo.svg"), {"docs", "skills"})
         # apps/web's tests resolve the links in its Markdown, so what they link to is web input.
@@ -297,10 +304,11 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-viewer-launch.sh": {"web", "skills"},
             "scripts/test/test-installed.sh": {"packaging", "skills"},
             "scripts/test/test-docs.sh": {"docs", "skills"},
-            "scripts/test/test-js.sh": {"core-js", "web", "mcp", "skills"},
-            "scripts/test/check-dependencies.mjs": {"core-js", "web", "mcp", "skills"},
+            "scripts/test/test-js.sh": {"core-js", "web", "mcp", "cloud", "skills"},
+            "scripts/test/check-dependencies.mjs": {"core-js", "web", "mcp", "cloud", "skills"},
             "scripts/test/test-global.sh": {"skills"},
-            "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
+            "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "cloud", "skills"},
+            "scripts/cloud/dev.sh": {"skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
             "scripts/bundle/bundle.sh": GATED - {"core-js", "mcp", "docs"},

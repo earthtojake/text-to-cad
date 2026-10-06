@@ -13,6 +13,7 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 | Check the release version and skill pins | `scripts/release/check-version.sh` |
 | Check the shipping contract | `scripts/github-workflows/check-builds.sh` |
 | Install this checkout into an agent app to test it | `scripts/install/dev_install.py <host>` |
+| Run the hosted CAD server locally | `scripts/cloud/dev.sh` |
 
 ## Index
 
@@ -181,6 +182,16 @@ where those files ship, so these scripts are what produces them.
   repository's skills installed loose, would load. Developer step in
   `CONTRIBUTING.md` ("Test In Agent Apps"); its assembly and loose-skill check are
   tested by `tests/python/global/test_dev_install.py`.
+
+`cloud/` — the hosted CAD server (`apps/cloud`; its README documents both).
+
+- `dev.sh [--rebuild]` — the whole server on this machine in one command:
+  development sign-in, PGlite and the object store under `tmp/cloud`, and the
+  local sandbox, which runs what a build sends as you, unisolated.
+- `prepare-sandbox.mjs` — makes the Vercel Sandbox snapshot every cloud job
+  starts from (Python 3.13, `cadgen==VERSION`, its browser, the runner), checks it
+  with a smoke build after cutting the network, and prints its id. It creates
+  cloud resources: run by hand, never in CI.
 
 `git-hooks/pre-commit` — the body `.githooks/pre-commit` runs: `bundle.sh --check`
 when staged paths touch `packages`, `apps`, `skills` or `scripts/bundle`. It is

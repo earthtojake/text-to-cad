@@ -119,4 +119,11 @@ test("package sub-asset URLs keep the shape of the package URL they came from", 
     resolvePackageAssetUrl(`${REMOTE}${localPackage}`, "components/7e4f.glb"),
     `${REMOTE}/__cad/asset?file=%2Fabs%2Fpkg.step%2Fcomponents%2F7e4f.glb&v=abc`,
   );
+  // A backend under a path prefix (a hosted build's `/b/<build>`): the prefix stays on the route.
+  const prefixed = "https://cad.example/b/k7Qx2/__cad/store?file=abc123&documentHash=d1";
+  assert.equal(
+    resolvePackageAssetUrl(prefixed, "components/7e4f.surf"),
+    "https://cad.example/b/k7Qx2/__cad/store?file=%2Fabc123%2Fcomponents%2F7e4f.surf&documentHash=d1",
+  );
+  assert.equal(viewerOriginUrl("https://cad.example/b/k7Qx2", "/__cad/catalog"), "https://cad.example/b/k7Qx2/__cad/catalog");
 });

@@ -20,6 +20,7 @@ import { DisplayPopoverClose } from "./DisplayPopover.jsx";
 import { attachLiveBinding } from "./liveBinding.js";
 import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
+import { promptResourceFor } from "./promptResource.js";
 import { fileViewsEqual, plainShellCamera, readFileView, readFileViewSlices, scopeShellCamera, shellPresentationKey, writeFileView } from "./fileView.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
 import { useWhenSettled } from "./useWhenSettled.js";
@@ -367,6 +368,9 @@ export function useRendererShell({
   promptContextRef.current = promptContext;
   const liveResourceRef = useRef(live.resource);
   liveResourceRef.current = live.resource;
+  // What a prompt names the document by: the host's address for it, where its files have one,
+  // else the path the view identifies it by (`promptResource.js`). The live state keeps the path.
+  const promptResource = useMemo(() => promptResourceFor(view.source, resource), [view.source, resource]);
   // Freeze references now; the host binds its destination before waiting for the PNG.
   const capture = useCallback(() => {
     if (!modelKey || !promptAvailable || viewerLoading) return;
@@ -379,10 +383,10 @@ export function useRendererShell({
         return;
       }
       void deliverPrompt(promptContextRef.current({
-        resource: liveResourceRef.current?.() || resource, references: referencesRef.current?.() || [], capture: pixels
+        resource: promptResourceFor(view.source, liveResourceRef.current?.() || resource), references: referencesRef.current?.() || [], capture: pixels
       }));
     } catch (error) { reportActionError(error); }
-  }, [modelKey, promptAvailable, viewerLoading, deliverPrompt, resource, composer, host.clipboard, reportActionError]);
+  }, [modelKey, promptAvailable, viewerLoading, deliverPrompt, resource, view.source, composer, host.clipboard, reportActionError]);
   const copyActionRef = useRef(null);
   // Draw's Copy: the view with its ink, to the clipboard; true once it is there.
   const copyDrawing = useCallback(async () => {
@@ -541,9 +545,9 @@ export function useRendererShell({
       previewOrbitSpeed, setPreviewOrbitSpeed, toolStack, changeToolStack, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, setRuntimeAlert,
       copyActionRef, copyDrawing, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
-      // Quick Edit's: the file it is about, how a copied prompt spells its paths, its sketch, and
-      // the renderer's own Escape, which an empty Quick Edit passes on.
-      resource, captureView, escape: escapeView,
+      // Quick Edit's: the file it is about, as a prompt names it (the host's address, or its
+      // path), its sketch, and the renderer's own Escape, which an empty Quick Edit passes on.
+      resource: promptResource, captureView, escape: escapeView,
       drawToolActive, drawing, animation, display
     }
   };

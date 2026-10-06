@@ -1,4 +1,5 @@
 import { createPromptContext, referencePart, textPart } from '@text-to-cad/core/prompt';
+import { resourceStem } from '../../kit/shell/promptResource.js';
 
 /** Assemble a snapshot once, before asynchronous image encoding or host routing. */
 export function createCadPromptContext({ resource, references = [], text = '', capture, operationId }) {
@@ -10,7 +11,7 @@ export function createCadPromptContext({ resource, references = [], text = '', c
   if (text) parts.push(textPart(text));
   if (capture) {
     if (!parts.some(part => part.kind === 'reference')) parts.unshift(referencePart({ resource: { ...resource }, target: { kind: 'whole-resource' } }, 'source'));
-    parts.push({ id: 'capture', kind: 'attachment', name: `${resource.path.split('/').pop().replace(/\.[^.]+$/, '')}-view.png`, mimeType: 'image/png', content: capture, about: parts.filter(part => part.kind === 'reference').map(part => part.id) });
+    parts.push({ id: 'capture', kind: 'attachment', name: `${resourceStem(resource)}-view.png`, mimeType: 'image/png', content: capture, about: parts.filter(part => part.kind === 'reference').map(part => part.id) });
   }
   return createPromptContext(parts, operationId);
 }

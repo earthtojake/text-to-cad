@@ -11,7 +11,8 @@ Stated as a criterion rather than a list, as before: "uses cadgen" is what the s
 TEACH (`cadgen ...`) or what its own Python imports. Skills that never touch cadgen
 (bambu-labs, dfam-check, gcode, sendcutsend, step-parts) carry no launch command, and a
 mention on a line that hands off to another skill (`$cad: cadgen stl build ...`) is that
-skill's command, not this one's.
+skill's command, not this one's. The hosted cad-cloud skill carries none either: its docs
+show model code that imports cadgen, but the hosted server runs it, never the agent's machine.
 """
 
 from __future__ import annotations
@@ -26,6 +27,10 @@ SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 LAUNCH = "uvx --no-config --managed-python --python 3.13 --from cadgen=={version} {tool}"
 
+
+# Skills whose cadgen runs on a hosted server: their docs are model code and the server's own
+# commands, none of it run locally, so there is nothing to launch and no pin to keep.
+HOSTED = frozenset({"cad-cloud"})
 
 _HANDOFF_MARKER = re.compile(r"\$(?P<name>[a-z0-9-]+)")
 
@@ -79,7 +84,7 @@ class SkillLaunchCommand(unittest.TestCase):
         for skill in SKILLS:
             text = (skill / "SKILL.md").read_text(encoding="utf-8")
             with self.subTest(skill=skill.name):
-                if not _teaches_cadgen(skill):
+                if skill.name in HOSTED or not _teaches_cadgen(skill):
                     self.assertNotIn("--from cadgen==", text, "a skill that never runs cadgen downloads nothing")
                     continue
                 for tool in ("cadgen", "python"):

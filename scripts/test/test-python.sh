@@ -9,7 +9,8 @@ set -euo pipefail
 #   cadgen   the cadgen package suite, the CAD Viewer backend included (92% of the time)
 #   viewer   the CAD Viewer backend alone (tests/python/packages/cadgen/viewer)
 #   skills   every skill's suite
-#   all      cadgen + skills (the default)
+#   cloud    the hosted CAD server's sandbox runner (tests/python/apps/cloud)
+#   all      cadgen + skills + cloud (the default)
 #
 # --print-weights prints one `WEIGHT<TAB>path<TAB>seconds` line per slow file on
 # stdout: the first thing to read when a run is slow.
@@ -41,8 +42,8 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$SELECT" in
-  all|cadgen|viewer|skills) ;;
-  *) echo "test-python.sh: --select wants all|cadgen|viewer|skills, not '$SELECT'" >&2; exit 2 ;;
+  all|cadgen|viewer|skills|cloud) ;;
+  *) echo "test-python.sh: --select wants all|cadgen|viewer|skills|cloud, not '$SELECT'" >&2; exit 2 ;;
 esac
 
 failed_suites=()
@@ -93,6 +94,12 @@ if [ "$SELECT" = "all" ] || [ "$SELECT" = "skills" ]; then
         "skills/$skill/scripts" "packages/cadgen/src"
     fi
   done
+fi
+
+# The hosted CAD server's runner: the one Python file apps/cloud ships into a sandbox, run here
+# against this checkout's cadgen as a sandbox runs it against the released one.
+if [ "$SELECT" = "all" ] || [ "$SELECT" = "cloud" ]; then
+  run_suite "cloud runner Python tests" "tests/python/apps/cloud" "packages/cadgen/src"
 fi
 
 require_selected_tests

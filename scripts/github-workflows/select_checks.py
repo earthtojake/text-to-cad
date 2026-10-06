@@ -24,6 +24,7 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
     core_js                       core-js
     web  web_ui  web_client  web_viewer
     mcp
+    cloud
     skills  light_policy  light_tests  skills_policy  skills_tests  skills_runtime
     docs
     packaging
@@ -56,7 +57,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages/cadgen"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "docs", "packaging")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "cloud", "docs", "packaging")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -113,12 +114,13 @@ LIGHT_SKILL_TESTS = (
     f"{SKILL_SUITES}/step-parts",
 )
 # The skill suites that drive cadgen's CLIs, and so read everything cadgen reads.
-CADGEN_SKILL_SUITES = (f"{SKILL_SUITES}/cad", f"{SKILL_SUITES}/dxf")
+CADGEN_SKILL_SUITES = (f"{SKILL_SUITES}/cad", f"{SKILL_SUITES}/cad-cloud", f"{SKILL_SUITES}/dxf")
 
 # Whatever runs cadgen: its suites on both platforms, the skill suites that drive it, the
-# policy tests that load it, the viewer gates that serve and build through it, the wheel.
+# policy tests that load it, the viewer gates that serve and build through it, the wheel, and
+# the hosted CAD server, whose sandbox runs it.
 CADGEN_CONSUMERS = select(
-    flags=["web_viewer", "packaging"], cadgen=[CADGEN_SUITE], skills=CADGEN_SKILL_SUITES,
+    flags=["web_viewer", "cloud", "packaging"], cadgen=[CADGEN_SUITE], skills=CADGEN_SKILL_SUITES,
     policy=[f"{POLICY_SUITE}/{name}" for name in sorted(HEAVY_POLICY)],
 )
 
@@ -150,7 +152,8 @@ def _test_file(suite: str, whole: str | None = None) -> Callable[[str], Select]:
 # all of cadgen at once; and, for the viewer, the gates that serve the bundled client. The
 # skill suites and the heavy policy tests reach neither.
 CADGEN_SRC = "packages/cadgen/src/cadgen"
-VIEWER_CODE = (f"{CADGEN_SRC}/viewer/**", f"{CADGEN_SRC}/cli/viewer.py", f"{CADGEN_SRC}/cli/viewer_stop.py")
+VIEWER_CODE = (f"{CADGEN_SRC}/viewer/**", f"{CADGEN_SRC}/cli/viewer.py", f"{CADGEN_SRC}/cli/viewer_stop.py",
+               f"{CADGEN_SRC}/cli/viewer_export.py")
 MCP_CODE = (f"{CADGEN_SRC}/mcp/**", f"{CADGEN_SRC}/cli/mcp.py")
 VIEWER_SHARED = (f"{CADGEN_SRC}/viewer/__init__.py", f"{CADGEN_SRC}/viewer/recents.py")
 _NAMES_VIEWER = r"cadgen\.viewer|cadgen\.mcp|cli\.viewer|cli\.mcp|[\"'](?:viewer|mcp)[\"' ]"
@@ -177,7 +180,8 @@ def _cadgen_tests_naming(names: str, directories: tuple[str, ...]) -> list[str]:
 
 
 def _viewer_change(path: str) -> Select:
-    return select(flags=["web_viewer", "packaging"], cadgen=_cadgen_tests_naming(_NAMES_VIEWER, ("viewer", "mcp")))
+    # The hosted CAD server serves `cadgen viewer export`'s record of these routes.
+    return select(flags=["web_viewer", "cloud", "packaging"], cadgen=_cadgen_tests_naming(_NAMES_VIEWER, ("viewer", "mcp")))
 
 
 def _mcp_change(path: str) -> Select:
@@ -240,9 +244,11 @@ RULES: tuple[Rule, ...] = (
 
     # The shared UI and the apps. The snapshot runtime is built from core alone, so ui
     # reaches the two hosts and the wheel, not cadgen's suites.
-    Rule(("packages/ui/**",), select(flags=["web_ui", "web_client", "web_viewer", "mcp", "packaging"])),
+    Rule(("packages/ui/**",), select(flags=["web_ui", "web_client", "web_viewer", "mcp", "cloud", "packaging"])),
     Rule(("apps/web/**",), select(flags=["web_client", "web_viewer", "packaging"])),
     Rule(("apps/mcp/**",), select(flags=["mcp", "packaging"])),
+    # The hosted CAD server: its own job (the server, the page, the runner and its tests).
+    Rule(("apps/cloud/**", "tests/python/apps/**"), select(flags=["cloud"])),
     Rule(("apps/docs/**",), select(flags=["docs"])),
     # check-dependencies.mjs walks every app's source and runs in core-js, the cheapest job
     # that has it.
@@ -268,14 +274,15 @@ RULES: tuple[Rule, ...] = (
     Rule(("skills/dxf/**",), select(skills=[f"{SKILL_SUITES}/dxf/test_documented_commands.py"])),
     Rule(("skills/dfam-check/**",), select(skills=[f"{SKILL_SUITES}/dfam-check"])),
     Rule(("skills/dfm/**",), select(skills=[f"{SKILL_SUITES}/dfm"])),
+    Rule(("skills/cad-cloud/**",), select(skills=[f"{SKILL_SUITES}/cad-cloud/test_documented_models.py"])),
     # Files that must never appear here: the test that refuses one runs when one does.
     Rule(("skills/**/node_runtime.py",), select(cadgen=[f"{CADGEN_SUITE}/test_node_resolve_bootstrap.py"])),
     Rule(("skills/*/scripts/packages/**",), policy("test_node_builder_bundles.py")),
 
     # The test runners and the gates each one feeds.
-    Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
+    Rule(("scripts/test/test-python.sh",), select(flags=["cloud"], cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
     Rule(("scripts/test/test-global.sh",), select(policy=[POLICY_SUITE])),
-    Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
+    Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp", "cloud"])),
     Rule(("scripts/test/test-docs.sh", "scripts/brand/**"), select(flags=["docs"])),
     Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"), select(flags=["web_viewer"])),
     Rule(("scripts/test/test-installed.sh",), select(flags=["packaging"])),
@@ -293,6 +300,7 @@ RULES: tuple[Rule, ...] = (
     # root prose, the deploy, and the sample models no test may read.
     Rule((
         "scripts/release/**", "scripts/install/**", "scripts/github-workflows/deploy-vercel-app.sh",
+        "scripts/cloud/**",
         "scripts/git-hooks/**", "scripts/bench/cadgen-performance/**", "scripts/README.md",
         ".github/workflows/release-publish.yml", ".github/workflows/release-prepare.yml",
         ".github/workflows/deploy-docs.yml",

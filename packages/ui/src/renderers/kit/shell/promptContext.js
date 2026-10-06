@@ -1,4 +1,5 @@
 import { createPromptContext, referencePart } from "@text-to-cad/core/prompt";
+import { resourceStem } from "./promptResource.js";
 
 /**
  * One prompt context for a view: the file as a whole-resource reference (or the
@@ -9,7 +10,7 @@ export function createViewPromptContext({ resource, references = [], capture, op
   const parts = references.map((reference, index) => referencePart(reference, `reference-${index}`));
   if (capture) {
     if (!parts.length) parts.push(referencePart({ resource: { ...resource }, target: { kind: "whole-resource" } }, "source"));
-    const name = `${String(resource.path || "view").split("/").pop().replace(/\.[^.]+$/, "")}-view.png`;
+    const name = `${resourceStem(resource)}-view.png`;
     parts.push({ id: "capture", kind: "attachment", name, mimeType: "image/png", content: capture, about: parts.map(part => part.id) });
   }
   return createPromptContext(parts, operationId);

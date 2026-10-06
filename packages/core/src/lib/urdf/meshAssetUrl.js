@@ -58,10 +58,12 @@ export function resolveLocalAssetFileRef(sourceFileRef, reference) {
 }
 
 /** The `/__cad/asset` URL for a mesh named relative to a description served from one, or ""
- * when the description did not come from that route (a plain static host, a test fixture). */
+ * when the description did not come from that route (a plain static host, a test fixture).
+ * The route may sit under a path prefix (a viewer origin of `/b/<build>`): the mesh is served
+ * from the same prefixed route as its description. */
 export function resolveCadAssetMeshUrl(reference, sourceUrl) {
   const source = new URL(normalizeAbsoluteUrl(sourceUrl));
-  if (source.pathname !== "/__cad/asset") {
+  if (!/(?:^|\/)__cad\/asset$/.test(source.pathname)) {
     return "";
   }
   const sourceFileRef = source.searchParams.get("file") || "";
@@ -69,7 +71,7 @@ export function resolveCadAssetMeshUrl(reference, sourceUrl) {
   if (!meshFileRef) {
     return "";
   }
-  const resolved = new URL("/__cad/asset", source);
+  const resolved = new URL(source.pathname, source);
   resolved.searchParams.set("file", meshFileRef);
   // Carry the cache-busting `v` (and anything else) so a mesh is versioned with its robot.
   for (const [key, value] of source.searchParams.entries()) {

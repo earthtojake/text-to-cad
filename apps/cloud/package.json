@@ -1,0 +1,47 @@
+{
+  "name": "@text-to-cad/cloud",
+  "private": true,
+  "type": "module",
+  "version": "0.7.15",
+  "scripts": {
+    "dev": "tsx server/node.ts",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "typecheck:server": "tsc -p tsconfig.server.json",
+    "serve:export": "node test/serveExport.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@hono/node-server": "^2.1.3",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@text-to-cad/core": "*",
+    "@text-to-cad/ui": "*",
+    "@vercel/functions": "^3.9.11",
+    "@vercel/sandbox": "^3.5.1",
+    "aws4fetch": "^1.0.20",
+    "hono": "^4.13.13",
+    "jose": "^6.2.12",
+    "lucide-react": "^1.48.0",
+    "meshoptimizer": "^1.2.0",
+    "postgres": "^3.4.9",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "three": "0.186.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "22.20.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "jsdom": "30.1.1",
+    "tailwindcss": "^4.2.2",
+    "tsx": "^4.23.15",
+    "typescript": "5.9.3",
+    "vite": "^8.3.0",
+    "vitest": "5.0.1"
+  }
+}

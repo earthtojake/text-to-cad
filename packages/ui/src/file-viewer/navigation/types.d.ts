@@ -12,8 +12,11 @@ export type Platform = "darwin" | "win32" | "linux";
 export type EntryMenuItem = { action: EntryAction; label: string };
 
 export const ENTRY_ACTIONS: readonly EntryAction[];
-/** The menu for the file on screen: the actions the host can perform, in a fixed order. */
-export function entryMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>): EntryMenuItem[];
+/**
+ * The menu for the file on screen: the actions the host can perform, in a fixed order. `link`: the
+ * host's files have an address (`FileSource.address`), so Copy path is Copy link.
+ */
+export function entryMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, options?: { link?: boolean }): EntryMenuItem[];
 export function revealLabel(platform: Platform): string;
 
 /* -------------------------------------------------------------------- */
@@ -65,7 +68,7 @@ export const ViewerNavbar: ComponentType<{
   /** The open file, by its absolute path. */
   file?: string | null;
   explorer?: { source: Pick<FileSource, "list" | "search">; onOpen: (path: string) => void } | null;
-  fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; onAction: (action: EntryAction, path: string) => void } | null;
+  fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; link?: boolean; onAction: (action: EntryAction, path: string) => void } | null;
   trailing?: ReactNode;
   /** The host's update button, first among the controls, while its install is behind. */
   update?: ReactNode;
