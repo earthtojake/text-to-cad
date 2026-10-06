@@ -766,6 +766,7 @@ What each store and installer reads:
 | Cursor, by hand | `latest` (`git clone --branch latest`) |
 | claude.ai's directory | `claude-plugin` |
 | Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch |
+| cursor.directory | `main`, once, when the listing is submitted: it copies the skills and the root `mcp.json` and never reads the repository again, so a release reaches the listing only when its owner edits it |
 | OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release |
 
 Each plugin's CAD server startup config says where its installs come from, its
@@ -791,6 +792,7 @@ hold each one:
 | `gemini-extension.json` | `gemini-github`, auto-updated | no: Gemini updates it | the checked-in file |
 | the README's Claude Desktop config | `claude-desktop` | yes | the README |
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
+| `main`'s `mcp.json`, the Agent Plugins standard's, which cursor.directory copies | `cursor-directory` | yes | the checked-in file |
 | `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
 | `claude-plugin`'s `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
 | the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |

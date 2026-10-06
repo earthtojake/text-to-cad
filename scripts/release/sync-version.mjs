@@ -46,6 +46,7 @@ export const pinTargets = [
   "codex.mcp.json",
   "claude.mcp.json",
   "cursor.mcp.json",
+  "mcp.json",
   "gemini-extension.json",
   "README.md",
   ...skillLaunchTargets(),

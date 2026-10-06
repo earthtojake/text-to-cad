@@ -29,6 +29,7 @@ CLAUDE_PLUGIN_PATH = REPO_ROOT / ".claude-plugin" / "plugin.json"
 CODEX_MCP_PATH = REPO_ROOT / "codex.mcp.json"
 CLAUDE_MCP_PATH = REPO_ROOT / "claude.mcp.json"
 CURSOR_MCP_PATH = REPO_ROOT / "cursor.mcp.json"
+MCP_PATH = REPO_ROOT / "mcp.json"
 CODEX_PLUGIN_PATH = REPO_ROOT / ".codex-plugin" / "plugin.json"
 CURSOR_PLUGIN_PATH = REPO_ROOT / ".cursor-plugin" / "plugin.json"
 GEMINI_EXTENSION_PATH = REPO_ROOT / "gemini-extension.json"
@@ -276,6 +277,19 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertFalse(logo.startswith(("/", "..")) or "://" in logo, logo)
         self.assertEqual(logo, ".claude-plugin/icon.png")
 
+    def test_cursor_directory_finds_the_server_in_the_standard_mcp_json(self) -> None:
+        # cursor.directory finds a plugin's servers in a root .mcp.json or mcp.json alone, never through a
+        # manifest, and copies them from main when the listing is submitted. mcp.json is the Agent Plugins
+        # standard's config (agent-plugins.org), which names its schema and each server's transport. Cursor
+        # reads it only when its manifest names no config of its own, so it never starts the server twice.
+        config = load_json(MCP_PATH)
+        self.assertEqual(config, {"$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+                                  "mcpServers": config["mcpServers"]})
+        self.assertEqual(list(config["mcpServers"]), ["cad"])
+        server, claude = config["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
+        self.assertEqual({**server, "env": None}, {**claude, "type": "stdio", "env": None})
+        self.assertEqual(load_json(CURSOR_PLUGIN_PATH).get("mcpServers"), "./cursor.mcp.json")
+
     def test_gemini_extension_names_the_plugin_and_starts_claudes_server(self) -> None:
         # Gemini CLI reads gemini-extension.json at the root (and its skills/), and runs servers
         # from the manifest itself: Claude's server, pinned to this release, under the same name,
@@ -300,7 +314,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         expected = [*LAUNCHER[1:], f"cadgen=={version}", "cadgen", "mcp"]
-        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, GEMINI_EXTENSION_PATH):
+        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]
                 self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
@@ -320,13 +334,14 @@ class PluginManifestPolicyTest(unittest.TestCase):
         from cadgen._internal.channel import is_channel
 
         said = {path.name: load_json(path)["mcpServers"]["cad"]["env"]
-                for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, GEMINI_EXTENSION_PATH)}
+                for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH)}
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         said["README.md"] = json.loads(re.search(r'"env": (\{"CADGEN_INSTALL_CHANNEL"[^}]*\})', readme).group(1))
         self.assertEqual(said, {
             "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-github"},
             "codex.mcp.json": {"CADGEN_INSTALL_CHANNEL": "codex-github"},
             "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-marketplace", "CADGEN_AUTO_UPDATED": "1"},
+            "mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-directory"},
             "gemini-extension.json": {"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"},
             "README.md": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"},
         })
