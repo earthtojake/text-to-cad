@@ -759,7 +759,7 @@ What each store and installer reads:
 | Where | Reads |
 | ----- | ----- |
 | Claude Code | `latest` (`earthtojake/text-to-cad#latest`; the marketplace keeps the ref, so its updates follow the branch); `main` without it |
-| Codex | `latest` (`earthtojake/text-to-cad --ref latest`); `main` without it. Codex clones the whole repository with its history, about 300 MB, whichever branch it installs |
+| Codex | its plugin directory listing, the preferred install: the plugin ZIP a person uploads to OpenAI's portal (below). By hand, `latest` (`earthtojake/text-to-cad --ref latest`); `main` without it. Codex clones the whole repository with its history, about 300 MB, whichever branch it installs |
 | Grok Build | `latest` (`earthtojake/text-to-cad@latest`; its registry keeps the ref); `main` without it |
 | Gemini CLI | `latest` (`--ref latest`, kept for its updates). Without the ref, the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, the whole repository. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
 | Skills CLI and skills.sh | `latest` (`earthtojake/text-to-cad#latest`; the lock file keeps the ref for updates); `main` without it |

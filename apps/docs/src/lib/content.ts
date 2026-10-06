@@ -20,18 +20,13 @@ export const support = {
 // (the README's Install, which says the same).
 export const agentInstallByline = "Send this message to your agent and it will install text-to-cad for you.";
 export const agentInstallMessage = "Install text-to-cad from https://github.com/earthtojake/text-to-cad";
-// Installing by hand, as a person or their agent does it: uv, the app's commands, a restart (the
-// README's numbered steps).
-export const installYourself = {
-  before: "Or install it yourself: install",
-  link: { text: "uv", href: "https://docs.astral.sh/uv/getting-started/installation/" },
-  after: "if you don't have it yet, then run the commands for your agent app below and restart the app.",
-};
 
 // Installing by hand, each its own sub-section of Install: the plugin for each agent app (the skills
 // and CAD's viewer together), then the skills alone, with the Skills CLI, for any other agent. Each
 // plugin says how to update it (then a restart) and how to remove it, to install it again: a
-// reinstall. The Skills CLI's install is its update and its reinstall, so it says neither.
+// reinstall. The Skills CLI's install is its update and its reinstall, so it says neither. An app
+// with a listing in its own plugin directory (`listing`) leads with that, the commands folded under
+// Manual install.
 export const installs = [
   {
     id: "claude-code",
@@ -45,6 +40,10 @@ export const installs = [
     id: "codex",
     agent: "Codex",
     note: "Requires Codex 0.142.0 or newer.",
+    listing: {
+      label: "Install in Codex",
+      href: "https://chatgpt.com/plugins/plugins_6ac09476ef008191a35887b22b0d048a",
+    },
     command:
       "codex plugin marketplace add earthtojake/text-to-cad --ref latest\ncodex plugin add text-to-cad@earthtojake",
     update: "codex plugin marketplace upgrade earthtojake",

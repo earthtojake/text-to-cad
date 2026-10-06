@@ -118,6 +118,17 @@ downloads. To update, change that version to the
 
 ### Codex
 
+Install text-to-cad from Codex's plugin directory:
+[text-to-cad for Codex](https://chatgpt.com/plugins/plugins_6ac09476ef008191a35887b22b0d048a),
+then **Open in desktop app**.
+
+In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
+(recent models, and Open), a **CAD** tab beside each thread that the agent
+drives, and *Open with CAD* for model files.
+
+<details>
+<summary>Manual install</summary>
+
 ```bash
 codex plugin marketplace add earthtojake/text-to-cad --ref latest
 codex plugin add text-to-cad@earthtojake
@@ -126,10 +137,6 @@ codex plugin add text-to-cad@earthtojake
 Requires Codex 0.142.0 or newer: older versions skip this repository-root plugin
 silently, and it never appears in `codex plugin list`. Upgrade with
 `npm install -g @openai/codex@latest`.
-
-In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
-(recent models, and Open), a **CAD** tab beside each thread that the agent
-drives, and *Open with CAD* for model files.
 
 To update, upgrade the `earthtojake` marketplace (or use Plugins › Manage ›
 Marketplace), then restart Codex:
@@ -147,6 +154,8 @@ codex plugin marketplace remove earthtojake
 
 The marketplace was renamed from `text-to-cad` to `earthtojake`; if you added it
 before, remove the old one first (`codex plugin marketplace remove text-to-cad`).
+
+</details>
 
 ### Cursor
 

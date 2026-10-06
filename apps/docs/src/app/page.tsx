@@ -1,5 +1,7 @@
 import { ChevronRight, ExternalLink } from "lucide-react";
 import Image from "next/image";
+import type { ComponentType, ReactNode } from "react";
+import { CodexLogo } from "@/components/codex-logo";
 import { CopyButton } from "@/components/copy-button";
 import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
@@ -9,7 +11,6 @@ import {
   agentInstallByline,
   agentInstallMessage,
   agents,
-  installYourself,
   installs,
   pluginDescription,
   pluginRequestUrl,
@@ -80,38 +81,71 @@ function Command({ text, label }: { text: string; label: string }) {
   );
 }
 
+// A fold, closed until opened: how to update and reinstall an install, or an app's commands where
+// it leads with its own plugin directory.
+function Fold({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className="group">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-sm leading-6 text-muted-foreground transition hover:text-foreground [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+        {label}
+      </summary>
+      <div className="mt-2 space-y-2">{children}</div>
+    </details>
+  );
+}
+
+// The logo on the button to an app's own plugin directory, by install.
+const LISTING_LOGOS: Record<string, ComponentType<{ className?: string }>> = { codex: CodexLogo };
+
 // An install, and under it, folded away, how to update it and how to reinstall it: where the CAD
-// app's update button sends a person who updates by hand (/install).
+// app's update button sends a person who updates by hand (/install). An app listed in its own plugin
+// directory leads with a button to the listing, its commands folded under Manual install.
 function Install({ item }: { item: (typeof installs)[number] }) {
+  const Logo = LISTING_LOGOS[item.id];
+  const updateOrReinstall = (
+    <>
+      {item.update ? (
+        <>
+          <p className="text-sm leading-6 text-muted-foreground">Update, then restart the app:</p>
+          <Command text={item.update} label={`Copy the ${item.agent} update command`} />
+        </>
+      ) : (
+        <p className="text-sm leading-6 text-muted-foreground">Run the install command again to update or reinstall, then restart the app.</p>
+      )}
+      {item.remove ? (
+        <>
+          <p className="text-sm leading-6 text-muted-foreground">Reinstall: remove it, then install it again:</p>
+          <Command text={item.remove} label={`Copy the ${item.agent} remove command`} />
+        </>
+      ) : null}
+    </>
+  );
   return (
     <div id={item.id} className="min-w-0 scroll-mt-20 space-y-2">
       <div>
         <h3 className="text-base font-semibold text-foreground">{item.agent}</h3>
         {item.note ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.note}</p> : null}
       </div>
-      <Command text={item.command} label={`Copy the ${item.agent} install command`} />
-      <details className="group">
-        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-sm leading-6 text-muted-foreground transition hover:text-foreground [&::-webkit-details-marker]:hidden">
-          <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
-          Update or reinstall
-        </summary>
-        <div className="mt-2 space-y-2">
-          {item.update ? (
-            <>
-              <p className="text-sm leading-6 text-muted-foreground">Update, then restart the app:</p>
-              <Command text={item.update} label={`Copy the ${item.agent} update command`} />
-            </>
-          ) : (
-            <p className="text-sm leading-6 text-muted-foreground">Run the install command again to update or reinstall, then restart the app.</p>
-          )}
-          {item.remove ? (
-            <>
-              <p className="text-sm leading-6 text-muted-foreground">Reinstall: remove it, then install it again:</p>
-              <Command text={item.remove} label={`Copy the ${item.agent} remove command`} />
-            </>
-          ) : null}
-        </div>
-      </details>
+      {item.listing ? (
+        <>
+          <Button asChild>
+            <a href={item.listing.href} target="_blank" rel="noreferrer">
+              {Logo ? <Logo className="size-4" /> : null}
+              {item.listing.label}
+            </a>
+          </Button>
+          <Fold label="Manual install">
+            <Command text={item.command} label={`Copy the ${item.agent} install command`} />
+            {updateOrReinstall}
+          </Fold>
+        </>
+      ) : (
+        <>
+          <Command text={item.command} label={`Copy the ${item.agent} install command`} />
+          <Fold label="Update or reinstall">{updateOrReinstall}</Fold>
+        </>
+      )}
     </div>
   );
 }
@@ -222,13 +256,6 @@ export default function Home() {
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">{agentInstallByline}</p>
               </div>
               <AgentMessage />
-              <p className="text-sm leading-6 text-muted-foreground">
-                {installYourself.before}{" "}
-                <a href={installYourself.link.href} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-4">
-                  {installYourself.link.text}
-                </a>{" "}
-                {installYourself.after}
-              </p>
             </div>
             <div className="space-y-6 pt-6">
               {installs.map((item) => (

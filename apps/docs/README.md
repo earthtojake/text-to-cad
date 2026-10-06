@@ -129,14 +129,14 @@ Lobe Icons (MIT) in the same tile, each tile blended into the page's background.
 A logo leads to its install. Then the plugin's description, which every manifest
 and the README's Overview say word for word (`test_plugin_manifests.py` holds
 them to one text). Install
-leads with the message to send to an agent and a line on installing it yourself
-(uv, the app's commands, a restart), then a sub-section per agent app, its update
-and remove commands folded under Update or reinstall, Other Agents (the Skills
-CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the
+leads with the message to send to an agent, then a sub-section per agent app, its update
+and remove commands folded under Update or reinstall; Codex leads with a button to its listing in
+Codex's plugin directory, its commands, update and remove folded under Manual install. Other Agents
+(the Skills CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the
 content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
-together: the plugin's description, the install message, installing it yourself,
+together: the plugin's description, the install message,
 each install's commands (to install, update and remove it), the skills and
 Contributing. Both speak to whoever installs text-to-cad, a person or their agent,
 and the README says more: numbered steps to install it yourself and fuller notes
