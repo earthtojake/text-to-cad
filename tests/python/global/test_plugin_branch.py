@@ -1,8 +1,8 @@
-"""The plugin the directories follow: scripts/release/plugin_branch.py.
+"""The plugin the install branches carry: scripts/release/plugin_branch.py.
 
-Publish Release commits this tree onto the `plugin` branch, so a tree claude.ai's
-directory would hold or refuse has to fail here, on the pull request that causes
-it, rather than at release time.
+Publish Release commits these trees onto `latest` and `claude-plugin`, so a
+tree claude.ai's directory would hold or refuse has to fail here, on the pull request that
+causes it, rather than at release time.
 """
 
 from __future__ import annotations
@@ -29,28 +29,79 @@ def git(root: Path, *args: str) -> str:
 
 
 class PluginTreeTests(unittest.TestCase):
-    def test_this_repository_builds_a_tree_of_only_the_plugin(self) -> None:
-        tree, errors, _manifest = branch.build(REPO_ROOT)
+    def test_this_repository_builds_trees_of_only_the_plugin(self) -> None:
+        plugin = {".claude-plugin", ".cursor-plugin", "gemini-extension.json", "claude.mcp.json", "cursor.mcp.json",
+                  "skills", "LICENSE", "README.md"}
+        directory, errors, _manifest = branch.build(REPO_ROOT, "directory")
         self.assertEqual(errors, [])
-        self.assertEqual({path.split("/")[0] for path in tree},
-                         {".claude-plugin", ".cursor-plugin", "gemini-extension.json", "claude.mcp.json", "cursor.mcp.json",
-                          "skills", "LICENSE", "README.md"})
-        self.assertEqual({path for path in tree if path.startswith(".claude-plugin/")},
+        self.assertEqual({path.split("/")[0] for path in directory}, plugin)
+        self.assertEqual({path for path in directory if path.startswith(".claude-plugin/")},
                          {".claude-plugin/plugin.json", ".claude-plugin/icon.png"})
-        self.assertEqual({path for path in tree if path.startswith(".cursor-plugin/")}, {".cursor-plugin/plugin.json"})
-
-    def test_each_config_on_the_branch_names_the_channel_its_installs_come_from(self) -> None:
-        # claude.ai's directory follows this branch and updates its copies; a Cursor install by hand
-        # clones it, and nothing updates that. On main the same configs name `claude-github` and the
-        # Cursor Marketplace. The server's environment is the plugin's say (cadgen's _internal/channel.py).
-        tree, errors, _manifest = branch.build(REPO_ROOT)
+        self.assertEqual({path for path in directory if path.startswith(".cursor-plugin/")}, {".cursor-plugin/plugin.json"})
+        # The latest copy adds what Claude Code's and Codex's marketplaces read, and the Agent Plugins standard's
+        # manifest and server config.
+        install, errors, _manifest = branch.build(REPO_ROOT, "latest")
         self.assertEqual(errors, [])
-        said = {path: json.loads(tree[path][1])["mcpServers"]["cad"]["env"]
-                for path in ("claude.mcp.json", "cursor.mcp.json", "gemini-extension.json")}
-        self.assertEqual(said, {
+        self.assertEqual(set(install) - set(directory), {".claude-plugin/marketplace.json", ".codex-plugin/plugin.json",
+                                                         ".codex-plugin/logo.png", "codex.mcp.json", "plugin.json",
+                                                         "mcp.json"})
+
+    def test_the_install_copy_lists_itself_as_the_plugin(self) -> None:
+        # The catalog lists the plugin at the root of the branch it is read from, so a marketplace
+        # added from `latest` installs what that branch holds -- no link back to the repo.
+        install, _errors, manifest = branch.build(REPO_ROOT, "latest")
+        catalog = json.loads(install[".claude-plugin/marketplace.json"][1])
+        self.assertEqual([entry["source"] for entry in catalog["plugins"] if entry["name"] == manifest["name"]], ["./"])
+
+    def test_every_file_a_manifest_names_ships_in_its_copy(self) -> None:
+        # Developers install main and users install a copy, so a manifest or config that names a file the
+        # copy leaves out works for every developer and breaks for every user.
+        on_main = set(branch.tracked(REPO_ROOT))
+
+        def strings(value):
+            if isinstance(value, dict):
+                value = list(value.values())
+            if isinstance(value, list):
+                for item in value:
+                    yield from strings(item)
+            elif isinstance(value, str):
+                yield value
+
+        for copy in branch.COPIES:
+            tree, errors, _manifest = branch.build(REPO_ROOT, copy)
+            self.assertEqual(errors, [], copy)
+            missing = [f"{path} -> {value}" for path, (_mode, data) in sorted(tree.items())
+                       if path.endswith(".json") and not path.startswith("skills/")
+                       for value in strings(json.loads(data))
+                       if branch.holds(on_main, value) and not branch.holds(set(tree), value)]
+            with self.subTest(copy=copy):
+                self.assertEqual(missing, [])
+
+    def test_each_config_names_the_channel_its_installs_come_from(self) -> None:
+        # claude.ai's directory follows claude-plugin and updates its copies. Every other installer
+        # follows latest, where the configs keep main's channels but Cursor's: main's names the
+        # Cursor Marketplace, which reads main, and a Cursor install by hand clones the branch.
+        # The server's environment is the plugin's say (cadgen's _internal/channel.py).
+        said = {}
+        for copy in ("latest", "directory"):
+            tree, errors, _manifest = branch.build(REPO_ROOT, copy)
+            self.assertEqual(errors, [])
+            said[copy] = {path: json.loads(tree[path][1])["mcpServers"]["cad"]["env"]
+                          for path in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json", "mcp.json",
+                                       "gemini-extension.json")
+                          if path in tree}
+        gemini = {"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"}
+        self.assertEqual(said["latest"], {
+            "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-github"},
+            "codex.mcp.json": {"CADGEN_INSTALL_CHANNEL": "codex-github"},
+            "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-github"},
+            "mcp.json": {"CADGEN_INSTALL_CHANNEL": "agent-plugins"},
+            "gemini-extension.json": gemini,
+        })
+        self.assertEqual(said["directory"], {
             "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-directory", "CADGEN_AUTO_UPDATED": "1"},
             "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-github"},
-            "gemini-extension.json": {"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"},
+            "gemini-extension.json": gemini,
         })
 
     def test_readme_links_outside_the_tree_point_at_the_commit(self) -> None:
@@ -95,7 +146,7 @@ class PluginTreeTests(unittest.TestCase):
             git(root, "add", "-A")
             git(root, "commit", "-q", "-m", "one")
 
-            tree, errors, _manifest = branch.build(root)
+            tree, errors, _manifest = branch.build(root, "directory")
             self.assertEqual(errors, [])
             first = branch.commit(root, tree, None, "demo 1.0.0")
             self.assertEqual(git(root, "ls-tree", "-r", "--name-only", first).split(),
@@ -108,7 +159,7 @@ class PluginTreeTests(unittest.TestCase):
 
             (root / "skills/s/SKILL.md").write_text("two\n", encoding="utf-8")
             git(root, "commit", "-q", "-am", "two")
-            second = branch.commit(root, branch.build(root)[0], first, "demo 1.0.1")
+            second = branch.commit(root, branch.build(root, "directory")[0], first, "demo 1.0.1")
             self.assertEqual(git(root, "rev-parse", f"{second}^"), first)
             self.assertEqual(git(root, "show", f"{second}:skills/s/SKILL.md"), "two")
 

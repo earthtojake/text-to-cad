@@ -15,7 +15,7 @@ create table if not exists events (
   calls          integer     not null,  -- tool: calls; view: touches; file: 1
   errors         integer     not null,  -- tool: failed calls
   version        text        not null,  -- cadgen's
-  channel        text        not null default 'unknown',  -- where the install came from (cadgen/_internal/channel.py): claude-github | codex-github | cursor-github | gemini-github | claude-desktop | claude-directory | openai-directory | cursor-marketplace | dev | unknown
+  channel        text        not null default 'unknown',  -- where the install came from (cadgen/_internal/channel.py): claude-github | codex-github | cursor-github | gemini-github | claude-desktop | claude-directory | openai-directory | cursor-marketplace | agent-plugins | dev | unknown
   source         text,                  -- schema 1 (cadgen 0.7.7 to 0.7.11), which names no channel: store | manual
   platform       text        not null,  -- darwin | linux | win32 | other
   arch           text,

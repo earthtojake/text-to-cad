@@ -72,9 +72,9 @@ scripts/         # asset checks
 
 The header uses the blue CAD wordmark and favicons use C, both with soft relief shading. The homepage
 hero builds the TEXTTOCAD wordmark in with its animated SVG (sketch, extrude, cut, chamfer,
-render), and the repository README shows the same animated SVG. A phone's header always shows the
-CAD wordmark at its left; a desktop's slides it in before the section links once the homepage's
-TEXTTOCAD has scrolled out of sight (a page without one shows it throughout). `/icon` plays each
+render), and the repository README shows the same animated SVG. The header slides the CAD wordmark
+in at its left once the homepage's TEXTTOCAD has scrolled out of sight (a page without one shows it
+throughout), pushing right what follows it: a desktop's section links, a phone's burger. `/icon` plays each
 mark's build, with Replay, and provides downloadable C, CAD, TEXTTOCAD and stacked TEXT TO CAD
 SVGs, PNGs and animated SVGs, followed by the original animated loading-icon playground.
 `LogoBuild` (`src/components/logo-build.tsx`) shows a build: a plain `<img>`, since the animation
@@ -117,24 +117,30 @@ actions use muted shades of the logo's pastel blue through shadcn semantic
 tokens: #2c7197 in light mode and #30779d in dark mode, with #f5fbff labels.
 Text contrast is 5.14:1 and 4.73:1 respectively; the solid darker hover shades
 also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
-pale highlight on charcoal. Every Copy button is one size; the install message's
-uses the blue primary action style, the others are plain. Every section title
-shares one heading scale, and the header lists Overview, Install and Skills, the
-active link following the visible section. Overview opens with Available for
+pale highlight on charcoal. Every Copy is a plain icon button, one size with the buttons beside the install
+message that open it in an app, and each icon button has a tooltip. Install in Codex, the official listing, is
+the one blue button. Every button shows a pointer. Every section title
+shares one heading scale. Each title, a section's or an install's, links to its
+own anchor (`#install`, `#cursor`), as GitHub's headings do, so following it puts
+that address in the bar. The header lists Overview, Install, Skills and
+Contributing, the active link following the visible section; a phone's header has
+a burger that drops them down. The header shows the version as its release tag
+names it (`v<VERSION>`), on a phone 360px or wider too. Overview opens with Available for
 these agents, first so a phone shows it on load: the agents' logos scrolling as
 skills.sh's do, skills.sh's logo set in `public/agents/` with Grok's glyph from
 Lobe Icons (MIT) in the same tile, each tile blended into the page's background.
 A logo leads to its install. Then the plugin's description, which every manifest
 and the README's Overview say word for word (`test_plugin_manifests.py` holds
 them to one text). Install
-leads with the message to send to an agent and a line on installing it yourself
-(uv, the app's commands, a restart), then a sub-section per agent app, its update
-and remove commands folded under Update or reinstall, Other Agents (the Skills
-CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the
+leads with the message to send to an agent, monospace like the commands, with buttons that open it
+in Claude Code (Claude Desktop), Codex or Cursor, prefilled and unsent, beside Copy; then a sub-section per agent app, its update
+and remove commands folded under Update or reinstall; Codex leads with a button to its listing in
+Codex's plugin directory, its commands, update and remove folded under Manual install. Other Agents
+(the Skills CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the
 content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
-together: the plugin's description, the install message, installing it yourself,
+together: the plugin's description, the install message,
 each install's commands (to install, update and remove it), the skills and
 Contributing. Both speak to whoever installs text-to-cad, a person or their agent,
 and the README says more: numbered steps to install it yourself and fuller notes
@@ -166,7 +172,7 @@ a release of cadgen.
 | Route | What it does |
 | --- | --- |
 | `GET /v1/versions` | The version feed, the same for everyone: `{latest}` → `200`, kept by Vercel's edge until the next deploy (`src/lib/api/versions.mjs`). `latest` is this app's version, which the release stamps from `VERSION`. Only a copy installed by hand reads it; a store's copy never checks. It reads no database. |
-| `POST /v1/events` | One batch: `{schema: 2, install, session, version, channel, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `channel` is where the install came from, as its package named it: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `claude-desktop`, `claude-directory`, `openai-directory`, `cursor-marketplace`, `dev` or `unknown`. A schema 1 batch (cadgen 0.7.7 to 0.7.11) says how the install was made, `source` (`store` or `manual`), in place of `channel`: its rows keep that as `source`, with the channel `unknown`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. One event per tool and per `file`, and one `view` at most. Anything else is `400` and stores nothing (`src/lib/api/events.mjs`). The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
+| `POST /v1/events` | One batch: `{schema: 2, install, session, version, channel, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `channel` is where the install came from, as its package named it: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `claude-desktop`, `claude-directory`, `openai-directory`, `cursor-marketplace`, `agent-plugins`, `dev` or `unknown`. A schema 1 batch (cadgen 0.7.7 to 0.7.11) says how the install was made, `source` (`store` or `manual`), in place of `channel`: its rows keep that as `source`, with the channel `unknown`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. One event per tool and per `file`, and one `view` at most. Anything else is `400` and stores nothing (`src/lib/api/events.mjs`). The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
 | `POST /v1/forget` | `{install}`: deletes every row sent under an install id → `204`. `cadgen analytics off` calls it; the random id is the only authority needed. The id rides in the body because Vercel's request logs keep each path beside the caller's IP. |
 | `GET /v1/prune` | The daily cron (`vercel.json`): deletes rows older than 13 months. Needs `Authorization: Bearer $CRON_SECRET`. |
 | `GET /v1/health` | → `200`, or `503` naming a missing setting (`DATABASE_URL`, `CRON_SECRET`), or the database's error code when it cannot take a batch (unreachable, or tables missing a column after a schema change that `schema.sql` was not re-run for). `Deploy Docs` checks it. |
