@@ -33,8 +33,8 @@ export interface CadRecent {
   /** The picture's name, for `thumbnail()`, and when it was taken. */
   thumbnail: string | null; pictured: number | null;
 }
-/** The person's analytics answer, and whether to ask (`/__cad/analytics`; cadgen no longer asks): `reason` says who decided. */
-export interface CadConsent { ask: boolean; sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string }
+/** Whether the person's usage stats are sent (`/__cad/analytics`; nothing asks): `reason` says who decided. */
+export interface CadConsent { sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string }
 /** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`). */
 export interface CadUpdateNotice { latest: string; version: string; text: string; prompt: string; instructions: string }
 export interface CadCatalog { entries: CadEntry[]; [key: string]: unknown }
@@ -160,8 +160,8 @@ export interface CadWorkspaceService {
   pick(): Promise<string | null>;
   /** Show a file, by its absolute path, in the desktop's file manager. */
   reveal(path: string): Promise<void>;
-  /** The person's analytics answer; with `share`, their answer (a card's counts only while the question is open). */
-  consent(share?: boolean, from?: 'card' | 'settings'): Promise<CadConsent>;
+  /** Whether the person's usage stats are sent; with `share`, their answer (the app menu's toggle). */
+  consent(share?: boolean): Promise<CadConsent>;
   /** The features the person can turn off, as they left them; with `change`, their change of some. */
   features(change?: Record<string, boolean>): Promise<Record<string, boolean>>;
   /** Whether a newer text-to-cad is out: the update button's notice, or null. */

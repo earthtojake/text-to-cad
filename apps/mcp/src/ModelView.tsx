@@ -30,7 +30,7 @@ export interface ViewReporter {
  * Codex's file handler (`surface: file`, `alone`) shows its file alone: the host's own file tree is
  * its navigation.
  */
-export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, platform, reporter, sync, chat, appSettings, features, notice, update, fullSize }: {
+export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, platform, reporter, sync, chat, appSettings, features, update, fullSize }: {
   launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   /**
    * The view shows the one file its host opened, and nothing else (Codex's file handler): no home,
@@ -51,8 +51,6 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   appSettings?: readonly AppSetting[];
   /** The features the person left on (in the app menu): Quick edit. */
   features?: ViewerFeatures;
-  /** The analytics question, which the viewer asks once a model is on screen. */
-  notice?: ReactNode;
   /** The update button, first in the navbar and on the home, while this install is behind. */
   update?: ReactNode;
   /** Inline, the card's way to full size, where the host can show it so: in the navbar, before the view's controls, and last on the home. */
@@ -133,6 +131,6 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   // The file on screen joins the library every CAD view shares, with its picture.
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
-    library={library} appSettings={appSettings} features={features} notice={notice} update={update} fullSize={fullSize} history={viewerHistory}
+    library={library} appSettings={appSettings} features={features} update={update} fullSize={fullSize} history={viewerHistory}
     onThumbnail={(png, pictured) => client.keepThumbnail(png, pictured)} />;
 }

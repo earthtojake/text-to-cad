@@ -549,7 +549,7 @@ class CadApp:
                     if type(payload) is not dict:
                         raise ValueError("an analytics request is an object")
                     if pathname == "/__cad/analytics":
-                        response.send_json(200, self._consent(payload.get("share"), card=payload.get("card") is True))
+                        response.send_json(200, self._consent(payload.get("share")))
                     else:
                         self._report_activity(payload)
                         response.send_empty(204)
@@ -733,17 +733,16 @@ class CadApp:
 
     # --- usage stats (telemetry) --------------------------------------------
 
-    def _consent(self, share=None, *, card: bool = False) -> dict:
-        """The app menu's analytics toggle: whether sharing is on and why, and, from the person's click,
-        their answer. Nothing asks (``ask`` is always false): analytics are on by default once a ``cadgen``
-        command has said so (``cadgen/analytics.py``). A card a page still shows answers only while nothing
-        is chosen, so it never undoes an answer just given (``card``); the toggle changes it whenever."""
+    def _consent(self, share=None) -> dict:
+        """The app menu's Share usage stats toggle: whether sharing is on and why, and, from the person's
+        click, their answer, which changes it whenever. Nothing asks: telemetry is on by default once a
+        ``cadgen`` command has said so (``cadgen/analytics.py``)."""
         from cadgen.analytics import PRIVACY_URL
 
-        if isinstance(share, bool) and (not card or self.analytics.status()["reason"] in ("default", "untold")):
+        if isinstance(share, bool):
             self.analytics.choose(share, by=self.consent_by)
         found = self.analytics.status()
-        return {"ask": False, "sharing": found["sharing"], "reason": found["reason"], "policy": PRIVACY_URL}
+        return {"sharing": found["sharing"], "reason": found["reason"], "policy": PRIVACY_URL}
 
     def _version(self) -> dict:
         """The page's update button (``cadgen/updates.py``): whether a newer text-to-cad is out, from

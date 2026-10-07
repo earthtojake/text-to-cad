@@ -77,11 +77,11 @@ class _Tmp(unittest.TestCase):
         data = base64.b64decode(reply["structuredContent"].get("body") or "")
         return reply["structuredContent"]["status"], json.loads(data) if data else None
 
-    def consent(self, server: Server, share: bool | None = None, *, card: bool = False) -> dict:
-        """The page's analytics card and the app menu's toggle: read, or the person's answer."""
+    def consent(self, server: Server, share: bool | None = None) -> dict:
+        """The app menu's Share usage stats toggle: read, or the person's answer."""
         if share is None:
             return self.http(server, "GET", "/__cad/analytics")[1]
-        return self.http(server, "POST", "/__cad/analytics", {"share": share, **({"card": True} if card else {})})[1]
+        return self.http(server, "POST", "/__cad/analytics", {"share": share})[1]
 
 
 class ConsentTest(_Tmp):
@@ -230,14 +230,13 @@ class OneAnswerTest(_Tmp):
             self.assertTrue(recorder.flush())
         self.assertEqual(len(sent), 1)
 
-    def test_only_a_page_answers_and_a_card_only_an_open_question(self) -> None:
+    def test_only_a_page_answers_and_its_toggle_changes_it_whenever(self) -> None:
         server, sent = self.serve("claude-github", client="some-terminal-agent")
         with self.assertRaises(RpcError):  # a text client has no page: the agent cannot opt in
             self.consent(server, True)
         self.assertEqual(status(path=self.path)["reason"], "untold")
         server, sent = self.serve("claude-github")
-        self.consent(server, True, card=True)
-        self.consent(server, False, card=True)  # a stale card still up in another view
+        self.consent(server, True)
         self.assertTrue(status(path=self.path)["sharing"])
         self.consent(server, False)  # the app menu's toggle changes it whenever
         self.assertFalse(status(path=self.path)["sharing"])
@@ -252,7 +251,7 @@ class OneAnswerTest(_Tmp):
 class ServerCountsTest(_Tmp):
     def test_a_yes_sends_use_files_counted_and_metadata_and_nothing_the_person_made(self) -> None:
         server, sent = self.serve("claude-directory")
-        self.assertEqual(self.consent(server)["ask"], False)  # nothing in a CAD app asks: a command tells
+        self.assertNotIn("ask", self.consent(server))  # nothing in a CAD app asks: a command tells
         self.consent(server, True)
         secret, plate = self.tmp / "secret-bracket.step", self.tmp / "secret-plate.STL"
         secret.write_text("ISO-10303-21;", encoding="utf-8")
@@ -401,12 +400,12 @@ class ServerCountsTest(_Tmp):
     def test_counts_go_from_the_notice_on_without_a_restart(self) -> None:
         server, sent = self.serve("claude-github")
         self.call(server, "cad_show", {"path": "a.step"})
-        self.assertEqual(self.consent(server), {"ask": False, "sharing": False, "reason": "untold", "policy": PRIVACY_URL})
+        self.assertEqual(self.consent(server), {"sharing": False, "reason": "untold", "policy": PRIVACY_URL})
         self.assertFalse(server.analytics.flush())
         self.call(server, "cad_view")  # noted before anyone was told
         self.assertTrue(notify(io.StringIO(), path=self.path))  # a skill's first `cadgen` command
         # The running CAD app sends from the notice on, with no restart -- and never what it noted before.
-        self.assertEqual(self.consent(server), {"ask": False, "sharing": True, "reason": "default", "policy": PRIVACY_URL})
+        self.assertEqual(self.consent(server), {"sharing": True, "reason": "default", "policy": PRIVACY_URL})
         self.assertFalse(server.analytics.flush())
         self.assertEqual(sent, [])
         model = self.tmp / "bracket.step"
@@ -538,8 +537,8 @@ class NeverInTheWayTest(_Tmp):
         with mock.patch("cadgen.analytics.status", side_effect=RuntimeError("broken")), \
                 mock.patch("cadgen.analytics.choose", side_effect=RuntimeError("broken")), \
                 self.assertNoLogs("cadgen.analytics", level="INFO"):
-            # The tools answer as if nothing were wrong: off, and nothing to ask.
-            self.assertEqual(self.consent(server)["ask"], False)
+            # The tools answer as if nothing were wrong: off.
+            self.assertEqual(self.consent(server)["sharing"], False)
             self.assertEqual(self.consent(server, True)["sharing"], False)
             self.assertFalse(self.call(server, "cad_telemetry").get("isError"))
             self.assertFalse(self.call(server, "cad_telemetry", {"action": "off"}).get("isError"))

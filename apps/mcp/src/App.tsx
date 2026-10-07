@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { Maximize } from 'lucide-react';
-import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
+import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { useFeatures } from '@text-to-cad/ui/features';
 import { UpdateButton, useUpdateNotice } from '@text-to-cad/ui/update';
 import { viewerLinks } from '@text-to-cad/ui/links';
@@ -179,9 +179,9 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return () => { lifetime.abort(); stop(); window.removeEventListener('pointerdown', touched, true); window.removeEventListener('focus', touched); };
   }, [bridge, sync, superseded]);
 
-  // Asked once, of everyone, unless their environment answered or no answer could be kept
-  // (`cadgen/analytics.py`): the card, and the app menu's toggle after it.
-  const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(client.consent);
+  // The usage stats cadgen sends (its telemetry), the same as the browser viewer's: nothing asks here (a
+  // cadgen command says it once), and the app menu's switch changes it.
+  const { appSettings: analyticsSettings } = useAnalyticsConsent(client.consent);
   // The app menu's features (Quick edit), on until the person turns one off: kept by the server beside
   // the analytics answer, one choice for the sidebar, every thread's tab and the browser viewer.
   const { features, appSettings: featureSettings } = useFeatures(client.features);
@@ -206,7 +206,6 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
     <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings} features={features}
-      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}
       update={updateNotice ? <UpdateButton notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
         onLink={openLink} /> : null}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}

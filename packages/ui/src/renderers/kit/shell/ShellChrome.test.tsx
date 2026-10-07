@@ -374,7 +374,7 @@ it("a dismissed alert's own icon, at the navbar's right, brings its card back; i
 });
 
 it("the host's notice waits for the model, then takes the top-right with Quick Edit stacked under it", () => {
-  const notice = <div role="dialog" aria-label="Allow Analytics" />;
+  const notice = <div role="dialog" aria-label="A notice" />;
   const corner = () => [...document.querySelector('[data-viewport-top-right]')?.children ?? []]
     .map(child => child.hasAttribute('data-viewport-notice') ? 'notice' : child.hasAttribute('data-quick-edit') ? 'Quick Edit' : child.tagName);
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
@@ -382,9 +382,9 @@ it("the host's notice waits for the model, then takes the top-right with Quick E
   const clearsStrip = () => document.querySelector('[data-viewport-top-right]')!.className.includes('@max-md/cad-viewport:top-');
   frame({ notice });
   stage('finding');
-  expect(screen.queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'A notice' })).toBeNull();
   stage('broken');  // a load the model did not survive: only its card
-  expect(screen.queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'A notice' })).toBeNull();
   stage('idle');
   expect(corner()).toEqual(['notice', 'Quick Edit']);
   expect(clearsStrip()).toBe(true);
@@ -396,7 +396,7 @@ it("the host's notice waits for the model, then takes the top-right with Quick E
 });
 
 it("Quick edit turned off in Settings takes Quick Edit away: nothing a pick or a sketch could open, and the host's notice alone at the top-right", () => {
-  const notice = <div role="dialog" aria-label="Allow Analytics" />;
+  const notice = <div role="dialog" aria-label="A notice" />;
   const corner = () => [...document.querySelector('[data-viewport-top-right]')?.children ?? []]
     .map(child => child.hasAttribute('data-viewport-notice') ? 'notice' : child.hasAttribute('data-quick-edit') ? 'Quick Edit' : child.tagName);
   // On, as it starts and as a host that says nothing leaves it: Quick Edit waits under the notice.

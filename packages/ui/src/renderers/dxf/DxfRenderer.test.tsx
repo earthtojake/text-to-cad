@@ -137,8 +137,8 @@ it('the cursor says the drawing can be dragged, and says so louder while it is',
 });
 
 it("the host's notice shows at the top-right once the drawing is on screen", async () => {
-  const { pane, dispose } = await openDrawing('composer', <div role="dialog" aria-label="Allow Analytics" />);
-  expect(within(pane).getByRole('dialog', { name: 'Allow Analytics' }).closest('[data-viewport-top-right]')).not.toBeNull();
+  const { pane, dispose } = await openDrawing('composer', <div role="dialog" aria-label="A notice" />);
+  expect(within(pane).getByRole('dialog', { name: 'A notice' }).closest('[data-viewport-top-right]')).not.toBeNull();
   dispose();
 });
 

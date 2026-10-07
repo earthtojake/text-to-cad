@@ -202,7 +202,7 @@ cache reads and writes.
 | `POST /__cad/pick` | The desktop's own file chooser, held open while the person chooses: `{path}`, `{cancelled: true}`, a 400 naming the kinds CAD opens, a 500 with the chooser's own sentence (one already open among them). |
 | `POST /__cad/reveal` | `{path}`: show a file in the desktop's file manager. |
 | `POST /__cad/clipboard` | A PNG onto this machine's clipboard: the web page's picture copy, which asks the browser for no permission. |
-| `GET`/`POST /__cad/analytics` | The person's analytics answer and whether to ask; `{share, card?}` answers it (a card's only while the question is open). |
+| `GET`/`POST /__cad/analytics` | Whether the person's usage stats are sent, and why; `{share}` is their answer (the app menu's toggle). Nothing asks. |
 | `POST /__cad/analytics/activity` | What the page did, for telemetry: `{touched: true}`, a person touched it; `{quickEdit: true}`, a Quick Edit went; `{crash}`, the page crashed (core's `crashOf`: its type and frames, checked again by the server, never a message). |
 | `GET`/`POST /__cad/features` | The features a person can turn off, and their change of some. |
 | `GET /__cad/version` | Whether a newer text-to-cad is out: the update button's `notice`, or null. |

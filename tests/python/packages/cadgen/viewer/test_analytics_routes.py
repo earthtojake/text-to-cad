@@ -15,7 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 import cadgen
-from cadgen.analytics import Recorder
+from cadgen.analytics import PRIVACY_URL, Recorder
 from cadgen.viewer import handler as handler_module
 from cadgen.viewer.http_app import create_cad_app
 
@@ -67,15 +67,12 @@ class ViewerAnalyticsTest(unittest.TestCase):
 
     def test_the_viewer_never_asks_and_a_no_is_kept_for_every_cad_app(self) -> None:
         status, consent = self.request("GET", "/__cad/analytics")
-        self.assertEqual((status, consent["ask"], consent["sharing"], consent["reason"]), (200, False, False, "untold"))
+        self.assertEqual((status, consent), (200, {"sharing": False, "reason": "untold", "policy": PRIVACY_URL}))
         status, answered = self.request("POST", "/__cad/analytics", {"share": False})
-        self.assertEqual((status, answered["ask"], answered["sharing"], answered["reason"]), (200, False, False, "choice"))
-        self.assertEqual(self.request("GET", "/__cad/analytics")[1]["ask"], False)
+        self.assertEqual((status, answered["sharing"], answered["reason"]), (200, False, "choice"))
         # The answer is the person's, in the state directory every CAD app reads: the CAD app's
-        # server sees the same no.
+        # server sees the same no. The app menu's toggle changes it whenever.
         self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["telemetry"]["choice"], "off")
-        # A card still up in another view answers nothing now; the app menu's toggle changes it whenever.
-        self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True, "card": True})[1]["sharing"], False)
         self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True})[1]["sharing"], True)
 
     def test_a_web_page_cannot_answer_for_the_person(self) -> None:

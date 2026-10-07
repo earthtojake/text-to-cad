@@ -226,7 +226,7 @@ class TabServerTest(_Session):
         png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + bytes(64)).decode("ascii")
         [entry] = self.http("POST", "/__cad/recents", {"action": "thumbnail", "path": self.bracket, "png": png})[1]["recents"]
         self.assertEqual(self.http("GET", f"/__cad/thumbnail?name={entry['thumbnail']}"), (200, base64.b64decode(png)))
-        # The home's Open, and the person's answer on the analytics card: the CAD app's own.
+        # The home's Open, and the person's answer on the app menu's Share usage stats: the CAD app's own.
         with mock.patch.object(FilePicker, "choose", return_value=self.loose):
             self.assertEqual(self.http("POST", "/__cad/pick", {}), (200, {"path": self.loose.replace(os.sep, "/")}))
         with mock.patch.object(self.server.analytics, "choose", return_value={}) as answered:

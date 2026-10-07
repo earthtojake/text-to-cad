@@ -52,7 +52,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   appSettings?: readonly AppSetting[];
   /** The features the person has left on (in the app menu): Quick edit is offered only while it is on. */
   features?: ViewerFeatures;
-  /** The host's notice (the analytics question): a file's viewport, top-right, once the file is on screen; never the home. */
+  /** The host's notice: a file's viewport, top-right, once the file is on screen; never the home. */
   notice?: ReactNode;
   /**
    * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), while its install is behind:

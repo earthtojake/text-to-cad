@@ -59,7 +59,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     const reply = url === '/__cad/features' ? kept : url === '/__cad/version' ? { notice }
       : url === '/__cad/recents' ? { recents: [] } : url === '/__cad/pick' ? { path: '/m/picked.step' }
       : url !== '/__cad/analytics' ? { ok: true }
-      : init.body ? { ask: false, sharing: false, reason: 'choice', policy: 'p' } : { ask: true, sharing: false, reason: 'untold', policy: 'p' };
+      : init.body ? { sharing: false, reason: 'choice', policy: 'p' } : { sharing: false, reason: 'untold', policy: 'p' };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
   // The page's own client over this Viewer's routes, its server's description answered here.
@@ -117,11 +117,11 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     // The app menu: Analytics, then Features.
     assert.deepEqual(viewer().appSettings.map(setting => [setting.label, setting.checked]),
       [['Share usage stats', false], ['Quick edit', true]]);
-    // The card goes to the viewer (it asks once a model is on screen), and its answer is a card's: the
-    // server applies it only to an open question. Answered, it is gone.
-    await act(() => viewer().notice.props.onAnswer(false));
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics').at(-1), ['/__cad/analytics', { share: false, card: true }]);
-    assert.equal(viewer().notice, null);
+    // Nothing asks (a cadgen command says it once): the viewer has no notice, and the app menu's toggle
+    // is the person's answer.
+    assert.equal(viewer().notice, undefined);
+    await act(() => viewer().appSettings[0].onCheckedChange(false));
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics').at(-1), ['/__cad/analytics', { share: false }]);
     // A newer release is the update button, as in the CAD app: first in the navbar while this install is
     // behind. A page in a browser cannot reach the agent's chat, so its card only copies the prompt, and
     // nothing it does is kept: the server is only read.

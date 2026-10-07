@@ -6,7 +6,7 @@ import { createLiveRegistry, type ViewerHost } from '@text-to-cad/ui/host';
 import type { TabStore, Appearance } from '@text-to-cad/ui/tab-store';
 import { cadApiUrl, createHttpAttachmentStore, type CadClient, type CadServerInfo } from '@text-to-cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
-import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
+import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { useFeatures } from '@text-to-cad/ui/features';
 import { UpdateButton, useUpdateNotice, type UpdateNotice } from '@text-to-cad/ui/update';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
@@ -93,7 +93,7 @@ export default function App({ client, server, tabStore, notice = null }: { clien
   // The usage stats cadgen sends (its telemetry), the same as the CAD app's: nothing asks here (a
   // cadgen command says it once), and the app menu's switch changes it. The answer is the person's,
   // shared with the CAD app.
-  const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(client.consent);
+  const { appSettings: analyticsSettings } = useAnalyticsConsent(client.consent);
   // The app menu's features (Quick edit), on until the person turns one off: kept by this Viewer's
   // server beside the analytics answer, one choice with the CAD app's, whatever port this is.
   const { features, appSettings: featureSettings } = useFeatures(client.features);
@@ -125,7 +125,6 @@ export default function App({ client, server, tabStore, notice = null }: { clien
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings} features={features}
-      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openTab} /> : null}
       update={updateNotice ? <UpdateButton notice={updateNotice} copy={prompt => browserClipboard.writeText(prompt)} onLink={openTab} /> : null}
       displayActions={<ViewerAppearance colorSchemePreference={appearance.preference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />} />
   </div></div>;

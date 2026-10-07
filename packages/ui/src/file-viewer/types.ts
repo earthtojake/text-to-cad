@@ -91,7 +91,7 @@ export interface ViewerFeatures {
   quickEdit?: boolean;
 }
 export interface RendererViewProps {
-  /** The host's notice (a question it asks once): the viewport's top-right once the file is on screen, Quick Edit under it. */
+  /** The host's notice: the viewport's top-right once the file is on screen, Quick Edit under it. */
   notice?: ReactNode;
   /** The features the person has left on (in the app menu): what is off is not offered at all. */
   features?: ViewerFeatures;

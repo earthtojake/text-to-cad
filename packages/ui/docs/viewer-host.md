@@ -428,11 +428,10 @@ with its `appSettings`, and keeps the choice where it keeps the analytics answer
 Viewer and the CAD app alike through the client's `features` (`/__cad/features`), in the
 person's settings (`cadgen/features.py`), so it holds in every view, tab and app, across
 reloads — a page's own storage would not, the web Viewer's origin changing with its port.
-`@text-to-cad/ui/consent` is the analytics
-prompt both apps share: `ConsentCard` (the card) and
-`useAnalyticsConsent(consent)`, which turns the host's consent call into the card's state, its
-answer and its `appSettings` row (Share usage stats); the host supplies the call and
-where the answer is kept.
+`@text-to-cad/ui/consent` is the usage stats toggle both apps share:
+`useAnalyticsConsent(consent)`, which turns the host's consent call into its `appSettings` row
+(Share usage stats). Nothing asks: cadgen's telemetry is on by default once a `cadgen` command
+has said so. The host supplies the call and where the answer is kept.
 `@text-to-cad/ui/update` is the update button both apps share, from cadgen's version check:
 `UpdateButton`, the blue button a host hands the viewer as its `update` (`CadViewerProps.update`,
 first among the navbar's right-hand controls over every file, an icon, and on the home a row of its own,
@@ -443,8 +442,7 @@ the page regains focus. Nothing it does is an answer the server keeps: the butto
 install is behind and goes once the update lands. The card sends its prompt
 to the agent's chat through the host's `send`, where the host can, and otherwise copies it through
 `copy`, its button then Copy prompt; the prompt has a copy icon in its top-right corner either way; the host decides which it supplies. Its
-Manual installation link, the notice's `instructions`, opens through the host's `onLink`, as the
-`ConsentCard`'s privacy policy does through `onPolicy`. The shell
+Manual installation link, the notice's `instructions`, opens through the host's `onLink`. The shell
 handles placement and hides the toolbar in
 preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.
@@ -461,10 +459,9 @@ reason otherwise, each with a Go home button where the host has a home.
 The viewport's corners are the shell's, never the host's: the tool strip and its
 stack at the top-left, Quick Edit at the top-right, and the view cube at the
 bottom-left; the view's own controls (Display and Preview, a 3D view's) are the navbar's
-last. A host's one notice goes through the shell too: `notice` (the
-`ConsentCard`) is drawn at the top-right once the
+last. A host's one notice goes through the shell too: `notice` is drawn at the top-right once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
-it until it is answered; the home never shows it.
+it while it stands; the home never shows it. Neither app has one now.
 What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer
 destination, Send where the prompt port has `send`. Native clipboard effects
