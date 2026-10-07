@@ -282,8 +282,8 @@ never for a copy that something else updates. `CADGEN_UPDATE_CHECK=0` turns it o
 
 The CAD app (the plugin's `cad` server) and the browser viewer (`cadgen viewer`) send usage stats by default,
 tagged with a random install ID: versions, where you installed it from, your OS and agent app, and how often each
-CAD tool was called and views were used. Our server also counts installs per country, from each request's IP
-address, as weekly and monthly totals only. Never file names, paths, contents or prompts. The first `cadgen`
+CAD tool was called and views were used. Our server adds the country each request comes from (worked out from its
+IP address, which it doesn't keep) and stores it all with PostHog. Never file names, paths, contents or prompts. The first `cadgen`
 command says so once, and sending starts then. Turn it off, which also deletes what was sent, with
 `uvx cadgen telemetry off`, **Share usage stats** in either app's menu (the logo at the top left, over any model),
 or by asking your agent. `uvx cadgen telemetry on` also shares a one-way code and the format of each distinct file

@@ -861,8 +861,8 @@ docs after the PyPI upload, so the feed names a release only once it can be
 installed. Only a copy nothing else updates reads it (its channel, "The plugin
 branch" above): a store's copy (the Claude or OpenAI directory, the Cursor
 Marketplace) and Gemini's extension never check and are never told, since their
-store or Gemini updates them. A change to the analytics schema (`schema.sql`) is run on the database
-before the deploy that ships it (`apps/docs/README.md`).
+store or Gemini updates them. Telemetry passes through the same routes to PostHog: a deploy needs the
+project's PostHog settings in Vercel, which `/v1/health` checks (`apps/docs/README.md`).
 
 ### Resuming and republishing
 

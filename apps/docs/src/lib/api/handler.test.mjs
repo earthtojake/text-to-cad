@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { handle, RETENTION_DAYS } from './handler.mjs';
+import { handle } from './handler.mjs';
 import { versions } from './versions.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
@@ -20,24 +20,21 @@ const BATCH = {
 // out of the JSON a batch is sent as).
 const SCHEMA_1 = { ...BATCH, schema: 1, version: '0.7.11', source: 'store', channel: undefined };
 
-// A store in memory, all in one week: an install has been seen this week and month once it has rows.
+// A store in memory: the rows each batch passed on, and the country each came with.
 function memory() {
   const rows = [];
-  const tallies = [];
+  const countries = [];
   return {
     rows,
-    tallies,
-    async insert(batch) { rows.push(...batch); },
-    async seen(id) { const any = rows.some(row => row.install_id === id); return { week: any, month: any }; },
-    async tally(country, periods) { tallies.push([country, ...periods]); },
+    countries,
+    async insert(batch, { country }) { rows.push(...batch); countries.push(country); },
     async forget(id) { for (let i = rows.length - 1; i >= 0; i -= 1) if (rows[i].install_id === id) rows.splice(i, 1); },
-    async prune(days) { this.pruned = days; return 0; },
     async ready() {},
   };
 }
 const send = (store, method, path, body, headers = {}, country = 'DE') => handle(new Request(`https://api.texttocad.dev${path}`, {
   method, headers: { 'content-type': 'application/json', ...headers }, body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
-}), store, { cronSecret: 'secret', country });
+}), store, { country });
 
 test('a batch becomes one row per event, carrying its context and nothing else', async () => {
   const store = memory();
@@ -64,18 +61,18 @@ test('every schema a released cadgen sends is stored: a copy nobody updated keep
   ]);
 });
 
-test('where installs are is kept as totals: each counts once a week and a month, never beside its rows', async () => {
+test('a batch goes on with the country the host placed it in: never its address, nor anything finer', async () => {
   const store = memory();
   await send(store, 'POST', '/v1/events', BATCH);
-  await send(store, 'POST', '/v1/events', BATCH); // the same install again: already counted
-  const other = { ...BATCH, install: '5d7a3d6e-91c2-4f0e-8b7a-0f6c1e2d3a4b' };
-  await send(store, 'POST', '/v1/events', other, {}, 'not a country'); // the host could not tell
-  assert.deepEqual(store.tallies, [['DE', 'week', 'month'], ['ZZ', 'week', 'month']]);
-  assert.ok(store.rows.every(row => !('country' in row)));
-  // A side count: when the totals fail, the batch is still stored.
-  const broken = { ...memory(), async tally() { throw Object.assign(new Error('relation "countries" does not exist'), { code: '42P01' }); } };
-  assert.equal((await send(broken, 'POST', '/v1/events', BATCH)).status, 204);
-  assert.equal(broken.rows.length, BATCH.events.length);
+  await send(store, 'POST', '/v1/events', BATCH, {}, 'not a country'); // the host could not tell
+  assert.deepEqual(store.countries, ['DE', null]);
+  assert.ok(store.rows.every(row => !('country' in row))); // a batch names no country of its own
+});
+
+test("a service that will not take the batch is the receiver's failure: the client keeps it and sends it again", async () => {
+  const down = { ...memory(), async insert() { throw Object.assign(new Error('PostHog answered 503'), { code: 'posthog_503' }); } };
+  const reply = await send(down, 'POST', '/v1/events', BATCH);
+  assert.deepEqual([reply.status, await reply.json()], [500, { error: 'internal error' }]);
 });
 
 test('anything outside the contract is refused and stores nothing', async () => {
@@ -107,7 +104,7 @@ test('anything outside the contract is refused and stores nothing', async () => 
   ]) assert.equal((await send(store, 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
   assert.equal((await send(store, 'POST', '/v1/events', '{')).status, 400);
   assert.equal((await send(store, 'POST', '/v1/events', 'x'.repeat(20_000))).status, 400);
-  assert.deepEqual([store.rows, store.tallies], [[], []]);
+  assert.deepEqual([store.rows, store.countries], [[], []]);
 });
 
 test('a browser cannot post: a request with an Origin header, or a body that is not JSON, stores nothing', async () => {
@@ -116,36 +113,34 @@ test('a browser cannot post: a request with an Origin header, or a body that is 
   assert.deepEqual([page.status, await page.json()], [403, { error: 'not from a browser' }]);
   const text = await send(store, 'POST', '/v1/events', BATCH, { 'content-type': 'text/plain' });
   assert.deepEqual([text.status, await text.json()], [415, { error: 'the body must be application/json' }]);
-  assert.deepEqual([store.rows, store.tallies], [[], []]);
+  assert.deepEqual([store.rows, store.countries], [[], []]);
 });
 
-test('an install id forgets everything sent under it; pruning is the cron\'s alone', async () => {
+test('an install id forgets everything sent under it; retention is the service\'s', async () => {
   const store = memory();
   await send(store, 'POST', '/v1/events', BATCH);
   assert.equal((await send(store, 'POST', '/v1/forget', { install: 'not-an-id' })).status, 400);
   assert.equal((await send(store, 'POST', '/v1/forget', { install: INSTALL })).status, 204);
   assert.equal((await send(store, 'DELETE', `/v1/installs/${INSTALL}`)).status, 404); // no id in a path
   assert.deepEqual(store.rows, []);
-  assert.equal((await send(store, 'GET', '/v1/prune')).status, 401);
-  assert.equal((await send(store, 'GET', '/v1/prune', undefined, { authorization: 'Bearer secret' })).status, 200);
-  assert.equal(store.pruned, RETENTION_DAYS);
+  assert.equal((await send(store, 'GET', '/v1/prune')).status, 404);
   assert.equal((await send(store, 'GET', '/v1/events')).status, 404);
 });
 
-test('health fails without a setting, or with tables a batch cannot be stored in, naming no more than a code', async () => {
+test('health fails without a setting, or with keys the service refuses, naming no more than a code', async () => {
   assert.equal((await send(memory(), 'GET', '/v1/health')).status, 200);
-  const unset = await handle(new Request('https://api.texttocad.dev/v1/health'), memory(), { missing: ['CRON_SECRET'] });
-  assert.deepEqual([unset.status, await unset.json()], [503, { ok: false, missing: ['CRON_SECRET'] }]);
-  // A column schema.sql was not re-run for.
-  const stale = { ...memory(), async ready() { throw Object.assign(new Error('column "kind" does not exist'), { code: '42703' }); } };
-  const reply = await send(stale, 'GET', '/v1/health');
-  assert.deepEqual([reply.status, await reply.json()], [503, { ok: false, error: '42703' }]);
+  const unset = await handle(new Request('https://api.texttocad.dev/v1/health'), memory(), { missing: ['POSTHOG_PROJECT_KEY'] });
+  assert.deepEqual([unset.status, await unset.json()], [503, { ok: false, missing: ['POSTHOG_PROJECT_KEY'] }]);
+  // A personal key PostHog no longer takes.
+  const refused = { ...memory(), async ready() { throw Object.assign(new Error('PostHog answered 401'), { code: 'posthog_401' }); } };
+  const reply = await send(refused, 'GET', '/v1/health');
+  assert.deepEqual([reply.status, await reply.json()], [503, { ok: false, error: 'posthog_401' }]);
 });
 
-test('the version feed is the same for everyone, kept at the edge, and answers without a database', async () => {
+test('the version feed is the same for everyone, kept at the edge, and answers without the telemetry service', async () => {
   const feed = { latest: '0.9.0' };
   const down = { ...memory(), async ready() { throw new Error('unreachable'); } };
-  const reply = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: feed, missing: ['DATABASE_URL'] });
+  const reply = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: feed, missing: ['POSTHOG_REGION'] });
   assert.deepEqual([reply.status, await reply.json()], [200, feed]);
   assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=86400');
 });
