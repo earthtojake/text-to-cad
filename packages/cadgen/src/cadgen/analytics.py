@@ -776,6 +776,7 @@ class Recorder:
         self._day = ""
         self._shown: set[str] = set()  # the files a view showed today, by absolute path: never leaves this process
         self._basis: Any = _UNREAD  # the answer in force when what is noted now began to be noted
+        self._choices = 0  # the choices made here: a batch that failed is kept only if none came since
         self._off = False  # a no this process could not keep: nothing more is sent from it
         self._timer: threading.Event | None = None
         self._describe()
@@ -826,6 +827,7 @@ class Recorder:
         with self._lock:  # nothing noted before a choice is sent after it
             self._tally = _Tally()
             self._basis = decision
+            self._choices += 1
         if not share:
             self._off = self._off or not chosen["saved"]
             self._background(lambda: forget_pending(path=self.path))
@@ -929,7 +931,7 @@ class Recorder:
         found = dict(UNAVAILABLE) if self._off else status(path=self.path, probe=False)
         decided = _answer((_read(settings) or {}) if found["sharing"] else {})  # which answer is in force (``_answer``)
         with self._lock:
-            tally, basis = self._tally, self._basis
+            tally, basis, choices = self._tally, self._basis, self._choices
             self._tally, self._basis = _Tally(), decided
             context = dict(self._context)
             # Noted under an earlier answer -- before a yes given in another process (this one's own clears
@@ -946,9 +948,10 @@ class Recorder:
         outcome = self._send({"schema": SCHEMA, "install": found["id"], "session": self._session, **context,
                               "events": events})
         outcome = "ok" if outcome is True else "failed" if outcome in (False, None) else outcome
-        if outcome == "failed":  # kept for the next batch, added to whatever came since
-            with self._lock:
-                self._tally.merge(sending)
+        if outcome == "failed":  # kept for the next batch, added to whatever came since -- unless a choice
+            with self._lock:     # made here while it was on its way cleared it (two answers can share a tick)
+                if self._choices == choices:
+                    self._tally.merge(sending)
         # refused: dropped, or it would be refused again with everything after it
         if outcome == "ok":
             self._owe_deletion_if_gone(settings, found["id"])

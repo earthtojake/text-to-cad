@@ -310,6 +310,35 @@ class ServerCountsTest(_Tmp):
         self.assertTrue(recorder.flush())
         self.assertEqual([event["tool"] for event in sent[3]["events"]], ["cad_show"])
 
+    def test_a_batch_that_failed_while_the_person_chose_is_not_kept_past_the_choice(self) -> None:
+        sent: list[dict] = []
+        # Two answers can share a clock tick (Windows' is 16 ms): what a batch keeps follows this process's
+        # own choices, not their times.
+        with mock.patch("cadgen.analytics.time.time", return_value=1_790_000_000.0):
+            choose(True, by="cli", path=self.path)
+            first = status(path=self.path)["id"]
+
+            def answer(payload: dict) -> bool:
+                sent.append(payload)
+                if len(sent) == 1:  # the person says no, then yes, while this batch is on its way
+                    recorder.choose(False, by="app")
+                    recorder.choose(True, by="app")
+                    recorder.called("cad_view", True)
+                    recorder.opened(str(self.tmp / "new.step"))
+                    return False
+                return True
+
+            recorder = Recorder(path=self.path, send=answer)
+            recorder.called("cad_show", False)
+            recorder.opened(str(self.tmp / "old.step"))
+            self.assertFalse(recorder.flush())
+            self.assertTrue(recorder.flush())
+
+        self.assertNotEqual(sent[1]["install"], first)
+        self.assertEqual(sent[1]["events"], [{"name": "files", "kind": "step", "count": 1},
+                                             {"name": "tool", "tool": "cad_view", "calls": 1, "errors": 0}])
+        self.assertFalse(recorder.flush())
+
     def test_only_a_receiver_that_read_the_batch_refuses_it(self) -> None:
         # A 404 (no receiver deployed there yet), a firewall's 403, a 429 or a 5xx is no refusal: the batch,
         # or the deletion an opt-out owes, is kept and tried again. A 400 means it was read: dropped.
