@@ -134,6 +134,22 @@ jobs:
             exit 1
           fi
 
+      # The pages' source maps go to PostHog before the PyPI upload (the publish job), with a
+      # personal API key that may write error tracking: a release without them stops here.
+      - name: Check the PostHog source map settings
+        if: steps.gate.outputs.should_publish == 'true' && steps.gate.outputs.is_main == 'true'
+        env:
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: ${{ secrets.POSTHOG_CLI_PROJECT_ID }}
+          POSTHOG_CLI_HOST: ${{ secrets.POSTHOG_CLI_HOST }}
+        run: |
+          for name in POSTHOG_CLI_API_KEY POSTHOG_CLI_PROJECT_ID POSTHOG_CLI_HOST; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is not set, so the release could not upload the pages' source maps to PostHog."
+              exit 1
+            fi
+          done
+
       # The record a Test run made of exactly this tree with every job selected. Not finding
       # one -- or failing to look -- means the tests run below.
       - name: Find the run that tested this tree
@@ -228,6 +244,23 @@ jobs:
       - name: Validate production bundle layout
         run: scripts/github-workflows/check-builds.sh --skip-bundle-check
 
+      # The bundle built the CAD Viewer and the CAD app with a source map and a debug id for every
+      # chunk, and left the maps out of the wheel. Each chunk a crash on either page can name, with
+      # its map, gathered for PostHog and zipped for the GitHub Release (scripts/release/sourcemaps.py).
+      - name: Collect the pages' source maps
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          python3 scripts/release/sourcemaps.py collect --out "$RUNNER_TEMP/sourcemaps/files" \
+            --zip "$RUNNER_TEMP/sourcemaps/zip/cadgen-sourcemaps-$VERSION.zip"
+
+      - name: Upload the source maps as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cadgen-sourcemaps-${{ needs.gate.outputs.version }}
+          path: ${{ runner.temp }}/sourcemaps/zip/
+          if-no-files-found: error
+
       - name: Check cadgen package version matches the canonical release version
         run: |
           version="$(tr -d '[:space:]' < VERSION)"
@@ -303,6 +336,20 @@ jobs:
 
       # ---- irreversible from here: main only -------------------------------------
 
+      # Before the wheel goes out, so no install can crash with a map PostHog does not have. Each
+      # map is filed under its chunk's debug id, which the chunk's bytes decide: a resumed run, or a
+      # later release with the same chunk, uploads nothing twice and overwrites no other version's.
+      - name: Upload the pages' source maps to PostHog
+        if: needs.gate.outputs.is_main == 'true'
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: ${{ secrets.POSTHOG_CLI_PROJECT_ID }}
+          POSTHOG_CLI_HOST: ${{ secrets.POSTHOG_CLI_HOST }}
+        run: |
+          npx --yes @posthog/cli@0.18.9 sourcemap upload --directory "$RUNNER_TEMP/sourcemaps/files" \
+            --release-name cadgen --release-version "$VERSION"
+
       # Uploaded BEFORE anything an installer follows names the version. If the upload
       # succeeds and a later step fails, dispatch this workflow again: it resumes.
       - name: Publish cadgen to PyPI
@@ -335,6 +382,7 @@ jobs:
         run: |
           echo "Rehearsal complete on $GITHUB_REF_NAME at ${{ needs.gate.outputs.release_sha }}."
           echo "Would have uploaded: $(ls packages/cadgen/dist)"
+          echo "Would have uploaded these pages' source maps to PostHog: $(ls "$RUNNER_TEMP/sourcemaps/files")"
           echo "Would have deployed the docs site from ${{ needs.gate.outputs.release_sha }}."
           echo "Would have committed the plugin to latest and claude-plugin."
           # --dry-run computes the tag and the release it would create without
@@ -456,9 +504,17 @@ jobs:
           name: cad-openai-plugin-${{ needs.gate.outputs.version }}
           path: ${{ runner.temp }}/plugin
 
+      # The pages' source maps the publish job uploaded to PostHog: kept on the release, so this
+      # version's can be uploaded again (a new PostHog project, or past its retention).
+      - name: Download the pages' source maps
+        uses: actions/download-artifact@v8
+        with:
+          name: cadgen-sourcemaps-${{ needs.gate.outputs.version }}
+          path: ${{ runner.temp }}/sourcemaps
+
       # A push-triggered run has no `publish` input: it publishes. Only a manual
-      # dispatch can ask for a draft. The wheel, sdist and plugin ZIP are attached to
-      # the release; a resumed run attaches them to the release that already exists.
+      # dispatch can ask for a draft. The wheel, sdist, plugin ZIP and source maps are attached
+      # to the release; a resumed run attaches them to the release that already exists.
       - name: Create release tag and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -468,8 +524,8 @@ jobs:
           if [ "${INPUT_PUBLISH:-true}" = "true" ]; then
             args+=(--publish)
           fi
-          ls -l packages/cadgen/dist "$RUNNER_TEMP/plugin"
-          for file in packages/cadgen/dist/*.whl packages/cadgen/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip; do
+          ls -l packages/cadgen/dist "$RUNNER_TEMP/plugin" "$RUNNER_TEMP/sourcemaps"
+          for file in packages/cadgen/dist/*.whl packages/cadgen/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/sourcemaps/*.zip; do
             [ -f "$file" ] && args+=(--asset "$file")
           done
           scripts/release/publish-github-release.sh "${args[@]}"

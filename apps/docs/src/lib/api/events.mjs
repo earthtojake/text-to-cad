@@ -49,6 +49,7 @@ const SOURCES = new Set(['store', 'manual']);
 const PROCESSES = new Set(['app', 'viewer', 'daemon']);
 const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);
 const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
+const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
@@ -77,8 +78,10 @@ const some = (value, name) => (count(value, name) > 0 ? value : fail(`${name} co
 const matches = (value, pattern, name) => (typeof value === 'string' && pattern.test(value) ? value : fail(`${name} is not one`));
 const frameOf = (frame, name) => {
   if (!frame || typeof frame !== 'object' || Array.isArray(frame)) fail(`${name} is not a frame`);
-  only(frame, ['file', 'function', 'line', 'column'], name);
+  only(frame, ['file', 'function', 'line', 'column', 'chunk_id'], name);
   const read = { file: matches(frame.file, FRAME_FILE, `${name}.file`), function: matches(frame.function, FUNCTION, `${name}.function`) };
+  // A page's chunk, by the debug id its build stamped on it and on the source map a release uploads.
+  if (frame.chunk_id !== undefined) read.chunk_id = matches(frame.chunk_id, CHUNK_ID, `${name}.chunk_id`);
   // A minified script's one line runs to millions of columns.
   for (const key of ['line', 'column']) {
     if (frame[key] === undefined) continue;
@@ -164,6 +167,7 @@ const READERS = {
       frames: event.frames.map((frame, index) => frameOf(frame, `${at}.frames[${index}]`)),
       count: some(event.count, `${at}.count`),
     };
+    if (fields.where !== 'page' && fields.frames.some(frame => frame.chunk_id)) fail(`${at}: only a page's frames name a chunk`);
     const crash = [fields.where, fields.tool, fields.type, fields.handled, fields.status, fields.frames];
     return { key: `exception ${JSON.stringify(crash)}`, fields };
   },

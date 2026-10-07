@@ -56,6 +56,8 @@ export function exceptionOf(row) {
   const frames = row.frames.map(frame => ({
     platform: page ? 'web:javascript' : 'python', filename: frame.file, function: frame.function,
     ...(frame.line ? { lineno: frame.line } : {}), ...(frame.column ? { colno: frame.column } : {}),
+    // PostHog resolves a page's frame through the source map the release uploaded under this id.
+    ...(page && frame.chunk_id ? { chunk_id: frame.chunk_id } : {}),
     in_app: page ? !NOT_OURS.has(frame.file) : frame.file.startsWith('cadgen/'),
   }));
   return [{

@@ -181,6 +181,34 @@ function serverLifetimePlugin() {
   };
 }
 
+// Each chunk's debug id, by file name, in the page before anything runs (`__cadChunkIds`): a crash
+// report names the chunk each of its frames ran in by it (@text-to-cad/core's crash reporter), and
+// the release uploads every chunk with its source map (scripts/release/sourcemaps.py) for PostHog to
+// show the source. The maps stay in dist, which the wheel leaves out (scripts/bundle).
+function chunkIdsPlugin() {
+  return {
+    name: "cad-viewer-chunk-ids",
+    apply: "build",
+    enforce: "post",
+    generateBundle: { order: "post", handler(_, bundle) {
+      const ids = {};
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== "chunk" || !chunk.sourcemapFileName) continue;
+        const map = bundle[chunk.sourcemapFileName];
+        const debugId = map?.type === "asset" ? JSON.parse(String(map.source)).debugId : undefined;
+        if (!debugId) throw new Error(`The CAD Viewer chunk ${chunk.fileName}'s source map has no debug id.`);
+        ids[chunk.fileName.split("/").pop()] = debugId;
+      }
+      const html = bundle["index.html"];
+      if (!html || html.type !== "asset") throw new Error("The CAD Viewer build needs index.html.");
+      const script = `<script>globalThis.__cadChunkIds=${JSON.stringify(ids)}</script>`;
+      const document = String(html.source);
+      if (!document.includes("<head>")) throw new Error("The CAD Viewer's index.html has no <head>.");
+      html.source = document.replace("<head>", () => `<head>${script}`);
+    } },
+  };
+}
+
 export default defineConfig(async ({ command }) => ({
   root: viewerAppRoot,
   envPrefix: "VIEWER_",
@@ -193,11 +221,14 @@ export default defineConfig(async ({ command }) => ({
     drawingAssetsPlugin({ exclude: [/\/fonts\/Xiaolai\//] }),
     react(),
     serverLifetimePlugin(),
+    chunkIdsPlugin(),
   ],
   resolve: { alias: { "@": viewerClientRoot }, dedupe: ["react", "react-dom", "three", "lucide-react"] },
   build: {
     chunkSizeWarningLimit: 800,
-    rolldownOptions: { output: { codeSplitting: { groups: [
+    // Maps beside the chunks, named by no chunk (`hidden`), each chunk's debug id in it and in its map.
+    sourcemap: "hidden",
+    rolldownOptions: { output: { sourcemapDebugIds: true, codeSplitting: { groups: [
       { name: "vendor-three", test: /[\\/]node_modules[\\/]three[\\/]/ },
       { name: "vendor-react", test: /[\\/]node_modules[\\/]react(?:-dom)?[\\/]/ },
       { name: "vendor-ui", test: /[\\/]node_modules[\\/]@?radix-ui[\\/]/ },

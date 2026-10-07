@@ -116,7 +116,10 @@ reference host `basic-host` does.
   an argument or a file. A Quick Edit that went is counted through the host's `usage`, and
   crashes are reported too: a tool's call or a route that failed for no reason its caller
   gave, and the page's own (`main.tsx`, its frames named by the chunks the inline loader
-  made blob URLs of), as their type and frames, never a message. It is on by default once
+  made blob URLs of, and by each chunk's debug id), as their type and frames, never a message.
+  The build keeps a source map of each chunk as the page runs it (`dist/sourcemaps`, which a
+  release uploads to PostHog): every edit it makes to a chunk is folded into rolldown's map,
+  and each import's placeholder is as wide as the blob URL that replaces it. It is on by default once
   a `cadgen` command has said so, once, and nothing asks. The app menu's **Share usage
   stats** (`appSettings`, through `/__cad/analytics`) changes the answer, one answer for
   this app and the browser viewer. Its **Quick edit** (on until

@@ -3,6 +3,8 @@
  * checks it again): the error's type, whether the page went on, and its innermost frames, oldest first --
  * each a script file of the page's, a function, a line and a column. Never the error's message, a value,
  * or a URL: a frame names its script by the file's own name (`fileOf`), and anything else as `<?>`.
+ * A frame in one of the page's own chunks also names that chunk's debug id (`chunk_id`), which its build
+ * stamped on the chunk and on its source map: with it, PostHog finds the map the release uploaded.
  *
  * A host reports through `createCrashReporter`, which sends each distinct crash once per page and only
  * a few in all: a page failing in a loop sends one report, not one a frame.
@@ -14,6 +16,8 @@ const TYPE = /^[A-Za-z_][A-Za-z0-9_.]{0,127}$/;
 const FUNCTION = /^[A-Za-z_$<][A-Za-z0-9_$.<>]{0,79}$/;
 // A file's own name: letters, digits and `_.+-`, never `.` or `..` alone.
 const FILE = /^(?!\.\.?$)[A-Za-z0-9_.+-]{1,64}$/;
+// A debug id, as a bundler stamps one on a chunk and its map.
+const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // A frame of Chromium's (`    at name (url:line:column)`, `    at url:line:column`), and of every other
 // engine's (`name@url:line:column`).
 const CHROMIUM = /^\s+at (?:(.*?) \()?(.+?):(\d+):(\d+)\)?$/;
@@ -29,6 +33,13 @@ export function scriptFileOf(url) {
   } catch {
     return '<?>';
   }
+}
+
+/** The debug id the page's build gave one of its chunks, by the chunk's file name (`__cadChunkIds`, which
+ * the build writes into the page), or `undefined` for a script that is not one of them. */
+export function chunkIdOf(file) {
+  const id = /** @type {{ __cadChunkIds?: Record<string, unknown> }} */ (globalThis).__cadChunkIds?.[file];
+  return typeof id === 'string' && CHUNK_ID.test(id) ? id : undefined;
 }
 
 function functionOf(name) {
@@ -54,12 +65,15 @@ export function crashOf(error, { handled = false, fileOf = scriptFileOf } = {}) 
   for (const line of lines) {
     const match = chromium ? CHROMIUM.exec(line) : OTHERS.exec(line.trim());
     if (!match) continue;
-    const file = fileOf(match[2]);
+    const named = fileOf(match[2]);
+    const file = FILE.test(named) ? named : '<?>';
+    const chunk = file === '<?>' ? undefined : chunkIdOf(file);
     frames.push({
-      file: FILE.test(file) || file === '<?>' ? file : '<?>',
+      file,
       function: functionOf(match[1]),
       line: Math.min(Number(match[3]), 9_999_999),
       column: Math.min(Number(match[4]), 9_999_999),
+      ...(chunk ? { chunk_id: chunk } : {}),
     });
   }
   return {

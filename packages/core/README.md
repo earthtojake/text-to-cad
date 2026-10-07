@@ -201,8 +201,10 @@ telemetry (`reportActivity`: a touch, a Quick Edit that went, or a crash); every
 change is a POST with the viewer's guard header. A host reports its page's crashes
 with `createCrashReporter(send, { fileOf })`, which makes each with `crashOf` -- the
 error's type and its script frames, oldest first, never its message, a value or a
-URL (`fileOf` names a script by its file's own name, `scriptFileOf` by default) --
-and sends each distinct one once a page, a few at most. `dispose()` stops polling, aborts
+URL (`fileOf` names a script by its file's own name, `scriptFileOf` by default, and
+a frame in one of the page's own chunks also names its debug id, from the table the
+page's build wrote, `__cadChunkIds`) -- and sends each distinct one once a page, a few
+at most. `dispose()` stops polling, aborts
 requests and disposes render sessions. The client lazily owns its cache provider
 and bounded write-back queue; each render session borrows a cancellable cache
 view and owns its abort signal and worker leases. A host whose transport

@@ -218,8 +218,9 @@ export interface CadPageCrash {
   type: string;
   /** Whether the page went on: an error a view's boundary caught, not one that stopped it. */
   handled: boolean;
-  /** Its innermost frames, oldest first: a script file's own name (or `<?>`), a function, a place. */
-  frames: { file: string; function: string; line: number; column: number }[];
+  /** Its innermost frames, oldest first: a script file's own name (or `<?>`), a function, a place, and for
+   * one of the page's own chunks its debug id, by which PostHog finds the chunk's source map. */
+  frames: { file: string; function: string; line: number; column: number; chunk_id?: string }[];
 }
 
 /** What `reportActivity` tells the page's server. */

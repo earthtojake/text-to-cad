@@ -44,7 +44,8 @@ pass: the merge is the release.
 - `Publish Release` (`release-publish.yml`) runs on the merge. It finds the
   `Test` run that recorded the merged tree as tested in full (else it runs every
   `Test` job on it first), builds the plugin ZIP, the bundle and the `cadgen`
-  wheel and sdist, installs and exercises the wheel, uploads it to PyPI, and
+  wheel and sdist, installs and exercises the wheel, uploads the pages' source
+  maps to PostHog and the wheel to PyPI, and
   waits until PyPI's index lists it. Only then does it commit the plugin alone
   onto the branches installers follow (`scripts/release/plugin_branch.py`):
   `latest`, which every install command names, and `claude-plugin`, which

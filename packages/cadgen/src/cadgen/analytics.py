@@ -202,6 +202,7 @@ BUGS = (AttributeError, LookupError, TypeError, NameError, AssertionError, ZeroD
         NotImplementedError)
 _RAISED = re.compile(r"(?:^|:)\s*raise\b")
 USER = "<user>"  # the person's own code, a frame or an exception's type: never named
+_CHUNK_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")  # a page chunk's debug id
 _FILE = re.compile(r"(?!\.\.?(?:/|$))[A-Za-z0-9_.+-]{1,64}(?:/(?!\.\.?(?:/|$))[A-Za-z0-9_.+-]{1,64}){0,8}")
 _FUNCTION = re.compile(r"[A-Za-z_$<][A-Za-z0-9_$.<>]{0,79}")
 _TYPE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]{0,127}")
@@ -691,7 +692,11 @@ def valid_signature(found: Any) -> bool:
     if "status" in found and not (type(found["status"]) is int and -512 < found["status"] < 512):
         return False
     for frame in frames:
-        if not isinstance(frame, dict) or not set(frame) <= {"file", "function", "line", "column"}:
+        if not isinstance(frame, dict) or not set(frame) <= {"file", "function", "line", "column", "chunk_id"}:
+            return False
+        # A page's chunk, by the debug id its build stamped on it and on its source map: nothing else.
+        if "chunk_id" in frame and not (found["where"] == "page" and isinstance(frame["chunk_id"], str)
+                                        and _CHUNK_ID.fullmatch(frame["chunk_id"])):
             return False
         file, function = frame.get("file"), frame.get("function")
         if not (isinstance(file, str) and (file in (USER, "<?>", "<frozen>") or _FILE.fullmatch(file))):

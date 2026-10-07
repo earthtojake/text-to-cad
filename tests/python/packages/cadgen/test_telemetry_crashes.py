@@ -111,7 +111,8 @@ class SignatureTest(unittest.TestCase):
 
     def test_a_crash_from_elsewhere_is_taken_only_if_this_module_would_have_made_it(self) -> None:
         good = {"where": "page", "type": "TypeError", "handled": False,
-                "frames": [{"file": "assets/index-Bx3k2.js", "function": "Kt", "line": 1, "column": 48213}]}
+                "frames": [{"file": "assets/index-Bx3k2.js", "function": "Kt", "line": 1, "column": 48213,
+                            "chunk_id": "0de4d024-c159-4f6d-b15a-cc4ef7a6856d"}]}
         self.assertTrue(analytics.valid_signature(good))
         self.assertTrue(analytics.valid_signature(analytics.died(-11)))
         for bad in (
@@ -122,6 +123,8 @@ class SignatureTest(unittest.TestCase):
             {**good, "frames": [{"file": "a.js", "function": "make secret bracket", "line": 1}]},
             {**good, "frames": [{"file": "a.js", "function": "f", "line": -1}]},
             {**good, "frames": [{"file": "a.js", "function": "f", "line": 1, "source": "secret"}]},
+            {**good, "frames": [{"file": "a.js", "function": "f", "line": 1, "chunk_id": "secret"}]},
+            {**good, "where": "build"},  # only a page's frames name a chunk
             {**good, "frames": good["frames"] * (analytics.MAX_FRAMES + 1)},
             {**good, "type": "TypeError: secret"},
             {**good, "where": "elsewhere"},

@@ -91,9 +91,14 @@ test('a crash is one row, its frames checked one by one, and nothing it said', a
   const store = memory();
   const worker = { name: 'exception', where: 'build', type: 'WorkerDied', handled: false, status: -11, frames: [], count: 1 };
   const page = { name: 'exception', where: 'page', type: 'TypeError', handled: false, count: 1,
-    frames: [{ file: 'assets/index-Bx3k2.js', function: 'Kt', line: 1, column: 48213 }] };
+    frames: [{ file: 'assets/index-Bx3k2.js', function: 'Kt', line: 1, column: 48213, chunk_id: '0de4d024-c159-4f6d-b15a-cc4ef7a6856d' }] };
   assert.equal((await send(store, 'POST', '/v1/events', { ...DAEMON, events: [CRASH, worker, page] })).status, 204);
   assert.deepEqual(store.rows.map(fieldsOf), [CRASH, worker, page].map(({ name, ...crash }) => ({ event: name, ...crash })));
+  // Only a page's frame names a chunk, and only by a debug id.
+  for (const frames of [[{ ...page.frames[0], chunk_id: 'secret' }], [{ file: 'cadgen/x.py', function: 'f', chunk_id: '0de4d024-c159-4f6d-b15a-cc4ef7a6856d' }]]) {
+    const event = { ...page, where: frames[0].file.endsWith('.py') ? 'build' : 'page', frames };
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...DAEMON, events: [event] })).status, 400);
+  }
 });
 
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {

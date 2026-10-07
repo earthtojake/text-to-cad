@@ -73,7 +73,7 @@ test("a crash is PostHog's $exception: its type and frames, only cadgen's in the
     { name: 'exception', where: 'tool', tool: 'cad_show', type: 'KeyError', handled: true, frames, count: 2 },
     { name: 'exception', where: 'build', type: 'WorkerDied', handled: false, status: -11, frames: [], count: 1 },
     { name: 'exception', where: 'page', type: 'TypeError', handled: false, count: 1,
-      frames: [{ file: 'assets/index-Bx3k2.js', function: 'Kt', line: 1, column: 48213 }] },
+      frames: [{ file: 'assets/index-Bx3k2.js', function: 'Kt', line: 1, column: 48213, chunk_id: '0de4d024-c159-4f6d-b15a-cc4ef7a6856d' }] },
   ] }), { country: 'DE' });
   const [tool, worker, page] = asked[0].body.batch;
   assert.deepEqual([tool.event, worker.event, page.event], ['$exception', '$exception', '$exception']);
@@ -89,8 +89,10 @@ test("a crash is PostHog's $exception: its type and frames, only cadgen's in the
   // A worker that died shows its exit status, and nothing else; a page's frames are JavaScript's.
   assert.deepEqual(worker.properties.$exception_list, [{ type: 'WorkerDied', value: 'exit status -11',
     mechanism: { type: 'generic', handled: false, synthetic: false } }]);
+  // A page's frame names its chunk, by which PostHog finds the source map the release uploaded.
   assert.deepEqual(page.properties.$exception_list[0].stacktrace.frames,
-    [{ platform: 'web:javascript', filename: 'assets/index-Bx3k2.js', function: 'Kt', lineno: 1, colno: 48213, in_app: true }]);
+    [{ platform: 'web:javascript', filename: 'assets/index-Bx3k2.js', function: 'Kt', lineno: 1, colno: 48213,
+      chunk_id: '0de4d024-c159-4f6d-b15a-cc4ef7a6856d', in_app: true }]);
 });
 
 test('where the host could not tell, an event names no country; what a schema left out, it leaves out', async () => {

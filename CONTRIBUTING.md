@@ -692,12 +692,20 @@ green: that is the release. `Publish Release`, on the merge commit:
    the release commit carries none of it — `check-builds.sh`, the
    wheel-contents check, `python -m build`, and an `unzip -l` assertion that
    the wheel about to ship really holds `_runtime/node`, `_runtime/browser`,
-   `_runtime/viewer` and every `_runtime/native` tracer.
+   `_runtime/viewer` and every `_runtime/native` tracer. The pages' source maps,
+   which the bundle builds and the wheel leaves out, are gathered too
+   (`scripts/release/sourcemaps.py`): every chunk a crash on the CAD Viewer or
+   the CAD app can name, by the debug id its build stamped on it, with its map
+   -- a page whose maps PostHog could not use stops the release here.
 4. **Install test.** The built wheel into a fresh venv — `cadgen --help`,
    `cadgen viewer --help`, `cadgen doctor skills/cad` — then
    `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is
    uploaded as a workflow artifact (`cadgen-<version>`).
-5. **PyPI** (on `main` only), with `skip-existing`, so a rerun is a no-op. Then
+5. **Source maps, then PyPI** (on `main` only). The maps go to PostHog first
+   (`posthog-cli sourcemap upload`, pinned), each filed under its chunk's debug
+   id, which the chunk's bytes decide: a rerun, or a later release that ships the
+   same chunk, uploads nothing twice and overwrites no other version's. Then the
+   wheel, with `skip-existing`, so a rerun is a no-op. Then
    the job waits until PyPI's simple index, which uv resolves a pin through,
    lists the version: usually seconds.
 6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
@@ -705,9 +713,10 @@ green: that is the release. `Publish Release`, on the merge commit:
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, which moves
    the version feed that tells installs a release is out; and the `v<VERSION>`
-   tag and the GitHub Release, with the wheel and sdist from that same artifact
-   and the plugin ZIP attached as release assets (PyPI stays the install
-   channel; the release page is the provenance copy).
+   tag and the GitHub Release, with the wheel and sdist from that same artifact,
+   the plugin ZIP and the source maps (`cadgen-sourcemaps-<version>.zip`, to
+   upload a version's maps again) attached as release assets (PyPI stays the
+   install channel; the release page is the provenance copy).
 
 `main` has the new pins from the merge on, a few minutes before PyPI has the
 wheel. Only an install of `main` itself sees that: a command that names no
@@ -964,7 +973,11 @@ admin's or an agent's with an admin's credentials included. Its gate stops a
 release on `main` that lacks the secret, before the PyPI upload. GitHub allows no
 exception for the workflow's own token on a personal account's repository. To
 replace the key, add a new write deploy key, set the secret to its private half,
-then delete the old key. Keep
+then delete the old key. The source map upload needs three more secrets, which the
+gate checks the same way: `POSTHOG_CLI_API_KEY`, a PostHog personal API key scoped to
+the telemetry project with `error_tracking:write` alone (not the receiver's, which
+lives in Vercel); `POSTHOG_CLI_PROJECT_ID`; and `POSTHOG_CLI_HOST`
+(`https://us.posthog.com` or `https://eu.posthog.com`). Keep
 the repository tag ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*`
 beside the bare form) and immutable releases.
 

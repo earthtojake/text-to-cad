@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { crashOf, createCrashReporter, scriptFileOf } from './crash.js';
+import { chunkIdOf, crashOf, createCrashReporter, scriptFileOf } from './crash.js';
 
 const chromium = Object.assign(new TypeError("Cannot read properties of undefined (reading 'secret-bracket')"), {
   stack: [
@@ -28,6 +28,20 @@ test("a crash names its type and its script frames, oldest first, and never its 
   });
   const said = JSON.stringify(crash);
   for (const secret of ['secret', 'someone', '127.0.0.1', 'abcdefgh', 'Cannot read']) assert.ok(!said.includes(secret), secret);
+});
+
+test("a frame in one of the page's own chunks names the chunk's debug id, which the build wrote into the page", () => {
+  globalThis.__cadChunkIds = { 'index-Bx3k2.js': '0de4d024-c159-4f6d-b15a-cc4ef7a6856d', 'vendor-three-9fA_2.js': 'not an id' };
+  try {
+    const frames = crashOf(chromium).frames;
+    assert.deepEqual(frames.map(frame => [frame.file, frame.chunk_id]), [
+      ['<?>', undefined], ['<?>', undefined], ['index-Bx3k2.js', '0de4d024-c159-4f6d-b15a-cc4ef7a6856d'],
+      ['vendor-three-9fA_2.js', undefined], ['index-Bx3k2.js', '0de4d024-c159-4f6d-b15a-cc4ef7a6856d'],
+    ]);
+    assert.equal(chunkIdOf('<?>'), undefined);
+  } finally {
+    delete globalThis.__cadChunkIds;
+  }
 });
 
 test("other engines' stacks are frames alone, and a host can name its own scripts", () => {
