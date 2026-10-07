@@ -50,9 +50,10 @@ jobs:
           npm --prefix apps/mcp run build
       - name: Collect, as the release does
         run: python3 scripts/release/sourcemaps.py collect --out "$RUNNER_TEMP/sourcemaps/files"
-      - name: Upload, as the release does
+      - name: Upload, as the release does, and no two chunks share an id
         run: |
-          npx --yes @posthog/cli@0.18.9 sourcemap upload --directory "$RUNNER_TEMP/sourcemaps/files"
+          npx --yes @posthog/cli@0.18.9 sourcemap upload --directory "$RUNNER_TEMP/sourcemaps/files" 2>&1 | tee "$RUNNER_TEMP/upload.log"
+          if grep -q "Duplicate chunk id" "$RUNNER_TEMP/upload.log"; then echo "::error::posthog-cli kept one map for two chunks"; exit 1; fi
       - name: Every chunk's map is filed in PostHog under its debug id
         run: |
           missing=0
