@@ -13,8 +13,10 @@ after the code moves no code, so the map fits the copy as it fits the page.
 
     python3 scripts/release/sourcemaps.py collect --out DIR [--zip FILE]
 
-It fails when a page built no maps, when a map has no debug id, or when a chunk and its map name
-different ones: a release whose crashes PostHog could not show the source of stops here.
+It fails when a page built no maps, when a map has no debug id, when a chunk and its map name
+different ones, or when one id names two texts or maps (PostHog keeps one map an id; each page's build
+names a chunk by its text and map, @text-to-cad/core/chunk-ids): a release whose crashes PostHog could not
+show the source of stops here.
 """
 
 from __future__ import annotations
@@ -81,21 +83,32 @@ def pairs(directory: Path, ids: dict[str, str]) -> list[tuple[Path, Path, str]]:
 
 
 def collect(out: Path, *, root: Path = REPO_ROOT, pages: dict = PAGES) -> dict[str, int]:
-    """Copy every page's named chunks and their maps into ``out/<page>/``: how many each page has."""
+    """Copy every page's named chunks and their maps into ``out/<page>/``: how many each page adds. A chunk
+    an earlier page gave, its text and map the same, is gathered once."""
     if out.exists():
         shutil.rmtree(out)
     counts = {}
+    gathered: dict[str, tuple[Path, bytes, bytes]] = {}
     for name, (page, table, directory) in pages.items():
         if not (root / page).is_file():
             raise Unfit(f"{page} is not there: build the pages first (scripts/bundle/bundle.sh)")
         found = pairs(root / directory, chunks_of(root / page, table))
         target = out / name
         target.mkdir(parents=True)
+        counts[name] = 0
         for chunk, source_map, debug_id in found:
+            texts = (chunk.read_bytes(), source_map.read_bytes())
+            if debug_id in gathered:
+                first, *earlier = gathered[debug_id]
+                if tuple(earlier) != texts:
+                    raise Unfit(f"{first} and {chunk} name one debug id, {debug_id}, with different text or "
+                                "maps: PostHog keeps one map an id")
+                continue
+            gathered[debug_id] = (chunk, *texts)
             text = chunk.read_text(encoding="utf-8").rstrip("\n")
             (target / chunk.name).write_text(text + CHUNK_ID_LINE.format(debug_id) + "\n", encoding="utf-8")
             shutil.copy2(source_map, target / source_map.name)
-        counts[name] = len(found)
+            counts[name] += 1
     return counts
 
 

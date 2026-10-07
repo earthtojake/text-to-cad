@@ -24,7 +24,8 @@
     "./drawing": {
       "types": "./dist/drawing/index.d.ts",
       "import": "./dist/drawing/index.js"
-    }
+    },
+    "./chunk-ids": "./scripts/chunk-ids.mjs"
   },
   "scripts": {
     "test": "node scripts/run-tests.mjs",
@@ -49,6 +50,7 @@
   "files": [
     "dist",
     "bin",
+    "scripts/chunk-ids.mjs",
     "docs",
     "README.md"
   ]

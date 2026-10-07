@@ -703,8 +703,11 @@ green: that is the release. `Publish Release`, on the merge commit:
    uploaded as a workflow artifact (`cadgen-<version>`).
 5. **Source maps, then PyPI** (on `main` only). The maps go to PostHog first
    (`posthog-cli sourcemap upload`, pinned), each filed under its chunk's debug
-   id, which the chunk's bytes decide: a rerun, or a later release that ships the
-   same chunk, uploads nothing twice and overwrites no other version's. Then the
+   id, which the chunk's text and its map decide together
+   (`@text-to-cad/core/chunk-ids`; rolldown's own names the code alone): one id
+   names one map in every page and version, so no page's or version's map
+   overwrites another's, and a later release that ships the same chunk and map
+   uploads it once. Then the
    wheel, with `skip-existing`, so a rerun is a no-op. Then
    the job waits until PyPI's simple index, which uv resolves a pin through,
    lists the version: usually seconds.

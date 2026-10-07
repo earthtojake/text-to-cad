@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { stampDebugId } from "@text-to-cad/core/chunk-ids";
 import { drawingAssetsPlugin } from "@text-to-cad/ui/drawing-assets";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
@@ -184,7 +185,9 @@ function serverLifetimePlugin() {
 // Each chunk's debug id, by file name, in the page before anything runs (`__cadChunkIds`): a crash
 // report names the chunk each of its frames ran in by it (@text-to-cad/core's crash reporter), and
 // the release uploads every chunk with its source map (scripts/release/sourcemaps.py) for PostHog to
-// show the source. The maps stay in dist, which the wheel leaves out (scripts/bundle).
+// show the source. Each chunk goes by an id its text and its map decide (@text-to-cad/core/chunk-ids),
+// never rolldown's, which names the code alone. The maps stay in dist, which the wheel leaves out
+// (scripts/bundle).
 function chunkIdsPlugin() {
   return {
     name: "cad-viewer-chunk-ids",
@@ -195,9 +198,11 @@ function chunkIdsPlugin() {
       for (const chunk of Object.values(bundle)) {
         if (chunk.type !== "chunk" || !chunk.sourcemapFileName) continue;
         const map = bundle[chunk.sourcemapFileName];
-        const debugId = map?.type === "asset" ? JSON.parse(String(map.source)).debugId : undefined;
-        if (!debugId) throw new Error(`The CAD Viewer chunk ${chunk.fileName}'s source map has no debug id.`);
-        ids[chunk.fileName.split("/").pop()] = debugId;
+        if (map?.type !== "asset") throw new Error(`The CAD Viewer chunk ${chunk.fileName} has no source map.`);
+        const stamped = stampDebugId(chunk.code, String(map.source), chunk.fileName);
+        chunk.code = stamped.code;
+        map.source = stamped.map;
+        ids[chunk.fileName.split("/").pop()] = stamped.debugId;
       }
       const html = bundle["index.html"];
       if (!html || html.type !== "asset") throw new Error("The CAD Viewer build needs index.html.");

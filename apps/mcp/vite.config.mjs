@@ -5,6 +5,7 @@ import remapping from '@jridgewell/remapping';
 import MagicString from 'magic-string';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { stampDebugId } from '@text-to-cad/core/chunk-ids';
 import { drawingAssetFiles, localizeDrawingFontFallback } from '@text-to-cad/ui/drawing-assets';
 
 // An MCP App is one HTML resource with no asset directory behind it: the host renders it in a
@@ -64,7 +65,9 @@ function inlineWorkers() {
 // map (`dist/sourcemaps`, scripts/release/sourcemaps.py), so PostHog can show the source. The map
 // must fit the text the page runs: every edit here is made with its positions kept (magic-string)
 // and folded into rolldown's map, and a placeholder is as wide as the blob URL that replaces it
-// (`WIDTH`, padded with spaces a URL's parser drops), so swapping it moves no code.
+// (`WIDTH`, padded with spaces a URL's parser drops), so swapping it moves no code. The id is the
+// one that text and its map decide (@text-to-cad/core/chunk-ids), never rolldown's: rolldown names
+// the code before these edits, which the CAD Viewer may ship unedited under the same id.
 const CHUNK = 'cad-chunk:';
 const WIDTH = 192;
 const DYNAMIC_IMPORT = /\bimport\(\s*([`"'])\.\/([^`"'\s]+\.js)\1\s*\)/g;
@@ -109,10 +112,9 @@ function inlineDocument() {
         const name = base(chunk.fileName);
         if (/__VITE_[A-Z_]+__/.test(chunk.code)) throw new Error(`The CAD app chunk ${name} is unfinished.`);
         const mapName = chunk.sourcemapFileName ?? `${chunk.fileName}.map`;
-        const original = bundle[mapName]?.type === 'asset' ? JSON.parse(String(bundle[mapName].source)) : null;
         // A chunk with code of its own has a map and a debug id; one that only re-exports others has
         // neither, and nothing of its own to run, so no frame of a crash is ever in it.
-        if (original && !original.debugId) throw new Error(`The CAD app chunk ${name}'s source map has no debug id.`);
+        const original = bundle[mapName]?.type === 'asset' ? JSON.parse(String(bundle[mapName].source)) : null;
         const statics = new Set(), dynamics = new Set();
         const edited = new MagicString(chunk.code);
         for (const [workerName, expression] of workers) {
@@ -132,11 +134,13 @@ function inlineDocument() {
         if (!same(statics, chunk.imports) || !same(dynamics, chunk.dynamicImports) || [...statics, ...dynamics].some(file => !known.has(file))) {
           throw new Error(`The CAD app could not account for the imports of ${name}: found ${[...statics]} / ${[...dynamics]}, recorded ${chunk.imports} / ${chunk.dynamicImports}`);
         }
-        const code = edited.toString();
+        let code = edited.toString();
         if (original) {
           const map = remapping([edited.generateMap({ hires: true, source: name }), original], () => null);
-          pairs.push({ name, code, map: { ...map, file: name, debugId: original.debugId } });
-          ids[name] = original.debugId;
+          const stamped = stampDebugId(code, JSON.stringify({ ...map, file: name }), name);
+          code = stamped.code;
+          pairs.push({ name, code, map: stamped.map });
+          ids[name] = stamped.debugId;
         }
         sources[name] = gzipSync(code, { level: 9 }).toString('base64');
         imports[name] = [...statics];
@@ -166,9 +170,9 @@ function inlineDocument() {
       const out = path.join(options.dir, 'sourcemaps');
       fs.rmSync(out, { recursive: true, force: true });
       fs.mkdirSync(out, { recursive: true });
-      for (const { name, code, map } of pairs) {  // rolldown ends each chunk with its `//# debugId=`
+      for (const { name, code, map } of pairs) {  // each chunk ends with its `//# debugId=`
         fs.writeFileSync(path.join(out, name), code);
-        fs.writeFileSync(path.join(out, `${name}.map`), JSON.stringify(map));
+        fs.writeFileSync(path.join(out, `${name}.map`), map);
       }
     },
   };

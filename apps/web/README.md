@@ -307,8 +307,9 @@ and reports a person touching the page (at most every 2 s) to `/__cad/analytics/
 file shown is counted as it joins the library (`/__cad/recents`). A Quick Edit copied is counted
 through the host's `usage`, and the page's own crashes -- an error nothing caught, or one a view's
 boundary caught (`main.tsx`) -- are reported as core's `crashOf` makes them: the error's type and its
-script frames, never its message, each once a page. The build gives every chunk a debug id and a hidden
-source map (`vite.config.mjs`), which the wheel leaves out and a release uploads to PostHog; the page
+script frames, never its message, each once a page. The build gives every chunk a hidden source map and
+a debug id its text and that map decide (`vite.config.mjs`, `@text-to-cad/core/chunk-ids`); the wheel
+leaves the maps out and a release uploads them to PostHog, and the page
 carries each chunk's id by file name (`__cadChunkIds`), and a frame names its chunk by it. The server holds all of it as counts in memory
 -- a file once a day, by its format, never its name -- and sends them every few minutes.
 

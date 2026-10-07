@@ -119,7 +119,9 @@ reference host `basic-host` does.
   made blob URLs of, and by each chunk's debug id), as their type and frames, never a message.
   The build keeps a source map of each chunk as the page runs it (`dist/sourcemaps`, which a
   release uploads to PostHog): every edit it makes to a chunk is folded into rolldown's map,
-  and each import's placeholder is as wide as the blob URL that replaces it. It is on by default once
+  each import's placeholder is as wide as the blob URL that replaces it, and the chunk's debug
+  id is the one its edited text and map decide (`@text-to-cad/core/chunk-ids`), never the
+  id of the unedited chunk the CAD Viewer may ship. It is on by default once
   a `cadgen` command has said so, once, and nothing asks. The app menu's **Share usage
   stats** (`appSettings`, through `/__cad/analytics`) changes the answer, one answer for
   this app and the browser viewer. Its **Quick edit** (on until

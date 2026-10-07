@@ -22,6 +22,7 @@ spec.loader.exec_module(sourcemaps)
 
 VIEWER_ID = "0de4d024-c159-4f6d-b15a-cc4ef7a6856d"
 APP_ID = "5105e120-ad57-4fd0-9af1-d64b4ab0ab1c"
+SHARED_ID = "9b0c2a51-7e3d-4f68-a1c4-2d5e8f903b77"
 
 
 class SourceMapsTest(unittest.TestCase):
@@ -75,6 +76,22 @@ class SourceMapsTest(unittest.TestCase):
         self.pages()
         self.write("apps/web/dist/index.html", "<head>")  # a page its build wrote no table into
         with self.assertRaisesRegex(sourcemaps.Unfit, "names no chunk's debug id"):
+            sourcemaps.collect(self.root / "out", root=self.root)
+
+    def test_one_debug_id_names_one_text_and_map_in_every_page(self) -> None:
+        # PostHog keeps one map an id: a chunk both pages ship as it is is gathered once, and another text
+        # under its id -- the CAD app's, its imports rewritten -- stops the release.
+        self.pages()
+        self.write("apps/web/dist/index.html", "<head><script>globalThis.__cadChunkIds="
+                   f'{{"index-A.js":"{VIEWER_ID}","vendor-D.js":"{SHARED_ID}"}}</script>')
+        self.chunk("apps/web/dist/assets", "vendor-D.js", SHARED_ID)
+        self.write("apps/mcp/dist/index.html", "const SOURCES={},IMPORTS={},"
+                   f'IDS={{"index-C.js":"{APP_ID}","vendor-D.js":"{SHARED_ID}"}},ENTRY="index-C.js";')
+        self.chunk("apps/mcp/dist/sourcemaps", "vendor-D.js", SHARED_ID)
+        self.assertEqual(sourcemaps.collect(self.root / "out", root=self.root), {"viewer": 2, "cad-app": 1})
+        self.assertFalse((self.root / "out/cad-app/vendor-D.js").exists())
+        self.write("apps/mcp/dist/sourcemaps/vendor-D.js", f'import"cad-chunk:x.js";\n//# debugId={SHARED_ID}\n')
+        with self.assertRaisesRegex(sourcemaps.Unfit, "vendor-D.js name one debug id"):
             sourcemaps.collect(self.root / "out", root=self.root)
 
 
