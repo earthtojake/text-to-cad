@@ -37,7 +37,8 @@ import { FolderExplorer } from "./FolderExplorer.jsx";
 /**
  * The left of the row: the logo, the file's name and its ⋯, one kind of control — transparent until
  * the pointer is on it or its menu is open, then the same accent — and none with a tooltip: each
- * says what it is.
+ * says what it is. They sit edge to edge, spaced by their own padding alone: the logo's 24px button,
+ * Back, Forward and the ⋯ in 20px ones, the name 4px in from its edges — about 7px between glyphs.
  */
 const NAV_ITEM_CLASS = "flex h-6 shrink-0 cursor-pointer items-center rounded-md outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground";
 
@@ -49,14 +50,14 @@ function LogoMenu({ onHome, menu }) {
 }
 
 // Back and Forward: the row's icon buttons, muted as the ⋯ is, and dimmed where there is nowhere to go.
-const HISTORY_CLASS = cn(NAV_ITEM_CLASS, "w-6 justify-center text-muted-foreground disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground");
+const HISTORY_CLASS = cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground");
 
 /**
  * Back and Forward through the view's own history, as a browser's are: each disabled where it has
  * nowhere to go. The history is the host's (`viewHistory`), never the page's.
  */
 function HistoryButtons({ viewHistory }) {
-  return <span className="flex shrink-0 items-center gap-0.5" data-navbar-history="">
+  return <span className="flex shrink-0 items-center" data-navbar-history="">
     <button type="button" aria-label="Back" disabled={!viewHistory.canGoBack} onClick={() => viewHistory.back()} className={HISTORY_CLASS}>
       <ArrowLeft className="size-3.5" aria-hidden="true" />
     </button>
@@ -72,7 +73,7 @@ function FileMenu({ path, platform, capabilities, onAction }) {
   if (!items.length) return null;
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild><button aria-label="File actions" data-testid="file-actions" type="button"
-      className={cn(NAV_ITEM_CLASS, "w-6 justify-center text-muted-foreground")}>
+      className={cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground")}>
       <Ellipsis className="size-3.5" />
     </button></DropdownMenuTrigger>
     <DropdownMenuContent align="start" className="w-56" sideOffset={6}>
@@ -90,7 +91,7 @@ function FileName({ path, explorer }) {
   const [open, setOpen] = useState(false);
   const mobile = useViewerMobile();
   const name = path.split("/").pop() || path;
-  if (!explorer) return <span className="min-w-0 truncate px-1.5" data-file-name="">{name}</span>;
+  if (!explorer) return <span className="min-w-0 truncate px-1" data-file-name="">{name}</span>;
   // Opened, its filter has the keyboard, so typing finds a file at once; a phone keeps its keyboard
   // down, the explorer holding focus itself. Nothing else is focused for the person on opening.
   const focusFilter = event => {
@@ -100,7 +101,7 @@ function FileName({ path, explorer }) {
   };
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger asChild>
-      <button type="button" className={cn(NAV_ITEM_CLASS, "min-w-0 shrink px-1.5 text-left")} data-file-name="">
+      <button type="button" className={cn(NAV_ITEM_CLASS, "min-w-0 shrink px-1 text-left")} data-file-name="">
         <span className="truncate">{name}</span>
       </button>
     </PopoverTrigger>
@@ -132,10 +133,10 @@ function FileName({ path, explorer }) {
 export function ViewerNavbar({ onHome, menu = null, history = null, file = null, explorer = null, fileMenu = null, trailing = null, update = null, fullSize = null, controlsRef, className }) {
   return (
     <header className={cn(NAVBAR_ROW_CLASS, "border-border bg-background text-foreground", className)} data-viewer-navbar="">
-      <nav aria-label="Viewer" className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm">
+      <nav aria-label="Viewer" className="flex min-w-0 flex-1 items-center overflow-hidden text-sm">
         {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} /> : null}
         {history ? <HistoryButtons viewHistory={history} /> : null}
-        {file ? <span className="flex min-w-0 items-center gap-1">
+        {file ? <span className="flex min-w-0 items-center">
           <FileName path={file} explorer={explorer} />
           {fileMenu ? <FileMenu path={file} {...fileMenu} /> : null}
         </span> : null}

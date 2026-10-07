@@ -46,8 +46,9 @@ none.
   browsed; where they cannot it is plain text. The ⋯
   is the file menu: Copy path, and Reveal in Finder / Show in Explorer / Show in file
   manager, each only where the host can do it, and no ⋯ where it can do none. The name has
-  no right-click menu and there are no crumbs. It sits the row's 4px gap after the item
-  before it, with no margin of its own. Right, only what a host or a file adds: first, the
+  no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
+  by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
+  and the name 4px in from its edges, so about 7px separate one glyph from the next. Right, only what a host or a file adds: first, the
   update — a blue download button, there only when the host
   found a newer release, whose menu says the step to it, how this host updates and what
   is new. Then, while a person has put an alert card away: the card's own icon (a circle
