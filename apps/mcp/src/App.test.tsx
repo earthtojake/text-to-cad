@@ -167,6 +167,14 @@ it('a Quick Edit queues into a tab host\'s composer always, into an inline host\
   expect(reach('tabs', { message: { text: {}, image: {} } })).toEqual(['composer', 'send', true]);
 });
 
+it('a Quick Edit that reached its destination is counted by the CAD app\'s server, told nothing of the edit', async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: { text: {} } });
+  server.answers['/__cad/analytics/activity'] = () => null;
+  render(<App bridge={bridge as any} server={server as any} presentation="tabs" launch={{ protocol: 5, page: 'viewer', model: '/work/part.stl' }} />);
+  viewer.props!.host.usage.used('quickEdit');
+  await vi.waitFor(() => expect(server.asked('/__cad/analytics/activity')).toEqual([{ quickEdit: true }]));
+});
+
 it('a hand-made install is asked once about analytics: nothing is shared before a yes, and either answer ends the question', async () => {
   for (const choice of ['Allow', 'No thanks', 'Close']) {
     const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, true);

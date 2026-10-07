@@ -62,7 +62,35 @@ test("the build daemon's counts are PostHog events of their own, each a window's
     channel: 'claude-directory', platform: 'linux', arch: 'x86_64', country: 'NZ' };
   const countsOf = event => Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'name'));
   assert.deepEqual(batch.map(event => event.properties), DAEMON.events.map(event => ({ ...context, ...countsOf(event) })));
-  assert.deepEqual(Object.keys(EVENTS).sort(), ['build', 'feature', 'files', 'health', 'snapshot', 'tool', 'view']);
+  assert.deepEqual(Object.keys(EVENTS).sort(), ['build', 'exception', 'feature', 'files', 'health', 'snapshot', 'tool', 'view']);
+});
+
+test("a crash is PostHog's $exception: its type and frames, only cadgen's in the app, and no message", async () => {
+  const { asked, store } = posthog();
+  const frames = [{ file: 'cadgen/mcp/server.py', function: 'Server._call', line: 421 }, { file: '<user>', function: '<user>', line: 0 },
+    { file: 'json/decoder.py', function: 'JSONDecoder.decode', line: 345 }];
+  await store.insert(rowsOf({ ...BATCH, events: [
+    { name: 'exception', where: 'tool', tool: 'cad_show', type: 'KeyError', handled: true, frames, count: 2 },
+    { name: 'exception', where: 'build', type: 'WorkerDied', handled: false, status: -11, frames: [], count: 1 },
+    { name: 'exception', where: 'page', type: 'TypeError', handled: false, count: 1,
+      frames: [{ file: 'assets/index-Bx3k2.js', function: 'Kt', line: 1, column: 48213 }] },
+  ] }), { country: 'DE' });
+  const [tool, worker, page] = asked[0].body.batch;
+  assert.deepEqual([tool.event, worker.event, page.event], ['$exception', '$exception', '$exception']);
+  assert.deepEqual([tool.properties.where, tool.properties.tool, tool.properties.count, tool.properties.process], ['tool', 'cad_show', 2, 'app']);
+  assert.deepEqual(tool.properties.$exception_list, [{
+    type: 'KeyError', value: '', mechanism: { type: 'generic', handled: true, synthetic: false },
+    stacktrace: { type: 'raw', frames: [
+      { platform: 'python', filename: 'cadgen/mcp/server.py', function: 'Server._call', lineno: 421, in_app: true },
+      { platform: 'python', filename: '<user>', function: '<user>', in_app: false },
+      { platform: 'python', filename: 'json/decoder.py', function: 'JSONDecoder.decode', lineno: 345, in_app: false },
+    ] },
+  }]);
+  // A worker that died shows its exit status, and nothing else; a page's frames are JavaScript's.
+  assert.deepEqual(worker.properties.$exception_list, [{ type: 'WorkerDied', value: 'exit status -11',
+    mechanism: { type: 'generic', handled: false, synthetic: false } }]);
+  assert.deepEqual(page.properties.$exception_list[0].stacktrace.frames,
+    [{ platform: 'web:javascript', filename: 'assets/index-Bx3k2.js', function: 'Kt', lineno: 1, colno: 48213, in_app: true }]);
 });
 
 test('where the host could not tell, an event names no country; what a schema left out, it leaves out', async () => {

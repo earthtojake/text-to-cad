@@ -304,9 +304,11 @@ so, once, in its output; nothing in the Viewer asks. **Share usage stats** in th
 them off or on, and the answer is kept in the user's state directory, so one answer counts for
 both apps. The page reads and answers it through the CAD client (`consent`, `/__cad/analytics`),
 and reports a person touching the page (at most every 2 s) to `/__cad/analytics/activity`; a
-file shown is counted as it joins the library (`/__cad/recents`). The server holds those as
-counts in memory -- a file once a day, by its format, never its name -- and sends them every few
-minutes.
+file shown is counted as it joins the library (`/__cad/recents`). A Quick Edit copied is counted
+through the host's `usage`, and the page's own crashes -- an error nothing caught, or one a view's
+boundary caught (`main.tsx`) -- are reported as core's `crashOf` makes them: the error's type and its
+script frames, never its message, each once a page. The server holds all of it as counts in memory
+-- a file once a day, by its format, never its name -- and sends them every few minutes.
 
 The app menu's **Quick edit** (on until the person turns it off) is read and changed
 the same way: the client's `features`, through `/__cad/features` (`cadgen/features.py`).

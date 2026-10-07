@@ -166,8 +166,11 @@ export interface CadWorkspaceService {
   features(change?: Record<string, boolean>): Promise<Record<string, boolean>>;
   /** Whether a newer text-to-cad is out: the update button's notice, or null. */
   version(): Promise<{ notice: CadUpdateNotice | null }>;
-  /** What the page did (a person touched it): noted by the server, sent only with consent. Never fails. */
-  reportActivity(activity: { touched?: boolean }): void;
+  /**
+   * What the page did -- a person touched it, sent a Quick Edit, or the page crashed (`crashOf`) --
+   * noted by the server and sent only with consent. Never fails.
+   */
+  reportActivity(activity: CadActivity): void;
   requestArtifactStatus(file: string, options?: CadRequestOptions): Promise<CadArtifactResult>;
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
@@ -206,4 +209,22 @@ export interface CadClientOptions {
    * (`TESS_BATCH_MAX_BYTES`). Unset, the server's bound alone applies.
    */
   maxBatchBytes?: number;
+}
+
+/** A page's crash, as telemetry takes one (`crashOf`): never its message, a value or a URL. */
+export interface CadPageCrash {
+  where: 'page';
+  /** The error's name, such as `TypeError`; `<?>` for one that is no plain name. */
+  type: string;
+  /** Whether the page went on: an error a view's boundary caught, not one that stopped it. */
+  handled: boolean;
+  /** Its innermost frames, oldest first: a script file's own name (or `<?>`), a function, a place. */
+  frames: { file: string; function: string; line: number; column: number }[];
+}
+
+/** What `reportActivity` tells the page's server. */
+export interface CadActivity {
+  touched?: boolean;
+  quickEdit?: boolean;
+  crash?: CadPageCrash;
 }

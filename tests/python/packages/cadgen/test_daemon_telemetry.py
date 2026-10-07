@@ -59,12 +59,16 @@ class DaemonTelemetryTest(unittest.TestCase):
         assembly.observe({"model": "/w/arm.py", "state": "building", "job": "e:job-3"})
         assembly.finish(1, None, 4.0)
         telemetry.build(RUN, {"id": "e:job-4", "outputs": ["/w/plate.step"]}).finish(1, "crashed", 1.0)
+        telemetry.worker_died(-11)  # what ended that build: a crash, with its exit status
         telemetry.build(RUN, {"id": "e:job-5", "outputs": ["/w/plate.step"]}).finish(1, "cancelled", 1.0)
-        telemetry.build(RUN, {"id": "e:job-6", "outputs": ["/w/sketch.dxf"]}).finish(0, None, 0.5)
+        # A drawing its worker says came from the store: the daemon cannot see that in its events.
+        dxf = telemetry.build(RUN, {"id": "e:job-6", "outputs": ["/w/sketch.dxf"]})
+        telemetry.exited({"exit": 0, "reused": True}, dxf)
+        dxf.finish(0, None, 0.5)
         telemetry.build({"tool": "stl-build", "argv": ["plate.py"], "env": {}}, {"id": "e:job-7", "outputs": []}).finish(0, None, 0.5)
-        telemetry.crashed()  # a worker that never started
+        telemetry.worker_died(None)  # a worker that never started, and said nothing as it went
         self.assertEqual(self.events(), [
-            {"name": "build", "kind": "dxf", "via": "script", "count": 1, "failed": 0, "crashed": 0, "cancelled": 0, "cached": 0,
+            {"name": "build", "kind": "dxf", "via": "script", "count": 1, "failed": 0, "crashed": 0, "cancelled": 0, "cached": 1,
              "seconds": 0.5, "longest": 0.5},
             {"name": "build", "kind": "step", "via": "script", "count": 5, "failed": 1, "crashed": 1, "cancelled": 1, "cached": 1,
              "seconds": 9.0, "longest": 4.0},
@@ -73,9 +77,46 @@ class DaemonTelemetryTest(unittest.TestCase):
             {"name": "feature", "feature": "assembly", "count": 1},
             {"name": "feature", "feature": "declared_mesh", "count": 1},
             {"name": "health", "workers": 0, "crashes": 2, "recycles": 0, "refusals": 0},
+            {"name": "exception", "where": "build", "type": "WorkerDied", "handled": False, "frames": [], "status": -11, "count": 1},
+            {"name": "exception", "where": "build", "type": "WorkerDied", "handled": False, "frames": [], "count": 1},
         ])
         self.assertEqual(self.sent[-1]["process"], "daemon")
         self.assertNotIn("/w/", json.dumps(self.sent))
+
+    def test_a_jobs_crashes_and_its_reuse_ride_its_exit_frame(self) -> None:
+        # In a build worker (worker.serve): what cadgen decided as the job ran, for the daemon.
+        crash = {"where": "build", "type": "KeyError", "handled": True,
+                 "frames": [{"file": "cadgen/_internal/generation.py", "function": "build", "line": 7}]}
+        telemetry.job_started()
+        telemetry.job_reused(True)
+        telemetry.job_crashed(crash)
+        self.assertEqual(telemetry.job_finished(), {"reused": True, "crashes": [crash]})
+        telemetry.job_started()
+        for reused in (True, False):  # one part from the store, one built: not the store's answer
+            telemetry.job_reused(reused)
+        self.assertEqual(telemetry.job_finished(), {})
+        telemetry.job_reused(True)  # outside a job, as in any other process: nothing kept
+        telemetry.job_crashed(crash)
+        self.assertEqual(telemetry.job_finished(), {})
+        # The daemon takes a worker's crashes as another process's: checked before they are noted.
+        telemetry.exited({"exit": 1, "crashes": [crash, {**crash, "frames": [{"file": "/Users/someone/x.py", "function": "f"}]}]}, None)
+        self.assertEqual([event for event in self.events() if event["name"] == "exception"], [{"name": "exception", **crash, "count": 1}])
+
+    def test_a_commands_result_says_whether_it_was_the_stores(self) -> None:
+        from cadgen.results import BuildResult, CompileResult, MeshExportFile, MeshExportResult
+
+        def reused(result) -> dict:
+            telemetry.job_started()
+            telemetry.job_result(result)
+            return telemetry.job_finished()
+
+        mesh = lambda skipped: MeshExportFile(path=Path("/w/a.stl"), fmt="stl", skipped=skipped)  # noqa: E731
+        self.assertEqual(reused(CompileResult(ok=True, document=None, tree="t", skipped=True)), {"reused": True})
+        self.assertEqual(reused(BuildResult(ok=True, document=None, tree="t", skipped=False, sidecar_only=True)), {"reused": True})
+        self.assertEqual(reused(BuildResult(ok=True, document=None, tree="t", skipped=False)), {})
+        self.assertEqual(reused(MeshExportResult(ok=True, files=(mesh(True), mesh(True)))), {"reused": True})
+        self.assertEqual(reused(MeshExportResult(ok=True, files=(mesh(True), mesh(False)))), {})
+        self.assertEqual(reused(object()), {}, "a result that says nothing of the store")
 
     def test_what_is_not_a_build_is_not_counted(self) -> None:
         job = {"id": "e:job-1", "outputs": ["/w/plate.step"]}
@@ -93,7 +134,7 @@ class DaemonTelemetryTest(unittest.TestCase):
         with mock.patch.object(telemetry, "_RECORDER", None):
             self.assertIsNone(telemetry.build(RUN, job))
             telemetry.counted({"snapshots": [{"format": "step", "ok": True, "seconds": 1.0}]})
-            telemetry.crashed()
+            telemetry.worker_died(-11)
         self.assertFalse(self.recorder.flush())
         # The variables that say no travel with every build a client asks for.
         self.assertLessEqual(set(analytics.ENVIRONMENT), set(client.FORWARDED_ENV_VARS))
@@ -119,6 +160,8 @@ class DaemonTelemetryTest(unittest.TestCase):
         [message] = handed
         self.assertEqual(message["kind"], "count")
         telemetry.counted(message)  # what the daemon does with it, on its accept thread (server.serve)
+        telemetry.counted({"crashes": [{"where": "command", "type": "TypeError", "handled": False, "frames": [],
+                                        "message": "a secret"}]})  # a crash it would not have made: dropped
         self.assertEqual(self.events(), [
             {"name": "feature", "feature": "kinematics", "count": 1},
             {"name": "snapshot", "kind": "step", "count": 1, "failed": 0, "seconds": 1.5},

@@ -361,8 +361,9 @@ command has said so, and never after the person's no) and the daily version chec
 (`updates.py`). Both run in the background and fail silently: no start,
 command, build, request or tool call waits on them, and one that fails changes
 nothing but what is counted or offered. A command sends nothing itself: it hands
-what it counted to a running build daemon over its local socket, never starting
-one, and gives up after a moment (`daemon.client.HAND_OVER_SECONDS`). Two waits
+what it counted -- a snapshot, a drawing, a crash -- to a running build daemon over
+its local socket, never starting one, and gives up after a moment
+(`daemon.client.HAND_OVER_SECONDS`). Two waits
 remain, bounded, each for something only the network can do: a process's last
 telemetry send as it exits -- a server's, or the build daemon's
 (`analytics.CLOSE_SECONDS`) -- and `cadgen telemetry off`, which waits for the
@@ -396,10 +397,11 @@ src/cadgen/
   settings.py            # the person's settings: settings.json in the state
                          #   directory, a section per feature, shared by
                          #   every app and version of cadgen
-  analytics.py           # telemetry: usage counts from the CAD apps and the
-                         #   build daemon, on by default once a command has
-                         #   said so, never after a no (its answer:
-                         #   settings.json's `telemetry` section)
+  analytics.py           # telemetry: usage counts and crash reports (a
+                         #   crash's type and frames, never its message) from
+                         #   the CAD apps and the build daemon, on by default
+                         #   once a command has said so, never after a no (its
+                         #   answer: settings.json's `telemetry` section)
   features.py            # the CAD views' features a person can turn off
                          #   (Quick edit: settings.json's `features` section)
   updates.py             # the daily version check: whether a newer release is

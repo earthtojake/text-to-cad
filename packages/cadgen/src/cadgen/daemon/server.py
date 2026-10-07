@@ -421,7 +421,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         _JOBS.waiting(job, None)
         _log(f"{tool}: could not start a worker: {exc}")
         if isinstance(exc, pool_mod.WorkerGone):
-            telemetry.crashed()
+            telemetry.worker_died(exc.exit_status)  # a worker that could not start
         _JOBS.finish(job, 1, error=str(exc))
         if inflight is not None:
             _BROKER.finish_entry(inflight, 1)
@@ -497,6 +497,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         for frame in worker.frames(silence_timeout=WORKER_SILENCE_TIMEOUT_SECONDS):
             if "exit" in frame:
                 exit_code = int(frame.get("exit") or 0)
+                telemetry.exited(frame, build)
                 break
             if frame.get("stream") == "stderr":
                 stderr_tail.append(str(frame.get("data") or ""))
@@ -541,6 +542,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # worker that is gone.
         healthy = False
         ended = "cancelled" if left.is_set() else "crashed"
+        if ended == "crashed":
+            telemetry.worker_died(exc.exit_status)
         _log(f"{tool}: worker {worker.pid} died mid-job: {exc}")
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"workerDied": {"pid": worker.pid, "detail": str(exc),
@@ -589,8 +592,11 @@ _HOUSEKEEPER = Housekeeper(active=lambda: bool(_active_requests()), log=lambda m
 def _serve_connection(conn, request) -> None:
     try:
         _handle_request(conn, request)
-    except Exception:  # noqa: BLE001 - a job must never kill the supervisor
+    except Exception as error:  # noqa: BLE001 - a job must never kill the supervisor
         _log("unhandled error serving a job:\n" + traceback.format_exc())
+        from cadgen import analytics
+
+        analytics.report(error, "request")  # the daemon's own crash: its recorder's (telemetry.start)
     finally:
         _INFLIGHT.discard(threading.current_thread())
         _HOUSEKEEPER.note(request.get("store_root"), request.get("env"))
@@ -809,6 +815,12 @@ def serve() -> int:
     except _DaemonShutdown:
         _log("signal received; exiting")
         return 0
+    except Exception as error:
+        # The supervisor itself failing: a crash, counted before the recorder's last batch (finally).
+        from cadgen import analytics
+
+        analytics.report(error, "request", handled=False)
+        raise
     finally:
         _release_address()
         telemetry.close()  # its last batch: a moment at most, after the address is free for a successor

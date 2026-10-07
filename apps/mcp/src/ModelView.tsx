@@ -94,8 +94,10 @@ export default function ModelView({ launch, sequence, bridge, client, tunnel, ta
   } : undefined, [client, homed, launch.pick]);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
     files: source, fileActions, clipboard: frameClipboard, promptContext, attachments, links,
+    // A Quick Edit copied, queued or sent, counted by the CAD app's server for its telemetry.
+    usage: { used: feature => { if (feature === 'quickEdit') client.reportActivity({ quickEdit: true }); } },
     environment: { colorScheme, platform },
-  }), [source, fileActions, promptContext, attachments, links, colorScheme, platform]);
+  }), [client, source, fileActions, promptContext, attachments, links, colorScheme, platform]);
 
   // The file on screen joins the library every CAD view shares, with its picture.
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={setFile}

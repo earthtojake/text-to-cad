@@ -64,6 +64,11 @@ export interface ViewerHost {
   /** The navbar's links: the version, X, Discord, GitHub and new issues. A host with none gets none. */
   links?: ViewerLinks;
   /**
+   * What the person used, for the host to count: its telemetry, never what they made. Absent, nothing is
+   * counted. `quickEdit`: a Quick Edit reached its destination -- copied, queued or sent.
+   */
+  usage?: { used(feature: 'quickEdit'): void };
+  /**
    * `platform` names the keyboard's modifiers (⌘ on `darwin`, Ctrl elsewhere); `reducedMotion` is
    * the app's own motion setting, honoured beside the system's `prefers-reduced-motion`. `compact`
    * is a view drawn with no chrome (the library's picture of a model, drawn out of sight): a

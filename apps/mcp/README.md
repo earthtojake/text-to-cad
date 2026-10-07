@@ -97,8 +97,11 @@ reference host `basic-host` does.
   view's sync (`focused`), and the files views show (counted by format, once a day,
   as a view adds one to the library) --
   and sends the counts at most every five minutes (`cadgen/analytics.py`): never a path,
-  an argument or a file. It is on by default once a `cadgen` command has said so, once,
-  and nothing asks. The app menu's **Share usage
+  an argument or a file. A Quick Edit that went is counted through the host's `usage`, and
+  crashes are reported too: a tool's call or a route that failed for no reason its caller
+  gave, and the page's own (`main.tsx`, its frames named by the chunks the inline loader
+  made blob URLs of), as their type and frames, never a message. It is on by default once
+  a `cadgen` command has said so, once, and nothing asks. The app menu's **Share usage
   stats** (`appSettings`, through `/__cad/analytics`) changes the answer, one answer for
   this app and the browser viewer. Its **Quick edit** (on until
   the person turns it off) is read and changed the same way, through `/__cad/features`, and kept

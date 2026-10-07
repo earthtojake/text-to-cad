@@ -118,8 +118,10 @@ export default function App({ client, server, tabStore, notice = null }: { clien
   }, [client]);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
     files: source, fileActions, clipboard: browserClipboard, promptContext, attachments, links,
+    // A Quick Edit copied, counted by this Viewer's server for its telemetry, as a touch is.
+    usage: { used: feature => { if (feature === 'quickEdit') client.reportActivity({ quickEdit: true }); } },
     environment: { colorScheme: appearance.colorScheme, platform: keyboardPlatform() },
-  }), [source, fileActions, promptContext, attachments, links, appearance.colorScheme]);
+  }), [client, source, fileActions, promptContext, attachments, links, appearance.colorScheme]);
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings} features={features}

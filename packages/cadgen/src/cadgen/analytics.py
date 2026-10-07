@@ -1,9 +1,10 @@
-"""cadgen's telemetry: usage counts from the processes that do CAD's work -- ``cadgen mcp`` (the CAD
-app in an agent app), ``cadgen viewer`` (the browser viewer) and the build daemon, which builds for
-both and for every ``cadgen`` command and model script: how many people use CAD, how often, what they
-make and how it goes -- counts, times and metadata, never what anything says. A ``cadgen`` command
-sends nothing itself: it hands what it counted (a snapshot) to the daemon, and says, once, what is
-sent (``notify``).
+"""cadgen's telemetry: usage counts and crash reports from the processes that do CAD's work --
+``cadgen mcp`` (the CAD app in an agent app), ``cadgen viewer`` (the browser viewer) and the build
+daemon, which builds for both and for every ``cadgen`` command and model script: how many people use
+CAD, how often, what they make, how it goes and where cadgen's own code fails -- counts, times,
+metadata and crash signatures, never what anything says. A ``cadgen`` command sends nothing itself:
+it hands what it counted (a snapshot, a drawing, a crash) to a running daemon, and says, once, what
+is sent (``notify``).
 
 What is sent, at most every five minutes while there is something new and once more as a process
 exits, each batch stamped with the time it arrives:
@@ -24,15 +25,23 @@ exits, each batch stamped with the time it arrives:
   store answered without building, and how long they took;
 - ``snapshot`` (the daemon, told by the command that rendered it): for each format, how many
   renders, how many failed, and how long they took;
-- ``feature`` (the daemon): how many builds made an assembly or declared mesh exports, and how many
-  snapshots posed joints or played an animation (``FEATURES``);
+- ``feature``: how many builds made an assembly or declared mesh exports, snapshots posed joints or
+  played an animation, engineering drawings were made, and CAD views' Quick Edits were sent
+  (``FEATURES``);
 - ``health`` (the daemon): build workers started, crashed and recycled, and builds refused for
-  want of memory.
+  want of memory;
+- ``exception``: a crash in cadgen's own code (``signature``), and how many times it happened that
+  window -- where (``WHERE``), the error's type, whether the process went on, and its innermost frames
+  in code that may be named: each a file inside cadgen, the standard library or one of cadgen's
+  dependencies (a page's: its script asset), a function and a line, the person's own code a bare
+  ``<user>``; a build worker that died, its exit status. Never the error's message. Each process
+  reports its own (``report``, ``collect_crashes``); a build worker's go to the daemon with its exit
+  frame, a command's are handed to a running daemon, and a page's to the server that served it.
 
-Never a path, a file name, a model, an argument, a message, a prompt or anything typed. A batch with
-nothing in it is never sent: a process the host started and nobody used counts for nothing. The
-receiver (``cadgen/_internal/api.py``) is ours, so the service behind it can change without a
-release.
+Never a path or a file name of the person's, a model, an argument, a message, a prompt or anything
+typed. A batch with nothing in it is never sent: a process the host started and nobody used counts
+for nothing. The receiver (``cadgen/_internal/api.py``) is ours, so the service behind it can change
+without a release.
 
 It is sent by default once the person has been told, and never after their no. Strongest first:
 
@@ -89,6 +98,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import json
+import linecache
 import logging
 import math
 import os
@@ -97,6 +107,7 @@ import re
 import sys
 import threading
 import time
+import traceback
 import uuid
 from pathlib import Path
 
@@ -144,8 +155,9 @@ VIAS = frozenset({"script", "command"})
 # worker died under it); or cancelled (whoever asked left before it ended, and it was stopped).
 OUTCOMES = frozenset({"ok", "failed", "crashed", "cancelled"})
 # What a person used: a model with children, a model declaring mesh exports (``@stl``, ``@glb``, ``@threemf``),
-# and a snapshot that posed joints or played an animation.
-FEATURES = frozenset({"assembly", "declared_mesh", "kinematics", "animation"})
+# a snapshot that posed joints or played an animation, an engineering drawing (``@eng_drawing``), and a CAD
+# view's Quick Edit sending its prompt.
+FEATURES = frozenset({"assembly", "declared_mesh", "kinematics", "animation", "drawing", "quick_edit"})
 # The daemon's build workers: started (each imports the CAD kernel), crashed (died mid-job, or could not
 # start), recycled (retired after their share of jobs), and builds refused for want of memory.
 HEALTH = ("workers", "crashes", "recycles", "refusals")
@@ -161,6 +173,26 @@ EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "health": ((), HEALTH),
 }
 MAX_EVENTS = 64  # a batch's most (the receiver's too): any more wait for the next batch
+# A crash (``signature``): where it happened -- a CAD tool's call, a viewer's route, another request a
+# server answered (the daemon's, the CAD app's), a build a worker ran, a ``cadgen`` command, or a page --
+# its type, and its frames.
+WHERE = frozenset({"tool", "route", "request", "build", "command", "page"})
+MAX_FRAMES = 30  # a crash's innermost frames: where it failed, and how it got there
+CRASHES_PER_BATCH = 4  # a batch's most crashes, the rest the next batch's
+CRASHES_PENDING = 16  # past this many different crashes waiting, a process counts only those it has
+# Python's own words for a mistake in code, as against the errors cadgen raises on purpose for what it was
+# given (a model that failed, a file that is not there, an argument it cannot take). Where cadgen reports a
+# failure to the person anyway -- a build's, a command's -- only these are crashes, and only where Python
+# raised them in cadgen's own code: never at a ``raise`` (``_RAISED``), where cadgen says the person's
+# mistake in these words too ("@step returned a dict" is a TypeError).
+BUGS = (AttributeError, LookupError, TypeError, NameError, AssertionError, ZeroDivisionError, RecursionError,
+        NotImplementedError)
+_RAISED = re.compile(r"(?:^|:)\s*raise\b")
+USER = "<user>"  # the person's own code, a frame or an exception's type: never named
+_FILE = re.compile(r"(?!\.\.?(?:/|$))[A-Za-z0-9_.+-]{1,64}(?:/(?!\.\.?(?:/|$))[A-Za-z0-9_.+-]{1,64}){0,8}")
+_FUNCTION = re.compile(r"[A-Za-z_$<][A-Za-z0-9_$.<>]{0,79}")
+_TYPE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]{0,127}")
+_TOOL = re.compile(r"cad_[a-z_]{1,40}")
 # The receiver read the request and will never take it: malformed (400), too large (413), not JSON (415).
 # Anything else -- a 404 where no receiver is deployed yet, a firewall's 403, a 429, a 5xx -- is tried
 # again: dropping it would lose counts, and a deletion an opt-out owes, for good.
@@ -485,6 +517,176 @@ def _seconds(value: Any) -> float:
     return max(0.0, float(value)) if isinstance(value, (int, float)) and math.isfinite(value) else 0.0
 
 
+def _distribution(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+@functools.cache
+def _places() -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
+    """Where code a crash may name lives, the longest first: cadgen's own package, the folders installed
+    packages live in, and the standard library's; and the import names of cadgen's dependencies, all the
+    way down -- the only installed packages named, so a package of the person's own is never."""
+    import site
+    import sysconfig
+    from importlib import metadata
+
+    import cadgen
+
+    places = [(os.path.realpath(os.path.dirname(cadgen.__file__)), "cadgen")]
+    paths = sysconfig.get_paths()
+    sites = [*site.getsitepackages(), paths["purelib"], paths["platlib"],
+             *(entry for entry in sys.path if entry.endswith(("site-packages", "dist-packages")))]
+    places += [(os.path.realpath(entry), "site") for entry in sites if entry]
+    places += [(os.path.realpath(paths[key]), "stdlib") for key in ("stdlib", "platstdlib")]
+    seen, todo = set(), ["cadgen"]
+    while todo:
+        name = _distribution(todo.pop())
+        if name in seen:
+            continue
+        seen.add(name)
+        try:
+            requirements = metadata.requires(name) or ()
+        except metadata.PackageNotFoundError:
+            continue
+        # What it needs to run, not an extra nobody asked for (a test runner, say).
+        todo += [re.split(r"[\s;<>=!~\[(]", requirement, maxsplit=1)[0] for requirement in requirements
+                 if "extra" not in requirement.partition(";")[2]]
+    ours = frozenset(top for top, owners in metadata.packages_distributions().items()
+                     if top != "__pycache__" and any(_distribution(owner) in seen for owner in owners))
+    return tuple(sorted(set(places), key=lambda place: len(place[0]), reverse=True)), ours
+
+
+def _file_of(path: str) -> str | None:
+    """A frame's file as a crash names it: its path inside cadgen, the standard library or one of
+    cadgen's dependencies -- or ``None``, for the person's own code, or anything else."""
+    if path.startswith("<frozen "):
+        return "<frozen>"
+    resolved = os.path.realpath(path)
+    places, ours = _places()
+    for root, kind in places:
+        if not resolved.startswith(root + os.sep):
+            continue
+        inside = resolved[len(root) + 1:].replace(os.sep, "/")
+        if kind == "cadgen":
+            inside = f"cadgen/{inside}"
+        elif kind == "site" and inside.split("/", 1)[0].split(".", 1)[0] not in ours:
+            return None
+        elif kind == "stdlib" and ("site-packages/" in inside or "dist-packages/" in inside):
+            return None  # a folder of installed packages the longest-first order did not name
+        return inside if _FILE.fullmatch(inside) else "<?>"
+    return None
+
+
+def _type_of(error: BaseException) -> str:
+    kind = type(error)
+    module = kind.__module__
+    if module == "builtins":
+        return kind.__qualname__ if _TYPE.fullmatch(kind.__qualname__) else "<?>"
+    source = getattr(sys.modules.get(module), "__file__", None)
+    if module not in sys.builtin_module_names and (not source or _file_of(source) is None):
+        return USER  # an error the person's own code defined
+    name = f"{module}.{kind.__qualname__}"
+    return name if _TYPE.fullmatch(name) else "<?>"
+
+
+def signature(error: BaseException, where: str, *, tool: str | None = None, handled: bool = True,
+              bugs_only: bool = False) -> dict[str, Any] | None:
+    """A crash as telemetry sends it: where it happened (``WHERE``), the error's type, whether the
+    process went on (``handled``), and its innermost frames in code we may name -- cadgen's, the
+    standard library's, a dependency's -- each as its file inside that, its function and its line, with
+    any run of the person's own code one bare ``<user>``. Never its message, a variable, or a path
+    outside those. ``bugs_only``: only a mistake in cadgen's own code (one of ``BUGS``, raised where
+    cadgen's code, not the person's, was last), never an error raised on purpose. ``None``: not one to
+    send."""
+    if where not in WHERE or not isinstance(error, Exception):  # an interrupt, an exit: no crash
+        return None
+    if bugs_only and not isinstance(error, BUGS):  # before reading any frame: a failure is never kept waiting
+        return None
+    frames: list[dict[str, Any]] = []
+    decisive = None  # the innermost frame of cadgen's or of the person's: whose code failed, and at which line
+    for frame, line in traceback.walk_tb(error.__traceback__):
+        file = _file_of(frame.f_code.co_filename)
+        if file is None or file.startswith("cadgen/"):
+            decisive = (file, frame.f_code.co_filename, int(line or 0))
+        if file is None:
+            if not frames or frames[-1]["file"] != USER:
+                frames.append({"file": USER, "function": USER, "line": 0})
+            continue
+        function = frame.f_code.co_qualname
+        frames.append({"file": file, "function": function if _FUNCTION.fullmatch(function) else "<?>", "line": int(line or 0)})
+    if bugs_only and (decisive is None or decisive[0] is None or _RAISED.search(linecache.getline(decisive[1], decisive[2]))):
+        return None
+    found = {"where": where, "type": _type_of(error), "handled": bool(handled), "frames": frames[-MAX_FRAMES:]}
+    if tool is not None and _TOOL.fullmatch(str(tool)):
+        found["tool"] = tool
+    return found
+
+
+def died(status: Any) -> dict[str, Any]:
+    """A build worker that died under a job (a native crash, or killed for memory): a crash with no
+    frames to show, its exit status what there is to tell."""
+    found = {"where": "build", "type": "WorkerDied", "handled": False, "frames": []}
+    if isinstance(status, int) and not isinstance(status, bool) and -512 < status < 512:
+        found["status"] = status
+    return found
+
+
+def valid_signature(found: Any) -> bool:
+    """Whether a crash another process made -- a page's, a worker's, a command's -- is one this module
+    would have made: checked before it is noted, as the receiver checks it again."""
+    if not isinstance(found, dict) or not set(found) <= {"where", "type", "handled", "frames", "tool", "status"}:
+        return False
+    frames = found.get("frames")
+    if (found.get("where") not in WHERE or not isinstance(found.get("handled"), bool) or not isinstance(frames, list)
+            or len(frames) > MAX_FRAMES or not isinstance(found.get("type"), str)
+            or not (found["type"] in (USER, "<?>") or _TYPE.fullmatch(found["type"]))):
+        return False
+    if "tool" in found and not (isinstance(found["tool"], str) and _TOOL.fullmatch(found["tool"])):
+        return False
+    if "status" in found and not (type(found["status"]) is int and -512 < found["status"] < 512):
+        return False
+    for frame in frames:
+        if not isinstance(frame, dict) or not set(frame) <= {"file", "function", "line", "column"}:
+            return False
+        file, function = frame.get("file"), frame.get("function")
+        if not (isinstance(file, str) and (file in (USER, "<?>", "<frozen>") or _FILE.fullmatch(file))):
+            return False
+        if not (isinstance(function, str) and (function in (USER, "<?>") or _FUNCTION.fullmatch(function))):
+            return False
+        if any(key in frame and not (type(frame[key]) is int and 0 <= frame[key] < 10_000_000) for key in ("line", "column")):
+            return False
+    return True
+
+
+_SINK: Callable[[dict[str, Any]], Any] | None = None  # where this process's crashes go (``collect_crashes``)
+
+
+def collect_crashes(sink: Callable[[dict[str, Any]], Any] | None) -> None:
+    """Where ``report`` puts a crash in this process: its recorder's (the CAD app, the viewer, the
+    daemon), or a build worker's job (``cadgen.daemon.telemetry``). With none, it goes to a running
+    daemon, which sends it with its own (a ``cadgen`` command's)."""
+    global _SINK
+    _SINK = sink
+
+
+def report(error: BaseException, where: str, *, tool: str | None = None, handled: bool = True,
+           bugs_only: bool = False) -> None:
+    """Note a crash wherever cadgen runs (``signature``, ``collect_crashes``): in memory, or handed to a
+    running daemon, never sent from here, and never raising into the code that failed."""
+    try:
+        found = signature(error, where, tool=tool, handled=handled, bugs_only=bugs_only)
+        if found is None:
+            return
+        if _SINK is not None:
+            _SINK(found)
+            return
+        from cadgen.daemon.client import hand_over
+
+        hand_over({"crashes": [found]})
+    except Exception:  # noqa: BLE001 - reporting a crash never makes another
+        LOG.debug("could not report a crash", exc_info=True)
+
+
 def _guarded(default: Callable[[], Any]):
     """Never raise into the process that counts: a failure is a debug line and ``default()``."""
     def decorate(method):
@@ -500,10 +702,23 @@ def _guarded(default: Callable[[], Any]):
 
 
 class _Tally:
-    """What a process noted since its last batch: counts under ``EVENTS``' names, and nothing else."""
+    """What a process noted since its last batch: counts under ``EVENTS``' names, and crashes, each
+    sent once with how many times it happened."""
 
-    def __init__(self, rows: dict[tuple[str, ...], list[float]] | None = None) -> None:
+    def __init__(self, rows: dict[tuple[str, ...], list[float]] | None = None,
+                 crashes: dict[str, list[Any]] | None = None) -> None:
         self.rows = rows if rows is not None else {}  # (event, *names) -> its counts, in ``EVENTS`` order
+        self.crashes = crashes if crashes is not None else {}  # its key -> [signature, count]
+
+    def __bool__(self) -> bool:
+        return bool(self.rows or self.crashes)
+
+    def crashed(self, found: dict[str, Any], count: int = 1) -> None:
+        key = json.dumps(found, sort_keys=True)
+        if key in self.crashes:
+            self.crashes[key][1] += count
+        elif len(self.crashes) < CRASHES_PENDING:
+            self.crashes[key] = [found, count]
 
     def note(self, event: str, names: tuple[str, ...], counts: dict[str, float]) -> None:
         self._add((event, *names), [counts.get(name, 0) for name in EVENTS[event][1]])
@@ -518,12 +733,17 @@ class _Tally:
         """Add ``other``'s counts to these: a batch the receiver did not take, kept for the next."""
         for key, values in other.rows.items():
             self._add(key, values)
+        for found, count in other.crashes.values():
+            self.crashed(found, count)
 
     def split(self, limit: int) -> tuple[_Tally, _Tally]:
-        """The first ``limit`` events, and the rest: what a batch has room for, and the next batch's."""
-        keys = sorted(self.rows)
-        return (_Tally({key: self.rows[key] for key in keys[:limit]}),
-                _Tally({key: self.rows[key] for key in keys[limit:]}))
+        """The first ``limit`` events -- counts first, then up to ``CRASHES_PER_BATCH`` crashes -- and the
+        rest: what a batch has room for, and the next batch's."""
+        keys = sorted(self.rows)[:limit]
+        crashes = list(self.crashes)[:max(0, min(CRASHES_PER_BATCH, limit - len(keys)))]
+        return (_Tally({key: self.rows[key] for key in keys}, {key: self.crashes[key] for key in crashes}),
+                _Tally({key: value for key, value in self.rows.items() if key not in keys},
+                       {key: value for key, value in self.crashes.items() if key not in crashes}))
 
     def events(self) -> list[dict[str, Any]]:
         events = []
@@ -532,7 +752,7 @@ class _Tally:
             events.append({"name": key[0], **dict(zip(names, key[1:])),
                            **{name: round(value, 1) if name in ("seconds", "longest") else int(value)
                               for name, value in zip(counted, self.rows[key])}})
-        return events
+        return events + [{"name": "exception", **found, "count": count} for found, count in self.crashes.values()]
 
 
 class Recorder:
@@ -675,6 +895,19 @@ class Recorder:
             self._note("feature", (feature,), {"count": 1})
 
     @_guarded(lambda: None)
+    def crashed(self, error: BaseException | dict[str, Any], where: str = "", **detail: Any) -> None:
+        """A crash: an error caught here, made into its ``signature``, or one another process made (a
+        page's, a build worker's, a command's), noted only if it is one this module would make."""
+        found = (signature(error, where, **detail) if isinstance(error, BaseException)
+                 else error if valid_signature(error) else None)
+        if found is None:
+            return
+        answer = self._first_use()
+        with self._lock:
+            self._begin(answer)
+            self._tally.crashed(found)
+
+    @_guarded(lambda: None)
     def health(self, name: str, count: int = 1) -> None:
         """The daemon's build workers: one of ``HEALTH`` happened ``count`` times."""
         if name in HEALTH and isinstance(count, int) and count > 0:
@@ -690,7 +923,7 @@ class Recorder:
         settings = self.path or settings_path()
         forget_pending(path=settings)
         with self._lock:
-            if not self._tally.rows:  # nothing to send, nor an answer to read: the next use reads its own
+            if not self._tally:  # nothing to send, nor an answer to read: the next use reads its own
                 self._basis = _UNREAD
                 return False
         found = dict(UNAVAILABLE) if self._off else status(path=self.path, probe=False)

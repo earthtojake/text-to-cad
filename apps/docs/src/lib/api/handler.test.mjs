@@ -28,6 +28,12 @@ const DAEMON = {
     { name: 'health', workers: 2, crashes: 0, recycles: 0, refusals: 0 },
   ],
 };
+// A crash, as cadgen sends one: its type and frames in code that may be named, the person's own a bare <user>.
+const CRASH = {
+  name: 'exception', where: 'tool', tool: 'cad_show', type: 'KeyError', handled: true, count: 2,
+  frames: [{ file: 'cadgen/mcp/server.py', function: 'Server._call', line: 421 }, { file: '<user>', function: '<user>', line: 0 },
+    { file: 'json/decoder.py', function: 'JSONDecoder.decode', line: 345 }],
+};
 // What cadgen 0.7.12 to 0.7.15 send: no process, and with a yes a distinct file by its salted code...
 const SCHEMA_2 = {
   ...BATCH, schema: 2, version: '0.7.15', process: undefined,
@@ -79,6 +85,15 @@ test("the build daemon's counts are rows of their own, under the process that sa
   assert.equal((await send(store, 'POST', '/v1/events', DAEMON)).status, 204);
   assert.deepEqual(store.rows.map(fieldsOf), DAEMON.events.map(({ name, ...counts }) => ({ event: name, ...counts })));
   assert.ok(store.rows.every(row => row.process === 'daemon' && row.client === null && row.presentation === null));
+});
+
+test('a crash is one row, its frames checked one by one, and nothing it said', async () => {
+  const store = memory();
+  const worker = { name: 'exception', where: 'build', type: 'WorkerDied', handled: false, status: -11, frames: [], count: 1 };
+  const page = { name: 'exception', where: 'page', type: 'TypeError', handled: false, count: 1,
+    frames: [{ file: 'assets/index-Bx3k2.js', function: 'Kt', line: 1, column: 48213 }] };
+  assert.equal((await send(store, 'POST', '/v1/events', { ...DAEMON, events: [CRASH, worker, page] })).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf), [CRASH, worker, page].map(({ name, ...crash }) => ({ event: name, ...crash })));
 });
 
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
@@ -161,6 +176,19 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...DAEMON, events: [{ ...feature, count: 0 }] },
     { ...DAEMON, events: [{ ...health, workers: 0 }] }, // a health that counts nothing
     { ...DAEMON, events: [{ ...health, uptime: 3600 }] },
+    { ...BATCH, events: [{ ...CRASH, message: "KeyError: 'secret bracket'" }] }, // never what it said
+    { ...BATCH, events: [{ ...CRASH, frames: [{ file: '/Users/someone/secret.py', function: 'make', line: 3 }] }] },
+    { ...BATCH, events: [{ ...CRASH, frames: [{ file: 'C:\\Users\\someone\\secret.py', function: 'make', line: 3 }] }] },
+    { ...BATCH, events: [{ ...CRASH, frames: [{ file: '../secret.py', function: 'make', line: 3 }] }] },
+    { ...BATCH, events: [{ ...CRASH, frames: [{ ...CRASH.frames[0], locals: { part: 'secret' } }] }] },
+    { ...BATCH, events: [{ ...CRASH, frames: [{ ...CRASH.frames[0], function: 'make secret bracket' }] }] },
+    { ...BATCH, events: [{ ...CRASH, frames: Array(31).fill(CRASH.frames[0]) }] },
+    { ...BATCH, events: [{ ...CRASH, type: "KeyError('secret')" }] },
+    { ...BATCH, events: [{ ...CRASH, where: 'somewhere' }] },
+    { ...BATCH, events: [{ ...CRASH, handled: 'yes' }] },
+    { ...BATCH, events: [{ ...CRASH, count: 0 }] },
+    { ...BATCH, events: [CRASH, CRASH] }, // one crash, counted: never twice in a batch
+    { ...SCHEMA_2, events: [CRASH] }, // crashes are schema 3's
     { ...BATCH, channel: 'store' },
     { ...BATCH, channel: 'github' }, // a channel no plugin names any more
     { ...BATCH, schema: 4 }, // a schema no release sends

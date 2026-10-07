@@ -17,6 +17,10 @@
  *   snapshot  snapshots of one format, how many failed, and how long they took
  *   feature   uses of one feature
  *   health    the daemon's build workers: started, crashed and recycled, and builds refused for memory
+ *   exception one crash, and how many times it happened: where (a CAD tool's call, a viewer route, a
+ *             request the daemon served, a build, a command, a page), its type, and its innermost frames
+ *             in code that may be named -- cadgen's, the standard library's, a dependency's, the page's
+ *             assets -- with the person's own code a bare `<user>`. Never a message, a variable or a path.
  *
  * cadgen 0.7.7 to 0.7.15 (schemas 1 and 2) send `tool`, `view` and `file`: one distinct file, once a day,
  * by a salted code. Its code goes no further: a batch's are read as `files`, one of each format they name.
@@ -29,7 +33,13 @@ const FILE_CODE = /^[0-9a-f]{16}$/;
 const MAX_EVENTS = 64;
 const MAX_COUNT = 1_000_000;
 const MAX_SECONDS = 10_000_000; // a window's builds, added up across every worker: far past any there are
-export const MAX_BYTES = 16 * 1024;
+const MAX_FRAMES = 30;
+// A crash's frame, as cadgen names one (`cadgen/analytics.py`: `signature`; a page's: core's `crashOf`).
+// A path inside a place: segments of letters, digits and `_.+-`, none of them `.` or `..`.
+const FRAME_FILE = /^(?:<user>|<\?>|<frozen>|(?!\.\.?(?:\/|$))[A-Za-z0-9_.+-]{1,64}(?:\/(?!\.\.?(?:\/|$))[A-Za-z0-9_.+-]{1,64}){0,8})$/;
+const FUNCTION = /^(?:<user>|<\?>|[A-Za-z_$<][A-Za-z0-9_$.<>]{0,79})$/;
+const TYPE = /^(?:<user>|<\?>|[A-Za-z_][A-Za-z0-9_.]{0,127})$/;
+export const MAX_BYTES = 64 * 1024;
 
 const SHARED = new Set(['schema', 'install', 'session', 'version', 'platform', 'arch', 'client', 'presentation', 'events']);
 // Where the install came from, as its plugin's startup command named it (`cadgen/_internal/channel.py`).
@@ -41,7 +51,8 @@ const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);
 const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 const VIAS = new Set(['script', 'command']);
-const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation']);
+const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
+const WHERE = new Set(['tool', 'route', 'request', 'build', 'command', 'page']);
 
 /** Each event as a row carries it: the names it is told apart by, then what it counts. */
 export const FIELDS = {
@@ -52,6 +63,7 @@ export const FIELDS = {
   snapshot: ['kind', 'count', 'failed', 'seconds'],
   feature: ['feature', 'count'],
   health: ['workers', 'crashes', 'recycles', 'refusals'],
+  exception: ['where', 'tool', 'type', 'handled', 'status', 'frames', 'count'],
 };
 
 export class Invalid extends Error {}
@@ -62,6 +74,18 @@ const token = (value, name, limit = 64) =>
 const oneOf = (value, allowed, name) => (allowed.has(value) ? value : fail(`${name} is not one of ${[...allowed].join(', ')}`));
 const count = (value, name) => (Number.isInteger(value) && value >= 0 && value <= MAX_COUNT ? value : fail(`${name} is not a count`));
 const some = (value, name) => (count(value, name) > 0 ? value : fail(`${name} counts nothing`));
+const matches = (value, pattern, name) => (typeof value === 'string' && pattern.test(value) ? value : fail(`${name} is not one`));
+const frameOf = (frame, name) => {
+  if (!frame || typeof frame !== 'object' || Array.isArray(frame)) fail(`${name} is not a frame`);
+  only(frame, ['file', 'function', 'line', 'column'], name);
+  const read = { file: matches(frame.file, FRAME_FILE, `${name}.file`), function: matches(frame.function, FUNCTION, `${name}.function`) };
+  // A minified script's one line runs to millions of columns.
+  for (const key of ['line', 'column']) {
+    if (frame[key] === undefined) continue;
+    read[key] = Number.isInteger(frame[key]) && frame[key] >= 0 && frame[key] < 10_000_000 ? frame[key] : fail(`${name}.${key} is not a place`);
+  }
+  return read;
+};
 const seconds = (value, name) =>
   (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= MAX_SECONDS ? value : fail(`${name} is not seconds`));
 const only = (object, keys, name) => {
@@ -127,6 +151,22 @@ const READERS = {
     if (!Object.values(fields).some(Boolean)) fail(`${at} counts nothing`);
     return { key: 'health', fields };
   },
+  exception(event, at) {
+    only(event, ['name', ...FIELDS.exception], at);
+    if (typeof event.handled !== 'boolean') fail(`${at}.handled is not true or false`);
+    if (!Array.isArray(event.frames) || event.frames.length > MAX_FRAMES) fail(`${at}.frames is a list of at most ${MAX_FRAMES}`);
+    const fields = {
+      where: oneOf(event.where, WHERE, `${at}.where`),
+      ...(event.tool === undefined ? {} : { tool: matches(event.tool, TOOL, `${at}.tool`) }),
+      type: matches(event.type, TYPE, `${at}.type`),
+      handled: event.handled,
+      ...(event.status === undefined ? {} : { status: Number.isInteger(event.status) && Math.abs(event.status) < 512 ? event.status : fail(`${at}.status is not an exit status`) }),
+      frames: event.frames.map((frame, index) => frameOf(frame, `${at}.frames[${index}]`)),
+      count: some(event.count, `${at}.count`),
+    };
+    const crash = [fields.where, fields.tool, fields.type, fields.handled, fields.status, fields.frames];
+    return { key: `exception ${JSON.stringify(crash)}`, fields };
+  },
 };
 
 // Before schema 3 only the apps sent, and the browser viewer said so by how it shows CAD.
@@ -142,7 +182,7 @@ const SCHEMAS = new Map([
   [2, { fields: ['channel'], events: BEFORE_DAEMON,
     origin: batch => ({ channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: appOf(batch) }) }],
   // The build daemon joins the apps: each batch names its process, and counts files rather than naming them.
-  [3, { fields: ['channel', 'process'], events: new Set(['tool', 'view', 'files', 'build', 'snapshot', 'feature', 'health']),
+  [3, { fields: ['channel', 'process'], events: new Set(['tool', 'view', 'files', 'build', 'snapshot', 'feature', 'health', 'exception']),
     origin: batch => ({ channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: oneOf(batch.process, PROCESSES, 'process') }) }],
 ]);
 

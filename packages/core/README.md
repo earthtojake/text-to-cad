@@ -196,8 +196,13 @@ inert; subscriptions start catalog polling, which the host's `shouldPoll` gates
 CAD view asks of its server, so each host reaches it the same way: the model
 library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Open
 (`pick`), Reveal (`reveal`), the person's analytics answer and features
-(`consent`, `features`), the update check (`version`) and a touch
-(`reportActivity`); every change is a POST with the viewer's guard header. `dispose()` stops polling, aborts
+(`consent`, `features`), the update check (`version`) and what the page did for
+telemetry (`reportActivity`: a touch, a Quick Edit that went, or a crash); every
+change is a POST with the viewer's guard header. A host reports its page's crashes
+with `createCrashReporter(send, { fileOf })`, which makes each with `crashOf` -- the
+error's type and its script frames, oldest first, never its message, a value or a
+URL (`fileOf` names a script by its file's own name, `scriptFileOf` by default) --
+and sends each distinct one once a page, a few at most. `dispose()` stops polling, aborts
 requests and disposes render sessions. The client lazily owns its cache provider
 and bounded write-back queue; each render session borrows a cancellable cache
 view and owns its abort signal and worker leases. A host whose transport

@@ -21,8 +21,10 @@ import { FIELDS } from './events.mjs';
 // PostHog's name for each kind of row, as a product reads them.
 export const EVENTS = {
   tool: 'tool_used', view: 'view_used', files: 'files_shown', build: 'models_built', snapshot: 'snapshots_rendered',
-  feature: 'feature_used', health: 'daemon_health',
+  feature: 'feature_used', health: 'daemon_health', exception: '$exception',
 };
+// Frames that name no file of ours: never in the app, whatever the code around them.
+const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);
 // What a row says beside its own fields, from the batch it came in.
 const CONTEXT = ['process', 'version', 'channel', 'source', 'platform', 'arch', 'client', 'client_version', 'presentation'];
 export const SETTINGS = ['POSTHOG_REGION', 'POSTHOG_PROJECT_KEY', 'POSTHOG_PERSONAL_KEY', 'POSTHOG_PROJECT_ID'];
@@ -44,10 +46,31 @@ export function settingsOf(env) {
     projectId: env.POSTHOG_PROJECT_ID };
 }
 
+/**
+ * A crash as PostHog's error tracking reads one (`$exception_list`): its type, a value that is only ever
+ * a dead worker's exit status, whether the process went on, and its frames, oldest first -- Python's,
+ * or a page's JavaScript -- with only cadgen's own (or the page's) in the app.
+ */
+export function exceptionOf(row) {
+  const page = row.where === 'page';
+  const frames = row.frames.map(frame => ({
+    platform: page ? 'web:javascript' : 'python', filename: frame.file, function: frame.function,
+    ...(frame.line ? { lineno: frame.line } : {}), ...(frame.column ? { colno: frame.column } : {}),
+    in_app: page ? !NOT_OURS.has(frame.file) : frame.file.startsWith('cadgen/'),
+  }));
+  return [{
+    type: row.type, value: row.status === undefined ? '' : `exit status ${row.status}`,
+    mechanism: { type: 'generic', handled: row.handled, synthetic: false },
+    ...(frames.length ? { stacktrace: { type: 'raw', frames } } : {}),
+  }];
+}
+
 /** A row as PostHog properties: its context, its own fields, and where it came from; nothing unset. */
 export function propertiesOf(row, country) {
   const properties = { distinct_id: row.install_id, session: row.session_id, $geoip_disable: true };
-  for (const key of [...CONTEXT, ...FIELDS[row.event]]) if (row[key] !== null && row[key] !== undefined) properties[key] = row[key];
+  const fields = row.event === 'exception' ? ['where', 'tool', 'count'] : FIELDS[row.event];
+  for (const key of [...CONTEXT, ...fields]) if (row[key] !== null && row[key] !== undefined) properties[key] = row[key];
+  if (row.event === 'exception') properties.$exception_list = exceptionOf(row);
   if (country) properties.country = country;
   return properties;
 }

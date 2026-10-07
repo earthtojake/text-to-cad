@@ -105,6 +105,25 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertEqual(self.sent[-1]["events"], [{"name": "files", "kind": "stl", "count": 1}])
         self.assertNotIn(".stl", json.dumps(self.sent))
 
+    def test_a_page_says_its_quick_edits_and_its_crashes_and_a_route_that_breaks_is_one(self) -> None:
+        self.request("POST", "/__cad/analytics", {"share": True})
+        crash = {"where": "page", "type": "TypeError", "handled": False,
+                 "frames": [{"file": "index-Bx3k2.js", "function": "Kt", "line": 1, "column": 48213}]}
+        for activity in ({"quickEdit": True}, {"crash": crash},
+                         {"crash": {**crash, "message": "reading 'secret'"}},  # not one cadgen would make: dropped
+                         {"crash": {**crash, "where": "tool"}}):  # a page speaks only for a page
+            self.assertEqual(self.request("POST", "/__cad/analytics/activity", activity)[0], 204)
+        # A route that breaks for no reason its caller gave is the server's crash; a bad request is not.
+        with mock.patch.object(type(self.app), "_recents_payload", side_effect=KeyError("secret")):
+            self.assertEqual(self.request("GET", "/__cad/recents")[0], 400)
+        self.assertEqual(self.request("POST", "/__cad/recents", {"action": "open", "path": "relative.stl"})[0], 400)
+        self.assertTrue(self.app.analytics.flush())
+        events = self.sent[-1]["events"]
+        self.assertEqual([event for event in events if event["name"] == "feature"], [{"name": "feature", "feature": "quick_edit", "count": 1}])
+        crashes = [(event["where"], event["type"]) for event in events if event["name"] == "exception"]
+        self.assertEqual(crashes, [("page", "TypeError"), ("route", "KeyError")])
+        self.assertNotIn("secret", json.dumps(self.sent))
+
     def test_told_before_it_started_the_viewer_counts_by_default(self) -> None:
         # A `cadgen` command said it before this viewer started (``cadgen/analytics.py``: ``notify``).
         self.state.parent.mkdir(parents=True, exist_ok=True)

@@ -8,7 +8,9 @@ shared. Missing optional methods mean an operation is unsupported.
 
 The host contains `files`, optional native `fileActions`, `clipboard`,
 `promptContext`, the optional `attachments`, `navigation` (`openFile(path)` and an
-optional `home()`), the optional `links` (the app menu's) and `environment`. `environment` carries the resolved `colorScheme`,
+optional `home()`), the optional `links` (the app menu's), the optional `usage`
+(`used(feature)`: what the person used, for the host's telemetry to count, never what
+they made; absent, nothing is counted) and `environment`. `environment` carries the resolved `colorScheme`,
 the keyboard `platform` (`darwin` shows ⌘, anything else Ctrl), the app's own
 `reducedMotion`, honoured beside the system's `prefers-reduced-motion`, and
 `compact`: a view drawn as a picture (the home draws its thumbnails this way, out
@@ -35,7 +37,7 @@ are for reading and maintaining the contracts.
 
 | Contract | Definition | Public entry point |
 | --- | --- | --- |
-| `ViewerHost`, `ClipboardPort`, `AttachmentStore` (where a copied prompt's picture is saved) | [Host types](../src/host/types.ts) | `@text-to-cad/ui/host` |
+| `ViewerHost`, `ClipboardPort`, `AttachmentStore` (where a copied prompt's picture is saved), `usage` | [Host types](../src/host/types.ts) | `@text-to-cad/ui/host` |
 | `FileSource` (`stat`, and `list` and `search` where the host has them), `FileActions`, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@text-to-cad/ui/file-viewer` |
 | `PromptContextPort` (`deliver`, `send`), bundles, references, delivery receipts and `formatPromptMessage` (the one message a Quick Edit is) | [Prompt types](../../core/src/prompt/types.ts) | `@text-to-cad/core/prompt` |
 | `CadWorkspaceService` (the catalog of the files on screen, `folder`, `search`), `createCadClient` (`{ origin, fetch, … }`), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@text-to-cad/core/client` |
@@ -223,7 +225,9 @@ files by absolute path, as copied references do (below), and a sketch is saved t
 destination is a composer (`destination.kind === "composer"`): `deliver`, the
 context for the person's next message. **Send** is there where the prompt port
 has `send`. The context is built at the press, from what is live then; a changed
-document or revision never retargets it.
+document or revision never retargets it. A Quick Edit that reached its destination
+(copied, queued or sent: no `failed` or `cancelled` receipt) tells the host once,
+`usage.used('quickEdit')`, for its count; a host that throws there changes nothing.
 
 `ViewerHost.attachments` is an `AttachmentStore`: `save(image, name)` answers the
 saved file's absolute path. `createHttpAttachmentStore({ origin, fetch })` from

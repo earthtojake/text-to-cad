@@ -284,7 +284,21 @@ def main(argv: list[str] | None = None) -> int:
     # once and before its work, is what those two send by default (`cadgen/analytics.py`).
     if command not in _UNTOLD:
         _tell()
-    return _run(command, entry[0], rest)
+    try:
+        return _run(command, entry[0], rest)
+    except Exception as error:
+        _report(error)
+        raise
+
+
+def _report(error: Exception) -> None:
+    """A command that failed past its own reporting -- a crash of cadgen's -- handed to a running daemon
+    for telemetry (``cadgen.analytics.report``); the traceback is the person's, as ever."""
+    try:
+        from cadgen.analytics import report
+    except Exception:  # noqa: BLE001 - a crash report never adds a failure to one
+        return
+    report(error, "command", handled=False)
 
 
 # Commands that never carry the analytics notice: a CAD app's server, whose output only the host's log

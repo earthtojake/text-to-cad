@@ -262,6 +262,20 @@ class Server:
     # -- the protocol ----------------------------------------------------------
 
     def handle(self, method: str, params: dict[str, Any], context: RequestContext) -> Any:
+        try:
+            return self._dispatch(method, params, context)
+        except RpcError:
+            raise
+        except Exception as error:
+            # A request that failed for no reason its client gave: this server's crash, answered as the
+            # protocol answers one (an internal error), and counted (``cadgen/analytics.py``) -- a page's
+            # request (``cad_http``) by the viewer's routes, which counted it already (``tunnel.py``).
+            calling = method == "tools/call"
+            if not (calling and params.get("name") == "cad_http"):
+                self.analytics.crashed(error, "tool" if calling else "request", tool=params.get("name") if calling else None)
+            raise
+
+    def _dispatch(self, method: str, params: dict[str, Any], context: RequestContext) -> Any:
         if method == "initialize":
             return self._initialize(params)
         if method == "ping":
@@ -734,10 +748,11 @@ def serve(argv: list[str] | None = None) -> int:
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cadgen mcp: %(message)s")
     protocol_out = claim_stdout()
     from cadgen import updates
-    from cadgen.analytics import Recorder
+    from cadgen.analytics import Recorder, collect_crashes
 
     analytics = Recorder()
     analytics.start()
+    collect_crashes(analytics.crashed)  # what fails in this process, wherever it is caught, is this recorder's
     updates.refresh()
     server = Server(analytics=analytics)
     connection = Connection(sys.stdin.buffer, protocol_out, server.handle, workers=64)

@@ -59,7 +59,7 @@ const DYNAMIC_IMPORT = /\bimport\(\s*([`"'])\.\/([^`"'\s]+\.js)\1\s*\)/g;
 const STATIC_IMPORT = /\b(from|import)\s*(["'])\.\/([^"'\s]+\.js)\2/g;
 const LOADER = `const decode=t=>{if(Uint8Array.fromBase64)return Uint8Array.fromBase64(t);const s=atob(t),o=new Uint8Array(s.length);for(let i=0;i<s.length;i++)o[i]=s.charCodeAt(i);return o};
 const loaded=new Map();
-const load=f=>{let p=loaded.get(f);if(!p){p=Promise.all([new Response(new Blob([decode(SOURCES[f])]).stream().pipeThrough(new DecompressionStream('gzip'))).text(),Promise.all(IMPORTS[f].map(load))]).then(([s,urls])=>{IMPORTS[f].forEach((d,i)=>{s=s.replaceAll(JSON.stringify(${JSON.stringify(CHUNK)}+d),JSON.stringify(urls[i]))});return URL.createObjectURL(new Blob([s],{type:'text/javascript'}))});loaded.set(f,p)}return p};
+const load=f=>{let p=loaded.get(f);if(!p){p=Promise.all([new Response(new Blob([decode(SOURCES[f])]).stream().pipeThrough(new DecompressionStream('gzip'))).text(),Promise.all(IMPORTS[f].map(load))]).then(([s,urls])=>{IMPORTS[f].forEach((d,i)=>{s=s.replaceAll(JSON.stringify(${JSON.stringify(CHUNK)}+d),JSON.stringify(urls[i]))});const u=URL.createObjectURL(new Blob([s],{type:'text/javascript'}));(globalThis.__cadChunks??={})[u]=f;return u});loaded.set(f,p)}return p};
 globalThis.__cadImport=f=>load(f).then(u=>import(u));
 await import(await load(ENTRY));`;
 

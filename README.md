@@ -284,7 +284,9 @@ The CAD app (the plugin's `cad` server), the browser viewer (`cadgen viewer`) an
 them and for every `cadgen` command send usage stats by default, tagged with a random install ID: versions, where
 you installed it from, your OS and agent app, and counts -- how often each CAD tool was called and views were used,
 how many files of each format were shown, how many models were built and snapshots rendered, how those ended and
-how long they took -- added up over a few minutes before they are sent. Our server adds the country each request
+how long they took, which features were used -- added up over a few minutes before they are sent. When cadgen's own
+code fails, they also send a crash report: the error's type and where in cadgen (or Python, or one of its
+dependencies) it failed, never its message, and with any of your own code a bare placeholder. Our server adds the country each request
 comes from (worked out from its IP address, which it doesn't keep) and stores it all with PostHog. Never file names,
 paths, contents or prompts. The first `cadgen` command says so once, and sending starts then. Turn it off, which
 also deletes what was sent, with `uvx cadgen telemetry off`, **Share usage stats** in either app's menu (the logo at
