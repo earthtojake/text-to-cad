@@ -104,9 +104,14 @@ export function posthogStore({ region, projectKey, personalKey, projectId }, { f
         body: JSON.stringify({ distinct_ids: [install], delete_events: true }),
       });
     },
-    // Health's question: does the project answer to this key? (The capture key is checked by the first batch.)
+    // Health's question, every setting at once: the region and the id name a project that answers to the
+    // personal key, and the capture key is that project's own (`api_token`). A key from another project would
+    // put every batch there; one PostHog does not know would lose them all, unseen until someone looked.
     async ready() {
-      await call(`${api}/`, { headers: authorized });
+      const project = await (await call(`${api}/`, { headers: authorized })).json().catch(() => ({}));
+      if (typeof project?.api_token === 'string' && project.api_token !== projectKey) {
+        throw Object.assign(new Error("POSTHOG_PROJECT_KEY is not this project's"), { code: 'posthog_project_key' });
+      }
     },
   };
 }

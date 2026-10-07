@@ -128,11 +128,14 @@ test("PostHog refusing or failing is the receiver's failure, named by its status
   }
 });
 
-test('health asks for the project with the personal key', async () => {
+test('health asks for the project with the personal key, and finds the capture key its own', async () => {
   const { asked, store } = posthog();
   await store.ready();
   assert.deepEqual(asked.map(({ url, method, headers }) => [url, method, headers]),
     [['https://eu.posthog.com/api/projects/1234/', 'GET', { authorization: 'Bearer phx_personal' }]]);
+  const project = token => posthogStore(SETTINGS_EU, { fetch: async () => new Response(JSON.stringify({ api_token: token })) });
+  await project('phc_project').ready();
+  await assert.rejects(project('phc_another').ready(), { code: 'posthog_project_key' });
 });
 
 test('the host names its settings, and health names any missing or not what PostHog takes', () => {
