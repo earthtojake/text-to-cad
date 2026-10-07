@@ -54,6 +54,11 @@ class SourceMapsTest(unittest.TestCase):
         self.assertEqual(sourcemaps.collect(out, root=self.root), {"viewer": 1, "cad-app": 1})
         self.assertEqual(sorted(path.relative_to(out).as_posix() for path in out.rglob("*") if path.is_file()),
                          ["cad-app/index-C.js", "cad-app/index-C.js.map", "viewer/index-A.js", "viewer/index-A.js.map"])
+        # The copy ends with the line posthog-cli files the map under, naming the chunk's own debug id; the
+        # page's chunk keeps its bytes.
+        copy = (out / "viewer/index-A.js").read_text(encoding="utf-8")
+        self.assertTrue(copy.startswith(f"export const a=1;\n//# debugId={VIEWER_ID}\n//# chunkId={VIEWER_ID}"))
+        self.assertNotIn("chunkId", (self.root / "apps/web/dist/assets/index-A.js").read_text(encoding="utf-8"))
         sourcemaps.archive(out, self.root / "maps.zip")
         with zipfile.ZipFile(self.root / "maps.zip") as archive:
             self.assertIn("viewer/index-A.js.map", archive.namelist())

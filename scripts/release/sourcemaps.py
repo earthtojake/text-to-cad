@@ -5,8 +5,11 @@ The CAD Viewer's client and the CAD app's page are built with hidden source maps
 every chunk with code of its own (apps/web/vite.config.mjs, apps/mcp/vite.config.mjs), and a crash on
 either page names the chunk each of its frames ran in by that id (@text-to-cad/core's crash reporter).
 The maps never ship in the wheel. This gathers each such chunk -- the text the page runs -- with its map
-into one directory, for `posthog-cli sourcemap upload`, which files each map under its chunk's debug id,
-and zips them for the GitHub Release, so any version's maps can be uploaded again.
+into one directory, for `posthog-cli sourcemap upload`, and zips them for the GitHub Release, so any
+version's maps can be uploaded again. The CLI files a map under the id a chunk's `//# chunkId=` line names
+(it uploads chunk and map as they are, and reads no bundler's debug id), so each gathered copy -- never
+the page -- ends with that line naming the chunk's own debug id: what a crash's frame names. A line
+after the code moves no code, so the map fits the copy as it fits the page.
 
     python3 scripts/release/sourcemaps.py collect --out DIR [--zip FILE]
 
@@ -34,6 +37,7 @@ PAGES = {
 }
 DEBUG_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 COMMENT = re.compile(r"^//# debugId=(\S+)\s*$")
+CHUNK_ID_LINE = "\n//# chunkId={}"  # the line posthog-cli reads a chunk's id from (its CHUNKID_COMMENT_PREFIX)
 
 
 class Unfit(Exception):
@@ -61,8 +65,8 @@ def chunks_of(page: Path, table: re.Pattern[str]) -> dict[str, str]:
     return ids
 
 
-def pairs(directory: Path, ids: dict[str, str]) -> list[tuple[Path, Path]]:
-    """Each named chunk in ``directory`` and its map (``name.js.map``), both naming the chunk's debug id."""
+def pairs(directory: Path, ids: dict[str, str]) -> list[tuple[Path, Path, str]]:
+    """Each named chunk in ``directory``, its map (``name.js.map``), and the debug id both name."""
     found = []
     for name, debug_id in sorted(ids.items()):
         chunk, source_map = directory / name, directory / f"{name}.map"
@@ -72,7 +76,7 @@ def pairs(directory: Path, ids: dict[str, str]) -> list[tuple[Path, Path]]:
         chunk_id = chunk_debug_id(chunk.read_text(encoding="utf-8"))
         if not map_id == chunk_id == debug_id:
             raise Unfit(f"{chunk} names debug id {chunk_id}, its map {map_id}, its page {debug_id}")
-        found.append((chunk, source_map))
+        found.append((chunk, source_map, debug_id))
     return found
 
 
@@ -87,8 +91,9 @@ def collect(out: Path, *, root: Path = REPO_ROOT, pages: dict = PAGES) -> dict[s
         found = pairs(root / directory, chunks_of(root / page, table))
         target = out / name
         target.mkdir(parents=True)
-        for chunk, source_map in found:
-            shutil.copy2(chunk, target / chunk.name)
+        for chunk, source_map, debug_id in found:
+            text = chunk.read_text(encoding="utf-8").rstrip("\n")
+            (target / chunk.name).write_text(text + CHUNK_ID_LINE.format(debug_id) + "\n", encoding="utf-8")
             shutil.copy2(source_map, target / source_map.name)
         counts[name] = len(found)
     return counts

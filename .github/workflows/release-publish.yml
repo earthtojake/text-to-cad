@@ -337,18 +337,16 @@ jobs:
       # ---- irreversible from here: main only -------------------------------------
 
       # Before the wheel goes out, so no install can crash with a map PostHog does not have. Each
-      # map is filed under its chunk's debug id, which the chunk's bytes decide: a resumed run, or a
-      # later release with the same chunk, uploads nothing twice and overwrites no other version's.
+      # map is filed under its chunk's debug id (each gathered copy's `//# chunkId=` line), which the
+      # chunk's bytes decide: a resumed run, or a later release with the same chunk, uploads nothing
+      # twice and overwrites no other version's.
       - name: Upload the pages' source maps to PostHog
         if: needs.gate.outputs.is_main == 'true'
         env:
-          VERSION: ${{ needs.gate.outputs.version }}
           POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
           POSTHOG_CLI_PROJECT_ID: ${{ secrets.POSTHOG_CLI_PROJECT_ID }}
           POSTHOG_CLI_HOST: ${{ secrets.POSTHOG_CLI_HOST }}
-        run: |
-          npx --yes @posthog/cli@0.18.9 sourcemap upload --directory "$RUNNER_TEMP/sourcemaps/files" \
-            --release-name cadgen --release-version "$VERSION"
+        run: npx --yes @posthog/cli@0.18.9 sourcemap upload --directory "$RUNNER_TEMP/sourcemaps/files"
 
       # Uploaded BEFORE anything an installer follows names the version. If the upload
       # succeeds and a later step fails, dispatch this workflow again: it resumes.
