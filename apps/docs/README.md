@@ -212,7 +212,8 @@ project (a DNS-only CNAME at Cloudflare, like `www`); and four of the project's 
 production environment variables, set as Sensitive in the Vercel dashboard:
 `POSTHOG_REGION` (`us` or `eu`, where the PostHog project lives),
 `POSTHOG_PROJECT_KEY` (the project's API key, which captures), `POSTHOG_PERSONAL_KEY`
-(a personal API key with `person:write`, which deletes and checks the project), and
+(a personal API key with `person:write`, which deletes, and `project:read`, which health
+checks the project with; scope it to this project alone), and
 `POSTHOG_PROJECT_ID`. Nothing in GitHub holds them. A changed value takes effect with
 the next deploy, and `Deploy Docs` checks `api.texttocad.dev/v1/health`, which answers
 `503` while any is missing or PostHog refuses the personal key.

@@ -12,8 +12,8 @@
  * period its plan keeps them.
  *
  * Its settings are the host's (route.ts): the project's API key, which captures; a personal API key with
- * `person:write`, which deletes and checks the project is there; the project's id; and its region, `us` or
- * `eu`. `fetch` is handed in, so the tests need no network.
+ * `person:write`, which deletes, and `project:read`, which checks the project is there; the project's id; and
+ * its region, `us` or `eu`. `fetch` is handed in, so the tests need no network.
  */
 
 import { FIELDS } from './events.mjs';
