@@ -44,6 +44,14 @@ class _Tmp(unittest.TestCase):
         deletion = mock.patch("cadgen.analytics.request_deletion", side_effect=lambda id: self.deleted.append(id) or True)
         deletion.start()
         self.addCleanup(deletion.stop)
+        # What a recorder does in the background (an opt-out's deletion) ends inside the test, under its mocks:
+        # a thread still running after them would ask the real receiver.
+        begun: list[threading.Thread] = []
+        background = Recorder._background
+        threads = mock.patch.object(Recorder, "_background", lambda recorder, work: begun.append(background(recorder, work)) or begun[-1])
+        threads.start()
+        self.addCleanup(threads.stop)
+        self.addCleanup(lambda: [thread.join(10) for thread in begun])
 
     def serve(self, channel: str, client: str = "codex-mcp-client") -> tuple[Server, list[dict]]:
         sent: list[dict] = []
@@ -441,6 +449,20 @@ class BeforeTelemetryTest(_Tmp):
     def test_an_old_yes_carries_nothing(self) -> None:
         self.legacy({"choice": "on", "disclosure": 1, "by": "app", "decidedAt": 1, "id": "old", "salt": "0" * 64})
         self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
+
+    def test_a_no_here_also_stops_an_older_cadgen_and_deletes_what_it_sent(self) -> None:
+        # A plugin not yet updated runs 0.7.x beside this cadgen (`uvx cadgen telemetry off` runs the newest) and
+        # reads only `analytics`: its yes would go on sending, under an id this no deletes too.
+        self.legacy({"choice": "on", "disclosure": 1, "by": "app", "decidedAt": 1, "id": "old", "salt": "0" * 64})
+        asked: list[str] = []
+        self.assertTrue(choose(False, by="cli", path=self.path, forget=lambda id: asked.append(id) or True)["forgotten"])
+        self.assertEqual(asked, ["old"])
+        kept = json.loads(self.path.read_text(encoding="utf-8"))["analytics"]
+        self.assertEqual((kept["choice"], "id" in kept, "salt" in kept), ("off", False, False))  # what 0.7.x reads as no
+        # Where no earlier cadgen answered, none of its settings is written.
+        alone = self.tmp / "alone.json"
+        choose(False, by="cli", path=alone)
+        self.assertNotIn("analytics", json.loads(alone.read_text(encoding="utf-8")))
 
 
 class NoticeTest(_Tmp):

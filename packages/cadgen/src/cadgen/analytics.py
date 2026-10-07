@@ -64,7 +64,9 @@ is said again before it is sent. Nothing in a CAD app asks: the telling is the C
 Before telemetry, cadgen 0.7.7 to 0.7.15 kept these answers as ``analytics`` (the settings section,
 ``cadgen analytics``, ``CADGEN_ANALYTICS``). Nothing of that carries over but a no: an ``analytics``
 choice of off counts as off until the person answers here (``LEGACY``), and ``CADGEN_ANALYTICS=0``
-turns telemetry off as ``CADGEN_TELEMETRY=0`` does.
+turns telemetry off as ``CADGEN_TELEMETRY=0`` does. One may still be installed beside this one (a
+plugin not yet updated, while ``uvx cadgen`` runs the newest), reading only ``analytics``: a no here
+is said there too, and the id it sent under is deleted with this one's (``_stop_earlier``).
 
 Where CAD was installed from is only reported, as ``channel``: it decides nothing here but that a
 development install sends nothing by default.
@@ -221,6 +223,34 @@ def _read(path: Path) -> dict[str, Any] | None:
     except OSError:
         LOG.debug("could not read the telemetry choice in %s", path, exc_info=True)
         return None
+
+
+def _earlier_id(path: Path) -> str | None:
+    """The id an earlier cadgen keeps (``LEGACY``), if it was told yes there."""
+    try:
+        value = read_section(LEGACY, path=path).get("id")
+    except OSError:
+        return None
+    return value if isinstance(value, str) else None
+
+
+def _stop_earlier(path: Path, by: str) -> None:
+    """Say a no where cadgen 0.7.7 to 0.7.15 reads one (``LEGACY``), as its own off would: a plugin
+    not yet updated runs one beside this cadgen, and an earlier yes there would go on sending. Its id
+    is already owed a deletion with this one's (``choose``). Nothing is written where no earlier
+    cadgen answered."""
+
+    def off(section: dict[str, Any]) -> dict[str, Any]:
+        if not section or (section.get("choice") == "off" and "id" not in section and "salt" not in section):
+            return section
+        kept = {key: value for key, value in section.items() if key not in ("id", "salt")}
+        return {**kept, "choice": "off", "by": by, "decidedAt": time.time()}
+
+    try:
+        if read_section(LEGACY, path=path):
+            update_section(LEGACY, off, path=path)
+    except OSError:
+        LOG.debug("could not keep the no where an earlier cadgen reads it in %s", path, exc_info=True)
 
 
 _UNKEPT: set[Path] = set()  # settings a write failed for in this process: it asks about them no more
@@ -404,6 +434,7 @@ def choose(share: bool, *, by: str, path: Path | None = None,
     path = path or settings_path()
     # When, and so which answer this is: what another process noted under an earlier one is never sent (``Recorder.flush``).
     choice = {"choice": "on" if share else "off", "disclosure": DISCLOSURE, "by": by, "decidedAt": time.time()}
+    earlier = None if share else _earlier_id(path)  # what an earlier cadgen sent is deleted with the rest
 
     def keep(section: dict[str, Any]) -> dict[str, Any]:
         previous = section["id"] if isinstance(section.get("id"), str) else None
@@ -411,14 +442,16 @@ def choose(share: bool, *, by: str, path: Path | None = None,
         told = {key: section[key] for key in ("notifiedAt", "notice") if key in section}  # a fact, whatever the answer
         if share:
             return {**told, **choice, "id": previous or str(uuid.uuid4()), **({"forget": pending} if pending else {})}
-        if previous and previous not in pending:
-            pending.append(previous)
+        for gone in (previous, earlier):
+            if gone and gone not in pending:
+                pending.append(gone)
         return {**told, **choice, **({"forget": pending} if pending else {})}
 
     if _update(path, keep) is None:
         return {"saved": False, "sharing": None}
     if share:
         return {"saved": True, "sharing": True}
+    _stop_earlier(path, by)
     if forget is not None:
         forget_pending(path=path, forget=forget)
     return {"saved": True, "sharing": False, "forgotten": not _pending(_read(path) or {})}
