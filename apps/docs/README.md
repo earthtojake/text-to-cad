@@ -133,14 +133,17 @@ A logo leads to its install. Then the plugin's description, which every manifest
 and the README's Overview say word for word (`test_plugin_manifests.py` holds
 them to one text). Install
 leads with the message to send to an agent, monospace like the commands, with buttons that open it
-in Claude Code (Claude Desktop), Codex or Cursor, prefilled and unsent, beside Copy; then a sub-section per agent app, its update
+in Claude Code (Claude Desktop), Codex or Cursor, prefilled and unsent, beside Copy; under it, one
+sentence says what text-to-cad sends and how to turn it off, with the privacy policy (`telemetryNote`:
+only what holds for every release that sends anything by default, since a copy that has not updated
+reads it too); then a sub-section per agent app, its update
 and remove commands folded under Update or reinstall; Codex leads with a button to its listing in
 Codex's plugin directory, its commands, update and remove folded under Manual install. Other Agents
 (the Skills CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the
 content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
-together: the plugin's description, the install message,
+together: the plugin's description, the install message and what it sends,
 each install's commands (to install, update and remove it), the skills and
 Contributing. Both speak to whoever installs text-to-cad, a person or their agent,
 and the README says more: numbered steps to install it yourself and fuller notes
@@ -150,7 +153,7 @@ hero and the agents carousel. The page's copy lives in `src/lib/content.ts`, whi
 `/install` redirects to the Install section (`/#install`, `next.config.ts`): the stable address
 of the full install instructions, which the CAD app's update button links to.
 `tests/python/global/test_plugin_manifests.py` holds the description, the install
-message and every install, update and remove command to one text. The unboxed wordmark and one prominent tagline
+message, what it sends and every install, update and remove command to one text. The unboxed wordmark and one prominent tagline
 sit above the independently framed CAD demo. “100% open source and free.” follows
 “Give your agent CAD superpowers.” in blue, using a lighter brand shade on dark
 surfaces. The app owns

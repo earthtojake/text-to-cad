@@ -41,6 +41,11 @@ Send this message to your agent and it will install text-to-cad for you.
 Install text-to-cad from https://github.com/earthtojake/text-to-cad
 ```
 
+By default, text-to-cad sends usage stats and crash reports, tagged with a random
+ID and never including your files, paths or prompts; turn them off with
+`uvx cadgen telemetry off`, or ask your agent to. [Telemetry](#telemetry) says
+the rest.
+
 Or install it yourself:
 
 1. CAD runs through [uv](https://docs.astral.sh/uv/): check that it is installed

@@ -20,6 +20,12 @@ export const support = {
 // (the README's Install, which says the same).
 export const agentInstallByline = "Send this message to your agent and it will install text-to-cad for you.";
 export const agentInstallMessage = "Install text-to-cad from https://github.com/earthtojake/text-to-cad";
+// What it sends, said under the message before anything is installed, to the person and to the agent
+// that reads it. Only what holds for every release that sends anything by default, so a copy that has
+// not updated yet is never told less than it sends; the cadgen a person runs says the rest itself. The
+// README says it word for word. The command is in backticks, which the page sets as code.
+export const telemetryNote =
+  "By default, text-to-cad sends usage stats and crash reports, tagged with a random ID and never including your files, paths or prompts; turn them off with `uvx cadgen telemetry off`, or ask your agent to.";
 // The same message, opened in an agent app with its composer prefilled, never sent: Claude Code in
 // Claude Desktop (claude://code/new, Claude's help center, "Open Claude Desktop with a link"), the
 // Codex app (codex://threads/new, its commands reference) and Cursor (its prompt deeplink, Cursor's

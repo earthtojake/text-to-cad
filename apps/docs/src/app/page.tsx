@@ -18,6 +18,7 @@ import {
   pluginRequestUrl,
   skillGroups,
   support,
+  telemetryNote,
 } from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
@@ -51,6 +52,23 @@ function AgentMessage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// What text-to-cad sends, under the message (src/lib/content.ts): its command set as code, and the
+// privacy policy, which says the rest.
+function TelemetryNote() {
+  return (
+    <p className="text-sm leading-6 text-muted-foreground">
+      {telemetryNote.split("`").map((part, index) =>
+        index % 2 ? <code key={index} className="font-mono text-foreground">{part}</code> : part,
+      )}{" "}
+      See the{" "}
+      <a href="/privacy-policy" className="text-foreground underline underline-offset-4">
+        privacy policy
+      </a>
+      .
+    </p>
   );
 }
 
@@ -291,6 +309,7 @@ export default function Home() {
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">{agentInstallByline}</p>
               </div>
               <AgentMessage />
+              <TelemetryNote />
             </div>
             <div className="space-y-6 pt-6">
               {installs.map((item) => (

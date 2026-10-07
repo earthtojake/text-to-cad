@@ -180,7 +180,7 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Telemetry is on once cadgen has told you.</strong> The first <code>cadgen</code>{" "}
             command you or your agent run says, once, in its output, that cadgen sends usage stats and
-            how to turn them off, and nothing is sent before that. If we ever send more than this
+            crash reports and how to turn them off, and nothing is sent before that. If we ever send more than this
             policy describes, cadgen says so again before it does. Nothing is sent by default in CI or
             from a development install. Your choice is kept on your computer, as the{" "}
             <code>telemetry</code> setting in cadgen’s settings file, through restarts and updates, and

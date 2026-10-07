@@ -139,8 +139,9 @@ _TELEMETRY_TOOL = {
     "name": "cad_telemetry", "title": "CAD telemetry", "icons": [ICON],
     "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
     "description": ("Report whether cadgen sends usage stats (counts of tool calls, view activity, files shown, builds "
-                    "and snapshots, tagged with a random ID; never file names, paths, contents or prompts), or turn "
-                    "them off. Call with action off only when the user asks."),
+                    "and snapshots) and crash reports (where cadgen's own code failed, never a message), tagged with a "
+                    "random ID and never file names, paths, contents or prompts, or turn them off. Call with action off "
+                    "only when the user asks."),
     "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["status", "off"]}},
                     "additionalProperties": False},
 }
@@ -533,8 +534,9 @@ class Server:
                "untold": "not on: no cadgen command has told the user, and none does in CI or from a development install"}.get(
                    found["reason"], "off: the setting could not be read")
         state = "on" if found["sharing"] else "off"
-        return _text(f"cadgen's usage stats are {state} ({why}). They count CAD tool calls, view activity, files shown, "
-                     "builds and snapshots, tagged with a random ID; never file names, paths, contents or prompts. The user "
+        return _text(f"cadgen's usage stats and crash reports are {state} ({why}). They count CAD tool calls, view "
+                     "activity, files shown, builds and snapshots, and report where cadgen's own code failed (never a "
+                     "message), tagged with a random ID; never file names, paths, contents or prompts. The user "
                      "turns them off in the CAD app's menu (the logo at the top left of a view) or with "
                      f"`cadgen telemetry off`. Policy: {PRIVACY_URL}",
                      {"sharing": found["sharing"], "reason": found["reason"]})

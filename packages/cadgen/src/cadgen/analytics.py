@@ -131,8 +131,8 @@ DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
 NOTICE = 1
-NOTICE_TEXT = ("cadgen now sends usage stats, tagged with a random ID — never your files, paths or prompts. "
-               f"Turn off: cadgen telemetry off · {PRIVACY_URL}")
+NOTICE_TEXT = ("cadgen now sends usage stats and crash reports, tagged with a random ID — never your files, paths or "
+               f"prompts. Turn off: uvx cadgen telemetry off · {PRIVACY_URL}")
 # ``0``: what this command says reaches nobody -- a CAD app's own launch of one, its output thrown away.
 NOTICE_ENV = "CADGEN_TELEMETRY_NOTICE"
 # A batch is the counts of a window this long: a few events, however busy the window was.

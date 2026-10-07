@@ -1,5 +1,5 @@
-"""``cadgen telemetry`` -- show or change the usage stats cadgen sends: from CAD's apps (``cadgen mcp`` and
-``cadgen viewer``) and its build daemon.
+"""``cadgen telemetry`` -- show or change the usage stats and crash reports cadgen sends: from CAD's apps
+(``cadgen mcp`` and ``cadgen viewer``) and its build daemon.
 
 They are sent by default once a ``cadgen`` command has said so (``cadgen/analytics.py``). ``status`` (the
 default) says what is sent and why, and says that notice itself if no command has yet; ``on`` and ``off``
@@ -41,11 +41,11 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog,
         description=(
-            "Show or change the usage stats cadgen sends from CAD's apps (the CAD app in an agent app, and the CAD "
-            "Viewer) and its build daemon. By default, once a cadgen command has said so: a random install id, "
-            "versions, the OS and agent app, and counts of CAD tool calls, view activity, files shown by format, "
-            "builds and snapshots, how they ended and how long they took. `off` sends nothing. Never file names, "
-            "paths, contents or prompts."
+            "Show or change the usage stats and crash reports cadgen sends from CAD's apps (the CAD app in an agent "
+            "app, and the CAD Viewer) and its build daemon. By default, once a cadgen command has said so: a random "
+            "install id, versions, the OS and agent app, counts of CAD tool calls, view activity, files shown by "
+            "format, builds and snapshots, how they ended and how long they took, and where cadgen's own code failed "
+            "(never a message). `off` sends nothing. Never file names, paths, contents or prompts."
         ),
     )
     parser.add_argument("action", nargs="?", choices=("status", "on", "off"), default="status")
@@ -74,8 +74,8 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     if args.action != "off":
         print(f"Telemetry is {describe(found)}.")
         if found["reason"] == "default":
-            print("It counts CAD's tool calls, views, files shown, builds and snapshots -- never what they hold: "
-                  "`cadgen telemetry off` turns it off.")
+            print("It counts CAD's tool calls, views, files shown, builds and snapshots, and reports where cadgen's "
+                  "own code failed -- never what they hold: `cadgen telemetry off` turns it off.")
         if found["id"]:
             print(f"Install id: {found['id']}")
     if found["reason"] == "environment" and args.action in ("on", "off"):
