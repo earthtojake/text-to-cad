@@ -577,6 +577,13 @@ class Server:
             LOG.info("cad_show: no viewer for thread %s in process %d; live here: %s", context.meta.get("threadId") or "none",
                      os.getpid(), [(view.id, view.surface, view.thread_id) for view in self.views.live()] or "none")
             return _text("No CAD viewer is open in this thread. Call cad_open to open one.", {"delivered": 0})
+        if not isinstance(view, SidebarView) and view.surface == "file":
+            # The host's file handler shows the file it opened, and only that: the agent reads it
+            # (cad_view names it), but shows nothing in it.
+            if view.model == model:
+                return _text(f"That view already shows {model}, and shows each rebuild by itself.", {"delivered": 0, "view": view.id})
+            raise ToolFailed(f"That view is the app's own view of {os.path.basename(view.model or '') or 'a file'}, and "
+                             "shows that file alone. Call cad_show without a view to show a model in this thread's CAD tab.")
         launch = self._launch(model)
         if isinstance(view, SidebarView):
             if view.model != model:

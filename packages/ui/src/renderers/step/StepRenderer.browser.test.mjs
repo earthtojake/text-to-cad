@@ -178,7 +178,7 @@ async function measurePoints(page, at, ...points) {
 }
 
 // A page over the fixture. Unless a test seeds a record of its own, or keeps the tab in
-// sessionStorage, the file's view is seeded with Orbit off in its Playback settings — a still
+// sessionStorage, the file's view is seeded with preview's Orbit off — a still
 // preview camera, so what moves in a frame is the model — as a previous session would have left it.
 async function open(options = {}) {
   const seeded = options.record === undefined && options.store !== 'session'
@@ -207,8 +207,8 @@ async function open(options = {}) {
     reload: async () => { await page.reload(); Object.assign(opened, await ready()); },
     state: () => page.evaluate(() => window.cadHarness.a.controller.readState()),
     display: patch => page.evaluate(next => window.cadHarness.a.controller.setDisplaySettings(next), patch),
-    // Preview: its button, the fullscreen icon beside Settings; its X back. The file's view was
-    // seeded with Orbit off: a still camera, so what moves in a frame is the model.
+    // Preview: its button, last in the navbar; its X back. The file's view was seeded with Orbit
+    // off: a still camera, so what moves in a frame is the model.
     enterPreview: async () => {
       await pane.getByRole('button', { name: 'Preview', exact: true }).click();
       await pane.getByRole('button', { name: 'Exit preview', exact: true }).waitFor();
@@ -217,8 +217,8 @@ async function open(options = {}) {
       await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
       await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
     },
-    // Display is not a tool: its button sits before Preview on top of the cube.
-    tool: name => name === 'Display' ? pane.locator('[data-viewport-actions]').getByRole('button', { name, exact: true })
+    // Display is not a tool: its button sits before Preview at the navbar's right end.
+    tool: name => name === 'Display' ? pane.locator('[data-view-controls]').getByRole('button', { name, exact: true })
       : pane.locator(name === 'Reset' ? '[data-cad-camera-controls]' : '[data-cad-toolbar]').getByRole('button', { name, exact: true }),
     tools: () => pane.locator('[data-cad-toolbar]').getByRole('button')
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
@@ -249,16 +249,16 @@ async function open(options = {}) {
 }
 
 
-test('a STEP opens in Select with the tools its sidecar earns, its Features in the tool stack and Display and Preview on top of the cube, and paints both authored colours', async () => {
+test('a STEP opens in Select with the tools its sidecar earns, its Features in the tool stack and Display and Preview in the navbar, and paints both authored colours', async () => {
   const view = await open();
   const { page, pane, errors } = view;
   assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false'],
-    'Position because the sidecar bound; no Animate: its routine plays in preview. Display is a dropdown from on top of the cube, not a tool');
-  assert.deepEqual(await pane.locator('[data-viewport-actions] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Display', 'Preview'], 'the view\'s controls on top of the cube: Display, then Preview');
+    'Position because the sidecar bound; no Animate: its routine plays in preview. Display is a dropdown from the navbar, not a tool');
+  assert.deepEqual(await pane.locator('[data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Display', 'Preview'], 'the view\'s controls at the navbar\'s right end: Display, then Preview');
   assert.equal(await view.displayPanel().count(), 0, 'Display is never where a file opens');
-  assert.equal(await pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
-    'a STEP is 3D: Preview sits on top of its cube');
+  assert.equal(await pane.locator('[data-view-controls]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
+    'a STEP is 3D: Preview sits in its navbar');
   // Select is the tool, so the stack shows its Features — an assembly's tree starts open — with no
   // tabs, and nothing of Position's.
   assert.deepEqual(await view.stack(), ['Features']);
@@ -695,7 +695,7 @@ const MIN_REDRAWN = { render: 30_000, xray: 30_000, 'hidden-line': 30_000, wiref
 test('every Display preset reaches the drawn frame, on the live canvas', async () => {
   const view = await open();
   const { page, errors } = view;
-  // Display is a dropdown from its button on top of the cube, over the viewport.
+  // Display is a dropdown from its button in the navbar, over the viewport.
   await view.tool('Display').click();
   const panel = view.displayPanel();
   await panel.waitFor();
@@ -864,10 +864,12 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   const boxes = names => Promise.all(names.map(name => pane.getByRole('button', { name, exact: true }).boundingBox()));
   const viewControls = await boxes(['Display', 'Preview']);
   await view.enterPreview();
-  // Preview has the page to itself: the navbar goes, and its corner holds Playback settings and the
-  // way out exactly where Display and Preview sat, on top of the cube.
-  await pane.locator('[data-viewer-navbar]').waitFor({ state: 'hidden' });
-  assert.deepEqual(await boxes(['Playback settings', 'Exit preview']), viewControls);
+  // Preview has the page to itself: the navbar goes, and its corner holds Orbit, then Display and the
+  // way out exactly where Display and Preview sat in the navbar.
+  await pane.locator('[data-viewer-navbar]').waitFor({ state: 'detached' });
+  const [orbitBox, ...cornerBoxes] = await boxes(['Orbit', 'Display', 'Exit preview']);
+  assert.deepEqual(cornerBoxes, viewControls);
+  assert.ok(orbitBox.y === viewControls[0].y && orbitBox.x + orbitBox.width < viewControls[0].x, 'Orbit sits just before Display');
   // The tools are put away, and the playbar is under the model.
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).isVisible(), false);
   const bar = pane.getByRole('toolbar', { name: 'Animation playback' });
@@ -876,11 +878,24 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   await bar.getByRole('button', { name: 'Play animation', exact: true }).waitFor();
   await page.waitForTimeout(300);
   assert.deepEqual((await translations(page))['o1.2'], restArm, 'nothing plays until its play button is pressed');
-  const rest = await view.frame();
-  // Preview puts away prompt actions, leaving only playback controls; its settings are the corner's.
-  assert.deepEqual(await bar.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Play animation']);
+  // Display is preview's too: its dropdown opens from the corner over the file's own settings, an
+  // edit there draws in the preview, and Escape puts it away, preview kept.
+  const edged = await restingFrame(view);
+  await pane.locator('[data-preview-corner]').getByRole('button', { name: 'Display', exact: true }).click();
+  await view.displayPanel().getByRole('button', { name: 'Disable Edges', exact: true }).click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.edges?.enabled === false);
+  await frameWhen(view, shot => differing(edged, shot) > 100, 'drew the preview without its edges');
+  await page.keyboard.press('Escape');
+  await view.displayPanel().waitFor({ state: 'detached' });
+  assert.equal(await pane.getByRole('button', { name: 'Exit preview', exact: true }).isVisible(), true, 'Escape closes Display before preview');
+  await view.display({ edges: { enabled: true } });
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.edges?.enabled === true);
+  const rest = await restingFrame(view);
+  // Preview puts away prompt actions, leaving only playback controls: one routine has no list of
+  // routines, and the routine's settings end the playbar. The view's own are the corner's.
+  assert.deepEqual(await bar.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Play animation', 'Playback settings']);
   assert.deepEqual(await pane.locator('[data-preview-corner]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Playback settings', 'Exit preview']);
+    ['Orbit', 'Display', 'Exit preview']);
   assert.equal(await bar.getByRole('slider', { name: 'Animation time', exact: true }).count(), 1);
   assert.equal(await pane.getByRole('button', { name: 'Quick Edit' }).count(), 0);
 

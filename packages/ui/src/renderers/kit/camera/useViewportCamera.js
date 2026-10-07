@@ -135,7 +135,7 @@ export function useViewportCamera({
         previewCameraRef.current = null;
       }
       controls.enableDamping = true;
-      // Preview orbits only if its Playback settings say so: a preview entered with the orbit
+      // Preview orbits only if the file's Orbit says so: a preview entered with the orbit
       // off holds its fresh fit to the frame, not a frame later.
       controls.autoRotate = entering && previewOrbit && previewOrbitSpeed > 0;
       captureRuntimeViewportFitScale(runtime);

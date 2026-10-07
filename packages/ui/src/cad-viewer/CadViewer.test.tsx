@@ -58,14 +58,15 @@ test('the CAD viewer shows one file by its absolute path, the home with none, an
 
   // A file the viewer asks for (a pick in the explorer, a renderer's link) is the host's to show;
   // the file on screen is shown already.
-  act(() => props().host.navigation.openFile('C:\\models\\b.step'));
-  act(() => props().host.navigation.openFile('C:/models/a.step'));
+  act(() => props().host.navigation.openFile!('C:\\models\\b.step'));
+  act(() => props().host.navigation.openFile!('C:/models/a.step'));
   expect(shows).toEqual(['C:/models/b.step']);
-  // The navbar's logo leads home, which is no file; a host with no library has no home to lead to.
+  // The navbar's logo leads home, which is no file. A host with no library (a file handler's) shows
+  // its file and nothing else: no home to lead to, and no other file to open.
   act(() => props().host.navigation.home!());
   expect(shows.at(-1)).toBe('');
   rerender(view('C:/models/a.step', false));
-  expect(props().host.navigation.home).toBeUndefined();
+  expect([props().host.navigation.home, props().host.navigation.openFile]).toEqual([undefined, undefined]);
 
   // No file is the home: the library, laid out as the tab keeps it.
   rerender(view(''));

@@ -226,8 +226,8 @@ robots open in Select, whose Features (Links for a robot) panel hangs under the
 toolbar with the rest of the tool stack; Position's panel replaces it while Position
 is the tool. The file's name in the navbar opens the explorer.
 STEP and robot files have a top-left toolbar; GLB, STL and 3MF have none. Every 3D
-file has Display (its settings, a dropdown that opens up) and Preview on top of the
-view cube at the bottom-left, and Quick Edit at the top-right. DXF is a 2D canvas with
+file has Display (its settings, a dropdown that opens down) and Preview at the navbar's
+right end, the view cube at the bottom-left, and Quick Edit at the top-right. DXF is a 2D canvas with
 pan, zoom, snapshot and Quick Edit, without a 3D toolbar or tool stack.
 
 The explorer is a popover under the file's name: the file's folder, one folder at a
@@ -236,8 +236,8 @@ FileViewer width the tree panel of the tool stack starts closed (Select, pressed
 opens it). Preview is the shared shell's button beside Display: it takes the whole page,
 hiding the navbar, toolbar, tool stack and
 Quick Edit, orbits by default, plays routines (on entry only with Autoplay on)
-and offers Playback settings, in the box where Display and Preview sat; the host passes
-no preview props.
+and keeps its own controls where the navbar's sat — Orbit, Display, Exit preview — with
+the routines and their Playback settings on the playbar; the host passes no preview props.
 The file on screen keeps its view in the tab — its camera, Display settings
 (explode and clip included) and pose — so a refresh restores it; leaving the file for
 another or for the home drops it, and opening it again frames it anew (see
@@ -350,7 +350,7 @@ is out. The app menu holds Back to files (the home), the person's settings (Shar
 usage stats, Quick edit), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
 (X), as in the CAD app; the home shows GitHub, Discord and X under its wordmark instead.
-Display and Preview are the view's, on top of its cube. This host
+Display and Preview are the view's, last at the navbar's right. This host
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
 links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: cadgen's

@@ -38,7 +38,7 @@ export function useStepMotionControls({
   const poseLogic = useMemo(() => stepPoseLogic(selectedStepModuleDefinition), [selectedStepModuleDefinition]);
   useEffect(() => { heldPositionRef.current = null; }, [poseLogic]);
   // Handing the pose to Position stops the routine and rewinds its clock, and nothing more: the
-  // transport preferences preview's Playback settings set (the routine, its speed, the loop) are the
+  // transport preferences preview's playbar sets (the routine, its speed, the loop) are the
   // person's, and a joint nudge or a trip to another tool keeps them for the next play.
   const activatePositionControls = useCallback(() => {
     motionRevisionRef.current += 1;

@@ -12,7 +12,7 @@ Two copies, differing in what they carry and the channel each config names:
 
 - `latest`: the newest release, which every documented install command names. The copy also
   carries the marketplace catalog, which lists the plugin at the root of the branch it is read
-  from, and Codex's manifest and config.
+  from, Codex's manifest and config, and the Agent Plugins standard's.
 - `directory` (pushed to `claude-plugin`): claude.ai's plugin directory, which updates its
   copies.
 
@@ -51,6 +51,9 @@ FILES = (MANIFEST, ".claude-plugin/icon.png", ".cursor-plugin/plugin.json", "gem
          "cursor.mcp.json", "LICENSE")
 # What Claude Code's and Codex's marketplaces read besides: the catalog, and Codex's manifest and config.
 MARKETPLACE_FILES = (CATALOG, ".codex-plugin/plugin.json", ".codex-plugin/logo.png", "codex.mcp.json")
+# The Agent Plugins standard's manifest and server config (agent-plugins.org), which VS Code reads before
+# Claude's manifest.
+STANDARD_FILES = ("plugin.json", "mcp.json")
 
 
 class Copy(NamedTuple):
@@ -60,7 +63,7 @@ class Copy(NamedTuple):
 
 
 COPIES = {
-    "latest": Copy(FILES + MARKETPLACE_FILES, {"cursor.mcp.json": ("cursor-github", False)}),
+    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES, {"cursor.mcp.json": ("cursor-github", False)}),
     "directory": Copy(FILES, {"claude.mcp.json": ("claude-directory", True), "cursor.mcp.json": ("cursor-github", False)}),
 }
 DIRECTORIES = ("skills/",)

@@ -52,7 +52,7 @@ export function stepMotionSources(entry) {
  * Out: what the Position panel and the playbar read and call, what the viewport draws a frame
  * from (`animationRuntime`), and `restore`, which the file's view calls once before the
  * first paint. A routine is never restored: every open starts at rest, and the speed and
- * loop it plays with are the tab's (the shell's Playback settings).
+ * loop it plays with are the tab's (the playbar's Playback settings, the shell's).
  *
  * @param {{ entry: object, fileKey: string, resources: object, meshData: object | null, meshPartial: boolean,
  *   readStored: () => { pose: object | null }, clipboard: object,

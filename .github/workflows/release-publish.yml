@@ -122,6 +122,18 @@ jobs:
             echo "Nothing to publish: version $current_version is not past $latest_tag."
           fi
 
+      # Only a deploy key may update the install branches (CONTRIBUTING.md, "Repository settings"),
+      # and they are pushed after the PyPI upload: a release without the key stops here, before it.
+      - name: Check the install branches' deploy key
+        if: steps.gate.outputs.should_publish == 'true' && steps.gate.outputs.is_main == 'true'
+        env:
+          INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}
+        run: |
+          if [ -z "$INSTALL_BRANCHES_KEY" ]; then
+            echo "::error::INSTALL_BRANCHES_KEY is not set, so the release could not push latest and claude-plugin."
+            exit 1
+          fi
+
       # The record a Test run made of exactly this tree with every job selected. Not finding
       # one -- or failing to look -- means the tests run below.
       - name: Find the run that tested this tree
@@ -357,14 +369,23 @@ jobs:
 
       - name: Commit the plugin onto latest and claude-plugin and push them
         env:
-          PUBLISH_PUSH_TOKEN: ${{ secrets.PUBLISH_PUSH_TOKEN }}
+          # Only a deploy key may update the install branches (CONTRIBUTING.md, "Repository settings"),
+          # so the release pushes them with its own, which the gate found.
+          INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}
           GH_TOKEN: ${{ github.token }}
           GIT_AUTHOR_NAME: github-actions[bot]
           GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          remote="https://x-access-token:${PUBLISH_PUSH_TOKEN:-$GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          key="$RUNNER_TEMP/install-branches-key"
+          (umask 077 && printf '%s\n' "$INSTALL_BRANCHES_KEY" > "$key")
+          # GitHub's SSH host keys, read over HTTPS, so the connection is checked against them.
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/meta |
+            python3 -c 'import json, sys; print("\n".join("github.com " + k for k in json.load(sys.stdin)["ssh_keys"]))' \
+            > "$RUNNER_TEMP/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts -o StrictHostKeyChecking=yes"
+          remote="git@github.com:${GITHUB_REPOSITORY}.git"
           tip() {
             git fetch --quiet "$remote" "+refs/heads/$1:refs/remotes/origin/$1" 2>/dev/null &&
               git rev-parse "refs/remotes/origin/$1"
@@ -416,16 +437,8 @@ jobs:
 
       - name: Configure tag push credentials
         env:
-          PUBLISH_PUSH_TOKEN: ${{ secrets.PUBLISH_PUSH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ -n "$PUBLISH_PUSH_TOKEN" ]; then
-            git remote set-url origin "https://x-access-token:${PUBLISH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-            echo "Using PUBLISH_PUSH_TOKEN for tag push."
-          else
-            git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-            echo "Using GITHUB_TOKEN for tag push."
-          fi
+        run: git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
       # The distribution this run built and uploaded to PyPI, fetched back from the
       # workflow artifact so the release page carries the same bytes -- not a
