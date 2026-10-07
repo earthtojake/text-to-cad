@@ -96,8 +96,8 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # older cadgen ignores an environment variable it does not know, never a flag
     # (`cadgen/_internal/channel.py`).
     "mcp": frozenset(),
-    # The person's analytics choice: status, on or off.
-    "analytics": frozenset({"action"}),
+    # The person's telemetry choice: status, on or off.
+    "telemetry": frozenset({"action"}),
 }
 
 # Commands not yet re-homed under the schema. This set only shrinks.

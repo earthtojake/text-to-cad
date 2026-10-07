@@ -122,7 +122,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from cadgen._internal.api import api_url
-from cadgen._internal.atomic_replace import temp_suffix
+from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
 from cadgen._internal.file_lock import exclusive
 from cadgen.settings import LOCK, read_section, settings_path, update_section
 
@@ -767,7 +767,7 @@ def _take_spool(path: Path) -> list[dict[str, Any]]:
     taken = path.with_name(f"{SPOOL}{temp_suffix()}")
     with exclusive(path.with_name(LOCK)):
         try:
-            os.replace(kept, taken)
+            replace_atomic(kept, taken)
         except FileNotFoundError:
             return []
     try:
