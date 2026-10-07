@@ -186,7 +186,9 @@ export default function PrivacyPolicyPage() {
             <code>telemetry</code> setting in cadgen’s settings file, through restarts and updates, and
             one choice counts for every part of cadgen; a no stays a no. If you turned analytics off in
             an earlier version of text-to-cad, telemetry stays off. Turning telemetry off also turns off
-            analytics in an earlier version still installed, and deletes what it sent.
+            analytics in an earlier version still installed, and deletes what it sent. A command run
+            without cadgen’s build daemon keeps its counts in a small file beside that setting until the
+            next part of cadgen sends them; turning telemetry off deletes that file too.
           </li>
           <li>
             To turn telemetry off, run <code>uvx cadgen telemetry off</code>, use{" "}

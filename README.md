@@ -296,7 +296,9 @@ comes from (worked out from its IP address, which it doesn't keep) and stores it
 paths, contents or prompts. The first `cadgen` command says so once, and sending starts then. Turn it off, which
 also deletes what was sent, with `uvx cadgen telemetry off`, **Share usage stats** in either app's menu (the logo at
 the top left, over any model), or by asking your agent. `DO_NOT_TRACK=1` or `CADGEN_TELEMETRY=0` keeps it off, and
-nothing is sent by default in CI or from a development install. Offline, nothing is sent and everything works. See
+nothing is sent by default in CI or from a development install. A command run without the build daemon keeps its
+counts in a small file in cadgen's state folder until the next of these sends them; turning telemetry off deletes it.
+Offline, nothing is sent and everything works. See
 the [privacy policy](https://www.texttocad.dev/privacy-policy).
 
 ### Windows 11: Smart App Control

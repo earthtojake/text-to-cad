@@ -38,6 +38,12 @@ exits, each batch stamped with the time it arrives:
   reports its own (``report``, ``collect_crashes``); a build worker's go to the daemon with its exit
   frame, a command's are handed to a running daemon, and a page's to the server that served it.
 
+A command sends nothing itself. What it counts -- a build it made with no daemon to ask, a snapshot, a
+drawing, a crash -- is handed to a running daemon (``cadgen.daemon.client.hand_over``), or, with none to
+take it (``CADGEN_DAEMON=0``, a platform without one, none running), kept beside the settings for the next
+process that sends (``spool``): only while sharing is on, under the answer in force, capped, and deleted by
+a no.
+
 Never a path or a file name of the person's, a model, an argument, a message, a prompt or anything
 typed. A batch with nothing in it is never sent: a process the host started and nobody used counts
 for nothing. The receiver (``cadgen/_internal/api.py``) is ours, so the service behind it can change
@@ -141,6 +147,11 @@ FLUSH_SECONDS = 300
 # shorter wait would give up on a batch a cold receiver was still storing, and send it twice.
 TIMEOUT_SECONDS = 10
 CLOSE_SECONDS = 2  # the most an exiting process waits for its last send
+# Where a command keeps what it counted when no daemon can take it (``spool``), beside the settings, and
+# the most it keeps there: past it, a command's counts are dropped until a sender takes the rest.
+SPOOL = "telemetry-spool.jsonl"
+SPOOL_BYTES = 256 * 1024
+HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take``)
 # The page's plumbing: a view's once-a-second sync, its viewer requests (the home's re-reads of its
 # library every couple of seconds among them) and its capture replies say nothing about use and would
 # drown what does. A view's own activity is noted from its sync (``viewed``) and as it adds the model
@@ -452,6 +463,7 @@ def choose(share: bool, *, by: str, path: Path | None = None,
     if share:
         return {"saved": True, "sharing": True}
     _stop_earlier(path, by)
+    _drop_spool(path)
     if forget is not None:
         forget_pending(path=path, forget=forget)
     return {"saved": True, "sharing": False, "forgotten": not _pending(_read(path) or {})}
@@ -720,6 +732,64 @@ def report(error: BaseException, where: str, *, tool: str | None = None, handled
         LOG.debug("could not report a crash", exc_info=True)
 
 
+def spool(counts: dict[str, Any], *, path: Path | None = None) -> bool:
+    """Keep a command's counts for the next process that sends (``Recorder.take``, by way of its flush):
+    what it would have handed a running daemon (``cadgen.daemon.client.hand_over``), when there is none --
+    ``CADGEN_DAEMON=0``, a platform without one, or none running. One line, under the answer in force
+    (``_answer``), and only while sharing is on: a sender takes a line only under that same answer, and a
+    no deletes them all (``choose``). Past ``SPOOL_BYTES`` nothing more is kept. Never raises."""
+    try:
+        if not isinstance(counts, dict) or not any(counts.get(name) for name in ("builds", "snapshots", "features", "crashes")):
+            return False  # nothing counted, nothing to keep
+        path = path or settings_path()
+        if not status(path=path, probe=False)["sharing"]:
+            return False
+        line = json.dumps({"answer": list(_answer(_read(path) or {})), "counts": counts}, separators=(",", ":"))
+        kept = path.with_name(SPOOL)
+        with exclusive(path.with_name(LOCK)):
+            size = kept.stat().st_size if kept.exists() else 0
+            if size + len(line) + 1 > SPOOL_BYTES:
+                return False
+            with open(kept, "a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+        return True
+    except Exception:  # noqa: BLE001 - a count kept or not never fails the command that made it
+        LOG.debug("could not keep a command's counts", exc_info=True)
+        return False
+
+
+def _take_spool(path: Path) -> list[dict[str, Any]]:
+    """What commands kept (``spool``), taken whole by one process: moved aside under the settings lock,
+    so no line is taken twice or lost to a command appending meanwhile."""
+    kept = path.with_name(SPOOL)
+    if not kept.exists():
+        return []
+    taken = path.with_name(f"{SPOOL}{temp_suffix()}")
+    with exclusive(path.with_name(LOCK)):
+        try:
+            os.replace(kept, taken)
+        except FileNotFoundError:
+            return []
+    try:
+        lines = taken.read_text(encoding="utf-8").splitlines()
+    finally:
+        with contextlib.suppress(OSError):
+            taken.unlink()
+    found = []
+    for line in lines:
+        with contextlib.suppress(ValueError):
+            entry = json.loads(line)
+            if isinstance(entry, dict) and isinstance(entry.get("counts"), dict):
+                found.append(entry)
+    return found
+
+
+def _drop_spool(path: Path) -> None:
+    """A no: what commands kept for sending is deleted, not left to be dropped later."""
+    with contextlib.suppress(OSError), exclusive(path.with_name(LOCK)):
+        path.with_name(SPOOL).unlink(missing_ok=True)
+
+
 def _guarded(default: Callable[[], Any]):
     """Never raise into the process that counts: a failure is a debug line and ``default()``."""
     def decorate(method):
@@ -948,6 +1018,43 @@ class Recorder:
         if name in HEALTH and isinstance(count, int) and count > 0:
             self._note("health", (), {name: count})
 
+    @_guarded(lambda: None)
+    def take(self, counts: Any) -> None:
+        """A command's counts, handed to this process (``cadgen.daemon.client.hand_over``) or kept for the
+        next one that sends (``spool``): the builds it made itself, the snapshots it rendered, the features it
+        used and its crashes. Anything else in it, or past ``HANDED`` of any, is not counted."""
+        if not isinstance(counts, dict):
+            return
+
+        def each(name: str) -> list[Any]:
+            found = counts.get(name)
+            return found[:HANDED] if isinstance(found, list) else []
+
+        for build in each("builds"):
+            if isinstance(build, dict):
+                self.built(build.get("kind"), build.get("via"), build.get("outcome"), build.get("seconds"),
+                           cached=build.get("cached") is True)
+        for snapshot in each("snapshots"):
+            if isinstance(snapshot, dict) and isinstance(snapshot.get("ok"), bool):
+                self.rendered(snapshot.get("format"), snapshot["ok"], snapshot.get("seconds"))
+        for feature in each("features"):
+            self.used(feature)
+        for crash in each("crashes"):
+            self.crashed(crash)  # checked there: a command is another process
+
+    @_guarded(lambda: None)
+    def _drain(self) -> None:
+        """Take what commands kept for a sender (``spool``): only what they counted under the answer in force
+        now -- the rest was noted under another, and is dropped as this process's own would be."""
+        settings = self.path or settings_path()
+        kept = _take_spool(settings)
+        if not kept:
+            return
+        answer = list(_answer(_read(settings) or {}))
+        for entry in kept:
+            if entry.get("answer") == answer:
+                self.take(entry["counts"])
+
     @_guarded(lambda: False)
     def flush(self) -> bool:
         """Send what was used since the last batch, if sharing is on; drop it if not. A deletion still owed
@@ -955,6 +1062,7 @@ class Recorder:
         background sender and ``close`` call it."""
         if self._collect is not None:
             self._collect(self)
+        self._drain()
         settings = self.path or settings_path()
         forget_pending(path=settings)
         with self._lock:

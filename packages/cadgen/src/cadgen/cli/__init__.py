@@ -334,5 +334,22 @@ def _run(command: str, module_name: str, rest: list[str]) -> int:
     import inspect  # only the dispatcher needs it; `--help` and the daemon handoff do not.
 
     if "prog" in inspect.signature(module.main).parameters:
-        return int(module.main(rest, prog=f"cadgen {command}") or 0)
-    return int(module.main(rest) or 0)
+        def run() -> int:
+            return int(module.main(rest, prog=f"cadgen {command}") or 0)
+    else:
+        def run() -> int:
+            return int(module.main(rest) or 0)
+    kind = None if daemon_tool is None or "-h" in rest or "--help" in rest else _build_kind(daemon_tool)
+    if kind is None:
+        return run()
+    from cadgen.daemon import telemetry
+
+    return telemetry.cold_build(kind, "command", run)  # no daemon answered it: counted here
+
+
+def _build_kind(tool: str) -> str | None:
+    try:
+        from cadgen.daemon.telemetry import command_kind
+    except Exception:  # noqa: BLE001 - counting never stops a command
+        return None
+    return command_kind(tool)

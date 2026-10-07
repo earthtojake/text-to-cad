@@ -13,6 +13,10 @@ command. What a build asks for in turn (a child's build, a document's compile) i
 and what the CAD Viewer asks for (an artifact) is a view's, so neither is a build of its own. A client
 whose environment turns telemetry off (``analytics.refused``) has nothing it asks for counted.
 
+A build no daemon answers -- ``CADGEN_DAEMON=0``, a platform without one, or one that declined -- is made
+in the process that asked, and counted there the same way (``cold_build``): handed to a running daemon
+like a command's counts, or kept for the next process that sends (``analytics.spool``).
+
 Nothing here is waited on by a build or raises into one: every call is guarded, and the recorder
 notes in memory and sends from its own thread.
 """
@@ -21,6 +25,8 @@ from __future__ import annotations
 
 import functools
 import logging
+import os
+import time
 from typing import Any, Callable
 
 LOG = logging.getLogger("cadgen.analytics")
@@ -32,7 +38,7 @@ _MESHES = (".stl", ".3mf", ".glb")
 # What the pool counts from its start (``Pool.snapshot``), by the name a batch gives it. Its own count of
 # crashes takes in workers killed because their client left, so crashes are counted here (``Build.finish``).
 _POOL = {"workers": "imports", "recycles": "recycles", "refusals": "memoryRefusals"}
-_MOST = 16  # the most snapshots, and features, one hand-over counts
+_MOST = 16  # the most crashes one job's exit frame carries
 
 
 def _quiet(method):
@@ -110,7 +116,19 @@ _JOB: dict[str, Any] | None = None
 
 def job_started() -> None:
     global _JOB
-    _JOB = {"built": False, "reused": False, "crashes": []}
+    _JOB = {"built": False, "reused": False, "crashes": [], "children": False}
+
+
+def building() -> bool:
+    """Whether a build's job runs in this process now: a worker's, or one made here (``cold_build``)."""
+    return _JOB is not None
+
+
+def job_child() -> None:
+    """The job's model called another: an assembly. Called wherever a model composes a child; it counts
+    only for a build made in this process (``cold_build``) -- the daemon sees a worker's in its events."""
+    if _JOB is not None:
+        _JOB["children"] = True
 
 
 def job_reused(reused: bool) -> None:
@@ -208,16 +226,59 @@ def build(request: dict[str, Any], job: dict[str, Any]) -> Build | None:
 
 @_quiet
 def counted(message: dict[str, Any]) -> None:
-    """A command's counts, handed over (``cadgen.daemon.client.hand_over``): snapshots rendered, the
-    features used, and its crashes. Anything else in it, or past ``_MOST`` of any, is not counted."""
-    recorder = _RECORDER
-    if recorder is None:
+    """A command's counts, handed over (``cadgen.daemon.client.hand_over``): builds it made itself,
+    snapshots rendered, the features used, and its crashes (``analytics.Recorder.take``)."""
+    if _RECORDER is not None:
+        _RECORDER.take(message)
+
+
+def command_kind(tool: str) -> str | None:
+    """The format a daemon tool builds (``cadgen.cli``), or ``None`` for a tool that is not a build."""
+    return _COMMANDS.get(tool)
+
+
+def cold_build(kind: str, via: str, run: Callable[[], int], *, meshes: bool = False) -> int:
+    """Run ``run``, a build this process makes itself with no daemon to answer it, and count it as the
+    daemon counts the builds it answers (``Build.finish``): how it ended, how long it took, whether what it
+    made was the store's already, and the features it used. What ``run`` returns or raises is the caller's,
+    untouched. Not counted in a daemon worker (the daemon counts its jobs), inside another build made here,
+    or where the environment turned telemetry off."""
+    if os.environ.get("CADGEN_DAEMON_CHILD") or _JOB is not None or _refused():
+        return run()
+    job_started()
+    started, outcome = time.perf_counter(), "failed"
+    try:
+        code = run()
+        outcome = "ok" if code == 0 else "failed"
+        return code
+    except KeyboardInterrupt:
+        outcome = "cancelled"
+        raise
+    except SystemExit as stop:
+        outcome = "ok" if stop.code in (0, None) else "failed"
+        raise
+    finally:
+        _hand_cold(kind, via, outcome, time.perf_counter() - started, meshes)
+
+
+def _refused() -> bool:
+    try:
+        from cadgen.analytics import refused
+
+        return refused()
+    except Exception:  # noqa: BLE001 - an environment that cannot be read is no yes
+        return True
+
+
+@_quiet
+def _hand_cold(kind: str, via: str, outcome: str, seconds: float, meshes: bool) -> None:
+    global _JOB
+    job, _JOB = _JOB, None
+    if job is None:
         return
-    snapshots, features, crashes = message.get("snapshots"), message.get("features"), message.get("crashes")
-    for snapshot in snapshots[:_MOST] if isinstance(snapshots, list) else ():
-        if isinstance(snapshot, dict) and isinstance(snapshot.get("ok"), bool):
-            recorder.rendered(snapshot.get("format"), snapshot["ok"], snapshot.get("seconds"))
-    for feature in features[:_MOST] if isinstance(features, list) else ():
-        recorder.used(feature)
-    for crash in crashes[:_MOST] if isinstance(crashes, list) else ():
-        recorder.crashed(crash)  # checked there: a command is another process
+    cached = outcome == "ok" and job["reused"] and not job["built"]
+    features = [name for name, used in (("assembly", job["children"]), ("declared_mesh", meshes)) if used]
+    from cadgen.daemon.client import hand_over
+
+    hand_over({"builds": [{"kind": kind, "via": via, "outcome": outcome, "seconds": round(seconds, 3), "cached": cached}],
+               **({"features": features} if features else {})})

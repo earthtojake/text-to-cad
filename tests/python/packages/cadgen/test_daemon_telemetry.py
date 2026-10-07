@@ -187,6 +187,78 @@ class DaemonTelemetryTest(unittest.TestCase):
                 client.hand_over({"snapshots": []})
             connect.assert_not_called()
 
+    def test_with_no_daemon_a_commands_counts_wait_for_the_next_process_that_sends(self) -> None:
+        settings, kept = self.tmp / "settings.json", self.tmp / analytics.SPOOL
+        counts = {"snapshots": [{"format": "step", "ok": True, "seconds": 1.5}], "features": ["drawing"]}
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON": "0"}), mock.patch.object(client, "_connect") as connect:
+            client.hand_over(counts)  # the daemon turned off: never asked
+        connect.assert_not_called()
+        with mock.patch.object(client, "daemon_supported", return_value=True), \
+                mock.patch.object(client, "_connect", side_effect=ConnectionRefusedError):
+            client.hand_over({"features": ["kinematics"]})  # none running
+            client.hand_over({"snapshots": []})  # nothing counted: nothing kept
+        self.assertEqual(len(kept.read_text(encoding="utf-8").splitlines()), 2)
+        # Any process that sends takes them all, once, and the file with them.
+        self.assertEqual(self.events(), [
+            {"name": "feature", "feature": "drawing", "count": 1},
+            {"name": "feature", "feature": "kinematics", "count": 1},
+            {"name": "snapshot", "kind": "step", "count": 1, "failed": 0, "seconds": 1.5},
+        ])
+        self.assertFalse(kept.exists())
+        # What was kept under another answer is dropped there, and a no deletes what is kept at once.
+        self.assertTrue(analytics.spool(counts, path=settings))
+        with mock.patch("cadgen.analytics.time.time", return_value=time.time() + 60):
+            analytics.choose(True, by="cli", path=settings)  # a later yes: another answer
+        self.assertFalse(self.recorder.flush())
+        self.assertTrue(analytics.spool(counts, path=settings))
+        analytics.choose(False, by="cli", path=settings, forget=lambda id: True)
+        self.assertFalse(kept.exists())
+        self.assertFalse(analytics.spool(counts, path=settings), "nothing is kept while sharing is off")
+        # Past its size, nothing more is kept.
+        analytics.choose(True, by="cli", path=settings)
+        with mock.patch.object(analytics, "SPOOL_BYTES", 200):
+            self.assertTrue(analytics.spool(counts, path=settings))
+            self.assertFalse(analytics.spool(counts, path=settings))
+
+    def test_a_build_no_daemon_answered_is_counted_where_it_ran(self) -> None:
+        handed: list[dict] = []
+        with mock.patch.object(client, "hand_over", side_effect=handed.append):
+            def assembly() -> int:
+                telemetry.job_child()
+                telemetry.job_reused(False)
+                # A build inside it is its own work, not another build.
+                self.assertEqual(telemetry.cold_build("step", "script", lambda: 0), 0)
+                return 0
+
+            def current() -> int:
+                telemetry.job_reused(True)
+                return 0
+
+            def interrupted() -> int:
+                raise KeyboardInterrupt
+
+            self.assertEqual(telemetry.cold_build("step", "script", assembly, meshes=True), 0)
+            self.assertEqual(telemetry.cold_build("stl", "command", current), 0)
+            self.assertEqual(telemetry.cold_build("dxf", "script", lambda: 1), 1)
+            with self.assertRaises(KeyboardInterrupt):
+                telemetry.cold_build("step", "script", interrupted)
+            with mock.patch.dict(os.environ, {"CADGEN_DAEMON_CHILD": "1"}):
+                telemetry.cold_build("step", "script", lambda: 0)  # a daemon worker's job: the daemon counts it
+            with mock.patch.dict(os.environ, {"DO_NOT_TRACK": "1"}):
+                telemetry.cold_build("step", "script", lambda: 0)
+        self.assertFalse(telemetry.building())
+        self.assertEqual([(build["kind"], build["via"], build["outcome"], build["cached"])
+                          for counts in handed for build in counts["builds"]],
+                         [("step", "script", "ok", False), ("stl", "command", "ok", True), ("dxf", "script", "failed", False),
+                          ("step", "script", "cancelled", False)])
+        self.assertEqual(handed[0]["features"], ["assembly", "declared_mesh"])
+        for counts in handed:
+            telemetry.counted(counts)  # what a running daemon, or the next sender, does with them
+        builds = [event for event in self.events() if event["name"] == "build"]
+        self.assertEqual([(event["kind"], event["via"], event["count"], event["failed"], event["cancelled"], event["cached"])
+                          for event in builds],
+                         [("dxf", "script", 1, 1, 0, 0), ("step", "script", 2, 0, 1, 0), ("stl", "command", 1, 0, 0, 1)])
+
     def test_a_snapshot_counts_each_documents_format_and_the_features_it_used(self) -> None:
         handed: list[dict] = []
         options = SnapshotOptions(input="/w/arm.step", output="/w/arm.png", joint_values_specified=True)

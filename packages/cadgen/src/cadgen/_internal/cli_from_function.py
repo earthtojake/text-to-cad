@@ -438,9 +438,10 @@ def report_failure(
 def _report_crash(exc: BaseException) -> None:
     try:
         from cadgen import analytics
+        from cadgen.daemon import telemetry
 
-        worker = bool(os.environ.get("CADGEN_DAEMON_CHILD"))
-        analytics.report(exc, "build" if worker else "command", bugs_only=True)
+        building = bool(os.environ.get("CADGEN_DAEMON_CHILD")) or telemetry.building()
+        analytics.report(exc, "build" if building else "command", bugs_only=True)
     except Exception:  # noqa: BLE001 - a crash report never fails a command's own report
         pass
 

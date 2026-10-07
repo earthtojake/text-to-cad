@@ -827,8 +827,10 @@ def _compose_child(defn: ModelDef) -> Any:
             f"{defn.script_path.name}::{defn.name} is called while it is itself being built: "
             "a model may not depend on itself"
         )
+    from cadgen.daemon import telemetry
     from cadgen.daemon.executors import emit_event, model_event, submit
 
+    telemetry.job_child()  # an assembly, for a build this process counts itself (``cold_build``)
     parent = frame.model if frame is not None else None
     job = None
     tree: str | None = frame.pins.get(child) if frame is not None else None
@@ -907,8 +909,14 @@ def _build(defn: ModelDef) -> int:
         # (cadgen._internal.dxf_emit), so a cold run needs no interpreter restart and
         # @dxf reaches the pipeline by exactly the route @step does.
         from cadgen.cli._run_model import run_model_argv
+        from cadgen.daemon import telemetry
 
-        return run_model_argv([*target, *argv], prog=f"python {defn.script_path.name}")
+        # Counted here as the daemon counts the builds it answers: no daemon answered this one.
+        return telemetry.cold_build(
+            "dxf" if defn.fmt == "dxf" else "step", "script",
+            lambda: run_model_argv([*target, *argv], prog=f"python {defn.script_path.name}"),
+            meshes=bool(defn.mesh_exports),
+        )
 
 
 def _built_geometry(defn: ModelDef, *, tree: str | None) -> Any:

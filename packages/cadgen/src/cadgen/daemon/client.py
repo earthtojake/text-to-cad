@@ -798,27 +798,34 @@ HAND_OVER_SECONDS = 0.5
 def hand_over(counts: dict) -> None:
     """Hand a command's counts to the running daemon, which sends them with its own telemetry
     (``cadgen.daemon.telemetry.counted``): a command sends nothing itself. Like ``status`` it
-    never starts a daemon: with none running, or none answering within ``HAND_OVER_SECONDS``,
-    the counts are dropped and the command goes on. Never raises."""
-    if os.environ.get("CADGEN_DAEMON") == "0" or not daemon_supported():
-        return
+    never starts a daemon: with none to take them -- ``CADGEN_DAEMON=0``, a platform without one,
+    or none running -- they are kept for the next process that sends (``analytics.spool``). One
+    that does not answer within ``HAND_OVER_SECONDS``, or is gone mid-send, may have taken them,
+    so they are not kept twice. The command goes on either way. Never raises."""
     try:
-        from cadgen.analytics import refused
+        from cadgen.analytics import refused, spool
 
         if refused():
             return
     except Exception:  # noqa: BLE001 - telemetry never fails the command it counts
         return
+    if os.environ.get("CADGEN_DAEMON") == "0" or not daemon_supported():
+        spool(counts)
+        return
 
     def send() -> None:
         try:
             channel = _connect(daemon_address())
-            try:
-                _send_json(channel, {"kind": "count", **counts})
-            finally:
-                channel.close()
-        except Exception:  # noqa: BLE001 - no daemon, one that takes no key, or one gone mid-send: not counted
+        except Exception:  # noqa: BLE001 - none running, or one that takes no key: kept for the next sender
+            spool(counts)
+            return
+        try:
+            _send_json(channel, {"kind": "count", **counts})
+        except Exception:  # noqa: BLE001 - one gone mid-send may have read them: not kept again
             pass
+        finally:
+            with contextlib.suppress(Exception):
+                channel.close()
 
     thread = threading.Thread(target=send, name="cadgen-hand-over", daemon=True)
     thread.start()
