@@ -69,6 +69,9 @@ _TIMED_OUT = object()
 # idle housekeeping holds the client's store to (STORE.md §8). CADGEN_VERIFY_READBACK
 # is one build's request (STORE.md §10): a daemon started with it verified every
 # later build, and one started without it skipped the check a maintainer asked for.
+# The telemetry switches (``cadgen.analytics.ENVIRONMENT``) are the client's too: a
+# client whose environment turns telemetry off has none of its builds counted, whatever
+# the environment of the build that started the daemon said (``cadgen.daemon.telemetry``).
 FORWARDED_ENV_VARS = (
     "CADGEN_CACHE_DIR",
     "XDG_CACHE_HOME",
@@ -77,6 +80,9 @@ FORWARDED_ENV_VARS = (
     "CADGEN_FFMPEG",
     "CADGEN_STORE_MAX",
     "CADGEN_VERIFY_READBACK",
+    "DO_NOT_TRACK",
+    "CADGEN_TELEMETRY",
+    "CADGEN_ANALYTICS",
 )
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than
@@ -783,6 +789,40 @@ def prewarm() -> bool:
         if answer is not _RESTART:
             return answer is not None
     return False
+
+
+# The most a command waits to hand its counts over (``hand_over``): past it, they are not counted.
+HAND_OVER_SECONDS = 0.5
+
+
+def hand_over(counts: dict) -> None:
+    """Hand a command's counts to the running daemon, which sends them with its own telemetry
+    (``cadgen.daemon.telemetry.counted``): a command sends nothing itself. Like ``status`` it
+    never starts a daemon: with none running, or none answering within ``HAND_OVER_SECONDS``,
+    the counts are dropped and the command goes on. Never raises."""
+    if os.environ.get("CADGEN_DAEMON") == "0" or not daemon_supported():
+        return
+    try:
+        from cadgen.analytics import refused
+
+        if refused():
+            return
+    except Exception:  # noqa: BLE001 - telemetry never fails the command it counts
+        return
+
+    def send() -> None:
+        try:
+            channel = _connect(daemon_address())
+            try:
+                _send_json(channel, {"kind": "count", **counts})
+            finally:
+                channel.close()
+        except Exception:  # noqa: BLE001 - no daemon, one that takes no key, or one gone mid-send: not counted
+            pass
+
+    thread = threading.Thread(target=send, name="cadgen-hand-over", daemon=True)
+    thread.start()
+    thread.join(HAND_OVER_SECONDS)
 
 
 def status() -> dict | None:

@@ -41,7 +41,7 @@ import threading
 import time
 import traceback
 
-from cadgen.daemon import transport
+from cadgen.daemon import telemetry, transport
 from cadgen.daemon.housekeeping import Housekeeper
 from cadgen.daemon.jobs import JobLedger, failure_message
 from cadgen.daemon.client import (
@@ -157,6 +157,7 @@ def _watch_client(
     preserve_work=None,
     *,
     finishes_alone: bool = False,
+    left: threading.Event | None = None,
 ) -> None:
     """Kill the WORKER when the requesting client vanishes mid-job.
 
@@ -171,6 +172,8 @@ def _watch_client(
     A job that ``finishes_alone`` (an artifact job, ``_handle_request``) is never killed
     for its client: the worker stops it before its next derivation unless an identical
     request has attached, and stays warm.
+
+    ``left`` is set before a kill: the job was stopped, not lost to a crash.
     """
     while not done.wait(CLIENT_LIVENESS_INTERVAL_SECONDS):
         try:
@@ -187,10 +190,14 @@ def _watch_client(
                 while not done.wait(CLIENT_LIVENESS_INTERVAL_SECONDS):
                     if not preserve_work():
                         _log(f"{tool}: last coalesced consumer disconnected; killing worker {worker.pid}")
+                        if left is not None:
+                            left.set()
                         worker.kill()
                         return
                 return
             _log(f"{tool}: client disconnected mid-request; killing worker {worker.pid}")
+            if left is not None:
+                left.set()
             worker.kill()
             return
 
@@ -399,6 +406,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             return
         if not is_artifact:
             _JOBS.accept_editing_producer(job)
+    build = None if is_artifact else telemetry.build(request, job)  # counted as it ends, if it is one
 
     def starting_worker() -> None:
         # No warm worker could take the job and one is starting for it: a wait that
@@ -412,6 +420,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # retry here would bypass the daemon's aggregate admission policy.
         _JOBS.waiting(job, None)
         _log(f"{tool}: could not start a worker: {exc}")
+        if isinstance(exc, pool_mod.WorkerGone):
+            telemetry.crashed()
         _JOBS.finish(job, 1, error=str(exc))
         if inflight is not None:
             _BROKER.finish_entry(inflight, 1)
@@ -426,6 +436,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     # reason the ledger records, so a reader (the CAD Viewer) can say why.
     stderr_tail: collections.deque[str] = collections.deque(maxlen=80)
     watchdog_done = threading.Event()
+    left = threading.Event()  # the watchdog stopped the job: its client had left
+    ended = None  # how a job ended that its exit code cannot say: crashed, or cancelled
     def preserve_coalesced_work() -> bool:
         return bool(inflight is not None and _BROKER.abandon(inflight))
 
@@ -444,7 +456,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     watchdog = threading.Thread(
         target=_watch_client,
         args=(conn, send_lock, watchdog_done, tool, worker, preserve_coalesced_work),
-        kwargs={"finishes_alone": finishes_alone},
+        kwargs={"finishes_alone": finishes_alone, "left": left},
         daemon=True,
     )
     watchdog.start()
@@ -511,6 +523,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             event = frame.get("event")
             if inflight is not None and isinstance(event, dict) and event.get("job") == job["id"]:
                 _BROKER.publish_result(inflight, event)
+            if build is not None:
+                build.observe(event)
             if relay_connected:
                 try:
                     with send_lock:
@@ -526,6 +540,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # evidence. Note the log line too -- `cadgen daemon status` cannot show a
         # worker that is gone.
         healthy = False
+        ended = "cancelled" if left.is_set() else "crashed"
         _log(f"{tool}: worker {worker.pid} died mid-job: {exc}")
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"workerDied": {"pid": worker.pid, "detail": str(exc),
@@ -539,6 +554,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             _log(f"{tool}: client disconnected mid-request; killing worker {worker.pid}")
             worker.kill()
         healthy = False
+        ended = "cancelled"
     finally:
         watchdog_done.set()
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)
@@ -553,6 +569,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             _BROKER.finish_entry(inflight, exit_code)
 
     _REQUESTS_SERVED[0] += 1
+    if build is not None:
+        build.finish(exit_code, ended, time.perf_counter() - started)
     _log(f"{tool} {argv!r} -> exit {exit_code} in {time.perf_counter() - started:.2f}s "
          f"(worker {worker.pid}{' extra' if worker.extra else ''})")
     with contextlib.suppress(OSError), send_lock:
@@ -677,6 +695,8 @@ def serve() -> int:
     # The spares import build123d now, in the background, so the first requests find a
     # warm worker rather than paying the import on their own clock.
     _POOL.ensure_spares()
+    # Read as each batch is made, inside the recorder's guard: nothing telemetry touches can stop the serving.
+    telemetry.start(lambda: _POOL.snapshot())
 
     # accept() cannot take a timeout the way a socket could, so idleness is watched from
     # the side: the watchdog closes the listener, which makes the pending accept return.
@@ -715,10 +735,17 @@ def serve() -> int:
                 elif state["draining"]:
                     _log("version token changed; exiting")
                 return 0
-            state["last_activity"] = time.monotonic()
+            previous, state["last_activity"] = state["last_activity"], time.monotonic()
             try:
                 request = _read_request(conn)
                 if request is None:
+                    continue
+                if request.get("kind") == "count":
+                    # A command's counts (client.hand_over): noted here, never answered, and
+                    # before the token check, as status is. Not a use of the daemon either:
+                    # a count keeps no daemon alive.
+                    state["last_activity"] = previous
+                    telemetry.counted(request)
                     continue
                 if request.get("kind") == "status":
                     # Answered BEFORE the token check: asking what is warm must never
@@ -784,6 +811,7 @@ def serve() -> int:
         return 0
     finally:
         _release_address()
+        telemetry.close()  # its last batch: a moment at most, after the address is free for a successor
         _HOUSEKEEPER.stop()
         _POOL.shutdown()
 

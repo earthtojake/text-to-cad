@@ -477,7 +477,7 @@
     "openWorldHint": true,
     "readOnlyHint": false
    },
-   "description": "Report whether cadgen sends usage stats (by default, counts of tool calls and view activity tagged with a random ID; with the user's yes, distinct files as one-way codes; never file names, paths, contents or prompts), or turn them off. Call with action off only when the user asks.",
+   "description": "Report whether cadgen sends usage stats (counts of tool calls, view activity, files shown, builds and snapshots, tagged with a random ID; never file names, paths, contents or prompts), or turn them off. Call with action off only when the user asks.",
    "icons": [
     {
      "mimeType": "image/svg+xml",

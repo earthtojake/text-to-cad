@@ -55,14 +55,16 @@ class DoctorTests(unittest.TestCase):
         state = TemporaryDirectory()
         self.addCleanup(state.cleanup)
         self.state = Path(state.name)
-        environment = mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": state.name, "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "", "CADGEN_ANALYTICS": ""})
+        # A plugin's install outside CI, where telemetry's default holds.
+        environment = mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": state.name, "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "",
+                                                     "CADGEN_ANALYTICS": "", "CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""})
         environment.start()
         self.addCleanup(environment.stop)
 
     def test_the_report_says_what_cads_apps_share(self) -> None:
         with TemporaryDirectory() as tmp:
             _, out, _ = _run([tmp])
-        self.assertIn("sharing  off: no cadgen command has said so yet", out)
+        self.assertIn("sharing  off: not until a cadgen command says so", out)
         # Told, and nothing chosen: on by default, from the day it was said.
         (self.state / "settings.json").write_text('{"telemetry": {"notifiedAt": 1790000000, "notice": 1}}', encoding="utf-8")
         with TemporaryDirectory() as tmp:

@@ -305,7 +305,8 @@ them off or on, and the answer is kept in the user's state directory, so one ans
 both apps. The page reads and answers it through the CAD client (`consent`, `/__cad/analytics`),
 and reports a person touching the page (at most every 2 s) to `/__cad/analytics/activity`; a
 file shown is counted as it joins the library (`/__cad/recents`). The server holds those as
-counts and a code per file, in memory, and sends the codes only with the person's yes.
+counts in memory -- a file once a day, by its format, never its name -- and sends them every few
+minutes.
 
 The app menu's **Quick edit** (on until the person turns it off) is read and changed
 the same way: the client's `features`, through `/__cad/features` (`cadgen/features.py`).

@@ -1,11 +1,11 @@
-"""``cadgen telemetry`` -- show or change the usage stats CAD's apps (``cadgen mcp`` and ``cadgen viewer``)
-send.
+"""``cadgen telemetry`` -- show or change the usage stats cadgen sends: from CAD's apps (``cadgen mcp`` and
+``cadgen viewer``) and its build daemon.
 
-By default they send counts, never file codes, once a ``cadgen`` command has said so (``cadgen/analytics.py``).
-``status`` (the default) says what is sent and why, and says that notice itself if no command has yet;
-``on`` and ``off`` keep the person's choice in the state directory, which every agent app's CAD server
-reads: ``on`` adds a one-way code of each distinct file shown, ``off`` sends nothing.
-``DO_NOT_TRACK=1`` or ``CADGEN_TELEMETRY=0`` in an app's environment still turns it off there.
+They are sent by default once a ``cadgen`` command has said so (``cadgen/analytics.py``). ``status`` (the
+default) says what is sent and why, and says that notice itself if no command has yet; ``on`` and ``off``
+keep the person's choice in the state directory, which every cadgen process reads: ``on`` sends what the
+default does, as the person's own answer, and ``off`` sends nothing. ``DO_NOT_TRACK=1`` or
+``CADGEN_TELEMETRY=0`` in an app's environment still turns it off there.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ _REASONS = {
     "environment": "set by DO_NOT_TRACK or CADGEN_TELEMETRY in this environment",
     "choice": "your choice",
     "default": "by default, since cadgen said so{when}",
-    "untold": "no cadgen command has said so yet (none does in CI or from a development install)",
+    "untold": "not until a cadgen command says so, which none does in CI or from a development install",
     "unavailable": "the telemetry setting could not be read",
 }
 
@@ -41,10 +41,11 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog,
         description=(
-            "Show or change the usage stats CAD's apps (the CAD app in an agent app, and the CAD Viewer) send. "
-            "By default, once a cadgen command has said so: a random install id, versions, the OS and agent app, "
-            "and counts of CAD tool calls and view activity. `on` adds a one-way code and the format of each "
-            "distinct file shown; `off` sends nothing. Never file names, paths, contents or prompts."
+            "Show or change the usage stats cadgen sends from CAD's apps (the CAD app in an agent app, and the CAD "
+            "Viewer) and its build daemon. By default, once a cadgen command has said so: a random install id, "
+            "versions, the OS and agent app, and counts of CAD tool calls, view activity, files shown by format, "
+            "builds and snapshots, how they ended and how long they took. `off` sends nothing. Never file names, "
+            "paths, contents or prompts."
         ),
     )
     parser.add_argument("action", nargs="?", choices=("status", "on", "off"), default="status")
@@ -73,8 +74,8 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     if args.action != "off":
         print(f"Telemetry is {describe(found)}.")
         if found["reason"] == "default":
-            print("By default it counts CAD's tool calls and view activity, never files: `cadgen telemetry on` "
-                  "adds a one-way code of each file shown, `cadgen telemetry off` turns it off.")
+            print("It counts CAD's tool calls, views, files shown, builds and snapshots -- never what they hold: "
+                  "`cadgen telemetry off` turns it off.")
         if found["id"]:
             print(f"Install id: {found['id']}")
     if found["reason"] == "environment" and args.action in ("on", "off"):

@@ -1,6 +1,6 @@
 """cadgen's telemetry, CAD's usage stats: who decides whether they are sent -- by default once a ``cadgen`` command has
 said so, never after a no -- and that they carry counts, times and metadata -- how many people, how often,
-on how many files -- and nothing else."""
+on how many files -- and nothing else. The build daemon's counts are ``test_daemon_telemetry.py``'s."""
 
 from __future__ import annotations
 
@@ -17,17 +17,18 @@ from pathlib import Path
 from unittest import mock
 
 from cadgen import cli
-from cadgen.analytics import (CLOSE_SECONDS, FILES_PER_BATCH, NOTICE_ENV, NOTICE_TEXT, PRIVACY_URL, Recorder, _post, choose,
-                              file_code, file_salt, forget_pending, notify, status)
+from cadgen.analytics import (CLOSE_SECONDS, NOTICE_ENV, NOTICE_TEXT, PRIVACY_URL, Recorder, _post, choose, forget_pending,
+                              notify, status)
 from cadgen.cli import telemetry as telemetry_cli
 from cadgen.mcp.protocol import RequestContext, RpcError
 from cadgen.mcp.server import Server
 from cadgen.mcp.ui import AppPage
 from cadgen.viewer.recents import RecentStore
 
-QUIET = {"DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "", "CADGEN_ANALYTICS": "", NOTICE_ENV: ""}
-# Where the notice is said: an install a plugin made (a checkout is a development install, never told), outside CI.
+# Where the notice is said, and the default holds: an install a plugin made (a checkout is a development install,
+# never told and sending nothing by default), outside CI. Every test runs there unless it says otherwise.
 TOLD = {"CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""}
+QUIET = {"DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "", "CADGEN_ANALYTICS": "", NOTICE_ENV: "", **TOLD}
 
 
 class _Tmp(unittest.TestCase):
@@ -83,13 +84,19 @@ class ConsentTest(_Tmp):
         agreed = status(path=self.path)
         self.assertEqual((agreed["sharing"], agreed["reason"]), (True, "choice"))
         self.assertEqual(status(path=self.path)["id"], agreed["id"])  # one id, kept
-        # A file salt comes with the id, and goes with it: a new install's codes match nothing of the old one's.
-        salt = file_salt(self.path)
-        self.assertEqual(len(salt), 32)
-        choose(False, by="app", path=self.path)
-        self.assertIsNone(file_salt(self.path))
-        choose(True, by="app", path=self.path)
-        self.assertNotEqual(file_code(file_salt(self.path), "/work/bracket.step"), file_code(salt, "/work/bracket.step"))
+        self.assertEqual(set(json.loads(self.path.read_text(encoding="utf-8"))["telemetry"]),
+                         {"choice", "disclosure", "by", "decidedAt", "id"}, "the id, and nothing kept beside it")
+
+    def test_ci_and_a_development_install_send_nothing_by_default_even_where_the_person_was_told(self) -> None:
+        self.assertTrue(notify(io.StringIO(), path=self.path))  # told, by a plugin's command
+        self.assertEqual(status(path=self.path)["reason"], "default")
+        for name, value in (("CI", "true"), ("CADGEN_INSTALL_CHANNEL", "dev")):
+            with self.subTest(name=name), mock.patch.dict("os.environ", {name: value}):
+                self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
+                choose(True, by="cli", path=self.path)  # a yes holds anywhere
+                self.assertTrue(status(path=self.path)["sharing"])
+                choose(False, by="cli", path=self.path, forget=lambda id: True)
+                self.path.write_text(json.dumps({"telemetry": {"notifiedAt": time.time(), "notice": 1}}), encoding="utf-8")
 
     def test_off_forgets_the_id_and_the_environment_beats_the_choice(self) -> None:
         forgotten = []
@@ -137,16 +144,14 @@ class NoMeansNoTest(_Tmp):
             self.assertEqual(status(path=self.path), no)
         with mock.patch("cadgen.analytics.DISCLOSURE", 99), mock.patch("cadgen.analytics.NOTICE", 99):  # one that sends more
             self.assertEqual(status(path=self.path), no)
-            with mock.patch.dict("os.environ", TOLD):
-                self.assertFalse(notify(io.StringIO(), path=self.path))  # nothing to tell someone who said no
+            self.assertFalse(notify(io.StringIO(), path=self.path))  # nothing to tell someone who said no
 
     def test_where_no_answer_could_be_kept_nothing_is_said(self) -> None:
         # A file where the state folder would go: no folder can be made, on any platform or user.
         (self.tmp / "taken").write_text("", encoding="utf-8")
         self.assertEqual(status(path=self.tmp / "taken" / "state" / "settings.json")["reason"], "unavailable")
-        said = io.StringIO()
-        with mock.patch.dict("os.environ", TOLD):  # said on every command, it would be noise: never said at all
-            self.assertFalse(notify(said, path=self.tmp / "taken" / "state" / "settings.json"))
+        said = io.StringIO()  # said on every command, it would be noise: never said at all
+        self.assertFalse(notify(said, path=self.tmp / "taken" / "state" / "settings.json"))
         self.assertEqual(said.getvalue(), "")
         self.assertEqual(status(path=self.path)["reason"], "untold")
         self.assertEqual(list(self.tmp.glob("settings.json*")), [], "the try leaves nothing behind")
@@ -237,7 +242,7 @@ class OneAnswerTest(_Tmp):
 
 
 class ServerCountsTest(_Tmp):
-    def test_a_yes_sends_use_files_and_metadata_and_nothing_the_person_made(self) -> None:
+    def test_a_yes_sends_use_files_counted_and_metadata_and_nothing_the_person_made(self) -> None:
         server, sent = self.serve("claude-directory")
         self.assertEqual(self.consent(server)["ask"], False)  # nothing in a CAD app asks: a command tells
         self.consent(server, True)
@@ -257,15 +262,15 @@ class ServerCountsTest(_Tmp):
         self.call(server, "cad_sync", {"view": "v", "surface": "thread", "model": str(plate), "focused": True})
         self.assertTrue(server.analytics.flush())
         [payload] = sent
-        events = payload["events"]
-        self.assertEqual([(event["name"], event.get("tool"), event.get("calls")) for event in events if event["name"] != "file"],
-                         [("tool", "cad_open", 1), ("view", None, 1)])
-        files = sorted((event["kind"], event["file"]) for event in events if event["name"] == "file")
-        salt = file_salt(self.path)
-        self.assertEqual(files, sorted([("step", file_code(salt, str(secret))), ("stl", file_code(salt, str(plate)))]))
-        self.assertTrue(all(len(code) == 16 for _, code in files))
-        self.assertEqual((payload["channel"], payload["presentation"], payload["client"]["name"]),
-                         ("claude-directory", "tabs", "codex-mcp-client"))
+        # One event per thing counted, its counts added up: the files by format, never by name.
+        self.assertEqual(payload["events"], [
+            {"name": "files", "kind": "step", "count": 1},
+            {"name": "files", "kind": "stl", "count": 1},
+            {"name": "tool", "tool": "cad_open", "calls": 1, "errors": 0},
+            {"name": "view", "calls": 1},
+        ])
+        self.assertEqual((payload["schema"], payload["process"], payload["channel"], payload["presentation"],
+                          payload["client"]["name"]), (3, "app", "claude-directory", "tabs", "codex-mcp-client"))
         self.assertNotIn("secret", json.dumps(payload))
         self.assertNotIn(str(self.tmp), json.dumps(payload))
         # A batch with no use is not sent.
@@ -296,9 +301,8 @@ class ServerCountsTest(_Tmp):
         self.assertFalse(recorder.flush())  # offline: kept
         recorder.called("cad_show", False)
         self.assertTrue(recorder.flush())
-        tools = [event for event in sent[1]["events"] if event["name"] == "tool"]
-        self.assertEqual(tools, [{"name": "tool", "tool": "cad_show", "calls": 2, "errors": 1}])
-        self.assertEqual(len([event for event in sent[1]["events"] if event["name"] == "file"]), 1)
+        self.assertEqual(sent[1]["events"], [{"name": "files", "kind": "step", "count": 1},
+                                             {"name": "tool", "tool": "cad_show", "calls": 2, "errors": 1}])
         # One the receiver refused (a 4xx) is dropped: sent again, it would take what comes next down with it.
         recorder.called("cad_view", True)
         self.assertFalse(recorder.flush())
@@ -328,30 +332,42 @@ class ServerCountsTest(_Tmp):
         url = f"http://127.0.0.1:{server.server_address[1]}/v1/events"
         self.assertEqual([_post(url, {}) for _ in range(5)], ["failed", "failed", "failed", "failed", "refused"])
 
-    def test_files_past_a_batchs_room_go_in_the_next(self) -> None:
+    def test_files_are_counted_once_a_day_by_format_and_never_named(self) -> None:
         sent: list[dict] = []
         choose(True, by="cli", path=self.path)
         recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
-        for index in range(FILES_PER_BATCH + 8):
-            recorder.opened(f"/work/part-{index}.step")
-        recorder.opened("/work/notes.txt")  # not a CAD file: not noted
+        for name in ("/work/a.step", "/work/./a.step", "/work/b.STP", "/work/c.stl", "/work/notes.txt"):
+            recorder.opened(name)  # one file however a view spells it; a file CAD does not show is none
         self.assertTrue(recorder.flush())
+        self.assertEqual(sent[-1]["events"], [{"name": "files", "kind": "step", "count": 2},
+                                              {"name": "files", "kind": "stl", "count": 1}])
+        recorder.opened("/work/a.step")  # shown again today: counted already
+        self.assertFalse(recorder.flush())
+        with mock.patch("cadgen.analytics._day", return_value="2999-01-01"):
+            recorder.opened("/work/a.step")  # a new day's
         self.assertTrue(recorder.flush())
-        self.assertEqual([len(payload["events"]) for payload in sent], [FILES_PER_BATCH, 8])
-        # One file, however a view spelled it, is one event: the receiver refuses a repeated code.
-        recorder.opened("/work/again.step")
-        recorder.opened("/work/./again.step")
-        self.assertTrue(recorder.flush())
-        self.assertEqual(len(sent[-1]["events"]), 1)
+        self.assertEqual(sent[-1]["events"], [{"name": "files", "kind": "step", "count": 1}])
+        self.assertNotIn("/work", json.dumps(sent))
+        # Past a day's room, a process tells files apart no more; past a batch's, events wait for the next.
+        with mock.patch("cadgen.analytics.FILES_PER_DAY", 3), mock.patch("cadgen.analytics._day", return_value="3000-01-01"):
+            for index in range(5):
+                recorder.opened(f"/work/part-{index}.glb")
+        with mock.patch("cadgen.analytics.MAX_EVENTS", 2):
+            for tool in ("cad_open", "cad_show"):
+                recorder.called(tool, True)
+            self.assertTrue(recorder.flush())
+            self.assertTrue(recorder.flush())
+        self.assertEqual([[event["name"] for event in payload["events"]] for payload in sent[-2:]],
+                         [["files", "tool"], ["tool"]])
+        self.assertEqual(sent[-2]["events"][0], {"name": "files", "kind": "glb", "count": 3})
 
-    def test_counts_go_from_the_notice_on_without_a_restart_and_file_codes_only_with_a_yes(self) -> None:
+    def test_counts_go_from_the_notice_on_without_a_restart(self) -> None:
         server, sent = self.serve("claude-github")
         self.call(server, "cad_show", {"path": "a.step"})
         self.assertEqual(self.consent(server), {"ask": False, "sharing": False, "reason": "untold", "policy": PRIVACY_URL})
         self.assertFalse(server.analytics.flush())
         self.call(server, "cad_view")  # noted before anyone was told
-        with mock.patch.dict("os.environ", TOLD):
-            self.assertTrue(notify(io.StringIO(), path=self.path))  # a skill's first `cadgen` command
+        self.assertTrue(notify(io.StringIO(), path=self.path))  # a skill's first `cadgen` command
         # The running CAD app sends from the notice on, with no restart -- and never what it noted before.
         self.assertEqual(self.consent(server), {"ask": False, "sharing": True, "reason": "default", "policy": PRIVACY_URL})
         self.assertFalse(server.analytics.flush())
@@ -361,14 +377,9 @@ class ServerCountsTest(_Tmp):
         self.call(server, "cad_view")
         self.http(server, "POST", "/__cad/recents", {"action": "open", "path": str(model)})
         self.assertTrue(server.analytics.flush())
-        # Counts by default, never a file code.
-        self.assertEqual([(event["name"], event.get("tool")) for event in sent[0]["events"]], [("tool", "cad_view")])
+        self.assertEqual(sent[0]["events"], [{"name": "files", "kind": "step", "count": 1},
+                                             {"name": "tool", "tool": "cad_view", "calls": 1, "errors": 0}])
         self.assertEqual(sent[0]["install"], status(path=self.path)["id"])
-        # A yes, in the menu or `cadgen analytics on`, adds the files' codes.
-        self.consent(server, True)
-        self.http(server, "POST", "/__cad/recents", {"action": "open", "path": str(model)})
-        self.assertTrue(server.analytics.flush())
-        self.assertEqual(sent[1]["events"], [{"name": "file", "file": file_code(file_salt(self.path), str(model)), "kind": "step"}])
 
     def test_the_agent_can_turn_telemetry_off_but_not_on(self) -> None:
         server, sent = self.serve("claude-directory")
@@ -381,7 +392,7 @@ class ServerCountsTest(_Tmp):
         self.call(server, "cad_show", {"path": "a.step"})
         server.analytics.flush()
         self.assertEqual(sent, [])
-        self.assertIsNone(file_salt(self.path))
+        self.assertNotIn("id", json.loads(self.path.read_text(encoding="utf-8"))["telemetry"])
 
 
 class BeforeTelemetryTest(_Tmp):
@@ -392,8 +403,7 @@ class BeforeTelemetryTest(_Tmp):
 
     def test_an_old_no_still_holds_until_the_person_answers_again(self) -> None:
         self.legacy({"choice": "off", "disclosure": 1, "by": "app", "decidedAt": 1})
-        with mock.patch.dict("os.environ", TOLD):
-            self.assertFalse(notify(io.StringIO(), path=self.path))  # nothing to tell someone who said no
+        self.assertFalse(notify(io.StringIO(), path=self.path))  # nothing to tell someone who said no
         self.assertEqual(status(path=self.path), {"sharing": False, "reason": "choice", "id": None})
         choose(True, by="cli", path=self.path)  # a yes given now, here, wins
         self.assertEqual(status(path=self.path)["reason"], "choice")
@@ -409,9 +419,8 @@ class NoticeTest(_Tmp):
 
     def test_said_once_on_stderr_and_kept_as_said(self) -> None:
         said = io.StringIO()
-        with mock.patch.dict("os.environ", TOLD):
-            self.assertTrue(notify(said, path=self.path))
-            self.assertFalse(notify(said, path=self.path))  # once
+        self.assertTrue(notify(said, path=self.path))
+        self.assertFalse(notify(said, path=self.path))  # once
         self.assertEqual(said.getvalue(), NOTICE_TEXT + "\n")
         found = status(path=self.path)
         self.assertEqual((found["sharing"], found["reason"]), (True, "default"))
@@ -423,18 +432,17 @@ class NoticeTest(_Tmp):
         self.assertIn("notifiedAt", json.loads(self.path.read_text(encoding="utf-8"))["telemetry"])
 
     def test_a_larger_default_is_said_again_before_it_is_sent(self) -> None:
-        with mock.patch.dict("os.environ", TOLD):
-            notify(io.StringIO(), path=self.path)
-            with mock.patch("cadgen.analytics.NOTICE", 2):
-                self.assertEqual(status(path=self.path)["reason"], "untold")
-                self.assertTrue(notify(io.StringIO(), path=self.path))
-                self.assertEqual(status(path=self.path)["reason"], "default")
+        notify(io.StringIO(), path=self.path)
+        with mock.patch("cadgen.analytics.NOTICE", 2):
+            self.assertEqual(status(path=self.path)["reason"], "untold")
+            self.assertTrue(notify(io.StringIO(), path=self.path))
+            self.assertEqual(status(path=self.path)["reason"], "default")
 
     def test_nothing_is_said_where_nothing_would_be_sent_by_default(self) -> None:
         for name, value in (("CI", "true"), ("CADGEN_INSTALL_CHANNEL", "dev"), ("DO_NOT_TRACK", "1"),
                             ("CADGEN_TELEMETRY", "0"), ("CADGEN_TELEMETRY", "1"), ("CADGEN_ANALYTICS", "0"),
                             (NOTICE_ENV, "0")):
-            with self.subTest(name=name, value=value), mock.patch.dict("os.environ", {**TOLD, name: value}):
+            with self.subTest(name=name, value=value), mock.patch.dict("os.environ", {name: value}):
                 said = io.StringIO()
                 self.assertFalse(notify(said, path=self.path))
                 self.assertEqual(said.getvalue(), "")
@@ -442,7 +450,7 @@ class NoticeTest(_Tmp):
         # Nor to someone who already chose.
         for share in (True, False):
             choose(share, by="cli", path=self.path, forget=lambda id: True)
-            with self.subTest(share=share), mock.patch.dict("os.environ", TOLD):
+            with self.subTest(share=share):
                 self.assertFalse(notify(io.StringIO(), path=self.path))
 
     def test_every_command_says_it_but_the_servers_and_telemetry_itself(self) -> None:
@@ -461,7 +469,7 @@ class NoticeTest(_Tmp):
 
     def test_cadgen_telemetry_says_it_where_a_person_looks(self) -> None:
         out, err = io.StringIO(), io.StringIO()
-        with mock.patch.dict("os.environ", {**TOLD, "CADGEN_STATE_DIR": str(self.tmp)}), \
+        with mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": str(self.tmp)}), \
                 mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
             self.assertEqual(telemetry_cli.main([]), 0)
         self.assertEqual(err.getvalue(), NOTICE_TEXT + "\n")
@@ -469,7 +477,7 @@ class NoticeTest(_Tmp):
 
 
 class NeverInTheWayTest(_Tmp):
-    """Analytics never fail, slow or clutter what CAD does."""
+    """Telemetry never fails, slows or clutters what CAD does."""
 
     serve = ServerCountsTest.serve
     call = ServerCountsTest.call

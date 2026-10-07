@@ -92,13 +92,13 @@ reference host `basic-host` does.
   the server's environment (`CADGEN_INSTALL_CHANNEL`, `cadgen/_internal/channel.py`),
   with `CADGEN_AUTO_UPDATED=1` where something else keeps the copy up to date: only a
   copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
-  Marketplace) is left to its store, and Gemini's extension to Gemini. The analytics: the server
-  notes its use -- tool calls (not the page's plumbing), view activity from each
-  view's sync (`focused`), and the files views show (counted as a view adds one to
-  the library), as salted one-way codes --
-  and sends it once a minute (`cadgen/analytics.py`): never a path, an argument or
-  a file. It is on by default once a `cadgen` command has said so, once, and nothing
-  asks; file codes go only with the person's yes. The app menu's **Share usage
+  Marketplace) is left to its store, and Gemini's extension to Gemini. The telemetry: the server
+  counts its use -- tool calls (not the page's plumbing), view activity from each
+  view's sync (`focused`), and the files views show (counted by format, once a day,
+  as a view adds one to the library) --
+  and sends the counts at most every five minutes (`cadgen/analytics.py`): never a path,
+  an argument or a file. It is on by default once a `cadgen` command has said so, once,
+  and nothing asks. The app menu's **Share usage
   stats** (`appSettings`, through `/__cad/analytics`) changes the answer, one answer for
   this app and the browser viewer. Its **Quick edit** (on until
   the person turns it off) is read and changed the same way, through `/__cad/features`, and kept

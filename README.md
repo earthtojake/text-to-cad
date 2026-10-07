@@ -280,16 +280,17 @@ never for a copy that something else updates. `CADGEN_UPDATE_CHECK=0` turns it o
 
 ### Telemetry
 
-The CAD app (the plugin's `cad` server) and the browser viewer (`cadgen viewer`) send usage stats by default,
-tagged with a random install ID: versions, where you installed it from, your OS and agent app, and how often each
-CAD tool was called and views were used. Our server adds the country each request comes from (worked out from its
-IP address, which it doesn't keep) and stores it all with PostHog. Never file names, paths, contents or prompts. The first `cadgen`
-command says so once, and sending starts then. Turn it off, which also deletes what was sent, with
-`uvx cadgen telemetry off`, **Share usage stats** in either app's menu (the logo at the top left, over any model),
-or by asking your agent. `uvx cadgen telemetry on` also shares a one-way code and the format of each distinct file
-shown (to count files, not identify them). `DO_NOT_TRACK=1` or `CADGEN_TELEMETRY=0` keeps it off, and nothing is
-sent by default in CI or from a development install. See the
-[privacy policy](https://www.texttocad.dev/privacy-policy).
+The CAD app (the plugin's `cad` server), the browser viewer (`cadgen viewer`) and the build daemon that builds for
+them and for every `cadgen` command send usage stats by default, tagged with a random install ID: versions, where
+you installed it from, your OS and agent app, and counts -- how often each CAD tool was called and views were used,
+how many files of each format were shown, how many models were built and snapshots rendered, how those ended and
+how long they took -- added up over a few minutes before they are sent. Our server adds the country each request
+comes from (worked out from its IP address, which it doesn't keep) and stores it all with PostHog. Never file names,
+paths, contents or prompts. The first `cadgen` command says so once, and sending starts then. Turn it off, which
+also deletes what was sent, with `uvx cadgen telemetry off`, **Share usage stats** in either app's menu (the logo at
+the top left, over any model), or by asking your agent. `DO_NOT_TRACK=1` or `CADGEN_TELEMETRY=0` keeps it off, and
+nothing is sent by default in CI or from a development install. Offline, nothing is sent and everything works. See
+the [privacy policy](https://www.texttocad.dev/privacy-policy).
 
 ### Windows 11: Smart App Control
 

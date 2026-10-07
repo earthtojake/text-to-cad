@@ -261,7 +261,7 @@ diff content: a comment in a module selects what the module's code would.
 | web | `packages/ui`, `apps/web` and the files its Markdown links to, `packages/cadgen` and `scripts/bundle`, `tests/browser`, the viewer scripts | the UI's units and browser specs (ui changes only), the client's units, then the bundle, the launch smoke test and the format/camera gates through the real backend (anything the served client or the backend reads) |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's host-adapter units (jsdom) and its one-file build |
 | skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load cadgen or its runtime (`packages/cadgen`, `scripts/bundle`), the cad and dxf suites (the same, and each skill's documented examples), dfm and dfam-check (their skills) |
-| docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (static asset contract, the analytics receiver's tests, lint, Next build, icon verification) and the animated brand marks |
+| docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (static asset contract, the telemetry receiver's tests, lint, Next build, icon verification) and the animated brand marks |
 | packaging | `packages/cadgen`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts | clean bundle, layout, wheel contents, installed CLI behavior |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
@@ -773,13 +773,13 @@ install channel, in the server's environment (`CADGEN_INSTALL_CHANNEL`), and add
 `CADGEN_AUTO_UPDATED=1` where something other than the person keeps the copy up to
 date: the store that reviewed it, or the app that installed it. The processes the
 server starts (the Viewer, the daemon) inherit both. cadgen reports the channel
-with analytics and says a new release is out only to a copy that is not
+with telemetry and says a new release is out only to a copy that is not
 auto-updated (`cadgen/_internal/channel.py`, `cadgen/updates.py`); it never
 decides by a channel's name, since its core may not know a host. They are
 environment, never flags: an install of `main` pins the last release, and a cadgen
 ignores a variable it does not know but refuses a flag, so a new setting would
 stop every such server until the next release. Nothing works them out at
-runtime, so a plugin that ships somewhere new writes its own, and the analytics
+runtime, so a plugin that ships somewhere new writes its own, and the telemetry
 receiver (`apps/docs/src/lib/api/events.mjs`) learns its channel;
 `test_plugin_manifests.py`, `test_plugin_branch.py` and `test_plugin_zip.py`
 hold each one:

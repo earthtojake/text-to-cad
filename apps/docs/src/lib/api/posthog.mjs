@@ -1,9 +1,11 @@
 /**
  * The store over PostHog (cadgen's telemetry: usage counts now, crash reports to come). Every row a batch
- * makes (`events.mjs`) becomes one PostHog event, with the install id as its distinct id and the batch's
- * context as properties, and the country the host placed the request in beside them: never the IP address,
- * nor anything finer. PostHog's own lookup of where an event came from is off for every event
- * (`$geoip_disable`): the receiver posts from the host's servers, so it would place everyone there.
+ * makes (`events.mjs`) becomes one PostHog event (`EVENTS`), with the install id as its distinct id, the
+ * batch's context and the row's counts as properties, and the country the host placed the request in beside
+ * them: never the IP address, nor anything finer. PostHog's own lookup of where an event came from is off
+ * for every event (`$geoip_disable`): the receiver posts from the host's servers, so it would place everyone
+ * there. An event is a window's counts, so a product reads them by adding up a property (`calls`, `count`,
+ * `seconds`), never by counting events.
  *
  * An opt-out deletes the install's person and every event under its id (`/forget`): PostHog does that in the
  * background, so what "deleted" means is "queued for deletion". Retention is PostHog's: events go after the
@@ -14,11 +16,15 @@
  * `eu`. `fetch` is handed in, so the tests need no network.
  */
 
+import { FIELDS } from './events.mjs';
+
 // PostHog's name for each kind of row, as a product reads them.
-export const EVENTS = { tool: 'tool_used', view: 'view_used', file: 'file_shown' };
+export const EVENTS = {
+  tool: 'tool_used', view: 'view_used', files: 'files_shown', build: 'models_built', snapshot: 'snapshots_rendered',
+  feature: 'feature_used', health: 'daemon_health',
+};
 // What a row says beside its own fields, from the batch it came in.
-const CONTEXT = ['version', 'channel', 'source', 'platform', 'arch', 'client', 'client_version', 'presentation'];
-const FIELDS = { tool: ['tool', 'calls', 'errors'], view: ['calls'], file: ['file', 'kind'] };
+const CONTEXT = ['process', 'version', 'channel', 'source', 'platform', 'arch', 'client', 'client_version', 'presentation'];
 export const SETTINGS = ['POSTHOG_REGION', 'POSTHOG_PROJECT_KEY', 'POSTHOG_PERSONAL_KEY', 'POSTHOG_PROJECT_ID'];
 const REGIONS = new Set(['us', 'eu']);
 const TIMEOUT_MS = 8000; // well inside a function's own limit: a PostHog that hangs is a failure, and the batch waits

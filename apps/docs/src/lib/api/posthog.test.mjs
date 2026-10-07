@@ -5,14 +5,24 @@ import { EVENTS, missingSettings, posthogStore, SETTINGS, settingsOf } from './p
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
 const SESSION = '0b1e6f1a-6a52-4c39-9d43-2f5e0f0b9d11';
-// What cadgen sends (cadgen/analytics.py).
+// What cadgen sends (cadgen/analytics.py): the CAD app's counts, and the build daemon's.
 const BATCH = {
-  schema: 2, install: INSTALL, session: SESSION, version: '0.7.6', channel: 'claude-directory', platform: 'darwin', arch: 'arm64',
-  client: { name: 'codex-mcp-client', version: '0.159.0' }, presentation: 'tabs',
+  schema: 3, install: INSTALL, session: SESSION, process: 'app', version: '0.8.0', channel: 'claude-directory', platform: 'darwin',
+  arch: 'arm64', client: { name: 'codex-mcp-client', version: '0.159.0' }, presentation: 'tabs',
   events: [
     { name: 'tool', tool: 'cad_show', calls: 3, errors: 1 },
     { name: 'view', calls: 7 },
-    { name: 'file', file: '3f9a1c0be47d2a55', kind: 'step' },
+    { name: 'files', kind: 'step', count: 2 },
+  ],
+};
+const DAEMON = {
+  schema: 3, install: INSTALL, session: SESSION, process: 'daemon', version: '0.8.0', channel: 'claude-directory', platform: 'linux',
+  arch: 'x86_64',
+  events: [
+    { name: 'build', kind: 'step', via: 'script', count: 9, failed: 2, crashed: 0, cancelled: 1, cached: 4, seconds: 31.5, longest: 12.2 },
+    { name: 'snapshot', kind: 'step', count: 3, failed: 0, seconds: 7.25 },
+    { name: 'feature', feature: 'assembly', count: 2 },
+    { name: 'health', workers: 2, crashes: 1, recycles: 0, refusals: 0 },
   ],
 };
 const SETTINGS_EU = { region: 'eu', projectKey: 'phc_project', personalKey: 'phx_personal', projectId: '1234' };
@@ -32,25 +42,43 @@ test("each of a batch's rows is one PostHog event, under the install id, with th
   await store.insert(rowsOf(BATCH), { country: 'DE' });
   const [{ url, method, body }] = asked;
   assert.deepEqual([url, method, body.api_key], ['https://eu.i.posthog.com/batch/', 'POST', 'phc_project']);
-  assert.deepEqual(body.batch.map(event => event.event), [EVENTS.tool, EVENTS.view, EVENTS.file]);
-  const context = { distinct_id: INSTALL, session: SESSION, $geoip_disable: true, version: '0.7.6', channel: 'claude-directory',
-    platform: 'darwin', arch: 'arm64', client: 'codex-mcp-client', client_version: '0.159.0', presentation: 'tabs', country: 'DE' };
+  assert.deepEqual(body.batch.map(event => event.event), ['tool_used', 'view_used', 'files_shown']);
+  const context = { distinct_id: INSTALL, session: SESSION, $geoip_disable: true, process: 'app', version: '0.8.0',
+    channel: 'claude-directory', platform: 'darwin', arch: 'arm64', client: 'codex-mcp-client', client_version: '0.159.0',
+    presentation: 'tabs', country: 'DE' };
   assert.deepEqual(body.batch.map(event => event.properties), [
     { ...context, tool: 'cad_show', calls: 3, errors: 1 },
     { ...context, calls: 7 },
-    { ...context, file: '3f9a1c0be47d2a55', kind: 'step' },
+    { ...context, kind: 'step', count: 2 },
   ]);
+});
+
+test("the build daemon's counts are PostHog events of their own, each a window's to add up", async () => {
+  const { asked, store } = posthog();
+  await store.insert(rowsOf(DAEMON), { country: 'NZ' });
+  const { batch } = asked[0].body;
+  assert.deepEqual(batch.map(event => event.event), ['models_built', 'snapshots_rendered', 'feature_used', 'daemon_health']);
+  const context = { distinct_id: INSTALL, session: SESSION, $geoip_disable: true, process: 'daemon', version: '0.8.0',
+    channel: 'claude-directory', platform: 'linux', arch: 'x86_64', country: 'NZ' };
+  const countsOf = event => Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'name'));
+  assert.deepEqual(batch.map(event => event.properties), DAEMON.events.map(event => ({ ...context, ...countsOf(event) })));
+  assert.deepEqual(Object.keys(EVENTS).sort(), ['build', 'feature', 'files', 'health', 'snapshot', 'tool', 'view']);
 });
 
 test('where the host could not tell, an event names no country; what a schema left out, it leaves out', async () => {
   const { asked, store } = posthog();
-  // As cadgen 0.7.7 to 0.7.11 send it, over JSON (which leaves out what is undefined).
-  const schema1 = JSON.parse(JSON.stringify({ ...BATCH, schema: 1, source: 'store', channel: undefined, arch: undefined,
-    client: undefined, presentation: undefined, events: [BATCH.events[1]] }));
+  // As cadgen 0.7.7 to 0.7.11 send it, over JSON (which leaves out what is undefined): no process, which was
+  // always an app's then, and a file by its code, which goes no further.
+  const schema1 = JSON.parse(JSON.stringify({ ...BATCH, schema: 1, version: '0.7.11', process: undefined, source: 'store',
+    channel: undefined, arch: undefined, client: undefined, presentation: undefined,
+    events: [BATCH.events[1], { name: 'file', file: '3f9a1c0be47d2a55', kind: 'step' }] }));
   await store.insert(rowsOf(schema1), { country: null });
-  const [{ properties }] = asked[0].body.batch;
-  assert.deepEqual(properties, { distinct_id: INSTALL, session: SESSION, $geoip_disable: true, version: '0.7.6', channel: 'unknown',
-    source: 'store', platform: 'darwin', calls: 7 });
+  const context = { distinct_id: INSTALL, session: SESSION, $geoip_disable: true, process: 'app', version: '0.7.11', channel: 'unknown',
+    source: 'store', platform: 'darwin' };
+  assert.deepEqual(asked[0].body.batch, [
+    { event: 'view_used', properties: { ...context, calls: 7 } },
+    { event: 'files_shown', properties: { ...context, kind: 'step', count: 1 } },
+  ]);
 });
 
 test('an opt-out deletes the person and every event sent under the id, with the personal key', async () => {

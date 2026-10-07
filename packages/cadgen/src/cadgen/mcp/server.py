@@ -138,9 +138,9 @@ _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": F
 _TELEMETRY_TOOL = {
     "name": "cad_telemetry", "title": "CAD telemetry", "icons": [ICON],
     "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
-    "description": ("Report whether cadgen sends usage stats (by default, counts of tool calls and view activity "
-                    "tagged with a random ID; with the user's yes, distinct files as one-way codes; never file names, "
-                    "paths, contents or prompts), or turn them off. Call with action off only when the user asks."),
+    "description": ("Report whether cadgen sends usage stats (counts of tool calls, view activity, files shown, builds "
+                    "and snapshots, tagged with a random ID; never file names, paths, contents or prompts), or turn "
+                    "them off. Call with action off only when the user asks."),
     "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["status", "off"]}},
                     "additionalProperties": False},
 }
@@ -516,13 +516,13 @@ class Server:
         why = {"environment": "set by the environment (DO_NOT_TRACK or CADGEN_TELEMETRY)",
                "choice": "the user's choice",
                "default": "on by default: a cadgen command told the user once",
-               "untold": "not yet: no cadgen command has told the user"}.get(
+               "untold": "not on: no cadgen command has told the user, and none does in CI or from a development install"}.get(
                    found["reason"], "off: the setting could not be read")
         state = "on" if found["sharing"] else "off"
-        return _text(f"cadgen's usage stats are {state} ({why}). By default they count tool calls and view activity, "
-                     "tagged with a random ID; with the user's yes, also distinct files (as one-way codes); never file names, "
-                     "paths, contents or prompts. The user turns them off in the CAD app's menu (the logo at the top left "
-                     f"of a view) or with `cadgen telemetry off`, and adds file codes with `cadgen telemetry on`. Policy: {PRIVACY_URL}",
+        return _text(f"cadgen's usage stats are {state} ({why}). They count CAD tool calls, view activity, files shown, "
+                     "builds and snapshots, tagged with a random ID; never file names, paths, contents or prompts. The user "
+                     "turns them off in the CAD app's menu (the logo at the top left of a view) or with "
+                     f"`cadgen telemetry off`. Policy: {PRIVACY_URL}",
                      {"sharing": found["sharing"], "reason": found["reason"]})
 
     # the agent's tools ----------------------------------------------------------

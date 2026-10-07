@@ -356,13 +356,16 @@ cadgen build; the geometry it returns, and the answer to every `==` and
 
 Once installed, cadgen works offline: every command, build, snapshot, server
 and page. Its own requests are two: telemetry
-(`analytics.py`, usage stats under a random id, sent by default once a `cadgen`
+(`analytics.py`, usage counts under a random id, sent by default once a `cadgen`
 command has said so, and never after the person's no) and the daily version check
 (`updates.py`). Both run in the background and fail silently: no start,
-command, request or tool call waits on them, and one that fails changes
-nothing but what is counted or offered. Two waits remain, bounded, each for
-something only the network can do: a server's last analytics send as it exits
-(`analytics.CLOSE_SECONDS`), and `cadgen telemetry off`, which waits for the
+command, build, request or tool call waits on them, and one that fails changes
+nothing but what is counted or offered. A command sends nothing itself: it hands
+what it counted to a running build daemon over its local socket, never starting
+one, and gives up after a moment (`daemon.client.HAND_OVER_SECONDS`). Two waits
+remain, bounded, each for something only the network can do: a process's last
+telemetry send as it exits -- a server's, or the build daemon's
+(`analytics.CLOSE_SECONDS`) -- and `cadgen telemetry off`, which waits for the
 deletion it asks for (still owed, and asked again, when nobody answers). The
 pages load nothing from the internet: everything they show ships in the wheel.
 Installing needs the network (cadgen itself, and the headless browser the first
@@ -393,9 +396,10 @@ src/cadgen/
   settings.py            # the person's settings: settings.json in the state
                          #   directory, a section per feature, shared by
                          #   every app and version of cadgen
-  analytics.py           # telemetry, the CAD apps' usage stats: on by default
-                         #   once a command has said so, never after a no
-                         #   (its answer: settings.json's `analytics` section)
+  analytics.py           # telemetry: usage counts from the CAD apps and the
+                         #   build daemon, on by default once a command has
+                         #   said so, never after a no (its answer:
+                         #   settings.json's `telemetry` section)
   features.py            # the CAD views' features a person can turn off
                          #   (Quick edit: settings.json's `features` section)
   updates.py             # the daily version check: whether a newer release is
@@ -408,7 +412,8 @@ src/cadgen/
   daemon/                # the build pool: executors (daemon + transient),
                          #   broker (job slots, coalescing), pool (workers,
                          #   spares, extras), jobs (the ledger), server,
-                         #   worker, client, transport
+                         #   worker, client, transport, telemetry (what it
+                         #   builds and how that goes, counted)
   _internal/             # the engine: generation pipeline, tree builder,
                          #   filetrace (every file a build opens),
                          #   FK (kinematics_fk/resolve), mesh_export ledger,
