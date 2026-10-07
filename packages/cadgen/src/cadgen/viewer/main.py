@@ -545,6 +545,8 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
     is the child's own announcement, which it writes only once it is bound and
     attached, so the URL printed here answers its first request.
     """
+    from cadgen.analytics import for_others
+
     child_argv = [item for item in argv if item != "--detach"]
     if "--json" not in child_argv:
         child_argv.append("--json")
@@ -562,6 +564,8 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 close_fds=True,
+                # It outlives this command, so it goes by the person's telemetry settings, not this shell's.
+                env=for_others(os.environ),
                 **popen_options,
             )
     except OSError as error:

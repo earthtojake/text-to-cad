@@ -82,7 +82,6 @@ FORWARDED_ENV_VARS = (
     "CADGEN_VERIFY_READBACK",
     "DO_NOT_TRACK",
     "CADGEN_TELEMETRY",
-    "CADGEN_ANALYTICS",
 )
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than
@@ -478,11 +477,14 @@ def _reap_detached(process: subprocess.Popen) -> None:
 
 
 def _spawn_daemon(address: str) -> subprocess.Popen | None:
+    from cadgen.analytics import for_others
     from cadgen.daemon.executors import worker_env
 
     # The daemon and its workers must import THIS cadgen from whatever directory they
-    # run in; a relative PYTHONPATH entry would otherwise pick the installed one.
-    env = worker_env()
+    # run in; a relative PYTHONPATH entry would otherwise pick the installed one. The
+    # daemon serves every client, so it takes no telemetry switch from the one that
+    # started it: each client's travels with its own builds (FORWARDED_ENV_VARS).
+    env = for_others(worker_env())
     env["CADGEN_DAEMON_CHILD"] = "1"
     env.setdefault("CADGEN_DAEMON_SOCKET", str(address))
     try:

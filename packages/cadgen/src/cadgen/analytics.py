@@ -52,7 +52,9 @@ without a release.
 It is sent by default once the person has been told, and never after their no. Strongest first:
 
 1. The environment: ``DO_NOT_TRACK=1`` or ``CADGEN_TELEMETRY=0`` turns it off,
-   ``CADGEN_TELEMETRY=1`` on.
+   ``CADGEN_TELEMETRY=1`` on, over the person's choice -- for the process it is set in, and the builds that process asks of the
+   daemon, but never written to the settings, and not inherited by the processes it starts for others
+   (``for_others``): the build daemon and a detached viewer go by the settings.
 2. The person's choice, kept as the ``telemetry`` section of their settings (``cadgen/settings.py``:
    ``settings.json`` in the state directory) and shared by every process: either app's menu,
    ``cadgen telemetry on|off``, or the agent's ``cad_telemetry`` (off only). A yes sends all of
@@ -68,8 +70,7 @@ sent, a yes to less (``DISCLOSURE``) counts as no answer, and a default that gre
 is said again before it is sent. Nothing in a CAD app asks: the telling is the CLI's.
 
 Before telemetry, cadgen 0.7.7 to 0.7.15 kept these answers as ``analytics`` (the settings section,
-``cadgen analytics``, ``CADGEN_ANALYTICS``), for a few days. No answer kept there carries over
-(``LEGACY``); ``CADGEN_ANALYTICS=0`` still turns telemetry off as ``CADGEN_TELEMETRY=0`` does. One may
+``cadgen analytics``), for a few days. No answer kept there carries over (``LEGACY``). One may
 still be installed beside this one (a plugin not yet updated, while ``uvx cadgen`` runs the newest),
 reading only ``analytics``: a no here is said there too, and the id it sent under is deleted with
 this one's (``_stop_earlier``).
@@ -119,7 +120,7 @@ import traceback
 import uuid
 from pathlib import Path
 
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from cadgen._internal.api import api_url
 from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
@@ -278,17 +279,22 @@ def _update(path: Path, change: Callable[[dict[str, Any]], dict[str, Any]]) -> d
 
 # What an environment says (``_environment``): forwarded with every build a client asks the daemon for
 # (``cadgen.daemon.client.FORWARDED_ENV_VARS``), so a client's no holds for its builds there too.
-ENVIRONMENT = ("DO_NOT_TRACK", "CADGEN_TELEMETRY", "CADGEN_ANALYTICS")
+ENVIRONMENT = ("DO_NOT_TRACK", "CADGEN_TELEMETRY")
 
 
 def _environment(env: Any = None) -> bool | None:
     env = os.environ if env is None else env
     if str(env.get("DO_NOT_TRACK") or "").strip().lower() in _ON:
         return False
-    if str(env.get("CADGEN_ANALYTICS") or "").strip().lower() in _OFF:  # 0.7.7 to 0.7.15's switch, still a no
-        return False
     value = str(env.get("CADGEN_TELEMETRY") or "").strip().lower()
     return False if value in _OFF else True if value in _ON else None
+
+
+def for_others(env: Mapping[str, str]) -> dict[str, str]:
+    """``env`` without its telemetry switches (``ENVIRONMENT``), for a process started here that outlives
+    this one or serves others -- the build daemon, a detached viewer: it goes by the person's settings, not
+    by the environment of whichever process happened to start it."""
+    return {name: value for name, value in env.items() if name not in ENVIRONMENT}
 
 
 def refused(env: Any = None) -> bool:

@@ -28,7 +28,7 @@ class DaemonTelemetryTest(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         environment = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp), "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "",
-                                                   "CADGEN_ANALYTICS": "", "CADGEN_DAEMON": ""})
+                                                   "CADGEN_DAEMON": ""})
         environment.start()
         self.addCleanup(environment.stop)
         analytics.choose(True, by="cli", path=self.tmp / "settings.json")

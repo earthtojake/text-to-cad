@@ -654,6 +654,20 @@ class Detach(LauncherFixture):
         self.assertIn("no announcement within 0s; stopped it", stderr.getvalue())
 
 
+    def test_the_detached_server_goes_by_the_settings_not_this_shells_telemetry_switch(self) -> None:
+        stderr = io.StringIO()
+        child = mock.Mock(returncode=1)
+        child.poll.return_value = 1
+        with mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": self.state, "DO_NOT_TRACK": "1",
+                                          "CADGEN_TELEMETRY": "0"}), \
+                mock.patch.object(main_module.subprocess, "Popen", return_value=child) as popen, \
+                contextlib.redirect_stderr(stderr):
+            main_module.launch_detached(["--port", "1"], as_json=True)
+        env = popen.call_args.kwargs["env"]
+        self.assertEqual(env["CADGEN_STATE_DIR"], self.state)
+        self.assertNotIn("DO_NOT_TRACK", env)
+        self.assertNotIn("CADGEN_TELEMETRY", env)
+
 class PrewarmsTheDaemon(LauncherFixture):
     """After its announcement a launch starts the build daemon, whose workers import
     build123d before any build asks: a session's first build finds them warm."""

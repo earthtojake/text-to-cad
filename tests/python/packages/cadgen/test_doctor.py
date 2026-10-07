@@ -57,7 +57,7 @@ class DoctorTests(unittest.TestCase):
         self.state = Path(state.name)
         # A plugin's install outside CI, where telemetry's default holds.
         environment = mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": state.name, "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "",
-                                                     "CADGEN_ANALYTICS": "", "CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""})
+                                                     "CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""})
         environment.start()
         self.addCleanup(environment.stop)
 

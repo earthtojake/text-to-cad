@@ -195,10 +195,17 @@ export default function PrivacyPolicyPage() {
             at the top left, over any open model), or ask your agent to turn off CAD telemetry.
             Turning it off deletes the install ID on your computer and asks our server to delete
             everything stored under it. Turning it on again starts a new install ID, so nothing links
-            the two. Setting <code>DO_NOT_TRACK=1</code> or <code>CADGEN_TELEMETRY=0</code> where cadgen
-            runs (your agent app’s environment, or the shell that runs a <code>cadgen</code> command)
-            keeps it off there whatever else is chosen. <code>uvx cadgen telemetry on</code> turns it
-            on, and <code>uvx cadgen telemetry status</code> shows the setting and your install ID.
+            the two. <code>uvx cadgen telemetry on</code> turns it on, and{" "}
+            <code>uvx cadgen telemetry status</code> shows the setting and your install ID.
+          </li>
+          <li>
+            Setting <code>DO_NOT_TRACK=1</code> or <code>CADGEN_TELEMETRY=0</code> where cadgen runs
+            (your agent app’s environment, or the shell that runs a <code>cadgen</code> command) turns
+            telemetry off for that process and the models it asks cadgen’s build daemon to build,
+            whatever your setting says; <code>CADGEN_TELEMETRY=1</code> turns it on for that process
+            the same way. Neither changes your setting, and the parts of cadgen that process starts to
+            run on their own, the build daemon and a viewer started in the background, go by your
+            setting.
           </li>
           <li>
             Setting <code>CADGEN_UPDATE_CHECK=0</code> where cadgen runs turns the daily version check

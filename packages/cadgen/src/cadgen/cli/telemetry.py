@@ -5,7 +5,8 @@ They are sent by default once a ``cadgen`` command has said so (``cadgen/analyti
 default) says what is sent and why, and says that notice itself if no command has yet; ``on`` and ``off``
 keep the person's choice in the state directory, which every cadgen process reads: ``on`` sends what the
 default does, as the person's own answer, and ``off`` sends nothing. ``DO_NOT_TRACK=1`` or
-``CADGEN_TELEMETRY=0`` in an app's environment still turns it off there.
+``CADGEN_TELEMETRY=0`` in a process's environment turns it off for that process, and ``CADGEN_TELEMETRY=1``
+on, without changing the choice kept here.
 """
 
 from __future__ import annotations

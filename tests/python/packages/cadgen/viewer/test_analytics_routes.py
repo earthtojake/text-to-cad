@@ -32,7 +32,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         # A plugin's install outside CI, where the default holds (a checkout is a development install, which sends
         # nothing by default).
         environment = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp / "state"), "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "",
-                                                   "CADGEN_ANALYTICS": "", "CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""})
+                                                   "CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""})
         environment.start()
         self.addCleanup(environment.stop)
         self.state = self.tmp / "state" / "settings.json"

@@ -28,7 +28,7 @@ from cadgen.viewer.recents import RecentStore
 # Where the notice is said, and the default holds: an install a plugin made (a checkout is a development install,
 # never told and sending nothing by default), outside CI. Every test runs there unless it says otherwise.
 TOLD = {"CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""}
-QUIET = {"DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "", "CADGEN_ANALYTICS": "", NOTICE_ENV: "", **TOLD}
+QUIET = {"DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "", NOTICE_ENV: "", **TOLD}
 
 
 class _Tmp(unittest.TestCase):
@@ -135,7 +135,7 @@ class ConsentTest(_Tmp):
             choose(False, by="app", path=self.path, forget=lambda id: True)
         with mock.patch("cadgen.analytics.DISCLOSURE", 3):
             self.assertEqual(status(path=self.path)["reason"], "choice")
-        for name, value in (("DO_NOT_TRACK", "1"), ("CADGEN_TELEMETRY", "off"), ("CADGEN_ANALYTICS", "0")):
+        for name, value in (("DO_NOT_TRACK", "1"), ("CADGEN_TELEMETRY", "off")):
             with self.subTest(name=name), mock.patch.dict("os.environ", {name: value}):
                 self.assertEqual(status(path=self.path)["reason"], "environment")
                 self.assertFalse(status(path=self.path)["sharing"])
@@ -486,7 +486,7 @@ class NoticeTest(_Tmp):
 
     def test_nothing_is_said_where_nothing_would_be_sent_by_default(self) -> None:
         for name, value in (("CI", "true"), ("CADGEN_INSTALL_CHANNEL", "dev"), ("DO_NOT_TRACK", "1"),
-                            ("CADGEN_TELEMETRY", "0"), ("CADGEN_TELEMETRY", "1"), ("CADGEN_ANALYTICS", "0"),
+                            ("CADGEN_TELEMETRY", "0"), ("CADGEN_TELEMETRY", "1"),
                             (NOTICE_ENV, "0")):
             with self.subTest(name=name, value=value), mock.patch.dict("os.environ", {name: value}):
                 said = io.StringIO()
