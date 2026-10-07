@@ -432,22 +432,18 @@ class ServerCountsTest(_Tmp):
 
 
 class BeforeTelemetryTest(_Tmp):
-    """cadgen 0.7.7 to 0.7.15 kept the answer as `analytics`: only its no carries over."""
+    """cadgen 0.7.7 to 0.7.15 kept the answer as `analytics`, for a few days: none of it carries over."""
 
     def legacy(self, section: dict) -> None:
         self.path.write_text(json.dumps({"analytics": section}), encoding="utf-8")
 
-    def test_an_old_no_still_holds_until_the_person_answers_again(self) -> None:
-        self.legacy({"choice": "off", "disclosure": 1, "by": "app", "decidedAt": 1})
-        self.assertFalse(notify(io.StringIO(), path=self.path))  # nothing to tell someone who said no
-        self.assertEqual(status(path=self.path), {"sharing": False, "reason": "choice", "id": None})
-        choose(True, by="cli", path=self.path)  # a yes given now, here, wins
-        self.assertEqual(status(path=self.path)["reason"], "choice")
-        self.assertTrue(status(path=self.path)["sharing"])
-
-    def test_an_old_yes_carries_nothing(self) -> None:
-        self.legacy({"choice": "on", "disclosure": 1, "by": "app", "decidedAt": 1, "id": "old", "salt": "0" * 64})
-        self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
+    def test_an_old_answer_carries_nothing(self) -> None:
+        for choice in ("on", "off"):
+            self.legacy({"choice": choice, "disclosure": 1, "by": "app", "decidedAt": 1, "id": "old", "salt": "0" * 64})
+            self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
+        # Told, as anyone is: on by default, an old no or not.
+        self.assertTrue(notify(io.StringIO(), path=self.path))
+        self.assertEqual((status(path=self.path)["sharing"], status(path=self.path)["reason"]), (True, "default"))
 
     def test_a_no_here_also_stops_an_older_cadgen_and_deletes_what_it_sent(self) -> None:
         # A plugin not yet updated runs 0.7.x beside this cadgen (`uvx cadgen telemetry off` runs the newest) and

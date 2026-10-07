@@ -68,11 +68,11 @@ sent, a yes to less (``DISCLOSURE``) counts as no answer, and a default that gre
 is said again before it is sent. Nothing in a CAD app asks: the telling is the CLI's.
 
 Before telemetry, cadgen 0.7.7 to 0.7.15 kept these answers as ``analytics`` (the settings section,
-``cadgen analytics``, ``CADGEN_ANALYTICS``). Nothing of that carries over but a no: an ``analytics``
-choice of off counts as off until the person answers here (``LEGACY``), and ``CADGEN_ANALYTICS=0``
-turns telemetry off as ``CADGEN_TELEMETRY=0`` does. One may still be installed beside this one (a
-plugin not yet updated, while ``uvx cadgen`` runs the newest), reading only ``analytics``: a no here
-is said there too, and the id it sent under is deleted with this one's (``_stop_earlier``).
+``cadgen analytics``, ``CADGEN_ANALYTICS``), for a few days. No answer kept there carries over
+(``LEGACY``); ``CADGEN_ANALYTICS=0`` still turns telemetry off as ``CADGEN_TELEMETRY=0`` does. One may
+still be installed beside this one (a plugin not yet updated, while ``uvx cadgen`` runs the newest),
+reading only ``analytics``: a no here is said there too, and the id it sent under is deleted with
+this one's (``_stop_earlier``).
 
 Where CAD was installed from is only reported, as ``channel``: it decides nothing here but that a
 development install sends nothing by default.
@@ -220,18 +220,14 @@ _OFF, _ON = ("0", "off", "false", "no"), ("1", "on", "true", "yes")
 
 
 SECTION = "telemetry"  # this module's part of the settings file
-# Where cadgen 0.7.7 to 0.7.15 kept the answer, and its environment variable: read for a no, and nothing else.
+# Where cadgen 0.7.7 to 0.7.15 kept the answer: never read as one here, only told a no (``_stop_earlier``).
 LEGACY = "analytics"
 
 
 def _read(path: Path) -> dict[str, Any] | None:
-    """The telemetry section, or ``None`` when the settings are there but cannot be read now. A no kept
-    before telemetry (``LEGACY``) counts as this section's until the person answers here."""
+    """The telemetry section, or ``None`` when the settings are there but cannot be read now."""
     try:
-        kept = read_section(SECTION, path=path)
-        if "choice" not in kept and read_section(LEGACY, path=path).get("choice") == "off":
-            kept = {**kept, "choice": "off"}
-        return kept
+        return read_section(SECTION, path=path)
     except OSError:
         LOG.debug("could not read the telemetry choice in %s", path, exc_info=True)
         return None
@@ -289,7 +285,7 @@ def _environment(env: Any = None) -> bool | None:
     env = os.environ if env is None else env
     if str(env.get("DO_NOT_TRACK") or "").strip().lower() in _ON:
         return False
-    if str(env.get("CADGEN_ANALYTICS") or "").strip().lower() in _OFF:  # a no set before telemetry (LEGACY)
+    if str(env.get("CADGEN_ANALYTICS") or "").strip().lower() in _OFF:  # 0.7.7 to 0.7.15's switch, still a no
         return False
     value = str(env.get("CADGEN_TELEMETRY") or "").strip().lower()
     return False if value in _OFF else True if value in _ON else None
