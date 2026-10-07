@@ -1,0 +1,100 @@
+# TEMPORARY: an end-to-end check that the receiver's PostHog settings on Vercel work, run once on this branch
+# and then removed. It deploys this branch to the docs project's production environment WITHOUT its domains
+# (`--skip-domain`), so texttocad.dev and api.texttocad.dev keep serving main; asks that deployment's
+# /v1/health (all four settings) and /v1/forget for a random install id (the personal key may delete); then
+# deletes that one deployment, by its id. Prints no secret: only statuses, the receiver's own answers, and
+# the deployment's id, target and aliases.
+name: Receiver E2E (temporary)
+
+on:
+  push:
+    branches: [claude/determined-edison-yo8g4u]
+    paths: [.github/workflows/receiver-e2e.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-docs
+  cancel-in-progress: false
+
+jobs:
+  receiver:
+    name: The receiver's PostHog settings work, on a deployment with no domain
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_DOCS_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Install Vercel CLI
+        run: npm install --global vercel@50.28.0
+      - name: Build, and deploy to production with no domain
+        id: deploy
+        run: |
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            [ -n "${!name:-}" ] || { echo "::error::$name is not set"; exit 1; }
+          done
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN" > "$RUNNER_TEMP/deploy.out"
+          host="$(tail -n 1 "$RUNNER_TEMP/deploy.out" | sed 's|^https://||')"
+          if ! printf '%s' "$host" | grep -Eq '^[a-z0-9-]+\.vercel\.app$'; then
+            echo "::error::no deployment URL in the deploy's output"; exit 1
+          fi
+          curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v13/deployments/$host?teamId=$VERCEL_ORG_ID" \
+            > "$RUNNER_TEMP/deployment.json"
+          # Its id only when it took none of the live domains: one that did is serving them, and is never deleted.
+          id="$(python3 - "$RUNNER_TEMP/deployment.json" <<'EOF'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          aliases = d.get("alias") or []
+          print("id:", d.get("id"), "| target:", d.get("target"), "| aliases:", aliases, file=sys.stderr)
+          took = [alias for alias in aliases if "texttocad.dev" in alias]
+          if took or d.get("target") != "production" or not str(d.get("id", "")).startswith("dpl_"):
+              sys.exit("the deployment took a live domain, or is not the production deployment this made")
+          print(d["id"])
+          EOF
+          )"
+          echo "host=$host" >> "$GITHUB_OUTPUT"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          for url in https://api.texttocad.dev/v1/health https://texttocad.dev/; do
+            echo "live $url -> $(curl -sS -o /dev/null -w '%{http_code}' "$url")"
+          done
+      - name: Health and forget, on that deployment
+        id: checks
+        env:
+          HOST: ${{ steps.deploy.outputs.host }}
+        run: |
+          health="$(curl -sS -o "$RUNNER_TEMP/health.json" -w '%{http_code}' "https://$HOST/v1/health")"
+          echo "GET /v1/health -> $health $(head -c 300 "$RUNNER_TEMP/health.json")"
+          install="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+          forget="$(curl -sS -o "$RUNNER_TEMP/forget.json" -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' --data "{\"install\":\"$install\"}" "https://$HOST/v1/forget")"
+          echo "POST /v1/forget, a random install id -> $forget $(head -c 300 "$RUNNER_TEMP/forget.json")"
+          [ "$health" = 200 ] && [ "$forget" = 204 ]
+      - name: On a failure, leave four minutes to read the deployment's logs
+        if: failure() && steps.checks.outcome == 'failure'
+        run: sleep 240
+      - name: Delete that deployment, by its id
+        if: always() && steps.deploy.outputs.id != ''
+        env:
+          ID: ${{ steps.deploy.outputs.id }}
+        run: |
+          curl -sS -o /dev/null -w 'DELETE the deployment -> %{http_code}\n' -X DELETE \
+            -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v13/deployments/$ID?teamId=$VERCEL_ORG_ID"
+          for attempt in 1 2 3 4 5 6; do
+            status="$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v13/deployments/$ID?teamId=$VERCEL_ORG_ID")"
+            echo "the deployment, after deleting it -> $status"
+            [ "$status" = 404 ] && exit 0
+            sleep 5
+          done
+          exit 1
