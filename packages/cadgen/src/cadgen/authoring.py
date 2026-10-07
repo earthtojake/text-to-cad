@@ -428,7 +428,10 @@ def _report_uncaught_declaration(exc_type, exc, tb) -> None:
     arguments) is reported like the runner reports a build failure, instead of
     a traceback. Anything else goes to the previous hook."""
     main = sys.modules.get("__main__")
-    file = getattr(main, "__file__", None) if main is not None else None
+    # CPython 3.13.15+ and 3.14.7+ (gh-152132) remove ``__main__.__file__`` before
+    # they call this hook; a ``python script.py`` run still names the script in
+    # ``sys.argv[0]``.
+    file = getattr(main, "__file__", None) or (sys.argv[0] if sys.argv else None)
     if getattr(exc, "__cadgen_declaration__", False) and file and "--verbose" not in sys.argv[1:]:
         from cadgen._internal.cli_from_function import report_failure
 

@@ -1,15 +1,18 @@
-import { ChevronRight, ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink, LinkIcon } from "lucide-react";
 import Image from "next/image";
+import type { ReactNode } from "react";
+import { agentLogos } from "@/components/agent-logos";
 import { CopyButton } from "@/components/copy-button";
 import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   agentInstallByline,
+  agentInstallLinks,
   agentInstallMessage,
   agents,
-  installYourself,
   installs,
   pluginDescription,
   pluginRequestUrl,
@@ -24,11 +27,28 @@ const COMMAND_BOX_CLASS =
 function AgentMessage() {
   return (
     <div className={COMMAND_BOX_CLASS}>
-      <div className="flex min-h-[54px] min-w-0 max-w-full items-stretch">
-        <p className="flex min-w-0 flex-1 items-center px-3 py-2 text-sm leading-6 text-foreground">
+      <div className="flex min-h-[54px] min-w-0 max-w-full flex-col items-stretch sm:flex-row">
+        <p className="flex min-w-0 flex-1 items-center break-words px-3 pt-2 font-mono text-sm leading-6 text-foreground sm:py-2">
           {agentInstallMessage}
         </p>
-        <CopyButton text={agentInstallMessage} label="Copy the message for your agent" prominent />
+        <div className="flex shrink-0 items-center justify-end gap-1.5 p-2">
+          {agentInstallLinks.map(({ id, agent, href }) => {
+            const Logo = agentLogos[id];
+            return (
+              <Tooltip key={id}>
+                <TooltipTrigger asChild>
+                  <Button asChild variant="secondary" size="icon-lg">
+                    <a href={href} aria-label={`Open in ${agent}`}>
+                      <Logo className="size-4" />
+                    </a>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Open in {agent}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+          <CopyButton text={agentInstallMessage} label="Copy the message for your agent" />
+        </div>
       </div>
     </div>
   );
@@ -74,64 +94,111 @@ function Command({ text, label }: { text: string; label: string }) {
         <code className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-pre font-mono px-3 py-2 text-sm leading-6 text-foreground">
           {text}
         </code>
-        <CopyButton text={text} label={label} />
+        <CopyButton text={text} label={label} className="m-2 self-center" />
       </div>
     </div>
+  );
+}
+
+// A fold, closed until opened: how to update and reinstall an install, or an app's commands where
+// it leads with its own plugin directory.
+function Fold({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className="group">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-sm leading-6 text-muted-foreground transition hover:text-foreground [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+        {label}
+      </summary>
+      <div className="mt-2 space-y-2">{children}</div>
+    </details>
+  );
+}
+
+// A title that links to its own section, as GitHub's headings do: following it puts the section in the
+// address bar, to share or come back to. Its icon shows on hover and focus.
+function TitleLink({ anchor, children }: { anchor: string; children: ReactNode }) {
+  return (
+    <a href={`#${anchor}`} className="group/title inline-flex items-center gap-2 rounded-sm">
+      {children}
+      <LinkIcon
+        className="size-[0.7em] shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-visible/title:opacity-100"
+        aria-hidden="true"
+      />
+    </a>
   );
 }
 
 // An install, and under it, folded away, how to update it and how to reinstall it: where the CAD
-// app's update button sends a person who updates by hand (/install).
+// app's update button sends a person who updates by hand (/install). An app listed in its own plugin
+// directory leads with a button to the listing, its commands folded under Manual install.
 function Install({ item }: { item: (typeof installs)[number] }) {
+  const Logo = agentLogos[item.id];
+  const updateOrReinstall = (
+    <>
+      {item.update ? (
+        <>
+          <p className="text-sm leading-6 text-muted-foreground">Update, then restart the app:</p>
+          <Command text={item.update} label={`Copy the ${item.agent} update command`} />
+        </>
+      ) : (
+        <p className="text-sm leading-6 text-muted-foreground">Run the install command again to update or reinstall, then restart the app.</p>
+      )}
+      {item.remove ? (
+        <>
+          <p className="text-sm leading-6 text-muted-foreground">Reinstall: remove it, then install it again:</p>
+          <Command text={item.remove} label={`Copy the ${item.agent} remove command`} />
+        </>
+      ) : null}
+    </>
+  );
   return (
     <div id={item.id} className="min-w-0 scroll-mt-20 space-y-2">
       <div>
-        <h3 className="text-base font-semibold text-foreground">{item.agent}</h3>
+        <h3 className="text-base font-semibold text-foreground">
+          <TitleLink anchor={item.id}>{item.agent}</TitleLink>
+        </h3>
         {item.note ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.note}</p> : null}
       </div>
-      <Command text={item.command} label={`Copy the ${item.agent} install command`} />
-      <details className="group">
-        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-sm leading-6 text-muted-foreground transition hover:text-foreground [&::-webkit-details-marker]:hidden">
-          <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
-          Update or reinstall
-        </summary>
-        <div className="mt-2 space-y-2">
-          {item.update ? (
-            <>
-              <p className="text-sm leading-6 text-muted-foreground">Update, then restart the app:</p>
-              <Command text={item.update} label={`Copy the ${item.agent} update command`} />
-            </>
-          ) : (
-            <p className="text-sm leading-6 text-muted-foreground">Run the install command again to update or reinstall, then restart the app.</p>
-          )}
-          {item.remove ? (
-            <>
-              <p className="text-sm leading-6 text-muted-foreground">Reinstall: remove it, then install it again:</p>
-              <Command text={item.remove} label={`Copy the ${item.agent} remove command`} />
-            </>
-          ) : null}
-        </div>
-      </details>
+      {item.listing ? (
+        <>
+          <Button asChild className="h-11 gap-2 px-5 text-base">
+            <a href={item.listing.href} target="_blank" rel="noreferrer">
+              {Logo ? <Logo className="size-5" /> : null}
+              {item.listing.label}
+            </a>
+          </Button>
+          <Fold label="Manual install">
+            <Command text={item.command} label={`Copy the ${item.agent} install command`} />
+            {updateOrReinstall}
+          </Fold>
+        </>
+      ) : (
+        <>
+          <Command text={item.command} label={`Copy the ${item.agent} install command`} />
+          <Fold label="Update or reinstall">{updateOrReinstall}</Fold>
+        </>
+      )}
     </div>
   );
 }
 
+// A section's title, `<section>-title` (the section's label), linking to the section.
 function SectionIntro({
-  id,
+  section,
   title,
   description,
 }: {
-  id?: string;
+  section: string;
   title: string;
   description?: string;
 }) {
   return (
     <div>
       <h2
-        id={id}
+        id={`${section}-title`}
         className="text-heading font-semibold tracking-tight text-foreground"
       >
-        {title}
+        <TitleLink anchor={section}>{title}</TitleLink>
       </h2>
       {description ? (
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -199,12 +266,12 @@ export default function Home() {
 
           {/* Right under the hero, so a phone shows the agents on load. */}
           <section id="agents" aria-labelledby="agents-title" className="scroll-mt-20 space-y-3 py-6">
-            <SectionIntro id="agents-title" title="Available for these agents" />
+            <SectionIntro section="agents" title="Available for these agents" />
             <AgentCarousel />
           </section>
 
           <section id="overview" aria-labelledby="overview-title" className="scroll-mt-20 space-y-3 py-6">
-            <SectionIntro id="overview-title" title="Overview" description={pluginDescription} />
+            <SectionIntro section="overview" title="Overview" description={pluginDescription} />
             <p className="text-sm leading-6 text-muted-foreground">
               {support.before}{" "}
               <a href={support.link.href} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-4">
@@ -215,20 +282,15 @@ export default function Home() {
           </section>
 
           <section id="install" aria-labelledby="install-title" className="scroll-mt-20 space-y-3 py-6">
-            <SectionIntro id="install-title" title="Install" />
-            <div className="space-y-3">
+            <SectionIntro section="install" title="Install" />
+            <div id="ask-your-agent" className="scroll-mt-20 space-y-3">
               <div>
-                <h3 className="text-base font-semibold text-foreground">Ask your agent (recommended)</h3>
+                <h3 className="text-base font-semibold text-foreground">
+                  <TitleLink anchor="ask-your-agent">Ask your agent (recommended)</TitleLink>
+                </h3>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">{agentInstallByline}</p>
               </div>
               <AgentMessage />
-              <p className="text-sm leading-6 text-muted-foreground">
-                {installYourself.before}{" "}
-                <a href={installYourself.link.href} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-4">
-                  {installYourself.link.text}
-                </a>{" "}
-                {installYourself.after}
-              </p>
             </div>
             <div className="space-y-6 pt-6">
               {installs.map((item) => (
@@ -249,7 +311,7 @@ export default function Home() {
             className="scroll-mt-20 space-y-3 py-6"
           >
             <SectionIntro
-              id="skills-title"
+              section="skills"
               title="Skills"
               description="Install the library to give agents focused workflows for CAD, fabrication, robot description files, simulation, and local review."
             />
@@ -290,7 +352,7 @@ export default function Home() {
 
 
           <section id="contributing" aria-labelledby="contributing-title" className="scroll-mt-20 space-y-3 py-6">
-            <SectionIntro id="contributing-title" title="Contributing" />
+            <SectionIntro section="contributing" title="Contributing" />
             <p className="text-sm leading-6 text-muted-foreground">
               Branch from <code className="font-mono text-foreground">main</code> and open PRs against{" "}
               <code className="font-mono text-foreground">main</code>. For the local workflow, testing in agent apps

@@ -16,6 +16,7 @@ export const jsonTargets = [
   { path: ".codex-plugin/plugin.json", fields: [["version"]] },
   { path: ".cursor-plugin/plugin.json", fields: [["version"]] },
   { path: "gemini-extension.json", fields: [["version"]] },
+  { path: "plugin.json", fields: [["version"]] },
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["text-to-cad"] },
 ];
 
@@ -46,6 +47,7 @@ export const pinTargets = [
   "codex.mcp.json",
   "claude.mcp.json",
   "cursor.mcp.json",
+  "mcp.json",
   "gemini-extension.json",
   "README.md",
   ...skillLaunchTargets(),

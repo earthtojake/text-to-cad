@@ -3,7 +3,6 @@
 import {
   agentInstallByline,
   agentInstallMessage,
-  installYourself,
   installs,
   pluginDescription,
   skillGroups,
@@ -31,12 +30,11 @@ export function GET() {
     agentInstallMessage,
     "```",
     "",
-    `${installYourself.before} [${installYourself.link.text}](${installYourself.link.href}) ${installYourself.after}`,
-    "",
     ...installs.flatMap((item) => [
       `### ${item.agent}`,
       "",
       ...(item.note ? [item.note, ""] : []),
+      ...(item.listing ? [`${item.listing.label}: ${item.listing.href}`, "", "Or install it by hand:", ""] : []),
       "```bash",
       item.command,
       "```",

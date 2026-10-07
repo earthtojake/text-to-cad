@@ -22,7 +22,7 @@ export const MAX_BYTES = 16 * 1024;
 const SHARED = new Set(['schema', 'install', 'session', 'version', 'platform', 'arch', 'client', 'presentation', 'events']);
 // Where the install came from, as its plugin's startup command named it (`cadgen/_internal/channel.py`).
 const CHANNELS = new Set(['claude-github', 'codex-github', 'cursor-github', 'gemini-github', 'claude-desktop',
-  'claude-directory', 'openai-directory', 'cursor-marketplace', 'dev', 'unknown']);
+  'claude-directory', 'openai-directory', 'cursor-marketplace', 'agent-plugins', 'dev', 'unknown']);
 const SOURCES = new Set(['store', 'manual']);
 // What each schema says beside the shared fields: where the install came from. A new schema adds a reader
 // here and keeps the old ones.

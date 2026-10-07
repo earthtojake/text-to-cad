@@ -20,33 +20,40 @@ export const support = {
 // (the README's Install, which says the same).
 export const agentInstallByline = "Send this message to your agent and it will install text-to-cad for you.";
 export const agentInstallMessage = "Install text-to-cad from https://github.com/earthtojake/text-to-cad";
-// Installing by hand, as a person or their agent does it: uv, the app's commands, a restart (the
-// README's numbered steps).
-export const installYourself = {
-  before: "Or install it yourself: install",
-  link: { text: "uv", href: "https://docs.astral.sh/uv/getting-started/installation/" },
-  after: "if you don't have it yet, then run the commands for your agent app below and restart the app.",
-};
+// The same message, opened in an agent app with its composer prefilled, never sent: Claude Code in
+// Claude Desktop (claude://code/new, Claude's help center, "Open Claude Desktop with a link"), the
+// Codex app (codex://threads/new, its commands reference) and Cursor (its prompt deeplink, Cursor's
+// docs, "Deeplinks"). By install id, for the logo.
+export const agentInstallLinks = [
+  { id: "claude-code", agent: "Claude Code", href: `claude://code/new?q=${encodeURIComponent(agentInstallMessage)}` },
+  { id: "codex", agent: "Codex", href: `codex://threads/new?prompt=${encodeURIComponent(agentInstallMessage)}` },
+  { id: "cursor", agent: "Cursor", href: `cursor://anysphere.cursor-deeplink/prompt?text=${encodeURIComponent(agentInstallMessage)}` },
+];
 
 // Installing by hand, each its own sub-section of Install: the plugin for each agent app (the skills
 // and CAD's viewer together), then the skills alone, with the Skills CLI, for any other agent. Each
 // plugin says how to update it (then a restart) and how to remove it, to install it again: a
-// reinstall. The Skills CLI's install is its update and its reinstall, so it says neither.
+// reinstall. The Skills CLI's install is its update and its reinstall, so it says neither. An app
+// with a listing in its own plugin directory (`listing`) leads with that, the commands folded under
+// Manual install.
 export const installs = [
   {
     id: "claude-code",
     agent: "Claude Code",
     command:
-      "claude plugin marketplace add earthtojake/text-to-cad\nclaude plugin install text-to-cad@earthtojake",
+      "claude plugin marketplace add earthtojake/text-to-cad#latest\nclaude plugin install text-to-cad@earthtojake",
     update: "claude plugin marketplace update earthtojake\nclaude plugin update text-to-cad@earthtojake",
     remove: "claude plugin uninstall text-to-cad@earthtojake\nclaude plugin marketplace remove earthtojake",
   },
   {
     id: "codex",
     agent: "Codex",
-    note: "Requires Codex 0.142.0 or newer.",
+    listing: {
+      label: "Install in Codex",
+      href: "https://chatgpt.com/plugins/plugins_6ac09476ef008191a35887b22b0d048a",
+    },
     command:
-      "codex plugin marketplace add earthtojake/text-to-cad\ncodex plugin add text-to-cad@earthtojake",
+      "codex plugin marketplace add earthtojake/text-to-cad --ref latest\ncodex plugin add text-to-cad@earthtojake",
     update: "codex plugin marketplace upgrade earthtojake",
     remove: "codex plugin remove text-to-cad@earthtojake\ncodex plugin marketplace remove earthtojake",
   },
@@ -55,7 +62,7 @@ export const installs = [
     agent: "Cursor",
     note: "Cursor also loads the Claude Code plugin: if it is installed, skip this.",
     command:
-      "git clone --depth 1 --branch plugin https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad",
+      "git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad",
     update: "git -C ~/.cursor/plugins/local/text-to-cad pull",
     remove: "rm -rf ~/.cursor/plugins/local/text-to-cad",
   },
@@ -65,14 +72,14 @@ export const installs = [
     id: "grok-build",
     agent: "Grok Build",
     note: "Grok Build also loads the Claude Code plugin: if it is installed, skip this.",
-    command: "grok plugin install earthtojake/text-to-cad --trust\ngrok plugin enable text-to-cad",
+    command: "grok plugin install earthtojake/text-to-cad@latest --trust\ngrok plugin enable text-to-cad",
     update: "grok plugin update text-to-cad",
     remove: "grok plugin uninstall text-to-cad",
   },
   {
     id: "gemini",
     agent: "Gemini",
-    command: "gemini extensions install https://github.com/earthtojake/text-to-cad --consent --auto-update",
+    command: "gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest --consent --auto-update",
     update: "gemini extensions update text-to-cad",
     remove: "gemini extensions uninstall text-to-cad",
   },
@@ -80,7 +87,7 @@ export const installs = [
     id: "other-agents",
     agent: "Other Agents",
     note: "For an agent without plugin support: the skills give you everything you need for core CAD workflows and let you view CAD files in a localhost web app.",
-    command: "npx skills add earthtojake/text-to-cad",
+    command: "npx skills add earthtojake/text-to-cad#latest",
   },
 ];
 

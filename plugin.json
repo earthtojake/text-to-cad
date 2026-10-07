@@ -1,4 +1,5 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "text-to-cad",
   "version": "0.7.15",
   "description": "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.",
@@ -7,10 +8,6 @@
     "url": "https://github.com/earthtojake"
   },
   "homepage": "https://www.texttocad.dev",
-  "documentationUrl": "https://www.texttocad.dev",
-  "supportUrl": "https://github.com/earthtojake/text-to-cad/issues/new",
-  "privacyPolicyUrl": "https://www.texttocad.dev/privacy-policy",
-  "termsOfServiceUrl": "https://www.texttocad.dev/terms-of-service",
   "repository": "https://github.com/earthtojake/text-to-cad",
   "license": "MIT",
   "keywords": [
@@ -22,7 +19,5 @@
     "urdf",
     "sdf",
     "gcode"
-  ],
-  "skills": "./skills/",
-  "mcpServers": "./claude.mcp.json"
+  ]
 }

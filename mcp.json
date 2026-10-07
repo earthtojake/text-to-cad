@@ -1,6 +1,8 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
     "cad": {
+      "type": "stdio",
       "command": "uvx",
       "args": [
         "--no-config",
@@ -13,8 +15,7 @@
         "mcp"
       ],
       "env": {
-        "CADGEN_INSTALL_CHANNEL": "cursor-marketplace",
-        "CADGEN_AUTO_UPDATED": "1"
+        "CADGEN_INSTALL_CHANNEL": "agent-plugins"
       }
     }
   }
