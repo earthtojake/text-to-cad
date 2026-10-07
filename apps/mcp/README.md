@@ -57,11 +57,14 @@ reference host `basic-host` does.
   anywhere under the folder (the server's bounded `/__cad/search`). A pick shows
   the file and closes it. Nothing says where a view may browse: a tab, a card and
   the web viewer browse the same way.
-- **A view keeps its own history.** As a browser keeps a tab's: every model a
-  view showed and the home, in order, the agent's shows and the person's own moves
-  alike (`ModelView.tsx`). The navbar's Back and Forward, between its logo and the
+- **A view keeps its own history.** As a browser keeps a tab's: every file a
+  view showed, in order, the agent's shows and the person's own moves alike
+  (`ModelView.tsx`). The navbar's Back and Forward, between its logo and the
   file's name, walk it, each disabled where it has nowhere to go; a move after a
   Back drops what was ahead, and a show of what is already on screen adds nothing.
+  The home is no step: it is a bigger way to pick a recent file, so going there
+  leaves the history as it stands, and the file picked there follows the one the
+  view left.
   It is the view's, in memory: another tab or card has its own, and a view opened
   again starts with one step. Going back opens that model afresh, as a browser's
   Back does in the web viewer. A file handler's view, which shows its file alone,

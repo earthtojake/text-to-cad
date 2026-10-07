@@ -126,8 +126,8 @@ explorer, and no `openFile`, so a renderer's link to another file (a robot's mes
 text there. A host that keeps a view's own history,
 where no browser does (the CAD app's views), hands it as `history` (`ViewerHistory`:
 `canGoBack`, `canGoForward`, `back()`, `forward()`; `CadViewerProps.history`): the navbar
-draws Back and Forward over it. What the history holds, and that a step is every model and
-the home the view showed, the agent's shows and the person's moves alike, is the host's; the
+draws Back and Forward over it. What the history holds is the host's (the CAD app's: every file
+the view showed, the agent's shows and the person's moves alike, the home being no step); the
 web hands none, its page having the browser's. `onShown(path | null)` says which file the catalog
 has on screen (null for the home, or a file still resolving or missing), for a host that
 names its page after it or records it. The host decides what showing a file means,

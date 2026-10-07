@@ -37,8 +37,9 @@ none.
   logo, named Menu, the size of the row's icon buttons, with no chevron, which opens the
   **app menu** (see [Settings](#settings)) — a host with no home has it too — then, where the
   host keeps the view's own history (`history`: the CAD app's views, which no browser holds),
-  **Back** and **Forward**, two arrows walking it as a browser's do, each there always and
-  disabled where it has nowhere to go; then the open file's name and its ⋯. Each of these that
+  **Back** and **Forward**, two arrows walking it as a browser's do, from file to file (the home
+  is no step: it is a way to pick a recent file), each there always and disabled where it has
+  nowhere to go; then the open file's name and its ⋯. Each of these that
   is a control (`NAV_ITEM_CLASS`) is transparent at rest, takes the same accent background
   while the pointer is on it and while its menu is open, has a pointer cursor and no tooltip:
   it says what it is. The name

@@ -151,7 +151,7 @@ it('an inline host gets the whole viewer in a card of a height it is told, with 
   expect(viewer.mounts).toBe(1);
 });
 
-it("a view keeps its own history, as a browser's tab does: the agent's shows and the person's moves, Back and Forward over them, a move after a Back dropping what was ahead", async () => {
+it("a view keeps its own history of files, as a browser's tab does: the agent's shows and the person's moves, Back and Forward over them, a move after a Back dropping what was ahead, the home no step", async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   // The agent's shows reach the view on its sync, one reply at a time.
   const replies: ((reply: { events: unknown[] }) => void)[] = [];
@@ -173,14 +173,25 @@ it("a view keeps its own history, as a browser's tab does: the agent's shows and
   expect(at()).toEqual(['/work/a.step', false, true]);
   act(() => viewer.props!.history!.forward());
   expect(at()).toEqual(['/work/b.step', true, true]);
-  // The home is a step too; a move after a Back drops what was ahead (c).
+  // The home is no step, a bigger way to pick a recent file: going there leaves the history where
+  // it stands, and the file picked there follows the one the view left, dropping what was ahead (c).
   act(() => viewer.props!.onShow(''));
-  expect(at()).toEqual(['', true, false]);
+  expect(at()).toEqual(['', true, true]);
+  act(() => viewer.props!.onShow('/work/d.step'));
+  expect(at()).toEqual(['/work/d.step', true, false]);
   act(() => viewer.props!.history!.back());
   expect(at()).toEqual(['/work/b.step', true, true]);
-  // Showing what is already on screen adds nothing: the home is still ahead.
+  // Picking, on the home, the file the view left adds nothing; nor does a show of what is on screen.
+  act(() => viewer.props!.onShow(''));
+  act(() => viewer.props!.onShow('/work/b.step'));
+  expect(at()).toEqual(['/work/b.step', true, true]);
   await agentShows('/work/b.step', 2);
   expect(at()).toEqual(['/work/b.step', true, true]);
+  cleanup();
+  // A view opened on the home: its first file is its first step, with nothing behind it.
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'home', model: null, surface: 'tab', pick: false }} />);
+  act(() => viewer.props!.onShow('/work/a.step'));
+  expect(at()).toEqual(['/work/a.step', false, false]);
   cleanup();
   // A file handler shows its file alone, with no home to go to: no Back or Forward.
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);

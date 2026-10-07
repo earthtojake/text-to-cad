@@ -65,21 +65,26 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
     const { list, search, ...alone } = createCadFileSource(client);
     return homed ? { ...alone, list, search } : alone;
   }, [client, homed]);
-  // The view's own history, as a browser keeps a tab's: every model it showed, and the home, by
-  // absolute path ('' is the home), the agent's shows and the person's own moves alike. The file on
-  // screen is where it stands. Back and Forward walk it; a move after a Back drops what was ahead, and
-  // showing what is already on screen adds nothing.
+  // The view's own history, as a browser keeps a tab's: the files it showed, by absolute path, the
+  // agent's shows and the person's own moves alike. Back and Forward walk them; a move after a Back
+  // drops what was ahead, and showing what is already on screen adds nothing. The home ('') is no
+  // step: it is a bigger way to pick a recent file, so going there leaves the history where it
+  // stands, and a file picked there follows the one the view left.
   const launched = () => normalizePath(launch.model || '');
-  const [history, setHistory] = useState(() => ({ entries: [launched()], index: 0 }));
-  const file = history.entries[history.index];
+  const [history, setHistory] = useState(() => {
+    const first = launched();
+    return { entries: first ? [first] : [], index: first ? 0 : -1, home: !first };
+  });
+  const file = history.home ? '' : history.entries[history.index] ?? '';
   const navigate = useCallback((next: string) => setHistory(current => {
-    if (current.entries[current.index] === next) return current;
+    if (!next) return current.home ? current : { ...current, home: true };
+    if (current.entries[current.index] === next) return current.home ? { ...current, home: false } : current;
     const entries = [...current.entries.slice(0, current.index + 1), next].slice(-HISTORY_LIMIT);
-    return { entries, index: entries.length - 1 };
+    return { entries, index: entries.length - 1, home: false };
   }), []);
-  const back = useCallback(() => setHistory(current => current.index > 0 ? { ...current, index: current.index - 1 } : current), []);
+  const back = useCallback(() => setHistory(current => current.index > 0 ? { ...current, index: current.index - 1, home: false } : current), []);
   const forward = useCallback(() => setHistory(current =>
-    current.index < current.entries.length - 1 ? { ...current, index: current.index + 1 } : current), []);
+    current.index < current.entries.length - 1 ? { ...current, index: current.index + 1, home: false } : current), []);
   const showing = useRef(file);
   showing.current = file;
   // A copied prompt's sketch is saved by the server, which is on this machine.
@@ -91,7 +96,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   // The file menu: its path, and Reveal in the desktop's file manager (the server is on this machine).
   const fileActions = useMemo(() => createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path) }), [platform, client]);
 
-  // The agent's show is a step in the view's history, as a person's is.
+  // The agent's show of a file is a step in the view's history, as a person's is.
   useEffect(() => { navigate(launched()); }, [launch, sequence]);
   useEffect(() => sync.watch({
     file: () => showing.current || null, revision: () => client.getSnapshot().catalogRevision,
