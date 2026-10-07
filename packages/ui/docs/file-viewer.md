@@ -25,7 +25,8 @@ lifetime. Changing their object identity cancels outstanding document work.
 `source.id` is a stable identity, independent of a server's temporary port. Every
 path is absolute and `/`-separated (`/a/b.step`, `C:/a/b.step`); containment and
 authorization remain in the host service. The host controls navigation
-(`navigation.openFile(path)`, and `home()` where it has a home) and keeps
+(`navigation.openFile(path)` where the view can show another file, and `home()` where it
+has a home; a view that shows one file alone has neither, and no explorer) and keeps
 `FileViewerState` in its tab store (`@text-to-cad/ui/tab-store`; `useTabViewerState`
 derives it): `renderers`, under encoded `[file path, renderer ID]` keys, each the
 file's view.
@@ -62,7 +63,7 @@ A renderer is handed, besides its document: `onNavigationActionsChange`, for its
 nav-row actions (`FileNavigationAction`, with an optional shorter `hint`), hidden
 while it reports `onReady(false)`; `displayActions`, the host's controls for the
 Display settings; `appearance`; and `onOpenFile(path)`, which shows another file, by
-its absolute path, in this view (a robot's mesh). Its loading and update status are its
+its absolute path, in this view (a robot's mesh), absent where the view shows its file alone. Its loading and update status are its
 own to show: a CAD renderer shows them in its viewport. Host-specific pages are supplied through `presentation`,
 without duplicating the view's placement: `home` is a host's own page for a view with
 no file (every CAD host's model library), with no navbar over it; `loading`; and
@@ -82,29 +83,39 @@ shows its file fullscreen. Left to right:
   Discord and, in gray, the version and who made it. FileViewer builds it from
   `host.links`, `appSettings` and `environment.platform`. A host with no home has the
   logo and the menu too, without Back to files;
+- Back and Forward, where the host keeps the view's own history (`history`, a
+  `ViewerHistory`: the CAD app's views; a browser's page has its own and hands none): two
+  arrows, each there always and disabled where it has nowhere to go;
 - the open file's name: a button that opens the explorer where the source can both list
   and search, and plain text otherwise;
 - the ⋯ file menu: Copy path, and Reveal in Finder / Show in Explorer / Show in file
   manager, each only where the host's `fileActions` can do it, and no ⋯ where it can do
   none.
 
-The logo, the name (where it opens the explorer) and the ⋯ are one kind of control: transparent
+The logo, Back and Forward, the name (where it opens the explorer) and the ⋯ are one kind of control: transparent
 at rest, the same accent background while the pointer is on it and while its menu is open, a
 pointer cursor, and no tooltip.
 
-At the right, only what a host or a file adds, so usually nothing: the host's update
-button, a renderer's actions and the host's Full size, last, where the host shows the
-view small. A 3D view's own controls (Display, Preview) are not here: its renderer
-draws them on top of its view cube.
+At the right, only what a host or a file adds: the host's update button, a renderer's
+actions, the host's Full size, where the host shows the view small, and last the box for
+the renderer's own view controls, which FileViewer hands it as `navbarSlot` (a 3D view's
+Display and Preview). Last, so that a renderer showing its file fullscreen, which puts the
+navbar away, can draw its own controls where they sat.
 
 The explorer (`navigation/FolderExplorer.jsx`) is a popover under the file's name, a
 fixed 18rem wide and never resized. It floats over the view, so opening it resizes
 nothing, and it is built anew on each opening, so it starts in the open file's
-folder. It lists one folder at a time through `source.list`: the folder's
-subfolders, then its CAD files, the open file highlighted. A breadcrumb shows the
-last three folders of the one it is in, with a "…" button whose menu lists the
-folders above to jump to; a subfolder or a crumb opens a folder in place, and there
-is no up arrow. "Filter files..." searches every file nested under the folder it is
+folder, its filter taking the keyboard (on a phone the explorer holds focus itself, so no
+keyboard comes up). It lists one folder at a time through `source.list`: the folder's
+subfolders, then its CAD files, the open file highlighted, in compact rows (a folder's glyph
+its disclosure chevron). A press on a subfolder opens it inline, under itself and a little
+further in, reading it through `source.list` the first time; a double-click opens it in the
+explorer's place. A breadcrumb shows as many of
+the last three folders of the one it is in as fit whole, measured before it is painted:
+a crumb is never cut, the farthest giving way first to a "…" button whose menu lists the
+folders above the crumbs to jump to, and only the folder it is in, alone beside the "…",
+is cut to the row. A crumb, as a double-click does, opens a folder in place, and there is
+no up arrow. "Filter files..." searches every file nested under the folder it is
 in through `source.search`: the client waits 150 ms after the last keystroke and
 aborts the search before it, and each match shows its path below the folder, the
 subfolders muted before the name. An answer that is `truncated` adds "Stopped early.

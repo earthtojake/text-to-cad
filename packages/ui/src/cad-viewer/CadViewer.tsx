@@ -5,7 +5,7 @@ import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState } from '../file-viewer/navigation/index.js';
 import { Button } from '../primitives/button.jsx';
-import type { AppSetting, ViewerFeatures } from '../file-viewer/types.js';
+import type { AppSetting, ViewerFeatures, ViewerHistory } from '../file-viewer/types.js';
 import type { ViewerHost } from '../host/types.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
 import { ModelLibrary, type LibraryModel, type ModelLibrarySource } from '../library/ModelLibrary.js';
@@ -40,7 +40,8 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   /**
    * The home's library: the models opened before, to open again, and Open. A host with one shows it
    * wherever no file is open, and the navbar's logo leads to it from a file. Without one (a host
-   * whose own navigation shows one file, as a file handler does) a view has a file and nothing else.
+   * whose own navigation shows one file, as a file handler does) a view has a file and nothing else:
+   * no home, no explorer, and no link to another file.
    */
   library?: ModelLibrarySource<Model>;
   /** Keep the library's picture of a model: the file on screen once it has settled, and on the home a card's. */
@@ -60,9 +61,14 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   update?: ReactNode;
   /**
    * The host's Full size button, where it shows the view small (inline in a conversation) and can
-   * show it full size: last in the navbar over every file, and last in the home's row.
+   * show it full size: in the navbar over every file, before the view's own controls, and last in the home's row.
    */
   fullSize?: ReactNode;
+  /**
+   * The view's own history, where the host keeps one rather than a browser (the CAD app's views):
+   * Back and Forward in the navbar over every file, between its logo and the file's name.
+   */
+  history?: ViewerHistory;
   onError?(error: Error): void;
 }
 
@@ -79,7 +85,7 @@ const reportError = (error: Error) => console.error(error);
  * navigates: showing a file, or the home, is the host's `onShow`.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, onShown,
-  library, onThumbnail, displayActions, appSettings, features, notice, update, fullSize, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, displayActions, appSettings, features, notice, update, fullSize, history, onError = reportError }: CadViewerProps<Model>) {
   const preferences = tabStore.settings;
   // One viewer renderer per file family, sharing one client and the tab's preferences; each
   // lazy-loads only its own code.
@@ -123,13 +129,14 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     (png, pictured) => latest.current.onThumbnail?.(png, pictured) ?? Promise.resolve());
 
   // A file the viewer asks for — a pick in the explorer, a renderer's link — is shown by the host.
+  // A view with no library shows its file and nothing else: it opens no other, and has no home.
   const openFile = useCallback((next: string) => {
     const wanted = normalizePath(next);
     if (wanted && wanted !== latest.current.path) latest.current.onShow(wanted);
   }, []);
   const homed = Boolean(library);
   const home = useCallback(() => latest.current.onShow(''), []);
-  const viewerHost = useMemo<ViewerHost>(() => ({ ...host, navigation: homed ? { openFile, home } : { openFile } }), [host, openFile, home, homed]);
+  const viewerHost = useMemo<ViewerHost>(() => ({ ...host, navigation: homed ? { openFile, home } : {} }), [host, openFile, home, homed]);
 
   // The home's pictures for cards without a current one, drawn out of sight one at a time and kept as
   // the file on screen's are. A model whose display is not built yet is left to its placeholder: the
@@ -170,7 +177,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   }), [library, layout, changeLayout, path, picture, host.links, update, fullSize, onError, goHome]);
   return <>
     <FileViewer file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      displayActions={displayActions} appSettings={appSettings} update={update} fullSize={fullSize} features={features} notice={notice} onError={onError} presentation={presentation} />
+      displayActions={displayActions} appSettings={appSettings} update={update} fullSize={fullSize} history={history} features={features} notice={notice} onError={onError} presentation={presentation} />
     {drawing && !path ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}
   </>;
 }

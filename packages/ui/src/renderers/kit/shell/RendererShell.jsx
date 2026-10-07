@@ -1,6 +1,7 @@
-import { VIEWPORT_ACTION_HEIGHT_PX, VIEWPORT_CORNER_INSET_PX, VIEWPORT_CUBE_BOTTOM_PX, VIEWPORT_CUBE_SIZE, VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
+import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Play, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Maximize2, X } from "lucide-react";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
@@ -13,7 +14,7 @@ import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
 import DisplayPopover from "./DisplayPopover.jsx";
 import { DrawingToolbar } from "../../../drawing/toolbar.jsx";
 import ToolPanel, { ToolPanelFooterButton } from "../tools/ToolPanel.jsx";
-import PlaybackMenu from "../tools/PlaybackMenu.jsx";
+import PlaybackMenu, { OrbitMenu, RoutineMenu } from "../tools/PlaybackMenu.jsx";
 import FloatingToolBar from "../tools/FloatingToolBar.js";
 import ToolStack from "../tools/ToolStack.jsx";
 import { toolPanelClosed } from "../tools/toolStackLayout.js";
@@ -24,21 +25,16 @@ import ShellViewport from "./ShellViewport.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 
 // The strip and the panels under it share one column, inset from the viewer's top and left
-// edges and stopping above the cube and its actions in the bottom-left corner: the column is
-// exactly the height the stack may take, so however many panels are up, it never runs past the
-// viewer or under the cube (`ToolPanel.jsx` decides which of them gives way).
+// edges and stopping above the cube in the bottom-left corner: the column is exactly the height
+// the stack may take, so however many panels are up, it never runs past the viewer or under the
+// cube (`ToolPanel.jsx` decides which of them gives way).
 const INSET = `${VIEWPORT_INSET_PX}px`;
 // The strip and its stack stop short of Quick Edit's button at the top-right.
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
-// A 3D view's controls, on top of the cube in the bottom-left corner and as wide as it.
-const VIEW_CONTROLS_POSITION = Object.freeze({
-  bottom: `calc(${VIEWPORT_CUBE_SIZE} + ${VIEWPORT_CUBE_BOTTOM_PX}px)`, left: VIEWPORT_CORNER_INSET_PX,
-  width: VIEWPORT_CUBE_SIZE, height: VIEWPORT_ACTION_HEIGHT_PX,
-});
 
-/** One of the view's controls: an icon button with its name on hover (above it, over the cube). */
-function NavbarControl({ label, disabled = false, onClick, tooltipSide, children }) {
-  return <TooltipHint content={label} side={tooltipSide}>
+/** One of the view's controls: an icon button, the navbar's, with its name on hover, below it. */
+function NavbarControl({ label, disabled = false, onClick, children }) {
+  return <TooltipHint content={label}>
     <Button type="button" variant="ghost" size="icon-xs" aria-label={label} disabled={disabled} onClick={onClick} className={NAVBAR_CONTROL_CLASS}>
       {children}
     </Button>
@@ -48,8 +44,9 @@ function NavbarControl({ label, disabled = false, onClick, tooltipSide, children
 /**
  * The frame every file-family renderer draws itself in: the viewport box with the tool strip at
  * its top-left corner and the tool stack under it, Quick Edit at the top-right, the cube in the
- * bottom-left corner with a 3D view's controls on top of it (Display's settings and Preview), the
- * loading, update and alert overlays, and preview mode's controls. The same
+ * bottom-left corner, a 3D view's controls at the navbar's right end (Display's settings and
+ * Preview, in the renderer's `navbarSlot`), the loading, update and alert overlays, and preview
+ * mode's controls. The same
  * structure, classes and data attributes for every renderer: hosts, stylesheets and tests key on
  * them. A file's controls are never a sidebar: they are panels in the tool stack, shown by the
  * tool they belong to. Nothing sits at the bottom centre but preview's playbar.
@@ -114,8 +111,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   const { previewing, setPreviewing } = shell;
   const animation = playback || frame.animation;
   const hasAnimation = animationControlsHaveContent(animation);
-  // Speed and Loop, once chosen in Playback settings, are the file's: its routine plays with
-  // them, whatever it authored, until they are chosen again. Unset, the routine's own apply.
+  // Speed and Loop, once chosen in the playbar's Playback settings, are the file's: its routine
+  // plays with them, whatever it authored, until they are chosen again. Unset, the routine's own apply.
   const { speed: chosenSpeed, loop: chosenLoop } = shell.playback;
   const animationRef = useRef(animation);
   animationRef.current = animation;
@@ -131,16 +128,16 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
     onSpeedChange: value => { shell.setPlayback({ speed: value }); animation.onSpeedChange(value); },
     onLoopToggle: value => { shell.setPlayback({ loop: value }); animation.onLoopToggle(value); }
   } : null;
-  // Preview orbits the model from the moment it starts, unless the file's Playback settings say
-  // otherwise: orbit on or off is the file's, kept from one preview to the next.
+  // Preview orbits the model from the moment it starts, unless the file's Orbit says otherwise:
+  // orbit on or off is the file's, kept from one preview to the next.
   const orbitPlaying = shell.playback.orbit;
   const setOrbitPlaying = value => shell.setPlayback({ orbit: typeof value === "function" ? value(shell.playback.orbit) : value });
-  // Display's settings: a dropdown from its button on top of the cube, not a tool — opening it leaves the
-  // tool in hand as it is. Preview, which has the page to itself, puts it away; another file starts
-  // with it shut.
+  // Display's settings: a dropdown from its button at the navbar's right end — and in preview, from
+  // the same place in preview's corner — not a tool: opening it leaves the tool in hand as it is.
+  // Entering or leaving preview puts it away, as another file does.
   const [displayOpen, setDisplayOpen] = useState(false);
   useEffect(() => { setPreviewing(false); setDisplayOpen(false); }, [frame.modelKey, setPreviewing]);
-  useEffect(() => { if (previewing) setDisplayOpen(false); }, [previewing]);
+  useEffect(() => { setDisplayOpen(false); }, [previewing]);
   // One viewport, two render profiles over the same Display settings (`renderProfile.js`): the
   // tools view is drawn for working on the model, preview for looking at it.
   const renderProfile = previewing ? VIEWER_RENDER_PROFILE.PREVIEW : VIEWER_RENDER_PROFILE.TOOLS;
@@ -295,29 +292,32 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 </div>
               </div>
 
-              {/* The view's controls, on top of the cube: Display's settings, then Preview, for a 3D view
-                  (`useRendererShell`'s `previewable`); another has neither. Not while the model loads or
-                  after it failed to, not in a host that shows the view small, and not in Preview, which
-                  has the page to itself. */}
-              {shell.previewable && !toolsHidden && !previewing ? <div className="pointer-events-auto absolute z-20 flex items-center justify-center gap-0.5"
-                style={VIEW_CONTROLS_POSITION} data-viewport-actions="">
+              {/* The view's controls, at the navbar's right end: Display's settings, then Preview, for a
+                  3D view (`useRendererShell`'s `previewable`); another has neither. Not while the model
+                  loads or after it failed to, not in a host that shows the view small, and not in
+                  Preview, which has the page to itself. */}
+              {view.navbarSlot && shell.previewable && !toolsHidden && !previewing ? createPortal(<>
                 <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle} boundary={frame.hostElement}>{frame.display}</DisplayPopover>
-                <NavbarControl label="Preview" tooltipSide="top" disabled={shell.idle} onClick={enterPreview}><Play className="size-3.5" aria-hidden="true" /></NavbarControl>
-              </div> : null}
+                <NavbarControl label="Preview" disabled={shell.idle} onClick={enterPreview}><Maximize2 className="size-3.5" aria-hidden="true" /></NavbarControl>
+              </>, view.navbarSlot) : null}
               {/* Preview: fullscreen, the navbar and the tools put away and the model orbiting, its
-                  routines playing. Where Display and Preview sat, Playback settings (the routine's and
-                  the orbit's) then its way out; under the model, a file with routines has its playbar,
-                  and a static file nothing at all. */}
-              <PreviewChrome active={previewing} surface={frame.hostElement} cornerStyle={VIEW_CONTROLS_POSITION}
-                corner={onMenuOpenChange => <>
-                  <PlaybackMenu animation={playbackMenuRuntime} onOpenChange={onMenuOpenChange}
-                    autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay}
-                    orbit={orbitPlaying} onOrbitChange={setOrbitPlaying}
-                    orbitSpeed={frame.previewOrbitSpeed || 1} onOrbitSpeedChange={frame.setPreviewOrbitSpeed} />
-                  <NavbarControl label="Exit preview" tooltipSide="top" onClick={leavePreview}><X className="size-3.5" aria-hidden="true" /></NavbarControl>
+                  routines playing. At the top-right, where Display and Preview sit outside it: Orbit,
+                  then Display in its own place, then the way out where Preview was. Under the model, a
+                  file with routines has its playbar, its Routines at its left end and its Playback
+                  settings at its right; a static file has nothing there at all. */}
+              <PreviewChrome active={previewing} surface={frame.hostElement}
+                corner={menu => <>
+                  <OrbitMenu orbit={orbitPlaying} onOrbitChange={setOrbitPlaying} onOpenChange={menu("orbit")}
+                    speed={frame.previewOrbitSpeed || 1} onSpeedChange={frame.setPreviewOrbitSpeed} />
+                  <DisplayPopover open={displayOpen} onOpenChange={open => { setDisplayOpen(open); menu("display")(open); }}
+                    disabled={shell.idle} boundary={frame.hostElement}>{frame.display}</DisplayPopover>
+                  <NavbarControl label="Exit preview" onClick={leavePreview}><X className="size-3.5" aria-hidden="true" /></NavbarControl>
                 </>}
-                playbar={hasAnimation ? <ViewportAnimationBar key={frame.modelKey} runtime={animation}
-                  className="pointer-events-auto" disabled={viewerLoading || !scene} /> : null}>
+                playbar={menu => hasAnimation ? <ViewportAnimationBar key={frame.modelKey} runtime={animation}
+                  className="pointer-events-auto" disabled={viewerLoading || !scene}
+                  leading={<RoutineMenu animation={animation} onOpenChange={menu("routines")} />}
+                  trailing={<PlaybackMenu animation={playbackMenuRuntime} onOpenChange={menu("playback")}
+                    autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay} />} /> : null}>
 
               {/* The file explorer floats over this corner, above the tools, which stay drawn under it. */}
               {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2" style={TOOLBAR_POSITION}

@@ -130,9 +130,10 @@ export function fileIconFor(filePath) {
  * two wrappers are module-level, so a row's icon is stable and the choice is
  * a `createElement` call rather than a JSX element type.
  *
- * @param {{ path: string, className?: string }} props
+ * @param {{ path: string, className?: string, strokeWidth?: number }} props  `strokeWidth`: a lighter
+ *   line for a dense list (the explorer's).
  */
-export function FileIcon({ path, className }) {
+export function FileIcon({ path, className, strokeWidth = 1.75 }) {
   const renderFormat = renderFormatFromPath(path);
   if (renderFormat) {
     // A file the CAD Viewer renders: its own per-format glyph, from the one
@@ -142,11 +143,11 @@ export function FileIcon({ path, className }) {
         entry={{ file: path, kind: renderFormat }}
         sourceFormat={renderFormat}
         className={className}
-        strokeWidth={1.75}
+        strokeWidth={strokeWidth}
       />
     );
   }
-  return createElement(fileIconFor(path), { className, strokeWidth: 1.75 });
+  return createElement(fileIconFor(path), { className, strokeWidth });
 }
 
 /**

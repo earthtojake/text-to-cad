@@ -54,9 +54,10 @@ normal 16px root or shrinking layout spacing.
 
 File-tab chrome uses normal-weight type. The navbar's file name, the explorer's and
 the model tree's rows, and filter matches use muted/primary text color for emphasis,
-never bold weight. The explorer's rows are 12px, the size of the section titles and
-the filter above them; the tool stack's trees (Features, Links) are denser, in the
-panels' 11px text ([the tool stack](docs/settings-ui.md#the-tool-stack)). Both inset
+never bold weight. The explorer's rows are compact 24px lines in 12px text, the size of
+the section titles and the filter above them, a folder opening inline under itself; the
+tool stack's trees (Features, Links) are 24px lines in the panels' smaller 11px text
+([the tool stack](docs/settings-ui.md#the-tool-stack)). Both inset
 row backgrounds 4px from their horizontal edges, including selected, hovered and
 filtered rows; nesting adds indentation inside that gutter.
 The file explorer is a popover under the navbar's file name (`FolderExplorer.jsx`):
@@ -268,13 +269,14 @@ too. Links is the description's link tree, with the Model tree's rows, filter
 and Reference panel; see [robot links](docs/cad-renderer.md#robot-links).
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
 the tool stack, mobile layout, section density, keyboard scope, tooltips
-and preview. RendererShell owns the top-left toolbar, Quick Edit at the top-right and the
-bottom-left cube, with a 3D view's controls on top of it: Display (its settings, a
-dropdown that opens up), then Preview. Preview is the shell's own mode, where routines
-play and the model orbits, and takes the whole page, the navbar with it; its corner
-controls (Playback settings, Exit preview) sit in that same box over the cube's corner,
-where Display and Preview sat. Keep app-specific effects in the
-[host contract](docs/viewer-host.md), not in renderer components.
+and preview. RendererShell owns the top-left toolbar, Quick Edit at the top-right, the
+bottom-left cube, and a 3D view's controls, which it draws at the navbar's right end:
+Display (its settings, a dropdown that opens down), then Preview. Preview is the shell's own
+mode, where routines play and the model orbits, and takes the whole page, the navbar with
+it; its own controls sit at the view's top-right, on the navbar's geometry — Orbit, then
+Display where it sat in the navbar, then Exit preview where Preview sat — and its playbar
+holds the routines at its left end and their settings at its right. Keep app-specific
+effects in the [host contract](docs/viewer-host.md), not in renderer components.
 
 One per-file settings store serves controls, live commands and persistence.
 Presets use the canonical grouped schema; see [View presets](docs/render-mode.md).
@@ -290,11 +292,12 @@ is no Materials editor or persisted material override. See [View styles](docs/re
 The navbar leads with the C logo, which opens the app's menu: Back to files where the host
 has a home, the person's settings (Share anonymous usage data, Quick edit), Send feedback
 (a new issue titled "Feedback: " where the host has a tracker), GitHub, Discord and, in
-gray, the version and who made it. It names the file — the name opens the explorer — and
-offers its ⋯ menu (Copy path, Reveal). The three share one look: transparent until the
+gray, the version and who made it. Where the host keeps the view's own history (the CAD
+app's views), Back and Forward follow, disabled where they have nowhere to go. It names the
+file — the name opens the explorer — and offers its ⋯ menu (Copy path, Reveal). They share one look: transparent until the
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
-or a file adds: the host's update button, a dismissed alert's icon and the host's Full
-size.
+or a file adds: the host's update button, a dismissed alert's icon, the host's Full size
+and, last, a 3D view's Display and Preview.
 With no file a view shows the host's home, the model library: the models opened before,
 pinned first, with their pictures, and Open where the host has a file chooser, under its
 wordmark and GitHub, Discord and X. A file that

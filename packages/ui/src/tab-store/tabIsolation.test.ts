@@ -47,7 +47,7 @@ test('a new tab starts at the defaults and two tabs never meet: each reload brin
   expect(secondReloaded.files.read('/models/part.step', 'step')).toBeUndefined();
 });
 
-test("preview's Playback settings are the file's: kept across a reload of the tab, and another file has its own defaults", () => {
+test("preview's settings are the file's: kept across a reload of the tab, and another file has its own defaults", () => {
   const tab = browserTab();
   const store = createTabStore(tab.record());
   // A fresh file: orbit on at 1×, the routine's own loop, Autoplay off.

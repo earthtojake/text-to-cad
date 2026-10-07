@@ -55,10 +55,12 @@ export interface ViewerHost {
   /**
    * Show a file, by its absolute path, in this view: a pick in the explorer, a renderer's link.
    * `home` shows the host's home in this view: its recent models, what it shows with no file. A
-   * host with a home offers it, and the navbar's logo is the way to it from a file.
+   * host with a home offers it, and the navbar's logo is the way to it from a file. A view that
+   * shows one file alone (a host's file handler, whose own file tree is its navigation) offers
+   * neither: it has no explorer, and a renderer's link to another file is plain text there.
    */
   navigation: {
-    openFile(path: string): void;
+    openFile?(path: string): void;
     home?(): void;
   };
   /** The navbar's links: the version, X, Discord, GitHub and new issues. A host with none gets none. */

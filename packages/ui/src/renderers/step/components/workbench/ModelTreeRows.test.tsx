@@ -26,12 +26,12 @@ const descriptor = { components: Object.fromEntries(leaves.map(n => [`c${n.id}`,
 const source = { list: async () => [{ path: '/models/part.step', name: 'part.step', kind: 'file' }],
   search: async () => ({ paths: ['/models/part.step'], truncated: false }) };
 
-function Trees() {
+function Trees({ expanded = [] as string[] }) {
   const [selected, setSelected] = useState<string[]>([]);
   return <>
     <section data-testid="files"><FolderExplorer source={source} file="/models/part.step" onOpen={() => {}} /></section>
     <section data-testid="model"><ModelingTree active disabled={false} modeling={{ descriptor, results: {}, error: '', retryFailed() {} }} stepRoot={root}
-      selectedPartIds={selected} partControls={{ isAssemblyView: true, expandedTreeNodeIds: [], onToggleTreeNode() {}, hiddenPartIds: [],
+      selectedPartIds={selected} partControls={{ isAssemblyView: true, expandedTreeNodeIds: expanded, onToggleTreeNode() {}, hiddenPartIds: [],
         onSelectTreeNode: (id: string) => setSelected([id]), onTogglePartVisibility() {}, onFocusTreeNode() {} }} /></section>
   </>;
 }
@@ -51,14 +51,14 @@ function insetOf(row: HTMLElement, list: HTMLElement) {
   return { list: horizontalSpacing(list), between, box };
 }
 
-it('the file explorer and the model tree share one row primitive and one horizontal inset, the model tree in denser rows', async () => {
+it('the file explorer and the model tree share one row primitive and one horizontal inset, the model tree in smaller text', async () => {
   render(<Trees />);
   const files = screen.getByTestId('files'), model = screen.getByTestId('model');
   const fileRow = (await within(files).findByText('part.step')).closest('[data-explorer-row]') as HTMLElement;
   const modelRow = within(model).getByRole('button', { name: 'Select Part 2' }).parentElement as HTMLElement;
-  // The explorer keeps the regular 28px row in `text-xs`; the model tree the dense 24px row in the
-  // panels' 11px `text-tiny`; both the primitive's type weight.
-  expect([fileRow.style.height, modelRow.style.height]).toEqual(['28px', '24px']);
+  // The explorer's compact 24px row in `text-xs`; the model tree's dense 24px row in the panels' 11px
+  // `text-tiny`; both the primitive's type weight.
+  expect([fileRow.style.height, modelRow.style.height]).toEqual(['24px', '24px']);
   expect(fileRow.className).toMatch(/(^|\s)text-xs(\s|$)/);
   expect(modelRow.className).toMatch(/(^|\s)text-tiny(\s|$)/);
   for (const row of [fileRow, modelRow]) expect(row.className).toMatch(/(^|\s)font-normal(\s|$)/);
@@ -107,4 +107,17 @@ it('a row\'s actions float over its right end, the name running under them and f
   expect(name.getAttribute('aria-pressed')).toBe('true');
   expect(`${row.className} ${name.className}`).not.toMatch(/font-(medium|semibold|bold)/);
   expect(row.className).toMatch(/(^|\s)font-normal(\s|$)/);
+});
+
+it("a level of the model tree is the explorer's compact step, its rows hung from a faint line under each owner's chevron", () => {
+  render(<Trees expanded={['group']} />);
+  const model = screen.getByTestId('model');
+  const row = (name: string) => within(model).getByRole('button', { name: `Select ${name}` }).parentElement as HTMLElement;
+  const guides = (element: HTMLElement) => [...element.querySelectorAll<HTMLElement>('[data-tree-guide]')].map(line => line.style.left);
+  // The subassembly at the tree's edge; its parts one 10px level in, each under the subassembly's
+  // line, drawn in the middle of its 16px disclosure column.
+  expect([row('Subassembly').style.paddingLeft, guides(row('Subassembly'))]).toEqual(['0px', []]);
+  expect([row('Part 0').style.paddingLeft, guides(row('Part 0'))]).toEqual(['10px', ['7.5px']]);
+  // The parts beside it, at the edge too, hang from nothing.
+  expect(guides(row('Part 2'))).toEqual([]);
 });

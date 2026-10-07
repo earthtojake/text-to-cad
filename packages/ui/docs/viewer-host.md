@@ -7,16 +7,16 @@ persistent storage or page navigation. DOM, canvas, workers and layout remain
 shared. Missing optional methods mean an operation is unsupported.
 
 The host contains `files`, optional native `fileActions`, `clipboard`,
-`promptContext`, the optional `attachments`, `navigation` (`openFile(path)` and an
-optional `home()`), the optional `links` (the app menu's) and `environment`. `environment` carries the resolved `colorScheme`,
+`promptContext`, the optional `attachments`, `navigation` (the optional `openFile(path)` and
+`home()`), the optional `links` (the app menu's) and `environment`. `environment` carries the resolved `colorScheme`,
 the keyboard `platform` (`darwin` shows ⌘, anything else Ctrl), the app's own
 `reducedMotion`, honoured beside the system's `prefers-reduced-motion`, and
 `compact`: a view drawn as a picture (the home draws its thumbnails this way, out
 of sight), where a CAD renderer draws the model alone — no tools, view actions,
 view cube or Quick Edit — and FileViewer draws no navbar. A view shown small in a
 conversation is not compact: it is the whole viewer, and its host hands it a way
-to full size as `fullSize` (`CadViewerProps.fullSize`), the navbar's last control
-and the home's. CAD is a separate registration supplied with a
+to full size as `fullSize` (`CadViewerProps.fullSize`), the last of the navbar's own
+controls (the view's follow it) and the home's. CAD is a separate registration supplied with a
 `CadWorkspaceService`; the generic FileViewer does not import CAD. The HTTP CAD
 adapter can serve both apps, while desktop owns native runtime startup/recovery.
 See [workspace resources](../../core/docs/workspace-resources.md) for resource
@@ -85,8 +85,8 @@ Preview: it shows the normal view, of any file. It is fullscreen
 (`onFullscreenChange`, below): the navbar, with everything in it (the app menu and the
 explorer too), steps aside while it lasts. It never uses the browser Fullscreen API. The shell saves the tools view's camera, fits a preview camera and restores
 the tools view's exact pose on exit; nothing of preview is persisted. Orbit
-starts by default, with its speed, unless the file's Playback settings say otherwise:
-they are the file's view's `playback` — orbit on or off and its speed, Autoplay, the
+starts by default, with its speed, unless the file's Orbit says otherwise: preview's
+settings are the file's view's `playback` — orbit on or off and its speed, Autoplay, the
 routine's chosen speed and loop — kept between previews and across a reload, and a
 file's routine plays on entry only when its Autoplay is on. The rules are in
 [settings-ui.md](settings-ui.md#camera-animation-and-preview).
@@ -97,7 +97,7 @@ while a person has put away an alert card the model survives: the card's own ico
 colour, named after the alert, which brings the card back (`useAlertDismissal`,
 `kit/status/ViewerAlertCard.jsx`). The
 shared navbar shows these at its right, after the host's update button and before the
-host's Full size. Each action declares its icon, accessible label, an
+host's Full size and the view's own controls. Each action declares its icon, accessible label, an
 optional shorter hover `hint`, disabled state and invocation callback. Registration belongs to the mounted
 file generation: publish an empty list on cleanup; departing renderers cannot
 replace a new file's actions. Publish only when action metadata changes; stable
@@ -105,11 +105,13 @@ commands should read the current viewport through a ref, avoiding parent/child
 render loops. These actions use existing host capabilities for effects. What a
 person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
-A renderer's controls for the view are the renderer's own, drawn in its viewport and not in
-the navbar: the CAD viewer's Display and Preview, for a 3D view, sit on top of its view
-cube. A renderer that shows its file fullscreen (the CAD viewer's Preview) says so through
-`onFullscreenChange(true)`, and `false` when it stops: the navbar and any declared
-panel step aside while it lasts. The host's `captureRequest`
+A renderer's controls for the view are the renderer's own, drawn into the navbar: FileViewer
+hands it the box at the row's right end (`RendererViewProps.navbarSlot`, null where no navbar
+is drawn), and the CAD viewer's Display and Preview, for a 3D view, are portaled there, last.
+A renderer that shows its file fullscreen (the CAD viewer's Preview) says so through
+`onFullscreenChange(true)`, and `false` when it stops: the navbar, the box with it, steps
+aside while it lasts, and the renderer draws its own controls where they sat (preview's
+corner: Orbit, Display, Exit preview). The host's `captureRequest`
 command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
 
@@ -119,7 +121,14 @@ shows it in this view: from a file, the app menu's Back to files (the menu the n
 logo opens) leads to it, and the home itself has no navbar. `CadViewer` implements both
 over the host's `onShow(path)` (`''` is the home), and gives a host a home only with a
 `library`: a host whose own navigation shows one file (Codex's file handler) passes none,
-and its view has no home and its menu no Back to files. `onShown(path | null)` says which file the catalog
+and its view shows that file and nothing else — no home, its menu no Back to files, no
+explorer, and no `openFile`, so a renderer's link to another file (a robot's mesh) is plain
+text there. A host that keeps a view's own history,
+where no browser does (the CAD app's views), hands it as `history` (`ViewerHistory`:
+`canGoBack`, `canGoForward`, `back()`, `forward()`; `CadViewerProps.history`): the navbar
+draws Back and Forward over it. What the history holds, and that a step is every model and
+the home the view showed, the agent's shows and the person's moves alike, is the host's; the
+web hands none, its page having the browser's. `onShown(path | null)` says which file the catalog
 has on screen (null for the home, or a file still resolving or missing), for a host that
 names its page after it or records it. The host decides what showing a file means,
 because only the host knows which view shows it: the web viewer is one page per machine
@@ -324,8 +333,8 @@ at the defaults. In the CAD app there is one record per view: a view the host
 creates again (its frame re-created) starts afresh, since nothing names a view across its
 frames. A view is `{ camera, display, playback, renderer }` (`kit/shell/fileView.js`):
 the camera is restored in place of the open-time fit, the display settings with their
-Clip and Explode, preview's Playback settings (orbit on or off and its speed, Autoplay,
-the routine's chosen speed and loop), and the renderer's own slices each behind the
+Clip and Explode, preview's settings (Orbit on or off and its speed, Autoplay, the
+routine's chosen speed and loop), and the renderer's own slices each behind the
 signature it was written against — a slice that no longer fits the file on screen is
 dropped, the camera, the display and the playback never. Not in it, and started afresh
 on every open: the tool in hand, the selection, measurements, ink, preview, a
@@ -360,18 +369,20 @@ redo keys.
 
 FileViewer draws ONE navbar, the same in every app and over every file; a host's home
 has none (it holds the links itself, under its title). Left: the text-to-cad "C" logo,
-which opens the app menu (`AppMenu`, `file-viewer/navigation/AppMenu.jsx`), then the open
-file's name and its ⋯ menu. The logo, the name and the ⋯ share one style (`NAV_ITEM_CLASS`):
+which opens the app menu (`AppMenu`, `file-viewer/navigation/AppMenu.jsx`), then Back and
+Forward where the host hands a `history`, then the open file's name and its ⋯ menu. The
+logo, Back and Forward, the name and the ⋯ share one style (`NAV_ITEM_CLASS`):
 transparent at rest, the same accent background while the pointer is on them or their menu
 is open, a pointer cursor, and no tooltip. The name opens the explorer where the host's
 files can be browsed (`files.list` and `files.search`), and is plain text where they
 cannot; the ⋯ offers Copy path and Reveal in Finder / Show in Explorer / Show in file
 manager, each where `fileActions` can do it, and is absent where it can do none (no
 right-click on the name). Right, only what a host or a file adds: the host's update button
-first (`update`, while its install is behind), the renderer's navigation actions and,
-last, the host's Full size where it shows the view small
-(`fullSize`, the inline card's way to full size, in the home's row too). The navbar holds
-no settings and no view controls.
+first (`update`, while its install is behind), the renderer's navigation actions, the
+host's Full size where it shows the view small
+(`fullSize`, the inline card's way to full size, in the home's row too) and, last, the
+renderer's view controls in their box (`navbarSlot`: a 3D view's Display and Preview). The
+navbar holds no settings.
 
 The app menu is FileViewer's, built from the host's `navigation.home`, `links` and
 `environment.platform` and the person's `FileViewerProps.appSettings` (which `CadViewer`
@@ -445,8 +456,8 @@ reason otherwise, each with a Go home button where the host has a home.
 
 The viewport's corners are the shell's, never the host's: the tool strip and its
 stack at the top-left, Quick Edit at the top-right, and the view cube at the
-bottom-left, with the view's own controls (Display and Preview, a 3D view's) on top of
-it. A host's one notice goes through the shell too: `notice` (the
+bottom-left; the view's own controls (Display and Preview, a 3D view's) are the navbar's
+last. A host's one notice goes through the shell too: `notice` (the
 `ConsentCard`) is drawn at the top-right once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it until it is answered; the home never shows it.

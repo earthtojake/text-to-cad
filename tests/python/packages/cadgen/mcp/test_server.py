@@ -171,6 +171,20 @@ class TabServerTest(_Session):
         (event,) = self.call("cad_sync", {"view": "v1", "surface": "tab"})["structuredContent"]["events"]
         self.assertEqual((event["type"], event["launch"]["model"]), ("show", self.bracket))
 
+    def test_the_hosts_file_view_shows_the_file_it_opened_and_nothing_the_agent_shows(self) -> None:
+        self.call("cad_sync", {"view": "f1", "surface": "file", "model": self.bracket})
+        # The agent reads it by its id...
+        (view,) = self.call("cad_view")["structuredContent"]["views"]
+        self.assertEqual((view["view"], view["surface"]), ("f1", "file"))
+        # ...but shows nothing in it: unnamed, a show finds no viewer; named, it is refused, unless
+        # the view shows that file already.
+        self.assertEqual(self.call("cad_show", {"path": self.loose})["structuredContent"], {"delivered": 0})
+        refused = self.call("cad_show", {"path": self.loose, "view": "f1"})
+        self.assertTrue(refused["isError"])
+        self.assertIn("shows that file alone", refused["content"][0]["text"])
+        self.assertEqual(self.call("cad_show", {"path": self.bracket, "view": "f1"})["structuredContent"], {"delivered": 0, "view": "f1"})
+        self.assertEqual(self.call("cad_sync", {"view": "f1", "surface": "file", "model": self.bracket})["structuredContent"]["events"], [])
+
     def test_the_agent_reads_and_captures_what_the_open_view_shows(self) -> None:
         self.assertTrue(self.call("cad_screenshot")["isError"])
         model = self.bracket

@@ -121,7 +121,18 @@ it('every view has the home and browses from its file\'s folder, but the host\'s
   expect([viewer.props!.host.files.list, viewer.props!.host.files.search]).toEqual([undefined, undefined]);
 });
 
-it('an inline host gets the whole viewer in a card of a height it is told, with Full size last in its navbar, which goes full size in place', () => {
+it("the host's file handler keeps the file it opened: a show sent to it changes nothing, and gives it no home", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const replies: ((reply: { events: unknown[] }) => void)[] = [];
+  server.sync = vi.fn(() => new Promise(resolve => { replies.push(resolve); }));
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
+  // A show's launch names no surface: it is not this view's to take.
+  await act(async () => { replies.shift()!({ events: [{ seq: 1, type: 'show', launch: { protocol: 5, page: 'viewer', model: '/work/b.step' } }] }); });
+  expect([viewer.props!.file, viewer.props!.library, viewer.props!.history, viewer.props!.host.files.list])
+    .toEqual(['/work/a.step', undefined, undefined, undefined]);
+});
+
+it('an inline host gets the whole viewer in a card of a height it is told, with Full size in its navbar, which goes full size in place', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
     launch={{ ...home, surface: 'inline', view: 'cad-1-a', order: { createdAt: 1, seq: 1 } }} />);
@@ -138,6 +149,42 @@ it('an inline host gets the whole viewer in a card of a height it is told, with 
   expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--cad-viewport-bottom-center')).toBe('');
   // Full size keeps what was on the card: the same view, not a new one.
   expect(viewer.mounts).toBe(1);
+});
+
+it("a view keeps its own history, as a browser's tab does: the agent's shows and the person's moves, Back and Forward over them, a move after a Back dropping what was ahead", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  // The agent's shows reach the view on its sync, one reply at a time.
+  const replies: ((reply: { events: unknown[] }) => void)[] = [];
+  server.sync = vi.fn(() => new Promise(resolve => { replies.push(resolve); }));
+  const agentShows = (model: string, seq: number) => act(async () => {
+    replies.shift()!({ events: [{ seq, type: 'show', launch: { protocol: 5, page: 'viewer', model } }] });
+  });
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step' }} />);
+  const at = () => [viewer.props!.file, viewer.props!.history!.canGoBack, viewer.props!.history!.canGoForward];
+  expect(at()).toEqual(['/work/a.step', false, false]);
+  // The agent shows b, and the person opens c from the explorer: each a step.
+  await agentShows('/work/b.step', 1);
+  expect(at()).toEqual(['/work/b.step', true, false]);
+  act(() => viewer.props!.onShow('/work/c.step'));
+  expect(at()).toEqual(['/work/c.step', true, false]);
+  act(() => viewer.props!.history!.back());
+  expect(at()).toEqual(['/work/b.step', true, true]);
+  act(() => viewer.props!.history!.back());
+  expect(at()).toEqual(['/work/a.step', false, true]);
+  act(() => viewer.props!.history!.forward());
+  expect(at()).toEqual(['/work/b.step', true, true]);
+  // The home is a step too; a move after a Back drops what was ahead (c).
+  act(() => viewer.props!.onShow(''));
+  expect(at()).toEqual(['', true, false]);
+  act(() => viewer.props!.history!.back());
+  expect(at()).toEqual(['/work/b.step', true, true]);
+  // Showing what is already on screen adds nothing: the home is still ahead.
+  await agentShows('/work/b.step', 2);
+  expect(at()).toEqual(['/work/b.step', true, true]);
+  cleanup();
+  // A file handler shows its file alone, with no home to go to: no Back or Forward.
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
+  expect(viewer.props!.history).toBeUndefined();
 });
 
 it('an inline host that cannot show a view full size gets no Full size, and still the whole viewer', () => {

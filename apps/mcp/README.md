@@ -21,8 +21,8 @@ extension):
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
   the whole viewer at card size: its navbar (the logo, which opens the app menu,
   first; the file name that opens the explorer; the ⋯; then, at the right, the
-  update button, and Full size last where the host can show a view full size), the
-  tools, the view cube with Display and Preview on top of it, and Quick Edit. A
+  update button, Full size where the host can show a view full size, and last Display
+  and Preview), the tools, the view cube, and Quick Edit. A
   newer card retires the older ones.
 
 A client that renders no MCP Apps never loads this page: its `cad_show` answers
@@ -51,15 +51,28 @@ reference host `basic-host` does.
   Discord and X.
 - **A view browses from its file's folder.** The file name in the navbar opens
   the explorer: one folder at a time, its subfolders and then its CAD files,
-  starting at the file's; the last three folders as a breadcrumb, those above
-  them under "…"; and "Filter files..." finds the files anywhere under the folder
-  (the server's bounded `/__cad/search`). A pick shows the file and closes it.
-  Nothing says where a view may browse: a tab, a card and the web viewer browse
-  the same way.
+  starting at the file's, a subfolder opening inline at a press and in the
+  explorer's place at a double-click; as many of the last three folders as fit whole as a
+  breadcrumb, those above them under "…"; and "Filter files..." finds the files
+  anywhere under the folder (the server's bounded `/__cad/search`). A pick shows
+  the file and closes it. Nothing says where a view may browse: a tab, a card and
+  the web viewer browse the same way.
+- **A view keeps its own history.** As a browser keeps a tab's: every model a
+  view showed and the home, in order, the agent's shows and the person's own moves
+  alike (`ModelView.tsx`). The navbar's Back and Forward, between its logo and the
+  file's name, walk it, each disabled where it has nowhere to go; a move after a
+  Back drops what was ahead, and a show of what is already on screen adds nothing.
+  It is the view's, in memory: another tab or card has its own, and a view opened
+  again starts with one step. Going back opens that model afresh, as a browser's
+  Back does in the web viewer. A file handler's view, which shows its file alone,
+  has neither button.
 - ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
-  file the host handed over, with no home and no explorer: the host's own file
-  tree is its navigation. Its navbar still has the C logo and its menu, without
-  Back to files.
+  file the host handed over, and nothing else, for as long as it is open: no home
+  and no explorer (the host's own file tree is its navigation), no Back or Forward,
+  and a renderer's link to another file (a robot's mesh) is plain text. Its navbar
+  still has the C logo and its menu, without Back to files. The agent reads it
+  (`cad_view` lists it) but shows nothing in it: `cad_show` refuses its view, and
+  the page ignores a show that reaches it anyway.
 - **An agent reads the sidebar too, and shows beside its thread.** Codex runs the sidebar page
   in a thread, and a server process, of its own, so no thread's agent syncs with it. Each process
   publishes its sidebar views beside the model library (`cadgen/mcp/sidebar_views.py`), and an
@@ -209,7 +222,8 @@ its view — camera, Display settings, pose — through updates of it, and leavi
 another model or the home drops it, as in the web Viewer. A view the
 host creates again (its frame re-created) starts afresh: nothing names a view across its
 frames, so there is nothing to keep its record under. `App.tsx` frames it (full page, or
-an inline card whose height the host is told; its Full size is the navbar's last control). In a tab, preview's playbar sits on the line of Codex's
+an inline card whose height the host is told; its Full size is the last of the navbar's
+own controls, before the view's Display and Preview). In a tab, preview's playbar sits on the line of Codex's
 composer, which floats over the page (`--cad-viewport-bottom-center`), and the
 home's list scrolls clear of it (`--cad-host-bottom-inset`).
 

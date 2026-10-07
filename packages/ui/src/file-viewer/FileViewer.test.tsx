@@ -1,4 +1,5 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
+import { createPortal } from 'react-dom';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { isMissingFileError } from '@text-to-cad/core/client';
@@ -44,23 +45,48 @@ it('draws the navbar over every file, named by its name, and never over the home
   expect(navbar()).toBeNull();
 });
 
-it('keeps the right of the navbar for the host\'s update button and Full size alone, and steps the navbar aside while the renderer shows its file fullscreen', async () => {
-  // A renderer that shows its file fullscreen (the CAD viewer's Preview, a control of its own view).
+it('keeps the right of the navbar for the host\'s update button and Full size, then the renderer\'s view controls in the box it hands it, and steps the navbar aside while the renderer shows its file fullscreen', async () => {
+  // A renderer that draws its view controls into the navbar's box for them, and shows its file
+  // fullscreen (the CAD viewer's Display and Preview).
+  const slots: (HTMLElement | null)[] = [];
   const fullscreen = defineFileRenderer({
     id: 'full', priority: 2, matches: () => true, prepare: async () => ({ data: null }),
-    load: async () => ({ default: ({ onFullscreenChange }: any) => <>
-      <button type="button" onClick={() => onFullscreenChange(true)}>Preview</button>
+    load: async () => ({ default: ({ onFullscreenChange, navbarSlot }: any) => { slots.push(navbarSlot); return <>
+      {navbarSlot ? createPortal(<button type="button" aria-label="Preview" onClick={() => onFullscreenChange(true)} />, navbarSlot) : null}
       <button type="button" onClick={() => onFullscreenChange(false)}>Back</button>
-    </> }),
+    </>; } }),
   });
   render(<FileViewer file={FILE} host={host as any} renderers={[fullscreen]} state={{}} onStateChange={() => {}}
     update={<button type="button" aria-label="Update to 0.7.5" />} fullSize={<button type="button" aria-label="Full size" />} />);
   await screen.findByRole('button', { name: 'Preview' });
-  expect(labels()).toEqual(['Update to 0.7.5', 'Full size']);
+  expect(labels()).toEqual(['Update to 0.7.5', 'Full size', 'Preview']);
+  expect(slots.at(-1)!.matches('[data-viewer-navbar] [data-view-controls]')).toBe(true);
   act(() => screen.getByRole('button', { name: 'Preview' }).click());
-  expect(navbar()).toBeNull();
+  // Fullscreen, there is no navbar, and so no box: the renderer draws its controls itself.
+  expect([navbar(), slots.at(-1)]).toEqual([null, null]);
   act(() => screen.getByRole('button', { name: 'Back' }).click());
-  expect(labels()).toEqual(['Update to 0.7.5', 'Full size']);
+  expect(labels()).toEqual(['Update to 0.7.5', 'Full size', 'Preview']);
+});
+
+it('draws Back and Forward between the logo and the file\'s name where the host keeps the view\'s own history, each disabled where it has nowhere to go', async () => {
+  const back = vi.fn(), forward = vi.fn();
+  const homed = { ...host, navigation: { openFile(_path: string) {}, home() {} } };
+  // The row's left, in order: its buttons by name, and the file's name.
+  const left = () => [...document.querySelectorAll('nav[aria-label="Viewer"] button, nav[aria-label="Viewer"] [data-file-name]')]
+    .map(node => node.hasAttribute('data-file-name') ? `name:${node.textContent}` : node.getAttribute('aria-label'));
+  const view = render(<FileViewer file={FILE} host={homed as any} renderers={[renderer]} state={{}} onStateChange={() => {}}
+    history={{ canGoBack: true, canGoForward: false, back, forward }} />);
+  await screen.findByText('shown');
+  expect(left()).toEqual(['Menu', 'Back', 'Forward', 'name:a.step']);
+  const [backButton, forwardButton] = [screen.getByRole('button', { name: 'Back' }), screen.getByRole('button', { name: 'Forward' })];
+  expect([backButton.hasAttribute('disabled'), forwardButton.hasAttribute('disabled')]).toEqual([false, true]);
+  act(() => { backButton.click(); forwardButton.click(); });
+  expect([back.mock.calls.length, forward.mock.calls.length]).toEqual([1, 0]);
+  view.unmount();
+  // A host that keeps none (a browser's page has its own) gets neither.
+  open({ host: homed });
+  await screen.findByText('shown');
+  expect(left()).toEqual(['Menu', 'name:a.step']);
 });
 
 it('opens the app menu from the logo: Back to files where the host has a home, the person\'s settings and the host\'s links; its ⋯ offers what the host can do with the file', async () => {

@@ -72,6 +72,17 @@ export interface AppSetting {
   onCheckedChange: (checked: boolean) => void;
 }
 /**
+ * A view's own history, where the host keeps one: what it showed, in order, as a browser keeps a
+ * tab's. The navbar draws Back and Forward over it; a host whose page has a browser's history (the
+ * web) hands none.
+ */
+export interface ViewerHistory {
+  canGoBack: boolean;
+  canGoForward: boolean;
+  back(): void;
+  forward(): void;
+}
+/**
  * The viewer's features a person can turn off in the app menu, as the host keeps
  * them: each is on unless the host says it is off.
  */
@@ -90,13 +101,22 @@ export interface RendererViewProps {
   file: FileMetadata;
   source: FileSource;
   /**
+   * The navbar's box for the renderer's own view controls, last at its right end (the CAD
+   * viewer's Display and Preview, for a 3D view); null where no navbar is drawn, as while the
+   * renderer shows its file fullscreen.
+   */
+  navbarSlot: HTMLElement | null;
+  /**
    * The renderer shows its file fullscreen (the CAD viewer's Preview), or no longer does: the
    * navbar steps aside while it lasts.
    */
   onFullscreenChange: (fullscreen: boolean) => void;
   onReady: (ready: boolean) => void;
-  /** Show another file, by its absolute path, in this view (a robot's mesh). */
-  onOpenFile: (path: string) => void;
+  /**
+   * Show another file, by its absolute path, in this view (a robot's mesh). Absent where the view
+   * shows its file alone: a link to another file is plain text there.
+   */
+  onOpenFile?: (path: string) => void;
   appearance: { colorScheme: "light" | "dark" };
   /** The file's saved view as it stood when this renderer opened it; later saves do not come back. */
   state: JsonValue | undefined;
@@ -143,8 +163,13 @@ export interface FileViewerProps {
    * controls, while the host's install is behind; nothing otherwise.
    */
   update?: ReactNode;
-  /** The host's Full size button, last in the navbar, where the host shows the view small (inline in a conversation). */
+  /**
+   * The host's Full size button, where the host shows the view small (inline in a conversation):
+   * the last of the navbar's own controls, before the renderer's view controls.
+   */
   fullSize?: ReactNode;
+  /** The view's own history, where the host keeps one: Back and Forward, between the navbar's logo and the file's name. */
+  history?: ViewerHistory;
   /** The features the person has left on (in the app menu), for every renderer (`RendererViewProps.features`). */
   features?: ViewerFeatures;
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */

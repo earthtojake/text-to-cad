@@ -22,7 +22,7 @@ class RenderBoundary extends Component<{ children: ReactNode; onError?: (error: 
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, host, renderers, state, onStateChange, displayActions, appSettings, update, fullSize, features, notice, onError, presentation }: FileViewerProps) {
+export function FileViewer({ file, host, renderers, state, onStateChange, displayActions, appSettings, update, fullSize, history, features, notice, onError, presentation }: FileViewerProps) {
   const source = host.files;
   const onOpenFile = host.navigation.openFile;
   const appearance = host.environment;
@@ -42,6 +42,8 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const [rootRef, mobile] = useViewerMobileMeasure();
   const viewerElement = useRef<HTMLDivElement | null>(null);
   const bindElement = useCallback((element: HTMLDivElement | null) => { viewerElement.current = element; rootRef(element); }, [rootRef]);
+  // The navbar's box for the renderer's own view controls (the CAD viewer's Display and Preview).
+  const [navbarSlot, setNavbarSlot] = useState<HTMLDivElement | null>(null);
   // A renderer showing its file fullscreen has the page to itself, until it says otherwise or goes.
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => { setFullscreen(false); }, [key]);
@@ -70,10 +72,10 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
     if (!shown) return null;
     const Renderer = shown.prepared.Component;
     return <RenderBoundary key={key} onError={onError}><Renderer displayActions={displayActions} notice={notice} features={features} key={key} file={shown.file} source={source}
-      onFullscreenChange={onFullscreenChange} onReady={onReady} onNavigationActionsChange={onNavigationActionsChange}
+      navbarSlot={navbarSlot} onFullscreenChange={onFullscreenChange} onReady={onReady} onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={onOpenFile} appearance={appearance}
       state={rendererState} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
-  }, [shown, key, onError, displayActions, notice, features, source, onFullscreenChange, onReady,
+  }, [shown, key, onError, displayActions, notice, features, source, navbarSlot, onFullscreenChange, onReady,
     onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, reload]);
 
   let body: ReactNode;
@@ -94,8 +96,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
       onAction: (action: EntryAction, target: string) => { void Promise.resolve(perform?.[action]?.({ path: target, kind: "file" })).catch(error => onError?.(error)); },
     } : null;
   }, [perform, host.fileActions?.platform, onError]);
-  // The name opens the explorer where the host's files can be browsed: a pick shows the file here.
-  const explorer = useMemo(() => source.list && source.search ? { source, onOpen: (next: string) => onOpenFile(next) } : null, [source, onOpenFile]);
+  // The name opens the explorer where the host's files can be browsed and this view shows another:
+  // a pick shows the file here. A view that shows its file alone opens none.
+  const explorer = useMemo(() => source.list && source.search && onOpenFile ? { source, onOpen: onOpenFile } : null, [source, onOpenFile]);
   // The logo's app menu: the host's links and the person's settings (Back to files is `onHome`).
   const menu = useMemo(() => host.links || appSettings?.length ? { links: host.links, appSettings, platform: appearance.platform } : null,
     [host.links, appSettings, appearance.platform]);
@@ -103,7 +106,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   // or a view drawn small with no chrome (`compact`: an offscreen picture).
   const navbar = Boolean(path) && !appearance.compact && !fullscreen;
   return <ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={mobile ? "mobile" : "desktop"} tabIndex={-1}>
-    {navbar ? <ViewerNavbar onHome={host.navigation.home} menu={menu} file={path} explorer={explorer} fileMenu={fileMenu} trailing={trailing} update={update} fullSize={fullSize} /> : null}
+    {navbar ? <ViewerNavbar onHome={host.navigation.home} menu={menu} history={history} file={path} explorer={explorer} fileMenu={fileMenu} trailing={trailing} update={update} fullSize={fullSize} controlsRef={setNavbarSlot} /> : null}
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div className="min-w-0 flex-1 overflow-hidden">{body}</div>
     </div>
