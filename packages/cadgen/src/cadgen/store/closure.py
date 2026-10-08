@@ -105,6 +105,9 @@ class Closure:
     # bytes its slice was taken from: while the file still hashes to it, the
     # recorded slice stands without re-analysing the file.
     wholes: dict[str, str] = field(default_factory=dict)
+    # listing entry (``<folder>/``) -> the names its digest leaves out (sorted):
+    # the model's own outputs in that folder, never its inputs.
+    own: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     def as_json(self) -> dict:
         return {
@@ -113,6 +116,7 @@ class Closure:
             "shas": dict(self.shas),
             "names": {rel: list(names) for rel, names in self.names.items()},
             "wholes": dict(self.wholes),
+            "own": {rel: list(names) for rel, names in self.own.items()},
         }
 
 
@@ -1038,6 +1042,7 @@ def build_closure(
     executed: dict[str, str],
     inputs: Mapping[Path, str] | None = None,
     listings: Iterable[Path] = (),
+    outputs: Iterable[Path] = (),
     children: Iterable[Path | str] = (),
     sources: Mapping[str, bytes] | None = None,
 ) -> Closure:
@@ -1049,7 +1054,9 @@ def build_closure(
     first-party file, and ``inputs`` -- the data files the build read, each with
     the hash it was read with -- minus files that belong to a child model (its
     script and files reached only through it), which the boundary rule
-    excludes. ``listings`` are the folders its code listed. The reach walk starts at the script, then at every
+    excludes. ``listings`` are the folders its code listed, each hashed by its
+    entry names less the model's own ``outputs`` there (``Closure.own``). The
+    reach walk starts at the script, then at every
     executed first-party ``.py`` file it did not reach and no child owns, each
     walked whole; what the children's import-time code reaches in shared files
     is reached too. A non-model file the walk sliced is hashed by its reached
@@ -1153,9 +1160,19 @@ def build_closure(
     for rel in sorted({ABSENT_MARK + _relative(path, base) for path in walk.absent | imports.absent}):
         pairs.append((rel, ABSENT))
     # A folder the model's code listed (a glob of profiles, one part each): a file
-    # added or removed there changes what the body saw.
+    # added or removed there changes what the body saw. The model's own outputs
+    # there are left out, as they are of the files it read: a first build lists
+    # the folder before they exist and publishes them after, and a rebuild lists
+    # the previous run's. A sibling model's outputs stay in -- a body may list the
+    # folder to find them.
+    written = [Path(path).resolve() for path in outputs]
+    own: dict[str, tuple[str, ...]] = {}
     for directory in sorted(listed):
-        pairs.append((_relative(directory, base).rstrip("/") + "/", _listing_digest(directory)))
+        rel = _relative(directory, base).rstrip("/") + "/"
+        left_out = _own_entries(directory, written)
+        if left_out:
+            own[rel] = left_out
+        pairs.append((rel, _listing_digest(directory, left_out)))
     root_used = max(walk.root_used, imports.root_used)
     if root_used > 0:
         count = root_used + 1
@@ -1168,6 +1185,7 @@ def build_closure(
         shas={rel: file_hash for rel, file_hash in sorted(pairs)},
         names=dict(sorted(names.items())),
         wholes=dict(sorted(wholes.items())),
+        own=own,
     )
 
 
@@ -1220,15 +1238,33 @@ def source_files(files: Iterable[str]) -> list[str]:
             if _roots_count(rel) is None and not rel.startswith(ABSENT_MARK) and not rel.endswith("/")]
 
 
-def _listing_digest(directory: Path) -> str:
-    """A folder the model's code listed, as what it saw: its sorted entry names. Entries cadgen
-    keeps only while it writes are left out: a sibling's build stages its STEP beside its output,
-    so a listing taken during a parallel build would otherwise go stale once that build ends."""
+def _listing_digest(directory: Path, own: Iterable[str] = ()) -> str:
+    """A folder the model's code listed, as what it saw: its sorted entry names,
+    less ``own``, the entries that hold the model's own outputs, and less the
+    entries cadgen keeps there only while it writes (``is_transient_name``): a
+    sibling's build stages its STEP beside its output, so a listing taken during
+    a parallel build would otherwise go stale once that build ends."""
+    own = frozenset(own)
     try:
-        names = sorted(name for name in os.listdir(directory) if not is_transient_name(name))
+        names = sorted(name for name in os.listdir(directory)
+                       if name not in own and not is_transient_name(name))
     except OSError:
         return "missing"
     return "listing:" + hashlib.sha256("\0".join(names).encode("utf-8")).hexdigest()
+
+
+def _own_entries(directory: Path, outputs: Iterable[Path]) -> tuple[str, ...]:
+    """The entries of a listed folder that hold the model's own outputs: each
+    output written there, and each folder there one was written into."""
+    entries: set[str] = set()
+    for output in outputs:
+        try:
+            inside = output.relative_to(directory).parts
+        except ValueError:
+            continue
+        if inside:
+            entries.add(inside[0])
+    return tuple(sorted(entries))
 
 
 def _roots_digest(roots: Iterable[Path | str], base: Path) -> str:
@@ -1263,16 +1299,18 @@ def file_hash_now(path: Path, rel: str, names: Mapping[str, Iterable[str]] | Non
 
 
 def entry_hash_now(base: Path, rel: str, names: Mapping[str, Iterable[str]] | None,
-                   shas: Mapping[str, str] | None = None, wholes: Mapping[str, str] | None = None) -> str | None:
+                   shas: Mapping[str, str] | None = None, wholes: Mapping[str, str] | None = None,
+                   own: Mapping[str, Iterable[str]] | None = None) -> str | None:
     """One recorded closure entry as it hashes now, relative to the model's
     folder ``base``: a file (``file_hash_now``), or None when it is gone; a file
-    recorded absent, ABSENT while it still is; the search roots, their digest."""
+    recorded absent, ABSENT while it still is; the search roots, their digest; a
+    listed folder, its entry names less the recorded ``own`` ones."""
     if rel.startswith(ABSENT_MARK):
         candidate = Path(rel[len(ABSENT_MARK):])
         return ABSENT if not (candidate if candidate.is_absolute() else base / candidate).exists() else "present"
     if rel.endswith("/"):
         candidate = Path(rel)
-        return _listing_digest(candidate if candidate.is_absolute() else base / candidate)
+        return _listing_digest(candidate if candidate.is_absolute() else base / candidate, (own or {}).get(rel, ()))
     count = _roots_count(rel)
     if count is not None:
         return _roots_now(base, count)
@@ -1283,17 +1321,19 @@ def entry_hash_now(base: Path, rel: str, names: Mapping[str, Iterable[str]] | No
 
 
 def changed_closure_files(script: Path, shas: Mapping[str, str], names: Mapping[str, Iterable[str]] | None = None,
-                          wholes: Mapping[str, str] | None = None) -> list[str]:
+                          wholes: Mapping[str, str] | None = None,
+                          own: Mapping[str, Iterable[str]] | None = None) -> list[str]:
     """The recorded closure files whose content hash differs now (a missing file
     counts, and so does one recorded absent that exists), in recorded order.
     Empty when nothing moved -- or when the record carries no per-file hashes,
     in which case the caller can only say "changed". A file in ``names`` is
-    compared by its slice; any other is hashed whole."""
+    compared by its slice; any other is hashed whole; a listed folder leaves
+    out its ``own`` entries."""
     base = Path(script).resolve().parent
     changed: list[str] = []
     for rel, recorded in shas.items():
         try:
-            now = entry_hash_now(base, str(rel), names, shas, wholes)
+            now = entry_hash_now(base, str(rel), names, shas, wholes, own)
         except OSError:
             now = None
         if now != recorded:
@@ -1302,16 +1342,18 @@ def changed_closure_files(script: Path, shas: Mapping[str, str], names: Mapping[
 
 
 def current_closure_hash(script: Path, files: Iterable[str], names: Mapping[str, Iterable[str]] | None = None, *,
-                         shas: Mapping[str, str] | None = None, wholes: Mapping[str, str] | None = None) -> str | None:
+                         shas: Mapping[str, str] | None = None, wholes: Mapping[str, str] | None = None,
+                         own: Mapping[str, Iterable[str]] | None = None) -> str | None:
     """Re-hash a recorded file list as it is on disk now; None if a file is gone.
     A file in ``names`` is compared by its slice (``shas``/``wholes``: the
     recorded slice stands while the file's whole-file hash is unchanged); any
-    other is hashed whole."""
+    other is hashed whole; a listed folder leaves out its recorded ``own``
+    entries, the model's outputs."""
     base = Path(script).resolve().parent
     pairs: list[tuple[str, str]] = []
     for rel in files:
         try:
-            now = entry_hash_now(base, str(rel), names, shas, wholes)
+            now = entry_hash_now(base, str(rel), names, shas, wholes, own)
         except OSError:
             return None
         if now is None:

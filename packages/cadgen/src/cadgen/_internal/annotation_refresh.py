@@ -206,14 +206,15 @@ def refresh_annotations(spec, *, verdict=None) -> str | None:
     sliced = dict(closure.get('names') or {})
     recorded_shas = dict(closure.get('shas') or {})
     wholes = dict(closure.get('wholes') or {})
+    own = dict(closure.get('own') or {})
     try:
         source = script.read_bytes()
         parts = _source_parts(source, entry_name)
         # Each closure file as the gate hashes it: the script whole, a sliced
         # helper by its recorded names (its recorded slice while unchanged),
-        # any other helper whole.
+        # any other helper whole, a listed folder less the model's own outputs.
         shas = {name: (_semantic_source_bytes(source) if name == script.name else
-                       entry_hash_now(script.parent, name, sliced, recorded_shas, wholes))
+                       entry_hash_now(script.parent, name, sliced, recorded_shas, wholes, own))
                 for name in closure['files']}
     except (OSError, KeyError, SyntaxError, ValueError):
         return None
@@ -270,7 +271,7 @@ def refresh_annotations(spec, *, verdict=None) -> str | None:
     pair = _document_pair_state(spec.step_path)
     if pair[0] != record.get('stepHash'):
         return None
-    if (current_closure_hash(script, closure['files'], sliced, shas=recorded_shas, wholes=wholes) != full_hash
+    if (current_closure_hash(script, closure['files'], sliced, shas=recorded_shas, wholes=wholes, own=own) != full_hash
             or read_record(model) != record):
         return None
     if _document_pair_state(spec.step_path) != pair:

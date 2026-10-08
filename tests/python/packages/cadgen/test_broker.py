@@ -138,6 +138,20 @@ class PrivateBrokerCloseWaits(unittest.TestCase):
         self.assertTrue(serving, "no thread served the lease")
         self.assertEqual(alive, [], "close returned while a request was served")
 
+    def test_close_returns_after_a_silent_peers_handshake_ends(self):
+        private = broker.PrivateBroker(limit=1)
+        before = set(threading.enumerate())
+        # Connected, challenged, and never answering: its handshake runs until close.
+        silent = broker.transport.mpc.Client(private.address, family=broker.transport._family())
+        self.addCleanup(silent.close)
+        self.assertTrue(silent.poll(10), "the broker sent no challenge")
+        self.assertTrue(silent.recv_bytes().startswith(b"#CHALLENGE#"))
+        handshakes = [t for t in set(threading.enumerate()) - before if t.name == "cadgen-handshake"]
+        self.assertTrue(handshakes, "no thread ran the handshake")
+        private.close()
+        alive = [t for t in handshakes if t.is_alive()]
+        self.assertEqual(alive, [], "close returned while a silent peer's handshake ran")
+
 
 class PrivateBrokerFixture(unittest.TestCase):
     def setUp(self):

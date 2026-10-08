@@ -59,6 +59,9 @@ class LoadedStepScene:
     # and their whole-file hashes (record.closure.wholes).
     source_closure_names: dict[str, tuple[str, ...]] = field(default_factory=dict)
     source_closure_wholes: dict[str, str] = field(default_factory=dict)
+    # Listed folders -> the entries their digests leave out, the model's own
+    # outputs (record.closure.own).
+    source_closure_own: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # Literals imported from model files, tracked by value (record.constants).
     source_closure_constants: dict[str, dict[str, str]] = field(default_factory=dict)
     # `cadgen step build IN OUT` only: the INPUT document's content hash (the

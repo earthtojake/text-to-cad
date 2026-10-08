@@ -687,6 +687,37 @@ class ReachClosure(unittest.TestCase):
         self.edit(self.geo, "TABLE[0] = 2.0", "TABLE[0] = 3.0")
         self.assert_clause_two(reference, True, "lib/geo.py")
 
+    def test_a_listed_folder_leaves_out_the_models_own_outputs_and_keeps_a_siblings(self):
+        """Issue #564: a model lists its folder before its first build publishes
+        its outputs there. Those outputs -- each one written there, and a folder
+        one was written into -- are never its inputs, so every re-hash leaves
+        them out. A sibling model's output is: a body may list the folder to find it."""
+        from cadgen.store.closure import build_closure, changed_closure_files
+        from cadgen.store.index import model_ref
+        from cadgen.store.publish import decide
+        from cadgen.store.records import write_record
+
+        parts = self.root / "parts"
+        parts.mkdir()
+        script = self.write("parts/part.py", "def part():\n    return None\n")
+        outputs = [parts / "part.step", parts / "part.step.json", parts / "meshes" / "part.stl"]
+        closure = build_closure(script, executed={}, listings=[parts], outputs=outputs)
+        self.assertEqual(closure.own, {"./": ("meshes", "part.step", "part.step.json")})
+        reference = model_ref(script, "part")
+        write_record(reference, {"entryKind": "part", "sourceKind": "python", "tree": None,
+                                 "closure": closure.as_json(), "constants": closure.constants,
+                                 "children": [], "outputs": {}})
+        (parts / "meshes").mkdir()
+        for output in outputs:
+            output.write_bytes(b"")
+        self.assert_clause_two(reference, False)
+        self.assertEqual(changed_closure_files(script, closure.shas, closure.names, closure.wholes, closure.own), [])
+        decision = decide(reference, ran_closure_hash=closure.hash, ran_files=closure.files, ran_names=closure.names,
+                          ran_shas=closure.shas, ran_wholes=closure.wholes, ran_own=closure.own)
+        self.assertEqual(decision.reason, "source unchanged since this build ran")
+        (parts / "sibling.step").write_bytes(b"")
+        self.assert_clause_two(reference, True, "closure changed: ./")
+
     def test_a_folder_the_model_listed_is_stale_when_a_file_is_added(self):
         from cadgen.store.closure import build_closure
         from cadgen.store.index import model_ref
@@ -1014,6 +1045,7 @@ class ReachEndToEnd(unittest.TestCase):
             capture_output=True, text=True, timeout=600,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr[-2000:])
+        self.output = completed.stdout + completed.stderr
         return completed.stdout.strip().splitlines()[-1].split(" ", 1)[0]
 
     def edit(self, old, new):
@@ -1041,6 +1073,54 @@ class ReachEndToEnd(unittest.TestCase):
         self.assertTrue(verdict.stale)
         self.assertEqual(verdict.reason(), "closure changed: lib/geo.py")
         self.assertEqual(self.run_model(), "built", "a reached constant edit")
+        self.assertEqual(self.run_model(), "current")
+
+    def test_a_model_that_lists_its_own_folder_is_current_after_its_first_build(self):
+        """Issue #564: the folder is listed before the build publishes the STEP,
+        its sidecar and its mesh there. Those are the model's own outputs, never
+        its inputs: its first build is current, an annotation edit still refreshes
+        without running the body, and a new profile beside it is still a change."""
+        from cadgen.store.gate import stale
+        from cadgen.store.records import read_record
+
+        folder = self.root / "listing"
+        folder.mkdir()
+        (folder / "a.profile").write_text("1\n", encoding="utf-8")
+        self.model = folder / "part.py"
+        self.model.write_text(textwrap.dedent("""
+            import os
+
+            from cadgen import build123d as bd
+            from cadgen import step, stl
+
+
+            @stl
+            @step(materials={"definitions": {"paint": {"baseColor": "#112233"}}, "assignments": []})
+            def part():
+                print("body ran", flush=True)
+                profiles = [name for name in os.listdir() if name.endswith(".profile")]
+                return bd.Box(10, 10, 10 + len(profiles))
+
+
+            if __name__ == "__main__":
+                part()
+        """).lstrip(), encoding="utf-8")
+
+        self.assertEqual(self.run_model(), "built")
+        self.assertEqual(sorted(os.listdir(folder)), ["a.profile", "part.py", "part.step", "part.step.json", "part.stl"])
+        self.assertFalse(stale(self.model).stale, stale(self.model).reason())
+        self.assertEqual(read_record(self.model)["closure"]["own"], {"./": ["part.step", "part.step.json", "part.stl"]})
+        self.assertEqual(self.run_model(), "current")
+
+        self.model.write_text(self.model.read_text(encoding="utf-8").replace("#112233", "#445566"), encoding="utf-8")
+        self.assertEqual(self.run_model(), "built")
+        self.assertNotIn("body ran", self.output, "an annotation edit refreshes the record without the body")
+        self.assertFalse(stale(self.model).stale, stale(self.model).reason())
+
+        (folder / "b.profile").write_text("2\n", encoding="utf-8")
+        self.assertEqual(stale(self.model).reason(), "closure changed: ./")
+        self.assertEqual(self.run_model(), "built")
+        self.assertIn("body ran", self.output)
         self.assertEqual(self.run_model(), "current")
 
     def test_store_why_prints_the_reached_names(self):

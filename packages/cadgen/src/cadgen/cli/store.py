@@ -143,14 +143,15 @@ def _cmd_why(target: str, as_json: bool) -> int:
     return code
 
 
-def _closure_file_label(rel: str, names: dict) -> str:
+def _closure_file_label(rel: str, names: dict, own: dict) -> str:
     """``lib/geo.py[plane, cyl_along]`` for a sliced file (its reached names,
-    the first six), the bare path for a file tracked whole, and ``lib/__init__.py
-    (must stay absent)`` for a file the imports rely on not existing."""
+    the first six), the bare path for a file tracked whole, ``lib/__init__.py
+    (must stay absent)`` for a file the imports rely on not existing, and
+    ``./ (listing, less part.step)`` for a listed folder, less its own outputs."""
     if rel.startswith("!"):
         return f"{rel[1:]} (must stay absent)"
     if rel.endswith("/"):
-        return f"{rel} (listing)"
+        return f"{rel} (listing, less {', '.join(own[rel])})" if own.get(rel) else f"{rel} (listing)"
     if rel not in names:
         return rel
     reached = list(names[rel])
@@ -192,7 +193,8 @@ def _why_one(model: str, as_json: bool) -> int:
     if record:
         closure = record.get("closure") or {}
         names = closure.get("names") or {}
-        print(f"closure {str(closure.get('hash'))[:12]}  files: {', '.join(_closure_file_label(rel, names) for rel in closure.get('files') or [])}")
+        own = closure.get("own") or {}
+        print(f"closure {str(closure.get('hash'))[:12]}  files: {', '.join(_closure_file_label(rel, names, own) for rel in closure.get('files') or [])}")
     if tree:
         print(f"tree    components {len(tree.get('components') or {})}  occurrences {len(tree.get('occurrences') or [])}  links {len(tree.get('links') or [])}")
         for link in tree.get("links") or []:
