@@ -708,7 +708,8 @@ Queue and Send clear the note and what it carries, and so close the box, once th
 note has gone. Copy Prompt keeps it all, since nothing has gone yet: its button
 shows a tick for a moment. A failure keeps the note and says why in the box. The message is
 one format, sent, queued or copied: what the person wrote; then `File: <path>`; then
-`References:` and one reference per line; then `Sketch: <path>` when the picture
+`References:` and one reference per line (a selection with a summary, a board's
+check, reads its sentence, then its references); then `Sketch: <path>` when the picture
 travels as a file (a picture sent beside the text is not named).
 
 ## Camera, animation and preview

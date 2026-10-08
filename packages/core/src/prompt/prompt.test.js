@@ -72,9 +72,19 @@ test('a delivery ledger delivers each operation once, bounds work in flight, and
   assert.equal(restarted, 1, 'the oldest completed operation was evicted');
 });
 
-test('a selection with a label reads its label, then its references', () => {
-  const labelled = { resource: { kind: 'workspace-file', path: '/work/board.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#U2.7', '#C4.1'] },
-    label: "U2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm)" };
-  assert.equal(formatPromptMessage(createPromptContext([textPart('fix this'), referencePart(labelled)])),
+test('a selection with a summary reads its summary, then its references', () => {
+  const summarized = { resource: { kind: 'workspace-file', path: '/work/board.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#U2.7', '#C4.1'] },
+    summary: "U2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm)" };
+  assert.equal(formatPromptMessage(createPromptContext([textPart('fix this'), referencePart(summarized)])),
     "fix this\n\nReferences:\nU2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm) · /work/board.kicad_pcb#U2.7,C4.1");
+});
+
+test('a part picked in a model keeps its message: a label alone is not written', () => {
+  const part = { resource: { kind: 'workspace-file', path: '/models/x.step' }, target: { kind: 'cad-selector', selectors: ['o1.2'] }, label: 'arm' };
+  assert.equal(formatPromptMessage(createPromptContext([textPart('fix this'), referencePart(part)])), 'fix this\n\nReferences:\n/models/x.step#o1.2');
+});
+
+test('a summary must be text', () => {
+  const bad = { resource: { kind: 'workspace-file', path: '/work/board.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#U2'] }, summary: 4 };
+  assert.throws(() => validatePromptContext(createPromptContext([referencePart(bad)])), /summary must be text/);
 });

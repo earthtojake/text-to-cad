@@ -256,7 +256,8 @@ canonical release versions during normal development.
 `@text-to-cad/core/prompt` exports lightweight non-React bundle/reference types,
 runtime validation and canonical text serialization: `formatPromptContextText`, the
 parts as lines, and `formatPromptMessage`, the one message a Quick Edit is — what the
-person wrote, then `File:`, `References:` and, for a picture that travels as a file,
+person wrote, then `File:`, `References:` (a selection with a summary, a board's check,
+reads its sentence, then its references) and, for a picture that travels as a file,
 its label and path. Text, typed resource
 references and attachments travel in one ordered, immutable snapshot with an
 operation ID; attachment relationships name reference parts, and an attachment's

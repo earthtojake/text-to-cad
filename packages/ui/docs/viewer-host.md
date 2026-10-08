@@ -191,7 +191,8 @@ references do not promise to survive edits. Shared serialization handles quoting
 
 `formatPromptMessage(context, { attachmentPath })` is the one
 message a Quick Edit is, whether sent, queued or copied: what the person wrote;
-then `File: <path>`; then `References:` and one reference per line; then
+then `File: <path>`; then `References:` and one reference per line (a selection with a summary, a board's
+check, reads its sentence, then its references); then
 `Sketch: <path>` (the attachment's label) when the picture travels as a file,
 where `attachmentPath` says where it was saved. A picture sent beside the text
 as an image block is not named.
