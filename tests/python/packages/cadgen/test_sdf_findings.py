@@ -208,6 +208,10 @@ CASES = [
         "missing_inertial",
         "warning",
     ),
+    # Standalone lights use the same validator as world/link lights.
+    ("root_light_type", '<sdf version="1.12"><light name="sun" type="laser"/></sdf>', "unknown_light_type", "error"),
+    ("root_light_name", '<sdf version="1.12"><light type="point"/></sdf>', "missing_name", "error"),
+    ("root_light_pose", '<sdf version="1.12"><light name="sun" type="point"><pose>1 2</pose></light></sdf>', "invalid_numeric_vector", "error"),
     # --- sensors, plugins, lights ---
     ("missing_sensor_type", _model('<link name="base"><sensor name="s"/></link>'), "missing_sensor_type", "error"),
     ("typo_sensor_type", _model('<link name="base"><sensor name="s" type="gpu-lidar"/></link>'), "unknown_sensor_type", "warning"),

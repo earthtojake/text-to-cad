@@ -141,6 +141,10 @@ def validate_sdf_root(
     _check_unique_named(children(root, "world"), result, "/sdf", "world")
     _check_unique_named(children(root, "model"), result, "/sdf", "model")
 
+    _check_unique_named(children(root, "light"), result, "/sdf", "light")
+    for light_element in children(root, "light"):
+        _validate_light(light_element, result, {"world"}, "/sdf")
+
     for include_element in children(root, "include"):
         _validate_include(include_element, result, "/sdf/include")
     for plugin_element in children(root, "plugin"):
