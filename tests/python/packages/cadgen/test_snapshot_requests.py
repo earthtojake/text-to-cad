@@ -218,9 +218,11 @@ class SrdfPairingTests(_Workspace):
 
     def test_the_pairing_is_by_robot_name_not_by_file_stem(self) -> None:
         self.write("robots/description.urdf", URDF)
-        self.write("robots/planning.srdf", "<robot name='arm'/>\n")
+        self.write("robots/planning.srdf", "<robot name='arm'><group name='all'><link name='base'/></group></robot>\n")
         packet = self.resolve({"input": "robots/planning.srdf", "outputs": [{"path": "o.png"}]})
-        self.assertIn("description.urdf", packet["jobs"][0]["resolved"]["urdfUrl"])
+        # The payload is the paired URDF's robot, with the SRDF's semantics on it.
+        robot = packet["jobs"][0]["resolved"]["robot"]
+        self.assertEqual(("srdf", "base", ["all"]), (robot["kind"], robot["root"], robot["srdf"]["groupsByLink"]["base"]))
 
     def test_no_match_names_what_was_looked_for_and_what_was_found(self) -> None:
         self.write("robots/other.urdf", "<robot name='crane'/>\n")
@@ -249,11 +251,18 @@ class SrdfPairingTests(_Workspace):
             "<joint name='elbow' type='revolute'><parent link='a'/><child link='b'/>"
             "<axis xyz='0 0 1'/><limit lower='-1' upper='1' effort='1' velocity='1'/></joint></robot>\n"
         ))
-        self.write("robots/planning.srdf", "<robot name='arm'/>\n")
+        self.write("robots/planning.srdf", "<robot name='arm'><group name='arm'><joint name='elbow'/></group></robot>\n")
         job = {"input": "robots/planning.srdf", "outputs": [{"path": "o.png"}]}
         self.resolve({**job, "jointValues": {"elbow": 10}})
         with self.assertRaisesRegex(SnapshotError, r"Unknown joint\(s\): elbw"):
             self.resolve({**job, "jointValues": {"elbw": 10}})
+
+    def test_an_srdf_the_validator_refuses_is_refused_at_the_door(self) -> None:
+        # One door validates: what `cadgen srdf validate` calls an error never reaches a browser.
+        self.write("robots/description.urdf", URDF)
+        self.write("robots/planning.srdf", "<robot name='arm'/>\n")
+        with self.assertRaisesRegex(SnapshotError, "SRDF must define at least one planning group"):
+            self.resolve({"input": "robots/planning.srdf", "outputs": [{"path": "o.png"}]})
 
 
 class SectionPlaneTests(_Workspace):
@@ -675,13 +684,19 @@ class PoseLimitTests(_Workspace):
     def test_urdf_joint_values_must_lie_within_each_joints_limits(self) -> None:
         self.write("arm.urdf", ARM_URDF)
         job = {"input": "arm.urdf"}
-        # The limit itself passes though degrees are converted from radians; a
-        # continuous joint has no limits; a mimic follower is posed by its leader,
-        # not by a value of its own, so its value is not a pose to range-check.
-        self.prepare({**job, "jointValues": {"elbow": 57.29577951308232, "slide": 0.1, "wheel": 720, "finger": 99}})
+        # The limit itself passes though degrees are converted from radians; a continuous
+        # joint has no limits. A mimic follower is posed by its leader, so a value of its own
+        # is refused by name rather than accepted and ignored, and a leader value that puts
+        # the follower past the follower's own limits is refused too.
+        self.prepare({**job, "jointValues": {"elbow": 20, "slide": 0.1, "wheel": 720}})
         refused = [
             ({"elbow": 60}, r"jointValues\[elbow\] = 60 deg is outside joint 'elbow''s limits \[-57\.2958, 57\.2958\] deg"),
             ({"slide": 0.2}, r"jointValues\[slide\] = 0\.2 m is outside joint 'slide''s limits \[0, 0\.1\] m"),
+            ({"finger": 5}, r"jointValues\[finger\]: joint 'finger' mimics 'elbow' \(finger = 1 × elbow\), so it is posed "
+                            r"by 'elbow''s value; set jointValues\[elbow\] instead"),
+            ({"elbow": 40}, r"jointValues\[elbow\] = 40 deg puts joint 'finger', which mimics 'elbow', at 40 deg, "
+                            r"outside its limits \[0, 28\.6479\] deg"),
+            ({"elbow": -10}, r"puts joint 'finger', which mimics 'elbow', at -10 deg"),
         ]
         for values, pattern in refused:
             with self.subTest(values=values):

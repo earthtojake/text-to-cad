@@ -89,6 +89,8 @@ _NAMED_FIELDS = {
     "drawing": ("object",),
     "skin": ("object",),
     "section": ("object",),
+    # A robot entry names its payload and the primitive meshes the payload draws.
+    "robot": ("object", "meshes"),
     "bounds": (),
 }
 _STOP_EVERY = 256
@@ -237,7 +239,9 @@ def named_objects(kind: str, entry: dict | None) -> tuple[str, ...]:
             return ()
     fields = _NAMED_FIELDS.get(kind)
     values = entry.values() if fields is None else (entry.get(name) for name in fields)
-    return tuple(dict.fromkeys(value for value in values if is_object_hash(value)))
+    # A field names one object, or a list of them (a robot entry's primitive meshes).
+    flat = (item for value in values for item in (value if isinstance(value, list) else (value,)))
+    return tuple(dict.fromkeys(value for value in flat if is_object_hash(value)))
 
 
 def _newer(version: object, current: int) -> bool:

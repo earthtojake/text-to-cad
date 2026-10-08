@@ -515,6 +515,8 @@ class CadApp:
                     self._handle_drawing(request, response, query)
                 elif pathname == "/__cad/tube-skins":
                     self._handle_tube_skins(request, response, query)
+                elif pathname == "/__cad/robot":
+                    self._handle_robot(request, response, query)
                 elif pathname == "/__cad/store":
                     self._handle_store_asset(request, response, query)
                 elif pathname == "/__cad/asset":
@@ -855,6 +857,18 @@ class CadApp:
                                            query.get("chord"), query.get("angle"))
         if isinstance(body, bytes):
             response.send_bytes(status, body, "model/gltf-binary")
+            return
+        response.send_json(status, body)
+
+    def _handle_robot(self, request, response, query):
+        """A robot description resolved for the page, or one of the primitive meshes cadgen made for
+        it (``robots.py`` owns both rules). Real work on a miss -- the validators, the frame graph,
+        meshing a shape -- so it is counted, as the drawing route is."""
+        from .robots import robot_response
+
+        status, body, content_type = robot_response(query.get("file") or "", query.get("mesh"))
+        if isinstance(body, bytes):
+            response.send_bytes(status, body, content_type, RAW_FILE_HEADERS if content_type.startswith("model/") else ())
             return
         response.send_json(status, body)
 

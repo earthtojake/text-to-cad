@@ -84,6 +84,25 @@ export interface CadDrawingPayload {
   }[];
   [key: string]: unknown;
 }
+/**
+ * What `GET /__cad/robot` answers: a URDF, SDF or SRDF resolved by cadgen into the articulation
+ * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
+ * with its colour and the URL of the mesh it draws), and what the description says about its
+ * links and joints, as written. See `packages/cadgen/src/cadgen/robot_payload.py`.
+ */
+export interface CadRobotPayload {
+  schemaVersion: number;
+  kind: 'urdf' | 'sdf' | 'srdf';
+  name: string;
+  root: string;
+  articulation: Record<string, unknown>;
+  links: { name: string; placement: number[]; visuals: unknown[]; collisions: unknown[]; inertial: unknown }[];
+  joints: Record<string, unknown>[];
+  visuals: { id: string; link: string; label: string; placement: number[]; color: string; mesh: { format: string; url: string } }[];
+  srdf: Record<string, unknown> | null;
+  sdf: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
 /** Byte tickets own their buffer exclusively: workers may detach it. URL tickets are approved by the provider. */
 export type CadWorkerResourceTicket =
   | { kind: 'url'; url: string; headers?: Record<string, string>; cache?: RequestCache; maxBytes?: number }
@@ -186,6 +205,8 @@ export interface CadWorkspaceService {
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
+  /** `GET /__cad/robot`: a robot description resolved for the page (`cadgen.robot_payload`). */
+  robot(file: string, options?: CadRequestOptions): Promise<CadRobotPayload>;
   readonly resources: CadResourceProvider;
   /**
    * `onReady` hears each component as soon as its row is ready, while the rest are still awaited.

@@ -115,7 +115,6 @@ from cadgen.snapshot_cli import (
     SnapshotError,
     load_job_from_options,
     resolve_render_job_packet,
-    unrenderable_sdf_geometry,
 )
 from cadgen.snapshot_core import (
     clear_render_output_targets,
@@ -1260,7 +1259,7 @@ class SnapshotCliTests(unittest.TestCase):
     def test_mesh_and_robot_refuse_the_presets_made_of_cad_edges_and_keep_surface_styles(self) -> None:
         # Hidden line, X-ray and Wireframe are drawn from CAD edges, which only a STEP model
         # has. The surface STYLES are not: a mesh can still be drawn flat or unlit.
-        for filename, data in (("widget.glb", b"glTF"), ("arm.urdf", b"<robot name='arm'/>")):
+        for filename, data in (("widget.glb", b"glTF"), ("arm.urdf", self.JOINTED_URDF)):
             with tempfile.TemporaryDirectory() as temporary_directory:
                 root = self._mesh_job_env(temporary_directory, filename, data)
                 base = {"input": f"models/{filename}", "outputs": [{"path": "tmp/iso.png", "camera": "iso"}]}
@@ -1428,7 +1427,7 @@ class SnapshotCliTests(unittest.TestCase):
 
     def test_render_job_resolves_robot_description_without_step_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
-            root = self._mesh_job_env(temporary_directory, "arm.urdf", b"<robot name='arm'/>\n")
+            root = self._mesh_job_env(temporary_directory, "arm.urdf", self.JOINTED_URDF)
             calls = []
 
             def fake_ensure(target, **kwargs):
@@ -1445,20 +1444,27 @@ class SnapshotCliTests(unittest.TestCase):
             finally:
                 snapshot_main.ensure_step_topology_artifact = original_ensure
 
-        # A robot assembles in the browser from its own description; no STEP pipeline.
+        # A robot is resolved by cadgen from its own description; no STEP pipeline.
         self.assertEqual(calls, [])
         job = packet["jobs"][0]
         resolved = job["resolved"]
         self.assertEqual(resolved["kind"], "urdf")
         self.assertTrue(urlparse(str(resolved["inputUrl"])).path.endswith("arm.urdf"))
         self.assertEqual(resolved["inputUrl"], resolved["url"])
+        # The page plays what cadgen resolved: the articulation, and every visual's mesh by a
+        # URL the snapshot host answers (a primitive by its store object).
+        robot = resolved["robot"]
+        self.assertEqual([control["id"] for control in robot["articulation"]["controls"]], ["shoulder_pan"])
+        self.assertEqual([visual["mesh"]["format"] for visual in robot["visuals"]], ["glb", "glb"])
+        self.assertTrue(all(visual["mesh"]["url"].startswith("/__robot_mesh/") for visual in robot["visuals"]))
+        self.assertEqual(resolved["controls"], {"shoulder_pan": 0.0})
         # Robots are authored in metres; the CAD profile would frame one for a workpiece a
         # thousand times its size.
         self.assertEqual(job["scale"], "urdf")
 
     def test_render_job_poses_a_robot_with_joint_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
-            root = self._mesh_job_env(temporary_directory, "arm.urdf", b"<robot name='arm'/>\n")
+            root = self._mesh_job_env(temporary_directory, "arm.urdf", self.TWO_JOINT_URDF)
             packet = resolve_render_job_packet(
                 {
                     "input": "models/arm.urdf",
@@ -1468,7 +1474,8 @@ class SnapshotCliTests(unittest.TestCase):
                 cwd=root,
             )
             resolved = packet["jobs"][0]["resolved"]
-            self.assertEqual(resolved["jointValues"], {"shoulder_pan": 55, "elbow_flex": -20})
+            # The full control vector the request means, validated at the door.
+            self.assertEqual(resolved["controls"], {"shoulder_pan": 55.0, "elbow_flex": -20.0})
 
             base = {"input": "models/arm.urdf", "outputs": [{"path": "tmp/iso.png"}]}
             with self.assertRaisesRegex(SnapshotError, "jointValues must be an object"):
@@ -1489,6 +1496,19 @@ class SnapshotCliTests(unittest.TestCase):
   </joint>
 </robot>
 """
+    TWO_JOINT_URDF = b"""<?xml version="1.0"?>
+<robot name="arm">
+  <link name="base_link"/><link name="upper"/><link name="fore"/>
+  <joint name="shoulder_pan" type="revolute">
+    <parent link="base_link"/><child link="upper"/>
+    <axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/>
+  </joint>
+  <joint name="elbow_flex" type="revolute">
+    <parent link="upper"/><child link="fore"/>
+    <axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/>
+  </joint>
+</robot>
+"""
 
     def test_render_job_refuses_a_joint_the_robot_does_not_declare(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1497,7 +1517,7 @@ class SnapshotCliTests(unittest.TestCase):
 
             # A declared joint still poses the robot.
             packet = resolve_render_job_packet({**base, "jointValues": {"shoulder_pan": 30}}, cwd=root)
-            self.assertEqual(packet["jobs"][0]["resolved"]["jointValues"], {"shoulder_pan": 30})
+            self.assertEqual(packet["jobs"][0]["resolved"]["controls"], {"shoulder_pan": 30.0})
 
             with self.assertRaisesRegex(SnapshotError, r"Unknown joint\(s\): shoulder_panx"):
                 resolve_render_job_packet({**base, "jointValues": {"shoulder_panx": 30}}, cwd=root)
@@ -1505,10 +1525,9 @@ class SnapshotCliTests(unittest.TestCase):
             with self.assertRaisesRegex(SnapshotError, "This URDF declares: shoulder_pan"):
                 resolve_render_job_packet({**base, "jointValues": {"Shoulder_Pan": 30}}, cwd=root)
 
-    # A capsule, plane, ellipsoid, heightmap or polyline has no mesh in the renderer, so a
-    # VISUAL built from one renders as EMPTY SPACE at exit 0. The browser parser refuses them
-    # (parseSdf.test.js); the door answers FIRST so the CLI fails before a browser ever
-    # starts, and says the same thing. Collisions are never drawn and are never refused.
+    # A plane, ellipsoid, heightmap or polyline has no mesh cadgen makes, so a VISUAL built
+    # from one is refused by cadgen as it reads the description (cadgen.robot_payload), before
+    # a browser ever starts. Collisions are never drawn and are never refused.
     def _sdf(self, body: str) -> bytes:
         return (
             "<?xml version='1.0'?>\n<sdf version='1.9'><model name='rig'>"
@@ -1523,12 +1542,12 @@ class SnapshotCliTests(unittest.TestCase):
     )
 
     def test_render_job_refuses_sdf_geometry_the_renderer_cannot_draw(self) -> None:
-        for shape, xml in (
-            ("capsule", "<capsule><radius>1</radius><length>2</length></capsule>"),
-            ("plane", "<plane><size>10 10</size></plane>"),
-            ("ellipsoid", "<ellipsoid><radii>1 2 3</radii></ellipsoid>"),
-            ("heightmap", "<heightmap><uri>h.png</uri></heightmap>"),
-            ("polyline", "<polyline><height>1</height></polyline>"),
+        # A plane is valid SDF cadgen has no mesh for; the rest `cadgen sdf validate` does not know.
+        for shape, xml, pattern in (
+            ("plane", "<plane><size>10 10</size></plane>", r"link 'ground' visual 1 uses <plane> geometry, which the viewer cannot draw"),
+            ("ellipsoid", "<ellipsoid><radii>1 2 3</radii></ellipsoid>", r"invalid_geometry_shape at .*link\[@name='ground'\]"),
+            ("heightmap", "<heightmap><uri>h.png</uri></heightmap>", r"invalid_geometry_shape at .*link\[@name='ground'\]"),
+            ("polyline", "<polyline><height>1</height></polyline>", r"invalid_geometry_shape at .*link\[@name='ground'\]"),
         ):
             with self.subTest(shape=shape), tempfile.TemporaryDirectory() as temporary_directory:
                 root = self._mesh_job_env(
@@ -1539,7 +1558,7 @@ class SnapshotCliTests(unittest.TestCase):
                         + f"<link name='ground'><visual name='g'><geometry>{xml}</geometry></visual></link>"
                     ),
                 )
-                with self.assertRaisesRegex(SnapshotError, rf"link ground visual uses <{shape}>"):
+                with self.assertRaisesRegex(SnapshotError, pattern):
                     resolve_render_job_packet(
                         {"input": "models/rig.sdf", "outputs": [{"path": "tmp/iso.png"}]},
                         cwd=root,
@@ -1552,9 +1571,10 @@ class SnapshotCliTests(unittest.TestCase):
                 "rig.sdf",
                 self._sdf(
                     self.DRAWABLE_LINK
-                    + "<link name='dome'><visual name='v'>"
-                    "<geometry><ellipsoid><radii>1 2 3</radii></ellipsoid></geometry></visual></link>"
-                    + "<link name='ghost'><visual name='v'></visual></link>"
+                    + "<link name='ground'><visual name='v'>"
+                    "<geometry><plane><size>10 10</size></plane></geometry></visual></link>"
+                    + "<link name='wall'><visual name='v'>"
+                    "<geometry><plane><size>10 10</size></plane></geometry></visual></link>"
                 ),
             )
             with self.assertRaises(SnapshotError) as caught:
@@ -1563,9 +1583,9 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
             message = str(caught.exception)
-            self.assertIn("link dome visual uses <ellipsoid>", message)
-            self.assertIn("link ghost visual has no <geometry>", message)
-            self.assertIn("Supported: box, cylinder, mesh, sphere", message)
+            self.assertIn("link 'ground' visual 1 uses <plane>", message)
+            self.assertIn("link 'wall' visual 1 uses <plane>", message)
+            self.assertIn("Supported: box, capsule, cylinder, sphere, mesh", message)
 
     def test_render_job_renders_a_world_whose_collision_geometry_it_cannot_draw(self) -> None:
         # Collision geometry is never drawn, so an undrawable one costs the picture nothing
@@ -1593,11 +1613,10 @@ class SnapshotCliTests(unittest.TestCase):
                 cwd=root,
             )
             self.assertEqual(packet["jobs"][0]["resolved"]["kind"], "sdf")
-            self.assertEqual(unrenderable_sdf_geometry(root / "models" / "world.sdf"), [])
 
     def test_render_job_accepts_sdf_built_only_from_drawable_shapes(self) -> None:
-        # The refusal may only fire on what it understands: a description made of shapes the
-        # renderer draws still resolves, and one this cannot parse is left to the renderer.
+        # A description made of the shapes cadgen meshes resolves, each visual a store object;
+        # one that is not SDF at all is refused by cadgen's reader, never left to a browser.
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(
                 temporary_directory,
@@ -1609,36 +1628,40 @@ class SnapshotCliTests(unittest.TestCase):
                     "</geometry></visual></link>"
                     + "<link name='lamp'><visual name='v'><geometry>"
                     "<sphere><radius>1</radius></sphere></geometry></visual></link>"
+                    + "<link name='pill'><visual name='v'><geometry>"
+                    "<capsule><radius>1</radius><length>2</length></capsule></geometry></visual></link>"
                 ),
             )
             packet = resolve_render_job_packet(
                 {"input": "models/rig.sdf", "outputs": [{"path": "tmp/iso.png"}]},
                 cwd=root,
             )
-            self.assertEqual(packet["jobs"][0]["resolved"]["kind"], "sdf")
+            resolved = packet["jobs"][0]["resolved"]
+            self.assertEqual(resolved["kind"], "sdf")
+            self.assertEqual([visual["label"] for visual in resolved["robot"]["visuals"]], ["box", "cylinder", "sphere", "capsule"])
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "rig.sdf", b"not xml at all")
-            packet = resolve_render_job_packet(
-                {"input": "models/rig.sdf", "outputs": [{"path": "tmp/iso.png"}]},
-                cwd=root,
-            )
-            self.assertEqual(packet["jobs"][0]["resolved"]["kind"], "sdf")
+            with self.assertRaisesRegex(SnapshotError, "could not be parsed as SDF XML"):
+                resolve_render_job_packet(
+                    {"input": "models/rig.sdf", "outputs": [{"path": "tmp/iso.png"}]},
+                    cwd=root,
+                )
 
-    def test_render_job_still_poses_a_robot_whose_joints_cannot_be_read(self) -> None:
-        # The check may only REFUSE a name it is sure about. A description this cannot parse
-        # renders exactly as before rather than becoming stricter than the renderer.
+    def test_render_job_refuses_a_robot_its_validator_refuses(self) -> None:
+        # One door validates: what `cadgen urdf validate` calls an error never reaches a browser,
+        # and a pose over it is not range-checked against joints that cannot be read.
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "arm.urdf", b"<robot name='arm'/>\n")
-            packet = resolve_render_job_packet(
-                {
-                    "input": "models/arm.urdf",
-                    "jointValues": {"anything": 12},
-                    "outputs": [{"path": "tmp/iso.png"}],
-                },
-                cwd=root,
-            )
-            self.assertEqual(packet["jobs"][0]["resolved"]["jointValues"], {"anything": 12})
+            with self.assertRaisesRegex(SnapshotError, "must define at least one link"):
+                resolve_render_job_packet(
+                    {
+                        "input": "models/arm.urdf",
+                        "jointValues": {"anything": 12},
+                        "outputs": [{"path": "tmp/iso.png"}],
+                    },
+                    cwd=root,
+                )
 
     def test_render_job_rejects_step_only_options_for_robot_input(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
