@@ -1,4 +1,4 @@
-"""Lazy, transparent re-export of build123d (design/library-first-generation.md).
+"""Lazy, transparent re-export of build123d.
 
 The canonical model-script import is::
 

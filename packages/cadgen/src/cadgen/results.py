@@ -3,7 +3,7 @@
 Every ``build`` / ``validate`` verb answers with one of these frozen
 dataclasses rather than a loose dict, so the library call and the generated CLI
 carry the SAME shape — ``--json`` is just ``dataclasses.asdict`` of the value
-the library already returned (design/format-doors.md).
+the library already returned.
 
 Stdlib only, on purpose: importing a result type must never pull in the CAD
 kernel, because the public namespaces (``cadgen.step``, ``cadgen.stl``, ...)
@@ -210,7 +210,7 @@ class SnapshotResult:
     internals, per-stage timings — the normal result omits that payload: the
     files are already on disk by the time this exists, so what a caller needs is
     WHICH paths were written. ``--json`` is this dataclass, so the library call
-    and the CLI report the same thing (design/format-doors.md).
+    and the CLI report the same thing.
     """
 
     ok: bool

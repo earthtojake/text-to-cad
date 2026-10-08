@@ -7,7 +7,7 @@ second implementation to drift.
 
 The engine is unchanged: :func:`cadgen.step_export_target.export_cad_target`
 is the one entry, so a door and a model-script run cannot produce different
-bytes (design/format-doors.md).
+bytes.
 
 The doors take DOCUMENTS: the mesh is the document's tree, tessellated. A door
 never moves geometry — a posed export is authored geometry or another model.

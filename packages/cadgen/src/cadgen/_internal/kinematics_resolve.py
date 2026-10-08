@@ -121,9 +121,9 @@ def _instance_tree_ids(descriptor: Mapping[str, Any]) -> tuple[dict[str, str], d
 
     The flat selector index holds LEAF occurrences only, but mates target the
     instance-tree namespace: a mate on a group occurrence is how "rigid groups
-    are free" (design/pose-animation-split.md), and ``_subtree_ids`` already
-    carries a group's whole subtree. So group nodes have to be resolvable, and
-    ``assembly.json["assembly"]["root"]`` is where they live.
+    are free", and ``_subtree_ids`` already carries a group's whole subtree. So
+    group nodes have to be resolvable, and ``assembly.json["assembly"]["root"]``
+    is where they live.
     """
     by_id: dict[str, str] = {}
     by_name: dict[str, list[str]] = {}

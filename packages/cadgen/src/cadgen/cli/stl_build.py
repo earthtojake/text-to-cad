@@ -3,7 +3,7 @@
 There is no parser here on purpose: everything the command accepts is derived
 from the verb function's signature by
 :mod:`cadgen._internal.cli_from_function`, so a flag cannot drift from a
-parameter (design/format-doors.md).
+parameter (README law 6).
 
 One of the three per-format doors that replace the retired
 ``cadgen step export``. A door takes a STEP DOCUMENT and writes ONLY its own
