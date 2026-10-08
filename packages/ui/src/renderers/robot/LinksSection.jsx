@@ -92,17 +92,16 @@ function RobotSearchRow({ match, highlighted, cursor, selection }) {
 
 /**
  * @param {object} props
- * @param {object | null} props.description The parsed robot model (URDF, an SRDF's paired URDF, or SDF).
+ * @param {object | null} props.robot The payload cadgen resolved (`cadgen.robot_payload`): a URDF, an SRDF's paired URDF
+ *   with the SRDF's semantics on it, or an SDF.
  * @param {object[]} props.components `buildRobotParts(...).components`: the named mesh objects.
- * @param {{ id: string, linkName: string }[]} props.parts Mesh parts: which viewport geometry belongs to which link.
+ * @param {{ id: string, link: string }[]} props.parts Mesh parts: which viewport geometry belongs to which link.
  * @param {object} props.selection `useLinkSelection`, with `select`/`selectLink` routed through the Select tool.
- * @param {Map<string, string[]> | null} [props.groupNamesByLink] SRDF planning groups per link.
  * @param {boolean} [props.active] Whether Select is the tool, which is when the panels show; a hidden tree does not scroll to a selection.
- * @param {(filename: string) => string} [props.meshPath] The host path of a mesh the description names, or "" when it has none here.
- * @param {(path: string) => void} [props.onOpenFile] Opens a file the description names.
+ * @param {(path: string) => void} [props.onOpenFile] Opens a file the description names, by the host path the payload resolved for it.
  */
-export default function LinksSection({ description = null, components = EMPTY, parts = EMPTY, selection, groupNamesByLink = null, active = true, meshPath = null, onOpenFile = null }) {
-  const tree = useMemo(() => buildRobotTree(description, { components, parts }), [description, components, parts]);
+export default function LinksSection({ robot = null, components = EMPTY, parts = EMPTY, selection, active = true, onOpenFile = null }) {
+  const tree = useMemo(() => buildRobotTree(robot, { components, parts }), [robot, components, parts]);
   const [userExpanded, setUserExpanded] = useState(null);
   const defaultExpanded = useMemo(() => initialExpansion(tree), [tree]);
   const expanded = userExpanded || defaultExpanded;
@@ -142,14 +141,12 @@ export default function LinksSection({ description = null, components = EMPTY, p
   // objects are.
   const shownLinkNames = useMemo(() => selection.selectedLinkNames.filter(name => tree.nodesById.has(robotLinkNodeId(name))),
     [selection.selectedLinkNames, tree]);
-  const linkFacts = useMemo(() => (shownLinkNames.length === 1
-    ? robotLinkFacts(description, shownLinkNames[0], { groupNamesByLink }) : null),
-  [shownLinkNames, description, groupNamesByLink]);
+  const linkFacts = useMemo(() => (shownLinkNames.length === 1 ? robotLinkFacts(robot, shownLinkNames[0]) : null), [shownLinkNames, robot]);
   const selectedComponents = components.filter(component => selection.selectedComponentIds.includes(component.id));
   // The heading names what is selected: one link or object by its name, several by what they are.
   const referenceTitle = shownLinkNames.length === 1 ? shownLinkNames[0] : shownLinkNames.length ? "Links"
     : selectedComponents.length === 1 ? selectedComponents[0].name : "Mesh objects";
-  const details = linkFacts ? <RobotLinkDetails facts={linkFacts} meshPath={meshPath} onOpenFile={onOpenFile} onSelectLink={selection.selectLink} hasLinkRow={name => tree.nodesById.has(robotLinkNodeId(name))}/>
+  const details = linkFacts ? <RobotLinkDetails facts={linkFacts} onOpenFile={onOpenFile} onSelectLink={selection.selectLink} hasLinkRow={name => tree.nodesById.has(robotLinkNodeId(name))}/>
     : shownLinkNames.length ? <RobotLinksSummary linkNames={shownLinkNames}/>
     : selection.selectedComponentIds.length ? <RobotComponentDetails components={components} selectedIds={selection.selectedComponentIds}/> : null;
   const clearSelection = () => selection.select("");
@@ -168,7 +165,7 @@ export default function LinksSection({ description = null, components = EMPTY, p
             : deferredQuery.trim() && <p className="px-3 py-6 text-center text-tiny text-muted-foreground">{`No link matches “${deferredQuery.trim()}”`}</p>
           : tree.roots.length
             ? <ul aria-label="Robot links">{tree.roots.map(node => <RobotRow key={node.id} pinned={tree.roots.length === 1 && node.children.length > 0} {...{ node, highlighted, expanded, toggle, selection, rowRefs }}/>)}</ul>
-            : <p role="status" className="p-2 text-tiny text-muted-foreground">{description ? "This description has no links." : "Loading links…"}</p>}
+            : <p role="status" className="p-2 text-tiny text-muted-foreground">{robot ? "This description has no links." : "Loading links…"}</p>}
         </div>
       </div>
     </ToolPanel>

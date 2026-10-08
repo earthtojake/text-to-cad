@@ -48,11 +48,18 @@ snapshot's own.
 - An STL is one object and a 3MF one per object (and per material within one),
   each in its colour. They author no finish: `solid` wears the viewer's surface and
   `render` the studio's.
-- A robot is drawn where the viewer opens it: every joint at its default, then an
-  SRDF's `home` group state, with the joints `--joint-values` names on top. A
-  colour the description gives a visual wins over the colours its link mesh
-  carries, and a link mesh that cannot be loaded fails the snapshot rather than
-  leaving the link out.
+- A robot is drawn where the viewer opens it: every control at rest, then an
+  SRDF's `home` group state, with the joints `--joint-values` names on top.
+  cadgen resolves the description first (`cadgen.robot_payload`: the articulation
+  the page plays, the visuals it draws) and refuses, by name, what the page
+  cannot draw: a validator finding; a mesh that is not an STL, 3MF or GLB file
+  beside the description (`package://` and remote URIs are not resolved); a
+  value for a fixed joint or a mimic follower (a follower follows its leader);
+  a leader value that pushes a follower past the follower's own limits. A box,
+  cylinder, sphere or capsule is meshed by cadgen into its store. A colour the
+  description gives a visual wins over the colours its link mesh carries, and a
+  link mesh that cannot be loaded fails the snapshot rather than leaving the
+  link out.
 - The ground is sized from the rest placement, so a pose never rescales it; only
   the floor's height follows a posed robot down.
 - `--mode list` lists what the scene drew, one row per mesh: a `ref` naming it,

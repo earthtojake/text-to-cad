@@ -1,14 +1,12 @@
-// Resolving a robot's link-mesh reference against the URL its DESCRIPTION came from.
+// Resolving a file's relative reference (a GLB's texture or buffer) against the URL the file
+// came from.
 //
-// The Viewer serves a description as `/__cad/asset?file=<absolute path>`, so the file the
-// mesh is relative to lives in the QUERY, not the path. Resolving `meshes/wedge.stl`
-// against that URL the ordinary way gives `/__cad/meshes/wedge.stl`, which the backend does
-// not serve — the mesh 404s and the whole model fails to load. The reference has to be
-// resolved against the `file` parameter and written back into a fresh `/__cad/asset` URL.
-//
-// This lived privately in the URDF parser, so URDF link meshes loaded and SDF ones did not:
-// every SDF that names a mesh failed in the Viewer with "Couldn't load the model". One copy,
-// both parsers.
+// The Viewer serves a file as `/__cad/asset?file=<absolute path>`, so the file the reference is
+// relative to lives in the QUERY, not the path. Resolving `textures/skin.png` against that URL
+// the ordinary way gives `/__cad/textures/skin.png`, which the backend does not serve. The
+// reference has to be resolved against the `file` parameter and written back into a fresh
+// `/__cad/asset` URL. (A robot's link meshes are named by the URLs cadgen minted for them and
+// never resolved here.)
 
 function normalizeAbsoluteUrl(url) {
   if (url instanceof URL) {
@@ -46,7 +44,7 @@ function dirnameFileRef(value) {
   return index >= 0 ? normalized.slice(0, index + 1) : "";
 }
 
-export function resolveLocalAssetFileRef(sourceFileRef, reference) {
+function resolveLocalAssetFileRef(sourceFileRef, reference) {
   const rawReference = String(reference || "").trim();
   if (!rawReference || /^[a-z][a-z0-9+.-]*:/i.test(rawReference)) {
     return "";
@@ -57,8 +55,8 @@ export function resolveLocalAssetFileRef(sourceFileRef, reference) {
   return normalizeFileRefSegments(`${dirnameFileRef(sourceFileRef)}${rawReference}`);
 }
 
-/** The `/__cad/asset` URL for a mesh named relative to a description served from one, or ""
- * when the description did not come from that route (a plain static host, a test fixture). */
+/** The `/__cad/asset` URL for a file named relative to one served from that route, or "" when
+ * the source did not come from it (a plain static host, a test fixture). */
 export function resolveCadAssetMeshUrl(reference, sourceUrl) {
   const source = new URL(normalizeAbsoluteUrl(sourceUrl));
   if (source.pathname !== "/__cad/asset") {

@@ -645,8 +645,11 @@ STL and 3MF; URDF, SRDF and SDF), or null for a STEP document. A family is
 `{ load(job, { resources }), build(THREE, loaded, job), release(loaded) }`, each a call to
 the module the viewer's renderer calls: `loadRenderGlbDocument` + `createGlbScene`,
 `loadRenderMeshByUrl` + `buildMeshScene`, `loadRobot` + `createRobotScene`. A robot is
-posed as it is built, at `robotOpeningPose` (every joint's default, then an SRDF's `home`
-group state: where the viewer opens it) with the job's `jointValues` on top.
+drawn from the payload cadgen resolved for it (`resolved.robot`: the articulation, the
+visuals at their rest placements, each mesh by a URL the snapshot's asset server answers)
+and posed as it is built, at the articulation's opening (every control at rest, then an
+SRDF's `home` group state: where the viewer opens it) with the job's `resolved.controls` on
+top — the `--joint-values` as cadgen validated them against the articulation.
 
 `headlessSceneModel(THREE, scene, headlessSceneDress(context.sceneSettings))` dresses the
 scene exactly as the viewer's viewport dresses one it adopts, with the look

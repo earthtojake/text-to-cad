@@ -43,12 +43,13 @@ export function articulationControl(articulation, id) {
   return articulationControls(articulation).find((control) => control.id === String(id || "")) || null;
 }
 
-/** A value within the control's limits; an unreadable value is the control's rest value. */
+/** A value within the control's limits (a null limit is no limit: a continuous robot joint);
+ * an unreadable value is the control's rest value. */
 export function clampControlValue(control, value) {
   const rest = finite(control?.default, 0);
   let number = finite(value, rest);
-  const min = finite(control?.min, Number.NEGATIVE_INFINITY);
-  const max = finite(control?.max, Number.POSITIVE_INFINITY);
+  const min = control?.min == null ? Number.NEGATIVE_INFINITY : finite(control.min, Number.NEGATIVE_INFINITY);
+  const max = control?.max == null ? Number.POSITIVE_INFINITY : finite(control.max, Number.POSITIVE_INFINITY);
   if (number < Math.min(min, max)) number = Math.min(min, max);
   if (number > Math.max(min, max)) number = Math.max(min, max);
   return number;
@@ -117,9 +118,13 @@ function scratchFor(THREE) {
   return scratch;
 }
 
-// D(axis, q) in rest space: T(o) R(axis, turn) T(-o), then T(axis * travel) — the two
-// commute, both being about one axis.
-function jointMotion(THREE, joint, turnDeg, travel, target) {
+/**
+ * D(axis, q) in rest space: T(o) R(axis, turn) T(-o), then T(axis * travel) — the two
+ * commute, both being about one axis. Written into `target`. A robot's scene keeps one
+ * node per joint under its parent's and writes this as the node's own matrix, so three's
+ * world-matrix pass composes the chain (`lib/urdf/robotScene.js`).
+ */
+export function jointMotionMatrix(THREE, joint, turnDeg, travel, target) {
   const { axis, origin, rotation, step } = scratchFor(THREE);
   axis.set(finite(joint.axis?.[0], 0), finite(joint.axis?.[1], 0), finite(joint.axis?.[2], 1)).normalize();
   origin.set(finite(joint.origin?.[0], 0), finite(joint.origin?.[1], 0), finite(joint.origin?.[2], 0));
@@ -146,7 +151,7 @@ export function jointDeltas(THREE, articulation, values) {
     const delta = new THREE.Matrix4();
     if (joint.kind !== "fixed" && Array.isArray(joint.axis)) {
       const own = rows[joint.id];
-      jointMotion(THREE, joint, own.turn, own.travel, delta);
+      jointMotionMatrix(THREE, joint, own.turn, own.travel, delta);
     }
     if (parent) delta.premultiply(parent);
     deltas.set(joint.id, delta);

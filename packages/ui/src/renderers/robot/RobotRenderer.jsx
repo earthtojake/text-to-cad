@@ -2,9 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import * as THREE from "three";
 import { MousePointer2 } from "lucide-react";
 import { EDGELESS_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
-import { resolveLocalAssetFileRef } from "@text-to-cad/core/lib/urdf/meshAssetUrl.js";
 import { createRobotScene } from "@text-to-cad/core/lib/urdf/robotScene.js";
-import { srdfGroupNamesByLink } from "@text-to-cad/core/lib/urdf/parseSrdf.js";
 import { VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
@@ -18,7 +16,7 @@ import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } 
 import PositionControls from "./PositionControls.jsx";
 import LinksSection from "./LinksSection.jsx";
 import SdfSection from "./SdfSection.jsx";
-import { prepareRobotJointHandles, robotJointHandles, robotPosableJoints } from "./jointHandles.js";
+import { prepareRobotJointHandles, robotJointHandles } from "./jointHandles.js";
 import { createPoseStore, poseLogic } from "./poseStore.js";
 import { ROBOT_DECLINED_LIVE_COMMANDS, ROBOT_TOOL, ROBOT_TOOL_MODES } from "./tools.js";
 import { useLinkSelection } from "./useLinkSelection.js";
@@ -32,29 +30,29 @@ const LINKS_PANEL = Object.freeze({ id: "tree", label: "Links", startsClosed: fa
 
 function RobotSurface({ view, data }) {
   const document = useWorkspaceDocument({ view, data });
-  const loaded = useRobotDocument({ entry: document.entry, resources: document.client.resources });
+  const loaded = useRobotDocument({ entry: document.entry, client: document.client, resources: document.client.resources });
   const robot = loaded.robot;
   const kind = String(document.entry?.kind || "").toLowerCase();
 
   // ---- pose: outside React ------------------------------------------------------------
-  // This renderer's one slice of the file's view (`kit/shell/fileView.js`): the joint values,
-  // written against the description's revision, so a reopened file takes its pose back only
+  // This renderer's one slice of the file's view (`kit/shell/fileView.js`): the control values,
+  // written against the payload's revision, so a reopened file takes its pose back only
   // if it is the same robot. The selection and the tree's disclosure are not in it.
   const [stored] = useState(() => view.state);
   const poseRef = useRef(null);
   const pose = useMemo(() => {
     if (!robot) return null;
     // A new revision of the file keeps the pose it was left in, and the named pose it was chosen
-    // as, while what poses it — its joints and named poses — is unchanged; when that changed it
-    // opens at its own opening pose: the old pose is never fitted onto other joints. The first
+    // as, while what poses it — its controls and named poses — is unchanged; when that changed it
+    // opens at its own opening pose: the old pose is never fitted onto other controls. The first
     // load takes the stored pose, written against this very revision.
     const previous = poseRef.current;
     if (previous) {
       const { values, groupStateId } = previous.getSnapshot();
-      return previous.logic === poseLogic(robot.description)
-        ? createPoseStore(robot.description, values, groupStateId) : createPoseStore(robot.description);
+      return previous.logic === poseLogic(robot.robot)
+        ? createPoseStore(robot.robot, values, groupStateId) : createPoseStore(robot.robot);
     }
-    return createPoseStore(robot.description, readFileView(stored, { pose: robot.revision }).renderer.pose?.jointValues || null);
+    return createPoseStore(robot.robot, readFileView(stored, { pose: robot.revision }).renderer.pose?.jointValues || null);
   }, [robot, stored]);
   poseRef.current = pose;
   const robotRef = useRef(robot);
@@ -69,7 +67,7 @@ function RobotSurface({ view, data }) {
   useLayoutEffect(() => {
     if (!robot || !pose) { setScene(null); return undefined; }
     const next = createRobotScene(THREE, robot);
-    next.setJointValues(pose.getSnapshot().values);
+    next.setControlValues(pose.getSnapshot().values);
     setScene(next);
     // Its owner releases it: the viewport only ever detaches a scene.
     return () => next.dispose();
@@ -95,7 +93,7 @@ function RobotSurface({ view, data }) {
     state: () => ({
       selectedLinks: [...selectionRef.current.selectedLinkNames],
       selectedPartIds: (robotRef.current?.parts || []).filter(part => (selectionRef.current.selectedLinkNames.length
-        ? selectionRef.current.selectedLinkNames.includes(part.linkName) : selectionRef.current.selectedComponentIds.includes(part.id))).map(part => part.id)
+        ? selectionRef.current.selectedLinkNames.includes(part.link) : selectionRef.current.selectedComponentIds.includes(part.id))).map(part => part.id)
     })
   }), []);
   const escape = useMemo(() => ({
@@ -119,12 +117,12 @@ function RobotSurface({ view, data }) {
   const handleLayoutRef = useRef(null);
   useLayoutEffect(() => {
     if (!scene || !pose || !robot) { handlesRef.current = NO_HANDLES; return undefined; }
-    const prepared = prepareRobotJointHandles(THREE, robot.description, scene);
+    const prepared = prepareRobotJointHandles(THREE, robot.robot, scene);
     let boundsFrame = 0;
     const readHandles = () => { handlesRef.current = robotJointHandles(THREE, prepared, scene, pose.getSnapshot().values, pose.write); };
     const step = () => {
       shellRef.current?.scheduleStateSave();
-      if (!scene.setJointValues(pose.getSnapshot().values)) return;
+      if (!scene.setControlValues(pose.getSnapshot().values)) return;
       readHandles();
       shellRef.current?.requestRender();
       // Lighting, shadows and the floor follow the posed robot: once per frame, however many writes landed in it.
@@ -136,7 +134,7 @@ function RobotSurface({ view, data }) {
   }, [scene, pose, robot]);
 
   // Read-only debug/test seams: where the Pose knobs are (CSS pixels, with each joint's
-  // value), where every link group IS (so a test asserts what is drawn, not what was asked
+  // value), where every link IS (so a test asserts what is drawn, not what was asked
   // for), and what posing costs.
   const surfaceRenders = useRef(0);
   surfaceRenders.current += 1;
@@ -154,8 +152,8 @@ function RobotSurface({ view, data }) {
   }, [scene]);
 
   // ---- tools -------------------------------------------------------------------------------
-  // Pose exists where something can be driven: a turning or sliding joint that is not a mimic follower.
-  const posable = useMemo(() => robotPosableJoints(robot?.description).length > 0, [robot]);
+  // Pose exists where something can be driven: a control of the articulation.
+  const posable = Boolean(pose?.controls.length);
   const { toolMode, selectTool } = shell;
   // A robot restores into Pose before it has loaded; only a LOADED one can say it has nothing to pose.
   useEffect(() => { if (robot && !posable && toolMode === ROBOT_TOOL.POSE) selectTool(ROBOT_TOOL.SELECT); }, [robot, posable, toolMode, selectTool]);
@@ -176,20 +174,14 @@ function RobotSurface({ view, data }) {
   const pickSelection = selection.pick;
   const handlePick = useCallback((hit, modifiers) => { pickSelection(hit, modifiers); if (hit) toSelect(); }, [pickSelection, toSelect]);
 
-  // A mesh the description names, by the absolute path the host opens. It resolves against the
-  // opened file exactly as the mesh loader does (an SRDF's URDF is always beside it); a
-  // `package://` reference has no path here.
   const modelKey = document.modelKey;
-  const hostPath = String(document.entry?.file || "").trim() || modelKey;
-  const meshPath = useCallback((filename) => resolveLocalAssetFileRef(hostPath, filename), [hostPath]);
-  const groupNamesByLink = useMemo(() => (robot?.description?.srdf ? srdfGroupNamesByLink(robot.description) : null), [robot]);
 
   // Whether the pose is not the opening one, for the dot on the Position icon: a boolean read off
-  // the pose store, so moving a joint re-renders this only when it flips.
+  // the pose store, so moving a control re-renders this only when it flips.
   const noPose = useCallback(() => () => {}, []);
   const poseCustom = useSyncExternalStore(pose ? pose.subscribe : noPose,
     () => Boolean(pose) && !positionValuesAreDefault(pose.getSnapshot().values, pose.defaults));
-  // Position is offered where a joint can be driven; until the robot has loaded that is not
+  // Position is offered where a control can be driven; until the robot has loaded that is not
   // known, and it is shown, idle, meanwhile.
   const tools = [
     // Links closes by its X; a press on Select while it is the tool opens it again.
@@ -198,13 +190,13 @@ function RobotSurface({ view, data }) {
       // Its panel is in the tool stack for as long as it is the tool.
       onSelect: () => { if (!poseActive) selectTool(ROBOT_TOOL.POSE); } }) : null
   ].filter(Boolean);
-  // The tool stack: Select's Links and Reference (and an SDF's own metadata), then Position's joints.
+  // The tool stack: Select's Links and Reference (and an SDF's own metadata), then Position's controls.
   const linksShown = !shell.previewing && toolMode === ROBOT_TOOL.SELECT;
   const toolPanels = <>
-    <LinksSection key={modelKey} active={linksShown} description={robot?.description || null} components={robot?.components}
-      parts={robot?.parts} selection={treeSelection} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={view.onOpenFile} />
+    <LinksSection key={modelKey} active={linksShown} robot={robot?.robot || null} components={robot?.components}
+      parts={robot?.parts} selection={treeSelection} onOpenFile={view.onOpenFile} />
     {kind === "sdf" ? <ToolPanel id="sdf" title="SDF" label="SDF" fit="details" defaultCollapsed hidden={!linksShown}>
-      <SdfSection info={robot?.description?.sdf || null} movableJointCount={pose?.joints.length || 0} />
+      <SdfSection info={robot?.robot?.sdf || null} />
     </ToolPanel> : null}
     {/* Headed "Position" with its Reset; sized like the tree: its content's height, up to half the stack. */}
     {/* Its X puts Position down, back to Select (a robot's default tool); the pose stays. */}

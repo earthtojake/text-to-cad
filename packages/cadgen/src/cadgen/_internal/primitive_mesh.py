@@ -220,8 +220,10 @@ def primitive_glb(shape: str, dimensions: dict) -> bytes:
         "asset": {"version": "2.0", "generator": "cadgen"},
         "scene": 0,
         "scenes": [{"nodes": [0]}],
-        "nodes": [{"mesh": 0, "name": shape, "extras": {"cadSourceKind": "robot", "cadUnits": "m", "cadUpAxis": "y"}}],
-        "meshes": [{"name": shape, "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "mode": _TRIANGLES}]}],
+        # No node or mesh name: a primitive is a shape, not an authored object, and the page lists a
+        # named object of a link's mesh as a part of its own (its visual already says "box").
+        "nodes": [{"mesh": 0, "extras": {"cadSourceKind": "robot", "cadUnits": "m", "cadUpAxis": "y"}}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "mode": _TRIANGLES}]}],
         "accessors": [
             {"bufferView": view(position_bytes, _ARRAY_BUFFER), "componentType": _FLOAT, "count": len(positions), "type": "VEC3",
              "min": [float(value) for value in y_up.min(axis=0)], "max": [float(value) for value in y_up.max(axis=0)]},

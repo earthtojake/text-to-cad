@@ -1,126 +1,174 @@
-// Robot descriptions for the robot scene's tests, parsed by this package's own parsers.
-// The parsers read a DOM (`DOMParser`), which Node does not have and this package does not
-// depend on, so a small XML reader stands in for it: elements, attributes and text, which is
-// all a URDF, an SRDF or an SDF uses. Primitives only: no mesh is fetched.
-import {
-  mergeBounds, multiplyTransforms, solveUrdfLinkWorldTransforms, transformBounds, buildUrdfVisualParts
-} from "../kinematics.js";
-import { parseSdf } from "../parseSdf.js";
-import { parseSrdf } from "../parseSrdf.js";
-import { parseUrdf } from "../parseUrdf.js";
+// Robot payloads for the robot scene's tests, built by hand in the shape cadgen resolves
+// (`cadgen.robot_payload`): the articulation (the STEP format, over links), the visual list and
+// the link facts. Hand-built so a test reads every number it asserts against; what cadgen writes
+// for real descriptions is held current by the Python suite (`tests/python/.../test_robot_payload.py`)
+// and served to the browser suite from `packages/ui/src/renderers/robot/__fixtures__`.
 import { buildRobotParts } from "../robotParts.js";
 
-const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'" };
-const decode = text => text.replace(/&(amp|lt|gt|quot|apos);/g, (_, name) => ENTITIES[name]);
+const DEG = 180 / Math.PI;
+const identity = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+const translation = (x, y, z) => [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, z, 0, 0, 0, 1];
+// A primitive is meshed in metres and drawn in millimetres: its placement scales by 0.001.
+const scaled = (x, y, z, s = 0.001) => [s, 0, 0, x, 0, s, 0, y, 0, 0, s, z, 0, 0, 0, 1];
 
-function element(tagName, attributes, parentNode) {
-  const node = {
-    nodeType: 1, tagName, localName: tagName.split(":").pop(), namespaceURI: null, parentNode, childNodes: [],
-    getAttribute: name => (Object.hasOwn(attributes, name) ? attributes[name] : null),
-    get textContent() { return node.childNodes.map(child => child.textContent).join(""); }
+/** A box mesh as the page's loaders hand one back (`buildMeshDataFromGlbBuffer` shape), in millimetres. */
+export function boxMesh([sx, sy, sz], { colors = null, parts = [] } = {}) {
+  const [hx, hy, hz] = [sx / 2, sy / 2, sz / 2];
+  const corners = [[-hx, -hy, -hz], [hx, -hy, -hz], [hx, hy, -hz], [-hx, hy, -hz], [-hx, -hy, hz], [hx, -hy, hz], [hx, hy, hz], [-hx, hy, hz]];
+  const faces = [[0, 2, 1, 0, 3, 2], [4, 5, 6, 4, 6, 7], [0, 1, 5, 0, 5, 4], [2, 3, 7, 2, 7, 6], [1, 2, 6, 1, 6, 5], [3, 0, 4, 3, 4, 7]];
+  return {
+    vertices: new Float32Array(corners.flat()),
+    indices: new Uint32Array(faces.flat()),
+    normals: new Float32Array(0),
+    colors: colors || new Float32Array(0),
+    bounds: { min: [-hx, -hy, -hz], max: [hx, hy, hz] },
+    has_source_colors: Boolean(colors),
+    parts
   };
-  return node;
 }
 
-/** A document the robot parsers can read: `documentElement`, and no parse error. */
-export function parseXml(text) {
-  const root = { childNodes: [] };
-  const stack = [root];
-  const token = /<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<\/([^\s>]+)\s*>|<([^\s/>]+)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>|([^<]+)/g;
-  for (const match of text.matchAll(token)) {
-    const [, closing, opening, attributeText, selfClosing, textRun] = match;
-    const parent = stack[stack.length - 1];
-    if (closing) {
-      if (stack.length < 2 || parent.tagName !== closing) throw new Error(`unbalanced </${closing}>`);
-      stack.pop();
-    } else if (opening) {
-      const attributes = {};
-      for (const [, name, double, single] of (attributeText || "").matchAll(/([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
-        attributes[name] = decode(double ?? single);
-      }
-      const node = element(opening, attributes, parent.tagName ? parent : null);
-      parent.childNodes.push(node);
-      if (!selfClosing) stack.push(node);
-    } else if (textRun !== undefined) {
-      parent.childNodes.push({ nodeType: 3, textContent: decode(textRun), parentNode: parent });
-    }
+const row = (control, weight = 1, bias = 0) => ({ bias, terms: [[control, weight]] });
+
+// base -(yaw, continuous Z, 0.1 up)-> turret -(pitch, revolute Y, 1 m up, turned 0.3 about Z)-> arm
+// -(lift, prismatic Z, 1 m along the arm)-> tool, with a fixed camera on the turret, a finger pair
+// (finger_mirror = -finger) on the tool, and a wheel whose geometry sits on its own axis.
+export const ARM = Object.freeze({
+  schemaVersion: 1, kind: "urdf", name: "arm", root: "base",
+  articulation: {
+    schemaVersion: 1,
+    controls: [
+      { id: "yaw", label: "yaw", unit: "deg", min: null, max: null, default: 0 },
+      { id: "pitch", label: "pitch", unit: "deg", min: -90, max: 90, default: 0 },
+      { id: "lift", label: "lift", unit: "m", min: 0, max: 0.5, default: 0 },
+      { id: "finger", label: "finger", unit: "m", min: 0, max: 0.04, default: 0 },
+      { id: "wheel", label: "wheel", unit: "deg", min: null, max: null, default: 0 }
+    ],
+    joints: [
+      { id: "yaw", parent: null, kind: "revolute", origin: [0, 0, 0.1], axis: [0, 0, 1], turn: row("yaw") },
+      { id: "pitch", parent: "yaw", kind: "revolute", origin: [0, 0, 1.1], axis: [-Math.sin(0.3), Math.cos(0.3), 0], turn: row("pitch") },
+      { id: "lift", parent: "pitch", kind: "slider", origin: [Math.cos(0.3), Math.sin(0.3), 1.1], axis: [0, 0, 1], travel: row("lift") },
+      { id: "camera_mount", parent: "yaw", kind: "fixed" },
+      { id: "finger", parent: "lift", kind: "slider", origin: [Math.cos(0.3), Math.sin(0.3), 1.1], axis: [-Math.sin(0.3), Math.cos(0.3), 0], travel: row("finger") },
+      { id: "finger_mirror", parent: "lift", kind: "slider", origin: [Math.cos(0.3), Math.sin(0.3), 1.1], axis: [-Math.sin(0.3), Math.cos(0.3), 0], travel: row("finger", -1) },
+      { id: "wheel", parent: null, kind: "revolute", origin: [0, 2, 0], axis: [0, -1, 0], turn: row("wheel") }
+    ],
+    carries: { yaw: ["turret"], pitch: ["arm"], lift: ["tool"], camera_mount: ["camera"], finger: ["finger_link"], finger_mirror: ["finger_mirror_link"], wheel: ["wheel_link"] },
+    handles: [
+      { id: "yaw", joint: "yaw", dof: "turn", control: "yaw", weight: 1, label: "yaw", unit: "deg", min: null, max: null },
+      { id: "pitch", joint: "pitch", dof: "turn", control: "pitch", weight: 1, label: "pitch", unit: "deg", min: -90, max: 90 },
+      { id: "lift", joint: "lift", dof: "travel", control: "lift", weight: 1, label: "lift", unit: "m", min: 0, max: 0.5 },
+      { id: "finger", joint: "finger", dof: "travel", control: "finger", weight: 1, label: "finger", unit: "m", min: 0, max: 0.04 },
+      { id: "finger_mirror", joint: "finger_mirror", dof: "travel", control: "finger", weight: -1, label: "finger_mirror", unit: "m", min: -0.04, max: 0 },
+      { id: "wheel", joint: "wheel", dof: "turn", control: "wheel", weight: 1, label: "wheel", unit: "deg", min: null, max: null }
+    ],
+    poses: {},
+    opening: { yaw: 0, pitch: 0, lift: 0, finger: 0, wheel: 0 }
+  },
+  links: [
+    { name: "base", placement: identity(), visuals: [{ name: "", type: "box", filename: "", size: [0.6, 0.6, 0.1], origin: { xyz: [0, 0, 0.05], rpy: [0, 0, 0] }, color: "#4d4d59", materialName: "m" }], collisions: [], inertial: null },
+    { name: "turret", placement: translation(0, 0, 0.1), visuals: [{ name: "", type: "box", filename: "", size: [0.2, 0.2, 1], origin: { xyz: [0, 0, 0.5], rpy: [0, 0, 0] }, color: "", materialName: "" }], collisions: [], inertial: null },
+    { name: "arm", placement: [Math.cos(0.3), -Math.sin(0.3), 0, 0, Math.sin(0.3), Math.cos(0.3), 0, 0, 0, 0, 1, 1.1, 0, 0, 0, 1], visuals: [{ name: "", type: "box", filename: "", size: [1, 0.2, 0.2], origin: { xyz: [0.5, 0, 0], rpy: [0, 0, 0] }, color: "#e6801a", materialName: "m" }], collisions: [], inertial: null },
+    { name: "tool", placement: [Math.cos(0.3), -Math.sin(0.3), 0, Math.cos(0.3), Math.sin(0.3), Math.cos(0.3), 0, Math.sin(0.3), 0, 0, 1, 1.1, 0, 0, 0, 1], visuals: [{ name: "", type: "box", filename: "", size: [0.1, 0.1, 0.1], origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] }, color: "", materialName: "" }], collisions: [], inertial: null },
+    { name: "camera", placement: translation(0, 0, 1.3), visuals: [], collisions: [], inertial: null },
+    { name: "finger_link", placement: [Math.cos(0.3), -Math.sin(0.3), 0, Math.cos(0.3), Math.sin(0.3), Math.cos(0.3), 0, Math.sin(0.3), 0, 0, 1, 1.1, 0, 0, 0, 1], visuals: [], collisions: [], inertial: null },
+    { name: "finger_mirror_link", placement: [Math.cos(0.3), -Math.sin(0.3), 0, Math.cos(0.3), Math.sin(0.3), Math.cos(0.3), 0, Math.sin(0.3), 0, 0, 1, 1.1, 0, 0, 0, 1], visuals: [], collisions: [], inertial: null },
+    { name: "wheel_link", placement: [1, 0, 0, 0, 0, 0, -1, 2, 0, 1, 0, 0, 0, 0, 0, 1], visuals: [{ name: "", type: "cylinder", filename: "", radius: 0.3, length: 0.1, origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] }, color: "", materialName: "" }], collisions: [], inertial: null }
+  ],
+  joints: [
+    { name: "yaw", type: "continuous", parent: "base", child: "turret", axis: [0, 0, 1], origin: { xyz: [0, 0, 0.1], rpy: [0, 0, 0] }, limit: null, mimic: null },
+    { name: "pitch", type: "revolute", parent: "turret", child: "arm", axis: [0, 1, 0], origin: { xyz: [0, 0, 1], rpy: [0, 0, 0.3] }, limit: { lower: -1.5708, upper: 1.5708, effort: 1, velocity: 1 }, mimic: null },
+    { name: "lift", type: "prismatic", parent: "arm", child: "tool", axis: [0, 0, 1], origin: { xyz: [1, 0, 0], rpy: [0, 0, 0] }, limit: { lower: 0, upper: 0.5, effort: 1, velocity: 1 }, mimic: null },
+    { name: "camera_mount", type: "fixed", parent: "turret", child: "camera", axis: null, origin: { xyz: [0, 0, 1.2], rpy: [0, 0.5, 0] }, limit: null, mimic: null },
+    { name: "finger", type: "prismatic", parent: "tool", child: "finger_link", axis: [0, 1, 0], origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] }, limit: { lower: 0, upper: 0.04, effort: 1, velocity: 1 }, mimic: null },
+    { name: "finger_mirror", type: "prismatic", parent: "tool", child: "finger_mirror_link", axis: [0, 1, 0], origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] }, limit: { lower: -0.04, upper: 0, effort: 1, velocity: 1 }, mimic: { joint: "finger", multiplier: -1, offset: 0 } },
+    { name: "wheel", type: "continuous", parent: "base", child: "wheel_link", axis: [0, 0, 1], origin: { xyz: [0, 2, 0], rpy: [1.5708, 0, 0] }, limit: null, mimic: null }
+  ],
+  visuals: [
+    { id: "base:v1", link: "base", label: "box", placement: scaled(0, 0, 0.05), color: "#4d4d59", mesh: { format: "glb", url: "/primitives/box-0.6-0.6-0.1.glb" } },
+    { id: "turret:v1", link: "turret", label: "box", placement: scaled(0, 0, 0.6), color: "", mesh: { format: "glb", url: "/primitives/box-0.2-0.2-1.glb" } },
+    { id: "arm:v1", link: "arm", label: "box", placement: [0.001 * Math.cos(0.3), -0.001 * Math.sin(0.3), 0, 0.5 * Math.cos(0.3), 0.001 * Math.sin(0.3), 0.001 * Math.cos(0.3), 0, 0.5 * Math.sin(0.3), 0, 0, 0.001, 1.1, 0, 0, 0, 1], color: "#e6801a", mesh: { format: "glb", url: "/primitives/box-1-0.2-0.2.glb" } },
+    { id: "tool:v1", link: "tool", label: "box", placement: [0.001 * Math.cos(0.3), -0.001 * Math.sin(0.3), 0, Math.cos(0.3), 0.001 * Math.sin(0.3), 0.001 * Math.cos(0.3), 0, Math.sin(0.3), 0, 0, 0.001, 1.1, 0, 0, 0, 1], color: "", mesh: { format: "glb", url: "/primitives/box-0.1-0.1-0.1.glb" } },
+    { id: "wheel_link:v1", link: "wheel_link", label: "cylinder", placement: [0.001, 0, 0, 0, 0, 0, -0.001, 2, 0, 0.001, 0, 0, 0, 0, 0, 1], color: "", mesh: { format: "glb", url: "/primitives/cylinder-0.3-0.1.glb" } }
+  ],
+  srdf: null,
+  sdf: null
+});
+
+/** The ARM with an SRDF's semantics on it: two group states, `home` the opening. */
+export const ARM_SRDF = Object.freeze({
+  ...ARM,
+  kind: "srdf",
+  articulation: {
+    ...ARM.articulation,
+    poses: { "reach/home": { pitch: -0.5 * DEG }, "reach/raised": { yaw: 1.0 * DEG, pitch: -1.0 * DEG, lift: 0.2 }, "grip/open": { finger: 0.04 } },
+    opening: { yaw: 0, pitch: -0.5 * DEG, lift: 0, finger: 0, wheel: 0 }
+  },
+  srdf: {
+    planningGroups: [{ name: "reach", jointNames: ["yaw", "pitch", "lift"], linkNames: [], chains: [], subgroups: [] }, { name: "grip", jointNames: ["finger"], linkNames: [], chains: [], subgroups: [] }],
+    endEffectors: [{ name: "gripper", parentLink: "tool", group: "grip", parentGroup: "reach", link: "tool" }],
+    groupStates: [{ id: "reach/home", name: "home", group: "reach" }, { id: "reach/raised", name: "raised", group: "reach" }, { id: "grip/open", name: "open", group: "grip" }],
+    disabledCollisionPairs: [],
+    groupsByLink: { turret: ["reach"], arm: ["reach"], tool: ["reach"], finger_link: ["grip"] }
   }
-  if (stack.length !== 1) throw new Error(`unclosed <${stack[stack.length - 1].tagName}>`);
-  return { documentElement: root.childNodes.find(node => node.nodeType === 1) || null, querySelector: () => null };
+});
+
+// An SDF-shaped robot: the hinge joint hangs from nothing (the base is the root), its child link
+// sits 0.05 along the joint's X at an offset from the joint frame, so the joint frame and the
+// child frame differ: the case a rest-space delta over a rest placement exists for.
+export const SWING = Object.freeze({
+  schemaVersion: 1, kind: "sdf", name: "swing", root: "base",
+  articulation: {
+    schemaVersion: 1,
+    controls: [{ id: "hinge", label: "hinge", unit: "deg", min: -1.2 * DEG, max: 1.2 * DEG, default: 0 },
+      { id: "slide", label: "slide", unit: "m", min: 0, max: 0.3, default: 0 }],
+    joints: [
+      { id: "hinge", parent: null, kind: "revolute", origin: [0, 0, 0.2], axis: [0, 1, 0], turn: row("hinge") },
+      { id: "slide", parent: "hinge", kind: "slider", origin: [0.55, 0, 0.2], axis: [1, 0, 0], travel: row("slide") }
+    ],
+    carries: { hinge: ["arm"], slide: ["tip"] },
+    handles: [
+      { id: "hinge", joint: "hinge", dof: "turn", control: "hinge", weight: 1, label: "hinge", unit: "deg", min: -1.2 * DEG, max: 1.2 * DEG },
+      { id: "slide", joint: "slide", dof: "travel", control: "slide", weight: 1, label: "slide", unit: "m", min: 0, max: 0.3 }
+    ],
+    poses: {},
+    opening: { hinge: 0, slide: 0 }
+  },
+  links: [
+    { name: "base", placement: identity(), visuals: [{ name: "v", type: "box", filename: "", size: [0.4, 0.4, 0.1], origin: { xyz: [0, 0, 0.05], rpy: [0, 0, 0] }, color: "", materialName: "" }], collisions: [], inertial: null },
+    { name: "arm", placement: translation(0.05, 0, 0.2), visuals: [{ name: "v", type: "box", filename: "", size: [0.5, 0.08, 0.06], origin: { xyz: [0.25, 0, 0], rpy: [0, 0, 0] }, color: "", materialName: "" }], collisions: [], inertial: null },
+    { name: "tip", placement: translation(0.55, 0, 0.22), visuals: [{ name: "v", type: "sphere", filename: "", radius: 0.04, origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] }, color: "", materialName: "" }], collisions: [], inertial: null }
+  ],
+  joints: [
+    { name: "hinge", type: "revolute", parent: "base", child: "arm", axis: [0, 1, 0], origin: { xyz: [0, 0, 0.2], rpy: [0, 0, 0] }, limit: { lower: -1.2, upper: 1.2 }, mimic: null },
+    { name: "slide", type: "prismatic", parent: "arm", child: "tip", axis: [1, 0, 0], origin: { xyz: [0.5, 0, 0], rpy: [0, 0, 0] }, limit: { lower: 0, upper: 0.3 }, mimic: null }
+  ],
+  visuals: [
+    { id: "base:v1", link: "base", label: "box", placement: scaled(0, 0, 0.05), color: "", mesh: { format: "glb", url: "/primitives/box-0.4-0.4-0.1.glb" } },
+    { id: "arm:v1", link: "arm", label: "box", placement: scaled(0.3, 0, 0.2), color: "", mesh: { format: "glb", url: "/primitives/box-0.5-0.08-0.06.glb" } },
+    { id: "tip:v1", link: "tip", label: "sphere", placement: scaled(0.55, 0, 0.22), color: "", mesh: { format: "glb", url: "/primitives/sphere-0.04.glb" } }
+  ],
+  srdf: null,
+  sdf: { version: "1.9", documentKind: "model", worldName: "", modelName: "swing", rootLink: "base", rootLinks: ["base"], frameCount: 0, linkCount: 3, jointCount: 2,
+    staticMetadata: { includes: [], plugins: [], sensors: [], lights: [], physics: [], nestedModelCount: 0 } }
+});
+
+/** The meshes a payload's visuals name, as the loaders hand them back: a box (in millimetres) per primitive URL. */
+export function meshesFor(robot) {
+  const meshes = new Map();
+  for (const visual of robot.visuals) {
+    const url = visual.mesh.url;
+    if (meshes.has(url)) continue;
+    const number = "(\\d+(?:\\.\\d+)?)";
+    const size = new RegExp(`box-${number}-${number}-${number}`).exec(url);
+    const round = new RegExp(`(?:cylinder|sphere)-${number}(?:-${number})?`).exec(url);
+    const metres = size ? [Number(size[1]), Number(size[2]), Number(size[3])]
+      : [2 * Number(round[1]), 2 * Number(round[1]), round[2] === undefined ? 2 * Number(round[1]) : Number(round[2])];
+    meshes.set(url, boxMesh(metres.map(value => value * 1000)));
+  }
+  return meshes;
 }
 
-function withXml(read) {
-  const previous = globalThis.DOMParser;
-  globalThis.DOMParser = class { parseFromString(text) { return parseXml(text); } };
-  try { return read(); } finally { globalThis.DOMParser = previous; }
-}
-
-const box = (size, xyz = "0 0 0", rgba = "") => `<visual><origin xyz="${xyz}"/><geometry><box size="${size}"/></geometry>${rgba
-  ? `<material name="m${rgba.replaceAll(" ", "")}"><color rgba="${rgba}"/></material>` : ""}</visual>`;
-
-// base -(yaw, continuous Z)-> turret -(pitch, revolute Y, 1 m up)-> arm -(lift, prismatic Z)-> tool
-// with a fixed camera, a mimic finger pair, and a wheel whose geometry sits on its own axis.
-export const ARM_URDF = `<?xml version="1.0"?>
-<robot name="arm">
-  <link name="base">${box("0.6 0.6 0.1", "0 0 0.05", "0.3 0.3 0.35 1")}</link>
-  <link name="turret">${box("0.2 0.2 1", "0 0 0.5")}</link>
-  <link name="arm">${box("1 0.2 0.2", "0.5 0 0", "0.9 0.5 0.1 1")}</link>
-  <link name="tool">${box("0.1 0.1 0.1")}</link>
-  <link name="camera"/>
-  <link name="finger_link">${box("0.02 0.02 0.1", "0 0.05 0.1")}</link>
-  <link name="finger_mirror_link">${box("0.02 0.02 0.1", "0 -0.05 0.1")}</link>
-  <link name="wheel_link"><visual><geometry><cylinder radius="0.3" length="0.1"/></geometry></visual></link>
-  <joint name="yaw" type="continuous"><parent link="base"/><child link="turret"/><origin xyz="0 0 0.1"/><axis xyz="0 0 1"/></joint>
-  <joint name="pitch" type="revolute"><parent link="turret"/><child link="arm"/><origin xyz="0 0 1" rpy="0 0 0.3"/><axis xyz="0 1 0"/><limit lower="-1.5708" upper="1.5708" effort="1" velocity="1"/></joint>
-  <joint name="lift" type="prismatic"><parent link="arm"/><child link="tool"/><origin xyz="1 0 0"/><axis xyz="0 0 1"/><limit lower="0" upper="0.5" effort="1" velocity="1"/></joint>
-  <joint name="camera_mount" type="fixed"><parent link="turret"/><child link="camera"/><origin xyz="0 0 1.2" rpy="0 0.5 0"/></joint>
-  <joint name="finger" type="prismatic"><parent link="tool"/><child link="finger_link"/><axis xyz="0 1 0"/><limit lower="0" upper="0.04" effort="1" velocity="1"/></joint>
-  <joint name="finger_mirror" type="prismatic"><parent link="tool"/><child link="finger_mirror_link"/><axis xyz="0 1 0"/><limit lower="-0.04" upper="0" effort="1" velocity="1"/><mimic joint="finger" multiplier="-1"/></joint>
-  <joint name="wheel" type="continuous"><parent link="base"/><child link="wheel_link"/><origin xyz="0 2 0" rpy="1.5708 0 0"/><axis xyz="0 0 1"/></joint>
-</robot>`;
-
-export const ARM_SRDF = `<?xml version="1.0"?>
-<robot name="arm">
-  <group name="reach"><joint name="yaw"/><joint name="pitch"/><joint name="lift"/></group>
-  <group name="grip"><joint name="finger"/></group>
-  <end_effector name="gripper" parent_link="tool" group="grip" parent_group="reach"/>
-  <group_state name="home" group="reach"><joint name="pitch" value="-0.5"/></group_state>
-  <group_state name="raised" group="reach"><joint name="yaw" value="1.0"/><joint name="pitch" value="-1.0"/><joint name="lift" value="0.2"/></group_state>
-  <group_state name="open" group="grip"><joint name="finger" value="0.04"/></group_state>
-</robot>`;
-
-// An SDF joint sits at its own pose and its child link at a static offset from it, so the
-// joint frame and the child frame differ: the case the motion group exists for.
-export const SWING_SDF = `<?xml version="1.0"?>
-<sdf version="1.9"><model name="swing">
-  <link name="base"><visual name="v"><pose>0 0 0.05 0 0 0</pose><geometry><box><size>0.4 0.4 0.1</size></box></geometry></visual></link>
-  <link name="arm"><pose relative_to="hinge">0.05 0.1 0 0 0 0.4</pose><visual name="v"><pose>0.25 0 0 0 0 0</pose><geometry><box><size>0.5 0.08 0.06</size></box></geometry></visual></link>
-  <link name="tip"><pose relative_to="slide">0 0 0.02 0 0 0</pose><visual name="v"><geometry><sphere><radius>0.04</radius></sphere></geometry></visual></link>
-  <joint name="hinge" type="revolute"><pose relative_to="base">0 0 0.2 0 0.2 0</pose><parent>base</parent><child>arm</child><axis><xyz>0 1 0</xyz><limit><lower>-1.2</lower><upper>1.2</upper></limit></axis></joint>
-  <joint name="slide" type="prismatic"><pose relative_to="arm">0.5 0 0 0 0 0</pose><parent>arm</parent><child>tip</child><axis><xyz>1 0 0</xyz><limit><lower>0</lower><upper>0.3</upper></limit></axis></joint>
-</model></sdf>`;
-
-export const parseArmUrdf = (xml = ARM_URDF) => withXml(() => parseUrdf(xml, { sourceUrl: "/robots/arm.urdf" }));
-export const parseSwingSdf = (xml = SWING_SDF) => withXml(() => parseSdf(xml, { sourceUrl: "/robots/swing.sdf" }));
-/** An SRDF's description: its URDF's, with the SRDF's semantics on it (as `loadRenderSrdf` builds it). */
-export function parseArmSrdf() {
-  const urdfData = parseArmUrdf();
-  const srdf = withXml(() => parseSrdf(ARM_SRDF, { sourceUrl: "/robots/arm.srdf", urdfData }));
-  return { ...urdfData, srdf };
-}
-
-/** A description with its once-built part list, as the robot renderer and the snapshot CLI load it. */
-export function robotOf(description, meshesByUrl = new Map()) {
-  return { description, ...buildRobotParts(description, meshesByUrl), oracleParts: buildUrdfVisualParts(description, meshesByUrl) };
-}
-
-/**
- * The ORACLE a robot scene is held to: the description solver's box around every visual at
- * `pose`, each visual's source box carried through its link's solved transform and its own.
- */
-export function solvedBounds(robot, pose = {}) {
-  const links = solveUrdfLinkWorldTransforms(robot.description, pose);
-  const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-  return mergeBounds(robot.oracleParts.map(part => transformBounds(part.sourceBounds,
-    multiplyTransforms(links.get(part.linkName) || identity, part.localTransform))));
+/** A payload with its once-built part list, as the robot renderer and the snapshot CLI load it. */
+export function robotOf(robot, meshesByUrl = meshesFor(robot)) {
+  return { robot, ...buildRobotParts(robot, meshesByUrl) };
 }

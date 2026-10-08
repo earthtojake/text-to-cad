@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHttpCadResourceProvider, readCadWorkerTicket } from './resources.js';
 import { createCadClient } from './client.js';
-import { loadRenderJson, peekRenderJson, loadRenderUrdf } from '../lib/renderAssetClient.js';
+import { loadRenderJson, peekRenderJson } from '../lib/renderAssetClient.js';
 
 test('injected resource reads and URL caches remain isolated between workspace providers', async () => {
   const calls = [];
@@ -45,22 +45,6 @@ test('workspace disposal rejects borrowed provider late replies and does not sha
   b.dispose();
 });
 
-test('robot dependencies are resolved by the injected provider', async t => {
-  const element = (tagName, attributes = {}, childNodes = []) => ({nodeType:1, tagName, localName:tagName, childNodes, getAttribute:name=>attributes[name] ?? null});
-  const root = element('robot', {name:'test'}, [element('link', {name:'base'}, [element('visual', {}, [element('geometry', {}, [element('mesh', {filename:'mesh.stl'})])])])]);
-  const previous = globalThis.DOMParser;
-  globalThis.DOMParser = class { parseFromString() { return {documentElement:root, querySelector:()=>null}; } };
-  t.after(() => { globalThis.DOMParser = previous; });
-  const resolutions=[];
-  const resources = {
-    readText: async () => '<robot name="test"><link name="base"><visual><geometry><mesh filename="mesh.stl"/></geometry></visual></link></robot>',
-    resolveDependency(source, reference, options) { resolutions.push([source,reference,options.kind]); return 'private:mesh'; },
-  };
-  const robot = await loadRenderUrdf('private:robot', {resources});
-  assert.equal(robot.links[0].visuals[0].meshUrl, 'private:mesh');
-  assert.deepEqual(resolutions, [['private:robot','mesh.stl','robot']]);
-});
-
 test('observed backend restart retires resource generation and aborts old reads', async () => {
   let epoch = 'one', finish;
   const client = createCadClient({fetch: async url => url.includes('/__cad/server')
@@ -77,13 +61,12 @@ test('observed backend restart retires resource generation and aborts old reads'
   client.dispose();
 });
 
-test('HTTP dependency resolution preserves catalog query versions, static packages and robot package URIs', () => {
+test('HTTP dependency resolution preserves catalog query versions and static packages', () => {
   const resources = createHttpCadResourceProvider({origin:'https://cad.test'});
   const asset = resources.resolveDependency('/__cad/asset?file=/models/model.gltf&v=abc', '../mesh.bin');
   assert.equal(new URL(asset).searchParams.get('file'), '/mesh.bin');
   assert.equal(new URL(asset).searchParams.get('v'), 'abc');
   assert.equal(resources.resolveDependency('/hero/assembly', 'part.surf', {kind:'package'}), 'https://cad.test/hero/assembly/part.surf');
-  assert.equal(resources.resolveDependency('/robot.urdf', 'package://robot/mesh.stl', {kind:'robot'}), 'https://cad.test/robot/mesh.stl');
 });
 
 test('worker URL tickets retain the configured HTTP cache policy and headers', async t => {

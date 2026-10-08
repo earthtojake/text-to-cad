@@ -1,5 +1,5 @@
 import { buildCadRefToken } from "../cadRefs.js";
-import { mergeBounds } from "../urdf/kinematics.js";
+import { mergeBoundsList } from "../viewer/autoZoom.js";
 import { stepProductName } from "../step/productName.js";
 
 function isObject(value) {
@@ -1092,7 +1092,7 @@ export function composeSelectorRuntimes(runtimes) {
   const base = valid[0];
   return {
     ...base,
-    bbox: mergeBounds(valid.map((runtime) => runtime.bbox)) || base.bbox,
+    bbox: mergeBoundsList(valid.map((runtime) => runtime.bbox)) || base.bbox,
     occurrences,
     shapes,
     faces,
@@ -1409,7 +1409,7 @@ export function createSelectorRuntimeComposer() {
     const base = valid[0].base;
     const result = {
       ...base,
-      bbox: mergeBounds(valid.map((part) => part.bbox)) || base.bbox,
+      bbox: mergeBoundsList(valid.map((part) => part.bbox)) || base.bbox,
       occurrences,
       shapes,
       faces,

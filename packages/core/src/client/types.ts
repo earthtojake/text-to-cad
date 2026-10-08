@@ -117,7 +117,7 @@ export interface CadResourceProvider {
   readText(url: string, options?: CadRequestOptions): Promise<string>;
   readBytes(url: string, options?: CadResourceReadOptions): Promise<ArrayBuffer>;
   byteLength(url: string, options?: CadRequestOptions): Promise<number | null>;
-  resolveDependency(source: string, reference: string, options?: { kind?: 'relative' | 'package' | 'robot' }): string;
+  resolveDependency(source: string, reference: string, options?: { kind?: 'relative' | 'package' }): string;
   workerTicket(url: string, options?: CadResourceReadOptions): Promise<CadWorkerResourceTicket>;
 }
 export interface CadSurfaceProducer { scheme?: number; surfFormat?: number; producerKey?: string; [key: string]: unknown }

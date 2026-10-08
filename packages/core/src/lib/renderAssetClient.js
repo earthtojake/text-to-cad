@@ -45,9 +45,7 @@ const threeMfCache = new Map();
 const selectorCache = new Map();
 const displayEdgeCache = new Map();
 const topologyIndexCache = new Map();
-const urdfCache = new Map();
-const srdfCache = new Map();
-const sdfCache = new Map();
+const robotCache = new Map();
 const GIT_LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1";
 const GIT_LFS_POINTER_SCAN_BYTES = 512;
 
@@ -949,71 +947,44 @@ export async function loadRenderSurfSelectorBundle(selectorsUrl, {
   return bundle;
 }
 
-function urdfCacheKey(url) {
-  return String(url || "");
-}
-
-export async function loadRenderUrdf(url, { signal, resources } = {}) {
-  const cacheKey = cadResourceCacheKey(resources, urdfCacheKey(url));
-  const payload = await loadCached(urdfCache, cacheKey, async () => {
-    const [xmlText, { parseUrdf }] = await Promise.all([
-      loadRenderText(url, { signal, resources }),
-      import("./urdf/parseUrdf.js"),
-    ]);
-    return parseUrdf(xmlText, { sourceUrl: url, resolveResource: resources ? (reference) => resources.resolveDependency(url, reference, { kind: "robot" }) : undefined });
+/**
+ * A robot as cadgen resolved it (`cadgen.robot_payload`, `GET /__cad/robot`): the articulation
+ * to play and the visuals to draw. Cached for the page by file and revision, as a description
+ * once was, so a warm reopen is whole on the first render; the page validates nothing of it but
+ * the schema it reads.
+ *
+ * @param {string} file  The description's absolute path, as the catalog names it.
+ * @param {{ client: { robot: Function }, revision?: string, signal?: AbortSignal }} options
+ */
+export async function loadRenderRobot(file, { client, revision = "", signal } = {}) {
+  const cacheKey = robotCacheKey(file, revision);
+  const payload = await loadCached(robotCache, cacheKey, async () => {
+    const robot = await client.robot(file, { signal });
+    if (robot?.schemaVersion !== ROBOT_PAYLOAD_SCHEMA_VERSION) {
+      throw new RobotSchemaError(robot?.schemaVersion);
+    }
+    return robot;
   }, { cachePending: !signal });
-  return finalizeCached(urdfCache, cacheKey, payload);
+  return finalizeCached(robotCache, cacheKey, payload);
 }
 
-export function peekRenderUrdf(url, { resources } = {}) {
-  return peekCached(urdfCache, cadResourceCacheKey(resources, urdfCacheKey(url)));
+export function peekRenderRobot(file, { revision = "" } = {}) {
+  return peekCached(robotCache, robotCacheKey(file, revision));
 }
 
-function srdfCacheKey(srdfUrl, urdfUrl = "") {
-  return [srdfUrl, urdfUrl].filter(Boolean).join("::");
+function robotCacheKey(file, revision) {
+  return `${String(file || "")}::${String(revision || "")}`;
 }
 
-export async function loadRenderSrdf(srdfUrl, { signal, resources, urdfUrl = "" } = {}) {
-  const cacheKey = cadResourceCacheKey(resources, srdfCacheKey(srdfUrl, urdfUrl));
-  const payload = await loadCached(srdfCache, cacheKey, async () => {
-    const [srdfText, urdfData, { parseSrdf, motionFromSrdf }] = await Promise.all([
-      loadRenderText(srdfUrl, { signal, resources }),
-      loadRenderUrdf(urdfUrl, { signal, resources }),
-      import("./urdf/parseSrdf.js"),
-    ]);
-    const srdfData = parseSrdf(srdfText, { sourceUrl: srdfUrl, urdfData });
-    return {
-      srdfData,
-      urdfData: {
-        ...urdfData,
-        motion: motionFromSrdf(srdfData),
-        srdf: srdfData
-      }
-    };
-  }, { cachePending: !signal });
-  return finalizeCached(srdfCache, cacheKey, payload);
-}
+/** The payload shape this build reads (`cadgen.robot_payload.ROBOT_PAYLOAD_SCHEMA_VERSION`). */
+export const ROBOT_PAYLOAD_SCHEMA_VERSION = 1;
 
-export function peekRenderSrdf(srdfUrl, { resources, urdfUrl = "" } = {}) {
-  return peekCached(srdfCache, cadResourceCacheKey(resources, srdfCacheKey(srdfUrl, urdfUrl)));
-}
-
-function sdfCacheKey(url) {
-  return String(url || "");
-}
-
-export async function loadRenderSdf(url, { signal, resources } = {}) {
-  const cacheKey = cadResourceCacheKey(resources, sdfCacheKey(url));
-  const payload = await loadCached(sdfCache, cacheKey, async () => {
-    const [xmlText, { parseSdf }] = await Promise.all([
-      loadRenderText(url, { signal, resources }),
-      import("./urdf/parseSdf.js"),
-    ]);
-    return parseSdf(xmlText, { sourceUrl: url, resolveResource: resources ? (reference) => resources.resolveDependency(url, reference, { kind: "robot" }) : undefined });
-  }, { cachePending: !signal });
-  return finalizeCached(sdfCache, cacheKey, payload);
-}
-
-export function peekRenderSdf(url, { resources } = {}) {
-  return peekCached(sdfCache, cadResourceCacheKey(resources, sdfCacheKey(url)));
+/** A payload from a cadgen that does not agree with this build about the shape. */
+export class RobotSchemaError extends Error {
+  constructor(received) {
+    super(`The viewer received a robot payload at schemaVersion ${JSON.stringify(received)}, but this `
+      + `build of the app reads version ${ROBOT_PAYLOAD_SCHEMA_VERSION}.`);
+    this.name = "RobotSchemaError";
+    this.received = received;
+  }
 }

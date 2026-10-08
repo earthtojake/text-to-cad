@@ -7,20 +7,24 @@ import { useLinkSelection } from '../../../dist/renderers/robot/useLinkSelection
 Object.assign(globalThis, { React });
 afterEach(cleanup);
 
-const joint = (name: string, type: string, parentLink: string, childLink: string, extra = {}) => ({ name, type, parentLink, childLink, axis: [0, 0, 1], ...extra });
-const description = {
-  robotName: 'arm', rootLink: 'base_footprint',
+// A payload as cadgen resolves one (`cadgen.robot_payload`): links with their facts as written and the
+// host path of each mesh file it could resolve, joints with `parent`/`child`, an SRDF's groups by link.
+const joint = (name: string, type: string, parent: string, child: string, extra = {}) =>
+  ({ name, type, parent, child, axis: type === 'fixed' ? null : [0, 0, 1], origin: null, limit: null, mimic: null, ...extra });
+const origin = (xyz: number[], rpy = [0, 0, 0]) => ({ xyz, rpy });
+const robot = {
+  kind: 'urdf', name: 'arm', root: 'base_footprint',
   links: [
     { name: 'base_footprint', visuals: [], collisions: [], inertial: null },
     { name: 'base_link',
-      inertial: { mass: 2.5, origin: { xyz: [0, 0, 0.05], rpy: [0, 0, 0] }, inertia: { ixx: 0.01, ixy: 0, ixz: 0, iyy: 0.02, iyz: 0, izz: 0.03 } },
+      inertial: { mass: 2.5, origin: origin([0, 0, 0.05]), inertia: { ixx: 0.01, ixy: 0, ixz: 0, iyy: 0.02, iyz: 0, izz: 0.03 } },
       collisions: [
-        { type: 'mesh', filename: 'meshes/base_collision.stl', origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] } },
-        { type: 'box', filename: '', size: [0.1, 0.2, 0.3], origin: { xyz: [0, 0, 0.5], rpy: [0, 0, 0] } },
-        { type: 'mesh', filename: 'package://arm/meshes/far.stl', origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] } },
+        { name: '', type: 'mesh', filename: 'meshes/base_collision.stl', path: 'robots/arm/meshes/base_collision.stl', origin: origin([0, 0, 0]) },
+        { name: '', type: 'box', filename: '', size: [0.1, 0.2, 0.3], origin: origin([0, 0, 0.5]) },
+        // A reference cadgen could not resolve to a file (a package:// URI) has no path.
+        { name: '', type: 'mesh', filename: 'package://arm/meshes/far.stl', origin: origin([0, 0, 0]) },
       ],
-      visuals: [{ id: 'base_link:v1', filename: 'meshes/base.3mf', label: 'base.3mf', meshUrl: '/meshes/base.3mf', color: '#336699',
-        description: { name: '', type: 'mesh', filename: 'meshes/base.3mf', scale: [0.001, 0.001, 0.001], origin: { xyz: [0, 0, 0], rpy: [0, 0, 0] }, materialName: 'blue' } }] },
+      visuals: [{ name: '', type: 'mesh', filename: 'meshes/base.3mf', path: 'robots/arm/meshes/base.3mf', scale: [0.001, 0.001, 0.001], origin: origin([0, 0, 0]), color: '#336699', materialName: 'blue' }] },
     { name: 'shoulder_link', visuals: [], collisions: [], inertial: { mass: 1.25 } },
     { name: 'elbow_link', visuals: [], collisions: [], inertial: null },
     { name: 'wrist_link', visuals: [], collisions: [], inertial: null },
@@ -29,28 +33,28 @@ const description = {
   joints: [
     joint('footprint_to_base', 'fixed', 'base_footprint', 'base_link'),
     joint('shoulder_pan', 'revolute', 'base_link', 'shoulder_link', {
-      origin: { xyz: [0, 0, 0.25], rpy: [0, 0, 1.5708] }, limit: { lower: -1.5708, upper: 1.5708, effort: 12, velocity: 3.5 },
+      origin: origin([0, 0, 0.25], [0, 0, 1.5708]), limit: { lower: -1.5708, upper: 1.5708, effort: 12, velocity: 3.5 },
     }),
     joint('elbow_lift', 'prismatic', 'shoulder_link', 'elbow_link', { limit: { lower: 0, upper: 0.2 } }),
     joint('wrist_roll', 'continuous', 'elbow_link', 'wrist_link'),
     joint('camera_mount', 'fixed', 'base_link', 'camera_link'),
   ],
+  srdf: null,
 };
+const planned = { ...robot, srdf: { planningGroups: [], endEffectors: [], groupStates: [], disabledCollisionPairs: [], groupsByLink: { shoulder_link: ['manipulator'] } } };
 const parts = [
-  { id: 'base_link:v1', linkName: 'base_link' },
-  { id: 'wrist_link:v1/object/0', linkName: 'wrist_link' }, { id: 'wrist_link:v1/object/1', linkName: 'wrist_link' },
+  { id: 'base_link:v1', link: 'base_link' },
+  { id: 'wrist_link:v1/object/0', link: 'wrist_link' }, { id: 'wrist_link:v1/object/1', link: 'wrist_link' },
 ];
 const components = [
-  { id: 'wrist_link:v1/object/0', name: 'flange', linkName: 'wrist_link', color: '#336699', triangleCount: 1200, vertexCount: 700, sizeMillimetres: [40, 40, 8] },
+  { id: 'wrist_link:v1/object/0', name: 'flange', link: 'wrist_link', color: '#336699', triangleCount: 1200, vertexCount: 700, sizeMillimetres: [40, 40, 8] },
 ];
 
-// The host's resolver: a description-relative mesh has a path, a package:// one does not.
-const meshPath = (filename: string) => (filename.includes(':') ? '' : `robots/arm/${filename}`);
 // What the scene graph was last asked to draw: the viewport half of a selection.
 let highlight: Record<string, unknown> = {};
 const scene = { hasComponent: (id: string) => components.some(component => component.id === id), setHighlight(next: Record<string, unknown>) { highlight = next; } };
 const drawn = () => JSON.stringify([highlight.selectedLinks || [], highlight.selectedComponents || []]);
-function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNamesByLink = null as Map<string, string[]> | null, onOpenFile = undefined as ((path: string) => void) | undefined }) {
+function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload = robot as typeof planned, onOpenFile = undefined as ((path: string) => void) | undefined }) {
   const selection = useLinkSelection({ scene, hidden: false, requestRender() {} });
   const observed = {
     ...selection,
@@ -58,7 +62,7 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNa
     selectLink: (name: string, options?: any) => { spy.selectLink?.(name); selection.selectLink(name, options); },
     hoverLink: (name: string) => { spy.hoverLink?.(name); selection.hoverLink(name); },
   };
-  return <LinksSection description={description} components={components} parts={parts} selection={observed} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={onOpenFile}/>;
+  return <LinksSection robot={payload} components={components} parts={parts} selection={observed} onOpenFile={onOpenFile}/>;
 }
 const rows = () => within(screen.getByRole('list', { name: 'Robot links' })).getAllByRole('button', { name: /^Select / }).map(row => row.getAttribute('aria-label'));
 const filter = () => screen.getByRole('textbox', { name: 'Filter links' });
@@ -88,9 +92,9 @@ it('draws the kinematic tree collapsed below the first real choice, with each li
   expect(screen.queryByRole('region', { name: 'Reference details' })).toBeNull();
 });
 
-it('selects a link in the scene graph and reads the description back', () => {
+it('selects a link in the scene graph and reads the payload back', () => {
   const spy = { selectLink: vi.fn(), hoverLink: vi.fn() };
-  render(<Harness spy={spy} groupNamesByLink={new Map([['shoulder_link', ['manipulator']]])}/>);
+  render(<Harness spy={spy} payload={planned}/>);
   fireEvent.mouseEnter(screen.getByRole('button', { name: 'Select base_link' }).parentElement!);
   expect(spy.hoverLink).toHaveBeenLastCalledWith('base_link');
   expect(highlight.hoveredLink).toBe('base_link');
@@ -107,7 +111,7 @@ it('selects a link in the scene graph and reads the description back', () => {
   expect(details.getByLabelText('Parent joint').textContent).not.toContain('Axis');
   expect(details.getByLabelText('Child joints').textContent).toContain('shoulder_link · shoulder_pan · revolute');
 
-  // A link with no geometry is still a selection: the row, and what the description says.
+  // A link with no geometry is still a selection: the row, and what the payload says.
   fireEvent.click(screen.getByRole('button', { name: 'Select shoulder_link' }));
   expect(drawn()).toBe('[["shoulder_link"],[]]');
   details = within(screen.getByRole('region', { name: 'Reference details' }));
@@ -119,6 +123,7 @@ it('selects a link in the scene graph and reads the description back', () => {
   expect(parentJoint).toContain('12 N·m');
   expect(parentJoint).toContain('3.5 rad/s');
   expect(parentJoint).toContain('Z0.25');
+  // The SRDF's planning group the link is in.
   expect(details.getByLabelText('Link details').textContent).toContain('manipulator');
   expect(details.queryByRole('button', { name: /copy/i })).toBeNull();
 
@@ -134,7 +139,7 @@ it('names a mesh as plain text where the view opens no other file (a host’s fi
   expect(details.getByText('meshes/base.3mf').closest('button')).toBeNull();
 });
 
-it('reads a link’s inertial and geometry back, opens the mesh files it names and follows its parent and children', () => {
+it('reads a link’s inertial and geometry back, opens the mesh files it names by cadgen’s path and follows its parent and children', () => {
   const onOpenFile = vi.fn();
   render(<Harness onOpenFile={onOpenFile}/>);
   fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }));
@@ -158,7 +163,7 @@ it('reads a link’s inertial and geometry back, opens the mesh files it names a
   fireEvent.click(details.getByRole('button', { name: 'meshes/base.3mf' }));
   fireEvent.click(details.getByRole('button', { name: 'meshes/base_collision.stl' }));
   expect(onOpenFile.mock.calls).toEqual([['robots/arm/meshes/base.3mf'], ['robots/arm/meshes/base_collision.stl']]);
-  // A reference with no path here is text, not a link that leads nowhere.
+  // A reference with no path is text, not a link that leads nowhere.
   expect(details.getByText('package://arm/meshes/far.stl').closest('button')).toBeNull();
 
   // Parent and children are the same tree: pressing one selects it there and in the viewport.
@@ -231,7 +236,7 @@ it('a viewport pick of a surface selects its link; a named object selects itself
       <button type="button" onClick={() => selection.pick({ linkName: 'wrist_link', componentId: '' })}>Pick surface</button>
       <button type="button" onClick={() => selection.pick({ linkName: 'wrist_link', componentId: 'wrist_link:v1/object/0' }, { multiSelect: true })}>Pick named</button>
       <button type="button" onClick={() => selection.pick(null)}>Pick nothing</button>
-      <LinksSection description={description} components={components} parts={parts} selection={selection}/>
+      <LinksSection robot={robot} components={components} parts={parts} selection={selection}/>
     </div>;
   }
   render(<Viewport/>);
