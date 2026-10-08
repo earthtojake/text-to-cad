@@ -72,6 +72,9 @@ _TIMED_OUT = object()
 # The programs a board or a harness build runs are the same kind of choice: the
 # KiCad, the Freerouting and the Java to run it, the WireViz (and ngspice) the
 # caller named.
+# The telemetry switches (``cadgen.analytics.ENVIRONMENT``) are the client's too: a
+# client whose environment turns telemetry off has none of its builds counted, whatever
+# the environment of the build that started the daemon said (``cadgen.daemon.telemetry``).
 FORWARDED_ENV_VARS = (
     "CADGEN_CACHE_DIR",
     "XDG_CACHE_HOME",
@@ -86,6 +89,8 @@ FORWARDED_ENV_VARS = (
     "JAVA_HOME",
     "CADGEN_WIREVIZ",
     "CADGEN_NGSPICE",
+    "DO_NOT_TRACK",
+    "CADGEN_TELEMETRY",
 )
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than
@@ -379,7 +384,7 @@ def _connect(address: str) -> transport.Channel:
         return transport.connect(address, key)
     except transport.AuthenticationError:
         # A live lock owner repairs a replaced key after rejecting this handshake.
-        # Its accept thread and this client observe the rejection concurrently, so
+        # Its handshake thread and this client observe the rejection concurrently, so
         # give the owner a bounded window to finish the atomic publication. An empty
         # key is a recovery probe when external cleanup removed the file entirely.
         # Windows replacement can spend two 750 ms sharing-violation ladders,
@@ -481,11 +486,14 @@ def _reap_detached(process: subprocess.Popen) -> None:
 
 
 def _spawn_daemon(address: str) -> subprocess.Popen | None:
+    from cadgen.analytics import for_others
     from cadgen.daemon.executors import worker_env
 
     # The daemon and its workers must import THIS cadgen from whatever directory they
-    # run in; a relative PYTHONPATH entry would otherwise pick the installed one.
-    env = worker_env()
+    # run in; a relative PYTHONPATH entry would otherwise pick the installed one. The
+    # daemon serves every client, so it takes no telemetry switch from the one that
+    # started it: each client's travels with its own builds (FORWARDED_ENV_VARS).
+    env = for_others(worker_env())
     env["CADGEN_DAEMON_CHILD"] = "1"
     env.setdefault("CADGEN_DAEMON_SOCKET", str(address))
     try:
@@ -792,6 +800,47 @@ def prewarm() -> bool:
         if answer is not _RESTART:
             return answer is not None
     return False
+
+
+# The most a command waits to hand its counts over (``hand_over``): past it, they are not counted.
+HAND_OVER_SECONDS = 0.5
+
+
+def hand_over(counts: dict) -> None:
+    """Hand a command's counts to the running daemon, which sends them with its own telemetry
+    (``cadgen.daemon.telemetry.counted``): a command sends nothing itself. Like ``status`` it
+    never starts a daemon: with none to take them -- ``CADGEN_DAEMON=0``, a platform without one,
+    or none running -- they are kept for the next process that sends (``analytics.spool``). One
+    that does not answer within ``HAND_OVER_SECONDS``, or is gone mid-send, may have taken them,
+    so they are not kept twice. The command goes on either way. Never raises."""
+    try:
+        from cadgen.analytics import refused, spool
+
+        if refused():
+            return
+    except Exception:  # noqa: BLE001 - telemetry never fails the command it counts
+        return
+    if os.environ.get("CADGEN_DAEMON") == "0" or not daemon_supported():
+        spool(counts)
+        return
+
+    def send() -> None:
+        try:
+            channel = _connect(daemon_address())
+        except Exception:  # noqa: BLE001 - none running, or one that takes no key: kept for the next sender
+            spool(counts)
+            return
+        try:
+            _send_json(channel, {"kind": "count", **counts})
+        except Exception:  # noqa: BLE001 - one gone mid-send may have read them: not kept again
+            pass
+        finally:
+            with contextlib.suppress(Exception):
+                channel.close()
+
+    thread = threading.Thread(target=send, name="cadgen-hand-over", daemon=True)
+    thread.start()
+    thread.join(HAND_OVER_SECONDS)
 
 
 def status() -> dict | None:

@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { stampDebugId } from "@text-to-cad/core/chunk-ids";
+import { packageSourceMaps } from "@text-to-cad/core/source-maps";
 import { drawingAssetsPlugin } from "@text-to-cad/ui/drawing-assets";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
@@ -181,6 +183,39 @@ function serverLifetimePlugin() {
   };
 }
 
+// Each chunk's debug id, by file name, in the page before anything runs (`__cadChunkIds`): a crash
+// report names the chunk each of its frames ran in by it (@text-to-cad/core's crash reporter), and
+// the release uploads every chunk with its source map (scripts/release/sourcemaps.py) for PostHog to
+// show the source -- the shared packages' own source, whose maps the build chains
+// (@text-to-cad/core/source-maps), not their compiled dist. Each chunk goes by an id its text and its
+// map decide (@text-to-cad/core/chunk-ids), never rolldown's, which names the code alone. The maps stay
+// in dist, which the wheel leaves out (scripts/bundle).
+function chunkIdsPlugin() {
+  return {
+    name: "cad-viewer-chunk-ids",
+    apply: "build",
+    enforce: "post",
+    generateBundle: { order: "post", handler(_, bundle) {
+      const ids = {};
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== "chunk" || !chunk.sourcemapFileName) continue;
+        const map = bundle[chunk.sourcemapFileName];
+        if (map?.type !== "asset") throw new Error(`The CAD Viewer chunk ${chunk.fileName} has no source map.`);
+        const stamped = stampDebugId(chunk.code, String(map.source), chunk.fileName);
+        chunk.code = stamped.code;
+        map.source = stamped.map;
+        ids[chunk.fileName.split("/").pop()] = stamped.debugId;
+      }
+      const html = bundle["index.html"];
+      if (!html || html.type !== "asset") throw new Error("The CAD Viewer build needs index.html.");
+      const script = `<script>globalThis.__cadChunkIds=${JSON.stringify(ids)}</script>`;
+      const document = String(html.source);
+      if (!document.includes("<head>")) throw new Error("The CAD Viewer's index.html has no <head>.");
+      html.source = document.replace("<head>", () => `<head>${script}`);
+    } },
+  };
+}
+
 export default defineConfig(async ({ command }) => ({
   root: viewerAppRoot,
   envPrefix: "VIEWER_",
@@ -193,11 +228,15 @@ export default defineConfig(async ({ command }) => ({
     drawingAssetsPlugin({ exclude: [/\/fonts\/Xiaolai\//] }),
     react(),
     serverLifetimePlugin(),
+    packageSourceMaps(["@text-to-cad/core", "@text-to-cad/ui"]),
+    chunkIdsPlugin(),
   ],
   resolve: { alias: { "@": viewerClientRoot }, dedupe: ["react", "react-dom", "three", "lucide-react"] },
   build: {
     chunkSizeWarningLimit: 800,
-    rolldownOptions: { output: { codeSplitting: { groups: [
+    // Maps beside the chunks, named by no chunk (`hidden`), each chunk's debug id in it and in its map.
+    sourcemap: "hidden",
+    rolldownOptions: { output: { sourcemapDebugIds: true, codeSplitting: { groups: [
       { name: "vendor-three", test: /[\\/]node_modules[\\/]three[\\/]/ },
       { name: "vendor-react", test: /[\\/]node_modules[\\/]react(?:-dom)?[\\/]/ },
       { name: "vendor-ui", test: /[\\/]node_modules[\\/]@?radix-ui[\\/]/ },

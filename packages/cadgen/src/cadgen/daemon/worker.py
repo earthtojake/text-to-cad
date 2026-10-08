@@ -41,6 +41,7 @@ import time
 import traceback
 
 # Same registry the supervisor validates against; imported rather than duplicated.
+from cadgen.daemon import telemetry
 from cadgen.daemon.client import FORWARDED_ENV_VARS
 from cadgen.daemon.server import _TOOL_IMPORTS, _evict_first_party_modules
 
@@ -276,8 +277,9 @@ def _run(request: dict, *, supervised: bool = False) -> int:
             err.write(code + "\n")
             return 1
         return int(code or 0)
-    except BaseException:  # noqa: BLE001 - a failed build must not kill the worker
+    except BaseException as error:  # noqa: BLE001 - a failed build must not kill the worker
         err.write(traceback.format_exc())
+        _report(error, bugs_only=False)  # past the command's own reporting of what failed: never meant to
         return 1
     finally:
         sys.argv = previous_argv
@@ -326,9 +328,20 @@ def _run_artifact(request: dict, *, supervised: bool = False) -> int:
                 operation, artifacts.execute(operation, keep_going=_wanted if supervised else None))
             _emit({"artifactResult": result})
         return 0
-    except BaseException:  # the worker stays reusable, but no success is emitted
+    except BaseException as error:  # the worker stays reusable, but no success is emitted
         err.write(traceback.format_exc())
+        _report(error, bugs_only=True)  # a derivation the geometry refused is no bug; a mistake in cadgen's code is
         return 1
+
+
+def _report(error: BaseException, *, bugs_only: bool) -> None:
+    """A crash in a job: for its exit frame (``telemetry.job_finished``), and the daemon to send."""
+    try:
+        from cadgen import analytics
+
+        analytics.report(error, "build", bugs_only=bugs_only)
+    except Exception:  # noqa: BLE001 - a crash report never fails the job
+        pass
 
 
 def serve() -> int:
@@ -354,6 +367,11 @@ def serve() -> int:
     from cadgen._internal import temp_leftovers
 
     temp_leftovers.sweep_in_background()
+    # A crash in cadgen's code during a job goes to the daemon with the job's exit frame: this process sends nothing.
+    with contextlib.suppress(Exception):
+        from cadgen import analytics
+
+        analytics.collect_crashes(telemetry.job_crashed)
     _warm_imports()
     _emit({"ready": os.getpid()})
     for line in sys.stdin:
@@ -372,9 +390,11 @@ def serve() -> int:
             return 0
         else:
             _apply_request_env(request)
+            telemetry.job_started()
             with _heartbeat():
                 code = _run(request, supervised=True)
-            _emit({"exit": code, "pid": os.getpid()})
+            # What telemetry learned of the job rides its exit frame: the daemon counts it (server._handle_request).
+            _emit({"exit": code, "pid": os.getpid(), **telemetry.job_finished()})
     return 0
 
 

@@ -30,8 +30,16 @@ def find_paired_urdf(robot_name: str, srdf_dir: Path) -> tuple[Path | None, list
     """Resolve the URDF paired with an SRDF: the same-directory URDF whose
     root <robot name> matches. Returns (paired path or None, all matches)."""
     matches: list[Path] = []
-    for candidate in sorted(srdf_dir.glob("*" + URDF_SUFFIX)):
-        if _urdf_root_name(candidate) == robot_name:
+    try:
+        candidates = sorted(srdf_dir.iterdir())
+    except OSError:
+        return None, []
+    for candidate in candidates:
+        if (
+            candidate.suffix.lower() == URDF_SUFFIX
+            and candidate.is_file()
+            and _urdf_root_name(candidate) == robot_name
+        ):
             matches.append(candidate)
     return (matches[0] if len(matches) == 1 else None), matches
 
@@ -420,6 +428,18 @@ def _joint_names_for_group(
         joint = joints.get(joint_name)
         if isinstance(joint, dict) and str(joint.get("type") or "") != "fixed" and not bool(joint.get("mimic")):
             _append_unique(names, [joint_name])
+
+    # MoveIt includes the parent joint of each explicitly included link.
+    # Include only that joint, not the link's entire ancestor chain.
+    for link_name in group.link_names:
+        for joint_name, joint in joints.items():
+            if (
+                isinstance(joint, dict)
+                and joint.get("child") == link_name
+                and str(joint.get("type") or "") != "fixed"
+                and not bool(joint.get("mimic"))
+            ):
+                _append_unique(names, [joint_name])
 
     for chain in group.chains:
         chain_joint_names = []

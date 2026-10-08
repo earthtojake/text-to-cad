@@ -131,9 +131,9 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   });
   await page.goto(`${origin}/`);
   const first = page.getByTestId('one');
-  // Display's settings are a dropdown from its button on top of the cube (`DisplayPopover.jsx`),
+  // Display's settings are a dropdown from its button at the navbar's right end (`DisplayPopover.jsx`),
   // portaled out of the pane: a file never opens with it, and it is not a tool.
-  const displayButton = pane => pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Display', exact: true });
+  const displayButton = pane => pane.locator('[data-view-controls]').getByRole('button', { name: 'Display', exact: true });
   const display = page.locator('[data-display-popover]');
   const cameraZoom = id => page.evaluate(pane => window.cadHarness[pane].controller?.readState().camera?.zoom ?? null, id);
   await displayButton(first).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
@@ -576,8 +576,8 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await card.count(), 0, 'and raises nothing');
 
   // THE CUBE IS THE BOTTOM-LEFT CORNER'S, far enough off the bottom that its axes stay inside the
-  // view, with the view's controls, Display then Preview, on top of it, and the tool stack stops
-  // above them. The right of the view is Quick Edit's, and the bottom middle the host's (a
+  // view, and the tool stack stops above it. The view's controls, Display then Preview, are the
+  // navbar's last. The right of the view is Quick Edit's, and the bottom middle the host's (a
   // composer, on some) and preview's playbar.
   const frameBox = await canvasElement.boundingBox();
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
@@ -586,8 +586,8 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.ok(offBottom >= 6 && offBottom < 16, `the view cube sits just off the bottom-left corner: ${offBottom}px`);
   assert.ok(cubeBox.x < frameBox.x + 20, 'the view cube stays against the left edge');
   assert.ok(stackBox.y + stackBox.height <= cubeBox.y, 'the tool stack stops above the cube');
-  assert.deepEqual(await pane.locator('[data-viewport-actions] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Display', 'Preview'], 'Display then Preview, on top of the cube');
+  assert.deepEqual(await pane.locator('[data-viewer-navbar] > div button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Display', 'Preview'], 'Display then Preview, at the navbar\'s right end');
   assert.equal(await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).count(), 0, 'nothing of Display on the strip');
 
   // FINDING: the wait before the file is even located covers the viewport, and says

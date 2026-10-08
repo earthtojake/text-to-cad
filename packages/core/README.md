@@ -163,7 +163,7 @@ src/
                    #   builders), viewer/ (exploded view, part visual state,
                    #   the surface look, the scene contract), urdf/ (robot
                    #   parsing and loading; the robot parts and scene builder),
-                   #   drawing2d/ (a GET /__cad/drawing payload -> Canvas 2D:
+                   #   drawing2d/ (a GET /__cad/drawing payload -> Canvas 2D, text by fillText:
                    #   fit/pan/zoom maths, batched Path2D, hairline strokes),
                    #   plot2d/ (a GET /__cad/plot payload -> Canvas 2D:
                    #   KiCad's and WireViz's SVG sheets laid out and
@@ -172,6 +172,9 @@ src/
                    #   parity-tested against cad_ref_syntax.py)
 bin/               # node builders the bundler ships into _runtime/node:
                    #   mesh-export.mjs (the ONE mesh path)
+scripts/           # chunk-ids.mjs (the pages' builds: a chunk's debug id) and
+                   #   source-maps.mjs (the pages' builds: maps into the packages'
+                   #   src/), beside the package's own build and test runners
 docs/              # subsystem docs (the map below)
 ```
 
@@ -199,8 +202,20 @@ inert; subscriptions start catalog polling, which the host's `shouldPoll` gates
 CAD view asks of its server, so each host reaches it the same way: the model
 library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Open
 (`pick`), Reveal (`reveal`), the person's analytics answer and features
-(`consent`, `features`), the update check (`version`) and a touch
-(`reportActivity`); every change is a POST with the viewer's guard header. `dispose()` stops polling, aborts
+(`consent`, `features`), the update check (`version`) and what the page did for
+telemetry (`reportActivity`: a touch, a Quick Edit that went, or a crash); every
+change is a POST with the viewer's guard header. A host reports its page's crashes
+with `createCrashReporter(send, { fileOf })`, which makes each with `crashOf` -- the
+error's type and its script frames, oldest first, never its message, a value or a
+URL (`fileOf` names a script by its file's own name, `scriptFileOf` by default, and
+a frame in one of the page's own chunks also names its debug id, from the table the
+page's build wrote, `__cadChunkIds`) -- and sends each distinct one once a page, a few
+at most. A page's build stamps each chunk with the id its text and its source map decide
+(`@text-to-cad/core/chunk-ids`, a Node module the builds import), never the bundler's,
+which names the code alone: PostHog keeps one map an id. That map leads into the shared
+packages' `src/`, not their `dist/`: the build loads their modules with the maps their own
+builds wrote (`@text-to-cad/core/source-maps`), and fails if a chunk's map still ends in
+compiled code. `dispose()` stops polling, aborts
 requests and disposes render sessions. The client lazily owns its cache provider
 and bounded write-back queue; each render session borrows a cancellable cache
 view and owns its abort signal and worker leases. A host whose transport

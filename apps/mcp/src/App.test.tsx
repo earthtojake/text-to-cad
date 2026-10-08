@@ -12,7 +12,7 @@ vi.mock('@text-to-cad/ui/cad-viewer', async original => {
   const { useEffect } = await import('react');
   return {
     ...await original<object>(),
-    // The host's notice (the analytics card) drawn as the real viewer would once a model is on screen.
+    // The host's notice, if it had one, drawn as the real viewer would once a model is on screen.
     CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.update ?? null}{props.fullSize ?? null}{props.notice ?? null}</>; },
   };
 });
@@ -29,7 +29,7 @@ type Answer = (body: any) => unknown;
  * what the viewer reads for itself, never answers). `asked(path)` is what the page sent each: its
  * JSON body, or null for a read.
  */
-function host(initial: HostContext, hostCapabilities: Record<string, unknown> = {}, ask = false) {
+function host(initial: HostContext, hostCapabilities: Record<string, unknown> = {}) {
   const listeners = new Set<(context: HostContext) => void>();
   let context = initial;
   const bridge = {
@@ -41,7 +41,7 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
   };
   let kept = { quickEdit: true };
   const answers: Record<string, Answer> = {
-    '/__cad/analytics': body => ({ ask: body === null && ask, sharing: Boolean(body?.share), policy: POLICY }),
+    '/__cad/analytics': body => ({ sharing: Boolean(body?.share), policy: POLICY }),
     // The person's features as the server keeps them.
     '/__cad/features': body => (kept = { ...kept, ...body }),
     '/__cad/version': () => ({ notice: null }),
@@ -121,7 +121,18 @@ it('every view has the home and browses from its file\'s folder, but the host\'s
   expect([viewer.props!.host.files.list, viewer.props!.host.files.search]).toEqual([undefined, undefined]);
 });
 
-it('an inline host gets the whole viewer in a card of a height it is told, with Full size last in its navbar, which goes full size in place', () => {
+it("the host's file handler keeps the file it opened: a show sent to it changes nothing, and gives it no home", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const replies: ((reply: { events: unknown[] }) => void)[] = [];
+  server.sync = vi.fn(() => new Promise(resolve => { replies.push(resolve); }));
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
+  // A show's launch names no surface: it is not this view's to take.
+  await act(async () => { replies.shift()!({ events: [{ seq: 1, type: 'show', launch: { protocol: 5, page: 'viewer', model: '/work/b.step' } }] }); });
+  expect([viewer.props!.file, viewer.props!.library, viewer.props!.history, viewer.props!.host.files.list])
+    .toEqual(['/work/a.step', undefined, undefined, undefined]);
+});
+
+it('an inline host gets the whole viewer in a card of a height it is told, with Full size in its navbar, which goes full size in place', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
     launch={{ ...home, surface: 'inline', view: 'cad-1-a', order: { createdAt: 1, seq: 1 } }} />);
@@ -138,6 +149,53 @@ it('an inline host gets the whole viewer in a card of a height it is told, with 
   expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--cad-viewport-bottom-center')).toBe('');
   // Full size keeps what was on the card: the same view, not a new one.
   expect(viewer.mounts).toBe(1);
+});
+
+it("a view keeps its own history of files, as a browser's tab does: the agent's shows and the person's moves, Back and Forward over them, a move after a Back dropping what was ahead, the home no step", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  // The agent's shows reach the view on its sync, one reply at a time.
+  const replies: ((reply: { events: unknown[] }) => void)[] = [];
+  server.sync = vi.fn(() => new Promise(resolve => { replies.push(resolve); }));
+  const agentShows = (model: string, seq: number) => act(async () => {
+    replies.shift()!({ events: [{ seq, type: 'show', launch: { protocol: 5, page: 'viewer', model } }] });
+  });
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step' }} />);
+  const at = () => [viewer.props!.file, viewer.props!.history!.canGoBack, viewer.props!.history!.canGoForward];
+  expect(at()).toEqual(['/work/a.step', false, false]);
+  // The agent shows b, and the person opens c from the explorer: each a step.
+  await agentShows('/work/b.step', 1);
+  expect(at()).toEqual(['/work/b.step', true, false]);
+  act(() => viewer.props!.onShow('/work/c.step'));
+  expect(at()).toEqual(['/work/c.step', true, false]);
+  act(() => viewer.props!.history!.back());
+  expect(at()).toEqual(['/work/b.step', true, true]);
+  act(() => viewer.props!.history!.back());
+  expect(at()).toEqual(['/work/a.step', false, true]);
+  act(() => viewer.props!.history!.forward());
+  expect(at()).toEqual(['/work/b.step', true, true]);
+  // The home is no step, a bigger way to pick a recent file: going there leaves the history where
+  // it stands, and the file picked there follows the one the view left, dropping what was ahead (c).
+  act(() => viewer.props!.onShow(''));
+  expect(at()).toEqual(['', true, true]);
+  act(() => viewer.props!.onShow('/work/d.step'));
+  expect(at()).toEqual(['/work/d.step', true, false]);
+  act(() => viewer.props!.history!.back());
+  expect(at()).toEqual(['/work/b.step', true, true]);
+  // Picking, on the home, the file the view left adds nothing; nor does a show of what is on screen.
+  act(() => viewer.props!.onShow(''));
+  act(() => viewer.props!.onShow('/work/b.step'));
+  expect(at()).toEqual(['/work/b.step', true, true]);
+  await agentShows('/work/b.step', 2);
+  expect(at()).toEqual(['/work/b.step', true, true]);
+  cleanup();
+  // A view opened on the home: its first file is its first step, with nothing behind it.
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'home', model: null, surface: 'tab', pick: false }} />);
+  act(() => viewer.props!.onShow('/work/a.step'));
+  expect(at()).toEqual(['/work/a.step', false, false]);
+  cleanup();
+  // A file handler shows its file alone, with no home to go to: no Back or Forward.
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
+  expect(viewer.props!.history).toBeUndefined();
 });
 
 it('an inline host that cannot show a view full size gets no Full size, and still the whole viewer', () => {
@@ -167,68 +225,54 @@ it('a Quick Edit queues into a tab host\'s composer always, into an inline host\
   expect(reach('tabs', { message: { text: {}, image: {} } })).toEqual(['composer', 'send', true]);
 });
 
-it('a hand-made install is asked once about analytics: nothing is shared before a yes, and either answer ends the question', async () => {
-  for (const choice of ['Allow', 'No thanks', 'Close']) {
-    const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, true);
-    const { findByRole, queryByRole, getByText, getByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} />);
-    // The card is the viewer's notice: asked once a model is on screen, top-right, Quick Edit under it.
-    await findByRole('dialog', { name: 'Allow Analytics' });
-    expect(viewer.props!.notice).toBeTruthy();
-    const policy = getByText('Privacy Policy') as HTMLAnchorElement;
-    expect([policy.href, policy.target]).toEqual(['https://www.texttocad.dev/privacy-policy', '_blank']);
-    await act(async () => policy.click());
-    expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'https://www.texttocad.dev/privacy-policy' });
-    expect(server.asked('/__cad/analytics')).toEqual([null]);
-    await act(async () => (choice === 'Close' ? getByRole('button', { name: "Close and don't share" }) : getByText(choice)).click());
-    expect(server.asked('/__cad/analytics').at(-1)).toEqual({ share: choice === 'Allow', card: true });
-    expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
-    cleanup();
-  }
-  // The answer is the app menu's toggle from then on, and the toggle changes it.
-  {
-    const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, true);
-    const { findByRole, getByText } = render(<App bridge={bridge as any} server={server as any} launch={home} />);
-    await findByRole('dialog', { name: 'Allow Analytics' });
-    expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false }),
-      expect.objectContaining({ id: 'quickEdit', checked: true })]);
-    await act(async () => getByText('Allow').click());
-    expect(viewer.props!.appSettings![0].checked).toBe(true);
-    await act(async () => viewer.props!.appSettings![0].onCheckedChange(false));
-    expect(server.asked('/__cad/analytics').at(-1)).toEqual({ share: false });
-    expect(viewer.props!.appSettings![0].checked).toBe(false);
-    cleanup();
-  }
-  // A person who already answered (or whose environment did) is never asked.
+it('a Quick Edit that reached its destination is counted by the CAD app\'s server, told nothing of the edit', async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: { text: {} } });
+  server.answers['/__cad/analytics/activity'] = () => null;
+  render(<App bridge={bridge as any} server={server as any} presentation="tabs" launch={{ protocol: 5, page: 'viewer', model: '/work/part.stl' }} />);
+  viewer.props!.host.usage.used('quickEdit');
+  await vi.waitFor(() => expect(server.asked('/__cad/analytics/activity')).toEqual([{ quickEdit: true }]));
+});
+
+it('nothing asks about usage stats: the app menu shows the answer, and its toggle changes it', async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const { queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} />);
   await act(async () => {});
+  // cadgen's telemetry is on by default once a `cadgen` command has said so: the page never asks.
+  expect(queryByRole('dialog')).toBeNull();
+  expect(viewer.props!.notice).toBeFalsy();
   expect(server.asked('/__cad/analytics')).toEqual([null]);
-  expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
+  expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false }),
+    expect.objectContaining({ id: 'quickEdit', checked: true })]);
+  await act(async () => viewer.props!.appSettings![0].onCheckedChange(true));
+  expect(server.asked('/__cad/analytics').at(-1)).toEqual({ share: true });
+  expect(viewer.props!.appSettings![0].checked).toBe(true);
+  await act(async () => viewer.props!.appSettings![0].onCheckedChange(false));
+  expect(server.asked('/__cad/analytics').at(-1)).toEqual({ share: false });
+  expect(viewer.props!.appSettings![0].checked).toBe(false);
 });
 
 it('an answer is never undone by a read sent just before it, and a choice the environment made is shown fixed', async () => {
-  const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, true);
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
   let releaseStaleRead: (value: unknown) => void = () => {};
-  const { findByRole, getByText, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} />);
-  await findByRole('dialog', { name: 'Allow Analytics' });
-  // The click's own focus sends a read that answers late, with the question still open.
+  render(<App bridge={bridge as any} server={server as any} launch={home} />);
+  await act(async () => {});
+  // The click's own focus sends a read that answers late, with the answer from before it.
   const answer = server.answers['/__cad/analytics'];
   server.answers['/__cad/analytics'] = () => {
     server.answers['/__cad/analytics'] = answer;
     return new Promise(resolve => { releaseStaleRead = resolve; });
   };
   act(() => { window.dispatchEvent(new Event('focus')); });
-  await act(async () => getByText('Allow').click());
-  await act(async () => releaseStaleRead({ ask: true, sharing: false, policy: POLICY }));
-  expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
+  await act(async () => viewer.props!.appSettings![0].onCheckedChange(true));
+  await act(async () => releaseStaleRead({ sharing: false, policy: POLICY }));
   expect(viewer.props!.appSettings![0].checked).toBe(true);
   cleanup();
   // DO_NOT_TRACK: the setting says so, and cannot be changed here.
   const fixed = host({ displayMode: 'fullscreen' });
-  fixed.server.answers['/__cad/analytics'] = () => ({ ask: false, sharing: false, reason: 'environment', policy: POLICY });
+  fixed.server.answers['/__cad/analytics'] = () => ({ sharing: false, reason: 'environment', policy: POLICY });
   render(<App bridge={fixed.bridge as any} server={fixed.server as any} launch={home} />);
   await act(async () => {});
-  expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Share anonymous usage data (set by your environment)' }));
+  expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Share usage stats (set by your environment)' }));
 });
 
 it("the app menu's features: Quick edit is read from the server, turned off there for every view, and handed to the viewer", async () => {
@@ -239,7 +283,7 @@ it("the app menu's features: Quick edit is read from the server, turned off ther
   expect(viewer.props!.features).toEqual({ quickEdit: true });
   // Settings: Analytics, then Features.
   expect(viewer.props!.appSettings!.map(setting => [setting.label, setting.checked]))
-    .toEqual([['Share anonymous usage data', false], ['Quick edit', true]]);
+    .toEqual([['Share usage stats', false], ['Quick edit', true]]);
   await act(async () => viewer.props!.appSettings!.find(setting => setting.id === 'quickEdit')!.onCheckedChange(false));
   expect(server.asked('/__cad/features').at(-1)).toEqual({ quickEdit: false });
   expect(viewer.props!.features).toEqual({ quickEdit: false });
@@ -257,10 +301,8 @@ it('a newer release is the blue update button: its card sends the prompt to the 
     prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad', instructions: 'https://www.texttocad.dev/install' };
   {
     // The launch carries the notice as the server last read it: the button draws with the page.
-    const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} }, true);
+    const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
     const { findByRole, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice }} />);
-    // The button is the navbar's, not the analytics question's corner: both are up at once.
-    await findByRole('dialog', { name: 'Allow Analytics' });
     const update = await findByRole('button', { name: 'Update to 0.9.0' });
     await act(async () => update.click());
     await findByRole('dialog', { name: 'Update available' });

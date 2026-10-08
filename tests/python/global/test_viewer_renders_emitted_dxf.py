@@ -100,8 +100,8 @@ class ViewerRendersEmittedDxfTest(unittest.TestCase):
     def test_every_primitive_is_a_shape_the_shared_drawing_code_knows(self) -> None:
         # The client half (packages/core/src/lib/drawing2d) THROWS on a primitive
         # type it does not know rather than dropping it, so a new shape here is a
-        # drawing that refuses to open. Pinned against the same five names.
-        known = {"point", "lines", "path", "filled-paths", "filled-polygon"}
+        # drawing that refuses to open. Pinned against the same six names.
+        known = {"point", "lines", "path", "filled-paths", "filled-polygon", "text"}
         payload = _payload_for_emitted_drawing()
         unknown = sorted({str(primitive["type"]) for primitive in payload["primitives"]} - known)
         self.assertEqual(

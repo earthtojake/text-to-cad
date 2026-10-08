@@ -58,14 +58,15 @@ test('the CAD viewer shows one file by its absolute path, the home with none, an
 
   // A file the viewer asks for (a pick in the explorer, a renderer's link) is the host's to show;
   // the file on screen is shown already.
-  act(() => props().host.navigation.openFile('C:\\models\\b.step'));
-  act(() => props().host.navigation.openFile('C:/models/a.step'));
+  act(() => props().host.navigation.openFile!('C:\\models\\b.step'));
+  act(() => props().host.navigation.openFile!('C:/models/a.step'));
   expect(shows).toEqual(['C:/models/b.step']);
-  // The navbar's logo leads home, which is no file; a host with no library has no home to lead to.
+  // The navbar's logo leads home, which is no file. A host with no library (a file handler's) shows
+  // its file and nothing else: no home to lead to, and no other file to open.
   act(() => props().host.navigation.home!());
   expect(shows.at(-1)).toBe('');
   rerender(view('C:/models/a.step', false));
-  expect(props().host.navigation.home).toBeUndefined();
+  expect([props().host.navigation.home, props().host.navigation.openFile]).toEqual([undefined, undefined]);
 
   // No file is the home: the library, laid out as the tab keeps it.
   rerender(view(''));
@@ -133,7 +134,7 @@ test('the home pictures a card out of sight, in a viewer of its own, from what i
 
 test("the person's settings go to the app menu over every file; the home shows the host's links", async () => {
   const client = cadClient();
-  const appSettings = [{ id: 'analytics', label: 'Share anonymous usage data', checked: false, onCheckedChange: () => {} }];
+  const appSettings = [{ id: 'analytics', label: 'Share usage stats', checked: false, onCheckedChange: () => {} }];
   render(<CadViewer client={client as never} host={ports(client, { links: viewerLinks({ version: '0.7.4' }) })} tabStore={createTabStore(memoryTabRecord())}
     live={createLiveRegistry()} file="/models/parts/a.step" library={library} appSettings={appSettings} onShow={() => {}} />);
   // FileViewer's navbar logo opens them (its own suite).

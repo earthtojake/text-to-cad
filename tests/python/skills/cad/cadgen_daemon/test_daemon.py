@@ -135,22 +135,10 @@ class CadgenDaemonTests(unittest.TestCase):
             raise RuntimeError(f"daemon address never appeared:\n{cls.log_path.read_text(encoding='utf-8')}")
 
     @classmethod
-    def _live_worker_pids(cls) -> set[int]:
-        """The pool's worker pids, asked while the supervisor still answers."""
-        env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(cls.address)}
-        with mock.patch.dict(os.environ, env):
-            os.environ.pop("CADGEN_DAEMON_CHILD", None)
-            status = daemon_client.status() or {}
-        return {int(worker["pid"]) for worker in (status.get("workers") or []) if worker.get("pid")}
-
-    @classmethod
-    def _wait_for_no_requests_in_flight(cls, timeout: float = 60.0) -> None:
-        """Block until the supervisor has no request thread alive (its status's ``inflight``).
-
-        A job's thread outlives its client's answer by a moment: it closes the connection and
-        notes the store after the final frame. A stale-token request that lands in that moment
-        meets work in flight, so the supervisor drains instead of letting go of its address.
-        """
+    def _wait_for_no_request_in_flight(cls, timeout: float = 30.0) -> None:
+        """Block until the supervisor counts no request in flight. A job's thread sends its exit frame
+        and only then leaves the count, so on a loaded runner the next test's request can still find
+        the last test's job in flight -- and a restart then drains it rather than taking the no-work path."""
         env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(cls.address)}
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -160,10 +148,16 @@ class CadgenDaemonTests(unittest.TestCase):
             if status.get("inflight") == 0:
                 return
             time.sleep(0.05)
-        raise AssertionError(
-            f"the daemon still had requests in flight after {timeout:.0f}s:\n"
-            f"{cls.log_path.read_text(encoding='utf-8')}"
-        )
+        raise AssertionError(f"a request was still in flight after {timeout:.0f}s:\n{cls.log_path.read_text(encoding='utf-8')}")
+
+    @classmethod
+    def _live_worker_pids(cls) -> set[int]:
+        """The pool's worker pids, asked while the supervisor still answers."""
+        env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(cls.address)}
+        with mock.patch.dict(os.environ, env):
+            os.environ.pop("CADGEN_DAEMON_CHILD", None)
+            status = daemon_client.status() or {}
+        return {int(worker["pid"]) for worker in (status.get("workers") or []) if worker.get("pid")}
 
     @classmethod
     def _wait_for_busy_worker(cls, model: str, timeout: float = 120.0) -> int:
@@ -281,10 +275,9 @@ class CadgenDaemonTests(unittest.TestCase):
 
     def test_c_version_token_mismatch_triggers_restart(self) -> None:
         # Also pinned in test_daemon_routing; kept here because it is what retires the
-        # class's first daemon before test_d starts a fresh one. With no work in flight a
-        # stale token makes the daemon let go of its address and exit; with work in flight it
-        # drains instead. The last test's job thread may still be finishing: wait it out.
-        self._wait_for_no_requests_in_flight()
+        # class's first daemon before test_d starts a fresh one. The no-work path: with a
+        # request in flight the daemon drains first, keeping its address (test_daemon_routing).
+        self._wait_for_no_request_in_flight()
         frames = _raw_request(
             self.address,
             {"tool": "run", "argv": ["box.py"], "cwd": str(self.model_dir), "token": -1},

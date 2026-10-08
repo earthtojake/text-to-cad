@@ -22,8 +22,9 @@ export function revealLabel(platform: Platform): string;
 
 /**
  * The file explorer the navbar's file name opens: one folder at a time from the open file's folder,
- * a breadcrumb to climb (an ellipsis for the folders above its last three), and a search under the
- * folder it is in. A pick is `onOpen`.
+ * its subfolders opening inline (a double-click opens one in their place), a breadcrumb to climb (an
+ * ellipsis for the folders above the crumbs that fit), and a search under the folder it is in. A
+ * pick is `onOpen`.
  */
 export const FolderExplorer: ComponentType<{
   source: Pick<FileSource, "list" | "search">;
@@ -54,14 +55,17 @@ export function fuzzyMatch(
 
 /**
  * The one navbar, over a file (a host's home has none). Left: the logo, which opens the app's menu
- * (`AppMenu`), the open file's name (the explorer's door, where the host's files can be browsed)
- * and its ⋯. Right: `update`, `trailing` (the file's actions), then `fullSize`.
+ * (`AppMenu`), Back and Forward where the host keeps the view's history (`history`), the open file's
+ * name (the explorer's door, where the host's files can be browsed) and its ⋯. Right: `update`, `trailing` (the file's actions), `fullSize`, then the box the
+ * renderer draws its view controls into (`controlsRef`).
  */
 export const ViewerNavbar: ComponentType<{
   /** The host's home, where it has one: the app menu's Back to files. */
   onHome?: () => void;
   /** The rest of the app's menu: the host's links and the person's settings. */
   menu?: { links?: import("../../host/types.js").ViewerLinks; appSettings?: readonly import("../types.js").AppSetting[]; platform?: string } | null;
+  /** The view's own history, where the host keeps one: Back and Forward, each disabled where there is nowhere to go. */
+  history?: import("../types.js").ViewerHistory | null;
   /** The open file, by its absolute path. */
   file?: string | null;
   explorer?: { source: Pick<FileSource, "list" | "search">; onOpen: (path: string) => void } | null;
@@ -69,8 +73,10 @@ export const ViewerNavbar: ComponentType<{
   trailing?: ReactNode;
   /** The host's update button, first among the controls, while its install is behind. */
   update?: ReactNode;
-  /** The host's Full size button, last in the row, where it shows the view small. */
+  /** The host's Full size button, where it shows the view small. */
   fullSize?: ReactNode;
+  /** The box, last in the row, the renderer draws its view controls into (a 3D view's Display and Preview). */
+  controlsRef?: (element: HTMLDivElement | null) => void;
   className?: string;
 }>;
 
@@ -91,7 +97,7 @@ export const AppMenu: ComponentType<{
  * A file's icon. The nine formats the CAD Viewer renders get its own
  * per-format glyphs; everything else is one lucide table.
  */
-export const FileIcon: ComponentType<{ path: string; className?: string }>;
+export const FileIcon: ComponentType<{ path: string; className?: string; strokeWidth?: number }>;
 export const FolderIcon: ComponentType<{ open: boolean; className?: string }>;
 export const GitHubMark: ComponentType<{ className?: string }>;
 export const DiscordMark: ComponentType<{ className?: string }>;

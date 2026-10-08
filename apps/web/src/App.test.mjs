@@ -59,7 +59,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     const reply = url === '/__cad/features' ? kept : url === '/__cad/version' ? { notice }
       : url === '/__cad/recents' ? { recents: [] } : url === '/__cad/pick' ? { path: '/m/picked.step' }
       : url !== '/__cad/analytics' ? { ok: true }
-      : init.body ? { ask: false, sharing: false, reason: 'choice', policy: 'p' } : { ask: true, sharing: false, reason: 'unasked', policy: 'p' };
+      : init.body ? { sharing: false, reason: 'choice', policy: 'p' } : { sharing: false, reason: 'untold', policy: 'p' };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
   // The page's own client over this Viewer's routes, its server's description answered here.
@@ -106,17 +106,22 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     await act(() => viewer().onShown('/m/one.step'));
     assert.equal(window.document.title, 'CAD | one.step');
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/recents'), [['/__cad/recents', { action: 'open', path: '/m/one.step' }]]);
-    // CAD's analytics, as the CAD app's: the consent read once, its answer in the app menu. (The
-    // model shown is counted, as a code and only with consent, as it joins the library.)
+    // CAD's telemetry, as the CAD app's: the consent read once, its answer in the app menu. (The
+    // model shown is counted, by its format and only with consent, as it joins the library.)
     assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/__cad/analytics')), [['/__cad/analytics', null]]);
+    // A Quick Edit copied is counted by this Viewer's server, as a touch is: told nothing of the edit.
+    viewer().host.usage.used('quickEdit');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics/activity'), [['/__cad/analytics/activity', { quickEdit: true }]]);
+    libraryCalls.splice(libraryCalls.findIndex(([url]) => url === '/__cad/analytics/activity'), 1);
     // The app menu: Analytics, then Features.
     assert.deepEqual(viewer().appSettings.map(setting => [setting.label, setting.checked]),
-      [['Share anonymous usage data', false], ['Quick edit', true]]);
-    // The card goes to the viewer (it asks once a model is on screen), and its answer is a card's: the
-    // server applies it only to an open question. Answered, it is gone.
-    await act(() => viewer().notice.props.onAnswer(false));
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics').at(-1), ['/__cad/analytics', { share: false, card: true }]);
-    assert.equal(viewer().notice, null);
+      [['Share usage stats', false], ['Quick edit', true]]);
+    // Nothing asks (a cadgen command says it once): the viewer has no notice, and the app menu's toggle
+    // is the person's answer.
+    assert.equal(viewer().notice, undefined);
+    await act(() => viewer().appSettings[0].onCheckedChange(false));
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics').at(-1), ['/__cad/analytics', { share: false }]);
     // A newer release is the update button, as in the CAD app: first in the navbar while this install is
     // behind. A page in a browser cannot reach the agent's chat, so its card only copies the prompt, and
     // nothing it does is kept: the server is only read.

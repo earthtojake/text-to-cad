@@ -73,6 +73,41 @@ test("a bounded GET reports timeout context but the same bound never aborts a PO
   );
 });
 
+test("a bounded GET is bounded by the server's silence: a long answer that keeps arriving is read, one that stops fails", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  let source;
+  // A body arriving a part at a time, which the request's signal ends, as fetch's own does.
+  t.mock.method(globalThis, "fetch", async (_requestUrl, { signal }) => new Response(new ReadableStream({
+    start(controller) {
+      source = controller;
+      signal.addEventListener("abort", () => controller.error(signal.reason), { once: true });
+    }
+  })));
+  const encoder = new TextEncoder();
+  const read = requestViewerJson(url, {}, "drawing", { timeoutMs: 10_000 });
+  await settle();
+  for (const part of ['{"primitives":', '[1,2,', '3]}']) {
+    t.mock.timers.tick(9_000);
+    source.enqueue(encoder.encode(part));
+    await settle();
+  }
+  t.mock.timers.tick(9_000);
+  source.close();
+  assert.deepEqual(await read, { primitives: [1, 2, 3] });
+
+  const stalled = requestViewerJson(url, {}, "drawing", { timeoutMs: 10_000 });
+  await settle();
+  source.enqueue(encoder.encode('{"primitives":'));
+  await settle();
+  t.mock.timers.tick(10_000);
+  await assert.rejects(stalled, (error) => {
+    assert.equal(error.failure.kind, "timeout");
+    assert.match(error.failure.detail, /stopped sending its answer for 10 seconds/);
+    return true;
+  });
+});
+
 test("artifact requests preserve security header, GET/POST semantics and recover normally", async (t) => {
   globalThis.window = {};
   t.after(() => { delete globalThis.window; });

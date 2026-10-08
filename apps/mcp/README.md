@@ -21,8 +21,8 @@ extension):
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
   the whole viewer at card size: its navbar (the logo, which opens the app menu,
   first; the file name that opens the explorer; the ⋯; then, at the right, the
-  update button, and Full size last where the host can show a view full size), the
-  tools, the view cube with Display and Preview on top of it, and Quick Edit. A
+  update button, Full size where the host can show a view full size, and last Display
+  and Preview), the tools, the view cube, and Quick Edit. A
   newer card retires the older ones.
 
 A client that renders no MCP Apps never loads this page: its `cad_show` answers
@@ -51,15 +51,31 @@ reference host `basic-host` does.
   Discord and X.
 - **A view browses from its file's folder.** The file name in the navbar opens
   the explorer: one folder at a time, its subfolders and then its CAD files,
-  starting at the file's; the last three folders as a breadcrumb, those above
-  them under "…"; and "Filter files..." finds the files anywhere under the folder
-  (the server's bounded `/__cad/search`). A pick shows the file and closes it.
-  Nothing says where a view may browse: a tab, a card and the web viewer browse
-  the same way.
+  starting at the file's, a subfolder opening inline at a press and in the
+  explorer's place at a double-click; as many of the last three folders as fit whole as a
+  breadcrumb, those above them under "…"; and "Filter files..." finds the files
+  anywhere under the folder (the server's bounded `/__cad/search`). A pick shows
+  the file and closes it. Nothing says where a view may browse: a tab, a card and
+  the web viewer browse the same way.
+- **A view keeps its own history.** As a browser keeps a tab's: every file a
+  view showed, in order, the agent's shows and the person's own moves alike
+  (`ModelView.tsx`). The navbar's Back and Forward, between its logo and the
+  file's name, walk it, each disabled where it has nowhere to go; a move after a
+  Back drops what was ahead, and a show of what is already on screen adds nothing.
+  The home is no step: it is a bigger way to pick a recent file, so going there
+  leaves the history as it stands, and the file picked there follows the one the
+  view left.
+  It is the view's, in memory: another tab or card has its own, and a view opened
+  again starts with one step. Going back opens that model afresh, as a browser's
+  Back does in the web viewer. A file handler's view, which shows its file alone,
+  has neither button.
 - ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
-  file the host handed over, with no home and no explorer: the host's own file
-  tree is its navigation. Its navbar still has the C logo and its menu, without
-  Back to files.
+  file the host handed over, and nothing else, for as long as it is open: no home
+  and no explorer (the host's own file tree is its navigation), no Back or Forward,
+  and a renderer's link to another file (a robot's mesh) is plain text. Its navbar
+  still has the C logo and its menu, without Back to files. The agent reads it
+  (`cad_view` lists it) but shows nothing in it: `cad_show` refuses its view, and
+  the page ignores a show that reaches it anyway.
 - **An agent reads the sidebar too, and shows beside its thread.** Codex runs the sidebar page
   in a thread, and a server process, of its own, so no thread's agent syncs with it. Each process
   publishes its sidebar views beside the model library (`cadgen/mcp/sidebar_views.py`), and an
@@ -92,21 +108,29 @@ reference host `basic-host` does.
   the server's environment (`CADGEN_INSTALL_CHANNEL`, `cadgen/_internal/channel.py`),
   with `CADGEN_AUTO_UPDATED=1` where something else keeps the copy up to date: only a
   copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
-  Marketplace) is left to its store, and Gemini's extension to Gemini. The analytics: the server
-  notes its use -- tool calls (not the page's plumbing), view activity from each
-  view's sync (`focused`), and the files views show (counted as a view adds one to
-  the library), as salted one-way codes --
-  and, only with consent, sends it once a minute (`cadgen/analytics.py`): never a
-  path, an argument or a file. Every install is asked once by the page
-  (`/__cad/analytics`, the shared `ConsentCard` from `@text-to-cad/ui/consent`, the
-  viewer's `notice`: top-right once a model is on screen, Quick Edit under it,
-  never on the home; the browser viewer asks the same way, and one answer counts
-  for both), and nothing is sent before a yes; the app menu's **Share anonymous usage
-  data** (`appSettings`) changes the answer later. Its **Quick edit** (on until
+  Marketplace) is left to its store, and Gemini's extension to Gemini. The telemetry: the server
+  counts its use -- tool calls (not the page's plumbing), view activity from each
+  view's sync (`focused`), and the files views show (counted by format, once a day,
+  as a view adds one to the library) --
+  and sends the counts at most every five minutes (`cadgen/analytics.py`): never a path,
+  an argument or a file. A Quick Edit that went is counted through the host's `usage`, and
+  crashes are reported too: a tool's call or a route that failed for no reason its caller
+  gave, and the page's own (`main.tsx`, its frames named by the chunks the inline loader
+  made blob URLs of, and by each chunk's debug id), as their type and frames, never a message.
+  The build keeps a source map of each chunk as the page runs it (`dist/sourcemaps`, which a
+  release uploads to PostHog), leading into the shared packages' own source, whose modules
+  load with their maps (`@text-to-cad/core/source-maps`): every edit the build makes to a
+  module or a chunk is folded into rolldown's map, each import's placeholder is as wide as the
+  blob URL that replaces it, and the chunk's debug
+  id is the one its edited text and map decide (`@text-to-cad/core/chunk-ids`), never the
+  id of the unedited chunk the CAD Viewer may ship. It is on by default once
+  a `cadgen` command has said so, once, and nothing asks. The app menu's **Share usage
+  stats** (`appSettings`, through `/__cad/analytics`) changes the answer, one answer for
+  this app and the browser viewer. Its **Quick edit** (on until
   the person turns it off) is read and changed the same way, through `/__cad/features`, and kept
   beside the analytics answer (`cadgen/features.py`): one choice for the sidebar, every
   thread's tab, every inline card and the browser viewer. The channel is reported with the
-  counts; it decides nothing there. The agent's `cad_analytics` reports the
+  counts; it decides nothing there. The agent's `cad_telemetry` reports the
   setting and turns it off, never on.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
@@ -160,7 +184,9 @@ reference host `basic-host` does.
   read, and the cache verifies a tessellation's digest of the whole as of any
   body. The server refuses any reply still longer (502), and an agent's
   screenshot longer than that, rather than send it. 4 MiB loads as fast as 8 MiB
-  did.
+  did. The server produces such a body once: each later part names it
+  (`if-range: <etag>`) and is cut from the body the first part kept, never by
+  running the route again.
 - **One file.** The build inlines scripts, styles, workers (as blobs) and the
   drawing editor's fonts (as data URIs) into `dist/index.html`, and fails if
   anything would be left outside it: the host serves one resource and nothing
@@ -209,7 +235,8 @@ its view — camera, Display settings, pose — through updates of it, and leavi
 another model or the home drops it, as in the web Viewer. A view the
 host creates again (its frame re-created) starts afresh: nothing names a view across its
 frames, so there is nothing to keep its record under. `App.tsx` frames it (full page, or
-an inline card whose height the host is told; its Full size is the navbar's last control). In a tab, preview's playbar sits on the line of Codex's
+an inline card whose height the host is told; its Full size is the last of the navbar's
+own controls, before the view's Display and Preview). In a tab, preview's playbar sits on the line of Codex's
 composer, which floats over the page (`--cad-viewport-bottom-center`), and the
 home's list scrolls clear of it (`--cad-host-bottom-inset`).
 

@@ -28,6 +28,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from cadgen.daemon import client, transport  # noqa: E402
 from cadgen.daemon import pool as pool_mod  # noqa: E402
 from cadgen.daemon import server  # noqa: E402
+from cadgen.daemon.jobs import JobLedger
 
 
 class _ScriptedChannel:
@@ -149,6 +150,25 @@ class ResidentProcessLifecycle(unittest.TestCase):
         self.assertEqual(popen.call_args.kwargs["cwd"], tempfile.gettempdir())
         ensure.assert_not_called()
 
+    def test_the_daemon_takes_no_telemetry_switch_from_the_client_that_started_it(self):
+        # It serves every client; each client's switch travels with its own builds instead.
+        spawned = mock.Mock(pid=1234)
+        started_from = {"PATH": "/bin", "DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "0"}
+        with tempfile.TemporaryDirectory(prefix="cadgen-daemon-launch-") as tmp, \
+                mock.patch.object(client.transport, "ensure_authkey"), \
+                mock.patch.object(client, "daemon_identity", return_value="test"), \
+                mock.patch.object(client, "log_path", return_value=pathlib.Path(tmp) / "daemon.log"), \
+                mock.patch.object(client.subprocess, "Popen", return_value=spawned) as popen:
+            from cadgen.daemon import executors
+
+            with mock.patch.object(executors, "worker_env", return_value=started_from):
+                self.assertIs(client._spawn_daemon("test-address"), spawned)
+
+        env = popen.call_args.kwargs["env"]
+        self.assertEqual(env["PATH"], "/bin")
+        for name in ("DO_NOT_TRACK", "CADGEN_TELEMETRY"):
+            self.assertNotIn(name, env)
+
     def test_replaced_key_is_retried_only_after_the_live_owner_republishes(self):
         channel = mock.Mock()
         with mock.patch.object(client.transport, "read_authkey", side_effect=[b"stale", b"owned"]), \
@@ -254,13 +274,16 @@ class ServerRelaysTheDeath(unittest.TestCase):
         conn = self._Conn()
         request = {"tool": "step-compile", "argv": ["x.step"], "cwd": "/w", "prog": "cadgen step compile"}
         logged: list[str] = []
-        with mock.patch.object(server, "_POOL", pool), \
+        jobs = JobLedger()
+        with mock.patch.object(server, "_JOBS", jobs), \
+                mock.patch.object(server, "_POOL", pool), \
                 mock.patch.object(server, "_log", logged.append), \
                 mock.patch.object(server, "CLIENT_LIVENESS_INTERVAL_SECONDS", 60.0):
             server._handle_request(conn, request)
         kinds = [next(iter(frame)) for frame in conn.frames if frame != {"stream": "stdout", "data": ""}]
         self.assertEqual(kinds, ["stream", "workerDied", "exit"])
         died = next(frame["workerDied"] for frame in conn.frames if "workerDied" in frame)
+        self.assertEqual(jobs.snapshot()[0]["error"], died["detail"])
         self.assertEqual(died["pid"], 777)
         self.assertEqual(died["exitStatus"], -9)
         self.assertIn("SIGKILL", died["detail"])

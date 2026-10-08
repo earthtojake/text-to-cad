@@ -8,43 +8,60 @@ product and `models/` as the shared fixture/artifact area.
 
 ## Branch First
 
-`main` is the only branch you develop on: the source tree, what installers
-clone, and what releases are cut from. Branch from `main` and open PRs against
-`main`; never push it directly. There is no development symlink layout — every
-path in the tree is the real file. `plugin`, the plugin claude.ai's directory
-follows (and `claude-plugin`, its old name, until claude.ai's listing moves), is
-written only by `Publish Release` (see below); never commit to it. `main` stays
-an installable plugin too: every manifest and MCP config lives at its root.
+`main` is the only branch you develop on: the source tree, and what releases
+are cut from. Branch from `main` and open PRs against `main`; never push it
+directly. There is no development symlink layout — every path in the tree is the
+real file. Installers follow `latest`, and claude.ai's directory
+`claude-plugin`: the plugin alone, one commit per release,
+written only by `Publish Release` once the release is on PyPI (see below); never
+commit to them. `main` stays an installable plugin too: every manifest and MCP
+config lives at its root.
 
 ## Release Workflow
 
-Do not bump the canonical release version in `VERSION` during normal
-development work; the `Test` workflow refuses a PR that changes `VERSION` from
-any branch but `release/*`. Releases are two GitHub Actions workflows:
+A pull request that changes `VERSION` is a release, and merging it releases it.
+Never bump during normal development work, and never pick the bump yourself: if
+a request to make or ship a release does not name patch, minor, major, or an
+exact version, ask which one. A release pull request comes one of two ways:
 
-- `Prepare Release` (`release-prepare.yml`, manual): opens and merges a release
-  PR against `main` that bumps `VERSION`, the derived metadata and every
-  skill's `cadgen==` pin together.
-- `Publish Release` (`release-publish.yml`): fires on the push that merge makes.
-  Bundles, tests, builds the `cadgen` wheel, installs and exercises it, keeps
-  the distribution as a workflow artifact, then — on `main` only — uploads to
-  PyPI, deploys the docs site, and tags (`v<VERSION>`; releases before 0.5.0
-  are bare `0.4.x` tags) + GitHub-Releases that same merged commit with the
-  wheel and sdist that went to PyPI attached as release assets, plus the
-  plugin ZIP that a person uploads to OpenAI's plugin portal, which has no API.
-  It also commits the plugin alone (Claude, Cursor and Gemini manifests, icon,
-  `claude.mcp.json`, `skills/`, `LICENSE`, README) onto the `plugin` branch,
-  which claude.ai's plugin directory follows (`scripts/release/plugin_branch.py`).
+- **Its own pull request**, for a release of what `main` already has — what
+  "make a release" means unless the user names a pull request to carry it:
+  dispatch `Prepare Release`
+  (`gh workflow run release-prepare.yml --ref main -f bump=<patch|minor|major>`,
+  or `-f set_version=X.Y.Z`). It opens `release/X.Y.Z` with the bump and never
+  merges it.
+- **On the pull request that should carry it**: on its branch,
+  `scripts/release/bump-version.sh <patch|minor|major|X.Y.Z>` sets `VERSION` past
+  `main`'s and stamps the derived metadata and every `cadgen==` pin with it.
 
-When asked to publish, make, or ship a release, dispatch `Prepare Release` on
-`main`. Never pick the semver bump yourself: if the request does not name patch,
-minor, major, or an exact version, ask which one before dispatching. To resume a
-run that uploaded the wheel but failed before the tag or the docs deploy, or to
-republish the current head, dispatch `Publish Release` on `main` (`publish=false`
-leaves the GitHub Release as a draft). `target=build-test` on `Prepare Release`
-is the rehearsal — the same PR against `build-test`, whose pushes run `Publish
-Release` without PyPI, docs or tag — and is never a release; use it only when the
-user explicitly asks to test the pipeline.
+Merge a release pull request only on the user's explicit word, once its checks
+pass: the merge is the release.
+
+- `Test` runs every job for a `VERSION` change, so a release is tested whole.
+  Its Version Check vets the bump: a branch of this repository only (a fork
+  cannot release), a version past `main`'s and the latest tag, every stamp in
+  step.
+- `Publish Release` (`release-publish.yml`) runs on the merge. It finds the
+  `Test` run that recorded the merged tree as tested in full (else it runs every
+  `Test` job on it first), builds the plugin ZIP, the bundle and the `cadgen`
+  wheel and sdist, installs and exercises the wheel, uploads the pages' source
+  maps to PostHog and the wheel to PyPI, and
+  waits until PyPI's index lists it. Only then does it commit the plugin alone
+  onto the branches installers follow (`scripts/release/plugin_branch.py`):
+  `latest`, which every install command names, and `claude-plugin`, which
+  claude.ai's directory tracks. After them it deploys the docs site, which moves
+  the version feed, and tags (`v<VERSION>`; releases before 0.5.0 are bare
+  `0.4.x` tags) and GitHub-Releases the release commit, with the wheel and sdist
+  that went to PyPI attached as release assets, plus the plugin ZIP that a
+  person uploads to OpenAI's plugin portal, which has no API.
+
+To finish a run that stopped partway, dispatch `Publish Release` on `main`
+(`publish=false` leaves the GitHub Release as a draft): it publishes the commit
+that last moved `VERSION`, if that version has no tag yet. `build-test` is the
+rehearsal branch — `Prepare Release` with `-f target=build-test` opens a bump
+against it, whose merge is built and installed with no PyPI, branches, docs or
+tag — and is never a release; use it only when the user explicitly asks to test
+the pipeline.
 
 The standalone `Deploy Docs` workflow redeploys the docs site from a ref
 (default `main`, or a release tag) without running a release.
@@ -69,9 +86,11 @@ path, the rehearsal, and local/manual fallbacks.
 ## Repo Map
 
 - `skills/`: agent skills and their references/scripts.
-- `.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`:
+- `.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`, and the
+  [Agent Plugins](https://agent-plugins.org) standard's `plugin.json` and `mcp.json`:
   agent plugin manifests. The repository root is the plugin package; its skills are
-  `skills/` directly.
+  `skills/` directly. Installers take it from the `latest` branch, which
+  `scripts/release/plugin_branch.py` builds from this tree at each release.
 - `models/`: sample and durable CAD/robot-description fixtures.
 - `apps/web/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
 - `apps/mcp/`: the CAD app agent hosts render: tabs in Codex, cards in Claude Desktop (its server is `cadgen mcp`).
@@ -164,6 +183,15 @@ path, the rehearsal, and local/manual fallbacks.
   entry point, `scripts/bundle/bundle.sh`; `bundle.sh --check` builds it and
   asserts every required output. Call `scripts/bundle/cadgen-runtime.sh`
   directly only when debugging one stage.
+- Installs always work from `main`. A command that names no branch installs `main`
+  as it is, so every manifest, MCP config and the marketplace catalog stay at its
+  root, the catalog lists the plugin at `./`, and nothing on `main` points an
+  installer at another branch. The documented commands name `latest` instead: the
+  plugin alone, one commit per release, which `Publish Release` writes once the
+  release is on PyPI, so it installs lean (no monorepo, no npm install of the
+  workspace) and is never ahead of PyPI. `latest` is a channel, so a slower
+  `stable` can join it later. `tests/python/global/test_plugin_manifests.py`
+  holds both halves.
 - Never let a symlink reach the published tree. Agent installers disagree about
   symlinks and one loses data silently: the Skills CLI dereferences them, Claude
   Code preserves them, and Codex `plugin add` drops them with no error, shipping
@@ -196,9 +224,9 @@ path, the rehearsal, and local/manual fallbacks.
 - Use path-targeted search, validation, and `git status`; avoid broad scans over
   generated CAD artifacts unless the task requires them.
 - Treat `VERSION` as the canonical release version. Do not hand-edit duplicate
-  package, plugin, lockfile, or Python `pyproject.toml` versions; release
-  preparation and `scripts/bundle/bundle.sh` stamp them from the canonical
-  version.
+  package, plugin, lockfile, or Python `pyproject.toml` versions;
+  `scripts/release/bump-version.sh` and `scripts/bundle/bundle.sh` stamp them
+  from the canonical version.
 
 ## Environments
 
@@ -228,10 +256,13 @@ when touching shared surfaces or before handoff:
   `test-python.sh` takes `--select cadgen|viewer|skills|all` and
   `--print-weights`; `test-js.sh` takes `--select core|ui|web|mcp|all`. See
   `scripts/README.md`.
-- In GitHub Actions, `test.yml` runs one conditional job per concern. The graph,
-  stable required check names and workspace install recipes are in
-  `CONTRIBUTING.md#ci`. Core changes reach all consumers; UI reaches web; app
-  changes do not run unrelated apps. Manual dispatch runs all jobs.
+- In GitHub Actions, `test.yml` runs one job per concern, each only when the
+  change reaches it: `scripts/github-workflows/select_checks.py` maps every
+  changed path to the tests that read it, and the Python jobs run just those
+  files. A test that reads a new kind of path gets a rule there
+  (`CONTRIBUTING.md#ci`); an unknown path, `VERSION`, `packages/core`, the
+  lockfiles and the test machinery run everything, as does a manual dispatch.
+  Required check names stay stable.
 - Canonical release version: `scripts/release/check-version.sh`
 - Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
 - CAD Viewer or shared packages: build exports with `npm run build:packages`,

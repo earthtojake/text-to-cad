@@ -370,6 +370,7 @@ def _write_drawing_record(
             "shas": dict(getattr(source_closure, "file_hashes", None) or {}),
             "names": {rel: list(names) for rel, names in (getattr(source_closure, "names", None) or {}).items()},
             "wholes": dict(getattr(source_closure, "wholes", None) or {}),
+            "own": {rel: list(names) for rel, names in (getattr(source_closure, "own", None) or {}).items()},
             "static": False,
         },
         "constants": dict(getattr(source_closure, "constants", None) or {}),
@@ -382,7 +383,7 @@ def _write_drawing_record(
     }
     decision = decide(model_path, ran_closure_hash=closure_hash, ran_files=closure_files,
                       ran_names=record["closure"]["names"], ran_shas=record["closure"]["shas"],
-                      ran_wholes=record["closure"]["wholes"])
+                      ran_wholes=record["closure"]["wholes"], ran_own=record["closure"]["own"])
     if not decision.publish_outputs:
         return
     write_record(model_path, record)
@@ -746,11 +747,12 @@ def _run_script_generator_body(
             raw_payload = generator()
 
     # A model's own outputs are never its inputs: reading one back reads the
-    # previous run, so a read the trace saw is dropped here.
-    from cadgen.metadata import declared_output_paths
+    # previous run, so a read the trace saw is dropped here, and a folder its
+    # code listed is hashed without them.
     from cadgen.store.closure import build_closure
 
-    read_files, listed = trace.inputs(outputs=declared_output_paths(spec.script_path, function=entry_name))
+    own_outputs = _own_outputs(spec, model_format, entry_name)
+    read_files, listed = trace.inputs(outputs=own_outputs)
     # The closure a record carries: the script + its static closure (stopping at
     # child models — a result edge is tracked by pin, not by file), every file
     # that executed (hashed AT execution), and the data files and folders the run
@@ -766,6 +768,7 @@ def _run_script_generator_body(
         executed=executed_hashes.hashes,
         inputs=read_files,
         listings=listed,
+        outputs=own_outputs,
         children=[child for child, _tree in child_trees],
         sources=executed_hashes.sources,
     )
@@ -776,6 +779,7 @@ def _run_script_generator_body(
         file_hashes=store_closure.shas,
         names=store_closure.names,
         wholes=store_closure.wholes,
+        own=store_closure.own,
     )
     board_outputs: dict[Path, dict] | None = None
     if model_format == "step" and spec.pcb_path is not None:
@@ -887,6 +891,7 @@ def _run_script_generator_body(
         generated_scene.source_closure_file_hashes = dict(getattr(source_closure, "file_hashes", None) or {})
         generated_scene.source_closure_names = dict(getattr(source_closure, "names", None) or {})
         generated_scene.source_closure_wholes = dict(getattr(source_closure, "wholes", None) or {})
+        generated_scene.source_closure_own = dict(getattr(source_closure, "own", None) or {})
         generated_scene.source_closure_constants = dict(source_closure.constants)
     if model_format == "dxf":
         written = spec.dxf_path
@@ -899,6 +904,20 @@ def _run_script_generator_body(
     if model_format == "harness":
         return harness_written
     return generated_scene if model_format == "step" else None
+
+
+def _own_outputs(spec: EntrySpec, model_format: str, entry_name: str) -> list[Path]:
+    """Every file a build of this model publishes beside its source: the outputs
+    its decorators declare and, beside a written STEP, its sidecar -- whether or
+    not this build writes one, since an annotation refresh can add it later."""
+    from cadgen.metadata import declared_output_paths
+
+    outputs = declared_output_paths(spec.script_path, function=entry_name)
+    if model_format == "step" and spec.step_path is not None and spec.step_output:
+        from cadgen._internal.source_sidecar import source_sidecar_path
+
+        outputs.append(source_sidecar_path(spec.step_path))
+    return outputs
 
 
 def _is_git_lfs_pointer(step_path: Path) -> bool:

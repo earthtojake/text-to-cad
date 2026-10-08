@@ -127,6 +127,13 @@ it('selects a link in the scene graph and reads the description back', () => {
   expect(screen.getByRole('button', { name: 'Select shoulder_link' }).getAttribute('aria-pressed')).toBe('false');
 });
 
+it('names a mesh as plain text where the view opens no other file (a host’s file handler)', () => {
+  render(<Harness/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }));
+  const details = within(screen.getByRole('region', { name: 'Reference details' }));
+  expect(details.getByText('meshes/base.3mf').closest('button')).toBeNull();
+});
+
 it('reads a link’s inertial and geometry back, opens the mesh files it names and follows its parent and children', () => {
   const onOpenFile = vi.fn();
   render(<Harness onOpenFile={onOpenFile}/>);

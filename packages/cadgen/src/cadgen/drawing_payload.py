@@ -1,17 +1,33 @@
 """A DXF flattened into a 2D render payload by ezdxf's drawing add-on.
 
-One function does the work: ``ezdxf``'s ``Frontend`` walks the modelspace and
-hands a backend the primitives every entity reduces to — text outlined to
-filled paths, dimensions exploded to their lines and arrow heads, hatches to
-fills or pattern lines, block references to the geometry of their contents.
-Nothing here knows about LINE or ARC or HATCH; the add-on already resolved all
-of that, which is the whole reason this module is 400 lines instead of 4000.
+One function does the work: ``ezdxf``'s frontend walks the modelspace and
+hands a backend the primitives every entity reduces to — dimensions exploded
+to their lines, arrow heads and text, hatches to fills or pattern lines, block
+references to the geometry of their contents, MTEXT to its laid-out lines and
+words. Nothing here knows about LINE or ARC or HATCH; the add-on already
+resolved all of that, which is the whole reason this module is 500 lines
+instead of 4000.
 
 Coordinates are DXF modelspace coordinates, **y up**, rounded to
 ``_COORDINATE_DECIMALS`` places. Rounding is not cosmetic: a flat pattern's
 payload shrinks ~3x, and the rounded numbers are also what ``bounds`` is
 computed from, so a consumer that fits the view to ``bounds`` fits it to the
 geometry it will actually draw.
+
+Text
+----
+Text stays text. The add-on would outline every glyph into filled paths — about
+23 KB of payload, and most of the render's time, per line of text, so a sheet of
+notes became a hundred megabytes nobody could open. Instead the pipeline's one
+text hook (``draw_text``) is given the string where the add-on has placed it: a
+``text`` primitive carries the string, the font it is set in, its cap height,
+the advance width ezdxf measured for it in that font, and the affine transform
+from its own space (baseline-left at the origin, y up) to the drawing. ezdxf has
+already applied alignment, rotation, width factor, oblique, mirroring and block
+transforms to that transform, and broken MTEXT into lines and words; a client
+sets the string at that cap height, stretches it to that width (so a font that
+differs from ezdxf's keeps the layout ezdxf computed), and paints it. Text inside
+a clipped block reference is still outlined, because only paths can be clipped.
 
 The default pen
 ---------------
@@ -35,7 +51,9 @@ The payload is derived data, cached in the store's ``drawing`` index — keyed b
 the document's bytes plus this extraction's scheme, exactly as every other
 input-addressed derivation is (``STORE.md`` §2). ``drawing_payload_bytes`` is
 the door: a second call for unchanged bytes never re-enters ezdxf, and never
-even imports it.
+even imports it. Its two halves — ``cached_drawing_payload`` and
+``render_drawing_payload`` under one ``drawing_payload_key`` — are there for a
+caller that renders off its request (the CAD Viewer's route).
 """
 
 from __future__ import annotations
@@ -51,16 +69,20 @@ __all__ = [
     "DRAWING_PAYLOAD_SCHEMA_VERSION",
     "DrawingReadError",
     "build_drawing_payload",
+    "cached_drawing_payload",
     "drawing_extraction_scheme",
     "drawing_payload_bytes",
+    "drawing_payload_key",
     "encode_drawing_payload",
     "read_drawing_document",
+    "render_drawing_payload",
 ]
 
 # Bumped when the payload's SHAPE changes. It rides in the payload (a client
 # checks it before drawing) and in the cache key (an old shape is not served
-# from the store after an upgrade).
-DRAWING_PAYLOAD_SCHEMA_VERSION = 1
+# from the store after an upgrade). 2: text is a `text` primitive and the
+# payload lists its `fonts`, where 1 outlined every glyph into `filled-paths`.
+DRAWING_PAYLOAD_SCHEMA_VERSION = 2
 
 # The layout foreground handed to ezdxf, and therefore the exact colour every
 # default-pen primitive comes back wearing. Not in the ACI palette; see the
@@ -71,10 +93,15 @@ _DEFAULT_PEN_SENTINEL = "#010203"
 _SENTINEL_BACKGROUND = "#ffffff"
 
 _COORDINATE_DECIMALS = 4
+# A text transform's linear part (rotation, width factor, oblique, scale) is
+# kept finer than a coordinate: it multiplies the whole length of a line of text.
+_LINEAR_DECIMALS = 6
 
 # ezdxf's own primitive names, unchanged: "point", "lines", "path",
 # "filled-paths", "filled-polygon". Renaming them would create a second
-# vocabulary for one set of shapes.
+# vocabulary for one set of shapes. "text" is this module's: ezdxf has no
+# primitive for a string it has not outlined.
+_TEXT = "text"
 
 _extraction_scheme: str | None = None
 
@@ -161,10 +188,58 @@ class _DefaultPenLayers(dict):
         return self._fallback if found is None else found
 
 
+_text_pipeline_class = None
+
+
+def _text_pipeline(backend):
+    """ezdxf's 2D render pipeline, with ONE change: text reaches the backend as text.
+
+    ``RenderPipeline2d.draw_text`` is the single place every TEXT, ATTRIB, MTEXT
+    line, MTEXT word and dimension label passes through, already placed: the
+    string (one line, never a newline), the transform from its own space to the
+    drawing, and its cap height. ezdxf outlines it there; this hands the backend
+    a ``text`` record instead (the module docstring). What it does not take over
+    it leaves to ezdxf: an empty string draws nothing, and text inside a clipping
+    boundary (a clipped block reference) is outlined so the clip applies to it.
+    """
+    global _text_pipeline_class
+    if _text_pipeline_class is None:
+        from ezdxf.addons.drawing.pipeline import RenderPipeline2d, prepare_string_for_rendering
+
+        class _TextPipeline(RenderPipeline2d):
+            def draw_text(self, text, transform, properties, cap_height, dxftype="TEXT"):
+                face = properties.font or getattr(self, "default_font_face", None)
+                if self.clipping_portal.is_active or face is None:
+                    super().draw_text(text, transform, properties, cap_height, dxftype)
+                    return
+                if not text.strip():
+                    return
+                text = prepare_string_for_rendering(text, dxftype)
+                try:
+                    width = self.text_engine.get_text_line_width(text, face, cap_height)
+                    descender = self.text_engine.get_font_measurements(face, cap_height).descender_height
+                except (RuntimeError, ValueError):
+                    # Where ezdxf cannot measure a string it cannot outline either, and draws nothing.
+                    return
+                # A row-vector Matrix44: x' = x*m00 + y*m10 + m30, y' = x*m01 + y*m11 + m31,
+                # which is Canvas 2D's (a, b, c, d, e, f) read off in this order.
+                linear = (transform[0, 0], transform[0, 1], transform[1, 0], transform[1, 1])
+                offset = (transform[3, 0], transform[3, 1])
+                self.backend.add_entity(
+                    _TEXT,
+                    (text, linear, offset, float(cap_height), float(width), float(descender), face),
+                    self.get_backend_properties(properties),
+                )
+
+        _text_pipeline_class = _TextPipeline
+    return _text_pipeline_class(backend)
+
+
 def _render(document):
     """``(render context, ezdxf primitive dicts)`` for the modelspace."""
-    from ezdxf.addons.drawing import Frontend, RenderContext
+    from ezdxf.addons.drawing import RenderContext
     from ezdxf.addons.drawing.config import Configuration, LineweightPolicy
+    from ezdxf.addons.drawing.frontend import UniversalFrontend
     from ezdxf.addons.drawing.json import CustomJSONBackend
     from ezdxf.addons.drawing.properties import LayerProperties, LayoutProperties
 
@@ -178,9 +253,12 @@ def _render(document):
     # ABSOLUTE lineweights keep the frontend from scaling strokes against a
     # page size we do not have. The widths are dropped from the payload anyway
     # (the client draws hairlines), but the policy must still be pinned or the
-    # frontend reads a default that could change under us.
-    frontend = Frontend(
-        context, backend, config=Configuration(lineweight_policy=LineweightPolicy.ABSOLUTE)
+    # frontend reads a default that could change under us. (`Frontend` is this
+    # same frontend over a plain `RenderPipeline2d`.)
+    frontend = UniversalFrontend(
+        context,
+        _text_pipeline(backend),
+        config=Configuration(lineweight_policy=LineweightPolicy.ABSOLUTE),
     )
 
     # The explicit layout properties are the point: without them ezdxf picks
@@ -310,6 +388,65 @@ def _polygon(vertices, extent):
     return [_point(vertex, extent) for vertex in vertices]
 
 
+def _linear(value):
+    """One coefficient of a text transform's linear part, rounded finer than a coordinate."""
+    number = round(float(value), _LINEAR_DECIMALS)
+    if number == 0.0:
+        return 0
+    integral = int(number)
+    return integral if integral == number else number
+
+
+class _Fonts:
+    """The payload's ``fonts``: one row per face text is set in, in first-seen order.
+
+    A row is what a client needs to name the face to its own font machinery —
+    family, weight, italic — and nothing about where ezdxf found it: the file is
+    this machine's, and the width every string is stretched to (``text``'s
+    ``width``) already carries the layout ezdxf computed with it.
+    """
+
+    __slots__ = ("rows", "_index")
+
+    def __init__(self) -> None:
+        self.rows: list[dict] = []
+        self._index: dict[tuple, int] = {}
+
+    def of(self, face) -> int:
+        family = str(getattr(face, "family", "") or "sans-serif")
+        weight = int(getattr(face, "weight", 400) or 400)
+        italic = bool(face.is_italic or face.is_oblique)
+        key = (family, weight, italic)
+        index = self._index.get(key)
+        if index is None:
+            index = self._index[key] = len(self.rows)
+            self.rows.append({"family": family, "weight": weight, "italic": italic})
+        return index
+
+
+def _text(record, fonts, extent):
+    """A ``text`` primitive's fields, its box counted into the extent.
+
+    The box is the string's advance width by its cap height, down to the font's
+    descender, put through the ROUNDED transform — the numbers a client draws
+    with — so a fit to ``bounds`` holds the text it fits.
+    """
+    text, linear, offset, cap_height, width, descender, face = record
+    a, b, c, d = (_linear(value) for value in linear)
+    e, f = (_rounded(value) for value in offset)
+    height = _rounded(cap_height)
+    advance = _rounded(width)
+    for x, y in ((0, -descender), (width, -descender), (width, cap_height), (0, cap_height)):
+        _point((a * x + c * y + e, b * x + d * y + f), extent)
+    return {
+        "text": text,
+        "font": fonts.of(face),
+        "height": height,
+        "width": advance,
+        "transform": [a, b, c, d, e, f],
+    }
+
+
 def _geometry(primitive_type, geometry, extent):
     if primitive_type == "lines":
         return _lines(geometry, extent)
@@ -411,30 +548,33 @@ def _units(document):
 def build_drawing_payload(path) -> dict:
     """The flat 2D render payload for one ``.dxf`` file.
 
-    ``{schemaVersion, units, bounds, layers, primitives}``; see the module
-    docstring for the coordinate and colour contracts.
+    ``{schemaVersion, units, bounds, layers, fonts, primitives}``; see the
+    module docstring for the coordinate, colour and text contracts.
     """
     document = read_drawing_document(path)
     context, emitted = _render(document)
 
     extent = _Extent()
+    fonts = _Fonts()
     primitives = []
     for primitive in emitted:
         properties = primitive["properties"]
         primitive_type = str(primitive["type"])
-        primitives.append(
-            {
-                "type": primitive_type,
-                "layer": str(properties["layer"]),
-                "color": _color(properties.get("color")),
-                "geometry": _geometry(primitive_type, primitive["geometry"], extent),
-            }
-        )
+        head = {
+            "type": primitive_type,
+            "layer": str(properties["layer"]),
+            "color": _color(properties.get("color")),
+        }
+        if primitive_type == _TEXT:
+            primitives.append({**head, **_text(primitive["geometry"], fonts, extent)})
+        else:
+            primitives.append({**head, "geometry": _geometry(primitive_type, primitive["geometry"], extent)})
     return {
         "schemaVersion": DRAWING_PAYLOAD_SCHEMA_VERSION,
         "units": _units(document),
         "bounds": extent.bounds(),
         "layers": _layers(context, emitted),
+        "fonts": fonts.rows,
         "primitives": primitives,
     }
 
@@ -492,17 +632,12 @@ def _document_hash(path) -> str:
     return digest.hexdigest()
 
 
-def drawing_payload_bytes(path) -> bytes:
-    """``encode_drawing_payload(build_drawing_payload(path))``, cached by content.
-
-    The store answers for bytes it has already drawn, so re-opening a drawing
-    — or opening one two tabs already have — never re-enters ezdxf. A store
-    that cannot be read or written costs the cache, never the answer.
-    """
+def drawing_payload_key(path) -> str:
+    """The store key of this file's payload: its bytes' hash under this extraction's scheme."""
     from cadgen.store import drawings as drawing_index
 
     try:
-        key = drawing_index.drawing_input_key(
+        return drawing_index.drawing_input_key(
             _document_hash(path), scheme=drawing_extraction_scheme()
         )
     except OSError as error:
@@ -511,9 +646,33 @@ def drawing_payload_bytes(path) -> bytes:
             "check that the file exists and that this user can read it"
         ) from None
 
-    cached = drawing_index.read(key)
-    if cached is not None:
-        return cached
+
+def cached_drawing_payload(key: str) -> bytes | None:
+    """The payload the store holds under ``key``, or ``None``: never a render."""
+    from cadgen.store import drawings as drawing_index
+
+    return drawing_index.read(key)
+
+
+def render_drawing_payload(path, key: str) -> bytes:
+    """Render the payload and keep it under ``key``. A store that cannot be
+    written costs the cache, never the answer."""
+    from cadgen.store import drawings as drawing_index
+
     data = encode_drawing_payload(build_drawing_payload(path))
     drawing_index.write(key, data)
     return data
+
+
+def drawing_payload_bytes(path) -> bytes:
+    """``encode_drawing_payload(build_drawing_payload(path))``, cached by content.
+
+    The store answers for bytes it has already drawn, so re-opening a drawing
+    — or opening one two tabs already have — never re-enters ezdxf. A store
+    that cannot be read or written costs the cache, never the answer.
+    """
+    key = drawing_payload_key(path)
+    cached = cached_drawing_payload(key)
+    if cached is not None:
+        return cached
+    return render_drawing_payload(path, key)

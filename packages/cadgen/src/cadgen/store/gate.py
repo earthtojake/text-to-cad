@@ -6,8 +6,10 @@
 2. ``sha256(closure.files as they are now) != closure.hash`` — a file the
    record sliced (``closure.names``) keeps its recorded slice while its
    whole-file hash is the recorded one (``closure.wholes``) and is re-sliced
-   by those names when it moved, every other file hashed whole — or a constant
-   the model imported by value (``record.constants``) no longer hashes the same;
+   by those names when it moved, every other file hashed whole, a listed
+   folder by its entry names less the model's own outputs (``closure.own``)
+   — or a constant the model imported by value (``record.constants``) no
+   longer hashes the same;
 3. for any recorded child: ``stale(child)`` **or** its current tree hash != the
    pinned hash;
 4. the tree object or any object it (transitively) references is missing;
@@ -193,7 +195,8 @@ def _stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verd
         # unchanged, and are re-sliced by their recorded names when it moved; the
         # rest are hashed whole.
         now = current_closure_hash(script, files, dict(closure.get("names") or {}),
-                                   shas=closure.get("shas") or {}, wholes=closure.get("wholes") or {})
+                                   shas=closure.get("shas") or {}, wholes=closure.get("wholes") or {},
+                                   own=closure.get("own") or {})
     else:
         now = None
     verdict.closure = now or _sha256_file(script)
@@ -272,7 +275,7 @@ def _closure_why(script: Path, closure: Mapping[str, Any], now: str | None) -> s
     from cadgen.store.closure import changed_closure_files, source_files
 
     changed = changed_closure_files(script, closure.get("shas") or {}, closure.get("names") or {},
-                                    closure.get("wholes") or {})
+                                    closure.get("wholes") or {}, closure.get("own") or {})
     if now is None:
         # Only a file can be missing: an absent, roots or listing entry changed.
         missing = [rel for rel in source_files(changed) if not (Path(script).resolve().parent / rel).exists()]

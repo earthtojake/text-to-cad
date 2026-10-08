@@ -99,7 +99,7 @@ const noTools = async (pane) => {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
   }
 };
-const displayButton = pane => pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Display', exact: true });
+const displayButton = pane => pane.locator('[data-view-controls]').getByRole('button', { name: 'Display', exact: true });
 // Display's settings: a dropdown, portaled out of the viewer.
 const displayPanel = pane => pane.page().locator('[data-display-popover]');
 // The viewport's own pixels, without any chrome over them: what a host capture returns.
@@ -174,8 +174,8 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   // orbits, pans and zooms, with no strip over it.
   await noTools(pane);
   assert.equal(await pane.locator('[data-quick-edit]').count(), 0, 'Quick Edit is a STEP file\'s: a GLB has nothing to pick');
-  assert.equal(await pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
-    'a GLB is 3D: Preview sits on top of its cube');
+  assert.equal(await pane.locator('[data-view-controls]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
+    'a GLB is 3D: Preview sits in the navbar beside Display');
 
   // A GLB has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens, so the model has the room.
@@ -303,7 +303,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
 });
 
 test('an animated GLB opens at rest, plays in preview, and leaving preview puts it back at rest', async (t) => {
-  // The file's Playback settings as a previous session left them: Orbit off, so the preview
+  // The file's preview settings as a previous session left them: Orbit off, so the preview
   // camera holds still and what moves in a capture is the model alone.
   const { page, pane, errors } = await open(t, 'animated.glb', { record: { version: 2, settings: {},
     files: { [JSON.stringify(['/models/animated.glb', 'glb'])]: { version: 2, playback: { orbit: false } } } } });
@@ -351,10 +351,10 @@ test('an animated GLB opens at rest, plays in preview, and leaving preview puts 
   await pane.getByRole('button', { name: 'Pause animation', exact: true }).click();
   assert.deepEqual(await page.evaluate(() => window.__cadStage().studioGround), floor);
 
-  // Preview orbits every GLB: the Orbit this file's record turned off is one tick away in
-  // Playback settings, where Display sat on top of the cube, and ticked, the preview camera turns.
-  await pane.locator('[data-preview-corner]').getByRole('button', { name: 'Playback settings', exact: true }).click();
-  const orbit = page.getByRole('menuitemcheckbox', { name: 'Orbit', exact: true });
+  // Preview orbits every GLB: the Orbit this file's record turned off is one tick away in the
+  // corner's Orbit, before Display, and ticked, the preview camera turns.
+  await pane.locator('[data-preview-corner]').getByRole('button', { name: 'Orbit', exact: true }).click();
+  const orbit = page.getByRole('menu', { name: 'Orbit', exact: true }).getByRole('menuitemcheckbox', { name: 'Orbit', exact: true });
   assert.equal(await orbit.getAttribute('aria-checked'), 'false', "the file's choice");
   const held = await page.evaluate(() => window.__cadCamera().position);
   // By keyboard: a menu item still easing in under a loaded software renderer never reads as

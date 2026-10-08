@@ -275,7 +275,7 @@ describe('the fetch tunnel', () => {
     }
   });
 
-  it('reads a body longer than one reply a part at a time, each within the bound, and hands over the whole', async () => {
+  it('reads a body longer than one reply a part at a time, each within the bound and naming the body it continues, and hands over the whole', async () => {
     const bytes = pattern(3 * TUNNEL_REPLY_MAX_BYTES + 1000);
     const parted = servingInParts(bytes);
     const reply = await createTunnelFetch(parted.server)(`${TUNNEL_ORIGIN}/__cad/asset?file=big.stl`);
@@ -283,6 +283,8 @@ describe('the fetch tunnel', () => {
     expect(same(new Uint8Array(await reply.arrayBuffer()), bytes)).toBe(true);
     expect(parted.ranges).toEqual([0, 1, 2, 3].map(part => `bytes=${part * TUNNEL_REPLY_MAX_BYTES}-${Math.min(bytes.length, (part + 1) * TUNNEL_REPLY_MAX_BYTES) - 1}`));
     expect(Math.max(...parted.sizes)).toBe(TUNNEL_REPLY_MAX_BYTES);
+    // Every part after the first names the body, which the server kept and cuts the part from.
+    expect(parted.continues).toEqual([null, '"v1"', '"v1"', '"v1"']);
   });
 
   it('fails the read of a body that changed between its parts, or whose parts are out of place', async () => {
@@ -344,10 +346,12 @@ function servingInParts(bytes: Uint8Array, {
   etag = (_first: number) => '"v1"', offset = (first: number) => first, alter = (part: Uint8Array, _first: number) => part,
 } = {}) {
   const ranges: string[] = [];
+  const continues: (string | null)[] = [];
   const sizes: number[] = [];
   const server = createServer({
     callTool: async (_name, args: any) => {
       ranges.push(args.headers.range);
+      continues.push(args.headers['if-range'] ?? null);
       const asked = /^bytes=(\d+)-(\d+)$/.exec(args.headers.range)!;
       const first = offset(Number(asked[1]));
       const last = Math.min(bytes.length - 1, Number(asked[2]));
@@ -359,7 +363,7 @@ function servingInParts(bytes: Uint8Array, {
       } } };
     },
   });
-  return { server, ranges, sizes };
+  return { server, ranges, continues, sizes };
 }
 
 describe('a Quick Edit in the chat', () => {

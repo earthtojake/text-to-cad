@@ -8,26 +8,27 @@ import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
 import { PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { TOOL_PANEL_BUTTON_CLASS } from "../tools/ToolPanel.jsx";
-import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 
-// However tall its sections, it stops below the tool strip at the top of the view.
-const COLLISION_PADDING = Object.freeze({ top: VIEWPORT_TOP_BAR_PX + VIEWPORT_INSET_PX * 2, right: 8, bottom: 8, left: 8 });
+// Inside the viewer, 8px clear of its sides and bottom. Its top is the navbar's bottom edge, which
+// the dropdown starts on: no room is kept above it.
+const COLLISION_PADDING = Object.freeze({ top: 0, right: 8, bottom: 8, left: 8 });
 
 /**
  * Display: a 3D view's settings (`children`: `useRendererShell`'s `frame.display`), a dropdown from
- * its button on top of the cube, before Preview. Its icon is the perspective box. It is not a tool:
- * opening it leaves the tool in hand as it is. It opens up from its button, start-aligned, as wide
- * as its two-a-row settings need (19rem: Projection's "Orthographic" in full beside the host's
- * appearance control), and never taller than the viewer below the tool strip (`boundary`, the
- * viewer): its sections scroll inside it. It goes as any popover does: Escape, a press outside it,
- * its button again, or the X at the end of its first heading (`DisplayPopoverClose`). It closes
- * with no exit animation, so a quick second press always reaches the button.
+ * its button at the navbar's right end, before Preview — and, in preview, from the same place in
+ * preview's corner, before its way out. Its icon is the perspective box. It is not a tool: opening
+ * it leaves the tool in hand as it is. It opens down from its button, end-aligned, as wide as its
+ * two-a-row settings need (19rem: Projection's "Orthographic" in full beside the host's appearance
+ * control), and never taller than the viewer below it (`boundary`, the viewer): its sections scroll
+ * inside it. It goes as any popover does: Escape, a press outside it, its button again, or the X at
+ * the end of its first heading (`DisplayPopoverClose`). It closes with no exit animation, so a quick
+ * second press always reaches the button.
  * @param {{ open: boolean, onOpenChange(open: boolean): void, disabled?: boolean, boundary?: Element | null,
  *   children: import("react").ReactNode }} props
  */
 export default function DisplayPopover({ open, onOpenChange, disabled = false, boundary = null, children }) {
   return <Popover open={open && !disabled} onOpenChange={onOpenChange} modal={false}>
-    <TooltipHint content="Display" side="top">
+    <TooltipHint content="Display">
       <PopoverTrigger asChild>
         <Button type="button" variant="ghost" size="icon-xs" aria-label="Display" aria-pressed={open} disabled={disabled}
           className={NAVBAR_CONTROL_CLASS}>
@@ -35,7 +36,7 @@ export default function DisplayPopover({ open, onOpenChange, disabled = false, b
         </Button>
       </PopoverTrigger>
     </TooltipHint>
-    <PopoverContent side="top" align="start" sideOffset={6} collisionPadding={COLLISION_PADDING} collisionBoundary={boundary || undefined}
+    <PopoverContent side="bottom" align="end" sideOffset={6} collisionPadding={COLLISION_PADDING} collisionBoundary={boundary || undefined}
       aria-label="Display settings" data-display-popover=""
       className={cn(FLOATING_SURFACE_CLASS, "flex w-76 max-h-[var(--radix-popover-content-available-height)] flex-col overflow-hidden p-0 text-tiny data-[state=closed]:animate-none!")}>
       <ScrollArea className="min-h-0 flex-1">{children}</ScrollArea>

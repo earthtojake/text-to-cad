@@ -20,7 +20,11 @@ tunnel gives it one, to carry a long body in parts). Every writer of a 200
 answers ``bytes=<first>-<last>`` inside the body with ``206``, that part,
 ``content-range: bytes <first>-<last>/<length>`` and an ``etag`` naming the
 whole body, so parts put together can be told to be of one body. Any other
-range is ignored, as RFC 9110 allows: the body is sent whole.
+range is ignored, as RFC 9110 allows: the body is sent whole. ``on_parts``
+hears the whole of an in-memory body that went out as a part (its etag, bytes,
+type and extra headers), so the tunnel can cut the later parts from it instead
+of producing it again; ``send_bytes(etag=...)`` sends such a kept body without
+hashing it again.
 
 HEAD suppression lives in each writer rather than at method dispatch. Under
 HTTP/1.1 keep-alive a HEAD that ships a body does not merely waste bytes — it
@@ -33,7 +37,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 from typing import Any, Iterable
 
 __all__ = ["Request", "Response", "STREAM_CHUNK_BYTES"]
@@ -83,12 +86,13 @@ class Request:
 class Response:
     """Writes one response onto a ``BaseHTTPRequestHandler``."""
 
-    __slots__ = ("_handler", "_head_only", "_range", "written")
+    __slots__ = ("_handler", "_head_only", "_range", "_on_parts", "written")
 
-    def __init__(self, handler, head_only: bool = False, byte_range: str | None = None):
+    def __init__(self, handler, head_only: bool = False, byte_range: str | None = None, on_parts=None):
         self._handler = handler
         self._head_only = head_only
         self._range = byte_range
+        self._on_parts = on_parts
         self.written = False
 
     def _span(self, length: int) -> tuple[int, int] | None:
@@ -99,23 +103,28 @@ class Response:
         first, last = int(match.group(1)), min(int(match.group(2)), length - 1)
         return (first, last) if first <= last and (first, last) != (0, length - 1) else None
 
-    def _send_part(self, data: bytes, content_type: str, extra_headers: Iterable[tuple[str, Any]]) -> bool:
+    def _send_part(self, data: bytes, content_type: str, extra_headers: Iterable[tuple[str, Any]],
+                   etag: str | None = None) -> bool:
         """206 with the part of ``data`` the range asks for; False when it asks for all of it."""
         span = self._span(len(data))
         if span is None:
             return False
         first, last = span
+        extra = tuple(extra_headers)
+        etag = etag or f'"{hashlib.sha256(data).hexdigest()}"'
         headers: list[tuple[str, Any]] = [
             ("cache-control", "no-store"),
             ("content-length", last - first + 1),
             ("content-range", f"bytes {first}-{last}/{len(data)}"),
-            ("etag", f'"{hashlib.sha256(data).hexdigest()}"'),
+            ("etag", etag),
         ]
         if content_type:
             headers.append(("content-type", content_type))
-        headers.extend(extra_headers)
+        headers.extend(extra)
         self._begin(206, headers)
         self._write(data[first:last + 1])
+        if self._on_parts is not None:
+            self._on_parts(etag, data, content_type, extra)
         return True
 
     # --- header plumbing ---------------------------------------------------
@@ -160,8 +169,9 @@ class Response:
         self._write(body)
 
     def send_bytes(self, status: int, data: bytes, content_type: str = "",
-                   extra_headers: Iterable[tuple[str, Any]] = ()) -> None:
-        if status == 200 and self._send_part(data, content_type, extra_headers):
+                   extra_headers: Iterable[tuple[str, Any]] = (), etag: str | None = None) -> None:
+        extra_headers = tuple(extra_headers)
+        if status == 200 and self._send_part(data, content_type, extra_headers, etag):
             return
         headers: list[tuple[str, Any]] = [
             ("cache-control", "no-store"),
@@ -194,31 +204,32 @@ class Response:
         """200 (206 for a range: read from where it starts), chunked, never buffered whole.
 
         A 500MB GLB must not become 500MB of RSS, and 200 concurrent asset GETs
-        must stay bounded at ``STREAM_CHUNK_BYTES`` per thread. The stat answers
-        existence and content-length up front, so the status line is always
+        must stay bounded at ``STREAM_CHUNK_BYTES`` per thread. Opening the file
+        and calling fstat on that handle answers existence and content-length
+        up front, so the status line is always
         correct. A part's ``etag`` is the file's inode, size and time: a rewrite
         changes it.
         """
-        span = self._span(stat_result.st_size)
-        first, last = span or (0, stat_result.st_size - 1)
-        headers: list[tuple[str, Any]] = [
-            ("cache-control", "no-store"),
-            ("content-length", last - first + 1),
-        ]
-        if span:
-            headers += [("content-range", f"bytes {first}-{last}/{stat_result.st_size}"),
-                        ("etag", f'"{stat_result.st_ino:x}-{stat_result.st_size:x}-{stat_result.st_mtime_ns:x}"')]
-        if content_type:
-            headers.append(("content-type", content_type))
-        headers.extend(extra_headers)
-        self._begin(206 if span else 200, headers)
-        if self._head_only:
-            return
-        try:
-            with open(file_path, "rb") as handle:
-                if not span:
-                    shutil.copyfileobj(handle, self._handler.wfile, STREAM_CHUNK_BYTES)
-                    return
+        with open(file_path, "rb") as handle:
+            # Routing may have statted an inode replaced atomically before open.
+            # Headers and every byte below must describe the same open file.
+            stat_result = os.fstat(handle.fileno())
+            span = self._span(stat_result.st_size)
+            first, last = span or (0, stat_result.st_size - 1)
+            headers: list[tuple[str, Any]] = [
+                ("cache-control", "no-store"),
+                ("content-length", last - first + 1),
+            ]
+            if span:
+                headers += [("content-range", f"bytes {first}-{last}/{stat_result.st_size}"),
+                            ("etag", f'"{stat_result.st_ino:x}-{stat_result.st_size:x}-{stat_result.st_mtime_ns:x}"')]
+            if content_type:
+                headers.append(("content-type", content_type))
+            headers.extend(extra_headers)
+            self._begin(206 if span else 200, headers)
+            if self._head_only:
+                return
+            try:
                 handle.seek(first)
                 remaining = last - first + 1
                 while remaining:
@@ -227,15 +238,15 @@ class Response:
                         raise OSError("the file is shorter than it was")
                     self._handler.wfile.write(chunk)
                     remaining -= len(chunk)
-        except (BrokenPipeError, ConnectionResetError):
-            self._handler.close_connection = True
-        except OSError:
-            # Headers are already gone, so a clean end() would present a
-            # TRUNCATED body as a complete response — and content-length would
-            # be a lie some clients accept silently. Kill the socket instead, so
-            # the failure is unambiguous.
-            self._handler.close_connection = True
-            try:
-                self._handler.connection.shutdown(2)
+            except (BrokenPipeError, ConnectionResetError):
+                self._handler.close_connection = True
             except OSError:
-                pass
+                # Headers are already gone, so a clean end() would present a
+                # TRUNCATED body as a complete response — and content-length would
+                # be a lie some clients accept silently. Kill the socket instead, so
+                # the failure is unambiguous.
+                self._handler.close_connection = True
+                try:
+                    self._handler.connection.shutdown(2)
+                except OSError:
+                    pass

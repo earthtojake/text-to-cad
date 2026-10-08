@@ -10,9 +10,9 @@ export const TOOL_COLUMN_POSITION = Object.freeze({ top: INSET, left: INSET, bot
 
 /**
  * The tool strip at a view's top-left corner and the tool stack under it, in one column inset from
- * the viewer's top and left edges and stopping above the cube and its actions in the bottom-left
- * corner: the column is exactly the height the stack may take, so however many panels are up, it
- * never runs past the viewer or under the cube (`ToolPanel.jsx` decides which of them gives way).
+ * the viewer's top and left edges and stopping above the cube in the bottom-left corner: the column
+ * is exactly the height the stack may take, so however many panels are up, it never runs past the
+ * viewer or under the cube (`ToolPanel.jsx` decides which of them gives way).
  * The 3D views (`RendererShell.jsx`) and the flat ones (a KiCad board's or schematic's) draw the same column.
  *
  * Every tool's panel but Select's has an X that puts the tool down. Select's tree has an X of its

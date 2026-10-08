@@ -139,6 +139,7 @@ class Broker:
                 "key": key,
                 "done": threading.Event(),
                 "exit": None,
+                "error": None,
                 "result": None,
                 "artifact": artifact,
                 "ownerActive": True,
@@ -213,12 +214,15 @@ class Broker:
     def orphaned(entry: dict[str, Any]) -> bool:
         return entry["orphaned"].is_set() and not entry["done"].is_set()
 
-    def finish_entry(self, entry: dict[str, Any], code: int) -> None:
+    def finish_entry(self, entry: dict[str, Any], code: int, *, error: str | None = None) -> None:
+        """Close the entry with the owner's exit code and, for a failure, its one-line
+        reason, which attached consumers record as their own."""
         with self._cv:
             key = entry["key"]
             if self._inflight.get(key) is entry:
                 self._inflight.pop(key, None)
             entry["exit"] = int(code)
+            entry["error"] = str(error) if code != 0 and error else None
             entry["ownerActive"] = False
             entry["done"].set()
             self._cv.notify_all()
@@ -406,15 +410,24 @@ class PrivateBroker:
         # socket call after the interpreter began finalizing takes the GIL from a
         # dying runtime, which CPython before 3.14 can crash on: a no-op build exits
         # within milliseconds of closing its broker, and one died with SIGSEGV in
-        # sock_accept -> take_gil. Each thread ends within milliseconds of the
-        # wakeup; the bound covers a peer stalled inside the authentication
-        # handshake, which the wakeup does not cancel.
+        # sock_accept -> take_gil. The accept thread ends within milliseconds of the
+        # wakeup, and then the handshakes it started: one still waiting on a silent
+        # peer drops it within transport.HANDSHAKE_POLL_SECONDS of the close. The
+        # bound covers a request still being served, such as a lease its holder has
+        # yet to release. The accept thread first: it is the one that starts the others.
         deadline = time.monotonic() + CLOSE_JOIN_SECONDS
+
+        def remaining() -> float:
+            return max(0.0, deadline - time.monotonic())
+
+        if self._thread is not threading.current_thread():
+            self._thread.join(remaining())
+        self._server.join(remaining())
         with self._serving_lock:
-            threads = [self._thread, *self._serving]
-        for thread in threads:
+            serving = list(self._serving)
+        for thread in serving:
             if thread is not threading.current_thread():
-                thread.join(max(0.0, deadline - time.monotonic()))
+                thread.join(remaining())
 
 
 # --- client side ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ exits on its own timer.
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import hashlib
 import hmac
@@ -35,7 +36,7 @@ import stat
 import tempfile
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 # Bump when the wire format changes. It is part of the address, so mismatched peers never
@@ -43,6 +44,27 @@ from pathlib import Path
 PROTOCOL = 2
 
 _AUTHKEY_BYTES = 32
+
+# How long a connected peer has to finish the authkey handshake. Each peer runs it on a
+# thread of its own (Server.accept), so this paces no one else: it frees the thread and
+# connection of a peer that will never answer -- one whose challenge another thread of
+# its own process read off a reused descriptor waits for it forever. A live client
+# answers in microseconds; a slow one is a thread whose interpreter a long native call
+# holds (a worker submitting children while its body computes), and it answers when that
+# call returns.
+HANDSHAKE_TIMEOUT_SECONDS = 10.0
+# How long accept() waits on one peer's handshake before it accepts the next. Responsive
+# clients finish well inside it, so they are still handed out one at a time, in the order
+# they connected; a slower one finishes in the background (Server). While one that
+# outlived its hold is still pending, accept() holds for no new peer: fifty silent peers
+# at once would otherwise cost the next client five seconds.
+HANDSHAKE_HOLD_SECONDS = 0.1
+# How often a pending handshake looks up from its peer to see whether the listener has
+# closed. close() never closes a pending peer's connection itself: its handshake thread
+# may be reading it, and closing a descriptor another thread reads frees its number for
+# the next socket -- the race that stalled the daemon. Each handshake closes its own,
+# within one slice of close(), and Server.join() waits for that.
+HANDSHAKE_POLL_SECONDS = 0.05
 
 
 def supported() -> bool:
@@ -277,15 +299,47 @@ def clear_address(address: str) -> None:
 
 
 class Channel:
-    """A duplex message channel. Wraps a Connection so callers never see the family."""
+    """A duplex message channel. Wraps a Connection so callers never see the family.
+
+    close() cancels active POSIX socket I/O without releasing the descriptor
+    until that operation exits; subsequent receives return end-of-stream."""
 
     def __init__(self, conn) -> None:
         self._conn = conn
         self._close_guard = threading.Lock()
         self._closed = False
+        self._active_io = 0
+        self._close_pending = False
+        self._socket_io = False
+        if os.name != "nt" and isinstance(conn, mpc.Connection):
+            try:
+                probe = socket.socket(fileno=conn.fileno())
+            except OSError:
+                pass  # A non-socket Connection keeps its native close behavior.
+            else:
+                probe.detach()
+                self._socket_io = True
+
+    @contextlib.contextmanager
+    def _io(self) -> Iterator[None]:
+        with self._close_guard:
+            if self._closed:
+                raise OSError("channel closed")
+            self._active_io += 1
+        try:
+            yield
+        finally:
+            with self._close_guard:
+                self._active_io -= 1
+                close = self._close_pending and self._active_io == 0
+                if close:
+                    self._close_pending = False
+            if close:
+                self._close_connection()
 
     def send(self, payload: bytes) -> None:
-        self._conn.send_bytes(payload)
+        with self._io():
+            self._conn.send_bytes(payload)
 
     def recv(self, timeout: float | None = None) -> bytes | None:
         """One message, or None if nothing arrived within ``timeout``.
@@ -293,6 +347,7 @@ class Channel:
         ``poll`` replaces the socket timeout the old code set per read: a daemon that is
         streaming output keeps resetting the clock, so only genuine silence trips it.
 
+        A cancelled receive is end-of-stream, like a dead peer.
         A dead peer is END-OF-STREAM (``b""``), never an exception, and the two platforms
         report it differently: POSIX as EOFError from ``recv_bytes``, Windows as
         BrokenPipeError — an OSError, not an EOFError — raised by ``recv_bytes`` OR by
@@ -300,29 +355,38 @@ class Channel:
         drained). One shape for callers on both.
         """
         try:
-            if timeout is not None and not self._conn.poll(timeout):
-                return None
-            return self._conn.recv_bytes()
-        except EOFError:
-            return b""
-        except OSError:
+            with self._io():
+                if timeout is not None and not self._conn.poll(timeout):
+                    return None
+                return self._conn.recv_bytes()
+        except (EOFError, OSError):
             return b""
 
+    def _close_connection(self) -> None:
+        with contextlib.suppress(OSError):
+            self._conn.close()
+
     def close(self) -> None:
-        # Connection.close() is idempotent only when calls are serialized: it
-        # clears its integer handle AFTER closing it. Two concurrent callers can
-        # therefore both close the same number, and the second can close an
-        # unrelated descriptor if the OS reused that number in between. Claim
-        # close ownership here, then release the guard before the underlying
-        # close so a cancellation never waits behind a blocked receive.
         with self._close_guard:
             if self._closed:
                 return
+            # Claim close ownership while holding the guard, before any native close.
             self._closed = True
-        try:
-            self._conn.close()
-        except OSError:
-            pass
+            if self._socket_io and self._active_io:
+                # Wake the current I/O without releasing its descriptor. Connection
+                # keeps the number across partial reads/writes; closing it here can
+                # let that operation consume another connection that reuses it.
+                self._close_pending = True
+                wakeup = socket.socket(fileno=self._conn.fileno())
+                try:
+                    with contextlib.suppress(OSError):
+                        wakeup.shutdown(socket.SHUT_RDWR)
+                finally:
+                    wakeup.detach()
+                return
+        # The native owner closes once, outside the guard: duplicate cancellation
+        # never waits behind a blocking close, and Windows retains pipe behavior.
+        self._close_connection()
 
     def __enter__(self) -> Channel:
         return self
@@ -403,14 +467,81 @@ def _wake_listener(address: str, family: str) -> None:
             wakeup.connect(address)
 
 
+class _Deadline:
+    """A connection whose handshake reads must all arrive before one deadline, and
+    stop when ``cancelled()`` says so.
+
+    The stdlib handshake calls ``send_bytes`` and ``recv_bytes`` and nothing else.
+    Polling before each read, in slices of HANDSHAKE_POLL_SECONDS, turns silence into
+    TimeoutError and a close into ConnectionAbortedError; a message that has begun to
+    arrive is read whole, as every handshake message is one small write (one pipe
+    message).
+    """
+
+    def __init__(self, connection, timeout: float, cancelled: Callable[[], bool]) -> None:
+        self._connection = connection
+        self._deadline = time.monotonic() + timeout
+        self._cancelled = cancelled
+
+    def send_bytes(self, payload) -> None:
+        self._connection.send_bytes(payload)
+
+    def recv_bytes(self, maxlength=None) -> bytes:
+        while not self._cancelled():
+            remaining = max(0.0, self._deadline - time.monotonic())
+            if self._connection.poll(min(remaining, HANDSHAKE_POLL_SECONDS)):
+                return self._connection.recv_bytes(maxlength)
+            if remaining <= HANDSHAKE_POLL_SECONDS:
+                raise TimeoutError("the peer did not finish the authkey handshake in time")
+        raise ConnectionAbortedError("the listener closed during the authkey handshake")
+
+
+def _authenticate(connection, authkey: bytes, timeout: float, cancelled: Callable[[], bool]) -> None:
+    """What ``mpc.Listener.accept`` runs after its native accept, within ``timeout``, or
+    until ``cancelled()``.
+
+    The same two stdlib calls in the same order, so the challenges, their MACs and the
+    wire format are the stdlib's own: the peer proves it holds the key, then we do.
+    """
+    peer = _Deadline(connection, timeout, cancelled)
+    mpc.deliver_challenge(peer, authkey)
+    mpc.answer_challenge(peer, authkey)
+
+
+class _Handshake:
+    """One accepted peer, authenticating on its own thread.
+
+    ``claimed``: its thread has taken the connection. Until then accept() owns it, and
+    drops it if the thread cannot be started. ``stalled``: accept() stopped waiting for
+    it before it finished.
+    """
+
+    __slots__ = ("connection", "finished", "claimed", "stalled")
+
+    def __init__(self, connection) -> None:
+        self.connection = connection
+        self.finished = False
+        self.claimed = False
+        self.stalled = False
+
+
 class Server:
-    """A listener with a bounded, unauthenticated shutdown wakeup.
+    """A listener that authenticates each peer off its accept loop, with a bounded,
+    unauthenticated shutdown wakeup.
 
     The accept owner closes the listener after its native wait returns: closing it
     concurrently does not cancel Windows' pending pipe and can race pipe creation.
     The wakeup immediately disconnects and can never become an application channel.
-    An existing peer stalled inside the stdlib authentication handshake still has to
-    finish or disconnect; close does not wait for that peer or add a helper thread.
+
+    The stdlib Listener authenticates inside accept(), on the accept thread, with no
+    deadline: one peer that never answered stopped the daemon serving anyone. Here a
+    peer is accepted natively and authenticated on a thread of its own, within
+    HANDSHAKE_TIMEOUT_SECONDS. accept() waits HANDSHAKE_HOLD_SECONDS for that and then
+    accepts the next peer. A peer that answers later is handed out by a later accept(),
+    which its handshake wakes if it is waiting natively. close() waits for no handshake:
+    each one still pending drops its peer within HANDSHAKE_POLL_SECONDS of it, and one
+    that finishes after it is closed unused. join() waits for those threads, so none
+    wakes from a socket wait into a finalizing interpreter.
     """
 
     def __init__(
@@ -419,23 +550,38 @@ class Server:
         authkey: bytes,
         backlog: int = 8,
         on_authentication_error: Callable[[], None] | None = None,
+        handshake_timeout: float = HANDSHAKE_TIMEOUT_SECONDS,
     ) -> None:
+        if not isinstance(authkey, bytes):
+            raise TypeError("authkey must be bytes")
         self._family = _family()
-        self._listener = mpc.Listener(address, family=self._family, authkey=authkey, backlog=backlog)
+        # No authkey for the stdlib Listener: its accept() would authenticate inline.
+        self._listener = mpc.Listener(address, family=self._family, backlog=backlog)
         self.address = address
+        self._authkey = authkey
+        self._handshake_timeout = handshake_timeout
         self._on_authentication_error = on_authentication_error
         self._guard = threading.Lock()
+        self._changed = threading.Condition(self._guard)
         self._accept_guard = threading.Lock()
+        # Authenticated peers not yet handed out, in the order they finished.
+        self._ready: collections.deque = collections.deque()
+        # Every handshake thread accept() started that may still be running (join()).
+        self._threads: set[threading.Thread] = set()
+        # Pending handshakes accept() stopped waiting for: while any is, it holds for none.
+        self._stalled = 0
         self._accepting = False
+        self._woken = False
         self._closed = False
         self._wake_failed = False
 
     def accept(self) -> Channel | None:
-        """The next client, or None once the listener has been closed.
+        """The next authenticated client, or None once the listener has been closed.
 
-        A client that fails the authkey handshake (a stale key, a stranger) is ITS
-        failure, not the listener's: the daemon keeps accepting. Before this, one bad
-        handshake read as "listener closed" and took the whole daemon down.
+        A client that fails the authkey handshake (a stale key, a stranger), or never
+        finishes it, is ITS failure, not the listener's: the daemon keeps accepting.
+        Before this, one bad handshake read as "listener closed" and took the whole
+        daemon down.
         """
         with self._accept_guard:
             while True:
@@ -444,49 +590,141 @@ class Server:
                     with self._guard:
                         if self._closed:
                             return None
+                        if self._ready:
+                            return Channel(self._ready.popleft())
                         self._accepting = True
                     connection = self._listener.accept()
-                except mpc.AuthenticationError:
-                    if self._on_authentication_error is not None:
-                        with contextlib.suppress(OSError):
-                            self._on_authentication_error()
                 except (OSError, EOFError):
                     pass
                 finally:
                     with self._guard:
                         was_accepting = self._accepting
-                        self._accepting = False
+                        self._accepting = self._woken = False
                         if was_accepting and self._closed:
                             with contextlib.suppress(OSError):
                                 self._listener.close()
                             self._wake_failed = False
+                if connection is None:
+                    with self._guard:
+                        if self._closed:
+                            return None
+                    time.sleep(0.01)  # never a busy loop on a broken listener
+                    continue
+                handshake = _Handshake(connection)
+                thread = threading.Thread(target=self._run_handshake, args=(handshake,),
+                                          name="cadgen-handshake", daemon=True)
                 with self._guard:
                     if self._closed:
-                        if connection is not None:
-                            with contextlib.suppress(OSError):
-                                connection.close()
+                        with contextlib.suppress(OSError):
+                            connection.close()
                         return None
-                    if connection is not None:
-                        return Channel(connection)
-                time.sleep(0.01)  # a rejected peer; never a busy loop on a broken listener
+                    # Registered under the guard that close() sets, so a join() after
+                    # close() sees every handshake this accept() starts.
+                    self._threads = {t for t in self._threads if t.is_alive()}
+                    self._threads.add(thread)
+                    hold = 0.0 if self._stalled else HANDSHAKE_HOLD_SECONDS
+                try:
+                    thread.start()
+                except BaseException as error:
+                    with self._guard:
+                        dropped = not handshake.claimed
+                        if dropped:
+                            handshake.finished = True
+                            self._threads.discard(thread)
+                    if dropped:
+                        with contextlib.suppress(OSError):
+                            connection.close()
+                    if not isinstance(error, Exception):
+                        raise
+                    # No thread for this peer (the process is out of them, say): its client
+                    # reads a daemon closing while it connects and connects again. The
+                    # listener is fine, so keep serving the rest.
+                    continue
+                with self._changed:
+                    self._changed.wait_for(lambda: handshake.finished or self._ready or self._closed, hold)
+                    if not handshake.finished:
+                        handshake.stalled = True
+                        self._stalled += 1
+
+    def _run_handshake(self, handshake: _Handshake) -> None:
+        """One peer's handshake, on its own thread: queue it for accept(), or drop it."""
+        with self._guard:
+            if handshake.finished:
+                return  # accept() could not start this thread and dropped its peer
+            handshake.claimed = True
+        authenticated = False
+        try:
+            _authenticate(handshake.connection, self._authkey, self._handshake_timeout,
+                          lambda: self._closed)
+            authenticated = True
+        except mpc.AuthenticationError:
+            if self._on_authentication_error is not None:
+                with contextlib.suppress(OSError):
+                    self._on_authentication_error()
+        except (OSError, EOFError):
+            pass  # it hung up, or never answered
+        finally:
+            with self._guard:
+                queued = authenticated and not self._closed
+                if queued:
+                    self._ready.append(handshake.connection)
+                else:
+                    with contextlib.suppress(OSError):
+                        handshake.connection.close()
+                handshake.finished = True
+                if handshake.stalled:
+                    self._stalled -= 1
+                self._changed.notify_all()
+                if queued and self._accepting and not self._woken:
+                    # accept() moved on and waits natively for the next peer: wake it to
+                    # hand this one out. Under the guard, as close() wakes it. If the
+                    # wakeup fails, the next peer to connect hands this one out.
+                    self._woken = True
+                    try:
+                        _wake_listener(self.address, self._family)
+                    except OSError:
+                        self._woken = False
 
     def close(self) -> None:
-        with self._guard:
-            if self._closed and not self._wake_failed:
-                return
-            self._closed = True
-            if self._accepting:
-                # Hold the guard through the bounded wakeup so accept cannot close
-                # and release this address for another listener before we connect.
-                # An unexpected failure remains loud and admission stays closed;
-                # a later close may retry without abandoning the listener owner.
-                self._wake_failed = True
-                _wake_listener(self.address, self._family)
-                self._wake_failed = False
-            else:
+        unused = ()
+        try:
+            with self._guard:
+                if self._closed and not self._wake_failed:
+                    return
+                self._closed = True
+                unused, self._ready = self._ready, collections.deque()
+                self._changed.notify_all()
+                if self._accepting:
+                    # Hold the guard through the bounded wakeup so accept cannot close
+                    # and release this address for another listener before we connect.
+                    # An unexpected failure remains loud and admission stays closed;
+                    # a later close may retry without abandoning the listener owner.
+                    self._wake_failed = True
+                    _wake_listener(self.address, self._family)
+                    self._wake_failed = False
+                else:
+                    with contextlib.suppress(OSError):
+                        self._listener.close()
+                    self._wake_failed = False
+        finally:
+            for connection in unused:
                 with contextlib.suppress(OSError):
-                    self._listener.close()
-                self._wake_failed = False
+                    connection.close()
+
+    def join(self, timeout: float) -> bool:
+        """Wait up to ``timeout`` for the handshake threads to end; True if none is left.
+
+        After close(), each ends within HANDSHAKE_POLL_SECONDS. Call it once the accept
+        owner has returned: a handshake that a running accept() has yet to start is not
+        waited for.
+        """
+        deadline = time.monotonic() + timeout
+        with self._guard:
+            threads = list(self._threads)
+        for thread in threads:
+            if thread.ident is not None:
+                thread.join(max(0.0, deadline - time.monotonic()))
+        return not any(thread.is_alive() for thread in threads)
 
     @property
     def closed(self) -> bool:
