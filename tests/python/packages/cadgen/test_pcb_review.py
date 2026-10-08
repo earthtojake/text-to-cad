@@ -95,6 +95,14 @@ class ReviewTest(unittest.TestCase):
             self.assertEqual(net_currents(Path(folder) / "missing.kicad_pro"), {})
             self.assertEqual(net_currents(None), {})
 
+    def test_the_review_never_blocks_a_build(self):
+        from cadgen.kicad.check import is_blocking
+        from cadgen.kicad.cli import Finding
+
+        for severity in ("warning", "error"):
+            self.assertFalse(is_blocking(Finding(check="review", severity=severity, type="decoupling_far", description="", items=())))
+        self.assertTrue(is_blocking(Finding(check="drc", severity="error", type="clearance", description="", items=())))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -272,5 +272,8 @@ def check_project(path: Path, *, install: KicadInstall | None = None) -> Project
                     items=(),
                 ))
             findings.extend(board_findings)
-            findings.extend(_reviewed(tree, stage / f"{stem}.kicad_pro"))
+            try:
+                findings.extend(_reviewed(tree, stage / f"{stem}.kicad_pro"))
+            except ValueError:
+                pass  # a board cadgen's index cannot read (one KiCad's GUI wrote) loses the review, not its ERC and DRC
     return ProjectCheck(findings=tuple(findings))

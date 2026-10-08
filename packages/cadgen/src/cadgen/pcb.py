@@ -118,13 +118,14 @@ def validate(path: Path, *, strict: bool = False, verbose: bool = False) -> Vali
         issues.append(
             ValidationIssue(
                 severity=finding.severity,
-                message=finding.description + (": " + "; ".join(located) if located else ""),
+                message=(finding.summary or finding.description) + (": " + "; ".join(located) if located else ""),
                 code=f"{finding.check}.{finding.type}",
             )
         )
     errors = sum(1 for finding in report.findings if finding.severity == "error")
     warnings = sum(1 for finding in report.findings if finding.severity == "warning")
-    blocking = bool(errors or (strict and warnings))
+    advice = sum(1 for finding in report.findings if finding.severity == "warning" and finding.check == "review")
+    blocking = bool(errors or (strict and warnings > advice))  # the review advises; strict never fails on it
     return ValidationResult(
         ok=not blocking,
         path=target,

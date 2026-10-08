@@ -171,6 +171,10 @@ class PcbPlotAndValidateTest(unittest.TestCase):
         checked = pcb.validate(project / "regulator.kicad_pcb")
         [advice] = [issue for issue in checked.issues if issue.code == "review.decoupling_far"]
         self.assertEqual(advice.severity, "warning")
+        self.assertTrue(advice.message.startswith(review[0]["summary"]))  # the agent reads the viewer's sentence
+        strict = pcb.validate(project / "regulator.kicad_pcb", strict=True)
+        self.assertFalse([issue for issue in strict.issues if issue.severity == "error" and issue.code.startswith("review.")])
+        self.assertEqual(strict.ok, checked.ok)  # the review's warning does not turn strict into a failure
         self.assertTrue(all(finding.get("summary") for finding in payload["board"]["findings"]))
 
     def test_read_board_sees_the_copper_kicad_poured(self) -> None:
