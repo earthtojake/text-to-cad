@@ -57,7 +57,8 @@ The validator should check that:
 
 - `<frame name="...">` has a non-empty unique name in its scope;
 - `attached_to`, when present, resolves locally when possible;
-- frame attachment chains do not cycle;
+- world frames, lights, and model poses resolve against world frames, inline models, and explicitly named includes; names in this world scope do not become unqualified targets inside a model;
+- frame attachment chains do not cycle, including world model pose references back to a frame attached to that model;
 - unresolved nested or external frame references are reported as warnings when local validation cannot prove them invalid.
 
 ### Joints
