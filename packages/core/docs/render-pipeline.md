@@ -280,10 +280,7 @@ perspective camera every edge failed its depth test against the surfaces.
 ### `common/source.js`
 
 ```js
-import {
-  loadSource,
-  stepParameterRuntime
-} from "@text-to-cad/core/common/source.js";
+import { loadSource } from "@text-to-cad/core/common/source.js";
 ```
 
 `loadSource(input, options)` returns a normalized STEP render source:
@@ -294,7 +291,8 @@ import {
   meshData,
   selectorRuntime,
   displayEdgeRuntime,
-  stepParameterSource,
+  pose,        // {articulation, values} or null: what buildModel's stepParameters takes
+  animation,   // the baked animation section, or null
   resolved,
   url,
   glbUrl,
@@ -666,13 +664,10 @@ Two names, two things, and they are not interchangeable:
   Animation envelopes (`animate`, `fps`, `durationSeconds`, `duration`, `loop`)
   are retired and throw: a still renders one frame at the given values.
 
-* `stepParameters` is the compiled RUNTIME OBJECT that `buildModel()` takes,
-  produced by `stepParameterRuntime(source.stepParameterSource)`.
-
-`common/stepParameters.js` validates the pose values against the loaded
-definition and normalizes defaults.
-`loadSource()` uses it to populate `source.stepParameterSource`; callers then
-pass `stepParameterRuntime()` into `buildModel()`.
+* `stepParameters` is the POSE that `buildModel()` takes: `source.pose`,
+  `{articulation, values}` — cadgen's articulation at the control vector cadgen
+  resolved the job's `kinematics` into (`resolved.controls`), every control
+  present and within its limits (`common/articulation.js`).
 
 ## Examples
 
@@ -680,23 +675,26 @@ Interactive viewer/docs usage:
 
 ```js
 import * as THREE from "three";
-import { loadSource, stepParameterRuntime } from "@text-to-cad/core/common/source.js";
+import { loadSource } from "@text-to-cad/core/common/source.js";
 import { buildModel } from "@text-to-cad/core/common/cadScene.js";
 import { renderModel } from "@text-to-cad/core/common/renderModel.js";
 
+// `articulation` and `animation` are what cadgen resolved the model's sidecar into: a
+// catalog entry's, a snapshot job's `resolved`, or a static package's files.
 const source = await loadSource({
   kind: "step",
   glbUrl: "/models/.part.step.glb",
-  sourceSidecarUrl: "/models/part.step.json",
   cadPath: "models/part.step",
-  kinematics: { drive: 180 }
+  articulation,
+  controls: { drive: 180 },
+  animation
 });
 
 const model = buildModel(THREE, source, {
   theme,
   displayMode: "shaded_edges",
   edgeSettings,
-  stepParameters: stepParameterRuntime(source.stepParameterSource)
+  stepParameters: source.pose
 });
 
 const viewport = renderModel(THREE, model, {

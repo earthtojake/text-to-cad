@@ -43,13 +43,14 @@ function articulationOf(definition) {
   return definition?.articulation || null;
 }
 
-/** The handles of a STEP's articulation a person can drive: one per movable joint row. */
+/** The handles of a STEP's articulation a person can drive: one per movable joint row, each
+ * with the kit's kind and the joint it hangs on (`node`). */
 export function stepPosableHandles(definition) {
   const articulation = articulationOf(definition);
   const joints = new Map((articulation?.joints || []).map((joint) => [joint.id, joint]));
   return articulationHandles(articulation)
     .filter((handle) => HANDLE_KIND_BY_DOF[handle.dof] && joints.get(handle.joint)?.axis && joints.get(handle.joint)?.origin)
-    .map((handle) => ({ ...handle, kind: HANDLE_KIND_BY_DOF[handle.dof], joint: joints.get(handle.joint) }));
+    .map((handle) => ({ ...handle, kind: HANDLE_KIND_BY_DOF[handle.dof], node: joints.get(handle.joint) }));
 }
 
 function jointAxis(joint) {
@@ -108,13 +109,13 @@ export function stepJointHandles({ definition, parameterValues, meshData, onPara
   const posable = stepPosableHandles(definition);
   if (!posable.length) return [];
   const deltas = jointDeltas(THREE, articulation, parameterValues);
-  const located = posable.map((handle) => ({ handle, axis: jointAxis(handle.joint) })).filter(({ axis }) => axis);
+  const located = posable.map((handle) => ({ handle, axis: jointAxis(handle.node) })).filter(({ axis }) => axis);
   const arms = spreadCoincidentArms(located.map(({ handle, axis }) => {
-    const centre = carriedCentre(articulation, handle.joint.id, meshData);
+    const centre = carriedCentre(articulation, handle.joint, meshData);
     return { ...axis, arm: handle.kind === "prismatic" ? axis.dir : armOffset(axis.dir, centre ? subtract(centre, axis.origin) : null) };
   }));
   return located.map(({ handle, axis }, index) => {
-    const delta = deltas.get(handle.joint.id) || new THREE.Matrix4();
+    const delta = deltas.get(handle.joint) || new THREE.Matrix4();
     const prismatic = handle.kind === "prismatic";
     return {
       id: handle.id,

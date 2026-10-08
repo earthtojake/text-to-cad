@@ -7,7 +7,7 @@ kind of ref a kinematics mate names and poses without complaint -- carries no ro
 every command that resolved refs against rows alone refused it as "unknown".
 
 An occurrence id IS its path through the tree, so a group is an id PREFIX of its
-subtree, exactly as kinematicsModule.js and cadScene.js treat it. Everything here is
+subtree, exactly as cadScene.js treats it. Everything here is
 derived from the leaf ids on that basis rather than read out of ``assembly.json``,
 which keeps it in step with how the runtime resolves a group instead of introducing
 another opinion about what the tree contains.

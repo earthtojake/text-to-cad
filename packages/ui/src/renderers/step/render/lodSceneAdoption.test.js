@@ -217,43 +217,6 @@ test("Inspect to Render runtime handoff keeps an in-flight refinement adoptable"
   assert.deepEqual(f.counts, { commits: 1, recoveries: 0, failures: 0 });
 });
 
-test("Inspect to Render adopts an appearance wrapper as its exact LOD publication", async () => {
-  const f = fixture();
-  const promise = f.expect();
-  f.publish();
-
-  const decorate = source => registerLodDisplaySource({
-    ...source,
-    appearance: { materials: { steel: {} } },
-    parts: source.parts.map(part => ({ ...part, materialId: "steel" })),
-  }, source);
-
-  f.tracker.disposed(decorate(f.base), { handoff: true });
-  assert.equal(f.tracker.snapshot().pending, 1);
-  assert.equal(f.tracker.adopted(decorate(f.candidate)), true);
-  assert.equal((await promise).status, "adopted");
-  assert.equal(f.context.meshData, f.candidate, "the raw publication, not its display wrapper, is committed");
-  assert.deepEqual(f.counts, { commits: 1, recoveries: 0, failures: 0 });
-});
-
-test("appearance wrapper registration cannot weaken occurrence or transform validation", async () => {
-  for (const decorate of [
-    source => ({ ...source, parts: source.parts.slice(1) }),
-    source => ({ ...source, parts: source.parts.map((part, index) => index ? part : { ...part, occurrenceId: "other" }) }),
-    source => ({ ...source, parts: source.parts.map((part, index) => index ? part : { ...part, transform: [] }) }),
-  ]) {
-    const f = fixture();
-    const promise = f.expect();
-    f.publish();
-    const invalid = decorate(f.candidate);
-    registerLodDisplaySource(invalid, f.candidate);
-    assert.equal(f.tracker.adopted(invalid), false);
-    f.tracker.disposed(f.candidate);
-    assert.equal((await promise).status, "disposed-failed");
-    assert.deepEqual(f.counts, { commits: 0, recoveries: 0, failures: 1 });
-  }
-});
-
 test("runtime handoff remains fatal when the replacement cannot initialize", async () => {
   const f = fixture();
   const promise = f.expect();

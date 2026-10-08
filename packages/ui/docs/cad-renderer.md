@@ -604,7 +604,7 @@ A reload shows the same file, and restores it:
 | `camera` | The renderer's own: a scene's pose, lens and projection (a perspective snapshot, scoped to the model on read), restored in place of the open-time fit — null, or not a camera, fits; a drawing's plane transform. |
 | `display` | The Display settings, Clip and Explode included. |
 | `playback` | Preview's settings, Orbit's and the playbar's, every one of them (`kit/tools/playbar/playbackPreferences.js`): `orbit` on or off (on by default) and `orbitSpeed` (1), `autoplay` (off), and `speed` and `loop` once chosen — unset, the routine's authored values apply. Kept between leaving and re-entering preview, and across a reload of the tab; entering preview orbits only if the file's orbit is on. |
-| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. STEP (`workbench/stepViewSlices.js`): `tree` (expanded nodes, hidden parts, isolated assemblies) and `largeFile` against the geometry, `pose` against the sidecar. Robot: `pose` (joint values) against the description's revision. GLB, mesh: none. DXF: nothing beyond its camera. |
+| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. STEP (`workbench/stepViewSlices.js`): `tree` (expanded nodes, hidden parts, isolated assemblies) and `largeFile` against the geometry, `pose` against the build (a rebuild's articulation fits a stored pose to its own controls). Robot: `pose` (joint values) against the description's revision. GLB, mesh: none. DXF: nothing beyond its camera. |
 
 | Not kept | Every open starts it afresh |
 | --- | --- |
@@ -730,7 +730,7 @@ they are mutable state with one owner, the GLB renderer's mounted scene.
 
 Worker infrastructure is reference-counted across live render sessions. The
 last session releases workers and pending work. Playback clocks are separate
-per mounted renderer. Asset loads, sidecar loads and render-module loads have
+per mounted renderer. Asset loads and the routines' keyframe loads have
 their own abort signals; changing or closing a file cannot install a late
 result into the next file. A renderer release does not dispose a host's shared
 client while another pane still needs it.
@@ -1167,8 +1167,8 @@ is [the design system's](settings-ui.md#position-and-references).
 The Position tool (lucide `Spline`; its tool id is `pose`) drags a model's joints
 by handles in the viewport. It exists where
 something can be driven: a robot (URDF, SRDF, SDF) with a revolute, continuous
-or prismatic joint that is not a mimic follower, and a STEP whose sidecar
-kinematics declare a revolute, slider or cylindrical mate. Robots and STEP files
+or prismatic joint that is not a mimic follower, and a STEP whose articulation
+has a turning or sliding joint row (a revolute, slider or cylindrical mate). Robots and STEP files
 open in Select: the tool in hand is never stored, and a reload brings back a
 robot's joint values with the rest of the file's view. It is absent in preview. While it is active the model picks nothing, hovers
 nothing and casts no model ray (`pickMode` NONE, as in preview); the camera
