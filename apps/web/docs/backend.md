@@ -255,7 +255,7 @@ The answer is GLB-framed (`model/gltf-binary`): a glTF JSON chunk whose
 
 A 2D drawing is rendered on the SERVER. `cadgen.drawing_payload` runs ezdxf's
 drawing add-on over the `.dxf`'s modelspace and returns what every entity
-flattens to — text outlined, dimensions exploded, hatches filled or patterned,
+flattens to — text placed, dimensions exploded, hatches filled or patterned,
 block inserts placed — so the client draws primitives and never parses DXF.
 
 `cadgen dxf snapshot` draws the SAME payload: its resolver calls
@@ -273,31 +273,47 @@ not add one).
 
 ```jsonc
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "units": { "insunits": 4, "name": "Millimeters", "toMillimetres": 1.0 },
   "bounds": [minX, minY, maxX, maxY],        // null when nothing was drawn
   "layers": [{ "name": "CUT", "color": "#ff0000", "count": 12 }],
+  "fonts": [{ "family": "Arial", "weight": 400, "italic": false }],
   "primitives": [{ "type": "lines", "layer": "CUT", "color": "#ff0000",
-                   "geometry": [[0, 0, 40, 0]] }]
+                   "geometry": [[0, 0, 40, 0]] },
+                 { "type": "text", "layer": "0", "color": null, "text": "NOTE 1",
+                   "font": 0, "height": 2.5, "width": 12.94,
+                   "transform": [1, 0, 0, 1, 10, 20] }]
 }
 ```
 
 - **Coordinates** are DXF modelspace coordinates, **y up**, rounded to 4
   decimals and written as integers where they are whole. `bounds` is computed
-  from those same rounded numbers and includes Bezier control points, so it is
-  a conservative box that never clips.
+  from those same rounded numbers and includes Bezier control points and each
+  string's box, so it is a conservative box that never clips.
 - **`color: null`** means the drawing's default pen (ACI 7 — "whatever
   contrasts with the background"). The client paints those with the theme's
   foreground, which is why one payload serves both the light and the dark
   theme. Every other ACI and every true colour is a literal `#rrggbb`. A layer
   row's `color` is null on the same rule. Lineweights are not in the payload:
   the client draws hairlines, as AutoCAD does with LWDISPLAY off. The payload
-  shape also lets a primitive name its own screen `width` (CSS pixels) and
-  `opacity`, which a STEP section's drawing uses and a DXF's never does.
+  shape also lets a stroke (`lines`, `path`) name its own screen `width` (CSS
+  pixels) and any primitive its `opacity`, which a STEP section's drawing uses
+  and a DXF's never does.
 - **`primitives[].type`** is ezdxf's own vocabulary: `point` (`[x, y]`),
   `lines` (`[[x0,y0,x1,y1], …]`), `path` (SVG-like `["M"|"L"|"Q"|"C"|"Z", …]`
   commands), `filled-paths` (a list of those command lists, even-odd filled)
-  and `filled-polygon` (an explicitly closed `[[x, y], …]` ring).
+  and `filled-polygon` (an explicitly closed `[[x, y], …]` ring) — and `text`.
+- **`text`** is one line of text where ezdxf placed it (a TEXT, an MTEXT line or
+  word, a dimension's measurement): the string, its face (`font`, an index into
+  `fonts`), its cap `height`, the advance `width` ezdxf measured in that face, and
+  `transform`, `[a, b, c, d, e, f]` in Canvas 2D's order, from the string's own
+  space (baseline-left at the origin, y up) to the drawing — alignment, rotation,
+  width factor, mirroring and block transforms already in it. The client sets the
+  string at that cap height in the face it has under that name and stretches it to
+  `width`, so a face that differs from the server's keeps the server's layout.
+  Text inside a clipped block reference arrives outlined (`filled-paths`), since
+  only paths can be clipped. Outlined, a line of text was ~23 KB; as `text` it is
+  ~150 bytes.
 - **`layers`** lists only layers that drew something, in first-seen order.
 
 The payload is derived data, cached in the store's `drawing` index under the
@@ -305,9 +321,20 @@ document's content hash plus the extraction scheme, so a second request for
 unchanged bytes re-serves stored bytes without entering — or importing —
 ezdxf. See `packages/cadgen/STORE.md` §2.
 
-Rendering is CPU-bound Python on the request thread (~0.1 s for a 1k-entity
-drawing, ~0.7 s for 10k on a warm laptop), and the server is a
-`ThreadingHTTPServer`, so a large cold drawing holds the GIL against other
-requests for about that long. If drawings that size become routine, the
+Bytes the store has not drawn are rendered OFF the request
+(`cadgen/viewer/drawings.py`): the request starts the render on a thread of its
+own, or joins the one already running for those bytes, and waits on it at most
+2 s. A render that ends within that is the answer; one still running answers
+`202 {"state": "drawing", "retryMs": 0}`, and the client asks again after
+`retryMs` (the CAD app's tunnel holds 0.25 s and asks for 750 ms, since its calls
+share the host's few slots). The client bounds each request by how long the
+server stays silent — 10 s to the headers, then 10 s between parts of the body —
+never by how long a drawing takes, so a drawing that renders for a minute opens,
+and a server that stopped answering still fails. One render per drawing: every
+request for the same bytes joins it, and its answer is kept for 30 s after it
+ends, so the next request is answered even where the store could not keep it.
+Rendering is CPU-bound Python (~0.2 s for 2,000 lines of text, ~1 s for 6,000,
+~3 s for 100,000 LINEs on a warm laptop) and still holds the GIL against the
+server's other threads while it runs. If drawings that size become routine, the
 escalation is cadgen's build pool — the same move the STEP import made — not a
-second thread pool here.
+thread pool here.

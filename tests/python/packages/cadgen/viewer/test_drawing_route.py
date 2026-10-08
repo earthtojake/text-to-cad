@@ -19,9 +19,13 @@ import unittest
 from pathlib import Path
 from urllib.parse import quote
 
+from unittest import mock
+
 import ezdxf
 
+from cadgen.drawing_payload import DRAWING_PAYLOAD_SCHEMA_VERSION
 from cadgen.viewer import handler as handler_module
+from cadgen.viewer.drawings import DrawingRenders
 from cadgen.viewer.http_app import create_cad_app
 
 SECRET = "TOP-SECRET-BYTES"
@@ -94,7 +98,11 @@ class DrawingRouteFixture:
             conn.close()
 
     def drawing(self, file_param):
-        return self.request(f"/__cad/drawing?file={quote(str(file_param), safe='')}")
+        """The answer, asked again while the drawing renders (202), as the client asks."""
+        while True:
+            status, headers, body = self.request(f"/__cad/drawing?file={quote(str(file_param), safe='')}")
+            if status != 202:
+                return status, headers, body
 
 
 class DrawingRouteTestCase(unittest.TestCase):
@@ -120,8 +128,6 @@ class ItServesTheDrawing(DrawingRouteTestCase):
         # The viewer serves bytes to render, never a save-as.
         self.assertNotIn("content-disposition", {name.lower() for name in headers})
         payload = json.loads(body)
-        from cadgen.drawing_payload import DRAWING_PAYLOAD_SCHEMA_VERSION
-
         self.assertEqual(payload["schemaVersion"], DRAWING_PAYLOAD_SCHEMA_VERSION)
         self.assertEqual(payload["units"]["insunits"], 4)
         self.assertEqual(len(payload["bounds"]), 4)
@@ -189,6 +195,57 @@ class ItRefusesWhatItShould(DrawingRouteTestCase):
             conn.close()
         self.assertEqual(response.status, 405)
         self.assertNotIn(b'"primitives"', body)
+
+
+class OneRenderPerDrawing(unittest.TestCase):
+    """A render runs off the request, once per drawing's bytes, and every request joins it.
+
+    The render is held on an event, so "still rendering" is a state the test sets rather than a
+    race it hopes to win, and it writes no store: the answer must come from the render itself, as
+    it does where the store cannot keep it.
+    """
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        patcher = mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.base / "cache")})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.drawing = write_drawing(self.base / "plate.dxf", plate)
+        self.release = threading.Event()
+        self.calls = []
+
+    def render(self, outcome):
+        def rendered(path, key):
+            self.calls.append(path)
+            self.release.wait(30)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        return mock.patch("cadgen.drawing_payload.render_drawing_payload", side_effect=rendered)
+
+    def test_requests_while_it_renders_join_it_and_the_next_has_its_payload(self) -> None:
+        renders = DrawingRenders(hold_seconds=0, retry_ms=750)
+        with self.render(b'{"payload":1}'):
+            self.assertEqual(renders.response(str(self.drawing)), (202, {"state": "drawing", "retryMs": 750}))
+            self.assertEqual(renders.response(str(self.drawing))[0], 202)
+            self.assertTrue(renders.any_in_flight())
+            self.release.set()
+            renders.hold_seconds = 30
+            self.assertEqual(renders.response(str(self.drawing)), (200, b'{"payload":1}'))
+        self.assertEqual(len(self.calls), 1)
+        self.assertFalse(renders.any_in_flight())
+
+    def test_a_drawing_that_will_not_render_is_reported_to_the_request_that_follows(self) -> None:
+        crashes = []
+        renders = DrawingRenders(hold_seconds=0, on_crash=crashes.append)
+        with self.render(RuntimeError("ezdxf tripped")):
+            self.assertEqual(renders.response(str(self.drawing))[0], 202)
+            self.release.set()
+            renders.hold_seconds = 30
+            self.assertEqual(renders.response(str(self.drawing)), (400, {"error": "ezdxf tripped"}))
+        self.assertEqual([str(error) for error in crashes], ["ezdxf tripped"], "a bug is counted once, by the render")
 
 
 class ItStaysOffTheKernelAndTheReloadCounter(DrawingRouteTestCase):

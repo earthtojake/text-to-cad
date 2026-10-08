@@ -264,6 +264,26 @@ test('a drawing is one plain GET, and a refusal arrives with the server’s own 
   client.dispose();
 });
 
+test('a drawing still rendering is asked for again after the server\'s retryMs, until its payload comes back', async () => {
+  const replies = [{ state: 'drawing', retryMs: 0 }, { state: 'drawing', retryMs: 0 }, { schemaVersion: 2, primitives: [] }];
+  let asked = 0;
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => {
+    asked += 1;
+    return Response.json(replies.shift(), { status: asked < 3 ? 202 : 200 });
+  } });
+  assert.deepEqual(await client.drawing('/m/sheet.dxf'), { schemaVersion: 2, primitives: [] });
+  assert.equal(asked, 3);
+  // The wait for the next ask ends with its owner.
+  const controller = new AbortController();
+  const waiting = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => {
+    queueMicrotask(() => controller.abort());
+    return Response.json({ state: 'drawing', retryMs: 60_000 }, { status: 202 });
+  } });
+  await assert.rejects(waiting.drawing('/m/sheet.dxf', { signal: controller.signal }), { name: 'AbortError' });
+  client.dispose();
+  waiting.dispose();
+});
+
 test('a drawing refused by the server raises the classified failure an alert is built from', async () => {
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => ({
     ok: false, status: 400, statusText: 'Bad Request',

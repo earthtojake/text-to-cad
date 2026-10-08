@@ -15,7 +15,7 @@ import { PNG } from 'pngjs';
 // `__fixtures__/README.md` says how to regenerate the pair.
 const SAMPLE = JSON.parse(await readFile(new URL('./__fixtures__/sample.drawing.json', import.meta.url), 'utf8'));
 // A drawing whose modelspace is empty: `bounds: null`, and nothing to frame.
-const EMPTY = { schemaVersion: SAMPLE.schemaVersion, units: SAMPLE.units, bounds: null, layers: [], primitives: [] };
+const EMPTY = { schemaVersion: SAMPLE.schemaVersion, units: SAMPLE.units, bounds: null, layers: [], fonts: [], primitives: [] };
 const BAD_DXF_MESSAGE = 'plate.dxf is not a readable DXF document: run `ezdxf audit` on it, or export it again.';
 
 // The fixture's own measurements, so an assertion can say WHICH edge it is reading.

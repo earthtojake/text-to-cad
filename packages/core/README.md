@@ -151,8 +151,8 @@ src/
                    #   payload's meshes loaded; the robot parts and scene
                    #   builder, played by common/articulation),
                    #   drawing2d/ (a cadgen drawing payload -- a DXF's, or a
-                   #   STEP section's exact cut -> Canvas 2D: fit/pan/zoom
-                   #   maths, batched Path2D, screen-width strokes),
+                   #   STEP section's exact cut -> Canvas 2D, text by fillText:
+                   #   fit/pan/zoom maths, batched Path2D, screen-width strokes),
                    #   glb/ (a GLB writer for test fixtures), cadRefs (grammar,
                    #   parity-tested against cad_ref_syntax.py)
 scripts/           # chunk-ids.mjs (the pages' builds: a chunk's debug id) and

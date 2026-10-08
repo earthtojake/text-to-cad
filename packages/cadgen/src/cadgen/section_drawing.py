@@ -377,6 +377,8 @@ def section_drawing(
         "units": _units(descriptor),
         "bounds": None,
         "layers": [],
+        # A section is lettered by the page's overlay, not by the payload: no text, no fonts.
+        "fonts": [],
         "primitives": [],
     }
     if not points:
