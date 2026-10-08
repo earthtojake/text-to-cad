@@ -55,6 +55,14 @@ def index_presets(roots: list[Path]) -> tuple[dict[tuple[str, str], list[Path]],
     return found, selectable
 
 
+def shared_path_depth(a: Path, b: Path) -> int:
+    """Compare resolved paths; different Windows drives have no shared parent."""
+    try:
+        return len(Path(os.path.commonpath([a.resolve(), b.resolve()])).parts)
+    except ValueError:
+        return 0
+
+
 def complete(index: dict[tuple[str, str], list[Path]], kind: str, ref: str) -> tuple[dict, str]:
     """The preset merged with every parent, and the selectable system preset it comes from."""
     path = Path(ref).expanduser()
@@ -68,7 +76,7 @@ def complete(index: dict[tuple[str, str], list[Path]], kind: str, ref: str) -> t
         if not parents or len(chain) > 20:
             sys.exit(f"Can't resolve parent {chain[-1]['inherits']!r} of {kind} preset {chain[0].get('name')!r}.")
         # A parent of the same name can exist under several vendors: take the one nearest the child.
-        path = max(parents, key=lambda parent: len(os.path.commonpath([parent, path])))
+        path = max(parents, key=lambda parent: shared_path_depth(parent, path))
         chain.append(json.loads(path.read_text(encoding="utf-8")))
     merged: dict = {}
     for layer in reversed(chain):

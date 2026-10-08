@@ -474,6 +474,77 @@ class NoDistConfigured(unittest.TestCase):
 
 
 class Streaming(unittest.TestCase):
+    def test_atomic_replacement_before_open_uses_the_open_file_length(self):
+        from cadgen.viewer.response import Response
+        from cadgen.mcp.tunnel import ViewerTunnel
+        import base64
+
+        fixture = ServerFixture()
+        original = Response.stream_file
+        model = Path(fixture.root, "part.stl")
+        url = f"/__cad/asset?file={quote(str(model), safe='')}"
+        try:
+            for payload in (b"small", b"larger replacement" * 8):
+                for via_tunnel in (False, True):
+                    with self.subTest(length=len(payload), tunnel=via_tunnel):
+                        model.write_bytes(b"original contents")
+
+                        def replace(response, path, stat_result, *args):
+                            pending = Path(path).with_suffix(".pending")
+                            pending.write_bytes(payload)
+                            os.replace(pending, path)
+                            return original(response, path, stat_result, *args)
+
+                        with mock.patch.object(Response, "stream_file", replace):
+                            if via_tunnel:
+                                reply = ViewerTunnel().serve(method="GET", url=url, headers={}, body=b"")
+                                status, headers, body = reply["status"], reply["headers"], base64.b64decode(reply["body"])
+                            else:
+                                conn = http.client.HTTPConnection("127.0.0.1", fixture.port, timeout=1)
+                                try:
+                                    conn.request("GET", url)
+                                    reply = conn.getresponse()
+                                    status, headers, body = reply.status, dict(reply.getheaders()), reply.read()
+                                finally:
+                                    conn.close()
+                        self.assertEqual((status, int(headers["content-length"]), body), (200, len(payload), payload))
+        finally:
+            fixture.close()
+
+    def test_atomic_replacement_after_headers_keeps_the_open_inode_and_etag(self):
+        from cadgen.viewer.response import Response
+        from cadgen.mcp.tunnel import ViewerTunnel
+        import base64
+
+        fixture = ServerFixture()
+        model = Path(fixture.root, "part.stl")
+        payload = b"original contents"
+        model.write_bytes(payload)
+        stat = model.stat()
+        original = Response._begin
+
+        def replace(response, status, headers):
+            original(response, status, headers)
+            pending = model.with_suffix(".pending")
+            pending.write_bytes(b"replacement contents")
+            try:
+                os.replace(pending, model)
+            except PermissionError:
+                # Windows refuses to replace a file a handle holds open (cadgen's own
+                # atomic_replace waits that out); the open stream keeps the original
+                # bytes on either platform, which is what this pins.
+                if os.name != "nt":
+                    raise
+
+        try:
+            with mock.patch.object(Response, "_begin", replace):
+                reply = ViewerTunnel().serve(method="GET", url=f"/__cad/asset?file={quote(str(model), safe='')}", headers={"range": "bytes=1-4"}, body=b"")
+                status, headers, body = reply["status"], reply["headers"], base64.b64decode(reply["body"])
+            self.assertEqual((status, body), (206, payload[1:5]))
+            self.assertEqual(headers["etag"], f'"{stat.st_ino:x}-{stat.st_size:x}-{stat.st_mtime_ns:x}"')
+        finally:
+            fixture.close()
+
     def test_a_large_file_streams_with_an_accurate_content_length(self):
         fixture = ServerFixture()
         try:

@@ -768,7 +768,10 @@ def paired_urdf_for_srdf(srdf_path: Path) -> Path:
             f"{srdf_path.name} is ambiguous: {len(matches)} .urdf files in {folder} declare "
             f"<robot name={robot_name!r}> ({', '.join(match.name for match in matches)}). {rule}"
         )
-    candidates = sorted(folder.glob("*.urdf"))
+    try:
+        candidates = sorted(path for path in folder.iterdir() if path.suffix.lower() == ".urdf" and path.is_file())
+    except OSError:
+        candidates = []
     found = (
         "; it holds " + ", ".join(
             f"{candidate.name} (robot {(_robot_name(candidate) or 'unreadable')!r})"
