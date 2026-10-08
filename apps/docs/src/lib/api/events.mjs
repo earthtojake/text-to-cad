@@ -27,9 +27,7 @@
  *
  * cadgen 0.7.7 to 0.7.15 (schemas 1 and 2) send `tool`, `view` and `file`: one distinct file, once a day,
  * by a salted code. Its code goes no further: a batch's are read as `files`, one of each format they name.
- * Schema 4 adds `tool_failure`. A schema 4 batch a receiver refuses is sent again as schema 3 without it
- * (`cadgen/analytics.py`: `EARLIER`): a cadgen released before the receiver that reads its schema is deployed
- * loses nothing but its failures' reasons.
+ * Schema 4 adds `tool_failure`. A receiver that reads a new schema is deployed before any release sends it.
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

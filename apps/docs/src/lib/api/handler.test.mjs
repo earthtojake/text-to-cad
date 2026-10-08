@@ -106,7 +106,7 @@ test("schema 4 says why a tool's calls failed, one row per tool and reason, by a
   const failures = [{ name: 'tool_failure', tool: 'cad_show', reason: 'no_file', count: 1 }];
   assert.equal((await send(store, 'POST', '/v1/events', { ...BATCH, schema: 4, events: [...BATCH.events, ...failures] })).status, 204);
   assert.deepEqual(store.rows.map(fieldsOf).at(-1), { event: 'tool_failure', tool: 'cad_show', reason: 'no_file', count: 1 });
-  // The schema 3 batch a client sends again when a receiver that predates schema 4 refused it is read as ever.
+  // Schema 3, as cadgen 0.7.16 and 0.7.17 send it, is read as ever.
   assert.equal((await send(store, 'POST', '/v1/events', BATCH)).status, 204);
   for (const bad of [
     { ...BATCH, events: failures }, // schema 3 never sent one

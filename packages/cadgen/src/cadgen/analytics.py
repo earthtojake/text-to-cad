@@ -98,10 +98,7 @@ Telemetry never gets in the way of CAD:
   sends sends it, in the background, soon after it starts.
 - A batch the receiver did not take (offline, a slow or broken receiver, or none answering
   there yet) is kept for the next one; it is never an error. One the receiver read and refused
-  (``REFUSED``) is sent once more in the schema before this one (``EARLIER``), without what that schema
-  never had: a release reaches PyPI before the receiver that reads its schema is deployed, and the
-  receiver deployed until then reads only the schemas released before. Refused again, it is dropped:
-  it would be refused every time, and take everything after it down with it.
+  (``REFUSED``) is dropped: it would be refused again, and take everything after it down with it.
 
 The answer is changed only under the settings lock (``settings.update_section``), so the processes
 answering, opting out or making the install's id at once never undo one another. A settings file
@@ -139,9 +136,6 @@ LOG = logging.getLogger("cadgen.analytics")
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
 # 4: why tool calls failed; 3: the build daemon's counts, and files as numbers; 2: the install's channel replaced `source`
 SCHEMA = 4
-# The schema before ``SCHEMA``, and the events it never had: what a batch the receiver refused is sent again as
-# (``Recorder._deliver``), for a receiver not yet deployed with this release -- it reaches PyPI first.
-EARLIER = (3, frozenset({"tool_failure"}))
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the person's state directory, not the install.
@@ -1124,7 +1118,7 @@ class Recorder:
         if taken is None:
             return False
         payload, sending, choices = taken
-        outcome = self._deliver(payload)
+        outcome = _outcome(self._send(payload))
         if outcome == "failed":  # kept for the next batch, added to whatever came since -- unless a choice
             with self._lock:     # made here while it was on its way cleared it (two answers can share a tick)
                 if self._choices == choices:
@@ -1176,7 +1170,7 @@ class Recorder:
         for index, entry in enumerate(kept):
             if entry.get("answer") != answer:
                 continue
-            outcome = self._deliver(entry["batch"])
+            outcome = _outcome(self._send(entry["batch"]))
             if outcome == "failed":  # offline, or the receiver is down: this one and the rest wait for later
                 for rest in kept[index:]:
                     if rest.get("answer") == answer:
@@ -1184,19 +1178,6 @@ class Recorder:
                 return
             if outcome == "ok" and isinstance(entry["batch"].get("install"), str):
                 self._owe_deletion_if_gone(settings, entry["batch"]["install"])
-
-    def _deliver(self, payload: dict[str, Any]) -> str:
-        """Send a batch: ``ok``, ``refused`` or ``failed`` (``_post``). One this schema's receiver refused is
-        sent once more as the schema before (``EARLIER``) -- a receiver not yet deployed with this release
-        refuses a schema it does not know, and stores nothing of it -- without the events that one never had."""
-        outcome = _outcome(self._send(payload))
-        schema, unknown = EARLIER
-        if outcome != "refused" or payload.get("schema") != SCHEMA:
-            return outcome
-        events = [event for event in payload.get("events") or () if event.get("name") not in unknown]
-        if not events:
-            return outcome
-        return _outcome(self._send({**payload, "schema": schema, "events": events}))
 
     def _owe_deletion_if_gone(self, path: Path, install_id: str) -> None:
         """A batch can land after the deletion an opt-out asked for (said here or in another process

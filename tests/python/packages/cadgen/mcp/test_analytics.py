@@ -299,7 +299,7 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(sent, [])
 
     def test_a_batch_the_receiver_did_not_take_waits_for_the_next(self) -> None:
-        answers: list = [False, True, "refused", "refused", True]
+        answers: list = [False, True, "refused", True]
         sent: list[dict] = []
         choose(True, by="cli", path=self.path)
         recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or answers.pop(0))
@@ -311,29 +311,12 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(sent[1]["events"], [{"name": "files", "kind": "step", "count": 1},
                                              {"name": "tool", "tool": "cad_show", "calls": 2, "errors": 1},
                                              {"name": "tool_failure", "tool": "cad_show", "reason": "no_file", "count": 1}])
-        # One the receiver refused (a 4xx), and refused again in the schema before, is dropped: sent again, it
-        # would take what comes next down with it.
+        # One the receiver refused (a 4xx) is dropped: sent again, it would take what comes next down with it.
         recorder.called("cad_view", True)
         self.assertFalse(recorder.flush())
-        self.assertEqual([batch["schema"] for batch in sent[2:]], [4, 3])
         recorder.called("cad_show", True)
         self.assertTrue(recorder.flush())
-        self.assertEqual([event["tool"] for event in sent[4]["events"]], ["cad_show"])
-
-    def test_a_receiver_older_than_this_schema_still_counts_everything_but_why_tools_failed(self) -> None:
-        # A release reaches PyPI before the docs site deploys the receiver that reads its schema: until then the
-        # receiver refuses it, storing nothing, and the batch goes again as the schema before, without what that
-        # one never had. A receiver that reads it takes it the first time.
-        choose(True, by="cli", path=self.path)
-        sent: list[dict] = []
-        old = Recorder(path=self.path, send=lambda payload: sent.append(payload) or ("ok" if payload["schema"] <= 3 else "refused"))
-        old.called("cad_screenshot", True)
-        old.called("cad_screenshot", False, "timeout")
-        self.assertTrue(old.flush())
-        self.assertEqual([batch["schema"] for batch in sent], [4, 3])
-        self.assertEqual(sent[1]["events"], [{"name": "tool", "tool": "cad_screenshot", "calls": 2, "errors": 1}])
-        self.assertEqual({key: value for key, value in sent[1].items() if key not in ("schema", "events")},
-                         {key: value for key, value in sent[0].items() if key not in ("schema", "events")})
+        self.assertEqual([event["tool"] for event in sent[3]["events"]], ["cad_show"])
 
     def test_a_failed_call_says_why_by_a_word_chosen_where_it_failed_never_what_it_said(self) -> None:
         server, sent = self.serve("claude-directory")
