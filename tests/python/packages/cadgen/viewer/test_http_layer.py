@@ -527,7 +527,14 @@ class Streaming(unittest.TestCase):
             original(response, status, headers)
             pending = model.with_suffix(".pending")
             pending.write_bytes(b"replacement contents")
-            os.replace(pending, model)
+            try:
+                os.replace(pending, model)
+            except PermissionError:
+                # Windows refuses to replace a file a handle holds open (cadgen's own
+                # atomic_replace waits that out); the open stream keeps the original
+                # bytes on either platform, which is what this pins.
+                if os.name != "nt":
+                    raise
 
         try:
             with mock.patch.object(Response, "_begin", replace):
