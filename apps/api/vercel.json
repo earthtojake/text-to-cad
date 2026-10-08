@@ -4,7 +4,6 @@
     "deploymentEnabled": false
   },
   "framework": null,
-  "installCommand": "",
   "rewrites": [
     { "source": "/v1/(.*)", "destination": "/api/v1" }
   ]
