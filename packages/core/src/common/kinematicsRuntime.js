@@ -28,13 +28,11 @@ export function kinematicsCouplings(block) {
   return isObject(block) && Array.isArray(block.couplings) ? block.couplings : [];
 }
 
-function couplingLimits(coupling) {
-  return Array.isArray(coupling?.limits) ? coupling.limits : [0, 1];
-}
-
 // Every controllable DOF, in declaration order: mate DOFs first (cylindrical
 // contributes "<name>.turn" and "<name>.travel"), then coupling DOFs. Each
-// entry carries what a slider needs: id, kind, limits [lo, hi], default.
+// entry carries what a slider needs: id, kind, limits [lo, hi]. The limits are
+// the sidecar's: cadgen requires them on every mate DOF and writes a
+// coupling's range (0..1 when it declared none), so nothing here defaults one.
 export function kinematicsDofs(block) {
   const dofs = [];
   for (const mate of kinematicsMates(block)) {
@@ -51,14 +49,14 @@ export function kinematicsDofs(block) {
         dofs.push({
           id: `${name}.${sub}`,
           kind: sub === "turn" ? "revolute" : "slider",
-          limits: Array.isArray(limits[sub]) ? limits[sub] : null
+          limits: limits[sub]
         });
       }
     } else {
       dofs.push({
         id: name,
         kind: String(mate.kind || ""),
-        limits: Array.isArray(limits.value) ? limits.value : null
+        limits: limits.value
       });
     }
   }
@@ -68,7 +66,7 @@ export function kinematicsDofs(block) {
       dofs.push({
         id: name,
         kind: "coupling",
-        limits: couplingLimits(coupling)
+        limits: coupling.limits
       });
     }
   }
@@ -140,7 +138,7 @@ export function kinematicsDrivenDofs(block) {
         contested.add(dof);
         continue;
       }
-      drivers.set(dof, { coupling: name, ratio, limits: couplingLimits(coupling) });
+      drivers.set(dof, { coupling: name, ratio, limits: coupling.limits });
     }
   }
   const driven = {};

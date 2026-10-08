@@ -214,3 +214,34 @@ test("jaw-only motion moves the nested horn with the jaw", async (t) => {
   // servo group, which does not turn with the jaw.
   assert.ok(maxElementDelta(effects.get("o1.2.1").matrix, new THREE.Matrix4()) < 1e-9);
 });
+
+test("every slider range is the sidecar's own limits, cylindrical sub-DOFs included", async (t) => {
+  // cadgen requires limits on every mate DOF (both cylindrical sub-DOFs) and
+  // writes each coupling's range, so the page reads them and never makes one up.
+  stubSidecar(t, {
+    schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION,
+    documentHash: DOCUMENT_HASH,
+    kinematics: {
+      mates: [
+        {
+          name: "crown", kind: "cylindrical", parent: "#case", child: "#crown",
+          axis: { origin: [0, 0, 0], dir: [1, 0, 0] },
+          limits: { turn: [-3600, 3600], travel: [0, 1.6] }
+        }
+      ],
+      couplings: [{ name: "wind", gears: { "crown.turn": 360 }, limits: [-10, 10] }]
+    }
+  });
+  const definition = await loadKinematicsModuleDefinition(SIDECAR_URL, {
+    cadPath: "watch.step",
+    documentHash: DOCUMENT_HASH
+  });
+  const ranges = Object.fromEntries(
+    definition.parameters.map((parameter) => [parameter.id, [parameter.min, parameter.max]])
+  );
+  assert.deepEqual(ranges, {
+    "crown.turn": [-3600, 3600],
+    "crown.travel": [0, 1.6],
+    wind: [-10, 10]
+  });
+});

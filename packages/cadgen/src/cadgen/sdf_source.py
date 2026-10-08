@@ -22,6 +22,11 @@ class SdfJoint:
     joint_type: str
     parent_link: str
     child_link: str
+    # Native SDF units from <axis><limit>: radians for revolute, meters for
+    # prismatic. None for joints that have no position limits (continuous, fixed)
+    # or that declare none.
+    lower: float | None = None
+    upper: float | None = None
 
 
 @dataclass(frozen=True)
@@ -188,17 +193,35 @@ def _read_model(
             context=f"model {model_name!r} joint {joint_name!r} child",
             allow_world=False,
         )
+        lower, upper = _joint_position_limits(joint_element, joint_type)
         joints.append(
             SdfJoint(
                 name=joint_name,
                 joint_type=joint_type,
                 parent_link=parent_link,
                 child_link=child_link,
+                lower=lower,
+                upper=upper,
             )
         )
     _raise_on_duplicates(joint_names, source_path=source_path, label=f"model {model_name!r} joint")
 
     return link_names, joints, visual_mesh_paths, collision_mesh_paths
+
+
+def _joint_position_limits(joint_element: ET.Element, joint_type: str) -> tuple[float | None, float | None]:
+    if joint_type not in ("revolute", "prismatic"):
+        return None, None
+    for axis_element in children(joint_element, "axis"):
+        for limit_element in children(axis_element, "limit"):
+            bounds = [children(limit_element, tag) for tag in ("lower", "upper")]
+            if not all(bounds):
+                return None, None
+            try:
+                return float(str(bounds[0][0].text).strip()), float(str(bounds[1][0].text).strip())
+            except ValueError:
+                return None, None
+    return None, None
 
 
 def _required_name(element: ET.Element, *, source_path: Path, label: str) -> str:

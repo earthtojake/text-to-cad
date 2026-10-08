@@ -93,12 +93,12 @@ export function stepModuleFromKinematics(block) {
   const dofs = kinematicsDofs(block);
   const parameters = {};
   for (const dof of dofs) {
-    const limits = Array.isArray(dof.limits) ? dof.limits : [0, 1];
+    const [min, max] = dof.limits;
     parameters[dof.id] = {
       type: "number",
       label: dof.id,
-      min: limits[0],
-      max: limits[1],
+      min,
+      max,
       default: 0,
       unit: dof.kind === "revolute" ? "deg" : dof.kind === "coupling" ? "" : "mm"
     };

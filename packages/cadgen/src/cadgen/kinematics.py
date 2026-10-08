@@ -51,6 +51,8 @@ __all__ = [
     "couple",
     "normalize_kinematics",
     "kinematics_dof_ids",
+    "kinematics_dof_limits",
+    "dof_value_outside_limits",
 ]
 
 # The closed section vocabulary of the kinematics dict: the sidecar's kinematics
@@ -152,7 +154,16 @@ def _normalize_limits(limits: object, *, mate: str, kind: str) -> dict[str, list
                 f"cylindrical mate {mate!r} limits has unknown sub-DOF "
                 f"{sorted(unknown)}; it has exactly: {list(_CYLINDRICAL_DOFS)}"
             )
-        return {dof: pair(limits[dof], dof) for dof in _CYLINDRICAL_DOFS if dof in limits}
+        # Every DOF has a range, as revolute and slider limits are required: a
+        # sub-DOF without one would have no slider range and no limit to check
+        # a pose against.
+        missing = [dof for dof in _CYLINDRICAL_DOFS if dof not in limits]
+        if missing:
+            raise _fail(
+                f"cylindrical mate {mate!r} limits needs a (lo, hi) pair for every sub-DOF; "
+                f"missing {missing}, e.g. {{'turn': (0, 360), 'travel': (0, 40)}}"
+            )
+        return {dof: pair(limits[dof], dof) for dof in _CYLINDRICAL_DOFS}
     if limits is None:
         raise _fail(f"mate {mate!r} needs limits=(lo, hi) — sliders and exports both read the range")
     return {"value": pair(limits, "limits")}
@@ -365,6 +376,38 @@ def kinematics_dof_ids(block: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(ids)
 
 
+def kinematics_dof_limits(block: Mapping[str, Any]) -> dict[str, tuple[float, float, str]]:
+    """Every DOF's ``(lo, hi, unit)``: the range a value for it must lie in.
+
+    A revolute DOF is in degrees, a slider DOF in model units (mm), and a
+    coupling's value is a plain number. Every DOF has a range: mate limits are
+    required at declaration and a coupling without one spans (0, 1).
+    """
+    limits: dict[str, tuple[float, float, str]] = {}
+    for mate in block.get("mates", ()):
+        bounds = mate.get("limits") or {}
+        if mate.get("kind") == "cylindrical":
+            for dof, unit in (("turn", "deg"), ("travel", "mm")):
+                lo, hi = bounds[dof]
+                limits[f"{mate['name']}.{dof}"] = (float(lo), float(hi), unit)
+        elif mate.get("kind") in ("revolute", "slider"):
+            lo, hi = bounds["value"]
+            limits[mate["name"]] = (float(lo), float(hi), "deg" if mate["kind"] == "revolute" else "mm")
+    for coupling in block.get("couplings", ()):
+        lo, hi = coupling["limits"]
+        limits[coupling["name"]] = (float(lo), float(hi), "")
+    return limits
+
+
+def dof_value_outside_limits(block: Mapping[str, Any], dof: str, value: float) -> str | None:
+    """Why ``value`` cannot pose ``dof``, or None when it lies within its limits."""
+    lo, hi, unit = kinematics_dof_limits(block)[dof]
+    if lo <= value <= hi:
+        return None
+    suffix = f" {unit}" if unit else ""
+    return f"{value:g}{suffix} is outside DOF {dof!r}'s limits [{lo:g}, {hi:g}]{suffix}"
+
+
 def _validated_pose_values(block: Mapping[str, Any], values: Mapping[str, Any], *, where: str) -> dict[str, float]:
     known = set(kinematics_dof_ids(block))
     resolved: dict[str, float] = {}
@@ -377,6 +420,9 @@ def _validated_pose_values(block: Mapping[str, Any], values: Mapping[str, Any], 
             resolved[dof_name] = float(value)
         except (TypeError, ValueError):
             raise _fail(f"{where} value for {dof_name!r} must be a number, got {value!r}") from None
+        outside = dof_value_outside_limits(block, dof_name, resolved[dof_name])
+        if outside:
+            raise _fail(f"{where} value {outside}; a pose stays within the declared limits")
     return resolved
 
 

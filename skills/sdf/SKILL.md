@@ -131,7 +131,9 @@ the CAD Viewer shows.
 cadgen sdf snapshot path/to/robot.sdf review.png
 ```
 
-It accepts `.sdf` only (a format door, same `TARGET [OUT]` grammar as the rest). Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
+It accepts `.sdf` only (a format door, same `TARGET [OUT]` grammar as the rest). Pose the robot with `--joint-values` — `{joint: value}` JSON in degrees (metres for a
+prismatic joint), each value within the joint's limits or the request is refused before
+anything renders,
 joints you do not name staying at their defaults, where the CAD Viewer opens the robot (the
 `"jointValues"` job field is the same thing in a packet). The snapshot draws the robot with the
 viewer's own scene, so it shows what the viewer shows, and a link mesh that cannot be loaded

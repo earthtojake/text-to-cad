@@ -783,35 +783,51 @@ def paired_urdf_for_srdf(srdf_path: Path) -> Path:
     )
 
 
-def robot_joint_names(kind: str, description: Path) -> frozenset[str] | None:
-    """The joint names a pose request may name, or None when they cannot be read.
+def robot_joint_ranges(
+    kind: str, description: Path
+) -> dict[str, tuple[float, float, str] | None] | None:
+    """Every joint a pose request may name, with the range a value for it must lie in.
 
-    The browser is what ASSEMBLES a robot, so this module never had the joint list and a
-    misspelled `--joint-values` name was dropped in silence: the door reported success and
-    rendered the rest pose, which is the one failure a posed review cannot survive. The
-    STEP door already refuses an unknown DOF by name; robots now do the same.
+    Each name maps to ``(lo, hi, unit)`` in the units ``jointValues`` takes (degrees
+    for a revolute joint, metres for a prismatic one), or to None when no range
+    applies: a continuous joint turns without limit, and a fixed joint or a mimic
+    follower is not posed by its own value. The page would clamp an out-of-range value
+    and render a pose the request did not ask for, so the door refuses it instead.
 
     ``description`` is the file that DECLARES the joints: the SDF or URDF itself, or an
-    SRDF's paired URDF. The answer is only ever used to REFUSE a name that is definitely
-    not in the description. A description this cannot parse returns None and renders
-    exactly as before, so the check can never make the door stricter about geometry than
-    the renderer that has to draw it.
+    SRDF's paired URDF. The answer is only ever used to REFUSE a request. A description
+    this cannot parse returns None and renders exactly as before, so the check can never
+    make the door stricter about geometry than the renderer that has to draw it.
     """
+
+    def joint_range(joint_type: str, lower: float | None, upper: float | None, mimic: bool):
+        if mimic or joint_type not in ("revolute", "prismatic") or lower is None or upper is None:
+            return None
+        if joint_type == "revolute":
+            return (math.degrees(lower), math.degrees(upper), "deg")
+        return (lower, upper, "m")
+
     try:
         if kind == "sdf":
             from cadgen.sdf_source import read_sdf_source
 
-            return frozenset(joint.name for joint in read_sdf_source(description).joints)
+            return {
+                joint.name: joint_range(joint.joint_type, joint.lower, joint.upper, False)
+                for joint in read_sdf_source(description).joints
+            }
         import warnings
 
         from cadgen.urdf_source import read_urdf_source
 
         # The reader doubles as the validator and advises about inertials, materials and
         # the like. Those belong to `cadgen urdf validate`; a render that only needs the
-        # joint names must not start narrating them over the snapshot's own output.
+        # joints must not start narrating them over the snapshot's own output.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            return frozenset(joint.name for joint in read_urdf_source(description).joints)
+            return {
+                joint.name: joint_range(joint.joint_type, joint.lower, joint.upper, joint.mimic)
+                for joint in read_urdf_source(description).joints
+            }
     except Exception:
         return None
 
@@ -864,8 +880,8 @@ def check_robot_render_job(
     if joint_values:
         for name, value in joint_values.items():
             if not isinstance(value, (int, float)) or isinstance(value, bool):
-                raise SnapshotError(f"jointValues[{name}] must be a number (degrees)")
-        declared = robot_joint_names(kind, urdf_path or input_path)
+                raise SnapshotError(f"jointValues[{name}] must be a number (degrees, or metres for a prismatic joint)")
+        declared = robot_joint_ranges(kind, urdf_path or input_path)
         if declared is not None:
             unknown = sorted(str(name) for name in joint_values if str(name) not in declared)
             if unknown:
@@ -873,6 +889,19 @@ def check_robot_render_job(
                     f"Unknown joint(s): {', '.join(unknown)}. "
                     f"This {label} declares: {', '.join(sorted(declared)) or '(none)'}"
                 )
+            for name, value in joint_values.items():
+                limits = declared[str(name)]
+                if limits is None:
+                    continue
+                lo, hi, unit = limits
+                # Degrees converted from radians carry rounding: a value written as
+                # the limit itself must still pass.
+                tolerance = 1e-9 * max(1.0, abs(lo), abs(hi))
+                if not lo - tolerance <= value <= hi + tolerance:
+                    raise SnapshotError(
+                        f"jointValues[{name}] = {value:g} {unit} is outside joint {name!r}'s "
+                        f"limits [{lo:g}, {hi:g}] {unit}; pass a value within them"
+                    )
 
     # Robots are authored in METRES; the CAD profile assumes millimetres, and its floor,
     # grid and lighting radii are sized accordingly. Default the robot profile so a robot
@@ -1158,7 +1187,7 @@ def check_step_pose_and_clip_names(
                     )
                 )
         elif is_plain_object(preset):
-            from cadgen.kinematics import kinematics_dof_ids
+            from cadgen.kinematics import dof_value_outside_limits, kinematics_dof_ids
 
             dofs = set(kinematics_dof_ids(kinematics_block))
             unknown = sorted(str(key) for key in preset if str(key) not in dofs)
@@ -1167,6 +1196,14 @@ def check_step_pose_and_clip_names(
                     f"Unknown kinematics DOF(s): {', '.join(unknown)}. "
                     f"This model declares: {', '.join(sorted(dofs)) or '(none)'}"
                 )
+            # The page would clamp an out-of-range value and render a pose the
+            # request did not ask for, so the range is checked here.
+            for key, value in preset.items():
+                if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+                    raise SnapshotError(f"kinematics[{key}] must be a number, got {value!r}")
+                outside = dof_value_outside_limits(kinematics_block, str(key), float(value))
+                if outside:
+                    raise SnapshotError(f"kinematics[{key}] = {outside}; pass a value within them")
     elif has_kinematics_render_values(preset):
         raise SnapshotError(
             f"{input_name} declares no kinematics, so pose values have nothing to "
