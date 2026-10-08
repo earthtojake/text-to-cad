@@ -107,7 +107,9 @@ in [the drawing contract](../ui/docs/drawing.md); the mechanism is
   `lib/urdf/loadRobot.js` and `lib/urdf/robotParts.js`), which the viewer's renderer
   for that family and the snapshot CLI's headless stage (`common/headlessScene.js`)
   both call; the look they wear is resolved in one place (`resolveSceneSurfaceLook`,
-  `common/sceneSettings.js`) and a robot opens at one pose (`robotOpeningPose`). A
+  `common/sceneSettings.js`) and a robot opens at one pose: the opening of the
+  articulation cadgen resolved for it (`cadgen.robot_payload`, played by
+  `common/articulation.js` as a STEP model's kinematics are). A
   snapshot therefore cannot draw one of them differently from the viewer, and none is
   flattened into mesh data for a render. `npm run check:boundaries` holds both callers
   to the shared modules. A STEP document's scene is `buildModel`, shared the same way.
@@ -145,8 +147,9 @@ src/
                    #   (ref runtime), assembly/ (package composition),
                    #   render/ (format mesh loaders; the GLB and mesh scene
                    #   builders), viewer/ (exploded view, part visual state,
-                   #   the surface look, the scene contract), urdf/ (robot
-                   #   parsing and loading; the robot parts and scene builder),
+                   #   the surface look, the scene contract), urdf/ (a robot
+                   #   payload's meshes loaded; the robot parts and scene
+                   #   builder, played by common/articulation),
                    #   drawing2d/ (a cadgen drawing payload -- a DXF's, or a
                    #   STEP section's exact cut -> Canvas 2D: fit/pan/zoom
                    #   maths, batched Path2D, screen-width strokes),

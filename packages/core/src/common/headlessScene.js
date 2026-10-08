@@ -23,7 +23,6 @@ import { createGlbScene } from "../lib/render/glbScene.js";
 import { loadRenderMeshByUrl } from "../lib/render/meshLoaders.js";
 import { buildMeshScene } from "../lib/render/meshScene.js";
 import { loadRobot } from "../lib/urdf/loadRobot.js";
-import { robotOpeningPose } from "../lib/urdf/motion.js";
 import { createRobotScene } from "../lib/urdf/robotScene.js";
 import { isKitScene, sceneFramingBounds } from "../lib/viewer/sceneContract.js";
 import { resolveSceneSurfaceLook } from "./sceneSettings.js";
@@ -75,24 +74,19 @@ const MESH_FAMILY = Object.freeze({
 
 const ROBOT_FAMILY = Object.freeze({
   name: "robot",
-  // The robot the robot renderer loads (`useRobotDocument`): the description and every link mesh.
-  load: (job, { resources }) => loadRobot(jobKind(job), {
-    url: jobUrl(job), urdfUrl: String(job?.resolved?.urdfUrl || job?.urdfUrl || "").trim(), resources
-  }),
+  // The robot the robot renderer loads (`useRobotDocument`): the payload cadgen resolved, which
+  // the job carries (`resolved.robot`), and every mesh its visuals name.
+  load: (job, { resources }) => loadRobot({ robot: job?.resolved?.robot, resources }),
   build(THREE, robot, job) {
     const scene = createRobotScene(THREE, robot);
-    // Where the viewer OPENS this robot, with the joints the request names on top: one
-    // write through the one path a pose takes (the scene's joint matrices).
-    scene.setJointValues({ ...robotOpeningPose(robot.description), ...jointValuesOf(job) });
+    // The control vector cadgen validated for this job (`resolved.controls`: where the viewer
+    // opens the robot, with the joints the request names on top), through the one path a pose
+    // takes (the scene's joint matrices).
+    scene.setControlValues(job?.resolved?.controls);
     return scene;
   },
   release: () => {}
 });
-
-function jointValuesOf(job) {
-  const values = job?.jointValues ?? job?.resolved?.jointValues ?? null;
-  return values && typeof values === "object" && !Array.isArray(values) ? values : {};
-}
 
 const FAMILY_BY_KIND = Object.freeze({
   glb: GLB_FAMILY,

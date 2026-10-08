@@ -5,7 +5,7 @@
 // Encoding linear -> sRGB hex makes that round-trip land on the same linear albedo the baked
 // path shaded, so a flat override renders pixel-identically without baking per-occurrence vertices.
 import { linearRgbToHex } from "../color.js";
-import { mergeBounds } from "../urdf/kinematics.js";
+import { mergeBoundsList } from "../viewer/autoZoom.js";
 
 const IDENTITY_TRANSFORM = Object.freeze([
   1, 0, 0, 0,
@@ -663,7 +663,7 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
     assemblyRoot,
     bounds: assemblyRoot && assemblyRoot === previous?.assemblyRoot
       ? previous.bounds
-      : mergeBounds(parts.map((part) => part.bounds)),
+      : mergeBoundsList(parts.map((part) => part.bounds)) || { min: [0, 0, 0], max: [0, 0, 0] },
     declaredBounds: declaredPackageBounds(descriptor, previous?.declaredBounds),
     missingComponentIds,
     // Each occurrence is placed by its transform at render time over shared component
@@ -725,7 +725,7 @@ function enrichPackageAssemblyNode(node, partById, previous = null) {
     }
   } else {
     out.transform = [...IDENTITY_TRANSFORM];
-    out.bounds = mergeBounds(children.map((child) => child.bounds));
+    out.bounds = mergeBoundsList(children.map((child) => child.bounds)) || { min: [0, 0, 0], max: [0, 0, 0] };
   }
   return out;
 }

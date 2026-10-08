@@ -10,14 +10,15 @@ import {
   loadRenderArrayBuffer,
   loadRenderGlb,
   loadRenderJson,
-  loadRenderSdf,
+  loadRenderRobot,
   loadRenderDisplayEdgeBundle,
   loadRenderSelectorBundle,
   loadRenderTopologyIndex,
   loadRenderSurf as loadSurf,
   loadRenderSurfSelectorBundle as loadSurfSelectors,
   peekRenderJson,
-  peekRenderSdf,
+  peekRenderRobot,
+  ROBOT_PAYLOAD_SCHEMA_VERSION,
   renderAssetCacheStats,
   reclaimIdleSurfWorkers,
   releaseSurfWorkers,
@@ -66,39 +67,6 @@ const loadRenderSurfSelectorBundle = (url, options = {}) => loadSurfSelectors(ur
 const releaseRenderSurfLevel = (url, options = {}) => releaseSurfLevel(url, {
   identity: identityForSurfTest(url), tessellationCache, tessellation: STANDARD, ...options,
 });
-
-class FakeElement {
-  constructor(tagName, attributes = {}, children = [], text = "") {
-    this.nodeType = 1;
-    this.tagName = tagName;
-    this.localName = String(tagName || "").split(":").pop();
-    this._attributes = { ...attributes };
-    this.childNodes = children;
-    this._text = String(text || "");
-  }
-
-  getAttribute(name) {
-    return Object.hasOwn(this._attributes, name) ? this._attributes[name] : null;
-  }
-
-  get textContent() {
-    return `${this._text}${this.childNodes.map((child) => String(child?.textContent || "")).join("")}`;
-  }
-}
-
-class FakeDocument {
-  constructor(documentElement) {
-    this.documentElement = documentElement;
-  }
-
-  querySelector(selector) {
-    return selector === "parsererror" ? null : null;
-  }
-}
-
-function el(tagName, attributes = {}, children = [], text = "") {
-  return new FakeElement(tagName, attributes, children, text);
-}
 
 function pad4(buffer, byte = 0) {
   const padding = (4 - (buffer.length % 4)) % 4;
@@ -371,40 +339,19 @@ test("STEP_topology client rejects old schema artifacts", async (t) => {
   );
 });
 
-test("SDF robot descriptions load through the render cache", async (t) => {
-  const originalFetch = globalThis.fetch;
-  const originalDomParser = globalThis.DOMParser;
-  const url = `/robot-${Date.now()}-${Math.random()}.sdf`;
-  let fetchCount = 0;
-
-  globalThis.DOMParser = class FakeDomParser {
-    parseFromString() {
-      return new FakeDocument(el("sdf", { version: "1.12" }, [
-        el("model", { name: "sample_robot" }, [
-          el("link", { name: "base_link" })
-        ])
-      ]));
-    }
-  };
-  globalThis.fetch = async (requestUrl) => {
-    fetchCount += 1;
-    assert.equal(String(requestUrl), url);
-    return new Response("<sdf />", { status: 200 });
-  };
-
-  t.after(() => {
-    globalThis.fetch = originalFetch;
-    globalThis.DOMParser = originalDomParser;
-  });
-
-  const first = await loadRenderSdf(url);
-  const second = await loadRenderSdf(url);
-
-  assert.equal(first.robotName, "sample_robot");
-  assert.equal(first.rootLink, "base_link");
+test("a robot payload loads through the render cache, by file and revision, and only at this build's schema", async () => {
+  const file = `/robots/arm-${Date.now()}-${Math.random()}.urdf`;
+  let calls = 0;
+  const client = { robot: async (asked) => { calls += 1; assert.equal(asked, file); return { schemaVersion: ROBOT_PAYLOAD_SCHEMA_VERSION, kind: "urdf", articulation: {}, visuals: [] }; } };
+  const first = await loadRenderRobot(file, { client, revision: "r1" });
+  const second = await loadRenderRobot(file, { client, revision: "r1" });
   assert.equal(second, first);
-  assert.equal(peekRenderSdf(url), first);
-  assert.equal(fetchCount, 1);
+  assert.equal(peekRenderRobot(file, { revision: "r1" }), first);
+  assert.equal(peekRenderRobot(file, { revision: "r2" }), null, "a new revision of the file is read again");
+  await loadRenderRobot(file, { client, revision: "r2" });
+  assert.equal(calls, 2);
+  const stale = { robot: async () => ({ schemaVersion: ROBOT_PAYLOAD_SCHEMA_VERSION + 1 }) };
+  await assert.rejects(loadRenderRobot(`${file}-stale`, { client: stale }), /schemaVersion 2.*reads version 1/);
 });
 
 test("a cached render asset is not reused across source scopes", async (t) => {

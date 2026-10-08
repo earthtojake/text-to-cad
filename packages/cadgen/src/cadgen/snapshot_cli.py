@@ -678,160 +678,6 @@ def normalize_render_job_selection(
     return normalized
 
 
-# The shapes the renderer can draw. Kept beside the door because "renderable" is a RENDERER
-# fact, not a validity one: `cadgen sdf validate` accepts every shape SDFormat defines.
-SDF_RENDERABLE_GEOMETRY = ("box", "cylinder", "mesh", "sphere")
-
-
-def unrenderable_sdf_geometry(input_path: Path) -> list[tuple[str, str]]:
-    """``(link, kind)`` for every VISUAL shape the renderer cannot draw.
-
-    A capsule, plane, ellipsoid, heightmap or polyline has no mesh in the renderer, so the
-    composer drops it and the model renders as EMPTY SPACE at exit 0. The browser parser
-    refuses these too — that is what the Viewer shows — but the door answers first so the
-    CLI fails before starting a browser, and says the same thing.
-
-    COLLISION geometry is deliberately not checked. It is never drawn, so an undrawable one
-    costs the picture nothing, and a ``<plane>`` ground collision is the single most common
-    shape in a real Gazebo world — refusing those would block loading and snapshotting every
-    one of them for no visual gain. The Viewer counts them in its SDF sheet instead; this
-    door has no non-blocking channel of its own (a snapshot's ``warnings`` come back from the
-    renderer, not from job resolution), so it passes over them in silence.
-
-    Returns [] when the file cannot be read: a description this cannot parse is left to the
-    renderer exactly as before, so the check never refuses more than it understands.
-    """
-    import xml.etree.ElementTree as ET
-
-    def local(tag: object) -> str:
-        return str(tag).rsplit("}", 1)[-1]
-
-    try:
-        root = ET.parse(input_path).getroot()
-    except Exception:
-        return []
-    found: list[tuple[str, str]] = []
-    for link in root.iter():
-        if local(link.tag) != "link":
-            continue
-        link_name = link.get("name") or "(unnamed)"
-        for container in link:
-            if local(container.tag) != "visual":
-                continue
-            geometry = next((c for c in container if local(c.tag) == "geometry"), None)
-            shapes = [local(c.tag) for c in geometry] if geometry is not None else []
-            kind = shapes[0] if shapes else "missing"
-            if kind not in SDF_RENDERABLE_GEOMETRY:
-                found.append((link_name, kind))
-    return found
-
-
-def _robot_name(description: Path) -> str | None:
-    """The root ``<robot name>`` of a URDF or SRDF, or None when it cannot be read."""
-    import xml.etree.ElementTree as ET
-
-    try:
-        for _event, element in ET.iterparse(str(description), events=("start",)):
-            if str(element.tag).rsplit("}", 1)[-1] != "robot":
-                return None
-            return str(element.attrib.get("name") or "").strip() or None
-    except (OSError, ET.ParseError):
-        return None
-    return None
-
-
-def paired_urdf_for_srdf(srdf_path: Path) -> Path:
-    """The URDF whose geometry an SRDF renders, or a refusal naming the search.
-
-    An SRDF carries planning semantics only. It pairs with the same-folder
-    ``.urdf`` whose ``<robot name>`` matches — the rule ``cadgen srdf validate``
-    and the Viewer use — and exactly one may match. Anything else used to reach
-    the browser with no URDF at all and come back as a stack trace.
-    """
-    from cadgen.srdf_validation import find_paired_urdf
-
-    folder = srdf_path.parent
-    robot_name = _robot_name(srdf_path)
-    rule = (
-        "An SRDF renders the geometry of the same-folder .urdf whose <robot name> "
-        "matches its own, and exactly one may match (check with `cadgen srdf validate`)."
-    )
-    if not robot_name:
-        raise SnapshotError(
-            f"{srdf_path.name} has no readable <robot name>, so its URDF cannot be found. {rule}"
-        )
-    paired, matches = find_paired_urdf(robot_name, folder)
-    if paired is not None:
-        return paired
-    if matches:
-        raise SnapshotError(
-            f"{srdf_path.name} is ambiguous: {len(matches)} .urdf files in {folder} declare "
-            f"<robot name={robot_name!r}> ({', '.join(match.name for match in matches)}). {rule}"
-        )
-    candidates = sorted(folder.glob("*.urdf"))
-    found = (
-        "; it holds " + ", ".join(
-            f"{candidate.name} (robot {(_robot_name(candidate) or 'unreadable')!r})"
-            for candidate in candidates[:6]
-        ) + (f" and {len(candidates) - 6} more" if len(candidates) > 6 else "")
-        if candidates
-        else "; it holds no .urdf files"
-    )
-    raise SnapshotError(
-        f"{srdf_path.name} has no paired URDF: no .urdf in {folder} declares "
-        f"<robot name={robot_name!r}>{found}. {rule}"
-    )
-
-
-def robot_joint_ranges(
-    kind: str, description: Path
-) -> dict[str, tuple[float, float, str] | None] | None:
-    """Every joint a pose request may name, with the range a value for it must lie in.
-
-    Each name maps to ``(lo, hi, unit)`` in the units ``jointValues`` takes (degrees
-    for a revolute joint, metres for a prismatic one), or to None when no range
-    applies: a continuous joint turns without limit, and a fixed joint or a mimic
-    follower is not posed by its own value. The page would clamp an out-of-range value
-    and render a pose the request did not ask for, so the door refuses it instead.
-
-    ``description`` is the file that DECLARES the joints: the SDF or URDF itself, or an
-    SRDF's paired URDF. The answer is only ever used to REFUSE a request. A description
-    this cannot parse returns None and renders exactly as before, so the check can never
-    make the door stricter about geometry than the renderer that has to draw it.
-    """
-
-    def joint_range(joint_type: str, lower: float | None, upper: float | None, mimic: bool):
-        if mimic or joint_type not in ("revolute", "prismatic") or lower is None or upper is None:
-            return None
-        if joint_type == "revolute":
-            return (math.degrees(lower), math.degrees(upper), "deg")
-        return (lower, upper, "m")
-
-    try:
-        if kind == "sdf":
-            from cadgen.sdf_source import read_sdf_source
-
-            return {
-                joint.name: joint_range(joint.joint_type, joint.lower, joint.upper, False)
-                for joint in read_sdf_source(description).joints
-            }
-        import warnings
-
-        from cadgen.urdf_source import read_urdf_source
-
-        # The reader doubles as the validator and advises about inertials, materials and
-        # the like. Those belong to `cadgen urdf validate`; a render that only needs the
-        # joints must not start narrating them over the snapshot's own output.
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            return {
-                joint.name: joint_range(joint.joint_type, joint.lower, joint.upper, joint.mimic)
-                for joint in read_urdf_source(description).joints
-            }
-    except Exception:
-        return None
-
-
 def check_robot_render_job(
     job: dict[str, object],
     *,
@@ -842,9 +688,14 @@ def check_robot_render_job(
 ) -> dict[str, object]:
     """What a robot description (`.urdf` / `.srdf` / `.sdf`) cannot be asked for.
 
-    Everything here is decided from the request and the description's own XML, before
-    anything is cleared: the STEP-only options, undrawable SDF geometry, the SRDF's
-    pairing, and the joint names a pose may use."""
+    Everything here is decided from the request and the description, before anything is
+    cleared: the STEP-only options, and then the description itself resolved by cadgen
+    (``cadgen.robot_payload``: its validator's findings, a mesh or shape the page cannot
+    draw, an SRDF's pairing) and the joint values a pose may set, each held to its
+    control's limits -- a fixed joint and a mimic follower have no value of their own, and
+    a leader may not put its follower past the follower's limits."""
+    from cadgen.robot_payload import RobotReadError, read_robot_description, robot_control_values
+
     label = kind.upper()
     refuse_cad_model_requests(
         job,
@@ -854,61 +705,18 @@ def check_robot_render_job(
         tessellation_hint="a robot's link meshes are existing meshes",
         joints=True,
     )
-
-    if kind == "sdf":
-        unrenderable = unrenderable_sdf_geometry(input_path)
-        if unrenderable:
-            listed = "; ".join(
-                f"link {name} visual uses <{shape}>" if shape != "missing"
-                else f"link {name} visual has no <geometry>"
-                for name, shape in unrenderable[:4]
-            )
-            more = f" (and {len(unrenderable) - 4} more)" if len(unrenderable) > 4 else ""
-            raise SnapshotError(
-                f"{input_path.name} has visual geometry this renderer cannot draw: {listed}{more}. "
-                f"Supported: {', '.join(SDF_RENDERABLE_GEOMETRY)}. "
-                "Replace the shape or reference a mesh file — rendering it would silently "
-                "leave those links out of the picture."
-            )
-
-    # An SRDF carries semantics; its geometry and its joints are the paired URDF's.
-    urdf_path = paired_urdf_for_srdf(input_path) if kind == "srdf" else None
-
-    joint_values = job.get("jointValues")
-    if joint_values is not None and not is_plain_object(joint_values):
-        raise SnapshotError("jointValues must be an object of joint name to angle")
-    if joint_values:
-        for name, value in joint_values.items():
-            if not isinstance(value, (int, float)) or isinstance(value, bool):
-                raise SnapshotError(f"jointValues[{name}] must be a number (degrees, or metres for a prismatic joint)")
-        declared = robot_joint_ranges(kind, urdf_path or input_path)
-        if declared is not None:
-            unknown = sorted(str(name) for name in joint_values if str(name) not in declared)
-            if unknown:
-                raise SnapshotError(
-                    f"Unknown joint(s): {', '.join(unknown)}. "
-                    f"This {label} declares: {', '.join(sorted(declared)) or '(none)'}"
-                )
-            for name, value in joint_values.items():
-                limits = declared[str(name)]
-                if limits is None:
-                    continue
-                lo, hi, unit = limits
-                # Degrees converted from radians carry rounding: a value written as
-                # the limit itself must still pass.
-                tolerance = 1e-9 * max(1.0, abs(lo), abs(hi))
-                if not lo - tolerance <= value <= hi + tolerance:
-                    raise SnapshotError(
-                        f"jointValues[{name}] = {value:g} {unit} is outside joint {name!r}'s "
-                        f"limits [{lo:g}, {hi:g}] {unit}; pass a value within them"
-                    )
+    try:
+        payload = read_robot_description(input_path)
+        controls = robot_control_values(payload, job.get("jointValues"))
+    except RobotReadError as exc:
+        raise SnapshotError(str(exc)) from None
 
     # Robots are authored in METRES; the CAD profile assumes millimetres, and its floor,
     # grid and lighting radii are sized accordingly. Default the robot profile so a robot
     # frames like a robot without the caller having to know the unit convention.
     if not str(job.get("scale") or "").strip():
         job["scale"] = "urdf"
-    return {"urdf_path": urdf_path}
+    return {"robot": payload, "controls": controls}
 
 
 def resolve_robot_render_job(
@@ -917,16 +725,19 @@ def resolve_robot_render_job(
     kind: str,
     input_path: Path,
     root_path: Path,
-    urdf_path: Path | None = None,
+    robot: dict[str, object] | None = None,
+    controls: dict[str, float] | None = None,
     **_kind_context: object,
 ) -> dict[str, object]:
     """Resolve a robot description (`.urdf` / `.srdf` / `.sdf`).
 
-    The browser assembles the robot: the parser resolves each link mesh against the
-    description's own URL, so this hands over one asset URL and the pose, and the shared
-    mesh backend renders the result."""
-    # Link meshes are referenced relative to the description, so the folder this serves has
-    # to contain both: the description's own directory.
+    The page plays what cadgen resolved: ``resolved.robot`` is the payload with every
+    visual's mesh named by the URL the snapshot host answers for it (a link mesh file under
+    the render root, a primitive mesh by its store object), and ``resolved.controls`` the
+    full control vector the job's ``jointValues`` mean, validated at the door."""
+    from cadgen.robot_payload import locate_robot_payload
+    from cadgen.snapshot_core import robot_mesh_asset_url
+
     asset_url = asset_url_for_path(input_path, root_path)
     resolved: dict[str, object] = {
         "rootPath": str(root_path),
@@ -935,10 +746,11 @@ def resolve_robot_render_job(
         "kind": kind,
         "url": asset_url,
     }
-    if urdf_path is not None:
-        resolved["urdfUrl"] = asset_url_for_path(urdf_path, root_path)
-    if job.get("jointValues"):
-        resolved["jointValues"] = dict(job["jointValues"])
+    if robot is not None:
+        resolved["robot"] = locate_robot_payload(
+            robot, file_url=lambda path: asset_url_for_path(Path(path), root_path), object_url=robot_mesh_asset_url,
+        )
+        resolved["controls"] = dict(controls or {})
     if bool(job.get("debug")):
         resolved["debug"] = {"robotSource": {"kind": kind}}
     return {**job, "resolved": resolved}

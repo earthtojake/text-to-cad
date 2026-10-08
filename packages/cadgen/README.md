@@ -400,6 +400,13 @@ src/cadgen/
   articulation.py        # a model's kinematics resolved for a player:
                          #   controls, joints as affine rows, carries,
                          #   handles, poses; the reference evaluator
+  robot_payload.py       # a robot description (URDF, SDF, SRDF with its
+                         #   URDF) resolved for the page: the articulation
+                         #   above, the visuals in rest space (a box,
+                         #   cylinder, sphere or capsule meshed into the
+                         #   store), the facts a person reads back; refused
+                         #   at the door in the validators' words, joint
+                         #   values held to the articulation
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
   animation.py           # animation clips (cadgen.clip) for @step's

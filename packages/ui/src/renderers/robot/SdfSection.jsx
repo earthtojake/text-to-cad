@@ -29,8 +29,8 @@ function SdfMetadataList({ title, items, fields }) {
   );
 }
 
-/** What an SDF document says about itself beyond its links and joints: the parser's `sdf` record. */
-export default function SdfSection({ info, movableJointCount = 0 }) {
+/** What an SDF document says about itself beyond its links and joints: the payload's `sdf` record. */
+export default function SdfSection({ info }) {
   const sdfInfo = info && typeof info === "object" ? info : {};
   const metadata = sdfInfo.staticMetadata && typeof sdfInfo.staticMetadata === "object" ? sdfInfo.staticMetadata : {};
   const list = key => (Array.isArray(metadata[key]) ? metadata[key] : []);
@@ -43,15 +43,15 @@ export default function SdfSection({ info, movableJointCount = 0 }) {
           <FileSheetValueField label="Version" value={String(sdfInfo.version || "unknown")} />
           <FileSheetValueField label="Document" value={String(sdfInfo.documentKind || "model")} />
           {sdfInfo.worldName ? <FileSheetValueField label="World" value={String(sdfInfo.worldName)} /> : null}
-          <FileSheetValueField label="Frame mode" value={sdfInfo.nativeFrameSemantics ? "native" : "compat"} />
-          <FileSheetValueField label="Root link" value={String(sdfInfo.rootLink || "")} />
+          {/* A model whose links float free has no single root: each is listed. */}
+          <FileSheetValueField label="Root link" value={String(sdfInfo.rootLink || (Array.isArray(sdfInfo.rootLinks) ? sdfInfo.rootLinks.join(", ") : ""))} />
           <FileSheetValueField label="Model" value={String(sdfInfo.modelName || "SDF")} />
         </FileSheetFieldGrid>
       </FileSheetSubsection>
       <FileSheetSubsection title="Counts">
         <FileSheetFieldGrid columns={3}>
-          <FileSheetValueField label="Links" value={String(sdfInfo.linkCount ?? movableJointCount)} />
-          <FileSheetValueField label="Joints" value={String(sdfInfo.jointCount ?? movableJointCount)} />
+          <FileSheetValueField label="Links" value={String(sdfInfo.linkCount ?? 0)} />
+          <FileSheetValueField label="Joints" value={String(sdfInfo.jointCount ?? 0)} />
           <FileSheetValueField label="Frames" value={String(sdfInfo.frameCount ?? 0)} />
           <FileSheetValueField label="Includes" value={String(includes.length)} />
           <FileSheetValueField label="Plugins" value={String(plugins.length)} />
@@ -59,7 +59,6 @@ export default function SdfSection({ info, movableJointCount = 0 }) {
           <FileSheetValueField label="Lights" value={String(lights.length)} />
           <FileSheetValueField label="Physics" value={String(physics.length)} />
           <FileSheetValueField label="Nested models" value={formatSdfNumber(nestedModelCount)} />
-          <FileSheetValueField label="Unsupported geom." value={`${formatSdfNumber(sdfInfo.unsupportedVisualCount)} / ${formatSdfNumber(sdfInfo.unsupportedCollisionCount)}`} />
         </FileSheetFieldGrid>
       </FileSheetSubsection>
       {includes.length || plugins.length || sensors.length || lights.length || physics.length ? (

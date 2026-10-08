@@ -103,14 +103,12 @@ export function createHttpCadResourceProvider({ origin = '', fetch: fetchImpl = 
         const resolved = resolvePackageAssetUrl(source, reference);
         if (resolved) return resourceUrl(resolved);
       }
-      if (kind === 'robot' || kind === 'relative') {
+      if (kind === 'relative') {
         const resolved = resolveCadAssetMeshUrl(reference, resourceUrl(source));
         if (resolved) return resolved;
       }
       const base = new URL(resourceUrl(source), globalThis.window?.location?.href || 'http://cad.local/');
-      const resolved = kind === 'robot' && String(reference).startsWith('package://')
-        ? new URL(String(reference).slice('package://'.length).replace(/^\/+/, ''), new URL('/', base))
-        : new URL(kind === 'package' ? `${String(source).replace(/\/+$/, '')}/${reference}` : reference, base);
+      const resolved = new URL(kind === 'package' ? `${String(source).replace(/\/+$/, '')}/${reference}` : reference, base);
       return /^[a-z][a-z0-9+.-]*:/i.test(resourceUrl(source)) || /^(https?:)?\/\//i.test(reference) ? resolved.href : `${resolved.pathname}${resolved.search}`;
     },
     async workerTicket(url, options = {}) {

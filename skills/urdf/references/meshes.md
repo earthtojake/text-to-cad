@@ -29,10 +29,12 @@ Checklist after export, before authoring:
 ## Reference Forms
 
 - **Local relative paths** (`3MF/forearm_link.3mf`) resolve from the `.urdf` file's directory. Preferred for a robot kept in a project tree — the bundled validator verifies these files exist.
-- **`package://name/path` URIs** are for ROS-package consumers. The validator checks syntax only and warns that resolution is consumer-specific; confirm the consuming environment resolves the package root as expected.
+- **`package://name/path` URIs** are for ROS-package consumers. The validator checks syntax only and warns that resolution is consumer-specific (`--packages NAME=PATH` resolves them for the validator alone); confirm the consuming environment resolves the package root as expected.
 - Remote URIs are accepted with warnings; avoid them for durable fixtures.
 
 Keep mesh files under the same model directory tree as the URDF, so the file and its assets move together.
+
+What the CAD Viewer and `cadgen urdf snapshot` draw is narrower than what the validator accepts: a local STL, 3MF or GLB file beside the description, and the `box`, `cylinder` and `sphere` primitives, which cadgen meshes itself. A `.dae`, `.obj` or `.ply` mesh, a `package://` or remote URI, or a missing file is refused by name before anything renders — convert the mesh, or keep a rendering copy of the robot whose meshes sit beside it.
 
 ## Visual vs Collision Assets
 

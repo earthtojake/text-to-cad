@@ -279,6 +279,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                          [f"{SKILLS}/dxf/test_snapshot_render.py"])
         self.assertEqual(tests_for("packages/ui/src/renderers/dxf/DxfRenderer.js")["skills_tests"],
                          [f"{SKILLS}/dxf/test_drawing_checks.py"])
+        # ...and the robot payload suite holds the robot renderer's browser fixtures (cadgen's payloads) current.
+        self.assertEqual(tests_for("packages/ui/src/renderers/robot/__fixtures__/arm.urdf")["cadgen_tests"],
+                         [f"{CADGEN}/test_robot_payload.py"])
 
     def test_each_app_runs_its_own_job(self):
         self.assertEqual(jobs_for("apps/web/src/main.tsx"), {"web", "skills", "packaging"})

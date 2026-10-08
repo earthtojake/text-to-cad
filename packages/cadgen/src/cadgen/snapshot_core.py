@@ -1441,6 +1441,14 @@ STORE_ASSET_ROUTE_PREFIX = "/__store_asset/"
 # A job's tube skins (``cadgen._internal.tube_skin_payload``), by content hash.
 TUBE_SKINS_ROUTE_PREFIX = "/__tube_skins/"
 _TUBE_SKINS_NAME = re.compile(r"^[0-9a-f]{64}\.glb$")
+# A robot's primitive meshes (``cadgen._internal.primitive_mesh``): store objects, by hash.
+ROBOT_MESH_ROUTE_PREFIX = "/__robot_mesh/"
+_ROBOT_MESH_NAME = re.compile(r"^[0-9a-f]{64}$")
+
+
+def robot_mesh_asset_url(digest: str) -> str:
+    """Where a snapshot page reads one of a robot's primitive meshes: the store object by hash."""
+    return f"{ROBOT_MESH_ROUTE_PREFIX}{digest}"
 
 
 @functools.lru_cache(maxsize=1)
@@ -1560,6 +1568,20 @@ class SnapshotAssetServer:
                         self._send(404, b"not found", "text/plain; charset=utf-8")
                         return
                     self._send(200, file_path.read_bytes(), "model/gltf-binary")
+                    return
+                if pathname.startswith(ROBOT_MESH_ROUTE_PREFIX):
+                    from cadgen.store.objects import read_verified_object
+
+                    name = pathname[len(ROBOT_MESH_ROUTE_PREFIX):]
+                    if not _ROBOT_MESH_NAME.match(name):
+                        self._send(404, b"not found", "text/plain; charset=utf-8")
+                        return
+                    try:
+                        body = read_verified_object(name)
+                    except (OSError, ValueError):
+                        self._send(404, b"not found", "text/plain; charset=utf-8")
+                        return
+                    self._send(200, body, "model/gltf-binary")
                     return
                 if pathname.startswith(STORE_ASSET_ROUTE_PREFIX):
                     try:

@@ -266,7 +266,9 @@ def _validate_model(
     for link_element in link_elements:
         _validate_link(link_element, result, base_dir, local_targets, model_path)
     for joint_element in joint_elements:
-        _validate_joint(joint_element, result, link_names, local_targets, model_path)
+        # SDFormat >= 1.7: a joint's parent and child name a frame, which a link, an explicit
+        # <frame> (attached, through its chain, to a link) or the world is.
+        _validate_joint(joint_element, result, link_names | frame_names, local_targets, model_path)
     for include_element in children(model_element, "include"):
         _validate_include(include_element, result, f"{model_path}/include")
     for plugin_element in plugin_elements:

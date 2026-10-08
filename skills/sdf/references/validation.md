@@ -126,6 +126,8 @@ Plugin filenames and parameters can pass bundled validation and still fail in th
 
 CAD Viewer treats SDF plugins, sensors, lights, includes, and nested models as static metadata, and says so per kind in the file's warning list. A plugin named `cad-viewer-input-motion` (or `cad_viewer_input_motion`) is recognized and then ignored: SDF rendering is static unless joints are posed manually. The bundled validator checks generic structure only and never executes a plugin of any kind.
 
+What the viewer and `cadgen sdf snapshot` draw is narrower than what the validator accepts: cadgen resolves the frame graph into every link's rest placement, meshes `box`, `cylinder`, `sphere` and `capsule` itself, and draws a mesh `<uri>` only when it is a local STL, 3MF or GLB file beside the description. A `plane`, `heightmap`, `polyline` or `ellipsoid`, a `model://`, `package://` or remote URI, a `.dae`, `.obj` or `.ply` mesh, or a missing file is refused by name, and the validator's own errors refuse the file before anything renders.
+
 After `.sdf` files are created or modified, show them ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 
 ## External checks

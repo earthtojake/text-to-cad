@@ -132,9 +132,9 @@ not: the camera fit, the studio set up per output, and PNG encoding.
 
 Both hosts dress a scene the same way: the look from `resolveSceneSurfaceLook`, shadows
 while the lighting is on, `keepsAuthoredFinish` for Inspect's reflection environment, and
-the ground sized from `restBounds`. A robot opens at `robotOpeningPose`
-(`lib/urdf/motion.js`: every joint's default, then an SRDF's `home` state) and a
-snapshot's `--joint-values` go on top through the same joint matrices. What a snapshot
+the ground sized from `restBounds`. A robot opens at the opening of the articulation
+cadgen resolved for it (every control at rest, then an SRDF's `home` state) and a
+snapshot's `--joint-values` go on top through the same player (`common/articulation.js`). What a snapshot
 cannot express, it refuses rather than approximates: a GLB's clips are the viewer's
 playbar and have no snapshot flag. The pieces are pinned by `common/headlessScene.test.js`
 (core), `kit/view-settings/renderState.test.js` (one look from either route) and
@@ -431,40 +431,51 @@ renderer does not match either.
 ## Robot renderer
 
 `createRobotRenderer` (`@text-to-cad/ui/renderers/robot`, id `robot`) shows a
-`.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, three parsers:
-an SRDF is its paired URDF with the SRDF's semantics on it (group states, end
-effectors, planning groups), an SDF a robot with one more section. Nothing below the
-loader asks which it is. The STEP renderer matches none of them.
+`.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, one payload: cadgen
+resolves the description (`GET /__cad/robot`, `cadgen.robot_payload`) into the
+articulation the page plays — the artifact a STEP model's kinematics resolve to, played
+by core's `common/articulation.js` — the visuals it draws (each mesh at its rest
+placement: a link's mesh file, or a box, cylinder, sphere or capsule cadgen meshed into
+its store) and the facts a person reads back. An SRDF is its paired URDF with the SRDF's
+semantics on it (group states as named poses, end effectors, planning groups), an SDF a
+robot with one more section. The page parses nothing: a description cadgen refuses (its
+validators' findings, a mesh the page cannot draw, a `package://` or remote mesh, an SRDF
+with no single URDF beside it) is refused at the door, in cadgen's words. Nothing below
+the loader asks which format it was. The STEP renderer matches none of them.
 
-- **Scene** (core's `lib/urdf/robotScene.js`, no React, no DOM, which the snapshot CLI draws a robot with too): a scene GRAPH. One `Group`
-  per link, a link's meshes attached to it once, and each joint as three nested
-  frames: the static parent-to-joint frame, ONE motion group, then the child link
-  (at an SDF joint's static child offset, else identity). A pose writes the
-  motion matrices of the joints that changed (the joint and its mimic followers;
-  `jointMotionTransform`, values resolved by `resolveUrdfJointValues`, both in
-  core's `urdf/kinematics.js`) and nothing else: no geometry, no material, no
+- **Scene** (core's `lib/urdf/robotScene.js`, no React, no DOM, which the snapshot CLI draws a robot with too): a scene GRAPH
+  played from the payload. One node per joint of the articulation, nested under its
+  parent joint's, whose matrix is the joint's own motion in rest space
+  (`jointMotionMatrix`); a link's meshes sit under the joint that carries the link, at
+  their rest placements, and a link no joint carries under the root. A pose
+  (`setControlValues`) normalizes the control vector against the articulation as every
+  player does and writes the motion matrices of the joint rows that changed (a joint and
+  its mimic followers) and nothing else: no geometry, no material, no
   part list, no React state. Core transforms are row-major, so matrices are
-  written with `Matrix4.set`. Every link group is where the description solver
-  (`solveUrdfLinkWorldTransforms`) puts that link; the unit test holds the graph
-  to it for random poses. `bounds` follows the pose (only the moved subtree is
-  re-measured); `restBounds` is every joint at its declared default, whatever
-  pose the file opens in, and is what the camera frames and the ground is sized
-  from. Picking raycasts the link meshes (each geometry's BVH is built in idle
-  time once a ray reaches it, core's `raycastBvh.js`) and walks up to the link
-  group; a named object of a link's mesh is itself.
-- **Parts** (core's `lib/urdf/robotParts.js`): built once per load. One part per visual, or
-  per NAMED object of a visual's mesh (`head:v1/object/0`), with its link, local
-  transform, source mesh and palette place. Geometries wrap the loader's arrays
-  and are shared by visuals that name one mesh.
+  written with `Matrix4.set`. A joint node's world matrix IS the joint's delta
+  (`jointDeltas`), which the unit test holds the graph to for random poses. `bounds`
+  follows the pose (only the moved subtree is re-measured); `restBounds` is the robot as
+  written (every row at zero), whatever pose the file opens in, and is what the camera
+  frames and the ground is sized from. Picking raycasts the link meshes (each geometry's
+  BVH is built in idle time once a ray reaches it, core's `raycastBvh.js`) and reads the
+  mesh's link; a named object of a link's mesh is itself.
+- **Parts** (core's `lib/urdf/robotParts.js`): built once per load. One part per visual of
+  the payload, or per NAMED object of a visual's mesh (`head:v1/object/0`), with its link,
+  rest placement, source mesh and palette place. A primitive cadgen meshed carries no name
+  and is never an object. Geometries wrap the loader's arrays and are shared by visuals
+  that name one mesh.
 - **Loading** (`robot/useRobotDocument.js`, over core's `lib/urdf/loadRobot.js`, the loader
-  the snapshot CLI uses): `loadRenderUrdf`, `loadRenderSrdf` or `loadRenderSdf`, then every
-  distinct link mesh (`loadRenderMeshByUrl`, at most eight at a time). Progress reads "Loading URDF", "Loading meshes 3/13",
-  "Building robot". The robot is published once, whole. A missing link mesh fails
-  the load. A warm file is on screen on the first render; a new revision loads
-  behind the robot on screen and keeps the pose it was left in while its driven joints and
-  named poses are unchanged, and opens at its opening pose when they changed. An SRDF with no
-  URDF paired (the catalog pairs the ONE `.urdf` in the same folder whose
-  `<robot name>` matches) raises an alert that names what was looked for.
+  the snapshot CLI uses): `loadRenderRobot` (the payload, cached by the description's
+  revision), then every distinct mesh URL it names (`loadRenderMeshByUrl`, at most eight
+  at a time; a primitive is served from cadgen's store, `/__cad/robot?file=&mesh=<hash>`).
+  Progress reads "Loading URDF", "Loading meshes 3/13",
+  "Building robot". The robot is published once, whole. A mesh that cannot be fetched
+  fails the load. A warm file is on screen on the first render; a new revision loads
+  behind the robot on screen and keeps the pose it was left in while its controls and
+  named poses are unchanged (`poseLogic`), and opens at its opening pose when they
+  changed. An SRDF cadgen could not pair (the ONE `.urdf` in the same folder whose
+  `<robot name>` matches) raises an alert that says what was looked for, around cadgen's
+  sentence; any other refusal is the load alert, with cadgen's sentence as its reason.
 - **Look**: a robot authors no finish, so Solid wears the viewer's surface and
   Render the studio's. Colour, in order: the colour the description gives the
   visual; else the colours the mesh brought (per vertex, graded as a material
@@ -478,19 +489,22 @@ loader asks which it is. The STEP renderer matches none of them.
 - **Tools**, left to right: **Select** (the default), **Position** (only with
   movable joints; shown idle until the robot has loaded; it shows its Position panel),
   and nothing else: Display and Preview are the view's controls, in the navbar.
-- **Pose** (`robot/poseStore.js`): joint values live in a store outside React
-  (degrees; metres for a prismatic joint), with one write path. A write is clamped,
-  ignored under `URDF_JOINT_VALUE_EPSILON`, releases the tracked named pose and is
-  heard synchronously: the scene poses itself, the handle list is re-read from the
-  motion groups' world matrices (`robot/jointHandles.js`), one frame is requested,
-  and the stage follows once per frame (`shell.syncSceneBounds`). Only the control
+- **Pose** (`robot/poseStore.js`): the articulation's control values live in a store
+  outside React (degrees; metres for a prismatic joint; a mimic follower has no control,
+  its row follows its leader's), with one write path. A write is clamped to the control's
+  limits (a continuous joint has none), ignored under `JOINT_VALUE_EPSILON`, releases the
+  tracked named pose and is heard synchronously: the scene poses itself, the handle list
+  is re-read from the joint nodes' world matrices (`robot/jointHandles.js`: one knob per
+  moving joint row, a follower's included — its drag writes its leader through the row's
+  weight, `controlWriteForHandle`), one frame is requested, and the stage follows once per
+  frame (`shell.syncSceneBounds`). Only the control
   that shows the value that changed is subscribed to it, so a pose step renders one
   slider row and no other component. On `juno.urdf` (28 links) a knob step cost
   about 270 ms of script when a pose was React state and a re-placed part list; it
   costs about 3 ms with the Position panel hidden and about 6 ms with the joint sliders on
   screen (a development React build), which is what a frame costs. The opening pose is
-  every joint's default, then the SRDF group state(s) named `home` (core's
-  `robotOpeningPose`, which a snapshot opens the robot at too).
+  the articulation's (`opening`: every control at rest, then the SRDF group state(s)
+  named `home`, decided in cadgen, where a snapshot opens the robot too).
 - **Select**: a selection is any number of links or any number of named objects,
   never both (`robot/useLinkSelection.js`; Shift in the viewport, Shift, Ctrl or Cmd
   on a row add), and the Reference panel names several by what they are ("Links",
@@ -506,14 +520,15 @@ loader asks which it is. The STEP renderer matches none of them.
   `PositionControls.jsx` is the Position panel's body — headed "Position" with Reset
   (`RobotRenderer.jsx`) — the `Pose` label and dropdown (only with SRDF group states:
   `Default`, the states and `Custom` for a hand-moved pose), then a compact slider row per
-  driven joint, its thumb named after the joint.
+  control of the articulation (a driven joint; never a fixed joint or a mimic follower),
+  its thumb named after the control.
 - **Host commands**: the base live commands; `clearSelection` clears the link
   selection; `select` is declined with a sentence (a robot description has no
   reference grammar), and a `selectReference` host request is consumed and
   acknowledged without changing the view. Live state adds `selectedLinks` and `selectedPartIds`.
 - **State**: the file's view under `[path, "robot"]`; its one slice is
-  `pose: { jointValues }`, written against the description's revision and restored
-  only under it. The tracked named pose, the selection and the tree's disclosure
+  `pose: { jointValues }` (the control values), written against the description's
+  revision and restored only under it. The tracked named pose, the selection and the tree's disclosure
   are not stored.
 - **Test seams** (read-only): `window.__cadJointHandles()` (knobs in CSS pixels,
   with values and drawn travel), `window.__robotLinks()` (every link group's frame)
@@ -1183,15 +1198,16 @@ One handle system serves both formats. Two adapters turn a description and its
 CURRENT pose into one plain list, in model space: `{ id, label, kind, pivot,
 axis, toward, value, min, max, unit, onChange }` (`robot/jointHandles.js`, and
 the STEP renderer's `workbench/jointHandles.js`). A robot's joint
-frame is READ, not solved: it is the world matrix of the joint's motion group in
-the scene graph, which already sits before an SDF joint's static child offset; a
+frame is READ, not solved: it is the world matrix of the joint's node in the scene
+graph, the joint's delta as `jointDeltas` composes it; a
 STEP mate's world-at-rest axis is carried by the
 accumulated delta of its child, the composition `kinematicsDeltas` uses, so a
-handle rides a mate chain of any depth. A fixed joint, a fastened mate and a
-mimic follower have no handle. A STEP DOF that a coupling drives KEEPS its
-handle and writes through the coupling (`poseControlWrite`), as its slider does:
-a coupling has no axis to hang a handle on, and a gear train whose every member
-is geared would otherwise have none. The list is rebuilt from the pose on screen,
+handle rides a mate chain of any depth. A fixed joint and a fastened mate have no
+handle. A row a coupling drives KEEPS its handle and writes through the coupling,
+as its slider does (a STEP DOF through `poseControlWrite`, a robot's mimic follower
+through its leader's control, `controlWriteForHandle`): a coupling has no axis to
+hang a handle on, and a gear train whose every member is geared would otherwise
+have none. The list is rebuilt from the pose on screen,
 so sliders, presets, Reset and a handle further up the chain all carry the
 knobs along.
 
@@ -1507,26 +1523,25 @@ Escape clears it. A click acts at once, as a STEP's does; a
 robot has no double-click at all.
 
 The Reference panel, headed by the link's name, reads back what the description says
-about the link, in sections: its SRDF planning groups (`srdfGroupNamesByLink`) and end effectors;
+about the link, in sections: its SRDF planning groups (the payload's `srdf.groupsByLink`) and end effectors;
 **Inertial** (mass, centre of mass in the link frame, and the six inertia terms
 laid out as the symmetric tensor); **Geometry** (each visual and collision as
 its mesh path or its primitive with dimensions, plus only what the description
 bothered to say: a scale that is not 1, an origin that is not zero, the visual's
 colour); the **Parent joint** (name, type, parent link, axis, lower/upper limits
 as written plus degrees, effort, velocity, mimic, origin); and the **Child
-joints**. `parseUrdf` keeps those facts as written (`joint.origin`,
-`joint.limit`, `link.inertial` with `origin` and `inertia`, `link.collisions`,
-`visual.description`) beside the transforms it renders from, leniently: a
-malformed inspection value is left out, never a load failure. An SDF model
-reports only what its parser records. A named object shows its link, colour,
+joints**. cadgen keeps those facts as the description wrote them, in the payload's
+`links` and `joints` (`joints[].origin`, `limit`, `mimic`; `links[].inertial` with
+`origin` and `inertia`, `visuals` and `collisions`, each mesh file with the host path
+cadgen resolved for it), beside the articulation it renders from. An SDF model
+reports only what cadgen records of it. A named object shows its link, colour,
 triangles and size.
 
 What names something else can be followed. A mesh path is a link that opens
-that file, by its absolute path, through the host's `onOpenFile`: the renderer resolves
-it against the opened file with the mesh loader's own `resolveLocalAssetFileRef` (an
-SRDF's URDF is always beside it). A `package://` reference has no path here and stays
-plain text, as is every mesh path in a view that shows its file alone (no `onOpenFile`: a
-host's file handler). A parent or child link name selects that link in the tree and the viewport.
+that file, by its absolute path, through the host's `onOpenFile`: the path cadgen
+resolved for it beside the description (an SRDF's URDF is always beside it). A
+`package://` reference has no path and stays plain text, as is every mesh path in a view
+that shows its file alone (no `onOpenFile`: a host's file handler). A parent or child link name selects that link in the tree and the viewport.
 There is no copy action and no Quick Edit: robot formats have no reference grammar to deliver.
 
 

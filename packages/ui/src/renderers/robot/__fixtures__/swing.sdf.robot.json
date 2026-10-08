@@ -1,0 +1,283 @@
+{
+ "schemaVersion": 1,
+ "kind": "sdf",
+ "name": "swing",
+ "root": "base",
+ "articulation": {
+  "schemaVersion": 1,
+  "controls": [
+   {
+    "id": "hinge",
+    "label": "hinge",
+    "unit": "deg",
+    "min": -68.754935415699,
+    "max": 68.754935415699,
+    "default": 0.0
+   }
+  ],
+  "joints": [
+   {
+    "id": "hinge",
+    "parent": null,
+    "kind": "revolute",
+    "origin": [
+     0.0,
+     0.0,
+     0.2
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "turn": {
+     "bias": 0.0,
+     "terms": [
+      [
+       "hinge",
+       1.0
+      ]
+     ]
+    }
+   }
+  ],
+  "carries": {
+   "hinge": [
+    "arm"
+   ]
+  },
+  "handles": [
+   {
+    "id": "hinge",
+    "joint": "hinge",
+    "dof": "turn",
+    "control": "hinge",
+    "weight": 1.0,
+    "label": "hinge",
+    "unit": "deg",
+    "min": -68.754935415699,
+    "max": 68.754935415699
+   }
+  ],
+  "poses": {},
+  "opening": {
+   "hinge": 0.0
+  }
+ },
+ "links": [
+  {
+   "name": "base",
+   "placement": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "visuals": [
+    {
+     "name": "v",
+     "type": "box",
+     "filename": "",
+     "origin": {
+      "xyz": [
+       0.0,
+       0.0,
+       0.05
+      ],
+      "rpy": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "size": [
+      0.4,
+      0.4,
+      0.1
+     ],
+     "color": "",
+     "materialName": ""
+    }
+   ],
+   "collisions": [],
+   "inertial": null
+  },
+  {
+   "name": "arm",
+   "placement": [
+    1.0,
+    0.0,
+    0.0,
+    0.05,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.2,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "visuals": [
+    {
+     "name": "v",
+     "type": "box",
+     "filename": "",
+     "origin": {
+      "xyz": [
+       0.25,
+       0.0,
+       0.0
+      ],
+      "rpy": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "size": [
+      0.5,
+      0.08,
+      0.06
+     ],
+     "color": "",
+     "materialName": ""
+    }
+   ],
+   "collisions": [],
+   "inertial": null
+  }
+ ],
+ "joints": [
+  {
+   "name": "hinge",
+   "type": "revolute",
+   "parent": "base",
+   "child": "arm",
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "origin": {
+    "xyz": [
+     0.0,
+     0.0,
+     0.2
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "limit": {
+    "lower": -1.2,
+    "upper": 1.2
+   },
+   "mimic": null
+  }
+ ],
+ "visuals": [
+  {
+   "id": "base:v1",
+   "link": "base",
+   "label": "box",
+   "placement": [
+    0.001,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.001,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.001,
+    0.05,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": "",
+   "mesh": {
+    "format": "glb",
+    "url": "/primitives/609f32530d08aba46e105b45036b7dea515baf7c4762d020a9e481f2b34fa6de.glb"
+   }
+  },
+  {
+   "id": "arm:v1",
+   "link": "arm",
+   "label": "box",
+   "placement": [
+    0.001,
+    0.0,
+    0.0,
+    0.3,
+    0.0,
+    0.001,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.001,
+    0.2,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": "",
+   "mesh": {
+    "format": "glb",
+    "url": "/primitives/13517242e4812ac90e1c751052428b6ecd20ba9ffefe434042284d142c642568.glb"
+   }
+  }
+ ],
+ "srdf": null,
+ "sdf": {
+  "version": "1.9",
+  "documentKind": "world",
+  "worldName": "lab",
+  "modelName": "swing",
+  "rootLink": "base",
+  "rootLinks": [
+   "base"
+  ],
+  "frameCount": 0,
+  "linkCount": 2,
+  "jointCount": 1,
+  "staticMetadata": {
+   "includes": [],
+   "plugins": [],
+   "sensors": [],
+   "lights": [
+    {
+     "id": "light:1",
+     "name": "sun",
+     "type": "directional"
+    }
+   ],
+   "physics": [],
+   "nestedModelCount": 0
+  }
+ }
+}

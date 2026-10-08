@@ -75,6 +75,7 @@ One word is NOT retired, and it has exactly one meaning:
   index/drawing/<sha256(scheme + document hash)>  a 2D drawing's render payload → object hash
   index/skin/<sha256(scheme + document + animation + meshes)>  a document's tube skins → object hash
   index/section/<sha256(scheme + BREP + plane)>    one component's exact cut by one plane → object hash
+  index/robot/<sha256(scheme + path + description hash + paired URDF hash)>  a robot description resolved for a player → object hash, plus its primitive meshes
 ```
 
 Nothing else lives under the root. A build's progress is process state, not
@@ -135,13 +136,21 @@ operations always execute.
 `objects/` is the **artifact side**: what geometry exists. `index/model`,
 `index/output` are the **code side**: what source produced a result and
 what it depended on. `index/bounds`, `index/component`, `index/surface`,
-`index/selector`, `index/mesh`, `index/drawing`, `index/skin` and
-`index/section` remember reusable derivations; surface, selector, mesh, drawing
-and section jobs consume only immutable artifact inputs. `index/drawing` is a
+`index/selector`, `index/mesh`, `index/drawing`, `index/skin`,
+`index/section` and `index/robot` remember reusable derivations; surface,
+selector, mesh, drawing and section jobs consume only immutable artifact
+inputs. `index/drawing` is a
 2D document's flattened render payload: its key hashes the extraction scheme
 (payload shape × the drawing library's release) together with the document's
 content hash, so the same bytes are never flattened twice and an upgrade lands
-on a new key instead of invalidating an old one in place. `index/skin` is the
+on a new key instead of invalidating an old one in place. `index/robot` is the
+same for a robot description (URDF, SDF, or an SRDF with its paired URDF)
+resolved into the articulation and visual list a page plays
+(`cadgen.robot_payload`): its key hashes the scheme, the description's path
+(the payload names each link mesh by the absolute path it resolved beside the
+description) and the content hashes of the description and the paired URDF,
+and the entry also names the primitive meshes the payload draws (`meshes`),
+which a sweep keeps with it. `index/skin` is the
 same for a document's bending tubes as a CAD view plays them
 (`_internal/tube_skin_payload.py`): its key hashes the payload's scheme, the
 document's content hash, the digest of the sidecar animation that bends them and
@@ -1234,8 +1243,8 @@ kinds of thing:
    object goes with its entry rather than with the next full sweep, and an
    entry written again since the scan stays.
 2. **Evicted entries**, only under a cap: the derived kinds -- `mesh`,
-   `surface`, `selector`, `component`, `bounds`, `drawing`, `skin`, `section`
-   -- least recently written first, until the store fits 80% of the cap. Sizes
+   `surface`, `selector`, `component`, `bounds`, `drawing`, `skin`, `section`,
+   `robot` -- least recently written first, until the store fits 80% of the cap. Sizes
    are deduplicated: an
    object goes only when nothing that stays still needs it, so evicting a
    component entry whose BREP a current tree places frees only the entry.
@@ -1255,7 +1264,7 @@ kinds of thing:
 **Recently used means recently written.** A hit is a read (§5). An entry's age
 is when a build or a derivation last wrote it -- a publish rewrites every
 component entry its tree has; a derivation writes the surface, selector, mesh,
-bounds, drawing, skin or section entry it computed -- and an object's is when a
+bounds, drawing, skin, section or robot entry it computed -- and an object's is when a
 publish last wrote or claimed it. A display cache that is only ever read ages, goes when the cap needs
 the room, and costs one recomputation when it is next shown. Evicting never
 changes an answer: every reader treats a missing entry or object as a miss.

@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<robot name="arm">
+  <group name="arm"><joint name="shoulder"/><joint name="lift"/></group>
+  <group name="gripper"><joint name="grip"/></group>
+  <end_effector name="tool" parent_link="carriage" group="gripper" parent_group="arm"/>
+  <group_state name="home" group="arm"><joint name="shoulder" value="-0.5"/><joint name="lift" value="0.1"/></group_state>
+  <group_state name="raised" group="arm"><joint name="shoulder" value="-1.0"/><joint name="lift" value="0.2"/></group_state>
+</robot>

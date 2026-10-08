@@ -251,6 +251,9 @@ RULES: tuple[Rule, ...] = (
     Rule(("packages/ui/src/renderers/dxf/__fixtures__/**",), select(skills=[f"{SKILL_SUITES}/dxf/test_snapshot_render.py"])),
     # The STEP browser fixture's articulation is cadgen's: the articulation suite asserts it is current.
     Rule(("packages/ui/src/renderers/step/__fixtures__/step/**",), select(cadgen=[f"{CADGEN_SUITE}/test_articulation.py"])),
+    # The robot renderer's browser fixtures are the payloads cadgen resolves for its descriptions:
+    # the payload suite asserts they are current.
+    Rule(("packages/ui/src/renderers/robot/__fixtures__/**",), select(cadgen=[f"{CADGEN_SUITE}/test_robot_payload.py"])),
     Rule(("packages/ui/**/*.js",), select(skills=[f"{SKILL_SUITES}/dxf/test_drawing_checks.py"])),
     Rule(("tests/browser/**", "tests/fixtures/cad/**"), select(flags=["web_viewer"])),
 
