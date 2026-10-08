@@ -25,7 +25,8 @@
       "types": "./dist/drawing/index.d.ts",
       "import": "./dist/drawing/index.js"
     },
-    "./chunk-ids": "./scripts/chunk-ids.mjs"
+    "./chunk-ids": "./scripts/chunk-ids.mjs",
+    "./source-maps": "./scripts/source-maps.mjs"
   },
   "scripts": {
     "test": "node scripts/run-tests.mjs",
@@ -51,6 +52,7 @@
     "dist",
     "bin",
     "scripts/chunk-ids.mjs",
+    "scripts/source-maps.mjs",
     "docs",
     "README.md"
   ]

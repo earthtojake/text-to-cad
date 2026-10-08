@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { stampDebugId } from "@text-to-cad/core/chunk-ids";
+import { packageSourceMaps } from "@text-to-cad/core/source-maps";
 import { drawingAssetsPlugin } from "@text-to-cad/ui/drawing-assets";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
@@ -185,9 +186,10 @@ function serverLifetimePlugin() {
 // Each chunk's debug id, by file name, in the page before anything runs (`__cadChunkIds`): a crash
 // report names the chunk each of its frames ran in by it (@text-to-cad/core's crash reporter), and
 // the release uploads every chunk with its source map (scripts/release/sourcemaps.py) for PostHog to
-// show the source. Each chunk goes by an id its text and its map decide (@text-to-cad/core/chunk-ids),
-// never rolldown's, which names the code alone. The maps stay in dist, which the wheel leaves out
-// (scripts/bundle).
+// show the source -- the shared packages' own source, whose maps the build chains
+// (@text-to-cad/core/source-maps), not their compiled dist. Each chunk goes by an id its text and its
+// map decide (@text-to-cad/core/chunk-ids), never rolldown's, which names the code alone. The maps stay
+// in dist, which the wheel leaves out (scripts/bundle).
 function chunkIdsPlugin() {
   return {
     name: "cad-viewer-chunk-ids",
@@ -226,6 +228,7 @@ export default defineConfig(async ({ command }) => ({
     drawingAssetsPlugin({ exclude: [/\/fonts\/Xiaolai\//] }),
     react(),
     serverLifetimePlugin(),
+    packageSourceMaps(["@text-to-cad/core", "@text-to-cad/ui"]),
     chunkIdsPlugin(),
   ],
   resolve: { alias: { "@": viewerClientRoot }, dedupe: ["react", "react-dom", "three", "lucide-react"] },

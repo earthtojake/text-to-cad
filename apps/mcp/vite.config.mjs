@@ -6,6 +6,7 @@ import MagicString from 'magic-string';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { stampDebugId } from '@text-to-cad/core/chunk-ids';
+import { packageSourceMaps } from '@text-to-cad/core/source-maps';
 import { drawingAssetFiles, localizeDrawingFontFallback } from '@text-to-cad/ui/drawing-assets';
 
 // An MCP App is one HTML resource with no asset directory behind it: the host renders it in a
@@ -33,19 +34,25 @@ function inlineDrawingFonts() {
 }
 
 // The shared packages start workers with `new Worker(new URL(file, import.meta.url))`. Here
-// that URL would point at the sandbox, so each one becomes Vite's inline (blob) worker.
+// that URL would point at the sandbox, so each one becomes Vite's inline (blob) worker. The
+// edit comes with its map (its imports push the module's code down a line), so that code keeps
+// its place in the page's map.
+const WORKER = /new Worker\(\s*new URL\(\s*(["'])([^"']+)\1\s*,\s*import\.meta\.url\s*\)\s*,\s*\{\s*type:\s*(["'])module\3\s*\}\s*\)/g;
 function inlineWorkers() {
   return {
     name: 'cad-app-inline-workers', enforce: 'pre',
     transform(code, id) {
       if (!/\.[cm]?jsx?$/.test(id) || !code.includes('new Worker')) return;
+      const edited = new MagicString(code);
       const imports = [];
-      const result = code.replace(/new Worker\(\s*new URL\(\s*(["'])([^"']+)\1\s*,\s*import\.meta\.url\s*\)\s*,\s*\{\s*type:\s*(["'])module\3\s*\}\s*\)/g, (_, _quote, file) => {
+      for (const match of code.matchAll(WORKER)) {
         const name = `__cadInlineWorker${imports.length}`;
-        imports.push(`import ${name} from ${JSON.stringify(`${file}?worker&inline`)};`);
-        return `new ${name}()`;
-      });
-      return imports.length ? { code: `${imports.join('\n')}\n${result}`, map: null } : undefined;
+        imports.push(`import ${name} from ${JSON.stringify(`${match[2]}?worker&inline`)};`);
+        edited.overwrite(match.index, match.index + match[0].length, `new ${name}()`);
+      }
+      if (!imports.length) return;
+      edited.prepend(`${imports.join('\n')}\n`);
+      return { code: edited.toString(), map: edited.generateMap({ hires: true }) };
     },
   };
 }
@@ -62,12 +69,14 @@ function inlineWorkers() {
 //
 // A crash on the page names the chunk it ran in by its debug id (`IDS`, as `__cadChunkIds`; the
 // crash reporter in @text-to-cad/core reads it), and the release uploads each chunk with its source
-// map (`dist/sourcemaps`, scripts/release/sourcemaps.py), so PostHog can show the source. The map
-// must fit the text the page runs: every edit here is made with its positions kept (magic-string)
-// and folded into rolldown's map, and a placeholder is as wide as the blob URL that replaces it
-// (`WIDTH`, padded with spaces a URL's parser drops), so swapping it moves no code. The id is the
-// one that text and its map decide (@text-to-cad/core/chunk-ids), never rolldown's: rolldown names
-// the code before these edits, which the CAD Viewer may ship unedited under the same id.
+// map (`dist/sourcemaps`, scripts/release/sourcemaps.py), so PostHog can show the source -- the
+// shared packages' own, since their modules load with their maps (@text-to-cad/core/source-maps)
+// and rolldown chains them. The map must fit the text the page runs: every edit here is made with
+// its positions kept (magic-string) and folded into rolldown's map, and a placeholder is as wide as
+// the blob URL that replaces it (`WIDTH`, padded with spaces a URL's parser drops), so swapping it
+// moves no code. The id is the one that text and its map decide (@text-to-cad/core/chunk-ids), never
+// rolldown's: rolldown names the code before these edits, which the CAD Viewer may ship unedited
+// under the same id.
 const CHUNK = 'cad-chunk:';
 const WIDTH = 192;
 const DYNAMIC_IMPORT = /\bimport\(\s*([`"'])\.\/([^`"'\s]+\.js)\1\s*\)/g;
@@ -179,7 +188,7 @@ function inlineDocument() {
 }
 
 export default defineConfig({
-  plugins: [inlineWorkers(), inlineDrawingFonts(), react(), inlineDocument()],
+  plugins: [packageSourceMaps(['@text-to-cad/core', '@text-to-cad/ui']), inlineWorkers(), inlineDrawingFonts(), react(), inlineDocument()],
   resolve: { dedupe: ['react', 'react-dom', 'three', 'lucide-react'] },
   build: {
     assetsInlineLimit: Infinity, cssCodeSplit: false, modulePreload: false,

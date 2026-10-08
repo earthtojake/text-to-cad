@@ -169,8 +169,9 @@ src/
                    #   parity-tested against cad_ref_syntax.py)
 bin/               # node builders the bundler ships into _runtime/node:
                    #   mesh-export.mjs (the ONE mesh path)
-scripts/           # chunk-ids.mjs (the pages' builds: a chunk's debug id)
-                   #   beside the package's own build and test runners
+scripts/           # chunk-ids.mjs (the pages' builds: a chunk's debug id) and
+                   #   source-maps.mjs (the pages' builds: maps into the packages'
+                   #   src/), beside the package's own build and test runners
 docs/              # subsystem docs (the map below)
 ```
 
@@ -208,7 +209,10 @@ a frame in one of the page's own chunks also names its debug id, from the table 
 page's build wrote, `__cadChunkIds`) -- and sends each distinct one once a page, a few
 at most. A page's build stamps each chunk with the id its text and its source map decide
 (`@text-to-cad/core/chunk-ids`, a Node module the builds import), never the bundler's,
-which names the code alone: PostHog keeps one map an id. `dispose()` stops polling, aborts
+which names the code alone: PostHog keeps one map an id. That map leads into the shared
+packages' `src/`, not their `dist/`: the build loads their modules with the maps their own
+builds wrote (`@text-to-cad/core/source-maps`), and fails if a chunk's map still ends in
+compiled code. `dispose()` stops polling, aborts
 requests and disposes render sessions. The client lazily owns its cache provider
 and bounded write-back queue; each render session borrows a cancellable cache
 view and owns its abort signal and worker leases. A host whose transport
