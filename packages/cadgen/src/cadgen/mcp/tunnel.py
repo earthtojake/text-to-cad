@@ -180,4 +180,7 @@ class ViewerTunnel:
             raise
         if not response.written:
             response.send_json(500, {"ok": False, "error": "the route wrote no response"})
+        if handler.close_connection:
+            return _result(502, {"content-type": "application/json; charset=utf-8"},
+                           b'{"ok":false,"error":"the file changed or could not be read completely"}')
         return _result(handler.status, handler.headers, handler.wfile.getvalue())

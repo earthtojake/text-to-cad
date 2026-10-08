@@ -68,6 +68,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Mapping
 
+from cadgen._internal.atomic_replace import is_transient_name
 from cadgen._internal.source_hash import (
     _semantic_source_bytes,
     _semantic_source_hash,
@@ -1239,10 +1240,14 @@ def source_files(files: Iterable[str]) -> list[str]:
 
 def _listing_digest(directory: Path, own: Iterable[str] = ()) -> str:
     """A folder the model's code listed, as what it saw: its sorted entry names,
-    less ``own``, the entries that hold the model's own outputs."""
+    less ``own``, the entries that hold the model's own outputs, and less the
+    entries cadgen keeps there only while it writes (``is_transient_name``): a
+    sibling's build stages its STEP beside its output, so a listing taken during
+    a parallel build would otherwise go stale once that build ends."""
     own = frozenset(own)
     try:
-        names = sorted(name for name in os.listdir(directory) if name not in own)
+        names = sorted(name for name in os.listdir(directory)
+                       if name not in own and not is_transient_name(name))
     except OSError:
         return "missing"
     return "listing:" + hashlib.sha256("\0".join(names).encode("utf-8")).hexdigest()

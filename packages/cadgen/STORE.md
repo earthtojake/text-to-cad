@@ -527,7 +527,10 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   interpreter and its packages, cadgen, the store, and the folders the
   operating system owns (fonts, time zones). Three kinds of entry are not files: `<folder>/`, a folder
   the model's code listed (a glob of profiles), hashed by its sorted entry
-  names; `!<path>`, a file that
+  names, less the ones cadgen keeps only while it writes beside an output
+  (a temp file, a STEP stage folder; `is_transient_name` in
+  `cadgen._internal.atomic_replace`), so a sibling's build in that folder
+  does not stale it; `!<path>`, a file that
   must stay absent — one the imports were resolved past (a package beside a
   module, an `__init__.py` a namespace package lacks, a module an earlier
   search root lacks) and would resolve to if it appeared — hashed `absent`;

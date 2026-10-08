@@ -67,6 +67,9 @@ if __name__ == "__main__":
   one axis), `fastened` (0-DOF rigid attachment — needed exactly when
   occurrences are SIBLINGS in the instance tree, like a pin that must orbit
   with its carrier; instance-tree children ride for free).
+- **`limits=(lo, hi)`** is required on every mate that moves, and both ends
+  must be finite: Position sliders and exports read the range. A joint that
+  turns freely takes a full range such as `(-180, 180)`; `math.inf` fails the build.
 - **`parent`/`child`** are occurrence refs: `#`-prefixed labels (canonical —
   label parts with `cadgen.label_shape`) or occurrence ids. They must resolve
   at build or the build fails; `read_scene(path).leaves()` lists saved geometry occurrences.

@@ -687,7 +687,16 @@ def _validate_link_geometry(
         )
         if element_name == "visual":
             _validate_material_reference(geometry_owner, material_names, result, display, owner_path)
-        geometry_element = geometry_owner.find("geometry")
+        geometry_elements = geometry_owner.findall("geometry")
+        if len(geometry_elements) > 1:
+            result.add(
+                "error", "duplicate_geometry",
+                f"{display} link {link_name!r} {element_name} must contain exactly one <geometry>",
+                path=owner_path,
+                hint=f"Put each geometry in a separate <{element_name}> element.",
+            )
+            # Keep validating the first geometry, as the renderer does.
+        geometry_element = geometry_elements[0] if geometry_elements else None
         if geometry_element is None:
             result.add(
                 "error",

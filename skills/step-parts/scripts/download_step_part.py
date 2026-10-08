@@ -138,15 +138,15 @@ def write_download(part: dict[str, Any], args: argparse.Namespace, allow_request
         raise SystemExit(f"Refusing to overwrite existing file: {path}")
 
     data = request(step_url, args.timeout)
-    path.write_bytes(data)
 
     actual_sha256 = hashlib.sha256(data).hexdigest()
     expected_sha256 = part.get("sha256")
-    checksum_ok = expected_sha256 is None or expected_sha256 == actual_sha256
-    if not checksum_ok:
+    if expected_sha256 is not None and expected_sha256 != actual_sha256:
         raise SystemExit(
             f"Checksum mismatch for {path}: expected {expected_sha256}, got {actual_sha256}",
         )
+
+    path.write_bytes(data)
 
     return {
         "id": part.get("id"),
