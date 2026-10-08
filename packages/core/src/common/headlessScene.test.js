@@ -220,7 +220,7 @@ test("the still's tight frame fits a skinned and morphed GLB where it is drawn; 
   model.dispose();
 });
 
-test("a family scene takes none of a CAD model's steps: no edges, explode or section, and --mode list lists what it drew", async () => {
+test("a family scene takes none of a CAD model's steps: no edges or explode, and --mode list lists what it drew", async () => {
   const context = renderJobContext({ bounds: { min: [0, 0, 0], max: [1, 1, 1] } }, job("glb", {
     display: { mode: "solid", edges: { enabled: true }, exploded: { enabled: true, amount: 1 }, clip: { enabled: true } }
   }));
@@ -235,8 +235,6 @@ test("a family scene takes none of a CAD model's steps: no edges, explode or sec
   assert.deepEqual(listed.parts.map(({ ref, name, triangleCount, vertexCount }) => [ref, name, triangleCount, vertexCount]),
     [["#o1.1", "base", 12, 24], ["#o1.2", "rider", 12, 24]]);
   assert.deepEqual(listed.parts[1].bounds, { min: [30, -10, 0], max: [40, 0, 10] }, "placed in CAD millimetres, as drawn");
-  await assert.rejects(() => captureModel({ model, context: { ...context, mode: "section" } }, { job: job("glb") }),
-    /section mode cuts a STEP model's solids/);
   model.dispose();
 
   const stl = headlessSceneModel(THREE, headlessSceneFamily(job("stl")).build(THREE, await buildMeshDataFromStlBuffer(stlBytes()), job("stl")),

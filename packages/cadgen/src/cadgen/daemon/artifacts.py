@@ -25,6 +25,8 @@ _CID = re.compile(r"[0-9a-f]{16}\Z")
 _PRODUCER_FIELDS = {"scheme", "surfFormat", "build123d", "ocp", "cadqueryOcp"}
 # The most mesh keys one request may name: a mesh probe's bound (store/tess_cache.py).
 MESH_KEYS_MAX = 256
+# The most component cuts one sections request may name.
+SECTION_ITEMS_MAX = 256
 # How ``deal`` sizes build-pool jobs. A job takes a warm worker when the daemon has
 # one (``pool.spare_count``); a job past them starts a worker, whose kernel import
 # took 4-5 s on a busy 4-core machine. So the warm workers share any work of at
@@ -34,6 +36,8 @@ MESH_KEYS_MAX = 256
 DEAL_PER_JOB = 4
 SURFACES_PER_STARTED_WORKER = 32
 MESHES_PER_STARTED_WORKER = 96
+# A cut is milliseconds a component, so only a large assembly repays starting a worker for it.
+SECTIONS_PER_STARTED_WORKER = 256
 
 
 class ArtifactJobError(RuntimeError):
@@ -75,10 +79,12 @@ def normalize_request(request):
         return {"kind": "producer"}
     if kind == "meshes" and set(request) == {"kind", "keys"}:
         return {"kind": "meshes", "keys": _mesh_keys(request["keys"])}
+    if kind == "sections" and set(request) == {"kind", "items"}:
+        return {"kind": "sections", "items": _section_items(request["items"])}
     fields = {"kind", "tree", "cids", "producer", "expected_objects", "force", "tessellations"}
     required = {"kind", "tree", "cids", "producer"}
     if kind != "surfaces" or not required <= set(request) or set(request) - fields:
-        raise ValueError("artifact request must be producer, surfaces or meshes with closed immutable inputs")
+        raise ValueError("artifact request must be producer, surfaces, meshes or sections with closed immutable inputs")
     cids = request["cids"]
     if not isinstance(cids, (list, tuple)) or not cids:
         raise ValueError("artifact cids must be a nonempty list")
@@ -117,6 +123,20 @@ def _mesh_keys(keys):
     if len(set(keys)) != len(keys):
         raise ValueError("artifact meshes keys must not contain duplicates")
     return sorted(keys)
+
+
+def _section_items(items):
+    """The component cuts a sections request names, canonical (``store.sections.normalize_item``),
+    in one order, none twice."""
+    from cadgen.store.sections import normalize_item
+
+    if not isinstance(items, (list, tuple)) or not items or len(items) > SECTION_ITEMS_MAX:
+        raise ValueError(f"artifact sections items must be a nonempty list of at most {SECTION_ITEMS_MAX}")
+    normalized = [normalize_item(item) for item in items]
+    keys = [json.dumps(item, sort_keys=True, separators=(",", ":")) for item in normalized]
+    if len(set(keys)) != len(keys):
+        raise ValueError("artifact sections items must not contain duplicates")
+    return [item for _key, item in sorted(zip(keys, normalized))]
 
 
 def request_key(request):
@@ -179,6 +199,10 @@ def execute(request, *, keep_going=None):
         return surfaces.producer_identity()
     if request["kind"] == "meshes":
         return surfaces.produce_meshes(request["keys"], keep_going=keep_going)
+    if request["kind"] == "sections":
+        from cadgen.store import sections
+
+        return sections.produce(request["items"], keep_going=keep_going)
     meshes = {"tessellations": request["tessellations"]} if request.get("tessellations") else {}
     return surfaces.derive(request["tree"], request["cids"], producer=request["producer"],
                            expected_objects=request["expected_objects"], force=request["force"],

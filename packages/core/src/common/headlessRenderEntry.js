@@ -37,7 +37,7 @@ import {
 // anything else's scene from its family's shared builder), and the stage, the camera and
 // the encoding are the same for all of them.
 async function captureWithModel(model, context, job, stageTimings) {
-  if (context.mode === "list" || context.mode === "section") {
+  if (context.mode === "list") {
     try {
       return await captureModel({ model, context }, { job });
     } finally {
@@ -162,15 +162,16 @@ async function prepareRenderJob(job) {
   return prepared;
 }
 
-/** A `.dxf` job: a flat 2D drawing, not a scene. */
+/** A 2D drawing cadgen resolved -- a `.dxf`, or a STEP section's exact cut -- not a scene. */
 function jobIsDrawing(job) {
-  return String(job?.resolved?.kind || "").toLowerCase() === "dxf";
+  return Boolean(job?.resolved?.drawingUrl);
 }
 
 export async function runHeadlessRenderJob(job) {
   // A drawing never enters the mesh pipeline: there is no source to fetch, no
   // model to build and no viewport to fit. It is painted on a 2D canvas with
   // the code the viewer's DXF pane paints with (./headlessDrawingRender.js).
+  // A STEP section is one: cadgen cut the exact solids and drew the result.
   if (jobIsDrawing(job)) {
     return runHeadlessDrawingJob(job);
   }

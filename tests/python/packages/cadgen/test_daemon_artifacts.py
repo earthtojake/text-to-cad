@@ -196,6 +196,27 @@ class ArtifactRequests(unittest.TestCase):
             with self.subTest(request=request), self.assertRaises(ValueError):
                 artifacts.normalize_request(request)
 
+    def test_a_sections_request_names_each_component_cut_once_in_one_canonical_order(self):
+        component = {"kind": "native", "codec": "bintools-v4", "brep": "b" * 64, "contentHash": "c" * 64,
+                     "faceColors": {}}
+        items = [{"component": component, "normal": [0, 0, 2], "offset": 4},
+                 {"component": component, "normal": [1, 0, 0], "offset": -1.5}]
+        normalized = artifacts.normalize_request({"kind": "sections", "items": items})
+        # The plane is the unit normal and the offset along it, as every key and cut uses it.
+        self.assertIn({"component": component, "normal": [0.0, 0.0, 1.0], "offset": 2.0}, normalized["items"])
+        self.assertEqual(artifacts.request_key({"kind": "sections", "items": items}),
+                         artifacts.request_key({"kind": "sections", "items": items[::-1]}), "an order splits no request")
+        crowd = [{"component": component, "normal": [0, 0, 1], "offset": n}
+                 for n in range(artifacts.SECTION_ITEMS_MAX + 1)]
+        for request in ({"kind": "sections"}, {"kind": "sections", "items": []},
+                        {"kind": "sections", "items": items * 2}, {"kind": "sections", "items": crowd},
+                        {"kind": "sections", "items": items, "tree": "a" * 64},
+                        {"kind": "sections", "items": [{**items[0], "normal": [0, 0, 0]}]},
+                        {"kind": "sections", "items": [{**items[0], "component": {**component, "script": "x.py"}}]},
+                        {"kind": "sections", "items": [{**items[0], "component": {**component, "brep": "../x"}}]}):
+            with self.subTest(request=request), self.assertRaises(ValueError):
+                artifacts.normalize_request(request)
+
     def test_work_is_dealt_one_job_per_cpu_slot_and_every_job_ends_before_a_failure_is_raised(self):
         from cadgen.daemon import executors, pool
 

@@ -207,6 +207,13 @@ is refused. A plane that misses the model renders an empty drawing with a
 warning that says so. Section mode is STEP-only, and takes no kinematics,
 animation or Render display.
 
+The cut is exact: cadgen sections each part's solid with the plane, so a bore
+cut across its axis is a true circle, not a polygon. `--focus` and `--hide` pick
+the parts that are cut. Each part's cut is filled and hatched, outlined in the
+appearance's foreground (or `display.edges.color`), with dash-dot centre lines
+and a cut locator; `--view-labels` adds the plane's label. A `.svg` is the same
+drawing, y up, and a job whose outputs are all `.svg` needs no browser.
+
 OUT's extension picks the format and nothing else does: section mode writes
 `.png` or `.svg`, view mode writes `.png`, and a video writes `.mp4` or `.gif`.
 Any other extension — a view named `.svg` or `.jpg` — is refused instead of

@@ -85,6 +85,7 @@ _NAMED_FIELDS = {
     "surface": ("object",),
     "mesh": ("object",),
     "drawing": ("object",),
+    "section": ("object",),
     "bounds": (),
 }
 _STOP_EVERY = 256

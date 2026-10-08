@@ -1,6 +1,7 @@
 /**
- * `cadgen dxf snapshot` in the page: a `GET /__cad/drawing` payload, on a 2D
- * canvas, as a PNG.
+ * A cadgen drawing payload, on a 2D canvas, as a PNG: `cadgen dxf snapshot`
+ * (a `GET /__cad/drawing` payload) and `cadgen step snapshot --mode section`
+ * (the exact cut cadgen computed, `cadgen.section_drawing`).
  *
  * This is the CLI half of the viewer's DXF pane, and deliberately shares its
  * whole drawing path (`../lib/drawing2d`): the same fit, the same hairline rule,
@@ -16,6 +17,7 @@
  */
 import { appThemeColors } from "../lib/appTheme.js";
 import { clearSurface, drawDrawing, fitTransform, prepareDrawing } from "../lib/drawing2d/index.js";
+import { drawSectionOverlay } from "./sectionOverlay.js";
 
 /** What an output falls back to when the host sent no size (it always does). */
 const DEFAULT_OUTPUT_WIDTH = 1200;
@@ -56,7 +58,7 @@ function canvasContext(width, height) {
  * OUTPUT pixels, so a render scale buys sampling quality and never changes the
  * size of the file.
  */
-function drawOutput(drawable, { width, height, scale, background, foreground }) {
+function drawOutput(drawable, { width, height, scale, background, foreground, overlay = null }) {
   const { canvas, context } = canvasContext(
     Math.max(1, Math.round(width * scale)),
     Math.max(1, Math.round(height * scale))
@@ -70,6 +72,7 @@ function drawOutput(drawable, { width, height, scale, background, foreground }) 
     });
   }
   if (canvas.width === width && canvas.height === height) {
+    overlay?.(context, width, height);
     return canvas.toDataURL("image/png");
   }
   const resampled = canvasContext(width, height);
@@ -78,11 +81,16 @@ function drawOutput(drawable, { width, height, scale, background, foreground }) 
     resampled.context.imageSmoothingQuality = "high";
   }
   resampled.context.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, width, height);
+  overlay?.(resampled.context, width, height);
   return resampled.canvas.toDataURL("image/png");
 }
 
 /**
- * Render one resolved `dxf` snapshot job.
+ * Render one resolved drawing job: a `.dxf`, or a STEP section.
+ *
+ * What the picture says about itself (an empty drawing, a plane that misses the
+ * model) is cadgen's to say, and it does, beside the job; the page only paints.
+ * A section's `job.resolved.section` carries the chrome drawn over it.
  *
  * @param {object} job The resolved render job; `job.resolved.drawingUrl` names the payload.
  * @returns {Promise<object>} The host's result shape: `{ ok, mode, outputs, warnings }`.
@@ -100,12 +108,9 @@ export async function runHeadlessDrawingJob(job) {
     throw new Error(`the drawing payload could not be read (HTTP ${response.status} for ${url})`);
   }
   const drawable = prepareDrawing(await response.json());
-  const warnings = [];
-  if (!drawable.bounds) {
-    // A true answer, and one nobody would guess from a blank PNG.
-    warnings.push("this drawing has no geometry in its modelspace, so the image is empty");
-  }
   const { background, foreground } = appThemeColors(job?.display?.appearance);
+  const section = job?.resolved?.section || null;
+  const overlay = section ? (context, width, height) => drawSectionOverlay(context, section, width, height) : null;
   const scale = renderScale(job);
   const transparent = job?.output?.transparent === true;
   const outputs = (Array.isArray(job?.outputs) ? job.outputs : []).map((output) => {
@@ -121,16 +126,17 @@ export async function runHeadlessDrawingJob(job) {
         height,
         scale,
         background: transparent ? null : background,
-        foreground
+        foreground,
+        overlay
       })
     };
   });
   return {
     ok: true,
-    mode: "view",
+    mode: section ? "section" : "view",
     appearance: job?.display?.appearance === "dark" ? "dark" : "light",
     primitiveCount: drawable.primitiveCount,
     outputs,
-    warnings
+    warnings: []
   };
 }

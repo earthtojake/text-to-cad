@@ -37,6 +37,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from cadgen.assets import require_browser_runtime
 from cadgen.coordination import PHASE_RENDER, resolve as resolve_progress
 from cadgen.results import SnapshotFile, SnapshotResult, SnapshotTimings
+from cadgen.section_drawing import SECTION_FRAMES
 from cadgen._internal.atomic_replace import write_bytes_atomic
 
 
@@ -164,9 +165,8 @@ RETIRED_SIZE_PROFILES = {
 # photographic preset's 2x render scale this is the 16384 px renderbuffer limit.
 MAX_OUTPUT_DIMENSION = 8192
 SIMPLE_RENDER_WIDTH, SIMPLE_RENDER_HEIGHT = SIZE_PROFILES["simple"]
-# Where section mode cuts. Mirrored as SECTION_PLANES in
-# packages/core/src/common/renderMeshScene.js (the parity is tested).
-SECTION_PLANES = ("XY", "XZ", "YZ")
+# Where section mode cuts: the planes cadgen.section_drawing cuts and draws.
+SECTION_PLANES = tuple(SECTION_FRAMES)
 SECTION_KEYS = frozenset({"plane", "offset"})
 # What an output's extension may be, per mode. The extension decides the
 # encoding; nothing in a job does.
@@ -692,7 +692,7 @@ def validate_section(value: object) -> dict[str, object]:
 
     The plane is named by the two axes it contains; the offset moves it along its
     own normal (Z for XY, Y for XZ, X for YZ) in model units, and defaults to 0.
-    These are exactly the two fields the renderer reads.
+    These are exactly the two fields ``cadgen.section_drawing`` cuts with.
     """
     if not is_plain_object(value):
         raise SnapshotError(
@@ -2078,6 +2078,50 @@ def _browser_stage_timings(value: object) -> dict[str, object]:
     return timings
 
 
+def _python_outputs(job: Mapping[str, object]) -> tuple[list[dict[str, object]], dict[str, object] | None]:
+    """Split a job into the outputs Python writes itself and what is left for the page.
+
+    A section's SVG is written by cadgen (``cadgen.section_drawing``), so its
+    ``.svg`` outputs never reach a browser; the job that is left -- its PNGs, if it
+    has any -- is ``None`` when nothing does. Every other job goes to the page whole.
+    """
+    resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}
+    svg_path = resolved.get("sectionSvg")
+    if not svg_path:
+        return [], dict(job)
+    text = Path(str(svg_path)).read_text(encoding="utf-8")
+    written, drawn = [], []
+    for output in job.get("outputs") or []:
+        if str(output.get("path") or "").lower().endswith(".svg"):
+            written.append({"path": str(output["path"]), "mimeType": "image/svg+xml", "text": text})
+        else:
+            drawn.append(output)
+    page_resolved = {key: value for key, value in resolved.items() if key != "sectionSvg"}
+    return written, ({**job, "outputs": drawn, "resolved": page_resolved} if drawn else None)
+
+
+async def _render_job(renderer: "BatchSnapshotRenderer", job: Mapping[str, object]) -> dict[str, object]:
+    """One still job's result: what Python answered, merged with what the page drew.
+
+    Warnings cadgen raised while resolving the job (``resolved.warnings``) come
+    first; the outputs keep the order the job declared them in.
+    """
+    written, page_job = _python_outputs(job)
+    resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}
+    if page_job is None:
+        result: dict[str, object] = {"ok": True, "mode": job.get("mode"), "outputs": [], "warnings": []}
+    else:
+        result = dict(await renderer.render(page_job))
+    if written:
+        by_path = {str(output.get("path")): output for output in [*written, *(result.get("outputs") or [])]}
+        result["outputs"] = [by_path[str(output.get("path"))] for output in job.get("outputs") or []
+                             if str(output.get("path")) in by_path]
+    warnings = [str(warning) for warning in resolved.get("warnings") or []]
+    if warnings:
+        result["warnings"] = [*warnings, *(result.get("warnings") or [])]
+    return result
+
+
 async def render_resolved_job_packet(
     packet: Mapping[str, object],
     *,
@@ -2111,7 +2155,7 @@ async def render_resolved_job_packet(
                 report.phase(PHASE_RENDER, total=total, detail=str(job.get("input") or ""))
                 report.advance(index + 1)
             else:
-                result = await snapshot_renderer.render(job)
+                result = await _render_job(snapshot_renderer, job)
                 report.advance()
             # Keep resolution and measured browser work together under --debug.
             # The typed result otherwise intentionally drops browser internals.

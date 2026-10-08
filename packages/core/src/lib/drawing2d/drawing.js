@@ -17,9 +17,14 @@
  *   theme and a theme flip costs a repaint rather than a re-fetch.
  * - **Lineweights are not displayed.** Strokes are hairlines at a constant
  *   screen width, as AutoCAD draws with LWDISPLAY off. Model-space widths would
- *   make a zoomed-out drawing a solid block of ink.
+ *   make a zoomed-out drawing a solid block of ink. A primitive may name its own
+ *   SCREEN width (`width`, CSS pixels) -- a section's outline is drawn heavier
+ *   than its hatch -- which is still constant at every zoom.
+ * - **`opacity`** (0..1, default 1) is a primitive's own alpha, applied as it
+ *   is painted: a section's fill and hatch let what is under them show.
  *
- * Batching is per colour for strokes and per colour, per primitive for fills.
+ * Batching is per pen -- colour, width, opacity -- for strokes, and per colour
+ * and opacity, per primitive, for fills.
  * Strokes of one colour can share a single `Path2D` because stroking is
  * order-independent and overlap is harmless. Fills cannot: `filled-paths` is
  * filled EVEN-ODD so its inner rings punch holes, and merging two overlapping
@@ -32,7 +37,7 @@
  * The payload shape this module understands. Must match
  * `cadgen.drawing_payload.DRAWING_PAYLOAD_SCHEMA_VERSION`.
  */
-export const DRAWING_SCHEMA_VERSION = 1;
+export const DRAWING_SCHEMA_VERSION = 2;
 
 /** Stroke width in CSS pixels, at every zoom. */
 export const DRAWING_HAIRLINE_CSS_PX = 1.25;
@@ -48,9 +53,9 @@ export const DRAWING_POINT_RADIUS_CSS_PX = 1.6;
  * @property {object} units
  * @property {DrawingBounds|null} bounds
  * @property {readonly object[]} layers
- * @property {readonly { color: string|null, paths: readonly any[] }[]} fills
- * @property {readonly { color: string|null, path: any }[]} strokes
- * @property {readonly { color: string|null, coordinates: readonly number[] }[]} points
+ * @property {readonly { color: string|null, opacity: number, paths: readonly any[] }[]} fills
+ * @property {readonly { color: string|null, opacity: number, width: number, path: any }[]} strokes
+ * @property {readonly { color: string|null, opacity: number, coordinates: readonly number[] }[]} points
  * @property {number} primitiveCount
  */
 
@@ -116,18 +121,38 @@ function appendPolygon(path, vertices) {
   }
 }
 
+/** A primitive's `opacity`, 1 when it names none; anything else is refused. */
+function primitiveOpacity(primitive, where) {
+  const value = primitive?.opacity;
+  if (value === undefined || value === null) return 1;
+  if (typeof value !== "number" || !(value >= 0 && value <= 1)) {
+    throw new Error(`${where}: opacity must be a number from 0 to 1; received ${describe(value)}.`);
+  }
+  return value;
+}
+
+/** A stroke primitive's `width` in CSS pixels, the hairline when it names none. */
+function primitiveWidth(primitive, where) {
+  const value = primitive?.width;
+  if (value === undefined || value === null) return DRAWING_HAIRLINE_CSS_PX;
+  if (typeof value !== "number" || !(value > 0) || !Number.isFinite(value)) {
+    throw new Error(`${where}: width must be a positive number of CSS pixels; received ${describe(value)}.`);
+  }
+  return value;
+}
+
 /**
- * Colour-keyed grouping. `null` — the default pen — is a KEY of its own, kept
- * distinct from every hex string: it is resolved at draw time and must not be
- * folded into whatever the theme's foreground happens to be right now. A Map
- * takes `null` as a key directly, so there is no sentinel string that a real
- * colour could ever collide with.
+ * Pen-keyed grouping: colour, opacity and (for strokes) width. `null` -- the
+ * default pen -- is a colour of its own, kept distinct from every hex string:
+ * it is resolved at draw time and must not be folded into whatever the theme's
+ * foreground happens to be right now.
  */
-function group(map, color) {
-  const key = color === null || color === undefined ? null : String(color);
+function group(map, color, opacity = 1, width = DRAWING_HAIRLINE_CSS_PX) {
+  const colorKey = color === null || color === undefined ? null : String(color);
+  const key = JSON.stringify([colorKey, opacity, width]);
   let entry = map.get(key);
   if (!entry) {
-    entry = { color: key, items: [] };
+    entry = { color: colorKey, opacity, width, items: [] };
     map.set(key, entry);
   }
   return entry;
@@ -176,8 +201,9 @@ export function prepareDrawing(payload, { Path2D: injectedPath2D } = {}) {
     const where = `primitives[${index}]`;
     const type = primitive?.type;
     const geometry = primitive?.geometry;
+    const opacity = primitiveOpacity(primitive, where);
     if (type === "lines") {
-      const entry = group(strokeGroups, primitive.color);
+      const entry = group(strokeGroups, primitive.color, opacity, primitiveWidth(primitive, where));
       if (!entry.path) {
         entry.path = new PathCtor();
       }
@@ -186,7 +212,7 @@ export function prepareDrawing(payload, { Path2D: injectedPath2D } = {}) {
         entry.path.lineTo(line[2], line[3]);
       }
     } else if (type === "path") {
-      const entry = group(strokeGroups, primitive.color);
+      const entry = group(strokeGroups, primitive.color, opacity, primitiveWidth(primitive, where));
       if (!entry.path) {
         entry.path = new PathCtor();
       }
@@ -196,13 +222,13 @@ export function prepareDrawing(payload, { Path2D: injectedPath2D } = {}) {
       for (const commands of geometry) {
         appendPath(path, commands, where);
       }
-      group(fillGroups, primitive.color).items.push(path);
+      group(fillGroups, primitive.color, opacity).items.push(path);
     } else if (type === "filled-polygon") {
       const path = new PathCtor();
       appendPolygon(path, geometry);
-      group(fillGroups, primitive.color).items.push(path);
+      group(fillGroups, primitive.color, opacity).items.push(path);
     } else if (type === "point") {
-      const entry = group(pointGroups, primitive.color);
+      const entry = group(pointGroups, primitive.color, opacity);
       entry.items.push(geometry[0], geometry[1]);
     } else {
       throw new Error(
@@ -218,9 +244,13 @@ export function prepareDrawing(payload, { Path2D: injectedPath2D } = {}) {
     units: payload.units || null,
     bounds,
     layers: isArray(payload.layers) ? payload.layers : [],
-    fills: [...fillGroups.values()].map((entry) => ({ color: entry.color, paths: entry.items })),
-    strokes: [...strokeGroups.values()].map((entry) => ({ color: entry.color, path: entry.path })),
-    points: [...pointGroups.values()].map((entry) => ({ color: entry.color, coordinates: entry.items })),
+    fills: [...fillGroups.values()].map((entry) => ({ color: entry.color, opacity: entry.opacity, paths: entry.items })),
+    strokes: [...strokeGroups.values()].map((entry) => ({
+      color: entry.color, opacity: entry.opacity, width: entry.width, path: entry.path
+    })),
+    points: [...pointGroups.values()].map((entry) => ({
+      color: entry.color, opacity: entry.opacity, coordinates: entry.items
+    })),
     primitiveCount: primitives.length
   };
 }
@@ -287,21 +317,24 @@ export function drawDrawing(ctx, drawable, { transform, foreground, pixelRatio =
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
-  for (const { color, paths } of drawable.fills) {
+  for (const { color, opacity = 1, paths } of drawable.fills) {
+    ctx.globalAlpha = opacity;
     ctx.fillStyle = color || foreground;
     for (const path of paths) {
       ctx.fill(path, "evenodd");
     }
   }
 
-  ctx.lineWidth = DRAWING_HAIRLINE_CSS_PX / scale;
-  for (const { color, path } of drawable.strokes) {
+  for (const { color, opacity = 1, width = DRAWING_HAIRLINE_CSS_PX, path } of drawable.strokes) {
+    ctx.globalAlpha = opacity;
+    ctx.lineWidth = width / scale;
     ctx.strokeStyle = color || foreground;
     ctx.stroke(path);
   }
 
   const radius = DRAWING_POINT_RADIUS_CSS_PX / scale;
-  for (const { color, coordinates } of drawable.points) {
+  for (const { color, opacity = 1, coordinates } of drawable.points) {
+    ctx.globalAlpha = opacity;
     ctx.fillStyle = color || foreground;
     for (let index = 0; index < coordinates.length; index += 2) {
       ctx.beginPath();
