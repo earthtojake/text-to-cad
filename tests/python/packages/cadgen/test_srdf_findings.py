@@ -54,6 +54,9 @@ def _srdf(body: str, *, header: str = SRDF_HEADER, groups: str = ARM_GROUP) -> s
 # (case name, srdf text, expected code, expected severity)
 CASES = [
     # --- structural parsing ---
+    ("unnamed_link_member", _srdf('<group name="bad"><link/></group>'), "missing_group_member_name", "error"),
+    ("blank_joint_member", _srdf('<group name="bad"><joint name="   "/></group>'), "missing_group_member_name", "error"),
+    ("unnamed_subgroup_member", _srdf('<group name="bad"><group/></group>'), "missing_group_member_name", "error"),
     ("invalid_xml", "<robot name='edge'><group></robot>", "invalid_xml", "error"),
     ("invalid_root", "<semantic/>", "invalid_root", "error"),
     ("missing_robot_name", _srdf("", header="<robot>\n"), "missing_robot_name", "error"),
