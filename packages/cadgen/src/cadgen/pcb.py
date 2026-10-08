@@ -122,7 +122,7 @@ def validate(path: Path, *, strict: bool = False, verbose: bool = False) -> Vali
                 code=f"{finding.check}.{finding.type}",
             )
         )
-    errors = sum(1 for finding in report.findings if finding.severity == "error")
+    errors = sum(1 for finding in report.findings if finding.severity == "error" and finding.check != "review")
     warnings = sum(1 for finding in report.findings if finding.severity == "warning")
     advice = sum(1 for finding in report.findings if finding.severity == "warning" and finding.check == "review")
     blocking = bool(errors or (strict and warnings > advice))  # the review advises; strict never fails on it

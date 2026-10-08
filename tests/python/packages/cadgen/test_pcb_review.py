@@ -103,6 +103,24 @@ class ReviewTest(unittest.TestCase):
             self.assertFalse(is_blocking(Finding(check="review", severity=severity, type="decoupling_far", description="", items=())))
         self.assertTrue(is_blocking(Finding(check="drc", severity="error", type="clearance", description="", items=())))
 
+    def test_validate_passes_a_board_whose_only_findings_are_the_review(self):
+        from unittest import mock
+
+        from cadgen import pcb
+        from cadgen.kicad.check import ProjectCheck
+        from cadgen.kicad.cli import Finding
+
+        for severity in ("warning", "error"):
+            found = Finding(check="review", severity=severity, type="decoupling_far", description="far", items=(), summary="C1 is far")
+            with tempfile.TemporaryDirectory() as folder, mock.patch("cadgen.kicad.check.check_project", return_value=ProjectCheck(findings=(found,))):
+                board = Path(folder) / "b.kicad_pcb"
+                board.write_text("")
+                for strict in (False, True):
+                    result = pcb.validate(board, strict=strict)
+                    self.assertTrue(result.ok, (severity, strict, result.issues))
+                    self.assertEqual([(issue.code, issue.severity, issue.message) for issue in result.issues],
+                                     [("review.decoupling_far", severity, "C1 is far")])
+
 
 if __name__ == "__main__":
     unittest.main()
