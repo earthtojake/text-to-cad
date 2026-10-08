@@ -27,6 +27,8 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
     skills  light_policy  light_tests  skills_policy  skills_tests  skills_runtime
     docs
     packaging
+    kicad                         KiCad boards
+    harness                       WireViz harnesses
     full
     record                        the artifact name recording what this run tests
 
@@ -56,7 +58,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages/cadgen"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "docs", "packaging")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "docs", "packaging", "kicad", "harness")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -116,9 +118,10 @@ LIGHT_SKILL_TESTS = (
 CADGEN_SKILL_SUITES = (f"{SKILL_SUITES}/cad", f"{SKILL_SUITES}/dxf")
 
 # Whatever runs cadgen: its suites on both platforms, the skill suites that drive it, the
-# policy tests that load it, the viewer gates that serve and build through it, the wheel.
+# policy tests that load it, the viewer gates that serve and build through it, the wheel, and
+# the boards and harnesses built end to end through KiCad and WireViz.
 CADGEN_CONSUMERS = select(
-    flags=["web_viewer", "packaging"], cadgen=[CADGEN_SUITE], skills=CADGEN_SKILL_SUITES,
+    flags=["web_viewer", "packaging", "kicad", "harness"], cadgen=[CADGEN_SUITE], skills=CADGEN_SKILL_SUITES,
     policy=[f"{POLICY_SUITE}/{name}" for name in sorted(HEAVY_POLICY)],
 )
 
@@ -279,6 +282,9 @@ RULES: tuple[Rule, ...] = (
     Rule(("scripts/test/test-docs.sh", "scripts/brand/**"), select(flags=["docs"])),
     Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"), select(flags=["web_viewer"])),
     Rule(("scripts/test/test-installed.sh",), select(flags=["packaging"])),
+    # The suites that need KiCad or WireViz installed, and their runners: their own jobs.
+    Rule(("tests/python/packages/kicad/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"])),
+    Rule(("tests/python/packages/harness/**", "scripts/test/test-harness.sh"), select(flags=["harness"])),
     Rule(("scripts/test/test.sh",), NOTHING),  # chains the runners for a local run; CI calls them itself
     Rule(("scripts/bench/viewer-memory/**",), select(flags=["core_js"])),
 

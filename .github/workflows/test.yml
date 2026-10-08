@@ -76,6 +76,8 @@ jobs:
       skills_runtime: ${{ steps.select.outputs.skills_runtime }}
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
+      kicad: ${{ steps.select.outputs.kicad }}
+      harness: ${{ steps.select.outputs.harness }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -334,7 +336,7 @@ jobs:
   kicad:
     name: KiCad boards
     needs: changes
-    if: needs.changes.outputs.cadgen == 'true'
+    if: needs.changes.outputs.kicad == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -397,7 +399,7 @@ jobs:
   harness:
     name: WireViz harnesses
     needs: changes
-    if: needs.changes.outputs.cadgen == 'true'
+    if: needs.changes.outputs.harness == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
