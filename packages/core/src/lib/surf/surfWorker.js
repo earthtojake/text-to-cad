@@ -4,14 +4,13 @@ import { readCadWorkerTicket } from "../../client/resources.js";
 // One request = one component's stored mesh (bytes the client thread read and
 // verified) and an explicit capability set. Ordinary display asks only for
 // render data, which the mesh alone carries; picking/measurement asks for
-// selectors, which also read the component's .surf for its topology tables;
-// refinement of active topology asks for both so triangle ranges stay aligned.
-// Decoding, copying into render-owned arrays and building selectors run here,
-// off the page's main thread.
+// selectors, which also read the component's selector table (cadgen's, served
+// with its surface) and join it to the mesh; refinement of active topology
+// asks for both so triangle ranges stay aligned. Decoding, copying into
+// render-owned arrays and the join run here, off the page's main thread.
 
-import { parseSurf } from "./container.js";
 import { buildMeshDataFromSurf } from "./surfMeshData.js";
-import { buildSelectorBundleFromSurf } from "./surfSelectorBundle.js";
+import { joinSelectorTable, parseSelectorTable } from "./selectorTable.js";
 import { meshDataTransferList } from "../render/meshTransfer.js";
 import { decodeComponentTessellation, surfIndexFromCacheEntry } from "./tessellationCache.js";
 
@@ -64,13 +63,12 @@ self.addEventListener("message", async (event) => {
     if (!cached) {
       throw new Error("Surf worker request carries no readable mesh for this component");
     }
-    let index = surfIndexFromCacheEntry(cached);
+    const meshData = capabilities.render ? buildMeshDataFromSurf(surfIndexFromCacheEntry(cached), cached.component) : null;
+    let bundle = null;
     if (capabilities.selectors) {
       const buffer = await readCadWorkerTicket(message.resource, { signal: controller.signal });
-      ({ index } = parseSurf(buffer));
+      bundle = joinSelectorTable(parseSelectorTable(buffer), cached.component);
     }
-    const meshData = capabilities.render ? buildMeshDataFromSurf(index, cached.component) : null;
-    const bundle = capabilities.selectors ? buildSelectorBundleFromSurf(index, cached.component) : null;
     if (controller.signal.aborted) {
       return;
     }

@@ -5,8 +5,9 @@ exact surfaces and the topology index) and ``<name>.l<level>.glb`` (cadgen's
 OCCT mesh of it at that viewer LOD level, ``lodPolicy.js``), bound to each
 other by the SURF's digest and to a fixed test surface input
 (``sha256("cadgen-test-fixture:<name>")``, recorded in ``fixtures.json``).
-``sun_gear.selector.json`` is the selector oracle: cadgen's own selector
-tables for that SURF (``cadgen._internal.surf_tables``).
+``<name>.selectors.json`` is the component's selector table as cadgen stores
+it beside the SURF (``cadgen._internal.selector_table``): what the page joins
+to the mesh, and the oracle every id and fact a JS test expects comes from.
 
 The shapes are built here, not read from ``models/``. Run from the repository
 root with the repo's Python whenever cadgen's SURF or mesh output changes:
@@ -23,14 +24,12 @@ from pathlib import Path
 
 from build123d import (
     Align, Axis, Box, BuildLine, BuildPart, BuildSketch, Circle, Color, Cylinder, Line, Location, Locations,
-    Mode, Plane, Polygon, Pos, Rectangle, Spline, extrude, fillet, loft, make_face, revolve,
+    Mode, Plane, Polygon, Pos, Rectangle, SlotOverall, Spline, extrude, fillet, loft, make_face, revolve,
 )
 
 HERE = Path(__file__).resolve().parent
 # lodPolicy.js LOD_TESSELLATION_LEVELS (the coarse and default rungs).
 LEVELS = {0: (2e-3, 1.4), 1: (1.5e-3, 0.35)}
-# The selector manifest's face-proxy run layout (surfSelectorBundle.js).
-FACE_RUN_COLUMNS = ["occurrenceRow", "primitiveIndex", "triangleStart", "triangleCount", "faceRow"]
 
 
 def sun_gear():
@@ -83,20 +82,34 @@ def mixed():
     return part
 
 
+def slot():
+    """An extruded slot: two lines and two half-circles chain round each cap, and the
+    rounded walls join the flat ones in one tangent group."""
+    with BuildPart() as part:
+        with BuildSketch(Plane.XY):
+            SlotOverall(30, 10)
+        extrude(amount=5)
+    solid = part.part
+    solid.color = Color(0.72, 0.30, 0.30, 1.0)
+    return solid
+
+
 def main() -> None:
     from cadgen._internal import occt_mesh
     from cadgen._internal.component_package import decode_display_shape, prepare_geometry_component
-    from cadgen._internal.surf_tables import selector_bundle_from_surf_index
+    from cadgen._internal.selector_table import build_selector_table, selector_table_bytes
     from cadgen._internal.surface_extract import extract_surface_component, read_surf
 
     manifest = {}
     for name, build, levels in (("sun_gear", sun_gear, (0, 1)), ("cam_follower_roller", cam_follower_roller, (0, 1)),
-                                ("mixed", mixed, (0, 1))):
+                                ("mixed", mixed, (0, 1)), ("slot", slot, (0, 1))):
         prepared = prepare_geometry_component(build())
         entry, payload = prepared["entry"], prepared["payload"]
         shape = decode_display_shape(entry, payload)
         surf = extract_surface_component(shape.wrapped, face_colors=getattr(shape, "cad_face_ordinal_colors", None))
         index, _floats = read_surf(surf)
+        table = selector_table_bytes(build_selector_table(shape.wrapped, index))
+        (HERE / f"{name}.selectors.json").write_bytes(table + b"\n")
         surface_input = hashlib.sha256(f"cadgen-test-fixture:{name}".encode()).hexdigest()
         surface_object = hashlib.sha256(surf).hexdigest()
         (HERE / f"{name}.surf").write_bytes(surf)
@@ -109,11 +122,8 @@ def main() -> None:
             (HERE / f"{name}.l{level}.glb").write_bytes(body)
             meshes[str(level)] = {"chordTolerance": chord, "angleTolerance": angle, "byteLength": len(body)}
         manifest[name] = {"surfaceInput": surface_input, "surfaceObject": surface_object,
-                          "faces": len(index["faces"]), "edges": len(index["edges"]), "meshes": meshes}
-        if name == "sun_gear":
-            oracle = selector_bundle_from_surf_index(index).manifest
-            oracle["faceProxy"] = {"runColumns": FACE_RUN_COLUMNS}
-            (HERE / "sun_gear.selector.json").write_text(json.dumps(oracle, separators=(",", ":")) + "\n", encoding="utf-8")
+                          "faces": len(index["faces"]), "edges": len(index["edges"]),
+                          "selectorsByteLength": len(table), "meshes": meshes}
     (HERE / "fixtures.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(manifest, indent=2, sort_keys=True))
 

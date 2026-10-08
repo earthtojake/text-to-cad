@@ -77,15 +77,17 @@ test("composeSelectorRuntimes merges per-component runtimes with disjoint row/pr
   assert.equal(refBySel("o1.2.f1").pickData.triangleStart, 1);
 });
 
-test("buildSelectorRuntime remaps source part rows onto an assembly occurrence", () => {
+test("buildSelectorRuntime composes a remapped occurrence with each row's own local id", () => {
+  // The local ids are cadgen's (the selector table's `localId`), and they need not be the
+  // row's position: a composed ref says what cadgen says, never `f${rowIndex + 1}`.
   const bundle = {
     manifest: {
       cadRef: "parts/source",
       tables: {
         occurrenceColumns: ["id", "path", "name", "sourceName", "parentId", "transform", "bbox", "shapeStart", "shapeCount", "faceStart", "faceCount", "edgeStart", "edgeCount"],
-        shapeColumns: ["id", "occurrenceId", "ordinal", "kind", "bbox", "center", "area", "volume", "faceStart", "faceCount", "edgeStart", "edgeCount"],
-        faceColumns: ["id", "occurrenceId", "shapeId", "ordinal", "surfaceType", "area", "center", "normal", "bbox", "edgeStart", "edgeCount", "relevance", "flags", "params", "triangleStart", "triangleCount"],
-        edgeColumns: ["id", "occurrenceId", "shapeId", "ordinal", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "relevance", "flags", "params", "segmentStart", "segmentCount"],
+        shapeColumns: ["id", "localId", "occurrenceId", "ordinal", "kind", "bbox", "center", "area", "volume", "faceStart", "faceCount", "edgeStart", "edgeCount"],
+        faceColumns: ["id", "localId", "occurrenceId", "shapeId", "ordinal", "surfaceType", "area", "center", "normal", "bbox", "edgeStart", "edgeCount", "relevance", "flags", "params", "tangentGroup", "triangleStart", "triangleCount"],
+        edgeColumns: ["id", "localId", "occurrenceId", "shapeId", "ordinal", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "relevance", "flags", "params", "chain", "segmentStart", "segmentCount"],
       },
       occurrences: [
         ["o1", "1", null, null, null, null, null, 0, 2, 0, 2, 0, 0],
@@ -93,14 +95,17 @@ test("buildSelectorRuntime remaps source part rows onto an assembly occurrence",
         ["o1.2", "1.2", null, null, "o1", null, null, 1, 1, 1, 1, 0, 0]
       ],
       shapes: [
-        ["o1.1.s1", "o1.1", 1, "solid", null, null, 1, 1, 0, 1, 0, 0],
-        ["o1.2.s1", "o1.2", 1, "solid", null, null, 1, 1, 1, 1, 0, 0]
+        ["o1.1.s1", "s1", "o1.1", 1, "solid", null, null, 1, 1, 0, 1, 0, 0],
+        ["o1.2.s1", "s1", "o1.2", 1, "solid", null, null, 1, 1, 1, 1, 0, 0]
       ],
       faces: [
-        ["o1.1.f1", "o1.1", "o1.1.s1", 1, "plane", 1, [0, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 0, 0],
-        ["o1.2.f1", "o1.2", "o1.2.s1", 1, "plane", 1, [1, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 0, 0]
+        ["o1.1.f1", "f1", "o1.1", "o1.1.s1", 1, "plane", 1, [0, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 1, 0, 0],
+        ["o1.2.f7", "f7", "o1.2", "o1.2.s1", 7, "plane", 1, [1, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 3, 0, 0],
+        ["o1.2.f9", "", "o1.2", "o1.2.s1", 9, "plane", 1, [1, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 3, 0, 0]
       ],
-      edges: []
+      edges: [
+        ["o1.1.e4", "e4", "o1.1", "o1.1.s1", 4, "line", 1, [0, 0, 0], null, 0, 0, 0, 0, {}, 2, 0, 0]
+      ]
     },
     buffers: {}
   };
@@ -112,11 +117,16 @@ test("buildSelectorRuntime remaps source part rows onto an assembly occurrence",
   });
   const faces = runtime.references.filter((reference) => reference.selectorType === "face");
 
-  assert.deepEqual(faces.map((reference) => reference.displaySelector), ["o1.5.f1", "o1.5.f2"]);
+  assert.deepEqual(faces.map((reference) => reference.displaySelector), ["o1.5.f1", "o1.5.f7"], "a row without a local id has no ref");
+  assert.deepEqual(faces.map((reference) => reference.pickData.tangentGroup), [1, 3]);
+  const [edge] = runtime.references.filter((reference) => reference.selectorType === "edge");
+  assert.equal(edge.displaySelector, "o1.5.e4");
+  assert.equal(edge.pickData.chain, 2);
+  assert.equal(edge.pickData.localId, "e4");
   // copyCadPath now reaches the copy text. It was always passed in here and always discarded
   // by buildCadRefToken; the token layer honours it so a copied ref says which file it came
   // from. The viewer supplies the name its host gives the file (its path under the host's root).
-  assert.equal(faces[1].copyText, "parts/root#o1.5.f2");
+  assert.equal(faces[1].copyText, "parts/root#o1.5.f7");
   assert.equal(faces[1].pickData.surfaceType, "plane");
 });
 
@@ -126,9 +136,9 @@ test("buildSelectorRuntime remaps native occurrence prefixes onto assembly desce
       cadRef: "parts/native",
       tables: {
         occurrenceColumns: ["id", "path", "name", "sourceName", "parentId", "transform", "bbox", "shapeStart", "shapeCount", "faceStart", "faceCount", "edgeStart", "edgeCount"],
-        shapeColumns: ["id", "occurrenceId", "ordinal", "kind", "bbox", "center", "area", "volume", "faceStart", "faceCount", "edgeStart", "edgeCount"],
-        faceColumns: ["id", "occurrenceId", "shapeId", "ordinal", "surfaceType", "area", "center", "normal", "bbox", "edgeStart", "edgeCount", "relevance", "flags", "params", "triangleStart", "triangleCount"],
-        edgeColumns: ["id", "occurrenceId", "shapeId", "ordinal", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "relevance", "flags", "params", "segmentStart", "segmentCount"],
+        shapeColumns: ["id", "localId", "occurrenceId", "ordinal", "kind", "bbox", "center", "area", "volume", "faceStart", "faceCount", "edgeStart", "edgeCount"],
+        faceColumns: ["id", "localId", "occurrenceId", "shapeId", "ordinal", "surfaceType", "area", "center", "normal", "bbox", "edgeStart", "edgeCount", "relevance", "flags", "params", "triangleStart", "triangleCount"],
+        edgeColumns: ["id", "localId", "occurrenceId", "shapeId", "ordinal", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "relevance", "flags", "params", "segmentStart", "segmentCount"],
       },
       occurrences: [
         ["o1", "1", null, null, null, null, null, 0, 2, 0, 2, 0, 0],
@@ -136,12 +146,12 @@ test("buildSelectorRuntime remaps native occurrence prefixes onto assembly desce
         ["o1.2", "1.2", null, null, "o1", null, null, 1, 1, 1, 1, 0, 0]
       ],
       shapes: [
-        ["o1.1.s1", "o1.1", 1, "solid", null, null, 1, 1, 0, 1, 0, 0],
-        ["o1.2.s1", "o1.2", 1, "solid", null, null, 1, 1, 1, 1, 0, 0]
+        ["o1.1.s1", "s1", "o1.1", 1, "solid", null, null, 1, 1, 0, 1, 0, 0],
+        ["o1.2.s1", "s1", "o1.2", 1, "solid", null, null, 1, 1, 1, 1, 0, 0]
       ],
       faces: [
-        ["o1.1.f1", "o1.1", "o1.1.s1", 1, "plane", 1, [0, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 0, 0],
-        ["o1.2.f1", "o1.2", "o1.2.s1", 1, "plane", 1, [1, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 0, 0]
+        ["o1.1.f1", "f1", "o1.1", "o1.1.s1", 1, "plane", 1, [0, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 0, 0],
+        ["o1.2.f2", "f2", "o1.2", "o1.2.s1", 2, "plane", 1, [1, 0, 0], [0, 0, 1], null, 0, 0, 0, 0, {}, 0, 0]
       ],
       edges: []
     },
@@ -270,14 +280,14 @@ function componentBundle(xOffset) {
       cadRef: "parts/source",
       tables: {
         occurrenceColumns: ["id", "path", "name", "sourceName", "parentId", "transform", "bbox", "shapeStart", "shapeCount", "faceStart", "faceCount", "edgeStart", "edgeCount"],
-        shapeColumns: ["id", "occurrenceId", "ordinal", "kind", "bbox", "center", "area", "volume", "faceStart", "faceCount", "edgeStart", "edgeCount"],
-        faceColumns: ["id", "occurrenceId", "shapeId", "ordinal", "surfaceType", "area", "center", "normal", "bbox", "edgeStart", "edgeCount", "relevance", "flags", "params", "triangleStart", "triangleCount"],
-        edgeColumns: ["id", "occurrenceId", "shapeId", "ordinal", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "relevance", "flags", "params", "segmentStart", "segmentCount"],
+        shapeColumns: ["id", "localId", "occurrenceId", "ordinal", "kind", "bbox", "center", "area", "volume", "faceStart", "faceCount", "edgeStart", "edgeCount"],
+        faceColumns: ["id", "localId", "occurrenceId", "shapeId", "ordinal", "surfaceType", "area", "center", "normal", "bbox", "edgeStart", "edgeCount", "relevance", "flags", "params", "triangleStart", "triangleCount"],
+        edgeColumns: ["id", "localId", "occurrenceId", "shapeId", "ordinal", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "relevance", "flags", "params", "segmentStart", "segmentCount"],
       },
       occurrences: [["o1", "1", null, null, null, null, { min: [xOffset, 0, 0], max: [xOffset + 1, 1, 0] }, 0, 1, 0, 1, 0, 1]],
-      shapes: [["o1.s1", "o1", 1, "solid", { min: [xOffset, 0, 0], max: [xOffset + 1, 1, 0] }, [xOffset + 0.5, 0.5, 0], 1, 1, 0, 1, 0, 1]],
-      faces: [["o1.f1", "o1", "o1.s1", 1, "plane", 1, [xOffset + 0.5, 0.5, 0], [0, 0, 1], { min: [xOffset, 0, 0], max: [xOffset + 1, 1, 0] }, 0, 1, 0, 0, {}, 0, 1]],
-      edges: [["o1.e1", "o1", "o1.s1", 1, "line", 1, [xOffset + 0.5, 0, 0], { min: [xOffset, 0, 0], max: [xOffset + 1, 0, 0] }, 0, 1, 0, 0, {}, 0, 1]],
+      shapes: [["o1.s1", "s1", "o1", 1, "solid", { min: [xOffset, 0, 0], max: [xOffset + 1, 1, 0] }, [xOffset + 0.5, 0.5, 0], 1, 1, 0, 1, 0, 1]],
+      faces: [["o1.f1", "f1", "o1", "o1.s1", 1, "plane", 1, [xOffset + 0.5, 0.5, 0], [0, 0, 1], { min: [xOffset, 0, 0], max: [xOffset + 1, 1, 0] }, 0, 1, 0, 0, {}, 0, 1]],
+      edges: [["o1.e1", "e1", "o1", "o1.s1", 1, "line", 1, [xOffset + 0.5, 0, 0], { min: [xOffset, 0, 0], max: [xOffset + 1, 0, 0] }, 0, 1, 0, 0, {}, 0, 1]],
       relations: { faceEdgeRows: [0], edgeFaceRows: [0] }
     },
     buffers: {
@@ -462,26 +472,21 @@ test("buildTransformedDisplayEdgeRuntime applies occurrence transforms to edge p
 });
 
 
-test("edge tangency and adjacency survive remapping into separate assembly occurrences", () => {
+test("edge tangency, adjacency and connected ids survive remapping into separate assembly occurrences", () => {
   const bundle={manifest:{tables:{
     occurrenceColumns:["id"],
-    faceColumns:["id","occurrenceId","shapeId","ordinal"],
-    edgeColumns:["id","occurrenceId","shapeId","ordinal","faceStart","faceCount","visibilityClass"],
-  },occurrences:[["o1"]],faces:[["o1.f1","o1","o1.s1",1],["o1.f2","o1","o1.s1",2]],
-  edges:[["o1.e1","o1","o1.s1",1,0,2,"tangent"]],relations:{edgeFaceRows:[0,1]}},buffers:{}};
+    faceColumns:["id","localId","occurrenceId","shapeId","ordinal","tangentGroup"],
+    edgeColumns:["id","localId","occurrenceId","shapeId","ordinal","faceStart","faceCount","visibilityClass","chain"],
+  },occurrences:[["o1"]],faces:[["o1.f1","f1","o1","o1.s1",1,1],["o1.f2","f2","o1","o1.s1",2,1]],
+  edges:[["o1.e1","e1","o1","o1.s1",1,0,2,"tangent",4]],relations:{edgeFaceRows:[0,1]}},buffers:{}};
   const runtimes=["o1.1","o1.2"].map(id=>buildSelectorRuntime(bundle,{partId:id,remapOccurrenceId:id}));
-  const edges=composeSelectorRuntimes(runtimes).references.filter(ref=>ref.selectorType==="edge");
+  const composed=composeSelectorRuntimes(runtimes);
+  const edges=composed.references.filter(ref=>ref.selectorType==="edge");
   assert.deepEqual(edges.map(ref=>ref.pickData.visibilityClass),["tangent","tangent"]);
   assert.deepEqual(edges.map(ref=>ref.pickData.adjacentSelectors),[["o1.1.f1","o1.1.f2"],["o1.2.f1","o1.2.f2"]]);
-});
-
-test('edge chain endpoints use proxy connectivity and follow occurrence transforms', () => {
-  const bundle = {manifest:{tables:{edgeColumns:['id','occurrenceId','shapeId','ordinal','curveType','segmentStart','segmentCount']},
-    edges:[['o1.e1','o1','o1.s1',1,'line',0,2],['o1.e2','o1','o1.s1',2,'circle',2,3]]},
-    buffers:{edgePositions:new Float32Array([0,0,0,1,0,0,2,0,0,0,1,0]),edgeIndices:new Uint32Array([0,1,1,2,0,1,1,3,3,0])}};
-  const runtime=buildSelectorRuntime(bundle);
-  assert.deepEqual(runtime.references[0].pickData.chainEndpoints,[{point:[0,0,0],direction:[1,0,0]},{point:[2,0,0],direction:[-1,0,0]}]);
-  assert.deepEqual(runtime.references[1].pickData.chainEndpoints,[]);
-  const moved=buildSelectorRuntime(bundle,{transform:[1,0,0,10,0,1,0,20,0,0,1,30,0,0,0,1],remapOccurrenceId:'o2'});
-  assert.deepEqual(moved.references[0].pickData.chainEndpoints[0].point,[10,20,30]);
+  // cadgen's ids ride through composition and posing unchanged: they are local to the component.
+  assert.deepEqual(edges.map(ref=>[ref.occurrenceId,ref.pickData.chain]),[["o1.1",4],["o1.2",4]]);
+  const posed=buildTransformedSelectorRuntime(composed,{"o1.2":[1,0,0,10,0,1,0,20,0,0,1,30,0,0,0,1]});
+  assert.deepEqual(posed.references.filter(ref=>ref.selectorType==="face").map(ref=>ref.pickData.tangentGroup),[1,1,1,1]);
+  assert.deepEqual(posed.references.filter(ref=>ref.selectorType==="edge").map(ref=>ref.pickData.chain),[4,4]);
 });

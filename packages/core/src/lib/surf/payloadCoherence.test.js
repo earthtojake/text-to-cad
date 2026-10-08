@@ -17,23 +17,24 @@ import test from "node:test";
 
 import { parseSurf } from "./container.js";
 import { buildMeshDataFromSurf } from "./surfMeshData.js";
-import { buildSelectorBundleFromSurf } from "./surfSelectorBundle.js";
+import { joinSelectorTable } from "./selectorTable.js";
 import {
   decodeComponentTessellation, meshEdgePolylines, meshFaceRanges, surfIndexFromCacheEntry,
 } from "./tessellationCache.js";
-import { meshFixture, surfFixture } from "./__tests__/meshFixtures.js";
+import { meshFixture, selectorTableFixture, surfFixture } from "./__tests__/meshFixtures.js";
 
 const FIXTURES = ["sun_gear", "cam_follower_roller"];
 const FACE_RUN_COLUMNS = 5; // occurrenceRow, primitiveIndex, triangleStart, triangleCount, faceRow
 
 function loadFixture(name, level = 1) {
   const { index } = parseSurf(surfFixture(name).arrayBuffer());
+  const table = selectorTableFixture(name);
   const mesh = meshFixture(name, level);
   const decoded = decodeComponentTessellation(mesh.bytes, {
     surfaceInput: mesh.surfaceInput, surfaceObject: mesh.surfaceObject, tessellation: mesh.tessellation || {},
   });
   assert.ok(decoded, `${name} L${level} decodes`);
-  return { index, decoded, component: decoded.component };
+  return { index, table, decoded, component: decoded.component };
 }
 
 function faceRunRows(bundle) {
@@ -110,10 +111,10 @@ function assertTypedArraysEqual(label, a, b) {
 }
 
 for (const fixture of FIXTURES) {
-  test(`${fixture}: the stored mesh with its SURF index is coherent (faces + edges)`, () => {
-    const { index, component } = loadFixture(fixture);
+  test(`${fixture}: the stored mesh with its selector table is coherent (faces + edges)`, () => {
+    const { index, table, component } = loadFixture(fixture);
     const meshData = buildMeshDataFromSurf(index, component);
-    const bundle = buildSelectorBundleFromSurf(index, component);
+    const bundle = joinSelectorTable(table, component);
     assertCoherent("real index", component, meshData, bundle);
     // A decoded entry (one buffer for every section) is copied out so the entry can be released.
     assert.notEqual(meshData.vertices.buffer, component.positions.buffer, "vertices leave the entry buffer");
@@ -133,7 +134,7 @@ for (const fixture of FIXTURES) {
   });
 
   test(`${fixture}: a mixed level pairing VIOLATES the invariant (detectability)`, () => {
-    const { index, component: level1 } = loadFixture(fixture, 1);
+    const { index, table, component: level1 } = loadFixture(fixture, 1);
     const { component: level0 } = loadFixture(fixture, 0);
     assert.notEqual(
       level1.indices.length,
@@ -141,7 +142,7 @@ for (const fixture of FIXTURES) {
       "levels mesh to different densities (otherwise this test is vacuous)",
     );
     const meshLevel1 = buildMeshDataFromSurf(index, level1);
-    const bundleLevel0 = buildSelectorBundleFromSurf(index, level0);
+    const bundleLevel0 = joinSelectorTable(table, level0);
     const runTriangles = faceRunRows(bundleLevel0).reduce((sum, row) => sum + row.triangleCount, 0);
     assert.notEqual(
       runTriangles,
@@ -149,7 +150,7 @@ for (const fixture of FIXTURES) {
       "level-0 runs against a level-1 mesh fail the count invariant — the desync is detectable",
     );
     // And the properly paired level-1 payload passes.
-    const bundleLevel1 = buildSelectorBundleFromSurf(index, level1);
+    const bundleLevel1 = joinSelectorTable(table, level1);
     assertCoherent("level-1 paired", level1, meshLevel1, bundleLevel1);
   });
 }

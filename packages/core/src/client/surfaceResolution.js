@@ -61,6 +61,21 @@ function verifiedReadyRow(row, { tree, cid, surfaceInput, client, tessellation }
       || parsed.searchParams.get("object") !== surfaceObject) {
     throw new Error(`Surface response has an invalid immutable URL for ${cid}`);
   }
+  // The component's selector table (cadgen's, derived with the surface): the same store route,
+  // bound to the same input, naming the table's object.
+  const selectors = row.selectors;
+  const selectorsObject = digest(selectors?.object, `selector table object for ${cid}`);
+  const selectorsByteLength = Number(selectors?.byteLength);
+  if (!Number.isSafeInteger(selectorsByteLength) || selectorsByteLength <= 0) {
+    throw new Error(`Surface response has an invalid selector table byte length for ${cid}`);
+  }
+  const selectorsParsed = new URL(String(selectors?.url || ""), "http://cad-viewer.local");
+  if (selectorsParsed.origin !== "http://cad-viewer.local" || selectorsParsed.pathname !== "/__cad/store"
+      || selectorsParsed.searchParams.get("tree") !== tree
+      || selectorsParsed.searchParams.get("surfaceInput") !== surfaceInput
+      || selectorsParsed.searchParams.get("object") !== selectorsObject) {
+    throw new Error(`Surface response has an invalid selector table URL for ${cid}`);
+  }
   // A request that named a tessellation is ready only with that mesh stored: its row is the
   // probe row a read of the mesh store would answer.
   let mesh = null;
@@ -70,11 +85,15 @@ function verifiedReadyRow(row, { tree, cid, surfaceInput, client, tessellation }
     });
     if (!mesh) throw new Error(`Surface response has no valid mesh for ${cid}`);
   }
+  const url = (location) => (client ? viewerOriginUrl(client.origin, `${location.pathname}${location.search}`) : `${location.pathname}${location.search}`);
   return Object.freeze({
     surfaceInput,
     surfaceObject,
-    surfUrl: client ? viewerOriginUrl(client.origin, `${parsed.pathname}${parsed.search}`) : `${parsed.pathname}${parsed.search}`,
+    surfUrl: url(parsed),
     byteLength,
+    selectorsObject,
+    selectorsUrl: url(selectorsParsed),
+    selectorsByteLength,
     ...(mesh ? { mesh } : {}),
   });
 }

@@ -53,6 +53,8 @@ in [the drawing contract](../ui/docs/drawing.md); the mechanism is
   raycast accelerator until a ray reaches a component's bounds. Refinement
   honours that boundary — a component with active topology replaces its
   selectors at the same concrete tessellation before publishing new triangles.
+  Selectors are cadgen's per-component table joined to the mesh by ordinal:
+  the page composes `occurrenceId.localId` and mints no fact of its own.
   Mechanism: [docs/resource-ownership.md](docs/resource-ownership.md) §2.
 - **Reuse never changes what is exact**: recomposition, instanced draws,
   frustum culling, material pass keys and detail swaps may all reuse previous

@@ -184,11 +184,13 @@ function runtimeComponentIdentity(context, cid) {
   return context?.componentIdentityByCid?.[cid] || context?.descriptor?.components?.[cid] || null;
 }
 
-function runtimeComponentSurfUrl(context, cid, resources) {
+// Where a component's selector table is read from: the surface ticket's, else the one a
+// static package lists beside its surf (`components/<cid>.selectors.json`).
+function runtimeComponentSelectorsUrl(context, cid, resources) {
   const identity = runtimeComponentIdentity(context, cid);
   const component = context?.descriptor?.components?.[cid];
-  return identity?.surfUrl
-    || (component?.surf ? resolvePackageAssetUrl(entryAssetUrl(context.entry, "glb"), component.surf, resources) : "");
+  return identity?.selectorsUrl
+    || (component?.selectors ? resolvePackageAssetUrl(entryAssetUrl(context.entry, "glb"), component.selectors, resources) : "");
 }
 
 function createAssemblyPreviewMeshData(meshData, topologyManifest = null) {
@@ -433,6 +435,7 @@ export function useCadAssets({
           diagonal,
           centers,
           surfUrl: identity.surfUrl || (component.surf ? resolvePackageAssetUrl(meshUrl, component.surf, resources) : ""),
+          selectorsUrl: identity.selectorsUrl || (component.selectors ? resolvePackageAssetUrl(meshUrl, component.selectors, resources) : ""),
           identity,
           // The component's surface, and its mesh at `tessellation` when one is named: cadgen
           // meshes a level its store lacks, and `mesh` is that level's probe row.
@@ -456,7 +459,7 @@ export function useCadAssets({
                 ...(context.componentIdentityByCid || {}), [cid]: nextIdentity,
               };
             }
-            return { identity: nextIdentity, surfUrl: nextIdentity.surfUrl, mesh };
+            return { identity: nextIdentity, surfUrl: nextIdentity.surfUrl, selectorsUrl: nextIdentity.selectorsUrl, mesh };
           },
           meshBytes: estimateMeshRenderCost(componentMeshDataByCid[cid]).typedArrayBytes,
           meshData: componentMeshDataByCid[cid],
@@ -485,10 +488,10 @@ export function useCadAssets({
     const ctx = lodPackageRef.current;
     if (!ctx || signal?.aborted || !payload?.meshData) throw abortError();
     const component = runtimeComponentIdentity(ctx, cid);
-    const surfUrl = runtimeComponentSurfUrl(ctx, cid, resources);
-    if (!matchesLodPayloadRequest(payload.lodRequest, ctx, cid, level, surfUrl)) throw abortError();
+    const selectorsUrl = runtimeComponentSelectorsUrl(ctx, cid, resources);
+    if (!matchesLodPayloadRequest(payload.lodRequest, ctx, cid, level, selectorsUrl)) throw abortError();
     if (payload.bundle || !componentLodNeedsSelectors(cid)) return payload;
-    return loadRenderSurfSelectorBundle(surfUrl, { resources, tessellationCache,
+    return loadRenderSurfSelectorBundle(selectorsUrl, { resources, tessellationCache,
       signal, tessellation: lodTessellationForLevel(level), identity: component,
     }).then(bundle => {
       if (lodPackageRef.current !== ctx || signal?.aborted) throw abortError();
@@ -504,11 +507,11 @@ export function useCadAssets({
     for (const { cid, level, payload } of entries) {
       const normalizedLevel = normalizeLodLevel(level);
       const component = runtimeComponentIdentity(ctx, cid);
-      const surfUrl = runtimeComponentSurfUrl(ctx, cid, resources);
-      if (!payload?.meshData || !matchesLodPayloadRequest(payload.lodRequest, ctx, cid, normalizedLevel, surfUrl)) return false;
+      const selectorsUrl = runtimeComponentSelectorsUrl(ctx, cid, resources);
+      if (!payload?.meshData || !matchesLodPayloadRequest(payload.lodRequest, ctx, cid, normalizedLevel, selectorsUrl)) return false;
       if (!payload.bundle && componentLodNeedsSelectors(cid)) return { status: "not-ready" };
       items.push({ cid, normalizedLevel, previousLevel: normalizeLodLevel(ctx.componentLodLevelByCid?.[cid]),
-        component, surfUrl, payload, baseMesh: ctx.componentMeshDataByCid[cid],
+        component, surfUrl: selectorsUrl, payload, baseMesh: ctx.componentMeshDataByCid[cid],
         nextMesh: Object.freeze({ ...payload.meshData, lodLevel: normalizedLevel, lodKey: payload.lodRequest.key }) });
     }
     const revision = ctx.meshHash;
@@ -856,6 +859,7 @@ export function useCadAssets({
               ...packageDescriptor.components[cid],
               surfaceObject: previousIdentity.surfaceObject,
               surfUrl: previousIdentity.surfUrl || "",
+              selectorsUrl: previousIdentity.selectorsUrl || "",
             }));
           }
         }
@@ -876,6 +880,7 @@ export function useCadAssets({
           prewarmSurfWorkers(Math.min(readCids.length, packageComponentLoadConcurrency()));
         };
         const staticSurfUrl = component => (component?.surf ? resolvePackageAssetUrl(meshUrl, component.surf, resources) : "");
+        const staticSelectorsUrl = component => (component?.selectors ? resolvePackageAssetUrl(meshUrl, component.selectors, resources) : "");
         // A cold component opens at the standard level, as a warm one does: cadgen meshes it there in
         // the same request that derives its surface, and nothing is tessellated here.
         const coldTessellation = {};
@@ -996,6 +1001,7 @@ export function useCadAssets({
                 ...component,
                 surfaceObject: cached.cacheProbe.surfaceObject,
                 surfUrl: staticSurfUrl(component),
+                selectorsUrl: staticSelectorsUrl(component),
               }));
               return { sourceBytes: null, cacheProbe: cached.cacheProbe };
             }
@@ -1359,11 +1365,12 @@ export function useCadAssets({
         const unresolved = [];
         for (const cid of neededCids) {
           if (componentIdentityByCid[cid]?.surfaceObject
-              && componentIdentityByCid[cid]?.surfUrl) continue;
+              && componentIdentityByCid[cid]?.selectorsUrl) continue;
           const component = packageDescriptor.components?.[cid];
           const staticUrl = component?.surf ? resolvePackageAssetUrl(glbUrl, component.surf, resources) : "";
-          if (component?.surfaceObject && staticUrl) {
-            componentIdentityByCid[cid] = Object.freeze({ ...component, surfUrl: staticUrl });
+          const staticSelectors = component?.selectors ? resolvePackageAssetUrl(glbUrl, component.selectors, resources) : "";
+          if (component?.surfaceObject && staticUrl && staticSelectors) {
+            componentIdentityByCid[cid] = Object.freeze({ ...component, surfUrl: staticUrl, selectorsUrl: staticSelectors });
           } else if (component) {
             unresolved.push({ cid, surfaceInput: component.surfaceInput,
               surfaceObject: component.surfaceObject });
@@ -1387,12 +1394,12 @@ export function useCadAssets({
         const componentBundleKeyByCid = {};
         const componentSurfUrlByCid = {};
         const tessellationForLevel = lodTessellationForLevel;
-        // A part's selectors at `level`: its SURF's topology over the mesh on screen. A mesh the
-        // store does not hold -- a part still loading cold, or one the store let go -- is cadgen's
-        // to make, as a refinement's is (`useViewportLod`): the surface request names that level,
-        // and the read goes on with the mesh it answered.
+        // A part's selectors at `level`: cadgen's selector table joined to the mesh on screen. A
+        // mesh the store does not hold -- a part still loading cold, or one the store let go -- is
+        // cadgen's to make, as a refinement's is (`useViewportLod`): the surface request names that
+        // level, and the read goes on with the mesh it answered.
         const loadSelectorBundle = async (cid, level) => {
-          const read = (identity, mesh = null) => loadRenderSurfSelectorBundle(identity?.surfUrl || "", {
+          const read = (identity, mesh = null) => loadRenderSurfSelectorBundle(identity?.selectorsUrl || "", {
             resources, tessellationCache, signal: controller.signal, tessellation: tessellationForLevel(level),
             identity: mesh ? { ...identity, tessellationProbe: mesh } : identity,
           });
@@ -1445,9 +1452,9 @@ export function useCadAssets({
               componentBundleByCid[cid] = held.bundle;
               return;
             }
-            // Exact-surface topology: the selector bundle is built client-side from the .surf
-            // and the component's mesh, against the concrete level now on screen so triangle
-            // ranges remain exact. One that cannot be built leaves its parts unpublished.
+            // Exact topology: cadgen's selector table joined client-side to the component's mesh,
+            // against the concrete level now on screen so triangle ranges remain exact. One that
+            // cannot be joined leaves its parts unpublished.
             componentBundleByCid[cid] = await loadSelectorBundle(cid, initialLevel).catch(() => null);
             if (componentBundleByCid[cid]) session.bundleByCid.set(cid, { key: componentBundleKeyByCid[cid], bundle: componentBundleByCid[cid] });
           }

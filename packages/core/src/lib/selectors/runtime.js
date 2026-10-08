@@ -190,71 +190,12 @@ function transformPositions(values, transform) {
   return next;
 }
 
-// An edge's chain endpoints are computed on first read (only Group edges reads them), and
-// every copy of its pickData shares that one computation. `chainEndpoints` is an
-// enumerable accessor, so it reads, compares and serializes as the value it stands for;
-// copies go through `copyPickData`, which carries the accessor instead of reading it —
-// an object spread would compute every edge's endpoints just to copy them.
-const CHAIN_ENDPOINTS = "chainEndpoints";
-
-function defineLazyProperty(target, key, compute) {
-  let computed = false;
-  let value;
-  Object.defineProperty(target, key, {
-    configurable: true,
-    enumerable: true,
-    get() {
-      if (!computed) {
-        value = compute();
-        computed = true;
-      }
-      return value;
-    },
-    set(next) {
-      Object.defineProperty(this, key, { value: next, writable: true, configurable: true, enumerable: true });
-    },
-  });
-}
-
-function lazyChainEndpoints(pickData) {
-  return isObject(pickData) ? Object.getOwnPropertyDescriptor(pickData, CHAIN_ENDPOINTS)?.get || null : null;
-}
-
-// `{ ...pickData }` that never reads a lazy `chainEndpoints`: `accessor` carries it over
-// (in its place), otherwise the key is left out for the caller to set.
-function pickDataWithoutReadingChain(pickData, { accessor = null } = {}) {
-  const next = {};
-  for (const key of Object.keys(pickData)) {
-    if (key !== CHAIN_ENDPOINTS) {
-      next[key] = pickData[key];
-    } else if (accessor) {
-      Object.defineProperty(next, key, accessor);
-    }
-  }
-  return next;
-}
-
-// `{ ...pickData, ...overrides }`, with a lazy `chainEndpoints` carried rather than read.
-function copyPickData(pickData, overrides) {
-  const accessor = Object.getOwnPropertyDescriptor(pickData, CHAIN_ENDPOINTS);
-  if (!accessor?.get) {
-    return { ...pickData, ...overrides };
-  }
-  return Object.assign(pickDataWithoutReadingChain(pickData, { accessor }), overrides);
-}
-
-function transformChainEndpoints(chainEndpoints, transform) {
-  return chainEndpoints?.map(({ point, direction }) => ({ point: transformPoint(transform, point), direction: transformVector(transform, direction) }));
-}
-
 function transformPickData(pickData, transform) {
   if (!isObject(pickData) || !Array.isArray(transform) || transform.length < 16) {
     return pickData;
   }
-  const lazyChain = lazyChainEndpoints(pickData);
-  const next = {
-    ...(lazyChain ? pickDataWithoutReadingChain(pickData) : pickData),
-    chainEndpoints: lazyChain ? undefined : transformChainEndpoints(pickData.chainEndpoints, transform),
+  return {
+    ...pickData,
     bbox: pickData.bbox ? transformBBox(transform, pickData.bbox) : pickData.bbox,
     center: Array.isArray(pickData.center) ? transformPoint(transform, pickData.center) : pickData.center,
     normal: Array.isArray(pickData.normal) ? transformVector(transform, pickData.normal) : pickData.normal,
@@ -267,10 +208,6 @@ function transformPickData(pickData, transform) {
     centroid: Array.isArray(pickData.centroid) ? transformPoint(transform, pickData.centroid) : pickData.centroid,
     transform,
   };
-  if (lazyChain) {
-    defineLazyProperty(next, CHAIN_ENDPOINTS, () => transformChainEndpoints(pickData.chainEndpoints, transform));
-  }
-  return next;
 }
 
 function referenceIdForRow(displaySelector, selectorType, partId) {
@@ -324,10 +261,14 @@ function remapSourceOccurrenceId(sourceOccurrenceId, remapOccurrencePrefix) {
   return "";
 }
 
+// A row placed at an occurrence of the assembly is `occurrenceId + "." + localId`: the one
+// composition rule, the same one cadgen applies (assembly_lookup), over the local id cadgen
+// minted for the row. A row without one has no selector here.
 function selectorForRow(selectorType, row, rowIndex, singleOccurrenceId, remapOccurrenceId = "", remapOccurrencePrefix = null) {
   if (!row || !Number.isFinite(Number(rowIndex))) {
     return "";
   }
+  const localId = String(row?.localId || "").trim();
   if (remapOccurrencePrefix && typeof remapOccurrencePrefix === "object") {
     const sourceOccurrenceId = selectorType === "occurrence"
       ? String(row?.id || "").trim()
@@ -339,24 +280,14 @@ function selectorForRow(selectorType, row, rowIndex, singleOccurrenceId, remapOc
     if (selectorType === "occurrence") {
       return occurrenceId;
     }
-    const selectorKind = selectorType === "shape"
-      ? "s"
-      : selectorType === "face"
-        ? "f"
-        : "e";
-    return `${occurrenceId}.${selectorKind}${rowIndex + 1}`;
+    return localId ? `${occurrenceId}.${localId}` : "";
   }
   const occurrenceId = String(remapOccurrenceId || "").trim();
   if (occurrenceId) {
     if (selectorType === "occurrence") {
       return occurrenceId;
     }
-    const selectorKind = selectorType === "shape"
-      ? "s"
-      : selectorType === "face"
-        ? "f"
-        : "e";
-    return `${occurrenceId}.${selectorKind}${rowIndex + 1}`;
+    return localId ? `${occurrenceId}.${localId}` : "";
   }
   return selectorPrefix(singleOccurrenceId, String(row?.id || "").trim());
 }
@@ -476,6 +407,7 @@ function buildReference({
     pickData: {
       selectorType,
       rowIndex,
+      localId: String(row.localId || "") || null,
       // An XCAF label entry standing for a name is none (`step/productName.js`).
       name: stepProductName(row.name) || null,
       sourceName: stepProductName(row.sourceName) || null,
@@ -491,6 +423,11 @@ function buildReference({
       center: row.center || null,
       normal: row.normal || null,
       params: row.params || null,
+      flags: Number.isFinite(Number(row.flags)) ? Number(row.flags) : 0,
+      // The connected sets cadgen decided from the BREP: the chain an edge runs in and the
+      // tangent group a face belongs to, each an id local to the component.
+      chain: Number.isInteger(row.chain) ? row.chain : null,
+      tangentGroup: Number.isInteger(row.tangentGroup) ? row.tangentGroup : null,
       triangleStart: row.triangleStart ?? 0,
       triangleCount: row.triangleCount ?? 0,
       segmentStart: row.segmentStart ?? 0,
@@ -499,61 +436,6 @@ function buildReference({
       transform: selectorTransform || null,
     },
   };
-}
-
-// Use each edge's own tessellation endpoints. Closed or branched edge proxies
-// have no unique pair and must not be guessed into an open chain.
-//
-// Reads the bundle's own (unplaced) edge positions and places each endpoint it
-// needs through `transform`, rounded to Float32 exactly as `transformPositions`
-// stores it, so the result is the one the placed proxy would give — without
-// holding a placed copy of every position for a value most edges never need.
-// Two points are one vertex when every coordinate is equal (the key is the
-// coordinates' own decimal text, as it always was).
-function edgeChainEndpoints({ segmentStart: start, segmentCount: count, curveType, params }, { positions, indices, transform }) {
-  if (!Number.isInteger(start) || !Number.isInteger(count) || count < 1 || (start + count) * 2 > indices.length) return [];
-  const placed = positions instanceof Float32Array && Array.isArray(transform) && transform.length >= 16;
-  const pointAt = (index) => {
-    const offset = index * 3;
-    if (!placed || offset + 3 > positions.length) return Array.from(positions.slice(offset, offset + 3));
-    const point = transformPoint(transform, [positions[offset], positions[offset + 1], positions[offset + 2]]);
-    return [Math.fround(point[0]), Math.fround(point[1]), Math.fround(point[2])];
-  };
-  const vertices = new Map();
-  for (let i = start * 2; i < (start + count) * 2; i += 2) {
-    const pair = [pointAt(indices[i]), pointAt(indices[i + 1])];
-    if (pair.some(point => point.length !== 3 || !point.every(Number.isFinite))) return [];
-    const keys = pair.map(point => `${point[0]},${point[1]},${point[2]}`);
-    if (keys[0] === keys[1]) continue;
-    for (let j = 0; j < 2; j++) {
-      const vertex = vertices.get(keys[j]) || { point: pair[j], neighbor: pair[1-j], count: 0 };
-      vertex.count++; vertices.set(keys[j], vertex);
-    }
-  }
-  if ([...vertices.values()].some(vertex => vertex.count > 2)) return [];
-  const ends = [...vertices.values()].filter(vertex => vertex.count === 1);
-  if (ends.length !== 2) return [];
-  return ends.map(({ point, neighbor }) => {
-    let direction = neighbor.map((value, i) => value - point[i]);
-    if (curveType === 'circle' && params?.center?.length === 3 && params?.axis?.length === 3) {
-      const radial = point.map((value, i) => value - params.center[i]);
-      const a = params.axis;
-      const tangent = [a[1]*radial[2]-a[2]*radial[1], a[2]*radial[0]-a[0]*radial[2], a[0]*radial[1]-a[1]*radial[0]];
-      const sign = tangent.reduce((sum, value, i) => sum + value * direction[i], 0) < 0 ? -1 : 1;
-      direction = tangent.map(value => value * sign);
-    }
-    const length = Math.hypot(...direction);
-    return { point, direction: length ? direction.map(value => value / length) : [0, 0, 0] };
-  });
-}
-
-function defineEdgeChainEndpoints(references, source) {
-  for (const reference of references) {
-    if (reference.selectorType !== 'edge') continue;
-    const { segmentStart, segmentCount, curveType, params } = reference.pickData;
-    const edge = { segmentStart, segmentCount, curveType, params };
-    defineLazyProperty(reference.pickData, CHAIN_ENDPOINTS, () => edgeChainEndpoints(edge, source));
-  }
 }
 
 function buildLeafOccurrenceIds(shapes) {
@@ -702,7 +584,6 @@ function buildSelectorTables(bundle, {
     remapOccurrencePrefix,
     targetSelectorType: "face",
   })));
-  defineEdgeChainEndpoints(references, { positions: buffers.edgePositions, indices: selectorBuffers.edgeIndices, transform });
   const visibleReferences = references.filter((reference) => String(reference?.normalizedSelector || "").trim());
   const occurrenceIdByRowIndex = new Map(
     occurrences.map((row, rowIndex) => [
@@ -1073,9 +954,9 @@ function placeReference(reference, offsets) {
   const pickData = reference?.pickData;
   if (pickData && typeof pickData === "object") {
     if (type === "edge" && Number.isFinite(Number(pickData.segmentStart))) {
-      next = { ...next, pickData: copyPickData(pickData, { segmentStart: Number(pickData.segmentStart) + offsets.segment }) };
+      next = { ...next, pickData: { ...pickData, segmentStart: Number(pickData.segmentStart) + offsets.segment } };
     } else if (type === "face" && Number.isFinite(Number(pickData.triangleStart))) {
-      next = { ...next, pickData: copyPickData(pickData, { triangleStart: Number(pickData.triangleStart) + offsets.triangle }) };
+      next = { ...next, pickData: { ...pickData, triangleStart: Number(pickData.triangleStart) + offsets.triangle } };
     }
   }
   return next;

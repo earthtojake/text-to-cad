@@ -13,11 +13,12 @@ import { chromium } from 'playwright';
 // A STEP is the one format whose load is a conversation rather than a download:
 // the catalog names a store view, the view names components by an immutable
 // `surfaceInput`, and only `POST /__cad/surfaces` turns those inputs into the
-// object digests the `.surf` bytes are fetched by — and, when it names a
-// tessellation, into each component's stored mesh, which cadgen makes. The
-// descriptor the real store route serves is NOT materialized, so that round
+// object digests the `.surf` bytes and the component's selector table
+// (`components/<cid>.selectors.json`, cadgen's) are fetched by — and, when it
+// names a tessellation, into each component's stored mesh, which cadgen makes.
+// The descriptor the real store route serves is NOT materialized, so that round
 // trip is mandatory and this server implements it exactly as
-// `client/surfaceResolution.js` validates it: the returned URL must be
+// `client/surfaceResolution.js` validates it: the returned URLs must be
 // `/__cad/store` carrying the same `tree`, `surfaceInput` and a lowercase 64-hex
 // `object`, and a requested mesh's row must be that mesh's probe row.
 
@@ -47,7 +48,10 @@ export async function loadStepFixture() {
     for (const level of MESH_LEVELS) {
       meshes.set(level, decodeComponentTessellation(new Uint8Array(await read(`components/${cid}.l${level}.glb`))));
     }
-    surfaces.set(component.surfaceInput, { cid, bytes, object: createHash('sha256').update(bytes).digest('hex'), meshes });
+    // The component's selector table, served by its own digest through the same store route.
+    const table = await read(`components/${cid}.selectors.json`);
+    surfaces.set(component.surfaceInput, { cid, bytes, object: createHash('sha256').update(bytes).digest('hex'), meshes,
+      selectors: { bytes: table, object: createHash('sha256').update(table).digest('hex') } });
   }
   return { assembly, view, sidecar, surfaces, file: 'hinge_block.step' };
 }
@@ -354,6 +358,8 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
           if (!surface) return [cid, { surfaceInput, state: 'failed', error: `unknown surface input for ${cid}` }];
           return [cid, { surfaceInput, state: 'ready', surfaceObject: surface.object, byteLength: surface.bytes.length,
             url: `/__cad/store?tree=${shown.view.tree}&surfaceInput=${surfaceInput}&object=${surface.object}`,
+            selectors: { object: surface.selectors.object, byteLength: surface.selectors.bytes.length,
+              url: `/__cad/store?tree=${shown.view.tree}&surfaceInput=${surfaceInput}&object=${surface.selectors.object}` },
             ...(body.tessellation ? { mesh: meshes.produce(surfaceInput, body.tessellation) } : {}) }];
         })),
       });
@@ -362,16 +368,18 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
     if (url.pathname.endsWith('/__cad/store')) {
       const object = url.searchParams.get('object');
       if (object) {
-        const surface = [...fixture.surfaces.values()].find(entry => entry.object === object);
+        // The surface's bytes, or its selector table's: each by its own digest.
+        const surface = [...fixture.surfaces.values()].find(entry => entry.object === object || entry.selectors.object === object);
         if (!surface) { notFound(response); return; }
+        const bytes = surface.object === object ? surface.bytes : surface.selectors.bytes;
         // Held by INPUT, not by object: identical components share one object, and it is
         // one component's download that waits (selectors read it; display reads the mesh,
         // held where the mesh store answers).
         const gate = fixture.heldInputs?.get(url.searchParams.get('surfaceInput'));
         if (gate && request.method !== 'HEAD') await gates[gate];
         response.setHeader('Content-Type', 'application/octet-stream');
-        response.setHeader('Content-Length', String(surface.bytes.length));
-        response.end(request.method === 'HEAD' ? undefined : surface.bytes);
+        response.setHeader('Content-Length', String(bytes.length));
+        response.end(request.method === 'HEAD' ? undefined : bytes);
         return;
       }
       if (url.searchParams.get('file')?.endsWith('/assembly.json')) {

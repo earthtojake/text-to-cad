@@ -12,10 +12,9 @@ import path from "node:path";
 import test from "node:test";
 import { createRequire } from "node:module";
 
-import { parseSurf } from "@text-to-cad/core/lib/surf/container.js";
-import { decodeComponentTessellation } from "@text-to-cad/core/lib/surf/tessellationCache.js";
+import { decodeComponentTessellation, surfIndexFromCacheEntry } from "@text-to-cad/core/lib/surf/tessellationCache.js";
 import { buildMeshDataFromSurf } from "@text-to-cad/core/lib/surf/surfMeshData.js";
-import { buildSelectorBundleFromSurf } from "@text-to-cad/core/lib/surf/surfSelectorBundle.js";
+import { joinSelectorTable, parseSelectorTable } from "@text-to-cad/core/lib/surf/selectorTable.js";
 import { buildGlbFaceIdsForPart, TOPOLOGY_FACE_ID_NONE } from "@text-to-cad/core/lib/viewer/selectorPickGroups.js";
 import { buildEdgeChainGraph } from "../../../workbench/edgeChainSelection.js";
 import { buildTangentFaceGraph } from "../../../workbench/tangentFaceSelection.js";
@@ -32,17 +31,16 @@ import {
 } from "./packageReferenceComposition.js";
 
 const require = createRequire(import.meta.url);
-// The gear's SURF and cadgen's stored meshes of it at two LOD levels (core's surf fixtures).
+// The gear's selector table and cadgen's stored meshes of it at two LOD levels (core's surf fixtures).
 const FIXTURES = path.join(path.dirname(require.resolve("@text-to-cad/core/lib/surf/container.js")), "fixtures");
 
 function loadLevel(level) {
-  const buffer = fs.readFileSync(path.join(FIXTURES, "sun_gear.surf"));
-  const { index } = parseSurf(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
-  const { component } = decodeComponentTessellation(new Uint8Array(fs.readFileSync(path.join(FIXTURES, `sun_gear.l${level}.glb`))));
+  const table = parseSelectorTable(fs.readFileSync(path.join(FIXTURES, "sun_gear.selectors.json"), "utf8"));
+  const decoded = decodeComponentTessellation(new Uint8Array(fs.readFileSync(path.join(FIXTURES, `sun_gear.l${level}.glb`))));
   return {
-    meshData: buildMeshDataFromSurf(index, component),
-    bundle: buildSelectorBundleFromSurf(index, component),
-    component
+    meshData: buildMeshDataFromSurf(surfIndexFromCacheEntry(decoded), decoded.component),
+    bundle: joinSelectorTable(table, decoded.component),
+    component: decoded.component
   };
 }
 
@@ -333,24 +331,24 @@ test("the package composer builds each occurrence once and releases what stops b
 });
 
 test("Group edges and Group faces group the same references through the package composer", () => {
-  // One square face bounded by four line edges that meet at shared corners, one tangent edge
-  // between two faces: chains and tangent groups both exist.
+  // One square face bounded by four line edges, three of them one chain as cadgen decided it,
+  // and one tangent edge between two faces of one tangent group: chains and groups both exist.
   const bundle = {
     manifest: {
       tables: {
         occurrenceColumns: ["id"],
-        shapeColumns: ["id", "occurrenceId", "ordinal", "kind"],
-        faceColumns: ["id", "occurrenceId", "shapeId", "ordinal", "surfaceType", "edgeStart", "edgeCount"],
-        edgeColumns: ["id", "occurrenceId", "shapeId", "ordinal", "curveType", "faceStart", "faceCount", "segmentStart", "segmentCount", "visibilityClass"],
+        shapeColumns: ["id", "localId", "occurrenceId", "ordinal", "kind"],
+        faceColumns: ["id", "localId", "occurrenceId", "shapeId", "ordinal", "surfaceType", "edgeStart", "edgeCount", "tangentGroup"],
+        edgeColumns: ["id", "localId", "occurrenceId", "shapeId", "ordinal", "curveType", "faceStart", "faceCount", "segmentStart", "segmentCount", "visibilityClass", "chain"],
       },
       occurrences: [["o1"]],
-      shapes: [["o1.s1", "o1", 1, "solid"]],
-      faces: [["o1.f1", "o1", "o1.s1", 1, "plane", 0, 4], ["o1.f2", "o1", "o1.s1", 2, "cylinder", 0, 1]],
+      shapes: [["o1.s1", "s1", "o1", 1, "solid"]],
+      faces: [["o1.f1", "f1", "o1", "o1.s1", 1, "plane", 0, 4, 1], ["o1.f2", "f2", "o1", "o1.s1", 2, "cylinder", 0, 1, 1]],
       edges: [
-        ["o1.e1", "o1", "o1.s1", 1, "line", 0, 2, 0, 1, "tangent"],
-        ["o1.e2", "o1", "o1.s1", 2, "line", 0, 1, 1, 1, "feature"],
-        ["o1.e3", "o1", "o1.s1", 3, "line", 0, 1, 2, 2, "feature"],
-        ["o1.e4", "o1", "o1.s1", 4, "line", 0, 1, 4, 1, "feature"],
+        ["o1.e1", "e1", "o1", "o1.s1", 1, "line", 0, 2, 0, 1, "tangent", 1],
+        ["o1.e2", "e2", "o1", "o1.s1", 2, "line", 0, 1, 1, 1, "feature", 2],
+        ["o1.e3", "e3", "o1", "o1.s1", 3, "line", 0, 1, 2, 2, "feature", 2],
+        ["o1.e4", "e4", "o1", "o1.s1", 4, "line", 0, 1, 4, 1, "feature", 2],
       ],
       relations: { faceEdgeRows: [0, 1, 2, 3, 0], edgeFaceRows: [0, 1, 0, 0, 0] },
     },

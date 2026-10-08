@@ -103,7 +103,11 @@ export interface CadRuntimeView {
   [key: string]: unknown;
 }
 export interface CadSurfaceComponentRequest { cid: string; surfaceInput: string; surfaceObject?: string }
-export interface CadSurfaceTicket { readonly surfaceInput: string; readonly surfaceObject: string; readonly surfUrl: string; readonly byteLength: number }
+/** One component's exact surface and, beside it, cadgen's selector table (the refs and facts the page joins to the mesh). */
+export interface CadSurfaceTicket {
+  readonly surfaceInput: string; readonly surfaceObject: string; readonly surfUrl: string; readonly byteLength: number;
+  readonly selectorsObject: string; readonly selectorsUrl: string; readonly selectorsByteLength: number;
+}
 export interface CadSurfaceRequest {
   tree: string; viewId: string; producer: CadSurfaceProducer;
   components: {cid: string; surfaceInput: string; expectedSurfaceObject?: string}[];
