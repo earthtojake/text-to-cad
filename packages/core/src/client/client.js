@@ -29,6 +29,20 @@ function abortError() {
   return new DOMException('The operation was aborted.', 'AbortError');
 }
 
+// The longest a drawing's 202 may ask the client to wait before it asks again.
+const DRAWING_RETRY_MAX_MS = 5000;
+
+/** `ms` of waiting that `signal` ends early, as an AbortError. */
+function pause(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(abortError()); return; }
+    const done = () => { signal?.removeEventListener('abort', stop); resolve(); };
+    const timer = setTimeout(done, ms);
+    const stop = () => { clearTimeout(timer); reject(abortError()); };
+    signal?.addEventListener('abort', stop, { once: true });
+  });
+}
+
 // A file is named by its absolute path, `/`-separated on every platform.
 const normalizedFile = (file) => String(file || '').replace(/\\/g, '/');
 const entryKey = (entry) => normalizedFile(entry.file);
@@ -263,14 +277,22 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         file, signal, method: 'POST', operation: 'compile', params: force ? { force: '1' } : {}, headers: { 'x-cadgen-viewer': '1' }
       });
     },
-    drawing(file, { signal } = {}) {
+    async drawing(file, { signal } = {}) {
       // A `.dxf` flattened to 2D render primitives on the SERVER: ezdxf does the
-      // reading, the client only paints. One plain GET, because the route is
-      // derived data cached by content hash — a second request for unchanged
-      // bytes is served from the store. The 10 s bound is the house value for a
-      // GET that can do real work (a cold 10k-entity drawing is ~0.7 s).
-      if (!file) return Promise.reject(new Error('Missing file'));
-      return request('/__cad/drawing', { file, signal, timeoutMs: 10_000, operation: 'drawing' });
+      // reading, the client only paints. A plain GET, derived data cached by
+      // content hash: unchanged bytes are served from the store. Bytes the
+      // server has not drawn yet it renders off the request, answering
+      // 202 { state: 'drawing', retryMs } until it has, and the client asks
+      // again after `retryMs`. Each request's 10 s is the time the server may
+      // stay silent (`requestViewerJson`), so a drawing that takes a minute to
+      // render or to arrive opens, and a server that stopped answering fails.
+      if (!file) throw new Error('Missing file');
+      for (;;) {
+        const reply = await request('/__cad/drawing', { file, signal, timeoutMs: 10_000, operation: 'drawing' });
+        if (reply?.state !== 'drawing') return reply;
+        await pause(Math.min(Math.max(Number(reply.retryMs) || 0, 0), DRAWING_RETRY_MAX_MS), signal);
+        if (disposed) throw abortError();
+      }
     },
     requestSurfaces(body, { signal } = {}) {
       return request('/__cad/surfaces', {

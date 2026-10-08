@@ -60,21 +60,35 @@ export interface CadArtifactResult {
 }
 /**
  * What `GET /__cad/drawing` answers: a drawing's modelspace, flattened to the
- * five primitive shapes ezdxf reduces every entity to, in DXF coordinates with
- * y UP. `color: null` is the default pen, painted with the theme's foreground;
- * `bounds: null` is a drawing with nothing in it. See `apps/web/docs/backend.md`.
+ * five primitive shapes ezdxf reduces every entity to and its text, placed, in
+ * DXF coordinates with y UP. `color: null` is the default pen, painted with the
+ * theme's foreground; `bounds: null` is a drawing with nothing in it. See
+ * `apps/web/docs/backend.md`.
  */
 export interface CadDrawingPayload {
   schemaVersion: number;
   units: { insunits: number; name: string; toMillimetres: number };
   bounds: [number, number, number, number] | null;
   layers: { name: string; color: string | null; count: number }[];
-  primitives: {
+  /** The faces `text` primitives are set in, which a `text` names by index. */
+  fonts: { family: string; weight: number; italic: boolean }[];
+  primitives: ({
     type: 'point' | 'lines' | 'path' | 'filled-paths' | 'filled-polygon';
     layer: string;
     color: string | null;
     geometry: unknown;
-  }[];
+  } | {
+    type: 'text';
+    layer: string;
+    color: string | null;
+    text: string;
+    font: number;
+    /** Cap height, and the advance width the server measured, in the string's own units. */
+    height: number;
+    width: number;
+    /** `[a, b, c, d, e, f]`: the string's space (baseline-left at the origin, y up) to the drawing's. */
+    transform: [number, number, number, number, number, number];
+  })[];
   [key: string]: unknown;
 }
 /** Byte tickets own their buffer exclusively: workers may detach it. URL tickets are approved by the provider. */

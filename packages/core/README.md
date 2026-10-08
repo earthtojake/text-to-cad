@@ -163,7 +163,7 @@ src/
                    #   builders), viewer/ (exploded view, part visual state,
                    #   the surface look, the scene contract), urdf/ (robot
                    #   parsing and loading; the robot parts and scene builder),
-                   #   drawing2d/ (a GET /__cad/drawing payload -> Canvas 2D:
+                   #   drawing2d/ (a GET /__cad/drawing payload -> Canvas 2D, text by fillText:
                    #   fit/pan/zoom maths, batched Path2D, hairline strokes),
                    #   export/ (packageMeshExport), cadRefs (grammar,
                    #   parity-tested against cad_ref_syntax.py)

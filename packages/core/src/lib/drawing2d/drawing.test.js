@@ -27,12 +27,23 @@ class RecordingPath {
   closePath() { this.commands.push(["closePath"]); }
 }
 
-/** A 2D context that records the calls a drawing makes, in order. */
-function recordingContext() {
+/**
+ * A 2D context that records the calls a drawing makes, in order. Its "font" measures every glyph
+ * 50 px wide and "H" 70 px tall at the 100 px a string is set at; `canvas` is what `drawDrawing`
+ * reads the visible area from, when given.
+ */
+function recordingContext(canvas) {
   const calls = [];
-  const state = { fillStyle: null, strokeStyle: null, lineWidth: null, lineJoin: null, lineCap: null };
+  const state = { fillStyle: null, strokeStyle: null, lineWidth: null, lineJoin: null, lineCap: null, font: null };
   return {
     calls,
+    canvas,
+    get font() { return state.font; },
+    set font(value) { state.font = value; calls.push(["font", value]); },
+    textAlign: "start",
+    textBaseline: "alphabetic",
+    measureText(text) { return { width: 50 * text.length, actualBoundingBoxAscent: 70 }; },
+    fillText(...args) { calls.push(["fillText", ...args]); },
     get lineWidth() { return state.lineWidth; },
     set lineWidth(value) { state.lineWidth = value; calls.push(["lineWidth", value]); },
     get fillStyle() { return state.fillStyle; },
@@ -61,6 +72,7 @@ function payload(primitives, extra = {}) {
     units: { insunits: 4, name: "Millimeters", toMillimetres: 1 },
     bounds: [0, 0, 10, 10],
     layers: [{ name: "0", color: null, count: primitives.length }],
+    fonts: [{ family: "Arial", weight: 400, italic: false }, { family: "sans-serif", weight: 700, italic: true }],
     primitives,
     ...extra
   };
@@ -171,8 +183,8 @@ test("an unknown path command is refused, naming it", () => {
 
 test("a payload from another schema version is refused with the upgrade to make", () => {
   assert.throws(
-    () => prepareDrawing({ ...payload([]), schemaVersion: 2 }, { Path2D: RecordingPath }),
-    /schemaVersion 2, but this build reads version 1.*Update cadgen and the app together/s
+    () => prepareDrawing({ ...payload([]), schemaVersion: DRAWING_SCHEMA_VERSION + 1 }, { Path2D: RecordingPath }),
+    new RegExp(`schemaVersion ${DRAWING_SCHEMA_VERSION + 1}, but this build reads version ${DRAWING_SCHEMA_VERSION}.*Update cadgen and the app together`, "s")
   );
   assert.throws(() => prepareDrawing(null, { Path2D: RecordingPath }), /needs a drawing payload object/);
   assert.throws(
@@ -300,4 +312,53 @@ test("a fitted drawing paints inside its pane", () => {
   assert.equal(a, transform.scale);
   assert.equal(d, -transform.scale);
   assert.ok(e >= 10 && f <= 190, `expected the fit inside the margin, got ${e} / ${f}`);
+});
+
+const NOTE = { type: "text", layer: "0", color: null, text: "AB", font: 0, height: 7, width: 20, transform: [0, 1, -1, 0, 5, 6] };
+
+test("text is set in its font, at its cap height, stretched to the server's width, where the server put it", () => {
+  const drawable = prepare([NOTE, { ...NOTE, color: "#ff0000", font: 1, text: "C", transform: [1, 0, 0, 1, 0, 0] }]);
+  assert.deepEqual(drawable.texts.map(({ color, items }) => [color, items.map((item) => item.font)]), [
+    [null, ['400 100px "Arial", sans-serif']],
+    ["#ff0000", ["italic 700 100px sans-serif"]]
+  ]);
+  const ctx = recordingContext();
+  drawDrawing(ctx, drawable, { transform: { scale: 2, offsetX: 10, offsetY: 100 }, foreground: "#111", pixelRatio: 1 });
+  const at = ctx.calls.findIndex(([name, text]) => name === "fillText" && text === "AB");
+  const [, a, b, c, d, e, f] = ctx.calls.slice(0, at).findLast(([name]) => name === "setTransform");
+  // 70 px of cap is 7 units: 0.1 unit per px. "AB" is 100 px, 10 units, stretched to 20: 0.2 along.
+  // Its space is turned a quarter (x along the drawing's y) and moved to (5, 6); the view doubles
+  // it, flips y and moves it to (10, 100).
+  const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
+  [[a, 0], [b, -0.4], [c, 0.2], [d, 0], [e, 20], [f, 88]].forEach(([actual, expected]) => close(actual, expected));
+  assert.deepEqual(ctx.calls[at], ["fillText", "AB", 0, 0]);
+  const styles = ctx.calls.filter(([name]) => name === "fillStyle").map(([, value]) => value);
+  assert.deepEqual(styles, ["#111", "#ff0000"], "the default pen is the theme's foreground, a hex pen its own");
+});
+
+test("text goes down after fills and before strokes, and the view transform is back for the strokes", () => {
+  const drawable = prepare([
+    { type: "lines", layer: "0", color: null, geometry: [[0, 0, 1, 1]] },
+    NOTE,
+    { type: "filled-polygon", layer: "0", color: "#0000ff", geometry: [[0, 0], [1, 0], [1, 1]] }
+  ]);
+  const ctx = recordingContext();
+  drawDrawing(ctx, drawable, { transform: { scale: 3, offsetX: 1, offsetY: 2 }, foreground: "#111" });
+  const order = ctx.calls.map(([name]) => name);
+  assert.ok(order.indexOf("fill") < order.indexOf("fillText") && order.indexOf("fillText") < order.indexOf("stroke"), order.join(","));
+  assert.deepEqual(ctx.calls.slice(0, order.indexOf("stroke")).findLast(([name]) => name === "setTransform"), ["setTransform", 3, 0, 0, -3, 1, 2]);
+});
+
+test("text wholly off the canvas is not set", () => {
+  const drawable = prepare([NOTE, { ...NOTE, text: "FAR", transform: [1, 0, 0, 1, 900, 900] }]);
+  const ctx = recordingContext({ width: 200, height: 200 });
+  drawDrawing(ctx, drawable, { transform: { scale: 4, offsetX: 50, offsetY: 150 }, foreground: "#111" });
+  assert.deepEqual(ctx.calls.filter(([name]) => name === "fillText").map(([, text]) => text), ["AB"]);
+});
+
+test("a text primitive the payload cannot back is refused, naming it", () => {
+  assert.throws(() => prepare([{ ...NOTE, font: 7 }]), /primitives\[0\]: text is set in font 7/);
+  assert.throws(() => prepare([{ ...NOTE, transform: [1, 0, 0, 1] }]), /a text transform is \[a, b, c, d, e, f\]/);
+  assert.throws(() => prepare([{ ...NOTE, height: 0 }]), /a positive height/);
+  assert.throws(() => prepareDrawing({ ...payload([]), fonts: undefined }, { Path2D: RecordingPath }), /`fonts` must be an array/);
 });
