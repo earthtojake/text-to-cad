@@ -267,8 +267,12 @@ plot without one is the picture alone.
   the view.
 - **The board tree** is Select's panel, closable as Features is: **Parts** by kind (ICs,
   Connectors, Capacitors…), each with its pads; **Nets**, each with the pads on it (KiCad's
-  names for a pin on nothing are left out); **Checks**, what KiCad reported, when it reported
-  anything — choosing one selects what it names and rings its places. The filter finds a part
+  names for a pin on nothing are left out); **Checks**, what KiCad reported and what the
+  review found, each a sentence naming what it is about, errors first; the group reads "N to
+  fix" while there are errors, else the count, and a board with nothing to report shows "No
+  problems found". Choosing one selects what it names and rings its places; its Reference shows
+  KiCad's type, severity and message, and Copy and Quick Edit carry its sentence before its
+  references. The filter finds a part
   by its reference, value, footprint or MPN, a pad by its pin's name, a net by its name, and a
   pasted reference exactly.
 - **The Reference** is headed by the pick as a person names it (`C14 · 100n`,
@@ -320,7 +324,8 @@ Reference, and having no layers it has no Display settings.
   symbol), **Parts** (a symbol, by its body or its pins), **Pins** and **Nets** (anything on a
   net). Shift-click adds; a double-click copies.
 - **The tree** is the board's, in pins: **Parts** by kind, each with its pins; **Nets**, each with
-  the pins on it. A symbol's units on several sheets are one row.
+  the pins on it. A symbol's units on several sheets are one row. **Checks** are the board's,
+  from KiCad's ERC, which the schematic's plot runs.
 - **The Reference**: a symbol's library entry, footprint, units, sheets (on a schematic of
   several), pins, MPN and LCSC fields and `Script`; a pin's net, name and type; a net's class,
   pins, parts and labels.

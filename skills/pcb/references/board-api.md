@@ -77,7 +77,7 @@ pin.number, pin.name, pin.electrical_type, pin.net, pin.position, pin.pads, pin.
 ## Nets
 
 ```python
-net = board.net("VBUS", netclass="Power", power_flag=True)
+net = board.net("VBUS", netclass="Power", power_flag=True, current=2.0)
 anonymous = board.net()                  # named like KiCad: Net-(R1-Pad2)
 board.connect(net, j1[1], u1["VIN"], c1[1])
 board.no_connect(u1["NC"], *u1.unconnected())
@@ -86,6 +86,10 @@ board.no_connect(u1["NC"], *u1.unconnected())
 - A pin joins one net; connecting it to a second is refused.
 - `power_flag=True`: the net is powered from off the board (a connector, a battery, a test
   pad). KiCad's ERC otherwise reports its power inputs as undriven.
+- `current=2.0`: the net's current in amperes, positive, one value per net. KiCad keeps no
+  current per net, so it is kept in the `.kicad_pro` under `"cadgen": {"net_currents": ...}`
+  for the review, which warns where the net's narrowest track is thinner than IPC-2221 asks
+  (1 oz outer copper, 10 °C rise). It sets no width: size the track or net class yourself.
 - Every pin must be connected or marked no-connect: KiCad's ERC fails a floating pin.
 
 ## Placement
