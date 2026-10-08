@@ -1424,8 +1424,11 @@ def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
             "@eng_drawing writes a PDF and its renderer is missing: "
             f"{exc}. Install cadgen's dependencies (pip install matplotlib pillow)."
         ) from exc
+    from cadgen._internal.atomic_replace import temp_suffix
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    partial = path.with_name(f".{path.name}.partial")
+    # A temp_suffix name, so a model listing this folder leaves it out while it exists.
+    partial = path.with_name(f".{path.name}{temp_suffix()}")
     try:
         # CreationDate=None drops the one field matplotlib stamps from the clock.
         with PdfPages(partial, metadata={"CreationDate": None}) as pdf:
