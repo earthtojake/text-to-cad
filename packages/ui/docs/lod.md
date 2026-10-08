@@ -32,7 +32,9 @@ the server's description -- the CAD Viewer's server info, the CAD app's launch -
 and the host installs them before a STEP model is drawn
 (`installTessellationLadder`, `@text-to-cad/core/lib/surf/lodPolicy.js`). The
 viewport only picks a rung from its camera, with the hysteresis of §2; every mesh
-request and cache key names both tolerances of the rung it asks for.
+request and cache key names both tolerances of the rung it asks for, and one that
+names fewer is refused, never filled in (`tessellationQuality`,
+`@text-to-cad/core/lib/surf/tessellationCache.js`).
 
 Every mesh the viewer draws is cadgen's (OCCT's mesh of the exact BREP, stored
 by cadgen); the browser never tessellates. Every component opens at the

@@ -181,7 +181,7 @@ export function reviseFixture(fixture, revision) {
  * batch read and a single read.
  */
 async function meshStore(fixture, { warm = false } = {}) {
-  const [cache, { encodeMeshFixture }, { lodTessellationForLevel }, { installTestTessellationLadder }] = await Promise.all([
+  const [cache, { encodeMeshFixture }, { lodDefaultLevel, lodTessellationForLevel }, { installTestTessellationLadder }] = await Promise.all([
     import('@text-to-cad/core/lib/surf/tessellationCache.js'),
     import('@text-to-cad/core/lib/surf/testing.js'),
     import('@text-to-cad/core/lib/surf/lodPolicy.js'),
@@ -189,7 +189,7 @@ async function meshStore(fixture, { warm = false } = {}) {
   ]);
   installTestTessellationLadder();
   const stored = new Map();
-  const produce = (surfaceInput, tessellation = {}) => {
+  const produce = (surfaceInput, tessellation) => {
     const surface = fixture.surfaces.get(surfaceInput);
     if (!surface) return null;
     const key = cache.tessellationCacheKey(surfaceInput, tessellation);
@@ -204,7 +204,10 @@ async function meshStore(fixture, { warm = false } = {}) {
     }
     return stored.get(key).row;
   };
-  if (warm) for (const component of Object.values(fixture.view.components)) produce(component.surfaceInput);
+  if (warm) {
+    const standard = lodTessellationForLevel(lodDefaultLevel());
+    for (const component of Object.values(fixture.view.components)) produce(component.surfaceInput, standard);
+  }
   const binary = (response, bytes) => {
     response.setHeader('Content-Type', 'application/octet-stream');
     response.setHeader('Content-Length', String(bytes.byteLength));

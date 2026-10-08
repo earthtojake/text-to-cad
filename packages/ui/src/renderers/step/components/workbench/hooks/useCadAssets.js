@@ -1411,7 +1411,7 @@ export function useCadAssets({
           const resolved = await resolveSurfaceComponents(packageDescriptor, [{
             cid, surfaceInput: component.surfaceInput,
             surfaceObject: componentIdentityByCid[cid]?.surfaceObject || component.surfaceObject,
-          }], { client, signal: controller.signal, tessellation: tessellationForLevel(level) || {} });
+          }], { client, signal: controller.signal, tessellation: tessellationForLevel(level) });
           const { mesh = null, ...surface } = resolved.get(cid);
           const identity = Object.freeze({ ...component, ...surface });
           componentIdentityByCid[cid] = identity;

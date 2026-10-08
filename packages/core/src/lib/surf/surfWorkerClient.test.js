@@ -13,6 +13,7 @@ import {
 } from "./surfWorkerClient.js";
 import { createTessellationCache, isTessellationCacheProbeMissError } from "./tessellationCache.js";
 import { encodeMeshFixture, probeRowFor } from "./__tests__/meshFixtures.js";
+import { TEST_TESSELLATION_LADDER } from "./testing.js";
 
 let tessellationCache = createTessellationCache();
 function setTessellationCacheProvider(provider) {
@@ -41,8 +42,10 @@ function waitingProvider() {
   };
   return { provider, answer: (found = true) => answer(found) };
 }
+// Every request names the rung it reads: the standard one of the ladder cadgen publishes.
+const STANDARD = TEST_TESSELLATION_LADDER.levels[TEST_TESSELLATION_LADDER.defaultLevel];
 const loadSurfComponentInWorker = (url, options = {}) => loadWorker(url, {
-  tessellationCache, ...options,
+  tessellationCache, tessellation: STANDARD, ...options,
   identity: options.identity ?? { ...CACHE_IDENTITY, tessellationEntry: ENTRY.slice() },
 });
 

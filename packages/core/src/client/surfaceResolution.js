@@ -197,7 +197,7 @@ async function resolveSurfaceRequest(descriptor, requested, { signal, client, on
     throw new TypeError("surface request must name at least one component");
   }
 
-  // The pair the server keys the mesh by: both tolerances, defaults filled in.
+  // The pair the server keys the mesh by: both tolerances, as the request names them.
   const quality = tessellation == null ? null : tessellationQuality(tessellation);
   const meshTessellation = quality
     ? { chordTolerance: quality.chordTolerance, angleTolerance: quality.angleTolerance } : null;

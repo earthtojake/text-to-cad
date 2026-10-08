@@ -39,6 +39,10 @@ import {
   tessellationCacheKey,
 } from "./surf/tessellationCache.js";
 import { everyKeyMeshProvider, probeRowFor } from "./surf/__tests__/meshFixtures.js";
+import { TEST_TESSELLATION_LADDER } from "./surf/testing.js";
+
+// Every mesh read names its tolerances: the standard rung of the ladder cadgen publishes.
+const STANDARD = TEST_TESSELLATION_LADDER.levels[TEST_TESSELLATION_LADDER.defaultLevel];
 
 // The mesh store every surf load reads: it holds the gear's mesh for any component asked.
 let meshStore = everyKeyMeshProvider();
@@ -54,13 +58,13 @@ const identityForSurfTest = (url) => ({
   surfaceObject: "a".repeat(64),
 });
 const loadRenderSurf = (url, options = {}) => loadSurf(url, {
-  identity: identityForSurfTest(url), tessellationCache, ...options,
+  identity: identityForSurfTest(url), tessellationCache, tessellation: STANDARD, ...options,
 });
 const loadRenderSurfSelectorBundle = (url, options = {}) => loadSurfSelectors(url, {
-  identity: identityForSurfTest(url), tessellationCache, ...options,
+  identity: identityForSurfTest(url), tessellationCache, tessellation: STANDARD, ...options,
 });
 const releaseRenderSurfLevel = (url, options = {}) => releaseSurfLevel(url, {
-  identity: identityForSurfTest(url), tessellationCache, ...options,
+  identity: identityForSurfTest(url), tessellationCache, tessellation: STANDARD, ...options,
 });
 
 class FakeElement {
@@ -712,7 +716,7 @@ test("an admitted probe whose body vanished is a probe miss, reading nothing els
   const surfBuffer = surfBytes.buffer.slice(surfBytes.byteOffset, surfBytes.byteOffset + surfBytes.byteLength);
   const url = `https://cache.test/strict/components/strict-${Date.now()}.surf`;
   const identity = identityForSurfTest(url);
-  const [probe] = await everyKeyMeshProvider().probeMany([tessellationCacheKey(identity.surfaceInput)]);
+  const [probe] = await everyKeyMeshProvider().probeMany([tessellationCacheKey(identity.surfaceInput, STANDARD)]);
   assert.deepEqual(probe, probeRowFor((await everyKeyMeshProvider().getManyProbed([probe]))[0]));
   let fetches = 0;
   const originalFetch = globalThis.fetch;
@@ -730,7 +734,7 @@ test("an admitted probe whose body vanished is a probe miss, reading nothing els
   });
 
   await assert.rejects(
-    loadSurf(url, { identity: { ...identity, tessellationProbe: probe } }),
+    loadSurf(url, { tessellation: STANDARD, identity: { ...identity, tessellationProbe: probe } }),
     isTessellationCacheProbeMissError,
   );
   assert.equal(fetches, 0, "cold work waits for a fresh admission");

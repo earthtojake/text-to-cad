@@ -31,7 +31,7 @@ function loadFixture(name, level = 1) {
   const table = selectorTableFixture(name);
   const mesh = meshFixture(name, level);
   const decoded = decodeComponentTessellation(mesh.bytes, {
-    surfaceInput: mesh.surfaceInput, surfaceObject: mesh.surfaceObject, tessellation: mesh.tessellation || {},
+    surfaceInput: mesh.surfaceInput, surfaceObject: mesh.surfaceObject, tessellation: mesh.tessellation,
   });
   assert.ok(decoded, `${name} L${level} decodes`);
   return { index, table, decoded, component: decoded.component };

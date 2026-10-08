@@ -149,8 +149,14 @@ test("lossless binary64 keys match Python and separate old decimal collisions", 
   }
   // A quality read back from an entry keys as the request it spells.
   assert.equal(tessellationCacheKey(D, tessellationQuality(Q)), tessellationCacheKey(D, Q));
-  // An empty request is the default pair, as cadgen keys it.
-  assert.equal(tessellationCacheKey(D), `${D}-t${TESSELLATION_VERSION}-p6-l3f589374bc6a7efa-a3fd6666666666666`);
+  assert.equal(tessellationCacheKey(D, { chordTolerance: 0.0015, angleTolerance: 0.35 }),
+    `${D}-t${TESSELLATION_VERSION}-p6-l3f589374bc6a7efa-a3fd6666666666666`);
+  // A request names both tolerances: which pair a mesh is drawn at is cadgen's, so one that
+  // leaves either out is refused, never filled in here.
+  for (const partial of [undefined, {}, { chordTolerance: 0.0015 }, { angleTolerance: 0.35 }]) {
+    assert.throws(() => tessellationCacheKey(D, partial), /names both tolerances/, JSON.stringify(partial));
+    assert.throws(() => resolvedTessellationIdentity(D, O, partial), /names both tolerances/);
+  }
 });
 
 test("a GLB body round-trips its arrays and tables as views and exposes exact D/O/L/Q/R", () => {
@@ -325,11 +331,11 @@ test("cadgen's stored meshes decode as the bodies their probe rows describe", ()
   for (const [name, level] of [["sun_gear", 0], ["sun_gear", 1], ["cam_follower_roller", 1], ["mixed", 0]]) {
     const fixture = meshFixture(name, level);
     const row = validateTessellationProbeRow(fixture.row, {
-      tessellationInput: tessellationCacheKey(fixture.surfaceInput, fixture.tessellation || {}),
+      tessellationInput: tessellationCacheKey(fixture.surfaceInput, fixture.tessellation),
     });
     assert.ok(row, `${name} L${level} row`);
     const decoded = decodeComponentTessellation(fixture.bytes, {
-      surfaceInput: fixture.surfaceInput, surfaceObject: fixture.surfaceObject, tessellation: fixture.tessellation || {},
+      surfaceInput: fixture.surfaceInput, surfaceObject: fixture.surfaceObject, tessellation: fixture.tessellation,
     });
     assert.ok(decoded, `${name} L${level} decodes`);
     assert.equal(decoded.component.positions.length, 3 * row.vertexCount);
