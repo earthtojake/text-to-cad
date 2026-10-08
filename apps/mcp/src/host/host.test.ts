@@ -405,7 +405,7 @@ describe('a Quick Edit in the chat', () => {
     const port = createChatPromptContext({
       hostContext: {}, onHostContext: () => () => {},
       request: async () => { throw new HostError('Method not found', -32601); },
-    } as any, { resolvePath, reach: { queue: true, send: false, sendImages: false } });
+    } as any, { reach: { queue: true, send: false, sendImages: false } });
     const result = await port.deliver(edit());
     expect(result.status).toBe('failed');
     expect((result as { message: string }).message).toMatch(/Copy Prompt/);
