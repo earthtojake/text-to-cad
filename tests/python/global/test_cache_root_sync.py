@@ -3,9 +3,10 @@
 cadgen writes the store's mesh entries (cadgen/store/meshes.py) and the CAD
 Viewer's client keys, probes and reads them
 (packages/core/src/lib/surf/tessellationCache.js). A one-sided change to the key
-scheme, its tessellator-version salt or the default tolerances would split "one
-store warms every consumer" into silent misses, so each is pinned against the
-other here, the same way test_render_contract_sync pins the render contract.
+scheme or its tessellator-version salt would split "one store warms every
+consumer" into silent misses, so each is pinned against the other here, the same
+way test_render_contract_sync pins the render contract. The tolerances are not
+among them: the client keeps none, and every request names the pair cadgen chose.
 """
 
 from __future__ import annotations
@@ -46,26 +47,6 @@ class MeshStoreContractSyncTest(unittest.TestCase):
             "the mesh key's tessellator-version salt diverged between languages — bump "
             "TESSELLATION_VERSION (tessellationCache.js) and TESSELLATOR_VERSION "
             "(cadgen/store/meshes.py) together",
-        )
-
-    def test_default_tolerances_match_between_python_and_js(self) -> None:
-        # The client asks for meshes at its defaults and a mesh export writes the
-        # store's at an omitted tolerance: one pair of numbers, or the two never
-        # share an entry.
-        from cadgen.store.meshes import DEFAULT_ANGLE, DEFAULT_CHORD
-
-        source = TESSELLATION_CACHE_JS.read_text(encoding="utf-8")
-        match = re.search(
-            r"export const DEFAULT_TESSELLATION = Object\.freeze\(\{\s*chordTolerance:\s*([0-9.eE+-]+),"
-            r"\s*angleTolerance:\s*([0-9.eE+-]+)\s*\}\);",
-            source,
-        )
-        assert match, "DEFAULT_TESSELLATION not found in tessellationCache.js"
-        self.assertEqual(
-            (float(match.group(1)), float(match.group(2))),
-            (DEFAULT_CHORD, DEFAULT_ANGLE),
-            "DEFAULT_TESSELLATION (tessellationCache.js) diverged from DEFAULT_CHORD/DEFAULT_ANGLE "
-            "(cadgen/store/meshes.py) — change both together",
         )
 
     def test_json_bound_matches_between_python_and_js(self) -> None:

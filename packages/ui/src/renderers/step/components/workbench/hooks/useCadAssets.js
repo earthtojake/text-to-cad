@@ -19,7 +19,6 @@ import {
   buildComposedPackageMeshData
 } from "@text-to-cad/core/lib/assembly/meshData.js";
 import { mapWithConcurrency } from "@text-to-cad/core/lib/async/concurrency.js";
-import { stepProductName } from "@text-to-cad/core/lib/step/productName.js";
 import {
   lodDefaultLevel,
   lodTessellationForLevel,
@@ -212,7 +211,7 @@ function failedPartNames(descriptor, failures) {
   const names = [];
   for (const occurrence of descriptor?.occurrences || []) {
     if (!failed.has(String(occurrence?.component || ""))) continue;
-    const name = String(stepProductName(occurrence?.name) || occurrence?.id || occurrence?.component).trim();
+    const name = String(occurrence?.name || occurrence?.id || occurrence?.component).trim();
     if (name && !names.includes(name)) names.push(name);
   }
   return names;
@@ -1403,7 +1402,7 @@ export function useCadAssets({
           const resolved = await resolveSurfaceComponents(packageDescriptor, [{
             cid, surfaceInput: component.surfaceInput,
             surfaceObject: componentIdentityByCid[cid]?.surfaceObject || component.surfaceObject,
-          }], { client, signal: controller.signal, tessellation: tessellationForLevel(level) || {} });
+          }], { client, signal: controller.signal, tessellation: tessellationForLevel(level) });
           const { mesh = null, ...surface } = resolved.get(cid);
           const identity = Object.freeze({ ...component, ...surface });
           componentIdentityByCid[cid] = identity;

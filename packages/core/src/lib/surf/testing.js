@@ -31,12 +31,13 @@ export function installTestTessellationLadder() {
  * A synthetic stored-mesh body for `component`, laid out as cadgen writes one: either
  * `{positions, normals, indices, faceRanges: [{ord, color?, indexStart, indexCount}],
  * edges: [{ord, visibilityClass?, polyline}], bounds, scale}` or a decoded component
- * (`decodeComponentTessellation(...).component`), whose tables it reads back.
+ * (`decodeComponentTessellation(...).component`), whose tables it reads back. Its tolerances
+ * are `tessellation`'s, else the test ladder's standard rung.
  */
 export function encodeMeshFixture(component, {
   surfaceInput,
   surfaceObject,
-  tessellation = {},
+  tessellation = TESSELLATION_LADDER.levels[TESSELLATION_LADDER.defaultLevel],
   partColor = null,
 } = {}) {
   const faceRanges = component.faceTable ? meshFaceRanges(component) : component.faceRanges || [];

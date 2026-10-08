@@ -206,34 +206,6 @@ test("buildSelectorRuntime uses STEP topology shape names in shape references", 
   assert.equal(shape.pickData.sourceName, "base");
 });
 
-test("buildSelectorRuntime reads an XCAF label entry where a row's name belongs as no name", () => {
-  const bundle = {
-    manifest: {
-      cadRef: "parts/l_bracket",
-      tables: {
-        occurrenceColumns: ["id", "path", "name", "sourceName", "parentId", "transform", "bbox", "shapeStart", "shapeCount", "faceStart", "faceCount", "edgeStart", "edgeCount"],
-        shapeColumns: ["id", "occurrenceId", "ordinal", "kind", "name", "sourceName", "bbox", "center", "area", "volume", "faceStart", "faceCount", "edgeStart", "edgeCount"],
-        faceColumns: ["id", "occurrenceId", "shapeId", "ordinal", "surfaceType", "area", "center", "normal", "bbox", "edgeStart", "edgeCount", "relevance", "flags", "params", "triangleStart", "triangleCount"],
-        edgeColumns: ["id", "occurrenceId", "shapeId", "ordinal", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "relevance", "flags", "params", "segmentStart", "segmentCount"],
-      },
-      occurrences: [
-        ["o1", "1", "=>[0:1:1:2]", "=>[0:1:1:2]", null, null, null, 0, 1, 0, 0, 0, 0]
-      ],
-      shapes: [
-        ["o1.s1", "o1", 1, "solid", "=>[0:1:1:2]", "l_bracket", null, null, 24, 12, 0, 0, 0, 0]
-      ],
-      faces: [],
-      edges: []
-    },
-    buffers: {}
-  };
-  const runtime = buildSelectorRuntime(bundle, { copyCadPath: "parts/l_bracket" });
-  const occurrence = runtime.references.find((reference) => reference.selectorType === "occurrence");
-  const shape = runtime.references.find((reference) => reference.selectorType === "shape");
-  assert.deepEqual([occurrence.summary, occurrence.pickData.name, occurrence.pickData.sourceName], ["o1", null, null]);
-  assert.deepEqual([shape.summary, shape.pickData.name, shape.pickData.sourceName], ["l_bracket solid volume=12", null, "l_bracket"]);
-});
-
 test("buildSelectorRuntime exposes v1 GLB face runs from selector buffers", () => {
   const bundle = {
     manifest: {

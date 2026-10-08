@@ -58,7 +58,7 @@ self.addEventListener("message", async (event) => {
     const cached = decodeComponentTessellation(message.cachedEntry, {
       surfaceInput: cacheIdentity.surfaceInput,
       surfaceObject: cacheIdentity.surfaceObject,
-      tessellation: message.tessellation || {},
+      tessellation: message.tessellation,
     });
     if (!cached) {
       throw new Error("Surf worker request carries no readable mesh for this component");

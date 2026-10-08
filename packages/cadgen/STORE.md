@@ -440,7 +440,8 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   linear part exactly the identity) with no link colour, and every link and
   group name survives the label round trip; every link's child record still
   pins the tree the parent used, with a complete `documentTree` whose root is
-  an assembly, whose components are all native and whose every node is named;
+  an assembly, whose components are all native and whose every node is named
+  by a name the label round trip keeps;
   every leaf box the canonical bounds path would take is already in
   `index/bounds` from the child's publication, under a leaf layout (§2)
   whose leaves all sit at the prototype's placement; and the writer emulation
@@ -939,7 +940,14 @@ Each with the failure it prevents.
   (`step_export.spell_name`), and every reader decodes the directives to the
   same name. A written document is ASCII. Every other literal keeps OCCT's
   spelling, and a file without such a name is never read again
-  (`STEP_WRITER_SCHEME` 3).
+  (`STEP_WRITER_SCHEME` 3). Where a STEP gave a product or a usage no name,
+  OCCT writes its label's address instead (`0:1:1:2`, `=>[0:1:1:2]`; a
+  single-part document's root is one): that, a blank, the translator's
+  default, a shape kind and digits alone read as no name
+  (`step_scene_loader._normalize_label_name`), and the document tree names
+  the occurrence by its id. Readers show the tree's names as given
+  (`DOCUMENT_SCHEMA_VERSION` 5: a document entry from before the entry rule
+  is a miss, and its bytes compile again).
 - **Publish rule.** `cadgen.store.publish.decide`: a build rejects replacing a
   current record with a stale one — if the record on disk already reflects the
   closure as it is NOW and the build that finished ran against older sources,

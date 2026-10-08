@@ -204,8 +204,8 @@ async function loadWarmPackage(t, count, providerOptions = {}) {
   const occurrences = [];
   for (let n = 0; n < count; n += 1) {
     const cid = `c${n}`, surfaceInput = createHash("sha256").update(cid).digest("hex");
-    const key = tessellationCacheKey(surfaceInput);
-    const body = encodeMeshFixture(component, { surfaceInput, surfaceObject });
+    const key = tessellationCacheKey(surfaceInput, STANDARD);
+    const body = encodeMeshFixture(component, { surfaceInput, surfaceObject, tessellation: STANDARD });
     rows[key] = probeRowFor(body);
     bodies[key] = body;
     components[cid] = { surfaceInput, surfaceObject };

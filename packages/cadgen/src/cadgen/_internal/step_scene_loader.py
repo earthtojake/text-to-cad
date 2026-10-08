@@ -176,7 +176,20 @@ def _repair_utf8_mojibake(text: str) -> str:
     return repaired
 
 
+# An XCAF label entry: the document address OCCT writes where a STEP had no name
+# for a product or an occurrence -- `0:1:1:2`, or `=>[0:1:1:2]` for a reference
+# to another label. An address, not a name somebody gave.
+_XCAF_LABEL_ENTRY = re.compile(r"(?:=>\s*)?(?:\[\s*[0-9]+(?::[0-9]+)+\s*\]|[0-9]+(?::[0-9]+)+)")
+
+
 def _normalize_label_name(raw_name: object) -> str | None:
+    """What a STEP calls a product or an occurrence, or None where it gave no name.
+
+    The one rule for every name cadgen reads from a STEP: a blank, the
+    translator's default, a shape kind, digits alone and an XCAF label entry
+    are no name, and whoever shows the thing names it otherwise (its
+    occurrence id).
+    """
     if raw_name is None:
         return None
     text = _decode_step_unicode_escapes(str(raw_name))
@@ -189,7 +202,7 @@ def _normalize_label_name(raw_name: object) -> str | None:
         return None
     if lowered in {"assembly", "solid", "compound", "compsolid", "shell", "face", "wire", "edge", "vertex"}:
         return None
-    if text.isdigit():
+    if text.isdigit() or _XCAF_LABEL_ENTRY.fullmatch(text):
         return None
     return text
 

@@ -477,7 +477,7 @@ export function loadSurfComponentInWorker(url, {
     if (readEntry) {
       ready(readEntry);
     } else if (tessellationCache) {
-      tessellationCache.getCachedEntryBytes(surfaceInput, tessellation || {}, {
+      tessellationCache.getCachedEntryBytes(surfaceInput, tessellation, {
         signal,
         probe: identity?.tessellationProbe || null,
         strictProbe: true,

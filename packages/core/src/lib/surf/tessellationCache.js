@@ -32,10 +32,6 @@ export const MESH_INDEX_SCHEMA = 2;
 // The JSON chunk grows only with the face colour palette: cadgen/store/meshes.py
 // MAX_JSON_BYTES, the same number.
 export const MESH_MAX_JSON_BYTES = 64 * 1024 * 1024;
-// The tolerances an empty request means (cadgen/store/meshes.py DEFAULT_CHORD
-// and DEFAULT_ANGLE): chord RELATIVE to the component's bounding diagonal,
-// angle in radians.
-export const DEFAULT_TESSELLATION = Object.freeze({ chordTolerance: 1.5e-3, angleTolerance: 0.35 });
 // The edge table's class codes, in this order (cadgen/store/meshes.py EDGE_CLASSES).
 export const MESH_EDGE_CLASSES = Object.freeze([
   "none", "feature", "tangent", "seam", "degenerate", "boundary", "nonManifold", "unknown",
@@ -85,13 +81,15 @@ export function float64Hex(value) {
   return hex;
 }
 
-// The tolerances are the only options a request carries, and the key spells
-// both. A quality object read back from an entry (with its lossless f64
-// spellings) is accepted as its own request; any other field is a caller
-// asking for something no mesh is keyed by, and is refused.
+// The tolerances are the only options a request carries, and it names both: the
+// key spells both, and which pair a mesh is drawn at is cadgen's (a rung of the
+// ladder it published, or the tessellation a job names), never a number here. A
+// quality object read back from an entry (with its lossless f64 spellings) is
+// accepted as its own request; any other field is a caller asking for something
+// no mesh is keyed by, and is refused.
 const TESSELLATION_OPTIONS = new Set(["chordTolerance", "angleTolerance", "chordToleranceF64", "angleToleranceF64"]);
 
-export function tessellationQuality(options = {}) {
+export function tessellationQuality(options) {
   const unknown = Object.keys(options || {}).filter((name) => !TESSELLATION_OPTIONS.has(name));
   if (unknown.length) {
     throw new TypeError(
@@ -99,8 +97,14 @@ export function tessellationQuality(options = {}) {
       + " Keyed options: chordTolerance, angleTolerance",
     );
   }
-  const chordTolerance = options?.chordTolerance ?? DEFAULT_TESSELLATION.chordTolerance;
-  const angleTolerance = options?.angleTolerance ?? DEFAULT_TESSELLATION.angleTolerance;
+  const chordTolerance = options?.chordTolerance;
+  const angleTolerance = options?.angleTolerance;
+  if (chordTolerance === undefined || angleTolerance === undefined) {
+    throw new TypeError(
+      "a mesh request names both tolerances, chordTolerance and angleTolerance: a rung of cadgen's"
+      + ` ladder (lodTessellationForLevel) or the tessellation a job names; got ${JSON.stringify(options ?? null)}`,
+    );
+  }
   return Object.freeze({
     chordTolerance,
     chordToleranceF64: float64Hex(chordTolerance),
@@ -113,7 +117,7 @@ export function tessellationQuality(options = {}) {
 // frozen surface producer. Lossless f64 spelling prevents distinct accepted
 // tolerances from colliding. The payload version is part of the key, so an
 // older body can never answer for this one.
-export function tessellationCacheKey(surfaceInput, options = {}) {
+export function tessellationCacheKey(surfaceInput, options) {
   return keyOf(requireDigest(surfaceInput, "surfaceInput"), tessellationQuality(options));
 }
 
@@ -125,7 +129,7 @@ function keyOf(digest, quality) {
 
 // R is the concrete display/selector identity. A body's extras carry O, so R
 // remains discoverable even after the SURF object and index are gone.
-export function resolvedTessellationIdentity(surfaceInput, surfaceObject, options = {}) {
+export function resolvedTessellationIdentity(surfaceInput, surfaceObject, options) {
   const key = tessellationCacheKey(surfaceInput, options);
   return `${key}-s${requireDigest(surfaceObject, "surfaceObject")}`;
 }
@@ -642,7 +646,7 @@ export function createTessellationCache({ provider = null } = {}) {
       : lifetime.signal,
   });
   function tessellationCacheProviderRegistered() { return !disposed && cacheProvider !== null; }
-  async function probeCachedTessellationEntries(surfaceInputs, options = {}, { signal } = {}) {
+  async function probeCachedTessellationEntries(surfaceInputs, options, { signal } = {}) {
     const hits = new Map();
     const provider = disposed ? null : cacheProvider;
     if (!provider || !Array.isArray(surfaceInputs) || !surfaceInputs.length) return hits;
@@ -669,7 +673,7 @@ export function createTessellationCache({ provider = null } = {}) {
   // it, and answers with its probe row, exactly as a probe would have. Only a
   // host that can mesh offers this (`provider.produceMany`); elsewhere a
   // missing mesh stays missing.
-  async function produceTessellationEntries(surfaceInputs, options = {}, { signal } = {}) {
+  async function produceTessellationEntries(surfaceInputs, options, { signal } = {}) {
     const hits = new Map();
     const provider = disposed ? null : cacheProvider;
     if (!provider || typeof provider.produceMany !== "function"
@@ -691,7 +695,7 @@ export function createTessellationCache({ provider = null } = {}) {
     return hits;
   }
 
-  async function getCachedEntryBytes(surfaceInput, options = {}, {
+  async function getCachedEntryBytes(surfaceInput, options, {
     signal,
     probe = null,
     strictProbe = false,
@@ -741,7 +745,7 @@ export function createTessellationCache({ provider = null } = {}) {
     ));
   }
 
-  async function getCachedComponentEntry(surfaceInput, options = {}, request = {}) {
+  async function getCachedComponentEntry(surfaceInput, options, request = {}) {
     const bytes = await getCachedEntryBytes(surfaceInput, options, request);
     return decodeComponentTessellation(bytes, {
       surfaceInput,

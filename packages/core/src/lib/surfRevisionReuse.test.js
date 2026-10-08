@@ -13,6 +13,7 @@ import {
 import { setRenderAssetSourceScope } from "./renderAssetSourceScope.js";
 import { createTessellationCache } from "./surf/tessellationCache.js";
 import { everyKeyMeshProvider } from "./surf/__tests__/meshFixtures.js";
+import { TEST_TESSELLATION_LADDER } from "./surf/testing.js";
 
 const fixture = readFileSync(new URL("./surf/fixtures/sun_gear.surf", import.meta.url));
 // What a selector read fetches: the component's selector table, bound to that surface.
@@ -25,7 +26,9 @@ const identity = {
 const tessellationCache = createTessellationCache({ provider: everyKeyMeshProvider("sun_gear", { surfaceObject: identity.surfaceObject }) });
 const url = (tree, cid = "123456789abcdef0", extra = "") =>
   `/__cad/store?file=${tree.repeat(64)}/components/${cid}.surf${extra}`;
-const key = (value, options, object = identity) => surfTessellationCacheKey(value, options, object);
+// Every read names its tolerances: the standard rung of the ladder cadgen publishes.
+const STANDARD = TEST_TESSELLATION_LADDER.levels[TEST_TESSELLATION_LADDER.defaultLevel];
+const key = (value, options = STANDARD, object = identity) => surfTessellationCacheKey(value, options, object);
 
 test("immutable SURF identity survives tree revisions but preserves all mesh inputs", () => {
   assert.equal(key(url("a")), key(url("b")));
@@ -53,7 +56,7 @@ test("revisions reuse meshes and exact selector payloads without fetching unchan
   });
   const first = url("1");
   const second = url("2");
-  const options = { identity, tessellationCache };
+  const options = { identity, tessellationCache, tessellation: STANDARD };
   const mesh = await loadRenderSurf(first, options);
   assert.equal(await loadRenderSurf(second, options), mesh);
   const selectors = await loadRenderSurfSelectorBundle(first, options);
@@ -85,9 +88,10 @@ test("snapshot source collision guard remains active even with an object identit
   setRenderAssetSourceScope("snapshot-A.step");
   try {
     assert.equal(key(asset, undefined, scopedIdentity), key(url("4"), undefined, scopedIdentity), "cache identity is the immutable D/O pair");
-    await loadRenderSurf(asset, { identity: scopedIdentity, tessellationCache });
+    await loadRenderSurf(asset, { identity: scopedIdentity, tessellationCache, tessellation: STANDARD });
     setRenderAssetSourceScope("snapshot-B.step");
-    await assert.rejects(loadRenderSurf(asset, { identity: scopedIdentity, tessellationCache }), { name: "RenderAssetSourceScopeError" });
+    await assert.rejects(loadRenderSurf(asset, { identity: scopedIdentity, tessellationCache, tessellation: STANDARD }),
+      { name: "RenderAssetSourceScopeError" });
   } finally {
     setRenderAssetSourceScope("");
   }

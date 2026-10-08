@@ -775,7 +775,7 @@ export function surfTessellationCacheKey(_url, tessellation, identity) {
   return resolvedTessellationIdentity(
     String(identity?.surfaceInput || ""),
     String(identity?.surfaceObject || ""),
-    tessellation || {},
+    tessellation,
   );
 }
 
@@ -840,9 +840,9 @@ async function loadSurfPayloadInline(url, { signal, resources, tessellation, ide
   const cached = readEntry
     ? decodeComponentTessellation(readEntry, {
       surfaceInput, ...(surfaceObject ? { surfaceObject } : {}),
-      tessellationInput: tessellationCacheKey(surfaceInput, tessellation || {}), tessellation: tessellation || {},
+      tessellationInput: tessellationCacheKey(surfaceInput, tessellation), tessellation,
     })
-    : await tessellationCache?.getCachedComponentEntry(surfaceInput, tessellation || {}, {
+    : await tessellationCache?.getCachedComponentEntry(surfaceInput, tessellation, {
       signal, probe, strictProbe: true,
     });
   if (!cached) throw new TessellationCacheProbeMissError(probe);

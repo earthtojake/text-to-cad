@@ -487,23 +487,20 @@ test("multiple components keep their own buffers without an aggregate allocation
   assert.equal(single.indices, a.indices);
 });
 
-test("an XCAF label entry where a STEP names an occurrence or assembly is no name: each goes by its id", () => {
+test("parts and groups are drawn by the names the tree gives them, and one without goes by its id", () => {
   const a = unitTriangleComponentMeshData();
-  // cadgen's single-part STEP: its one occurrence (and the root over it) named `=>[0:1:1:2]`.
-  const single = buildComposedPackageMeshData({ entryKind: "part", label: "=>[0:1:1:2]",
-    occurrences: [{ id: "o1.1", name: "=>[0:1:1:2]", component: "a", transform: IDENTITY_4X4 }] }, { a });
-  assert.deepEqual([single.parts[0].name, single.parts[0].label], ["o1.1", "o1.1"]);
   const descriptor = { components: { a: {} }, occurrences: [
     { id: "o1.1", name: "Panel:1", component: "a", transform: IDENTITY_4X4 },
-    { id: "o1.2", name: "0:1:1:5", component: "a", transform: IDENTITY_4X4 }
+    { id: "o1.2", component: "a", transform: IDENTITY_4X4 }
   ] };
-  descriptor.assembly = { root: { id: "o1", name: "=>[0:1:1:2]", nodeType: "assembly", children: [
+  descriptor.assembly = { root: { id: "o1", name: "frame", nodeType: "assembly", children: [
     { id: "o1.1", name: "Panel:1", nodeType: "part", children: [] },
-    { id: "o1.2", name: "=>[0:1:1:5]", label: "0:1:1:5", nodeType: "part", children: [] }
+    { id: "o1.2", nodeType: "part", children: [] }
   ] } };
   const composed = buildComposedPackageMeshData(descriptor, { a });
-  assert.deepEqual(composed.parts.map(part => part.name), ["Panel:1", "o1.2"], "a name somebody gave is kept");
-  assert.deepEqual([composed.assemblyRoot.name, ...composed.assemblyRoot.children.map(child => child.name)], ["o1", "Panel:1", "o1.2"]);
+  assert.deepEqual(composed.parts.map(part => [part.name, part.label]), [["Panel:1", "Panel:1"], ["o1.2", "o1.2"]]);
+  assert.deepEqual([composed.assemblyRoot.name, ...composed.assemblyRoot.children.map(child => child.name)],
+    ["frame", "Panel:1", "o1.2"]);
 });
 
 function reuseFixture() {

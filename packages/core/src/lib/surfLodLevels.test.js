@@ -20,6 +20,8 @@ import { everyKeyMeshProvider, memoryMeshProvider, meshFixture, selectorTableFix
 import { installTestTessellationLadder } from "./surf/testing.js";
 
 installTestTessellationLadder();
+// The rung every model opens at: what a request that means "the standard mesh" names.
+const STANDARD = lodTessellationForLevel(lodDefaultLevel());
 
 // Read the producer generation from the constant rather than spelling it out:
 // this asserts the key's SHAPE, and every producer change bumps that number.
@@ -48,21 +50,24 @@ function withSurfFetch(t) {
   return () => fetches;
 }
 
-test("mesh identity includes component, effective tolerances, producer and payload", () => {
-  const defaultKey = surfTessellationCacheKey("u.surf", undefined);
-  assert.equal(defaultKey, surfTessellationCacheKey("u.surf", {}));
-  assert.match(defaultKey, IDENTITY);
-  const l1 = surfTessellationCacheKey("u.surf", { chordTolerance: 5e-4 });
+test("mesh identity includes component, both tolerances, producer and payload", () => {
+  assert.match(surfTessellationCacheKey("u.surf", STANDARD), IDENTITY);
+  const fine = { chordTolerance: 5e-4, angleTolerance: 0.35 };
+  const l1 = surfTessellationCacheKey("u.surf", fine);
   assert.match(l1, IDENTITY);
-  assert.notEqual(l1, surfTessellationCacheKey("u.surf", { chordTolerance: 1.5e-4 }));
-  assert.notEqual(l1, surfTessellationCacheKey("u.surf", { chordTolerance: 5e-4, angleTolerance: 0.2 }));
+  assert.notEqual(l1, surfTessellationCacheKey("u.surf", { ...fine, chordTolerance: 1.5e-4 }));
+  assert.notEqual(l1, surfTessellationCacheKey("u.surf", { ...fine, angleTolerance: 0.2 }));
   // 0.0005 and 5e-4 hit the same entry.
-  assert.equal(l1, surfTessellationCacheKey("u.surf", { chordTolerance: 0.0005 }));
+  assert.equal(l1, surfTessellationCacheKey("u.surf", { ...fine, chordTolerance: 0.0005 }));
   assert.equal(
-    surfTessellationCacheKey("/pkg/a.surf", {}),
-    surfTessellationCacheKey("/pkg/b.surf", {}),
+    surfTessellationCacheKey("/pkg/a.surf", STANDARD),
+    surfTessellationCacheKey("/pkg/b.surf", STANDARD),
     "URL does not fork one immutable D/O identity",
   );
+  // The page fills in no tolerance: a request names both, or it is refused.
+  for (const partial of [undefined, {}, { chordTolerance: 5e-4 }]) {
+    assert.throws(() => surfTessellationCacheKey("u.surf", partial), /names both tolerances/);
+  }
   assert.notEqual(
     surfTessellationCacheKey("u.surf", lodTessellationForLevel(0)),
     surfTessellationCacheKey("u.surf", lodTessellationForLevel(lodDefaultLevel())),
@@ -75,7 +80,7 @@ test("levels read once each, differ in density, and stay consistent", async (t) 
   const store = levelStore();
   const tessellationCache = createTessellationCache({ provider: store });
   t.after(() => tessellationCache.dispose());
-  const options = { identity: identityFor(), tessellationCache };
+  const options = { identity: identityFor(), tessellationCache, tessellation: STANDARD };
   const url = "https://cad.test/components/sun_gear.surf";
   const l0 = await loadPayload(url, { ...options, tessellation: lodTessellationForLevel(0) });
   const l1 = await loadPayload(url, options);
@@ -121,7 +126,7 @@ test("the coarse tier is cheaper on curved and trimmed representative surfaces",
     t.after(() => tessellationCache.dispose());
     const { surfaceInput, surfaceObject } = surfFixture(name);
     const url = `https://cad.test/coarse-sample/${name}.surf`;
-    const options = { identity: { surfaceInput, surfaceObject }, tessellationCache, selectors: false };
+    const options = { identity: { surfaceInput, surfaceObject }, tessellationCache, tessellation: STANDARD, selectors: false };
     const coarse = await loadPayload(url, { ...options, tessellation: lodTessellationForLevel(0) });
     const canonical = await loadPayload(url, options);
     assert.ok(
@@ -145,9 +150,9 @@ test("every surf entry — any level — rides one bounded leash; consumers own 
   t.after(() => tessellationCache.dispose());
   const urlFor = (n) => `https://cad.test/lru/component-${n}.surf`;
   // Distinct components: each URL its own surface input, as distinct parts are.
-  const options = (n, tessellation) => ({
+  const options = (n, tessellation = STANDARD) => ({
     identity: { surfaceInput: String(n).padStart(64, "c"), surfaceObject: "a".repeat(64) },
-    tessellationCache, selectors: false, ...(tessellation ? { tessellation } : {}),
+    tessellationCache, selectors: false, tessellation,
   });
   const level = lodTessellationForLevel(2);
   const first = await loadPayload(urlFor(0), options(0, level));

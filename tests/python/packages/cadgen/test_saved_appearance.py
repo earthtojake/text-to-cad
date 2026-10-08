@@ -198,7 +198,7 @@ class SavedAppearanceTest(unittest.TestCase):
             write_source_sidecar(invalid, {"appearance": {"materials": {"m": {"name": "M", "opacity": False}}, "assignments": {"o1": "m"}}})
         self.assertFalse(source_sidecar_path(invalid).exists())
 
-    def test_model_records_cut_over_while_documents_remain_four(self) -> None:
+    def test_model_records_and_document_entries_cut_over(self) -> None:
         current_tree = "c" * 64
         model = self.root / "model.step"
         model.write_bytes(b"model")
@@ -221,17 +221,17 @@ class SavedAppearanceTest(unittest.TestCase):
         write_entry(
             "document",
             document_hash,
-            {"schemaVersion": 3, "tree": "legacy-tree", "kind": "step", "meshes": {"old": "mesh"}},
+            {"schemaVersion": 4, "tree": "legacy-tree", "kind": "step", "meshes": {"old": "mesh"}},
         )
         self.assertIsNone(tree_for_document_hash(document_hash))
         self.assertIsNone(document_mesh_sha(document_hash, "old"))
         note_document_mesh(document_hash, "new", "ignored")
-        self.assertEqual(3, read_entry("document", document_hash)["schemaVersion"])
+        self.assertEqual(4, read_entry("document", document_hash)["schemaVersion"])
 
         note_document_tree(document_hash, current_tree)
         current_document = read_entry("document", document_hash)
         self.assertEqual(DOCUMENT_SCHEMA_VERSION, current_document["schemaVersion"])
-        self.assertEqual(4, current_document["schemaVersion"])
+        self.assertEqual(5, current_document["schemaVersion"])
         self.assertEqual(current_tree, tree_for_document_hash(document_hash))
         self.assertNotIn("meshes", current_document)
         note_document_mesh(document_hash, "new", "current-mesh")
