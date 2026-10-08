@@ -24,13 +24,12 @@ function rowActions(node, select) {
   return {
     choose(event) {
       const add = event.ctrlKey || event.metaKey || event.shiftKey;
-      if (node.kind === "finding") select(node.finding.items.map((item) => item.ref).filter(Boolean), { finding: node.finding.index });
-      else if (node.selector) select([node.selector], { add });
+      if (node.selector) select([node.selector], { add });
     },
   };
 }
 
-// A row of the board tree: a group (Parts, a kind, Nets, Checks), a part, a net, a pad or a check.
+// A row of the board tree: a group (Parts, a kind, Nets), a part, a net or a pad.
 // A board's Nets can be thousands of rows: a row renders again only when it, or a row under it,
 // changed (`dirty`: the rows whose highlight or opening changed, and their owners).
 // (Named apart from the memo it is wrapped in, so the rows under it are the memo too.)
@@ -39,7 +38,6 @@ const BoardRow = memo(function BoardTreeRow({ node, depth, highlighted, expanded
   const open = branch && expanded.has(node.id);
   const { choose } = rowActions(node, select);
   const pickable = node.kind !== "group";
-  if (node.kind === "empty") return <li className="min-w-0"><p className="h-6 truncate text-micro leading-6 text-muted-foreground" style={{ paddingLeft: depth * 12 + 16 }}>{node.label}</p></li>;
   return <li className="min-w-0" ref={(element) => { if (element) rowRefs.current.set(node.id, element); else rowRefs.current.delete(node.id); }}>
     <TreeRowSurface dense active={highlighted.has(node.id)} className="gap-0 pr-0" style={{ paddingLeft: depth * 12 }} data-board-row={node.id}>
       {branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${node.label}`} aria-expanded={open}
@@ -75,12 +73,12 @@ function BoardSearchRow({ match, highlighted, cursor, select }) {
 }
 
 /**
- * Select's panel on a board or a schematic: its parts by kind, each with its pads or pins; its nets,
- * each with the pads or pins on it; the checks KiCad reported. The filter is the top row, with
- * Select's mode menu and the X. It renders again only for what it shows — the document, the
- * selection, the check in focus, the mode — not for every render of the view under it.
+ * Select's panel on a board or a schematic: its parts by kind, each with its pads or pins, and its
+ * nets, each with the pads or pins on it. The filter is the top row, with Select's mode menu and the
+ * X. It renders again only for what it shows — the document, the selection, the mode — not for
+ * every render of the view under it.
  */
-export const BoardTreePanel = memo(function BoardTreePanel({ index, documentKind, selection, focusedFinding, selectMode, onSelectMode, select, clear, active }) {
+export const BoardTreePanel = memo(function BoardTreePanel({ index, documentKind, selection, selectMode, onSelectMode, select, clear, active }) {
   const noun = nounOf({ document: documentKind });
   const tree = useMemo(() => (index ? buildBoardTree(index) : { roots: EMPTY, nodesById: new Map(), parents: new Map() }), [index]);
   const [expanded, setExpanded] = useState(() => new Set(["group:parts"]));
@@ -89,11 +87,7 @@ export const BoardTreePanel = memo(function BoardTreePanel({ index, documentKind
     if (!next.delete(node.id)) next.add(node.id);
     return next;
   }), []);
-  const highlighted = useMemo(() => {
-    const ids = new Set(selection.flatMap(boardTreeNodeIds));
-    if (focusedFinding != null) ids.add(`finding:${focusedFinding}`);
-    return ids;
-  }, [selection, focusedFinding]);
+  const highlighted = useMemo(() => new Set(selection.flatMap(boardTreeNodeIds)), [selection]);
   // The rows whose highlight or opening changed since the rows on screen were drawn, with their owners.
   const drawn = useRef({ tree, highlighted: NO_IDS, expanded: NO_IDS });
   const dirty = useMemo(() => {
@@ -171,9 +165,11 @@ export function BoardReferencePanel({ inspector, active, onCopy, copyShortcut = 
   const finding = inspector.finding ? boardFindingFacts(inspector.finding, inspector.index) : null;
   if (!items.length && !finding) return null;
   const shown = items[Math.min(browsed, items.length - 1)] || null;
-  const title = items.length > 1 ? <ReferencePicker items={items} browsed={Math.min(browsed, items.length - 1)} onBrowse={setBrowsed} />
-    : (finding ? finding.heading : shown?.heading);
-  const rows = [...(finding ? finding.rows : []), ...(shown ? shown.rows : [])];
+  // A finding is headed by its sentence; what it names is its Items row, and the one thing it names
+  // reads below its own rows.
+  const title = finding ? finding.heading
+    : items.length > 1 ? <ReferencePicker items={items} browsed={Math.min(browsed, items.length - 1)} onBrowse={setBrowsed} /> : shown?.heading;
+  const rows = finding ? [...finding.rows, ...(items.length === 1 ? shown.rows : [])] : shown.rows;
   return <ToolPanel id="reference" title={title} label="Reference details" closeLabel="Clear selection" fit="details" resizable hidden={!active}
     onClose={inspector.clear}
     footer={items.length ? <ToolPanelFooterButton label={items.length > 1 ? "Copy All" : "Copy"} shortcut={copyShortcut} onClick={onCopy} /> : null}>

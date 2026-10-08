@@ -70,6 +70,16 @@ async function open(t, file) {
   return { page, errors, pane: page.getByTestId('one') };
 }
 
+/**
+ * The fixture board has an unrouted connection: its findings card opens over the board, as a STEP's
+ * error does. A test that points at the board puts it away first (its X), as a person would.
+ */
+async function putAwayFindings(pane) {
+  const card = pane.getByRole('alert');
+  await card.getByRole('heading', { name: '1 to fix' }).waitFor();
+  await card.getByRole('button', { name: 'Dismiss' }).click();
+  await pane.page().getByRole('button', { name: '1 to fix' }).waitFor();
+}
 const canvasOf = pane => pane.locator('[data-plot-surface] canvas').first();
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 /**
@@ -126,6 +136,7 @@ const deltaForFactor = factor => -Math.log(factor) / 0.0015;
 
 test('a board opens fitted on its own background, its tracks drawn, and stays sharp when zoomed', async (t) => {
   const { page, pane, errors } = await open(t, 'blinky.kicad_pcb');
+  await putAwayFindings(pane);
   const fitted = await frame(pane);
   const box = sheetBox(fitted);
   // Fitted: the board's 4:3, centred, filling the pane but for the 16 px gutter on the tight axis.
@@ -165,6 +176,7 @@ test('a board opens fitted on its own background, its tracks drawn, and stays sh
 
 test('a press on a pad’s pixels selects that pad and lights them; from the bottom, its mirrored place does', async (t) => {
   const { page, pane, errors } = await open(t, 'blinky.kicad_pcb');
+  await putAwayFindings(pane);
   const fitted = await frame(pane);
   const canvas = await canvasOf(pane).boundingBox();
   const transform = fitPlotTransform(layoutPlot(BOARD), Math.round(canvas.width), Math.round(canvas.height));
@@ -262,6 +274,7 @@ test('a capture is the view as a PNG: the SVG drawn on the canvas does not taint
 
 test('a library card’s picture is the whole board, fitted, whatever the view on screen', async (t) => {
   const { page, pane, errors } = await open(t, 'blinky.kicad_pcb');
+  await putAwayFindings(pane);
   const fitted = await frame(pane);
   const canvas = await canvasOf(pane).boundingBox();
   await wheelAt(page, canvas, { x: 200, y: 200 }, deltaForFactor(5));
@@ -283,6 +296,7 @@ test('a library card’s picture is the whole board, fitted, whatever the view o
 
 test('the view a person chose is the file view’s camera, and comes back when the tab is reopened', async (t) => {
   const { page, pane, errors } = await open(t, 'blinky.kicad_pcb');
+  await putAwayFindings(pane);
   const fitted = await frame(pane);
   const canvas = await canvasOf(pane).boundingBox();
   await wheelAt(page, canvas, { x: canvas.width * 0.3, y: canvas.height * 0.6 }, deltaForFactor(3));

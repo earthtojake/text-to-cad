@@ -16,6 +16,7 @@ import DrawingOverlay from "../kit/tools/draw/DrawingOverlay.jsx";
 import ToolPanel, { ToolPanelFooterButton } from "../kit/tools/ToolPanel.jsx";
 import { DRAWING_TOOLBAR_TOOLS, DrawingToolbar } from "../../drawing/toolbar.jsx";
 import { BoardMeasurePanel, BoardReferencePanel, BoardTreePanel } from "./board/BoardPanels.jsx";
+import FindingsList, { findingBlocks, findingsLabel } from "./board/FindingsList.jsx";
 import { BoardMeasureIcon, BoardSelectIcon } from "./board/boardModes.jsx";
 import { BoardDisplaySection, boardDisplayAirwires, boardDrawView, readBoardDisplay } from "./board/BoardDisplay.jsx";
 import DisplayPopover from "../kit/shell/DisplayPopover.jsx";
@@ -41,7 +42,7 @@ import { plotKindForPath, plotWords } from "./plotWords.js";
  *
  * The picture comes from the BACKEND (`GET /__cad/plot`), which runs `kicad-cli` over the file
  * and returns its SVG plot. This renderer never parses KiCad's files. A board's payload also
- * carries its index (`board`: parts, pads, nets, tracks, checks, in the sheet's millimetres), and
+ * carries its index (`board`: parts, pads, nets, tracks, findings, in the sheet's millimetres), and
  * with it the board has the tools a person points with: Select (with its tree and Reference),
  * Draw, Measure, Quick Edit and the copy key, all speaking board references (`#U3`, `#U3.9`,
  * `#net:VIN`) that the agent resolves with `cadgen.pcb.read_board`. A schematic's payload carries
@@ -331,9 +332,31 @@ function PlotSurface({ view, data }) {
   };
   // A plot has settled once it is read and decoded: a library card's picture waits for that.
   const whenSettled = useWhenSettled(() => ready);
+  const compact = Boolean(view.appearance?.compact);
+  // What KiCad and the review found is the card a STEP's alerts are: open over the board while
+  // there is something to fix before ordering, put away (its icon in the navbar) for suggestions
+  // alone. Its key is the findings' sentences, so a rebuild that changes them is a new alert.
+  const findings = shown && !compact ? inspector.index?.findings ?? null : null;
+  const findingsAlert = useMemo(() => {
+    if (!findings?.length) return null;
+    const errors = findings.some(findingBlocks);
+    return { severity: errors ? "error" : "warning", blocking: false, kind: "findings", report: false, title: findingsLabel(findings), message: "",
+      key: JSON.stringify(findings.map((finding) => [finding.severity, finding.summary || finding.description])) };
+  }, [findings]);
   // The card the viewport shows, and its dismissal: put away, its icon in the navbar brings it back.
-  const cardAlert = alert || (actionError ? { severity: "error", kind: "status", blocking: false, title: actionError.title, message: actionError.message } : null);
-  const alertDismissal = useAlertDismissal(cardAlert, { hasContent: shown, scope: file, onNavigationActionsChange: view.onNavigationActionsChange });
+  // A failure, the plot's or an action's, owns it; the findings have it otherwise.
+  const cardAlert = alert || (actionError ? { severity: "error", kind: "status", blocking: false, title: actionError.title, message: actionError.message } : null)
+    || findingsAlert;
+  const showingFindings = Boolean(findingsAlert) && cardAlert === findingsAlert;
+  const alertDismissal = useAlertDismissal(cardAlert, { hasContent: shown, scope: file, onNavigationActionsChange: view.onNavigationActionsChange,
+    startDismissed: showingFindings && findingsAlert.severity === "warning" });
+  // A finding chosen in the card selects what it names, as a tree row would, and puts the card away.
+  const { select: selectOnBoard } = inspector;
+  const { dismiss: dismissAlert } = alertDismissal;
+  const chooseFinding = useCallback((finding) => {
+    selectOnBoard(finding.items.map((item) => item.ref).filter(Boolean), { finding: finding.index });
+    dismissAlert();
+  }, [selectOnBoard, dismissAlert]);
   const binding = data.services.live;
   // A board or a schematic answers select and clearSelection itself; a harness declines them.
   const declined = useMemo(() => {
@@ -349,7 +372,6 @@ function PlotSurface({ view, data }) {
 
   // While the plot loads, or once it has failed to, there is no chrome: no tools, no Quick Edit.
   const chromeHidden = !shown || payload.loading || Boolean(alert && !shown);
-  const compact = Boolean(view.appearance?.compact);
   const boardChrome = inspector.available && !chromeHidden && !compact;
   const copyShortcut = host.environment?.platform === "darwin" ? "⌘C" : "Ctrl+C";
   const darkTheme = view.appearance?.colorScheme === "dark";
@@ -380,7 +402,7 @@ function PlotSurface({ view, data }) {
             footer={boardDrawing.drawing.hasContent ? <ToolPanelFooterButton label="Copy Drawing" shortcut={mobile ? "" : copyShortcut} onClick={copyDrawing} /> : null}>
             <DrawingToolbar drawing={boardDrawing.drawing} layout="panel" className="p-1" />
           </ToolPanel> : null}
-          <BoardTreePanel index={inspector.index} documentKind={inspector.document} selection={inspector.selection} focusedFinding={inspector.focusedFinding}
+          <BoardTreePanel index={inspector.index} documentKind={inspector.document} selection={inspector.selection}
             selectMode={inspector.selectMode} onSelectMode={inspector.setSelectMode} select={inspector.select} clear={inspector.clear}
             active={inspector.tool === BOARD_TOOL.SELECT} />
           <BoardReferencePanel inspector={inspector} active={inspector.tool === BOARD_TOOL.SELECT} onCopy={() => copySelection()} copyShortcut={mobile ? "" : copyShortcut} />
@@ -401,7 +423,8 @@ function PlotSurface({ view, data }) {
         </ViewportTopRight>
         <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: words.reading } }}
           operationKey={file} />
-        <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={view.reload} file={file} />
+        <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={view.reload} file={file}
+          body={showingFindings ? <FindingsList findings={findings} onChoose={chooseFinding} /> : null} />
       </div>
     </div>
   );

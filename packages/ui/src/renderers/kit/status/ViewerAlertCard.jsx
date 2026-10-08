@@ -17,8 +17,9 @@ export function alertDismissible(alert, hasContent) {
   return alert.blocking === false || (hasContent && alert.severity === "warning");
 }
 
-// The same failure raised again is the same alert, even as a new object.
-const alertKey = alert => JSON.stringify([alert.severity, alert.title, alert.message, alert.reason, alert.details]);
+// The same failure raised again is the same alert, even as a new object. `key` is what tells two
+// alerts apart that the card says alike (a board's findings, by their count, are its `title`).
+const alertKey = alert => JSON.stringify([alert.severity, alert.title, alert.message, alert.reason, alert.details, alert.key]);
 /** What the card is headed, and what its icon in the navbar is called. */
 const alertTitle = alert => alert.title || alert.summary || "Couldn’t display the model";
 /** The card's icon colour: amber for a warning, the destructive red for an error. */
@@ -39,22 +40,26 @@ const NO_ACTIONS = Object.freeze([]);
  * the card's own icon, in its colour, named after the alert, leftmost of the navbar's right-hand
  * controls — the renderer's navbar action (`onNavigationActionsChange`), before the host's update,
  * Settings and the view's controls. Pressing it brings the card back and takes the icon away. Where
- * there is no navbar (preview, a view shown small) there is no icon either.
+ * there is no navbar (preview, a view shown small) there is no icon either. An alert that is news
+ * but no reason to stop (`startDismissed`: a board's suggestions) starts put away, its icon alone
+ * saying it is there, each time it changes, until the person brings it back.
  *
  * @param {object | null} alert  The alert the card shows.
- * @param {{ hasContent?: boolean, scope?: string,
+ * @param {{ hasContent?: boolean, scope?: string, startDismissed?: boolean,
  *   onNavigationActionsChange?: ((actions: readonly import("../../../file-viewer/types.js").FileNavigationAction[]) => void) | null }} [options]
  * @returns {{ dismissed: boolean, dismiss(): void }}
  */
-export function useAlertDismissal(alert, { hasContent = false, scope = "", onNavigationActionsChange = null } = {}) {
+export function useAlertDismissal(alert, { hasContent = false, scope = "", startDismissed = false, onNavigationActionsChange = null } = {}) {
   const key = alert ? alertKey(alert) : "";
+  // What the person did with the alert on screen (`away`: put it away, or brought it back).
   const [put, setPut] = useState(null);
   // The dismissal of the alert on screen alone: when it is not that alert any more, it is gone.
   const stale = put !== null && (put.key !== key || put.scope !== scope);
   if (stale) setPut(null);
-  const dismissed = !stale && put !== null && Boolean(alert) && alertDismissible(alert, hasContent);
-  const dismiss = useCallback(() => { if (key) setPut({ key, scope }); }, [key, scope]);
-  const reopen = useCallback(() => setPut(null), []);
+  const away = !stale && put !== null ? put.away : startDismissed;
+  const dismissed = away && Boolean(alert) && alertDismissible(alert, hasContent);
+  const dismiss = useCallback(() => { if (key) setPut({ key, scope, away: true }); }, [key, scope]);
+  const reopen = useCallback(() => setPut({ key, scope, away: false }), [key, scope]);
   const title = alert ? alertTitle(alert) : "";
   const warning = alert?.severity === "warning";
   const published = useRef(false);
@@ -80,9 +85,10 @@ export function useAlertDismissal(alert, { hasContent = false, scope = "", onNav
  * output stays complete in a scrollable diagnostic, never clipped. Retry reloads the file; where
  * the host has a tracker (`links.issues`), Report Issue beside it opens a new issue saying what the
  * card says, about `file` (its path as the alert names it, absolute: the issue names only the file,
- * and carries no path of this machine).
+ * and carries no path of this machine); an alert about the design, not the viewer (`report: false`),
+ * has none. `body`, after the alert's words, is what the renderer lists under it (a board's findings).
  */
-export default function ViewerAlertCard({ alert: shown, hasContent, onReload, file = "", dismissed = false, onDismiss = null }) {
+export default function ViewerAlertCard({ alert: shown, hasContent, onReload, file = "", dismissed = false, onDismiss = null, body = null }) {
   const mobile = useViewerMobile();
   const host = useContext(ViewerHostContext);
   const follow = useFollow(host?.links);
@@ -92,7 +98,7 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
   const shortReason = reason.split("\n").find((line) => line.trim()) || "";
   const readableReason = shortReason.length > 360 ? `${shortReason.slice(0, 360)}…` : shortReason;
   const title = alertTitle(shown);
-  const report = alertIssueUrl(host?.links?.issues, { ...shown, title },
+  const report = shown.report === false ? "" : alertIssueUrl(host?.links?.issues, { ...shown, title },
     { file, version: host?.links?.version, platform: host?.environment.platform });
   return (
     <div className={cn("pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center py-3", mobile ? "px-3" : "px-4")}>
@@ -116,6 +122,7 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
             {shown.message ? <p className="whitespace-pre-line break-words">{shown.message}</p> : null}
             {readableReason ? <p className="break-words text-foreground">{readableReason}</p> : null}
             {shown.recovery ? <p className="break-words">{shown.recovery}</p> : null}
+            {body}
             {shown.details ? (
               <details className="text-xs">
                 <summary className="w-fit cursor-pointer rounded-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Details</summary>

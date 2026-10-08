@@ -28,9 +28,9 @@ const BOARD = {
 };
 const index = createBoardIndex(BOARD);
 
-test("the tree is parts by kind, then nets, then checks", () => {
+test("the tree is parts by kind, then nets: what KiCad reported is the alert card's", () => {
   const tree = buildBoardTree(index);
-  assert.deepEqual(tree.roots.map((node) => `${node.label} ${node.detail}`), ["Parts 3", "Nets 2", "Checks 1"]);
+  assert.deepEqual(tree.roots.map((node) => `${node.label} ${node.detail}`), ["Parts 3", "Nets 2"]);
   const parts = tree.roots[0].children;
   assert.deepEqual(parts.map((node) => node.label), ["ICs", "Capacitors"]);
   assert.deepEqual(parts[1].children.map((node) => node.label), ["C2", "C10"], "natural order");
@@ -75,7 +75,8 @@ test("the Reference reads a part, a pad, a net, copper and a point in script mil
   assert.equal(row(copper, "Width"), "1 mm");
   assert.equal(boardReferenceFacts(index.resolve("#@x1y2"), index).rows[0][1], "x 1, y 2");
   const finding = boardFindingFacts(index.findings[0], index);
-  assert.equal(finding.heading, "silk overlap");
+  // Headed by its sentence: KiCad's message where it has no summary of its own.
+  assert.equal(finding.heading, "Silkscreen clearance");
   assert.equal(finding.rows.find(([name]) => name === "Items")[1], "#C10, x 1, y 29");
 });
 
@@ -93,7 +94,7 @@ test("a schematic's tree and Reference speak of pins, and of no positions", () =
     nets: [{ name: "VIN", class: "Power" }],
   }, [{ name: "amp", x: 0, y: 0 }, { name: "power", x: 0, y: 230 }]);
   const tree = buildBoardTree(schematic);
-  assert.deepEqual(tree.roots.map((node) => `${node.label} ${node.detail}`), ["Parts 1", "Nets 1", "Checks "]);
+  assert.deepEqual(tree.roots.map((node) => `${node.label} ${node.detail}`), ["Parts 1", "Nets 1"]);
   assert.equal(tree.roots[1].children[0].detail, "2 pins");
   assert.ok(tree.roots[0].children[0].children[0].searchAliases.includes("LM358"));
   const row = (facts, label) => facts.rows.find(([name]) => name === label)?.[1];
@@ -108,29 +109,4 @@ test("a schematic's tree and Reference speak of pins, and of no positions", () =
   const net = referenceFacts(schematic.resolve("#net:VIN"), schematic);
   assert.equal(row(net, "Pins"), "2 pins");
   assert.equal(row(net, "Labels"), "VIN");
-});
-
-const treeWith = (findings) => buildBoardTree(createBoardIndex({
-  ...BOARD,
-  findings: findings.map((finding) => ({ description: "", items: [], ...finding })),
-}));
-
-test("Checks read as sentences, errors first, and say how many to fix", () => {
-  const tree = treeWith([
-    { check: "review", severity: "warning", type: "decoupling_far", summary: "U2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm)" },
-    { check: "drc", severity: "error", type: "clearance", summary: "The SDA track and the SCL track are 0.15 mm apart; the rules need 0.2 mm" },
-  ]);
-  const checks = tree.roots.find((node) => node.id === "group:checks");
-  assert.equal(checks.detail, "1 to fix");
-  assert.deepEqual(checks.children.map((node) => node.label), [
-    "The SDA track and the SCL track are 0.15 mm apart; the rules need 0.2 mm",
-    "U2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm)",
-  ]);
-  assert.equal(checks.children[0].detail, "error");
-});
-
-test("a board with nothing to report says so", () => {
-  const checks = treeWith([]).roots.find((node) => node.id === "group:checks");
-  assert.deepEqual(checks.children.map((node) => [node.kind, node.label]), [["empty", "No problems found"]]);
-  assert.equal(checks.detail, "");
 });

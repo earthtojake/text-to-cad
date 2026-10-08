@@ -162,13 +162,16 @@ export function referenceFacts(resolved, index) {
   return index?.document === "schematic" ? schematicReferenceFacts(resolved, index) : boardReferenceFacts(resolved, index);
 }
 
-/** A check KiCad (or the review) reported, for the Reference panel when its row is chosen: KiCad's own words. */
+/**
+ * A finding KiCad (or the review) reported, for the Reference panel when it is chosen in the alert
+ * card: headed by its sentence, its rows KiCad's own words.
+ */
 export function boardFindingFacts(finding, index) {
   // A schematic has no script frame: an item it cannot name reads as KiCad wrote it.
   const located = (item) => (item.at && index?.toScript ? position(index.toScript(item.at)) : item.text);
   const items = finding.items.map((item) => item.ref || located(item)).filter(Boolean);
   return {
-    heading: finding.type.replaceAll("_", " "),
+    heading: finding.summary || finding.description || finding.type.replaceAll("_", " "),
     rows: [
       ["Check", finding.check.toUpperCase()],
       ["Severity", titleCase(finding.severity)],
