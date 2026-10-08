@@ -425,7 +425,9 @@ JSON routing atlas through `json.load`, a CSV of tap sizes, a table through
 `atlas.json` and the model is stale on its own; rewrite it with identical bytes
 and it stays current, because the input is the content and not the mtime. A
 folder the model globs is recorded too, so adding or removing a profile there
-rebuilds it. Nothing is declared.
+rebuilds it. The model's own outputs in that folder do not count; another
+model's do, so a model that globs the folder its siblings build into reads stale
+once after their first build. Nothing is declared.
 
 Not inputs: a file the build writes, the model's own outputs, the Python
 environment, and system files (fonts, time zones). A program the model starts
