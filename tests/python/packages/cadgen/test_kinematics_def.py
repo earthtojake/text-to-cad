@@ -62,6 +62,10 @@ class ConstructorTests(unittest.TestCase):
                         else:
                             couple("sync", {"lift": 1}, limits=(0, value))
 
+    def test_an_unbounded_turn_names_a_finite_range_to_use_instead(self) -> None:
+        with self.assertRaisesRegex(ValueError, r"mate 'spin' limits must .*\(-180, 180\)"):
+            revolute("spin", parent="#base", child="#rotor", axis="#rotor.f1", limits=(-float("inf"), float("inf")))
+
     def test_a_mate_serializes_its_declaration(self) -> None:
         mate = revolute("elbow", parent="#upper_arm", child="#forearm",
                         axis="#forearm.pivot_bore", limits=(0, 150))
