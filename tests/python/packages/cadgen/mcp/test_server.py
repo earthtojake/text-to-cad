@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import ntpath
 import os
 import shutil
 import subprocess
@@ -19,7 +20,7 @@ from urllib.parse import quote
 from cadgen._internal.picker import FilePicker
 from cadgen.mcp.protocol import RequestContext, RpcError
 from cadgen.viewer.recents import RecentStore
-from cadgen.mcp.server import Server
+from cadgen.mcp.server import Server, local_path
 from cadgen.mcp.tunnel import MAX_REPLY_BYTES
 from cadgen.mcp.ui import AppPage
 
@@ -34,6 +35,12 @@ STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nver
 MESSAGE_BOUND = MAX_REPLY_BYTES * 4 // 3 + 4096
 # What the page's client sends with every POST: the viewer refuses one without its header.
 GUARDED = {"x-cadgen-viewer": "1", "content-type": "application/json"}
+
+
+def as_codex_spells_it(path: str) -> str:
+    """A local file's path as Codex's file tree hands it to ``cad_file``: on Windows, forward slashes
+    and a slash before the drive (``/C:/Users/...``); elsewhere, the path itself."""
+    return "/" + path.replace("\\", "/") if os.name == "nt" else path
 
 
 def offer_an_update(test: unittest.TestCase) -> None:
@@ -150,7 +157,8 @@ class TabServerTest(_Session):
         self.assertTrue(refused["isError"])
         self.assertIn("is not an absolute path", refused["content"][0]["text"])
         # A file the host hands over is shown alone: the host's own file tree is its navigation.
-        handed = self.launch("cad_file", {"file": {"name": "loose.stl", "resourceUri": "x"}}, {"openai/resource": {"path": self.loose}})
+        handed = self.launch("cad_file", {"file": {"name": "loose.stl", "resourceUri": "codex-resource://app-1"}},
+                             {"openai/resource": {"path": as_codex_spells_it(self.loose)}})
         self.assertEqual((handed["model"], handed["surface"]), (self.loose, "file"))
         # A launch adds nothing to the library: the view does, once the model is on screen.
         self.assertEqual(self.server.recents.list(), [])
@@ -470,6 +478,26 @@ class TextServerTest(_Session):
             server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
             server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": self.client}, None)
         self.assertIn("ui", {tool["name"]: tool for tool in server.handle("tools/list", {}, None)["tools"]}["cad_show"]["_meta"])
+
+
+class LocalPathTest(unittest.TestCase):
+    def test_windows_reads_a_drive_path_however_a_host_spells_it(self) -> None:
+        # Codex's file tree names a file /C:/Users/...; a file URI names the same path. Windows reads
+        # either as a folder C: on the current drive until the slash before the drive goes.
+        for spelled in ("/C:/Users/me/parts/bracket.step", "file:///C:/Users/me/parts/bracket.step",
+                        "file:///c%3A/Users/me/parts/bracket.step", "C:/Users/me/parts/bracket.step",
+                        "C:\\Users\\me\\parts\\bracket.step"):
+            path = local_path(spelled, windows=True)
+            self.assertTrue(ntpath.isabs(path), spelled)
+            self.assertEqual(ntpath.normcase(ntpath.normpath(path)), "c:\\users\\me\\parts\\bracket.step", spelled)
+        self.assertEqual(local_path("file:///C:/My%20Parts/a.step", windows=True), "C:/My Parts/a.step")
+        # A share keeps both its slashes.
+        self.assertEqual(local_path("//server/share/a.step", windows=True), "//server/share/a.step")
+
+    def test_posix_keeps_every_path_as_named(self) -> None:
+        # On POSIX /C:/x is a real absolute path: a folder named C: at the root.
+        self.assertEqual(local_path("/C:/x/a.step", windows=False), "/C:/x/a.step")
+        self.assertEqual(local_path("file:///home/me/a%20b.step", windows=False), "/home/me/a b.step")
 
 
 class ImportBudgetTest(unittest.TestCase):

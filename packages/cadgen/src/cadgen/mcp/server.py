@@ -191,13 +191,22 @@ def _data(structured: dict[str, Any]) -> dict[str, Any]:
 
 
 def file_uri_path(value: Any) -> str | None:
-    """The local path a ``file:`` URI names (``file:///C:/x`` is ``C:/x`` on Windows), else None."""
+    """The path a ``file:`` URI names (``file:///C:/x`` names ``/C:/x``), else None."""
     if not isinstance(value, str) or not value.startswith("file:"):
         return None
-    path = unquote(urlparse(value).path)
-    if os.name == "nt" and len(path) > 2 and path[0] == "/" and path[2] == ":":
+    return unquote(urlparse(value).path) or None
+
+
+def local_path(value: str, *, windows: bool = os.name == "nt") -> str:
+    """A path a caller or host named, as this machine spells it: a ``file:`` URI is the path it names,
+    ``~`` is home, and on Windows a drive path loses the slash before its drive. A file URI names
+    ``/C:/x``, and Codex on Windows spells the path of a file opened from its file tree the same way
+    (``openai/resource``: ``/C:/Users/...``); Windows reads ``/C:/x`` as a folder ``C:`` on the
+    current drive, so that slash would name a file that is not there."""
+    path = file_uri_path(value) or os.path.expanduser(value.strip())
+    if windows and len(path) > 2 and path[0] == "/" and path[1].isalpha() and path[2] == ":":
         path = path[1:]
-    return path or None
+    return path
 
 
 class Server:
@@ -481,7 +490,7 @@ class Server:
         """An existing CAD file, from the absolute path a caller named."""
         if not isinstance(value, str) or not value.strip():
             raise ToolFailed("Name a CAD file by its absolute path.")
-        path = file_uri_path(value) or os.path.expanduser(value.strip())
+        path = local_path(value)
         if not os.path.isabs(path):
             raise ToolFailed(f"{value} is not an absolute path: name the model by its absolute path.")
         path = os.path.abspath(path)
@@ -502,6 +511,8 @@ class Server:
         return _text("CAD is open.", {"launch": launch})
 
     def _tool_cad_file(self, arguments, context):
+        # Codex names the file in ``openai/resource`` (``/C:/Users/...`` on Windows: ``local_path``);
+        # its ``file.resourceUri`` is a ``codex-resource://`` handle, not a file URI.
         resource = context.meta.get("openai/resource")
         path = resource.get("path") if isinstance(resource, dict) else None
         if not path:
