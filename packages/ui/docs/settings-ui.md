@@ -280,7 +280,9 @@ plot without one is the picture alone.
   error does, and can be dismissed; its icon is red. Suggestions alone start put away: the
   amber icon in the navbar says how many, and brings the card back. Choosing a finding selects
   what it names, rings its places and puts the card away; its Reference is headed by its
-  sentence, its rows KiCad's check, severity, message and items, and Copy and Quick Edit carry
+  sentence, its rows the sentence in full (where it says more than KiCad's message), then
+  KiCad's check, severity, message and items, then what it names (with a picker over them when
+  it names several), and Copy and Quick Edit carry
   its sentence before its references. A rebuild that changes the findings is a new card: open
   again if there is something to fix, else put away with its new count. A board with nothing to
   report has no card and no icon; a failure to load, or a failed action, has the card first.

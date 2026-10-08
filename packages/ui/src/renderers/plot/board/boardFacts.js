@@ -164,7 +164,7 @@ export function referenceFacts(resolved, index) {
 
 /**
  * A finding KiCad (or the review) reported, for the Reference panel when it is chosen in the alert
- * card: headed by its sentence, its rows KiCad's own words.
+ * card: headed by its sentence, which its first row gives in full, then KiCad's own words.
  */
 export function boardFindingFacts(finding, index) {
   // A schematic has no script frame: an item it cannot name reads as KiCad wrote it.
@@ -173,6 +173,8 @@ export function boardFindingFacts(finding, index) {
   return {
     heading: finding.summary || finding.description || finding.type.replaceAll("_", " "),
     rows: [
+      // The sentence in full (the heading may be cut short), where it says more than KiCad's message.
+      ...(finding.summary && finding.summary !== finding.description ? [["Finding", finding.summary]] : []),
       ["Check", finding.check.toUpperCase()],
       ["Severity", titleCase(finding.severity)],
       ["Message", finding.description],

@@ -1,5 +1,5 @@
 import { StrictMode, useState } from 'react';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createCadClient } from '@text-to-cad/core/client';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
@@ -382,6 +382,36 @@ it('a finding in the card selects what it names, puts the card away and heads th
   const reference = pane.querySelector('[data-board-reference]')!;
   expect(reference.textContent).toContain('Clearance violation');
   expect(reference.textContent).toContain('#net:VIN, #J1.2');
+  // The heading may be cut short: the sentence is read in full in the first row, which wraps.
+  const rowOf = (label: string) => [...reference.querySelectorAll('[data-info-row]')].find((element) => element.firstElementChild?.textContent === label);
+  const sentenceRow = rowOf('Finding')!;
+  expect(sentenceRow.lastElementChild!.textContent).toBe(sentence);
+  for (const element of [sentenceRow, ...sentenceRow.querySelectorAll('*')]) expect(element.getAttribute('class') || '').not.toMatch(/\btruncate\b/);
+  expect(reference.querySelector('[data-info-row]')).toBe(sentenceRow);
+  dispose();
+});
+
+it('a finding naming several things reads its own rows, then a picker over what it names', async () => {
+  readPlot = boardWith(FINDINGS);
+  const { pane, dispose } = await open('blinky.kicad_pcb');
+  await opened(pane);
+  const sentence = 'The VIN track and the GND pad of J1 are 0.15 mm apart; the rules need 0.2 mm';
+  await act(async () => { within(await within(pane).findByRole('alert')).getByRole('button', { name: sentence }).click(); });
+  const reference = pane.querySelector('[data-board-reference]')!;
+  const labels = () => [...reference.querySelectorAll('[data-info-row]')].map((element) => element.firstElementChild!.textContent);
+  // The finding's rows, then the picker, then the browsed thing's: the last named, J1's pad 2.
+  expect(labels().slice(0, 5)).toEqual(['Finding', 'Check', 'Severity', 'Message', 'Items']);
+  const picker = within(reference as HTMLElement).getByRole('button', { name: 'Choose a reference' });
+  expect(picker.textContent).toContain('J1 · pad 2');
+  expect(picker.textContent).toContain('2/2');
+  expect(labels()).toContain('Side');
+  expect(labels()).not.toContain('Tracks');
+  await act(async () => { fireEvent.pointerDown(picker, { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  await act(async () => { (await screen.findByRole('menuitemradio', { name: 'net VIN' })).click(); });
+  await waitFor(() => expect(labels()).toContain('Tracks'));
+  expect(labels()).not.toContain('Side');
+  expect(labels().slice(0, 5)).toEqual(['Finding', 'Check', 'Severity', 'Message', 'Items']);
+  expect(pane.querySelector('[data-tool-panel-id="reference"] [data-tool-panel-heading] h3')!.textContent).toBe(sentence);
   dispose();
 });
 

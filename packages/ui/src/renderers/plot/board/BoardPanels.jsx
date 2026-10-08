@@ -165,16 +165,18 @@ export function BoardReferencePanel({ inspector, active, onCopy, copyShortcut = 
   const finding = inspector.finding ? boardFindingFacts(inspector.finding, inspector.index) : null;
   if (!items.length && !finding) return null;
   const shown = items[Math.min(browsed, items.length - 1)] || null;
-  // A finding is headed by its sentence; what it names is its Items row, and the one thing it names
-  // reads below its own rows.
-  const title = finding ? finding.heading
-    : items.length > 1 ? <ReferencePicker items={items} browsed={Math.min(browsed, items.length - 1)} onBrowse={setBrowsed} /> : shown?.heading;
-  const rows = finding ? [...finding.rows, ...(items.length === 1 ? shown.rows : [])] : shown.rows;
+  const picker = items.length > 1 ? <ReferencePicker items={items} browsed={Math.min(browsed, items.length - 1)} onBrowse={setBrowsed} /> : null;
+  // A finding is headed by its sentence, its own rows first; what it names reads below them, behind
+  // the picker when it names several things.
+  const title = finding ? finding.heading : picker || shown?.heading;
+  const row = ([label, value], at) => <InfoRow key={`${label}-${at}`} label={label}><span className="tabular-nums">{value}</span></InfoRow>;
   return <ToolPanel id="reference" title={title} label="Reference details" closeLabel="Clear selection" fit="details" resizable hidden={!active}
     onClose={inspector.clear}
     footer={items.length ? <ToolPanelFooterButton label={items.length > 1 ? "Copy All" : "Copy"} shortcut={copyShortcut} onClick={onCopy} /> : null}>
     <div className="px-2 pb-1.5" data-board-reference="">
-      {rows.map(([label, value], at) => <InfoRow key={`${label}-${at}`} label={label}><span className="tabular-nums">{value}</span></InfoRow>)}
+      {finding ? finding.rows.map(row) : null}
+      {finding && picker ? <div className="flex min-h-7 items-center" data-finding-items="">{picker}</div> : null}
+      {shown ? shown.rows.map(row) : null}
     </div>
   </ToolPanel>;
 }

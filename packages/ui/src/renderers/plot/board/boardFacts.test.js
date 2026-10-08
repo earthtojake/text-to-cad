@@ -19,6 +19,11 @@ test("a finding is headed by its sentence, then KiCad's message, then its type",
   assert.equal(boardFindingFacts({ ...finding, summary: "", description: "" }, { document: "schematic" }).heading, "pin not connected");
 });
 
+test("a finding's first row is its sentence in full, where it says more than KiCad's message", () => {
+  assert.deepEqual(boardFindingFacts(finding, { document: "schematic" }).rows[0], ["Finding", "U2 pin 7 (VDD) isn't connected to anything"]);
+  assert.deepEqual(boardFindingFacts({ ...finding, summary: "Pin not connected" }, { document: "schematic" }).rows[0], ["Check", "ERC"]);
+});
+
 test("a check copies as its sentence, then its references", () => {
   assert.equal(findingCopyText(finding, "/w/b.kicad_sch#U2.7"), "U2 pin 7 (VDD) isn't connected to anything · /w/b.kicad_sch#U2.7");
   assert.equal(findingCopyText(null, "/w/b.kicad_sch#U2.7"), "/w/b.kicad_sch#U2.7");
