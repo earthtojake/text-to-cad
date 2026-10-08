@@ -22,6 +22,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
+from cadgen._internal.glb_animation import GltfClip, Pivot  # noqa: E402
 from cadgen._internal.mesh_formats import (  # noqa: E402
     Tessellation,
     build_primitives,
@@ -220,37 +221,41 @@ class Glb(unittest.TestCase):
         self.assertEqual(5123, gltf["accessors"][indices]["componentType"])
         self.assertTrue((accessor(gltf, binary, indices) < 24).all())
 
-    def test_an_animated_file_has_a_node_per_occurrence_with_its_rest_pose_and_channels(self):
+    def test_an_animated_file_turns_its_parts_about_a_pivot_node_pair(self):
         descriptor = {"components": {"c1": {}}, "occurrences": [occurrence("o1.1"), occurrence("o1.2")]}
         primitives = build_primitives(descriptor, {"c1": cube()}, per_occurrence=True)
-        animation = {
-            "name": "turn", "times": [0.0, 0.5, 1.0],
-            "channels": [{"node": "o1.2", "rotation": [0, 0, 0, 1, 0, 0.3826834, 0, 0.9238795, 0, 0.7071068, 0, 0.7071068]}],
-            "rest": {"o1.2": {"translation": [0.0, 0.0, 0.0], "rotation": [0.0, 0.0, 0.0, 1.0], "scale": None}},
-        }
-        gltf, binary = read_glb(glb_bytes(primitives, name="part", animation=animation))
+        half = [0.0, 0.3826834, 0.0, 0.9238795]
+        pivot = Pivot(members=("o1.2",), times=[0.0, 0.5, 1.0], translations=[0.01, 0.0, 0.0] * 3,
+                      rotations=[0.0, 0.0, 0.0, 1.0, *half, 0.0, 0.7071068, 0.0, 0.7071068],
+                      child_translation=[-0.01, 0.0, 0.0])
+        gltf, binary = read_glb(glb_bytes(primitives, name="part", animation=GltfClip("turn", 1.0, pivots=[pivot])))
         nodes = gltf["nodes"]
-        self.assertEqual(["o1_1", "o1_2"], [node["name"] for node in nodes])
-        self.assertEqual(["o1.1", "o1.2"], [node["extras"]["cadOccurrenceId"] for node in nodes])
-        self.assertNotIn("rotation", nodes[0])
-        self.assertEqual([0.0, 0.0, 0.0, 1.0], nodes[1]["rotation"])
+        self.assertEqual(["o1_1", "o1_2", "pivot 0 offset", "pivot 0"], [node["name"] for node in nodes])
+        self.assertEqual(["o1.1", "o1.2"], [node["extras"]["cadOccurrenceId"] for node in nodes[:2]])
+        # The part sits under the -pivot node, which sits under the pivot at its rest pose.
+        self.assertEqual(([1], [-0.01, 0.0, 0.0]), (nodes[2]["children"], nodes[2]["translation"]))
+        self.assertEqual(([2], [0.01, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]),
+                         (nodes[3]["children"], nodes[3]["translation"], nodes[3]["rotation"]))
+        self.assertEqual([0, 3], gltf["scenes"][0]["nodes"])
         (clip,) = gltf["animations"]
         self.assertEqual("turn", clip["name"])
-        self.assertEqual([{"sampler": 0, "target": {"node": 1, "path": "rotation"}}], clip["channels"])
-        (sampler,) = clip["samplers"]
-        self.assertEqual("LINEAR", sampler["interpolation"])
-        times = gltf["accessors"][sampler["input"]]
+        self.assertEqual([{"node": 3, "path": "translation"}, {"node": 3, "path": "rotation"}],
+                         [channel["target"] for channel in clip["channels"]])
+        rotation = clip["samplers"][clip["channels"][1]["sampler"]]
+        self.assertEqual("LINEAR", rotation["interpolation"])
+        times = gltf["accessors"][rotation["input"]]
         self.assertEqual(([0.0], [1.0], 3), (times["min"], times["max"], times["count"]))
-        self.assertEqual(("VEC4", 3), (gltf["accessors"][sampler["output"]]["type"],
-                                       gltf["accessors"][sampler["output"]]["count"]))
-        self.assertAlmostEqual(0.3826834, float(accessor(gltf, binary, sampler["output"])[5]), places=6)
+        self.assertEqual(("VEC4", 3), (gltf["accessors"][rotation["output"]]["type"],
+                                       gltf["accessors"][rotation["output"]]["count"]))
+        self.assertAlmostEqual(0.3826834, float(accessor(gltf, binary, rotation["output"])[5]), places=6)
 
-    def test_a_channel_for_a_node_the_file_does_not_hold_is_refused(self):
+    def test_a_pivot_carrying_a_part_the_file_does_not_hold_is_refused(self):
         primitives = build_primitives({"components": {"c1": {}}, "occurrences": [occurrence("o1")]},
                                       {"c1": cube()}, per_occurrence=True)
-        with self.assertRaisesRegex(ValueError, "no primitive declared"):
-            glb_bytes(primitives, animation={"name": "x", "times": [0, 1], "rest": {},
-                                             "channels": [{"node": "o9", "translation": [0] * 6}]})
+        pivot = Pivot(members=("o9",), times=[0.0, 1.0], translations=[0.0] * 6, rotations=[0.0, 0.0, 0.0, 1.0] * 2,
+                      child_translation=[0.0, 0.0, 0.0])
+        with self.assertRaisesRegex(ValueError, "carries 'o9', which no primitive declared"):
+            glb_bytes(primitives, animation=GltfClip("x", 1.0, pivots=[pivot]))
 
 
 class Determinism(unittest.TestCase):

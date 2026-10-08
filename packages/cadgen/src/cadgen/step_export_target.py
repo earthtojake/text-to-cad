@@ -178,35 +178,30 @@ def _baked_animations(payload: dict) -> "dict[Path, dict]":
 def _ledgered_animation(job: "MeshExportJob") -> "dict | None":
     """What a SKIPPED animated GLB carries, read off the request that wrote it.
 
-    A job the ledger satisfied was never sampled, so the engine's summary does
+    A job the ledger satisfied was never rewritten, so the engine's summary does
     not exist — but the file at that path is the one this request produced, and
     reporting ``None`` for it would say "static export" (what a null animation
     means, results.MeshExportFile) about a file with a clip baked into it. The
-    sample and moving counts stay absent because nothing on this side knows
-    them; the clip and the schedule are the request's own."""
+    counts stay absent because nothing on this side knows them; the clip and
+    the span are the request's own."""
     if job.animation is None:
         return None
     return {
         "clip": job.animation.get("clip"),
-        "fps": job.animation.get("fps"),
-        "samples": None,
         "seconds": job.animation.get("seconds"),
         "start": job.animation.get("start"),
-        "channels": None,
+        "pivots": None,
+        "skins": None,
+        "joints": None,
     }
 
 
 def _bakes_effects_static(job: "MeshExportJob") -> bool:
-    """Whether this request told the sampler to FREEZE something — the only case
-    where a skipped export has warnings it is not repeating.
-
-    ``drop`` bakes an effect's value at start; ``deform: "rest"`` ships a moving
-    tube at its rest shape. Both leave named occurrences standing still in a file
-    that otherwise moves. ``deform: "morph"`` freezes nothing — it bakes the
-    deformation as morph targets, which is why it exists — and ``refuse`` never
-    produced a file at all."""
-    request = job.animation or {}
-    return bool(request.get("drop")) or request.get("deform") == "rest"
+    """Whether this request told the export to FREEZE something -- the only case
+    where a skipped export has warnings it is not repeating: ``drop`` bakes an
+    effect's value at start, leaving named occurrences standing still in a file that
+    otherwise moves."""
+    return bool((job.animation or {}).get("drop"))
 
 
 def _resolve_export_output(fmt: str, raw: str | Path | None, *, document: Path) -> Path:
@@ -351,7 +346,7 @@ def export_cad_target(
             if summary is not None and _bakes_effects_static(job):
                 warnings.append(
                     f"{job.out.name} is current for clip {summary['clip']}: a skipped export "
-                    "re-samples nothing, so the occurrences its drop/deform froze are not "
+                    "rewrites nothing, so the occurrences its drop froze are not "
                     "named again — re-run with --force to hear them"
                 )
         files.append(

@@ -88,53 +88,31 @@ class BuildResult:
         return [f"{head} {_display(self.document) if self.document else (self.tree or '')}"]
 
 
-def _format_bytes(value: float) -> str:
-    """GiB past a gigabyte, MiB below it. Matches the morph bake's own refusal."""
-    if value >= 1024 ** 3:
-        return f"{value / 1024 ** 3:.2f} GiB"
-    return f"{value / 1024 ** 2:.1f} MiB"
-
-
 def _animation_summary(animation: dict | None) -> str:
-    """`` (showcase, 120 samples @ 30 fps, 4s, 3 moving)`` — what a GLB carries.
+    """`` (showcase, 4s, 3 moving, 1 tube on 11 joints)`` -- what a GLB carries.
 
-    Empty for a static export. The moving count is what catches the clip that
-    resolved but animated nothing: a typo'd label throws, but a clip whose
-    targets all sit still exports a file that plays and does not move.
+    Empty for a static export. The moving count -- the clip's pivots, each a set of
+    parts that move as one -- is what catches the clip that resolved but animated
+    nothing: a typo'd label throws, but a clip whose targets all sit still exports a
+    file that plays and does not move. A bending tube is a skin, counted with its
+    joints, because they are what the file carries for it.
 
-    A morph bake adds its own clause, because without it the line is misleading
-    twice over: a deforming tube's weights channel counts toward ``moving`` the
-    same as a part that travels, so 48 baked tendons read as 48 occurrences on
-    the move — and the numbers that decide whether the file is any GOOD (how many
-    targets it cost, how close they track, and the playback texture that has to
-    fit on a GPU) would appear nowhere a human looks.
-
-    A file the LEDGER served was not re-sampled, so only the request is known and
-    the counts it cannot answer are simply absent: `` (showcase, 30 fps)``.
-    Printing nothing there would report a clip-carrying file as static.
+    A file the LEDGER served was not rewritten, so only the request is known and the
+    counts it cannot answer are absent: `` (showcase)``. Printing nothing there would
+    report a clip-carrying file as static.
     """
     if not animation:
         return ""
     parts = [str(animation.get("clip"))]
-    samples = animation.get("samples")
-    parts.append(
-        f"{animation.get('fps')} fps" if samples is None
-        else f"{samples} samples @ {animation.get('fps')} fps"
-    )
     seconds = animation.get("seconds")
     if seconds is not None:
         parts.append(f"{float(seconds):g}s")
-    channels = animation.get("channels")
-    if channels is not None:
-        parts.append(f"{channels} moving")
-    deform = animation.get("deform")
-    if isinstance(deform, dict):
-        parts.append(
-            f"{deform.get('mode')} on {deform.get('nodes')} of them: "
-            f"{deform.get('targets')} targets, "
-            f"{float(deform.get('deviationMm', 0)):g}mm of {float(deform.get('toleranceMm', 0)):g}mm, "
-            f"{_format_bytes(float(deform.get('runtimeBytes', 0)))} at playback"
-        )
+    pivots = animation.get("pivots")
+    if pivots is not None:
+        parts.append(f"{pivots} moving")
+    skins = animation.get("skins")
+    if skins:
+        parts.append(f"{skins} tube{'' if skins == 1 else 's'} on {animation.get('joints')} joints")
     return f" ({', '.join(parts)})"
 
 
@@ -152,13 +130,12 @@ class MeshExportFile:
     #: A door reads no model declaration.
     mesh_tolerance: float | None = None
     mesh_angular_tolerance: float | None = None
-    #: The clip baked into this file, for an animated GLB: ``{clip, fps,
-    #: samples, seconds, start, channels}``. ``None`` for a static export, which
-    #: is every other file this door writes. Reported because the schedule is
-    #: DERIVED — a clip states its own duration — so a wrong clip or a wrong
-    #: span shows up without opening the file. A ``skipped`` file was not
-    #: re-sampled, so ``samples`` and ``channels`` are ``None`` there: the clip
-    #: and the request's own schedule are all this side knows.
+    #: The clip baked into this file, for an animated GLB: ``{clip, seconds, start,
+    #: pivots, skins, joints}``. ``None`` for a static export, which is every other
+    #: file this door writes. Reported because the span is DERIVED -- a clip states
+    #: its own duration -- so a wrong clip or a wrong span shows up without opening
+    #: the file. A ``skipped`` file was not rewritten, so the counts are ``None``
+    #: there: the clip and the request's own span are all this side knows.
     animation: dict | None = None
 
 

@@ -5,9 +5,9 @@ declaration produced by a model-script run, or an ad-hoc `cadgen stl|3mf|glb
 build` — funnels through :func:`run_mesh_exporter`, so the front doors cannot
 drift: the document's tree, the store's mesh of each component at each distinct
 tolerance pair, and every format serialized from those same meshes
-(``cadgen._internal.mesh_formats``; a clip is sampled by
-``cadgen._internal.glb_animation``, its deforming tubes baked into morph targets
-by ``cadgen._internal.tube_morph``). The meshes are OCCT's, of each component's
+(``cadgen._internal.mesh_formats``; a clip's keys go in as glTF animation by
+``cadgen._internal.glb_animation``, a bending tube as a skin by
+``cadgen._internal.tube_skin``). The meshes are OCCT's, of each component's
 exact BREP, derived in the build pool when the store lacks them -- the ones the
 CAD Viewer and snapshots draw. Nothing here spawns a process of its own.
 
@@ -147,9 +147,8 @@ def _check_jobs(jobs: "list[MeshExportJob]", pairs: list, animation_source: Anim
 
 def _export(source: MeshSource, jobs: "list[MeshExportJob]", pairs: list, *, name: str,
             default_color: str | None, animation_source: AnimationSnapshot | None, appearance: object) -> dict:
-    from cadgen._internal import glb_animation, tube_morph
+    from cadgen._internal import glb_animation
     from cadgen._internal.atomic_replace import write_bytes_atomic
-    from cadgen._internal.mesh_animation import DEFAULT_MORPH_TOLERANCE_MM
     from cadgen._internal.mesh_formats import (
         build_primitives,
         decode_tessellation,
@@ -178,39 +177,25 @@ def _export(source: MeshSource, jobs: "list[MeshExportJob]", pairs: list, *, nam
             clip_data = None
             if job.animation is not None:
                 clip = glb_animation.find_clip(animation, str(job.animation["clip"]))
-                plan = glb_animation.resolve_frame_plan(job.animation, clip)
-                sampled = glb_animation.sample_clip(
-                    clip, plan, drop=job.animation.get("drop") or (), deform=job.animation.get("deform") or "refuse")
-                # The bake runs BEFORE the primitive build because it replaces a
-                # deforming tube's geometry outright: the base its targets are deltas
-                # against is the REFINED, POSED tube, not the rest tessellation.
-                morph = tube_morph.build_tube_morph_targets(
-                    descriptor, tessellations, sampled.deformations, grid=sampled.grid,
-                    tolerance_mm=job.animation.get("deformTolerance") or DEFAULT_MORPH_TOLERANCE_MM,
-                    default_color=default_color, clip_id=sampled.name,
-                )
+                window = glb_animation.resolve_window(job.animation, clip)
+                gltf_clip = glb_animation.clip_to_gltf(clip, window, drop=job.animation.get("drop") or ())
+                # A bending tube's own primitives: its mesh refined and bound to its
+                # skin, in place of the rest tessellation the build would place.
                 primitives = build_primitives(
                     descriptor, tessellations, default_color=default_color, per_occurrence=True,
-                    hidden=sampled.hidden, opacity=sampled.opacity, overrides=morph.overrides,
+                    hidden=gltf_clip.hidden, opacity=gltf_clip.opacity,
+                    overrides=_skinned_tubes(descriptor, tessellations, gltf_clip, default_color),
                 )
                 # The clip names the DOCUMENT's occurrences, the file holds what
                 # meshed: an occurrence with no geometry is a named warning, never
-                # a channel that targets nothing.
-                sampled = glb_animation.restrict_to_nodes(
-                    glb_animation.with_morph_channels(sampled, morph.channels),
-                    {primitive.node for primitive in primitives if primitive.node})
-                clip_data = sampled.gltf()
+                # a node that carries nothing.
+                clip_data = glb_animation.restrict_to_nodes(
+                    gltf_clip, {primitive.node for primitive in primitives if primitive.node})
                 summary = {
-                    "clip": sampled.name, "fps": plan.fps, "samples": plan.frame_count,
-                    "seconds": plan.seconds, "start": plan.start, "channels": len(sampled.channels),
-                    **({"deform": {
-                        "mode": "morph", "nodes": morph.stats["nodes"], "targets": morph.stats["targets"],
-                        "bytes": morph.stats["bytes"], "runtimeBytes": morph.stats["runtimeBytes"],
-                        "refinedTriangles": morph.stats["refinedTriangles"],
-                        "deviationMm": round(morph.stats["deviationMm"], 4),
-                        "toleranceMm": morph.stats["toleranceMm"], "fitGridHz": sampled.grid.hz,
-                    }} if morph.stats else {}),
-                    "warnings": [*plan.warnings, *sampled.warnings, *morph.warnings],
+                    "clip": clip_data.name, "seconds": window.seconds, "start": window.start,
+                    "pivots": len(clip_data.pivots), "skins": len(clip_data.skins),
+                    "joints": sum(len(skin.fractions) for skin in clip_data.skins),
+                    "warnings": list(clip_data.warnings),
                 }
             else:
                 if static is None:
@@ -227,6 +212,46 @@ def _export(source: MeshSource, jobs: "list[MeshExportJob]", pairs: list, *, nam
             files[index] = {"path": str(job.out), "format": job.fmt, "triangleCount": triangles,
                             **({"animation": summary} if summary is not None else {})}
     return {"ok": True, "files": files}
+
+
+def _skinned_tubes(descriptor: dict, tessellations: dict, clip: Any, default_color: str | None) -> dict:
+    """Each bending tube's primitives, keyed by occurrence: its placed mesh refined and
+    bound to its skin (``tube_skin.bind``), one primitive per face colour."""
+    import numpy as np
+
+    from cadgen._internal import tube_deformation, tube_skin
+    from cadgen._internal.mesh_formats import Primitive, occurrence_colors, occurrence_world_mesh
+
+    occurrences = {str(occurrence.get("id")): occurrence for occurrence in descriptor.get("occurrences") or []}
+    overrides: dict[str, list] = {}
+    for index, skin in enumerate(clip.skins):
+        rest = tube_skin.compile_rest(skin.rest_path)
+        for member in skin.members:
+            occurrence = occurrences.get(member)
+            tessellation = tessellations.get(str((occurrence or {}).get("component") or ""))
+            if occurrence is None or tessellation is None:
+                continue
+            positions, normals, triangles, ranges = occurrence_world_mesh(occurrence, tessellation)
+            if not len(triangles):
+                continue
+            bound = tube_skin.bind(tube_deformation.RestMesh(
+                positions.astype(np.float32), normals.astype(np.float32), triangles.reshape(-1).astype(np.uint32),
+            ), rest, skin.spacing, skin.fractions)
+            refined = bound.indices.reshape(-1, 3)
+            source = (bound.source_triangles if bound.source_triangles is not None
+                      else np.arange(len(refined), dtype=np.int64))
+            colors = occurrence_colors(descriptor, occurrence, tessellation, default_color)
+            triangle_colors = np.asarray([colors[int(face)] for face in ranges[source]])
+            primitives = []
+            for color in sorted(set(triangle_colors.tolist())):
+                used, local = np.unique(refined[triangle_colors == color], return_inverse=True)
+                primitives.append(Primitive(
+                    color=color, positions=bound.positions[used], normals=bound.normals[used],
+                    indices=local.astype(np.uint32).reshape(-1), joints=bound.joints[used],
+                    weights=bound.weights[used], skin=index,
+                ))
+            overrides[member] = primitives
+    return overrides
 
 
 def _used_components(descriptor: dict) -> list[str]:

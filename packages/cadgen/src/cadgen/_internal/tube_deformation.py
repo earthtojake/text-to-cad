@@ -1,35 +1,21 @@
-"""Tube deformation, headless: the half of the runtime a GLB morph bake needs.
+"""Tube deformation: cadgen's one tube engine.
 
-The CAD Viewer and snapshots DRIVE a tube track (``@text-to-cad/core``
-``common/tubeDeformation.js``): every frame they compile the posed centerline
-and re-emit every vertex of the rest mesh on it. A GLB carries no evaluator, so
-an export bakes those poses into morph targets (``tube_morph``), and every pose
-it bakes must be the one the viewer draws. This module is the runtime's headless
-half -- its ``prepareTubeBake`` and ``poseTubeBake`` and everything under them --
-step for step:
+A tube track (``animation_bake``) keys a tube's centerline. Nothing else in the
+product works out where a tube is: this compiles a key's centerline, and
+``tube_skin`` turns it into the joints of a glTF skin that every CAD view, every
+snapshot and the animated GLB export play as glTF plays a skin. What lives here:
 
 - the path compiler: line, arc and cubic Bezier segments, Bezier arc length by
   adaptive five-point Gauss-Legendre quadrature, normals carried by parallel
-  transport, a key that maps its rest compiled on the rest's own parameters, and
-  the path between two such keys blended from their tables;
+  transport, a key that maps its rest compiled on the rest's own parameters;
 - the projection of every rest vertex onto the rest centerline;
 - the refinement that splits the rest mesh into bands of at most
-  ``maxSegmentLength`` of rest arc length;
-- the pose: each vertex re-emitted on the posed path, its normal carried by the
-  deformation's inverse-transpose, a pinched bend pulled back inside its centre.
+  ``maxSegmentLength`` of rest arc length.
 
-Where the runtime loops over vertices, frames, table entries or segments, this
-works on numpy arrays over all of them at once, mostly in the same elementwise
-arithmetic in the same order. Where the runtime carries a normal one rotation at
-a time, this composes the rotations (a prefix scan of their quaternions, or
-Rodrigues' formula read off two tangents), and the two part by rounding: the
-fifteenth digit of a frame, the float32 rounding of a vertex.
-``tubeDeformation.parity.json`` beside the JavaScript holds rest meshes and the
-poses both must make of them, the refined topology exactly: the JavaScript half
-is pinned by ``tubeDeformation.parity.test.js``, this one by
-``test_tube_deformation.py``. Measured on a 24,000-vertex coil spring compressing
-through 237 grid samples, the bake runs as fast as the runtime's did in Node,
-some 15 s, and fits the same keys to the same deviation.
+Everything works on numpy arrays over all vertices, frames, table entries or
+segments at once; a normal is carried down a path by composing its turns (a prefix
+scan of their quaternions, or Rodrigues' formula read off two tangents). Pinned by
+``test_tube_deformation.py``.
 
 Coordinates are the document's millimetres before occurrence animation; the
 caller places the rest mesh in the space the paths are authored in.
@@ -47,10 +33,6 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 EPS = 1e-7
-# How much of the local curvature radius a POSED surface may reach: an
-# interpolated centerline may pinch for an instant where an authored one may not,
-# and the surface is pulled back to keep 5% of the radius rather than refused.
-TUBE_PINCH_FLOOR = 0.05
 MAX_REFINED_TRIANGLES = 700_000
 COMPILED_PATH_CACHE_SIZE = 128
 # Every Bezier table is split at least this finely before quadrature decides.
@@ -65,11 +47,11 @@ _SEGMENT_KEYS = {
     "arc": ("kind", "center", "axis", "start", "sweepDeg"),
     "bezier": ("kind", "points"),
 }
-_DEFORMATION_KEYS = ("rest", "path", "twistDeg", "maxSegmentLength", "braid", "mapsRest", "between")
+_DEFORMATION_KEYS = ("rest", "path", "twistDeg", "maxSegmentLength", "braid", "mapsRest")
 
 
 class TubeDeformationError(ValueError):
-    """A path or deformation the runtime refuses, in the runtime's words."""
+    """A path or deformation cadgen refuses, and why."""
 
 
 def _fail(message: str):
@@ -79,7 +61,7 @@ def _fail(message: str):
 # --- three-vectors -------------------------------------------------------------
 #
 # Scalars as tuples for what a path compiles once, numpy (n, 3) arrays for what it
-# does per vertex or per sample. A dot starts from 0 as the runtime's does.
+# does per vertex or per sample. A dot starts from 0, so -0 never leaks out of one.
 
 
 def _add(a, b):
@@ -161,9 +143,8 @@ def _carry(normal: np.ndarray, frm: np.ndarray, to: np.ndarray) -> np.ndarray:
     """Parallel transport for a batch, without trigonometry: the turn from unit ``frm``
     to unit ``to`` about ``a = frm x to`` takes ``n`` to
     ``n c + a x n + a (a . n) / (1 + c)`` with ``c = frm . to`` -- Rodrigues' formula
-    with the sine and cosine of the turn read off the two tangents. It parts from
-    the runtime's atan2/cos/sin by rounding, and a turn below EPS leaves the normal
-    as it is, as there."""
+    with the sine and cosine of the turn read off the two tangents. A turn below EPS
+    leaves the normal as it is."""
     axis = _vcross(frm, to)
     sine = _vlength(axis)
     cosine = _vdot(frm, to)
@@ -316,7 +297,7 @@ class Path:
     def __post_init__(self) -> None:
         self.offsets = np.array([segment.offset for segment in self.segments])
         self.lengths = np.array([segment.length for segment in self.segments])
-        # Each segment's end as the runtime compares it: offset + length.
+        # Each segment's end as every lookup compares it: offset + length.
         self.ends = np.array([segment.offset + segment.length for segment in self.segments])
         self._arrays: _PathArrays | None = None
 
@@ -457,14 +438,13 @@ def _set_table(segment: Segment, t: np.ndarray, s: np.ndarray, tangents: np.ndar
 
 
 def _adaptive_tables(nets: np.ndarray) -> list:
-    """The runtime's adaptive table of each net: split until a piece's quadrature
-    agrees with its halves' and its tangent turns by less than 0.0081 degrees.
+    """The adaptive table of each net: split until a piece's quadrature agrees with
+    its halves' and its tangent turns by less than 0.0081 degrees.
 
-    The runtime recurses depth first, one curve at a time; this splits every curve
-    a whole level at a time. The pieces kept are the same, in the same order, and a
-    curve's first failure in the runtime's order is its one with the least
-    parameter. Each entry is ``(t, s, tangents)`` without the first row, or the
-    failure's message."""
+    Every curve splits a whole level at a time; the pieces kept are those a depth-
+    first recursion would keep, in its order, and a curve's first failure is its
+    one with the least parameter. Each entry is ``(t, s, tangents)`` without the
+    first row, or the failure's message."""
     count = len(nets)
     k = np.arange(_FORCED_INTERVALS, dtype=np.float64)
     owner = np.repeat(np.arange(count), _FORCED_INTERVALS)
@@ -512,7 +492,7 @@ def _adaptive_tables(nets: np.ndarray) -> list:
             out.append(failures[curve][1])
             continue
         rows = slice(bounds[curve], bounds[curve + 1])
-        # s[i] = (s[i-1] + left) + right, as the runtime adds them.
+        # s[i] = (s[i-1] + left) + right: each piece's halves added in turn.
         halves = np.empty(2 * (bounds[curve + 1] - bounds[curve]))
         halves[0::2] = lefts[rows]
         halves[1::2] = rights[rows]
@@ -525,7 +505,7 @@ def _image_tables(nets: np.ndarray, parameters: list, first_tangents: np.ndarray
     curve's parameters: an affine image is the same polynomial in the same
     parameter, so the pieces chosen for the original serve it, each integrated
     once. Each entry is ``(t, s, tangents)`` without the first row, or the message
-    of the first failure the runtime's walk over the entries meets."""
+    of the first failure a walk over the entries meets."""
     counts = [len(table) - 1 for table in parameters]
     owner = np.repeat(np.arange(len(nets)), counts)
     t = np.concatenate([table[1:] for table in parameters])
@@ -552,7 +532,7 @@ def _image_tables(nets: np.ndarray, parameters: list, first_tangents: np.ndarray
 
 def _turns(frm: np.ndarray, to: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """(quaternion of the minimal turn from each unit ``frm`` to ``to``, whether it
-    reverses). A turn below EPS is none, as the runtime's transport has it."""
+    reverses). A turn below EPS is none, as transport has it (:func:`_carry`)."""
     axis = _vcross(frm, to)
     sine = _vlength(axis)
     cosine = _vdot(frm, to)
@@ -575,10 +555,9 @@ def _rotate_by(normal: np.ndarray, turns: np.ndarray) -> np.ndarray:
 
 
 def _carried(seed, steps: np.ndarray) -> np.ndarray:
-    """The normal at every node of a chain of turns from ``seed``: the runtime
-    carries it one turn at a time, each a rotation of the last; a prefix scan of
-    the turns' quaternions forms every partial product in log2(n) array steps, and
-    the two part by rounding, a few units in the fifteenth digit."""
+    """The normal at every node of a chain of turns from ``seed``: a prefix scan of
+    the turns' quaternions forms every partial product in log2(n) array steps
+    instead of carrying it one turn at a time."""
     nodes = np.empty((len(steps) + 1, 3))
     nodes[0] = seed
     if not len(steps):
@@ -776,12 +755,11 @@ def compile_tube_path(raw: object, image: Path | None = None, *, canonical: bool
     parameters rather than split adaptively again. ``canonical`` says ``raw`` is a
     normalized deformation's spec, already checked.
 
-    The runtime compiles a segment at a time, each normal carried in from the
-    segment before; this tabulates every segment as one batch and carries the
-    normal down the whole path in one chain of turns. Failures are collected in
-    the runtime's order -- by segment, and within one: its own numbers, the gap
-    before it, the frame at the end of the one before, the corner there, the seed
-    normal, its table -- and the first is the one raised."""
+    Every segment tabulates as one batch and the normal is carried down the whole
+    path in one chain of turns. Failures are collected in the path's order -- by
+    segment, and within one: its own numbers, the gap before it, the frame at the
+    end of the one before, the corner there, the seed normal, its table -- and the
+    first is the one raised."""
     seed = list(raw["normal"]) if canonical else _path_spec_normal(raw)  # type: ignore[index]
     errors: list[tuple[int, int, str]] = []
     segments: list[Segment] = []
@@ -909,53 +887,9 @@ def compile_tube_path(raw: object, image: Path | None = None, *, canonical: bool
     return Path(segments, total)
 
 
-def blend_key_paths(raw: Mapping[str, Any], frm: Path, to: Path, u: float) -> Path:
-    """The path between two keys that both map the rest, from the keys' own tables.
-
-    Both were built on the rest's parameters, so they pair entry for entry: each
-    entry's arc length is the keys' lerped, its tangent this path's own, and its
-    normal the keys' blended and squared to that tangent. Every segment's entries
-    are worked as one batch."""
-    v = 1 - u
-    segments = [_compile_segment(spec, index, canonical=True) for index, spec in enumerate(raw["segments"])]
-    a, b = frm.arrays, to.arrays
-    tangents = np.array([segment.tangent for segment in segments])
-    n = a.normal * v + b.normal * u
-    starts = _units(n - tangents * _vdot(n, tangents)[:, None], "blended normal")
-    for segment, normal in zip(segments, starts):
-        segment.normal = tuple(normal)
-    curves = [index for index, segment in enumerate(segments) if segment.kind == "bezier"]
-    if curves:
-        counts = a.table_count[curves] - 1
-        entries = np.concatenate([np.arange(a.table_start[index] + 1, a.table_start[index] + a.table_count[index])
-                                  for index in curves])
-        owner = np.repeat(np.arange(len(curves)), counts)
-        t = a.table_t[entries]
-        nets = np.stack([segments[index].points for index in curves])
-        directions = _units(_bezier_derivative(nets[owner], t), "Bezier tangent")
-        lengths = a.table_s[entries] * v + b.table_s[entries] * u
-        blended = a.table_normal[entries] * v + b.table_normal[entries] * u
-        normals = _units(blended - directions * _vdot(blended, directions)[:, None], "blended normal")
-        bounds = np.concatenate([[0], np.cumsum(counts)])
-        for position, index in enumerate(curves):
-            rows = slice(bounds[position], bounds[position + 1])
-            segment = segments[index]
-            _set_table(
-                segment, np.concatenate([[0.0], t[rows]]), np.concatenate([[0.0], lengths[rows]]),
-                np.vstack([np.asarray(segment.tangent), directions[rows]]),
-                np.vstack([np.asarray(segment.normal), normals[rows]]),
-            )
-    total = 0.0
-    for segment in segments:
-        segment.offset = total
-        _segment_bounds(segment)
-        total += segment.length
-    return Path(segments, total)
-
-
 def sample_frames(path: Path, distances: np.ndarray) -> Frames:
     """Exact frames at arc lengths along ``path``; past either end the end frame
-    extrapolates along its tangent, as the runtime's does. One batch across every
+    extrapolates along its tangent. One batch across every
     segment: each sample gathers its own segment's numbers."""
     distance = np.asarray(distances, dtype=np.float64).reshape(-1)
     if not np.all(np.isfinite(distance)):
@@ -1017,7 +951,7 @@ def _table_points(segment: Segment) -> np.ndarray:
 def _newton_closest(points: np.ndarray, p: np.ndarray, t0: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> np.ndarray:
     """Newton on g(t) = (B(t) - p) . B'(t) from the nearest table sample, kept in its
     bracket. NaN where g is not increasing there or it does not converge: the
-    bracketing search below then decides, as the runtime's does."""
+    bracketing search below then decides."""
     a, b, c, d = points
     t = np.array(t0, dtype=np.float64, copy=True)
     result = np.full(len(t), np.nan)
@@ -1119,8 +1053,8 @@ class _Closest:
 
 def _closest_on_path(path: Path, p: np.ndarray) -> _Closest:
     """Each point's closest segment, visiting segments nearest-bound first and
-    stopping where a bound passes the best distance found, as the runtime does:
-    a tie keeps the segment visited first."""
+    stopping where a bound passes the best distance found: a tie keeps the segment
+    visited first."""
     count = len(p)
     segments = path.segments
     bounds = np.empty((count, len(segments)))
@@ -1214,9 +1148,7 @@ class Deformation:
     """A tube's pose as NUMBERS, validated and owned: never a compiled path.
 
     ``maps_rest`` says the path is the rest under one affine map, segment for
-    segment, so it compiles on the rest's parameters. ``between`` is ``(from, to,
-    u)``: two such keys and how far this path is from one to the other, so it
-    compiles by blending their tables."""
+    segment, so it compiles on the rest's parameters."""
 
     rest_spec: dict
     path_spec: dict
@@ -1224,44 +1156,16 @@ class Deformation:
     max_segment_length: float
     braid: dict | None = None
     maps_rest: bool = False
-    between: tuple | None = None
-
-
-def _same_numbers(a: object, b: object) -> bool:
-    return a is b or a == b
-
-
-def same_tube_deformation(a: Deformation | None, b: Deformation | None) -> bool:
-    """Do two deformations pose a tube identically? By value, never identity."""
-    if a is b:
-        return True
-    if a is None or b is None:
-        return False
-    return (a.twist_deg == b.twist_deg and a.max_segment_length == b.max_segment_length
-            and _same_numbers(a.braid, b.braid) and _same_numbers(a.rest_spec, b.rest_spec)
-            and _same_numbers(a.path_spec, b.path_spec))
-
-
-def same_tube_rest_shape(a: Deformation, b: Deformation) -> bool:
-    """Do two deformations share the rest shape the refined base mesh is OF?"""
-    return a.max_segment_length == b.max_segment_length and _same_numbers(a.rest_spec, b.rest_spec)
 
 
 def normalize_tube_deformation(spec: Mapping[str, Any], *, rest_spec: dict | None = None) -> Deformation:
     """A deformation spec, validated: ``{rest, path, twistDeg?, maxSegmentLength?,
-    braid?, mapsRest?, between?}`` with ``between`` as ``(from, to, u)`` over two
-    normalized keys. Compiles nothing.
+    braid?, mapsRest?}``. Compiles nothing.
 
     ``rest_spec`` is ``spec["rest"]`` already canonical (``canonical_path_spec``),
     for a caller posing one tube many times: every deformation it makes then
     shares that one copy."""
     _keys(spec, _DEFORMATION_KEYS, "deformation")
-    between = spec.get("between")
-    if between:
-        frm, to, u = between
-        if not isinstance(frm, Deformation) or not isinstance(to, Deformation) or not _number(u) or not 0 <= u <= 1:
-            _fail("between needs two normalized key deformations and a fraction from 0 to 1")
-        between = (frm, to, float(u))
     twist = spec.get("twistDeg")
     twist = 0.0 if twist is None else twist
     if not _number(twist):
@@ -1288,7 +1192,6 @@ def normalize_tube_deformation(spec: Mapping[str, Any], *, rest_spec: dict | Non
         max_segment_length=float(step),
         braid=braid,
         maps_rest=bool(spec.get("mapsRest")),
-        between=between or None,
     )
 
 
@@ -1311,7 +1214,6 @@ class CompiledDeformation:
 
 _compiled_paths: "OrderedDict[tuple, Path]" = OrderedDict()
 _compile_lock = threading.Lock()
-_last_blend: list = [None, None]
 
 
 def _spec_key(spec: Mapping[str, Any]) -> str:
@@ -1338,28 +1240,18 @@ def compile_deformation(deformation: Deformation) -> CompiledDeformation:
     """Resolve a deformation's two paths. Never memoised onto the deformation: a
     bake holds a sample per grid step, and a sample that held its tables would hold
     hundreds of kilobytes."""
-    rest_key = _spec_key(deformation.rest_spec)
     rest = _cached_compile(deformation.rest_spec)
-    if deformation.between is None:
-        image = rest if deformation.maps_rest else None
-        return CompiledDeformation(deformation, rest, _cached_compile(deformation.path_spec, image, rest_key))
-    with _compile_lock:
-        last, blended = _last_blend
-    if last is not deformation:
-        frm, to, u = deformation.between
-        a = _cached_compile(frm.path_spec, rest, rest_key)
-        b = _cached_compile(to.path_spec, rest, rest_key)
-        blended = blend_key_paths(deformation.path_spec, a, b, u)
-        with _compile_lock:
-            _last_blend[:] = [deformation, blended]
-    return CompiledDeformation(deformation, rest, blended)
+    image = rest if deformation.maps_rest else None
+    path = _cached_compile(deformation.path_spec, image, _spec_key(deformation.rest_spec))
+    return CompiledDeformation(deformation, rest, path)
 
 
 # --- the rest mesh: refine, map, pose --------------------------------------------
 
 
-def _js_round(value: float) -> int:
-    """``Math.round``: the nearest integer, a half going up."""
+def _round_half_up(value: float) -> int:
+    """The nearest integer, a half going up, so a weight and its negation never
+    round apart."""
     floor = math.floor(value)
     return floor + 1 if value - floor >= 0.5 else floor
 
@@ -1394,7 +1286,7 @@ def _vertex_key(ids: tuple, corner: list) -> tuple:
         order = (1, 0, 2) if a <= c else (1, 2, 0) if b <= c else (2, 1, 0)
     key = []
     for k in order:
-        weight = _js_round(corner[k + 1] * 1e10)
+        weight = _round_half_up(corner[k + 1] * 1e10)
         if weight:
             key.append((ids[k], weight))
     return tuple(key)
@@ -1413,7 +1305,7 @@ class RestMesh:
 
 def _unique_rows(rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """(first index of each distinct row, in first-seen order; each row's slot).
-    -0 and 0 are one value, as they are one key to the runtime."""
+    -0 and 0 are one value."""
     flat = np.ascontiguousarray(rows + 0.0)
     _unique, first, inverse = np.unique(flat, axis=0, return_index=True, return_inverse=True)
     order = np.argsort(first, kind="stable")
@@ -1491,26 +1383,19 @@ def refine_rest_mesh(mesh: RestMesh, rest: Path, step: float) -> RestMesh:
 
 
 @dataclass
-class Mapping8:
-    """One eight-float record per distinct (position, normal) pair --
-    [arc-length fraction, transverse u, transverse v, axial, normal.N, normal.B,
-    normal.T, rest metric] -- and each vertex's record."""
+class RestMapping:
+    """Each distinct rest vertex against the rest centerline -- [arc-length
+    fraction, transverse u, transverse v] -- and each vertex's row."""
 
-    values: np.ndarray  # (k, 8) float64
+    values: np.ndarray  # (k, 3) float64
     slots: np.ndarray  # (v,) int64
 
 
-def _unit_rows(vectors: np.ndarray) -> np.ndarray:
-    """Each row over its length (a zero row stays zero), as three.js normalizes."""
-    size = np.sqrt(vectors[:, 0] * vectors[:, 0] + vectors[:, 1] * vectors[:, 1] + vectors[:, 2] * vectors[:, 2])
-    return vectors * (1 / np.where(size == 0, 1.0, size))[:, None]
-
-
-def mapping_for(mesh: RestMesh, rest: Path) -> Mapping8:
-    """Every vertex decomposed against the rest centerline."""
+def mapping_for(mesh: RestMesh, rest: Path) -> RestMapping:
+    """Every vertex decomposed against the rest centerline. A vertex past the
+    centre of the rest's curvature has no one place on it, and is refused."""
     positions = mesh.positions.astype(np.float64)
-    normals = mesh.normals.astype(np.float64)
-    first, slots = _unique_rows(np.hstack([positions, normals]))
+    first, slots = _unique_rows(positions)
     projected = project_points(rest, positions[first])
     frames = projected.frames
     offset = frames.normal * projected.transverse[:, 0:1] + frames.binormal * projected.transverse[:, 1:2]
@@ -1518,68 +1403,5 @@ def mapping_for(mesh: RestMesh, rest: Path) -> Mapping8:
                   + frames.curvature[:, 2] * offset[:, 2])
     if np.any(metric <= EPS):
         _fail("rest mesh crosses the centerline curvature radius")
-    n = _unit_rows(normals[first])
-    values = np.column_stack([
-        projected.distance / rest.length, projected.transverse[:, 0], projected.transverse[:, 1], projected.axial,
-        _vdot(n, frames.normal), _vdot(n, frames.binormal), _vdot(n, frames.tangent), metric,
-    ])
-    return Mapping8(values, slots)
-
-
-@dataclass
-class PreparedTube:
-    """One tube's rest mesh, refined at its band step and mapped onto its rest
-    centerline: the base mesh a bake ships, and what every pose of it reads."""
-
-    mesh: RestMesh
-    mapping: Mapping8
-
-    @property
-    def vertex_count(self) -> int:
-        return len(self.mesh.positions)
-
-
-def prepare_tube_bake(mesh: RestMesh, compiled: CompiledDeformation) -> PreparedTube:
-    """Refine one tube's rest mesh and map it onto the rest centerline (the
-    runtime's ``prepareTubeBake``, its base matrix the identity: ``mesh`` is in the
-    space the paths are authored in)."""
-    refined = refine_rest_mesh(mesh, compiled.rest, compiled.max_segment_length)
-    return PreparedTube(refined, mapping_for(refined, compiled.rest))
-
-
-def pose_tube_bake(prepared: PreparedTube, compiled: CompiledDeformation,
-                   normals: bool = True) -> tuple[np.ndarray, np.ndarray | None]:
-    """ONE posed shape of a prepared tube: (positions, normals), float32 (v, 3).
-
-    Normals take the deformation's inverse-transpose: their transverse components
-    ride the frame, the tangential one scales by rest metric / (posed metric *
-    stretch)."""
-    path, rest = compiled.path, compiled.rest
-    values = prepared.mapping.values
-    twist = compiled.twist_deg * math.pi / 180
-    c = math.cos(twist)
-    s = math.sin(twist)
-    stretch = path.length / rest.length
-    frames = sample_frames(path, values[:, 0] * path.length)
-    u = c * values[:, 1] - s * values[:, 2]
-    v = s * values[:, 1] + c * values[:, 2]
-    offset = frames.normal * u[:, None] + frames.binormal * v[:, None]
-    # How far each transverse offset reaches toward the centre of curvature, as a
-    # fraction of the local radius: at 1 the surface touches the centre.
-    reach = frames.curvature[:, 0] * offset[:, 0] + frames.curvature[:, 1] * offset[:, 1] + frames.curvature[:, 2] * offset[:, 2]
-    pinched = 1 - reach <= TUBE_PINCH_FLOOR
-    if np.any(pinched):
-        offset[pinched] = offset[pinched] * ((1 - TUBE_PINCH_FLOOR) / reach[pinched])[:, None]
-        reach = np.where(pinched, 1 - TUBE_PINCH_FLOOR, reach)
-    # The normal's tangential term divides by the metric of the offset USED.
-    metric = 1 - reach
-    point = (frames.point + offset) + values[:, 3:4] * frames.tangent
-    slots = prepared.mapping.slots
-    positions = point.astype(np.float32)[slots]
-    if not normals:
-        return positions, None
-    nu = c * values[:, 4] - s * values[:, 5]
-    nv = s * values[:, 4] + c * values[:, 5]
-    nt = values[:, 6] * values[:, 7] / (metric * stretch)
-    normal = (frames.normal * nu[:, None] + frames.binormal * nv[:, None]) + frames.tangent * nt[:, None]
-    return positions, _unit_rows(normal).astype(np.float32)[slots]
+    values = np.column_stack([projected.distance / rest.length, projected.transverse[:, 0], projected.transverse[:, 1]])
+    return RestMapping(values, slots)

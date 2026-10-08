@@ -33,6 +33,7 @@ from cadgen._internal.animation_bake import (  # noqa: E402
     MAX_KEY_TURN_DEG,
     OPACITY_TOLERANCE,
     TRANSFORM_TOLERANCE,
+    TUBE_TURN_TOLERANCE_DEG,
     AnimationError,
     _lerp_path,
     _path_points,
@@ -79,7 +80,7 @@ def _placed(track: dict, t: float, point) -> list[float]:
     times, keys, pivot = track["times"], track["transform"], track["pivot"]
     k = min(max(bisect.bisect_right(times, t) - 1, 0), len(times) - 2)
     span = times[k + 1] - times[k]
-    d, r = _pose_at(keys[k], keys[k + 1], span, (t - times[k]) / span)
+    d, r = _pose_at(keys[k], keys[k + 1], (t - times[k]) / span)
     arm = [c - p for c, p in zip(point, pivot)]
     return [r[3 * i] * arm[0] + r[3 * i + 1] * arm[1] + r[3 * i + 2] * arm[2] + pivot[i] + d[i] for i in range(3)]
 
@@ -103,19 +104,30 @@ def _line(y: float) -> dict:
 def _coil(length: float, turns: int = 3, radius: float = 2.0) -> dict:
     """A coil spring's wire centerline, ``length`` tall about +Z: quarter-turn Beziers
     rising evenly, as a valve spring is built."""
-    k, rise = 4.0 / 3.0 * math.tan(math.pi / 8.0) * radius, length / (4 * turns)
+    return _coil_through([length * i / (4 * turns) for i in range(4 * turns + 1)], radius)
+
+
+def _coil_through(heights: list[float], radius: float = 2.0) -> dict:
+    """A coil whose quarter turns end at ``heights``: each joint's handles share one
+    slope, the turn's middle difference, so the wire stays tangent-continuous however
+    unevenly it rises."""
+    k = 4.0 / 3.0 * math.tan(math.pi / 8.0) * radius
 
     def at(quarter: int, z: float) -> list[float]:
         a = math.pi / 2 * quarter
         return [radius * math.cos(a), radius * math.sin(a), z]
 
+    def slope(i: int) -> float:
+        lo, hi = max(0, i - 1), min(len(heights) - 1, i + 1)
+        return (heights[hi] - heights[lo]) / (hi - lo) / 3
+
     def ahead(quarter: int, sign: float) -> list[float]:
         a = math.pi / 2 * quarter
-        return [-sign * k * math.sin(a), sign * k * math.cos(a), sign * rise / 3]
+        return [-sign * k * math.sin(a), sign * k * math.cos(a), sign * slope(quarter)]
 
     segments = []
-    for i in range(4 * turns):
-        p0, p3 = at(i, rise * i), at(i + 1, rise * (i + 1))
+    for i in range(len(heights) - 1):
+        p0, p3 = at(i, heights[i]), at(i + 1, heights[i + 1])
         p1 = [p + v for p, v in zip(p0, ahead(i, 1.0))]
         p2 = [p + v for p, v in zip(p3, ahead(i + 1, -1.0))]
         segments.append({"kind": "bezier", "points": [p0, p1, p2, p3]})
@@ -239,7 +251,7 @@ class BakingTransforms(unittest.TestCase):
         # A constant offset is one key: d = (0, 0, 3), no turn, nothing moving.
         held = tracks[("o1.1",)]
         self.assertEqual([0.0], held["times"])
-        self.assertEqual([[0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], held["transform"])
+        self.assertEqual([[0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.0]], held["transform"])
 
     def test_parts_that_move_alike_but_for_rounding_share_a_track(self) -> None:
         # One turn reached two ways -- through 30 degrees, and through two turns of 15 --
@@ -303,15 +315,16 @@ class BakingTransforms(unittest.TestCase):
                     tolerance)
 
     def test_a_hold_costs_its_two_ends(self) -> None:
-        # An eased lift between two holds, as a teardown moves its parts. The keys that
-        # bound each hold carry no speed, so the curve stays put through the hold, and an
-        # ease between two still keys is the curve itself.
+        # An eased lift between two holds, as a teardown moves its parts. Each hold is
+        # its two ends and nothing between them; the ease takes as many LINEAR keys as
+        # it needs to stay within tolerance.
         def lift(t, m):
             u = min(1.0, max(0.0, t - 1.0))
             m.get("#link").translate((0, 0, 8 * u * u * (3 - 2 * u)))
 
         (track,) = _bake("lift", lift, duration=4)["tracks"]
-        self.assertEqual([0.0, 1.0, 2.0, 4.0], track["times"])
+        self.assertLessEqual({0.0, 1.0, 2.0, 4.0}, set(track["times"]))
+        self.assertEqual([], [t for t in track["times"] if 0 < t < 1 or 2 < t < 4])
         tolerance = max(LENGTH_FLOOR, TRANSFORM_TOLERANCE * math.dist(*BOUNDS))
         for t in (0.5, 0.99, 1.37, 1.8, 2.01, 3.5):
             u = min(1.0, max(0.0, t - 1.0))
@@ -363,7 +376,12 @@ class BakingStyles(unittest.TestCase):
             [track for track in tracks if "visible" in track],
         )
 
-    def test_a_tube_path_lerps_between_keys_over_a_constant_rest(self) -> None:
+    def test_a_tube_is_keyed_so_its_skin_follows_the_clip(self) -> None:
+        # A tube that swings and twists at once: no single slerp is both, so the bake
+        # keys it until the skin's joints, interpolated as glTF does, stay on the clip's
+        # own centerline at every sample.
+        from cadgen._internal import tube_skin
+
         braid = {"pitch": 2.0, "depth": 0.1, "strands": 8}
 
         def bend(t, m):
@@ -372,17 +390,23 @@ class BakingStyles(unittest.TestCase):
             )
 
         (track,) = _bake("bend", bend, duration=1, fps=10)["tracks"]
-        self.assertEqual(
-            {
-                "targets": ["o1.2.1"],
-                "times": [0.0, 1.0],
-                "tube": [{"path": _line(0), "twistDeg": 0.0}, {"path": _line(4), "twistDeg": 90.0}],
-                "rest": _line(0),
-                "maxSegmentLength": 0.5,
-                "braid": braid,
-            },
-            track,
-        )
+        self.assertEqual((["o1.2.1"], _line(0), 0.5, braid),
+                         (track["targets"], track["rest"], track["maxSegmentLength"], track["braid"]))
+        self.assertEqual(([0.0, 1.0], {"path": _line(0), "twistDeg": 0.0}, {"path": _line(4), "twistDeg": 90.0}),
+                         ([track["times"][0], track["times"][-1]], track["tube"][0], track["tube"][-1]))
+        rest = tube_skin.compile_rest(track["rest"])
+        fractions = tube_skin.joint_fractions(rest, 0.5)
+        keys = [tube_skin.key_joints(key, track["rest"], rest, fractions) for key in track["tube"]]
+        tolerance = max(LENGTH_FLOOR, TRANSFORM_TOLERANCE * math.dist(*BOUNDS))
+        for step in range(11):
+            t = step / 10
+            k = min(bisect.bisect_right(track["times"], t) - 1, len(keys) - 2)
+            u = (t - track["times"][k]) / (track["times"][k + 1] - track["times"][k])
+            truth = tube_skin.key_joints({"path": _line(4 * t), "twistDeg": 90 * t}, track["rest"], rest, fractions)
+            moved, turned = tube_skin.joint_error(tube_skin.between(keys[k], keys[k + 1], u), truth)
+            with self.subTest(t=t):
+                self.assertLessEqual(moved, tolerance)
+                self.assertLessEqual(turned, TUBE_TURN_TOLERANCE_DEG + 1e-9)
 
         def release(t, m):
             if t < 0.5:
@@ -438,15 +462,29 @@ class BakingStyles(unittest.TestCase):
         # Turns closing up faster the higher they sit are no one map: past the rest pose,
         # those keys carry their own segments.
         def settle(t, m):
+            heights = [10.0 * i / 12 for i in range(13)]
+            m.get("#link").deform_tube(rest=_coil(10.0), path=_coil_through([z - 0.02 * t * z * z for z in heights]))
+
+        (settled,) = _bake("settle", settle, duration=1, fps=10)["tracks"]
+        self.assertEqual({"normal", "map"}, set(settled["tube"][0]["path"]))
+        self.assertTrue(all(set(key["path"]) == {"normal", "segments"} for key in settled["tube"][1:]))
+
+    def test_a_tube_path_no_renderer_could_draw_fails_with_its_time(self) -> None:
+        # Squashing a coil's control points by height breaks it at every joint: the
+        # handles either side stop lining up. The bake compiles every key it keeps, as
+        # each renderer will, so the clip fails here, saying where and when.
+        def kink(t, m):
             path = copy.deepcopy(_coil(10.0))
             for segment in path["segments"]:
                 for point in segment["points"]:
                     point[2] -= 0.02 * t * point[2] ** 2
             m.get("#link").deform_tube(rest=_coil(10.0), path=path)
 
-        (settled,) = _bake("settle", settle, duration=1, fps=10)["tracks"]
-        self.assertEqual({"normal", "map"}, set(settled["tube"][0]["path"]))
-        self.assertTrue(all(set(key["path"]) == {"normal", "segments"} for key in settled["tube"][1:]))
+        with self.assertRaises(AnimationError) as caught:
+            _bake("kink", kink, duration=1, fps=10)
+        self.assertRegex(str(caught.exception),
+                         r"^animation clip 'kink' part o1\.2\.1 at t=[0-9.]+ s: tube deformation: path is not "
+                         r"tangent-continuous before segment 1$")
 
 
 class ResolvingTargets(unittest.TestCase):

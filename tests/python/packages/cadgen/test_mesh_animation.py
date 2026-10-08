@@ -2,11 +2,11 @@
 
 What this file pins of an animated export is the REQUEST — its closed key set,
 its bounds, the clip name checked against the clips baked into the document's
-sidecar, and the freshness variant that makes a rebaked animation a miss. The
-resampling itself is pinned in test_glb_animation.py.
+sidecar, and the freshness variant that makes a rebaked animation a miss. What
+the export makes of the clip is pinned in test_glb_animation.py.
 
 Every test below is a file that would otherwise have been written: a clip
-dropped into an STL, a bad fps discovered after a tessellation, a typo'd clip
+dropped into an STL, a bad span discovered after a tessellation, a typo'd clip
 name surfacing after a minute of meshing, a GLB reported current with last
 week's motion baked in.
 """
@@ -26,10 +26,6 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal.mesh_animation import (  # noqa: E402
-    DEFAULT_MORPH_TOLERANCE_MM,
-    MAX_ANIMATION_SAMPLES,
-    MAX_MORPH_TOLERANCE_MM,
-    MIN_MORPH_TOLERANCE_MM,
     animation_variant_token,
     normalize_animation_request,
     parse_animation_option,
@@ -55,58 +51,33 @@ class TheRequestShape(unittest.TestCase):
 
     def test_a_bare_clip_name_is_the_whole_request(self):
         self.assertEqual(
-            {"clip": "showcase", "fps": 30, "seconds": None, "start": 0.0, "drop": [], "deform": "refuse"},
+            {"clip": "showcase", "seconds": None, "start": 0.0, "drop": []},
             parse_animation_option("showcase"),
         )
 
     def test_inline_json_and_a_real_dict_are_the_same_request(self):
-        expected = {
-            "clip": "showcase", "fps": 24, "seconds": 3.0, "start": 1.5,
-            "drop": ["opacity"], "deform": "rest",
-        }
-        request = {"clip": "showcase", "fps": 24, "seconds": 3, "start": 1.5,
-                   "drop": ["opacity"], "deform": "rest"}
+        expected = {"clip": "showcase", "seconds": 3.0, "start": 1.5, "drop": ["opacity"]}
+        request = {"clip": "showcase", "seconds": 3, "start": 1.5, "drop": ["opacity"]}
         self.assertEqual(expected, parse_animation_option(request))
         self.assertEqual(expected, parse_animation_option(json.dumps(request)))
 
     def test_seconds_stays_unresolved_because_only_the_clip_knows_its_duration(self):
         # The default is what is LEFT of the clip from `start`. None travels to
-        # the sampler, which reads the clip and resolves it there.
+        # the export, which reads the clip and resolves it there.
         self.assertIsNone(parse_animation_option({"clip": "showcase", "start": 2})["seconds"])
 
     def test_an_unknown_key_names_the_ones_that_exist(self):
         with self.assertRaises(ValueError) as caught:
             parse_animation_option({"clip": "showcase", "quality": "high"})
         self.assertIn("unknown key(s): quality", str(caught.exception))
-        # A video's vocabulary is not this one: fps means a different thing and
-        # quality means nothing at all.
-        self.assertIn("clip, deform, deformTolerance, drop, fps, seconds, start", str(caught.exception))
+        # A video's vocabulary is not this one: quality means nothing to a file that
+        # carries the clip itself.
+        self.assertIn("clip, drop, seconds, start", str(caught.exception))
 
     def test_a_request_that_names_no_clip_is_refused(self):
-        for value in ({}, {"fps": 30}, {"clip": "   "}, ""):
+        for value in ({}, {"seconds": 3}, {"clip": "   "}, ""):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 parse_animation_option(value)
-
-    def test_fps_is_a_whole_number_inside_its_bounds(self):
-        for fps in (0, 121, 29.97, True, "30"):
-            with self.subTest(fps=fps), self.assertRaises(ValueError) as caught:
-                parse_animation_option({"clip": "showcase", "fps": fps})
-            self.assertIn("fps must be", str(caught.exception))
-
-    def test_a_span_past_the_sample_ceiling_is_refused_by_name(self):
-        # fps alone bounds nothing: the count is fps TIMES seconds, and a caller
-        # writing milliseconds reaches six figures through the other one.
-        with self.assertRaises(ValueError) as caught:
-            parse_animation_option({"clip": "showcase", "fps": 30, "seconds": 3000})
-        self.assertIn("90000 samples", str(caught.exception))
-        self.assertIn(f"{MAX_ANIMATION_SAMPLES}-sample ceiling", str(caught.exception))
-        # The ceiling itself is reachable.
-        self.assertEqual(
-            float(MAX_ANIMATION_SAMPLES) / 30,
-            parse_animation_option(
-                {"clip": "showcase", "fps": 30, "seconds": MAX_ANIMATION_SAMPLES / 30}
-            )["seconds"],
-        )
 
     def test_seconds_and_start_must_be_real_spans(self):
         for request in (
@@ -131,64 +102,13 @@ class TheRequestShape(unittest.TestCase):
             parse_animation_option({"clip": "showcase", "drop": ["visible", "opacity", "opacity"]})["drop"],
         )
 
-    def test_deform_is_one_of_three_words(self):
-        with self.assertRaises(ValueError) as caught:
-            parse_animation_option({"clip": "showcase", "deform": "freeze"})
-        self.assertIn("deform must be one of: refuse, morph, rest", str(caught.exception))
-        self.assertEqual("refuse", parse_animation_option("showcase")["deform"])
-
-    def test_a_morph_bake_carries_its_tolerance_and_nothing_else_does(self):
-        # The tolerance is how close the baked targets must stay to the clip's own
-        # deformation, so it means nothing without a bake. Accepting it anywhere
-        # else would read as a promise about the file that the file does not keep.
-        morph = parse_animation_option({"clip": "showcase", "deform": "morph"})
-        self.assertEqual(DEFAULT_MORPH_TOLERANCE_MM, morph["deformTolerance"])
-        self.assertEqual(
-            0.25,
-            parse_animation_option(
-                {"clip": "showcase", "deform": "morph", "deformTolerance": 0.25}
-            )["deformTolerance"],
-        )
-        for mode in ("refuse", "rest"):
-            request = parse_animation_option({"clip": "showcase", "deform": mode})
-            self.assertNotIn("deformTolerance", request)
-            with self.assertRaises(ValueError) as caught:
-                parse_animation_option(
-                    {"clip": "showcase", "deform": mode, "deformTolerance": 0.5}
-                )
-            self.assertIn('deform is ' + repr(mode), str(caught.exception))
-            self.assertIn('pass deform: "morph"', str(caught.exception))
-
-    def test_the_morph_tolerance_is_bounded_in_millimetres(self):
-        for bad in (0, MIN_MORPH_TOLERANCE_MM / 2, MAX_MORPH_TOLERANCE_MM * 2, -1):
-            with self.assertRaises(ValueError) as caught:
-                parse_animation_option(
-                    {"clip": "showcase", "deform": "morph", "deformTolerance": bad}
-                )
-            self.assertIn("deformTolerance must be", str(caught.exception))
-        with self.assertRaises(ValueError) as caught:
-            parse_animation_option(
-                {"clip": "showcase", "deform": "morph", "deformTolerance": "fine"}
-            )
-        self.assertIn("deformTolerance must be a number", str(caught.exception))
-
-    def test_the_tolerance_re_keys_the_export_but_a_static_request_is_untouched(self):
-        # Two bakes of one clip at two tolerances are two different files, so the
-        # ledger must not serve one for the other. A request that never asked for
-        # a bake keeps exactly the canonical form -- and the token -- it always had.
-        loose = animation_variant_token(
-            parse_animation_option({"clip": "showcase", "deform": "morph", "deformTolerance": 1.0}),
-            ANIMATION_DATA,
-        )
-        tight = animation_variant_token(
-            parse_animation_option({"clip": "showcase", "deform": "morph", "deformTolerance": 0.25}),
-            ANIMATION_DATA,
-        )
-        self.assertNotEqual(loose, tight)
-        self.assertEqual(
-            {"clip": "showcase", "fps": 30, "seconds": None, "start": 0.0, "drop": [], "deform": "rest"},
-            parse_animation_option({"clip": "showcase", "deform": "rest"}),
-        )
+    def test_a_frame_rate_or_a_deform_mode_is_not_a_request_key(self):
+        # The file carries the clip's own keys, so there is no rate to sample at, and a
+        # bending tube is always a skin, so there is no mode to choose.
+        for key in ("fps", "deform", "deformTolerance"):
+            with self.subTest(key=key), self.assertRaises(ValueError) as caught:
+                parse_animation_option({"clip": "showcase", key: 1})
+            self.assertIn(f"unknown key(s): {key}", str(caught.exception))
 
     def test_a_job_packet_and_the_flag_share_one_validator(self):
         with self.assertRaises(ValueError) as caught:
@@ -209,7 +129,7 @@ class TheFreshnessVariant(unittest.TestCase):
         self.assertNotEqual(base, animation_variant_token(request, rebaked))
         # So is a different span of the same clip.
         self.assertNotEqual(
-            base, animation_variant_token(parse_animation_option({"clip": "showcase", "fps": 24}), ANIMATION_DATA)
+            base, animation_variant_token(parse_animation_option({"clip": "showcase", "seconds": 4}), ANIMATION_DATA)
         )
 
     def test_an_export_ledgered_for_other_keyframes_is_not_current(self):
@@ -380,7 +300,7 @@ class TheDoorPassesItThrough(unittest.TestCase):
             yield export
 
     def test_a_clip_name_and_an_inline_request_both_reach_the_engine(self):
-        for value in ("showcase", '{"clip": "showcase", "fps": 24}'):
+        for value in ("showcase", '{"clip": "showcase", "seconds": 4}'):
             with self.subTest(value=value), self._engine() as export:
                 self.assertEqual(0, glb_build.main([
                     str(self.document), str(self.out), "--animation", value,
@@ -402,8 +322,7 @@ class TheDoorPassesItThrough(unittest.TestCase):
                 "format": "glb", "path": "/abs/arm.glb", "skipped": False,
                 "meshTolerance": None, "meshAngularTolerance": None,
                 "animation": {
-                    "clip": "showcase", "fps": 30, "samples": 240,
-                    "seconds": 8.0, "start": 0.0, "channels": 3,
+                    "clip": "showcase", "seconds": 8.0, "start": 0.0, "pivots": 3, "skins": 1, "joints": 11,
                 },
             }],
         }
@@ -415,51 +334,12 @@ class TheDoorPassesItThrough(unittest.TestCase):
                 str(self.document), str(self.out), "--animation", "showcase",
             ]))
         self.assertEqual(
-            [f"wrote GLB: {Path('/abs/arm.glb')} (showcase, 240 samples @ 30 fps, 8s, 3 moving)"],
+            [f"wrote GLB: {Path('/abs/arm.glb')} (showcase, 8s, 3 moving, 1 tube on 11 joints)"],
             out.getvalue().splitlines(),
         )
 
-    def test_a_morph_bake_says_what_it_cost_and_which_of_the_moving_are_tubes(self):
-        # Without this clause the line is wrong twice: each deforming tube's
-        # weights channel counts toward "moving" exactly like a part that
-        # travels, and the numbers that decide whether the file is any good --
-        # the target count, how close they track, and the playback texture a GPU
-        # has to hold -- appear nowhere a human reads.
-        payload = {
-            "ok": True,
-            "files": [{
-                "format": "glb", "path": "/abs/hand.glb", "skipped": False,
-                "meshTolerance": None, "meshAngularTolerance": None,
-                "animation": {
-                    "clip": "fist", "fps": 24, "samples": 145, "seconds": 6.0,
-                    "start": 0.0, "channels": 51,
-                    "deform": {
-                        "mode": "morph", "nodes": 48, "targets": 1523,
-                        "bytes": 41943040, "runtimeBytes": 728330240,
-                        "refinedTriangles": 1252544, "deviationMm": 0.987,
-                        "toleranceMm": 1.0, "fitGridHz": 96,
-                    },
-                },
-            }],
-        }
-        out = io.StringIO()
-        with mock.patch(
-            "cadgen.step_export_target.export_cad_target", return_value=payload
-        ), contextlib.redirect_stdout(out):
-            self.assertEqual(0, glb_build.main([
-                str(self.document), str(self.out), "--animation", "fist",
-            ]))
-        self.assertEqual(
-            [
-                f"wrote GLB: {Path('/abs/hand.glb')} (fist, 145 samples @ 24 fps, 6s, "
-                "51 moving, morph on 48 of them: 1523 targets, 0.987mm of 1mm, "
-                "694.6 MiB at playback)"
-            ],
-            out.getvalue().splitlines(),
-        )
-
-    def test_what_the_sampling_could_not_carry_is_in_the_result_itself(self):
-        # The sampler's warnings used to go to the log and nowhere else, so
+    def test_what_the_export_could_not_carry_is_in_the_result_itself(self):
+        # The export's warnings used to go to the log and nowhere else, so
         # `--json` -- the surface an agent reads -- said nothing about a frozen
         # opacity. For a door whose whole premise is that the file must not lie
         # about the model, that is the one place the drops had to be.
@@ -468,10 +348,7 @@ class TheDoorPassesItThrough(unittest.TestCase):
             "files": [{
                 "format": "glb", "path": "/abs/arm.glb", "skipped": False,
                 "meshTolerance": None, "meshAngularTolerance": None,
-                "animation": {
-                    "clip": "showcase", "fps": 30, "samples": 240,
-                    "seconds": 8.0, "start": 0.0, "channels": 3,
-                },
+                "animation": {"clip": "showcase", "seconds": 8.0, "start": 0.0, "pivots": 3, "skins": 0, "joints": 0},
             }],
             "warnings": [".opacity() is not an animated glTF channel: o1.1 carries its value"],
         }
@@ -529,8 +406,7 @@ class WhatTheLedgerServes(unittest.TestCase):
         entry = payload["files"][0]
         self.assertTrue(entry["skipped"])
         self.assertEqual(
-            {"clip": "showcase", "fps": 30, "samples": None,
-             "seconds": None, "start": 0.0, "channels": None},
+            {"clip": "showcase", "seconds": None, "start": 0.0, "pivots": None, "skins": None, "joints": None},
             entry["animation"],
         )
 
@@ -544,35 +420,13 @@ class WhatTheLedgerServes(unittest.TestCase):
         quiet = self._run("showcase", written=frozenset(), baked={})
         self.assertEqual([], quiet["warnings"])
 
-    def test_a_skipped_morph_export_has_nothing_frozen_to_warn_about(self):
-        # A morph bake FREEZES NOTHING: that is the whole point of the mode, and
-        # the warning it used to draw claims the file has occurrences standing
-        # still that the re-run would have named. `deform: "rest"` is the mode
-        # that freezes, and `refuse` never wrote a file at all.
-        for deform, expected in (("morph", []), ("refuse", []), ("rest", 1)):
-            with self.subTest(deform=deform):
-                payload = self._run(
-                    {"clip": "showcase", "deform": deform}, written=frozenset(), baked={}
-                )
-                if expected == []:
-                    self.assertEqual([], payload["warnings"])
-                else:
-                    self.assertEqual(expected, len(payload["warnings"]))
-                    self.assertIn("is current for clip showcase", payload["warnings"][0])
-        # ...and a drop still speaks up whatever the deform mode is.
-        payload = self._run(
-            {"clip": "showcase", "deform": "morph", "drop": ["opacity"]},
-            written=frozenset(), baked={},
-        )
-        self.assertEqual(1, len(payload["warnings"]))
-
     def test_a_freshly_written_file_reports_the_schedule_and_lifts_its_warnings_out(self):
         payload = self._run(
             "showcase",
             written=frozenset({self.out}),
             baked={self.out: {
-                "clip": "showcase", "fps": 30, "samples": 240, "seconds": 8.0,
-                "start": 0.0, "channels": 3, "warnings": ["o1.2 has no geometry"],
+                "clip": "showcase", "seconds": 8.0, "start": 0.0, "pivots": 3, "skins": 0, "joints": 0,
+                "warnings": ["o1.2 has no geometry"],
             }},
         )
         entry = payload["files"][0]

@@ -20,8 +20,8 @@ reads the store or imports the kernel.
 - :func:`glb_bytes` is glTF 2.0, Y-up metres: one node per primitive for a static
   file, one node per OCCURRENCE when a clip animates it (a channel needs a node
   to target), with the occurrence ids, the declared up axis and the authored PBR
-  finish carried through. A deforming tube's primitives carry MORPH TARGETS
-  (``tube_morph``), driven by a weights channel.
+  finish carried through. A clip's moving parts hang under PIVOT nodes, and a
+  bending tube's primitives carry JOINTS_0/WEIGHTS_0 for its SKIN (``tube_skin``).
 
 Determinism (README law 5): the same meshes and descriptor give the same bytes.
 Every value written is IEEE arithmetic in a fixed order -- elementwise numpy
@@ -88,25 +88,6 @@ def decode_tessellation(payload: bytes) -> Tessellation:
 
 
 @dataclass
-class MorphTarget:
-    """One morph target: per-vertex deltas against its primitive's base, in CAD
-    millimetres -- positions, and normals unless the bake measured them unneeded."""
-
-    position_deltas: np.ndarray  # (v, 3) float32
-    normal_deltas: np.ndarray | None = None
-
-
-@dataclass
-class MorphCheck:
-    """A strided handful of a morph primitive's vertices posed by the bake itself,
-    per target: the independent answer the writer checks ``base + delta`` against
-    once both are in the file's own space."""
-
-    vertex_ids: np.ndarray  # (k,) indices into the primitive's vertices
-    posed: list  # per target, (k, 3) float32 CAD millimetres
-
-
-@dataclass
 class Primitive:
     """Indexed, coloured triangles placed in the document's world (CAD millimetres)."""
 
@@ -121,8 +102,11 @@ class Primitive:
     material: dict | None = None  # the authored finish, channels in [0, 1]
     material_id: str = ""
     material_name: str = ""
-    targets: list | None = None  # [MorphTarget], a deforming tube's
-    check: MorphCheck | None = None
+    # A bending tube's skin binding (glb only): JOINTS_0 and WEIGHTS_0, and which of
+    # the file's skins its node uses.
+    joints: np.ndarray | None = None  # (v, 4) uint16
+    weights: np.ndarray | None = None  # (v, 4) float32
+    skin: int | None = None
 
     @property
     def triangle_count(self) -> int:
@@ -573,44 +557,6 @@ def _y_up(values: np.ndarray, scale: float) -> np.ndarray:
     return np.stack([v[:, 0] * scale, v[:, 2] * scale, -(v[:, 1] * scale)], axis=1).astype(np.float32)
 
 
-# 1e-6 m is a thousandth of a millimetre: far tighter than a bake could be wrong by,
-# and about forty times the float32 rounding of `base + delta` at half a metre.
-MORPH_RECONSTRUCTION_TOLERANCE_M = 1e-6
-
-
-def _y_up_targets(primitive: Primitive) -> list[MorphTarget]:
-    """A target's position delta is a VECTOR: the same rotation and mm -> m scale as a
-    position, and no translation; a normal delta takes the rotation alone."""
-    return [MorphTarget(_y_up(target.position_deltas, CAD_TO_GLB_SCALE),
-                        None if target.normal_deltas is None else _y_up(target.normal_deltas, 1.0))
-            for target in primitive.targets or []]
-
-
-def _check_reconstruction(primitive: Primitive, positions: np.ndarray, targets: list[MorphTarget]) -> None:
-    """``base + delta`` in the file's own space against the bake's posed vertices,
-    carried across with their own arithmetic. True by construction, which is why
-    it is worth asserting: a basis change applied to the base and not the deltas,
-    a scale applied twice, a normal delta sent down the position path -- each is a
-    file that opens, moves, and is wrong."""
-    check = primitive.check
-    if check is None:
-        return
-    ids = np.asarray(check.vertex_ids, dtype=np.int64)
-    for ordinal, (target, posed) in enumerate(zip(targets, check.posed)):
-        reference = np.asarray(posed, dtype=np.float64)
-        expected = np.stack([reference[:, 0] * CAD_TO_GLB_SCALE, reference[:, 2] * CAD_TO_GLB_SCALE,
-                             -reference[:, 1] * CAD_TO_GLB_SCALE], axis=1)
-        rebuilt = positions[ids].astype(np.float64) + target.position_deltas[ids].astype(np.float64)
-        error = np.abs(rebuilt - expected)
-        if error.size and float(error.max()) > MORPH_RECONSTRUCTION_TOLERANCE_M:
-            sample, axis = np.unravel_index(int(np.argmax(error)), error.shape)
-            raise ValueError(
-                f"morph target {ordinal} of {primitive.occurrence_id or primitive.node} rebuilds vertex "
-                f"{int(ids[sample])} as {rebuilt[sample, axis]} where the posed tube is {expected[sample, axis]} "
-                f"(axis {axis}): base and deltas are not in the same space"
-            )
-
-
 def _gltf_material(primitive: Primitive) -> dict:
     # sRGB in, LINEAR out (baseColorFactor is linear), canonicalized to float32 so
     # the bytes do not hang on the last bit of a pow.
@@ -641,16 +587,16 @@ def _gltf_material(primitive: Primitive) -> dict:
     return material
 
 
-def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: Mapping[str, Any] | None = None) -> bytes:
+def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: Any = None) -> bytes:
     """glTF 2.0 binary, Y-up metres, uncompressed and unquantized (what slicers and
     stock importers read).
 
-    ``animation`` is a sampled clip (``cadgen._internal.glb_animation``):
-    ``{name, times, channels: [{node, translation?, rotation?}], rest: {node: {translation,
-    rotation}}}`` in glTF space, whose channels target the primitives' ``node`` keys.
-    ``rest`` is each node's own transform: what the file shows when nothing plays it.
-    A channel may instead be ``{node, times, weights, targetCount}``: its own
-    schedule driving that node's morph targets, ``targetCount`` scalars per time.
+    ``animation`` is a clip in glTF's terms (``glb_animation.GltfClip``), whose pivots
+    and skins name the primitives' ``node`` keys. A pivot is two nodes -- one at
+    ``pivot + d`` turned by ``q``, over one at ``-pivot`` that carries the pivot's
+    occurrence nodes -- and a skin is a joint node per joint, under the pivot that
+    also moves its tube or at the scene's root. Every node's own transform is its pose
+    at the clip's first moment: what the file shows when nothing plays it.
     """
     binary: list[bytes] = []
     size = 0
@@ -686,68 +632,47 @@ def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: Ma
         position_view = view(positions.astype("<f4").tobytes(), _ARRAY_BUFFER)
         normal_view = view(normals.astype("<f4").tobytes(), _ARRAY_BUFFER)
         index_view = view(index_bytes + b"\0" * (-len(index_bytes) % 4), _ELEMENT_ARRAY_BUFFER)
-        position_accessor = accessor({
-            "bufferView": position_view, "byteOffset": 0, "componentType": _FLOAT, "count": count, "type": "VEC3",
-            "min": [float(value) for value in positions.min(axis=0)],
-            "max": [float(value) for value in positions.max(axis=0)],
-        })
-        normal_accessor = accessor({
-            "bufferView": normal_view, "byteOffset": 0, "componentType": _FLOAT, "count": count, "type": "VEC3",
-        })
+        attributes = {
+            "POSITION": accessor({
+                "bufferView": position_view, "byteOffset": 0, "componentType": _FLOAT, "count": count,
+                "type": "VEC3", "min": [float(value) for value in positions.min(axis=0)],
+                "max": [float(value) for value in positions.max(axis=0)],
+            }),
+            "NORMAL": accessor({
+                "bufferView": normal_view, "byteOffset": 0, "componentType": _FLOAT, "count": count, "type": "VEC3",
+            }),
+        }
+        if primitive.joints is not None:
+            attributes["JOINTS_0"] = accessor({
+                "bufferView": view(primitive.joints.astype("<u2").tobytes(), _ARRAY_BUFFER), "byteOffset": 0,
+                "componentType": _UNSIGNED_SHORT, "count": count, "type": "VEC4",
+            })
+            attributes["WEIGHTS_0"] = accessor({
+                "bufferView": view(primitive.weights.astype("<f4").tobytes(), _ARRAY_BUFFER), "byteOffset": 0,
+                "componentType": _FLOAT, "count": count, "type": "VEC4",
+            })
         index_accessor = accessor({
             "bufferView": index_view, "byteOffset": 0, "componentType": index_type,
             "count": len(primitive.indices), "type": "SCALAR",
         })
-        targets = _y_up_targets(primitive)
-        _check_reconstruction(primitive, positions, targets)
-        target_accessors = []
-        for target in targets:
-            # A target POSITION's min/max are the DELTAS' bounds, as the spec asks: a
-            # viewer sizes the morphed bounding box from them.
-            entry = {"POSITION": accessor({
-                "bufferView": view(target.position_deltas.astype("<f4").tobytes(), _ARRAY_BUFFER),
-                "byteOffset": 0, "componentType": _FLOAT, "count": count, "type": "VEC3",
-                "min": [float(value) for value in target.position_deltas.min(axis=0)],
-                "max": [float(value) for value in target.position_deltas.max(axis=0)],
-            })}
-            if target.normal_deltas is not None:
-                entry["NORMAL"] = accessor({
-                    "bufferView": view(target.normal_deltas.astype("<f4").tobytes(), _ARRAY_BUFFER),
-                    "byteOffset": 0, "componentType": _FLOAT, "count": count, "type": "VEC3",
-                })
-            target_accessors.append(entry)
         materials.append(_gltf_material(primitive))
-        entry = {
-            "attributes": {"POSITION": position_accessor, "NORMAL": normal_accessor},
-            "indices": index_accessor, "material": len(materials) - 1, "mode": _TRIANGLES,
-        }
-        if target_accessors:
-            entry["targets"] = target_accessors
+        entry = {"attributes": attributes, "indices": index_accessor, "material": len(materials) - 1,
+                 "mode": _TRIANGLES}
         # A primitive with no node key gets a node of its own; no occurrence id
         # begins with a NUL, so the keys cannot collide.
         key = f"\0primitive:{len(groups)}" if primitive.node is None else str(primitive.node)
-        group = groups.setdefault(key, {"primitive": primitive, "primitives": [], "targets": len(target_accessors)})
-        if group["targets"] != len(target_accessors):
-            # `weights` belong to a MESH, so every primitive of one node must agree on
-            # how many targets it has, or the file's weights land on missing shapes.
-            raise ValueError(
-                f"node {key!r} mixes primitives with {group['targets']} and {len(target_accessors)} morph "
-                "targets, and glTF weights are per mesh"
-            )
+        group = groups.setdefault(key, {"primitive": primitive, "primitives": [], "skin": primitive.skin})
+        if group["skin"] != primitive.skin:
+            # `skin` belongs to a NODE, so every primitive of one node must agree on it.
+            raise ValueError(f"node {key!r} mixes primitives of skins {group['skin']} and {primitive.skin}")
         group["primitives"].append(entry)
 
-    rest = (animation or {}).get("rest") or {}
     meshes: list[dict] = []
     nodes: list[dict] = []
     node_index: dict[str, int] = {}
     for key, group in groups.items():
         first: Primitive = group["primitive"]
-        mesh: dict[str, Any] = {"primitives": group["primitives"]}
-        if group["targets"]:
-            # The mesh's default weights, all zero: the base is the clip's opening pose,
-            # so a file nothing plays shows the tube where the clip starts it.
-            mesh["weights"] = [0.0] * group["targets"]
-        meshes.append(mesh)
+        meshes.append({"primitives": group["primitives"]})
         node: dict[str, Any] = {
             "mesh": len(meshes) - 1,
             "name": sanitize_name(first.name or name, name),
@@ -760,20 +685,21 @@ def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: Ma
                 "cadUpAxis": "y",
             },
         }
-        pose = rest.get(key)
-        if pose:
-            for path in ("translation", "rotation", "scale"):
-                if pose.get(path) is not None:
-                    node[path] = [float(value) for value in pose[path]]
+        if group["skin"] is not None:
+            node["skin"] = int(group["skin"])
         node_index[key] = len(nodes)
         nodes.append(node)
 
-    animations = []
-    if animation is not None and animation.get("channels"):
+    roots = set(range(len(nodes)))
+    skins: list[dict] = []
+    animations: list[dict] = []
+    if animation is not None and (animation.pivots or animation.skins):
+        samplers: list[dict] = []
+        channels: list[dict] = []
         time_accessors: dict[bytes, int] = {}
 
         def time_accessor(values: object) -> int:
-            """One input accessor per distinct schedule: the clip's channels share one."""
+            """One input accessor per distinct schedule."""
             times = np.asarray(values, dtype="<f4")
             payload = times.tobytes()
             found = time_accessors.get(payload)
@@ -786,58 +712,75 @@ def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: Ma
                 })
             return found
 
-        samplers, channels = [], []
-        for channel in animation["channels"]:
-            target = node_index.get(str(channel["node"]))
-            if target is None:
-                raise ValueError(f"animation channel targets node {channel['node']!r}, which no primitive declared")
-            input_accessor = time_accessor(channel["times"] if channel.get("weights") is not None else animation["times"])
-            if channel.get("weights") is not None:
-                declared = int(channel["targetCount"])
-                actual = groups[str(channel["node"])]["targets"]
-                weights = np.asarray(channel["weights"], dtype="<f4")
-                schedule = channel["times"]
-                if declared != actual:
-                    raise ValueError(
-                        f"weights channel on node {channel['node']!r} declares {declared} morph targets, "
-                        f"but its mesh has {actual}"
-                    )
-                if len(weights) != len(schedule) * declared:
-                    raise ValueError(
-                        f"weights channel on node {channel['node']!r} has {len(weights)} scalars for "
-                        f"{len(schedule)} times x {declared} targets"
-                    )
-                output = accessor({
-                    "bufferView": view(weights.tobytes()), "byteOffset": 0, "componentType": _FLOAT,
-                    "count": len(weights), "type": "SCALAR",
-                })
-                samplers.append({"input": input_accessor, "output": output, "interpolation": "LINEAR"})
-                channels.append({"sampler": len(samplers) - 1, "target": {"node": target, "path": "weights"}})
-                continue
-            for path, width, kind in (("translation", 3, "VEC3"), ("rotation", 4, "VEC4"), ("scale", 3, "VEC3")):
-                values = channel.get(path)
-                if values is None:
-                    continue
-                values = np.asarray(values, dtype=np.float32)
-                output = accessor({
-                    "bufferView": view(values.astype("<f4").tobytes()), "byteOffset": 0,
-                    "componentType": _FLOAT, "count": len(values) // width, "type": kind,
-                })
-                samplers.append({"input": input_accessor, "output": output, "interpolation": "LINEAR"})
-                channels.append({"sampler": len(samplers) - 1, "target": {"node": target, "path": path}})
-        animations.append({"name": sanitize_name(animation.get("name") or "clip", "clip"),
+        def animate(target: int, times_accessor: int, path: str, output: int) -> None:
+            samplers.append({"input": times_accessor, "output": output, "interpolation": "LINEAR"})
+            channels.append({"sampler": len(samplers) - 1, "target": {"node": target, "path": path}})
+
+        offsets: list[int] = []  # each pivot's -pivot node, which carries its parts
+        for ordinal, pivot in enumerate(animation.pivots):
+            members = []
+            for member in pivot.members:
+                target = node_index.get(str(member))
+                if target is None:
+                    raise ValueError(f"animation pivot {ordinal} carries {member!r}, which no primitive declared")
+                members.append(target)
+                roots.discard(target)
+            nodes.append({"name": f"pivot {ordinal} offset", "translation": [float(c) for c in pivot.child_translation],
+                          "children": members})
+            offset = len(nodes) - 1
+            nodes.append({"name": f"pivot {ordinal}", "translation": [float(c) for c in pivot.rest_translation],
+                          "rotation": [float(c) for c in pivot.rest_rotation], "children": [offset]})
+            roots.add(len(nodes) - 1)
+            offsets.append(offset)
+            times = time_accessor(pivot.times)
+            for path, values, kind in (("translation", pivot.translations, "VEC3"), ("rotation", pivot.rotations, "VEC4")):
+                data = np.asarray(values, dtype="<f4")
+                animate(len(nodes) - 1, times, path, accessor({
+                    "bufferView": view(data.tobytes()), "byteOffset": 0, "componentType": _FLOAT,
+                    "count": len(pivot.times), "type": kind,
+                }))
+        for ordinal, skin in enumerate(animation.skins):
+            count, keys = skin.translations.shape[1], len(skin.times)
+            first_joint = len(nodes)
+            for joint in range(count):
+                nodes.append({"name": f"tube {ordinal} joint {joint}",
+                              "translation": [float(c) for c in skin.translations[0, joint]],
+                              "rotation": [float(c) for c in skin.rotations[0, joint]]})
+            joints = list(range(first_joint, first_joint + count))
+            if skin.parent is None:
+                roots.update(joints)
+            else:
+                nodes[offsets[skin.parent]]["children"] += joints
+            skins.append({"name": f"tube {ordinal}", "joints": joints, "inverseBindMatrices": accessor({
+                "bufferView": view(np.asarray(skin.inverse_binds, dtype="<f4").tobytes()), "byteOffset": 0,
+                "componentType": _FLOAT, "count": count, "type": "MAT4",
+            })})
+            times = time_accessor(skin.times)
+            # Every joint's keys contiguous, so each joint's output is one slice of a view.
+            for path, values, width, kind in (("translation", skin.translations, 3, "VEC3"),
+                                              ("rotation", skin.rotations, 4, "VEC4")):
+                data = np.ascontiguousarray(np.transpose(np.asarray(values, dtype="<f4"), (1, 0, 2)))
+                shared = view(data.tobytes())
+                for joint in range(count):
+                    animate(first_joint + joint, times, path, accessor({
+                        "bufferView": shared, "byteOffset": joint * keys * width * 4, "componentType": _FLOAT,
+                        "count": keys, "type": kind,
+                    }))
+        animations.append({"name": sanitize_name(animation.name or "clip", "clip"),
                            "samplers": samplers, "channels": channels})
 
     gltf: dict[str, Any] = {
         "asset": {"version": "2.0", "generator": "cadgen"},
         "scene": 0,
-        "scenes": [{"nodes": list(range(len(nodes)))}],
+        "scenes": [{"nodes": sorted(roots)}],
         "nodes": nodes,
         "meshes": meshes,
         "materials": materials,
         "bufferViews": buffer_views,
         "accessors": accessors,
     }
+    if skins:
+        gltf["skins"] = skins
     if animations:
         gltf["animations"] = animations
     if any("KHR_materials_clearcoat" in (material.get("extensions") or {}) for material in materials):

@@ -57,7 +57,9 @@ SOURCE_SIDECAR_SUFFIX = ".json"
 #    is written for kinematics alone. 5 moved provenance OUT of the sidecar.
 # 8: intrinsic PBR finishes were inline occurrence annotations.
 # 9: named material libraries + assignments, and embedded animation.
-# 10: animation is baked keyframes over document occurrences, never code.
+# 10: animation is baked keyframes over document occurrences, never code: glTF's
+#     LINEAR keys (a transform is [d, q] about its pivot, lerped and slerped), and
+#     for a tube, centerline keys cadgen poses as a skin's joints (tube_skin).
 SOURCE_SIDECAR_SCHEMA_VERSION = 10
 
 # What a sidecar may CONTAIN: declarations plus the exact-document binding.
