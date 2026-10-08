@@ -116,6 +116,19 @@ class _Session(unittest.TestCase):
         return viewer
 
 
+    def opens_later(self, view: str, surface: str, model: str, *, after: float = 0.3) -> threading.Thread:
+        """A view the host is still loading: it syncs for the first time ``after`` seconds from now, then
+        answers one capture."""
+
+        def load() -> None:
+            time.sleep(after)
+            self.poll_as(view, surface, 1, model).join(10)
+
+        loading = threading.Thread(target=load, daemon=True)
+        loading.start()
+        return loading
+
+
 class TabServerTest(_Session):
     """Codex: tab surfaces the agent opens once and then drives."""
 
@@ -205,6 +218,15 @@ class TabServerTest(_Session):
         self.assertFalse(viewer.is_alive())
         self.assertEqual(shot["content"][0], {"type": "image", "data": "iVBORw0KGgo=", "mimeType": "image/png"})
         self.assertEqual(shot["structuredContent"], {"view": "v1", "model": model})
+
+    def test_a_capture_right_after_cad_open_waits_for_the_tab_to_open(self) -> None:
+        # An agent opens a tab and captures it at once, before the host has loaded it: the capture
+        # waits for its first sync rather than saying no viewer is open.
+        self.call("cad_open", {"path": self.bracket})
+        self.opens_later("v1", "agent", self.bracket)
+        shot = self.call("cad_screenshot")
+        self.assertNotIn("isError", shot)
+        self.assertEqual(shot["structuredContent"], {"view": "v1", "model": self.bracket})
 
     def test_the_tunnel_serves_the_viewer_by_absolute_path_and_keeps_the_hosts_effects_the_hosts(self) -> None:
         # A model under a hidden folder, as an agent's worktree is: shown all the same.
@@ -427,6 +449,22 @@ class InlineServerTest(_Session):
         # A view a newer one replaced closes itself, and is no longer there to read.
         self.call("cad_sync", {"view": view, "surface": "inline", "model": model, "closed": True})
         self.assertIn("not open", self.call("cad_view", {"view": view})["content"][0]["text"])
+
+
+    def test_a_capture_right_after_cad_show_waits_for_the_card_and_says_when_it_never_opens(self) -> None:
+        view = self.launch("cad_show", {"path": self.bracket})["view"]
+        self.opens_later(view, "inline", self.bracket)
+        self.assertEqual(self.call("cad_screenshot", {"view": view})["content"][0]["data"], "iVBORw0KGgo=")
+        # A card the chat never draws (the person has not allowed it, or it is collapsed) is said so, not "closed".
+        unseen = self.launch("cad_show", {"path": self.loose})["view"]
+        with mock.patch("cadgen.mcp.server.OPENING_SECONDS", 0.2):
+            shot = self.call("cad_screenshot", {"view": unseen})
+        self.assertTrue(shot["isError"])
+        self.assertIn("has not opened yet", shot["content"][0]["text"])
+        # A token no cad_show of this server named is not waited for.
+        started = time.monotonic()
+        self.assertIn("not open", self.call("cad_screenshot", {"view": "cad-9-unknown"})["content"][0]["text"])
+        self.assertLess(time.monotonic() - started, 1.0)
 
 
 class TextServerTest(_Session):

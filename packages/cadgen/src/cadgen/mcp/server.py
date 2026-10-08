@@ -58,7 +58,7 @@ from cadgen.viewer.scanner import SOURCE_EXTENSIONS
 from .protocol import INVALID_PARAMS, METHOD_NOT_FOUND, Connection, RequestContext, RpcError, claim_stdout
 from .ui import MIME, RESOURCE_META, AppPage
 from .sidebar_views import SidebarView
-from .views import NoAnswer, ViewRegistry
+from .views import CAPTURE_SECONDS, NoAnswer, ViewRegistry
 
 LOG = logging.getLogger("cadgen.mcp")
 
@@ -80,6 +80,14 @@ _TAB_HOSTS = frozenset({"codex-mcp-client"})
 _UI_EXTENSION = "io.modelcontextprotocol/ui"
 _TABS_EXTENSION = "dev.texttocad/tabs"
 _TAB_ENTRYPOINTS = frozenset({"global", "thread", "file"})
+# How long a call that reads a view waits for one the agent just opened (a tab from cad_open, a card
+# from an inline cad_show) to sync for the first time: the host loads the page, then the page its
+# model. An agent reads a view right after it opened it.
+OPENING_SECONDS = 15.0
+# How long after an agent opened a view a read that finds none still waits for it; and how many
+# inline views not yet seen are remembered.
+_OPENED_WITHIN = 60.0
+_MOUNTING_KEPT = 64
 
 INSTRUCTIONS = (
     "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. "
@@ -230,6 +238,9 @@ class Server:
         self._order = itertools.count(1)
         self._analytics = analytics
         self._update_told = False
+        # Inline views this server named that have not synced yet, oldest first; when cad_open last opened a tab.
+        self._mounting: dict[str, None] = {}
+        self._opened: float | None = None
 
     # -- lazily built parts ----------------------------------------------------
 
@@ -488,6 +499,9 @@ class Server:
         """Stamp a launch that mounts a new inline view: its token, and its place among the views."""
         seq = next(self._order)
         launch["view"] = f"cad-{seq}-{uuid.uuid4().hex[:10]}"
+        self._mounting[launch["view"]] = None
+        while len(self._mounting) > _MOUNTING_KEPT:
+            self._mounting.pop(next(iter(self._mounting)), None)
         # Wall-clock time orders views across restarts of this process; seq breaks a tie.
         launch["order"] = {"createdAt": int(time.time() * 1000), "seq": seq}
         return launch
@@ -531,6 +545,7 @@ class Server:
     def _tool_cad_open(self, arguments, context):
         model = self._model_path(arguments.get("path"))
         launch = self._launch(model, surface="agent")
+        self._opened = time.monotonic()
         return _text(f"{model} is open in a new CAD tab. From now on, use cad_show to show models in it.", {"launch": launch})
 
     def _tool_cad_telemetry(self, arguments, context):
@@ -644,10 +659,20 @@ class Server:
         return result
 
     def _shown(self, view_id: Any) -> Any:
-        """The inline view the agent names by the token its cad_show returned."""
+        """The inline view the agent names by the token its cad_show returned: one the chat is still
+        drawing is waited for."""
         if not isinstance(view_id, str) or not view_id:
             raise ToolFailed("Name the viewer: pass the view that cad_show returned.", "no_view")
-        view = next((view for view in self.views.live() if view.id == view_id), None)
+
+        def found() -> Any:
+            return next((view for view in self.views.live() if view.id == view_id), None)
+
+        view = found()
+        if view is None and view_id in self._mounting:
+            view = self.views.wait(found, timeout=OPENING_SECONDS)
+            if view is None:
+                raise ToolFailed("That viewer has not opened yet: the chat has not drawn it (it may be waiting for the person "
+                                 "to allow it, or be collapsed or scrolled away). Ask the person to look at it, then try again.", "no_view")
         if view is None:
             raise ToolFailed("That viewer is not open: it was closed, or a newer one took its place. Show the model again "
                              "with cad_show.", "no_view")
@@ -664,21 +689,29 @@ class Server:
         return _text(json.dumps({"views": views}, indent=1), {"views": views})
 
     def _tool_cad_screenshot(self, arguments, context):
-        view = self._target(context, arguments.get("view"), needs_model=True) if self.tabs else self._shown(arguments.get("view"))
+        deadline = time.monotonic() + CAPTURE_SECONDS
+        if self.tabs:
+            view = self._target(context, arguments.get("view"), needs_model=True)
+            if view is None and self._opened is not None and time.monotonic() - self._opened < _OPENED_WITHIN:
+                # The tab cad_open just opened: the host is loading it, and it has not synced its model yet.
+                view = self.views.wait(lambda: self._target(context, arguments.get("view"), needs_model=True), timeout=OPENING_SECONDS)
+        else:
+            view = self._shown(arguments.get("view"))
         if view is not None and not view.model:
             raise ToolFailed("That viewer shows no model yet.", "no_view")
         if view is None:
             raise ToolFailed("No CAD viewer with a model is open in this thread. Open one with cad_open, "
                              "or render headless with `cadgen snapshot`.", "no_view")
         if isinstance(view, SidebarView):
-            reply = self.sidebar_views.ask(view.id)
+            reply = self.sidebar_views.ask(view.id, timeout=max(1.0, deadline - time.monotonic()))
             if reply is None:
-                raise ToolFailed("The CAD sidebar did not answer in time; is it still open?", "timeout")
+                raise ToolFailed("The CAD sidebar did not answer in time: it may be closed or out of sight. Ask the person to "
+                                 "open it, then capture again.", "timeout")
             if reply.get("error"):
                 raise ToolFailed(f"The CAD viewer could not capture: {reply['error']}", "view_error")
         else:
             try:
-                reply = self.views.ask(view.id, "capture")
+                reply = self.views.ask(view.id, "capture", timeout=max(1.0, deadline - time.monotonic()))
             except NoAnswer as failure:
                 raise ToolFailed(f"The CAD viewer could not capture: {failure}", failure.reason) from failure
         png = reply.get("png")
@@ -716,6 +749,7 @@ class Server:
         reads the catalog again only when that moves) and each feed's current status.
         """
         view_id = self._register(arguments, context)
+        self._mounting.pop(view_id, None)
         sidebar = self.tabs and arguments.get("surface") == "sidebar"
         if arguments.get("closed") is True:  # a view a newer one replaced: the agent can no longer reach it
             self.views.forget(view_id)

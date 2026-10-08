@@ -212,6 +212,16 @@ reference host `basic-host` does.
   `editingPreviewFeed`. A sync that brought news (an event, a moving build) is
   followed by the next sooner.
 
+- **A capture is of the model asked about, once it is drawn.** An agent captures
+  right after it opened a view, showed a model or rebuilt one, so `cad_screenshot`
+  waits rather than refusing: for a view it just opened (a tab from `cad_open`, a
+  card from `cad_show`) to sync for the first time (`OPENING_SECONDS`), then for
+  the view to show that model loaded and drawn (`host/capture.ts`,
+  `CAPTURE_SETTLE_MS`), within `views.CAPTURE_SECONDS` in all. A capture asked with
+  a show is of the model shown, never of the one the view is leaving. What it
+  cannot wait out it says: a card the chat never drew, a model that did not finish
+  loading, a view out of sight that did not answer.
+
 ## Host adapter (`src/host`)
 
 | Module | What it is |
