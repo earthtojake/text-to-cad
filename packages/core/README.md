@@ -23,24 +23,25 @@ in [the drawing contract](../ui/docs/drawing.md); the mechanism is
 
 ## The laws that live here
 
-- **Viewer three-input law**: a client renders from the file, its optional
-  sidecar (`<name>.step.json`), and the cache — never source, never a build.
-  Animation is keyframes in that one sidecar: a document ships no code, and
-  no adjacent file is discovered or fetched. The
-  code in this package must be writable against exactly those inputs.
-  An explicitly attached editing session may provide an immutable preview
-  tree and resolved kinematics instead; it must not alias that tree to saved
-  STEP bytes. Saved schema-10 sidecars require a matching document digest and
-  use a closed declaration envelope. Their appearance section supplies named,
-  sparse PBR materials plus canonical leaf assignments. Composition carries
-  material ids and names into mesh data, owns its appearance wrappers, and never
-  mutates the stored tree or component tessellation. Materials are read-only in
-  viewers: Inspect and Render honor authored color, finish and opacity, with
-  scene settings supplying fallbacks. Live annotation updates and assignment
-  removal use `applySourceAppearanceToMeshData`; `sourceAppearanceGeometry`
-  retains the exact publication identity for LOD ownership. These mechanisms
-  live in [sourceSidecar.js](src/common/sourceSidecar.js). There are no session
-  material overlays.
+- **Viewer three-input law**: a client renders from the file, what cadgen
+  resolved its sidecar (`<name>.step.json`) into, and the cache — never source,
+  never a build, and never the sidecar itself. The page reads no sidecar: cadgen
+  reads it, validates it against the document's digest, and serves what it MEANS
+  — the articulation of its kinematics (`cadgen.articulation`), the baked
+  animation keyframes, and per occurrence what its appearance resolves to
+  (material id and name, finish, base colour, opacity) — on the catalog entry
+  (`articulation`, `animation`, `display`), in a snapshot job (`resolved`), and
+  as static files beside a static package. A document ships no code, and no
+  adjacent file is discovered or fetched. The code in this package must be
+  writable against exactly those inputs. An explicitly attached editing session
+  may provide an immutable preview tree and resolved kinematics instead; it must
+  not alias that tree to saved STEP bytes. Composition joins the tree's
+  occurrences to the display table by id (`applyOccurrenceDisplay`), carries
+  material ids, names, finish and the folded opacity into mesh data, decides no
+  precedence of its own, and never mutates the stored tree or component
+  tessellation. Materials are read-only in viewers: Inspect and Render honor
+  authored color, finish and opacity, with scene settings supplying fallbacks.
+  There are no session material overlays.
   Authored finishes use a small fixed reflection fill in Inspect so metals
   remain legible. [inspectEnvironment.js](src/common/inspectEnvironment.js) owns
   its procedural texture; it loads no studio or external HDR asset.
@@ -81,11 +82,13 @@ in [the drawing contract](../ui/docs/drawing.md); the mechanism is
   clipping and explode remain model tools, outside preset selection and Custom
   comparison. View Reset clears display overrides and disables those tools. The grouped contract and the rig it drives:
   [docs/render-pipeline.md](docs/render-pipeline.md).
-- **Kinematics and choreography are data, independently**: the FK
-  evaluator (`kinematicsRuntime.js`) folds the sidecar's mate data, which
-  cadgen declares, validates and resolves, into per-occurrence transforms.
-  The animation runtime
-  (`animationRuntime.js`) plays the keyframes in `sidecar.animation`,
+- **Kinematics and choreography are data, independently**: the articulation
+  player (`articulation.js`) plays cadgen's articulation — controls with their
+  limits, joints with affine rows over the controls, which occurrences each
+  joint carries, what a drag writes, named poses — by dot products and TRS
+  composition, into per-occurrence transforms; it mints no id, decides no
+  default or ownership, and checks nothing cadgen checked. The animation runtime
+  (`animationRuntime.js`) plays the baked keyframes,
   `{clips: [{id, label, duration, loop, tracks}, ...]}`, which cadgen bakes
   from the model's Python clips when it builds, as a glTF player plays its
   samplers (a transform's keys CUBICSPLINE). Each track drives one channel
@@ -130,9 +133,9 @@ src/
                    #   renderModel/renderOptions (stills), headlessRenderEntry
                    #   (the snapshot browser bundle's entrypoint), headlessScene
                    #   (a GLB, mesh or robot job through its family builder),
-                   #   kinematicsRuntime + kinematicsModule (FK + sidecar ->
-                   #   pose definition), animationRuntime (clips),
-                   #   stepModule/stepModuleEffects (effects application),
+                   #   articulation (cadgen's articulation, played),
+                   #   animationRuntime (clips), applySceneState (the one
+                   #   effects pass), recordEffects (effects onto records),
                    #   source (render-source loading), sceneSettings (shared
                    #   CAD/Render contract), camera, themeSettings internals,
                    #   displaySettings, stepTopology

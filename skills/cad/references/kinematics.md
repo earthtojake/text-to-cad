@@ -117,8 +117,8 @@ if __name__ == "__main__":
   as a concept.
 - The mate graph is a TREE: one parent mate per occurrence, no cycles.
   Closed-loop linkages (four-bars) are out of scope by design — they need a
-  solver; the viewer evaluates pure forward kinematics from the sidecar's
-  numbers at render time.
+  solver; cadgen resolves the mates into joints over the DOFs, and the viewer
+  plays pure forward kinematics over them at render time.
 
 ## Annotating a STEP you did not generate
 

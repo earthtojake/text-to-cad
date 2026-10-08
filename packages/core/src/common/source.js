@@ -32,21 +32,7 @@ import {
   renderAssetSourceScopeForJob,
   setRenderAssetSourceScope
 } from "../lib/renderAssetSourceScope.js";
-import {
-  kinematicsModuleDefinitionFromSidecar,
-  loadKinematicsModuleDefinition
-} from "./kinematicsModule.js";
-import {
-  applySourceAppearance,
-  loadSourceSidecar,
-  validateSourceSidecar
-} from "./sourceSidecar.js";
-import {
-  hasStepParameterRenderValues,
-  normalizeStepParameterRenderValues,
-  stepParameterRenderState,
-  stepParameterRenderValues
-} from "./stepParameters.js";
+import { normalizeControlValues } from "./articulation.js";
 
 // A render source is a STEP document: its model is composed here and built by `buildModel`
 // (`cadScene.js`), in the viewer's STEP renderer and in a snapshot alike. Every other file
@@ -98,7 +84,7 @@ export function sourceIsStep(sourceOrKind) {
 }
 
 function assertStepOnlyOption(kind, value, label) {
-  // An empty value means the option was not provided (stepParameterUrl defaults to
+  // An empty value means the option was not provided (a URL option defaults to
   // the empty string), so there is nothing step-only to reject — required for direct
   // non-STEP mesh sources, which reach loadSource with no step parameters at all.
   if (value === undefined || value === null || value === "") {
@@ -238,15 +224,16 @@ export function tessellationForSnapshotQuality(input = {}) {
     : {};
 }
 
-async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = null, diagnostics = null, tessellationCache = null, options = {}) {
+async function loadPackageMeshData(packageInfo, tessellation = {}, diagnostics = null, tessellationCache = null, options = {}) {
   const measure = (name, started) => {
     if (diagnostics) diagnostics[name] = (diagnostics[name] || 0) + performance.now() - started;
   };
-  const storedDescriptor = isObject(packageInfo.descriptor) ? packageInfo.descriptor : null;
-  if (!storedDescriptor) {
+  // The tree as cadgen serves it for display: an assigned occurrence already carries its
+  // finish, base colour and opacity, so the page draws what it is given.
+  const descriptor = isObject(packageInfo.descriptor) ? packageInfo.descriptor : null;
+  if (!descriptor) {
     throw new Error("Assembly render job is missing its tree (assembly.json)");
   }
-  const descriptor = applySourceAppearance(storedDescriptor, appearance);
   // A static package (the docs hero) ships one mesh per component beside its
   // tree; a served one reads them from the host's mesh store.
   const meshUrls = isObject(packageInfo.meshUrls) ? packageInfo.meshUrls : {};
@@ -403,84 +390,19 @@ async function loadMeshDataFromUrl(url, kind, options) {
   return loadStepMeshFromGlb(url, options);
 }
 
-// A pose PRESET name in place of a values object. `--kinematics` takes either
-// spelling, and the CLI cannot tell them apart on its own: the declared preset
-// names live in the model's kinematics block, which is only loaded here. So the
-// name travels as a bare string and is resolved against the definition.
-function resolvePoseValues(definition, kinematics) {
-  if (typeof kinematics !== "string") {
-    return kinematics;
-  }
-  const name = kinematics.trim();
-  const poses = isObject(definition?.manifest?.poses) ? definition.manifest.poses : {};
-  if (isObject(poses[name])) {
-    return poses[name];
-  }
-  const declared = Object.keys(poses);
-  throw new Error(
-    declared.length
-      ? `Unknown kinematics pose: ${name}. This model declares: ${declared.join(", ")}`
-      : `Unknown kinematics pose: ${name}. This model declares no poses; pass {dof: value} JSON instead`
-  );
-}
-
-async function loadStepParameters({
-  kind,
-  kinematics,
-  stepParameterUrl,
-  documentHash,
-  cadPath,
-  selectorRuntime,
-  sourceSidecar = null,
-  resources, signal
-}) {
-  assertStepOnlyOption(kind, kinematics, "kinematics");
-  assertStepOnlyOption(kind, stepParameterUrl, "stepParameterUrl");
-  assertStepOnlyOption(kind, documentHash, "documentHash");
-  const explicit = hasStepParameterRenderValues(kinematics);
-  if (!stepParameterUrl && !sourceSidecar) {
-    if (!explicit) {
-      return null;
-    }
-    throw new Error("kinematics values require resolved.stepParameterUrl");
-  }
-  // stepParameterUrl is the model SIDECAR url (the .step.json); its
-  // kinematics section is the one articulation mechanism.
-  const definition = sourceSidecar
-    ? kinematicsModuleDefinitionFromSidecar(sourceSidecar, { cadPath, url: stepParameterUrl })
-    : await loadKinematicsModuleDefinition(stepParameterUrl, { cadPath, documentHash, resources, signal });
-  if (!definition) {
-    if (explicit) {
-      throw new Error("model declares no kinematics, so the kinematics values have nothing to drive");
+// The POSE half of a STEP source: cadgen's articulation of its kinematics at a control
+// vector cadgen validated (a snapshot job's `resolved.controls`; the opening when none is
+// given). This is the `stepParameters` object `buildModel` plays.
+function stepPose(kind, articulation, controls) {
+  assertStepOnlyOption(kind, articulation, "articulation");
+  assertStepOnlyOption(kind, controls, "controls");
+  if (!articulation) {
+    if (controls !== undefined && controls !== null) {
+      throw new Error("the model declares no kinematics, so the control values have nothing to drive");
     }
     return null;
   }
-  const renderParameters = normalizeStepParameterRenderValues(
-    definition,
-    explicit ? resolvePoseValues(definition, kinematics) : {}
-  );
-  return {
-    definition,
-    renderParameters,
-    selectorRuntime,
-    cadPath: cadPath || definition.cadPath || "",
-    sourceUrl: stepParameterUrl
-  };
-}
-
-export function stepParameterRuntime(stepParameterSource) {
-  if (!stepParameterSource) {
-    return null;
-  }
-  const { definition, renderParameters } = stepParameterSource;
-  return {
-    definition,
-    selectorRuntime: stepParameterSource.selectorRuntime || null,
-    parameterValues: stepParameterRenderValues(renderParameters),
-    animationState: stepParameterRenderState(),
-    cadPath: stepParameterSource.cadPath || definition.cadPath || "",
-    sourceUrl: stepParameterSource.sourceUrl || definition.url || ""
-  };
+  return { articulation, values: normalizeControlValues(articulation, controls) };
 }
 
 // A render package served off a plain static host (a docs site, a CDN): no
@@ -490,7 +412,7 @@ export function stepParameterRuntime(stepParameterSource) {
 // the tessellation the page draws, written by cadgen). This maps that layout to a
 // loadSource package input. The caller fetches `${baseUrl}/assembly.json`
 // itself (it may want to cache or inline it) and spreads extra fields
-// (stepParameterUrl, cadPath) into the returned object.
+// (articulation, controls, animation, cadPath) into the returned object.
 export function packageSourceFromBaseUrl(baseUrl, descriptor) {
   const base = String(baseUrl || "").replace(/\/+$/, "");
   if (!base) {
@@ -531,24 +453,14 @@ export async function loadSource(input, options = {}) {
   const rawTessellation = inputObject.quality?.tessellation;
   const tessellation = tessellationForSnapshotQuality(inputObject);
   assertStepOnlyOption(kind, rawTessellation, "quality.tessellation");
-  const kinematics = inputObject.kinematics ?? options.kinematics;
-  const stepParameterUrl = String(
-    inputObject.stepParameterUrl || resolved.stepParameterUrl || options.stepParameterUrl || ""
-  ).trim();
-  const documentHash = String(
-    inputObject.documentHash || resolved.documentHash || options.documentHash || ""
-  ).trim();
-  const inlineSourceSidecar = inputObject.sourceSidecar || resolved.sourceSidecar || options.sourceSidecar || null;
-
+  // What the document's sidecar means, resolved by cadgen: the articulation and the
+  // control vector to pose it at, and the baked animation. The page reads no sidecar.
+  const articulation = inputObject.articulation || resolved.articulation || options.articulation || null;
+  const controls = inputObject.controls ?? resolved.controls ?? options.controls;
+  const animation = inputObject.animation || resolved.animation || options.animation || null;
   const cadPath = String(inputObject.cadPath || resolved.inputPath || options.cadPath || "").trim();
-  assertStepOnlyOption(kind, kinematics, "kinematics");
-  assertStepOnlyOption(kind, stepParameterUrl, "stepParameterUrl");
-  assertStepOnlyOption(kind, documentHash, "documentHash");
-  assertStepOnlyOption(kind, inlineSourceSidecar, "sourceSidecar");
-
-  const sourceSidecar = inlineSourceSidecar
-    ? validateSourceSidecar(inlineSourceSidecar, { url: stepParameterUrl || cadPath, documentHash })
-    : (stepParameterUrl ? await loadSourceSidecar(stepParameterUrl, { documentHash, signal: options.signal, resources }) : null);
+  assertStepOnlyOption(kind, animation, "animation");
+  const pose = stepPose(kind, articulation, controls);
 
   let meshData = explicitMeshData;
   // Component-GLB package: the canonical assembly artifact is a directory, so there is
@@ -560,7 +472,7 @@ export async function loadSource(input, options = {}) {
   );
   if (!meshData && packageInfo) {
     const diagnostics = options.stageTimings ? {} : null;
-    meshData = await loadPackageMeshData(packageInfo, tessellation, sourceSidecar?.appearance, diagnostics, options.tessellationCache, options);
+    meshData = await loadPackageMeshData(packageInfo, tessellation, diagnostics, options.tessellationCache, options);
     if (diagnostics) options.stageTimings.sourceLoad = diagnostics;
     const packageSelectorRuntime = inputObject.selectorRuntime || options.selectorRuntime || null;
     return {
@@ -568,19 +480,10 @@ export async function loadSource(input, options = {}) {
       meshData,
       selectorRuntime: packageSelectorRuntime,
       displayEdgeRuntime: inputObject.displayEdgeRuntime || options.displayEdgeRuntime || null,
-      // Parameter sidecars resolve features against composed occurrence ids, so
-      // they stay fully functional for package sources even without a selector
-      // runtime (feature refs prefix-match meshData part occurrence ids).
-      stepParameterSource: await loadStepParameters({
-        kind: "step",
-        kinematics,
-        stepParameterUrl,
-        documentHash,
-        cadPath,
-        selectorRuntime: packageSelectorRuntime,
-        sourceSidecar, resources, signal: options.signal
-      }),
-      sourceSidecar,
+      // The articulation carries the composed occurrence ids each joint moves, so a package
+      // poses with no selector runtime at all.
+      pose,
+      animation,
       resolved,
       url: "",
       glbUrl: "",
@@ -626,23 +529,13 @@ export async function loadSource(input, options = {}) {
     const displayEdgeRuntime = inputObject.displayEdgeRuntime || options.displayEdgeRuntime || (
       stepSidecarsEnabled ? await loadDisplayEdgeRuntime(glbUrl || url, options) : null
     );
-    const stepParameterSource = await loadStepParameters({
-      kind,
-      kinematics,
-      stepParameterUrl,
-      documentHash,
-      cadPath,
-      selectorRuntime,
-      sourceSidecar, resources, signal: options.signal
-    });
-
     return {
       kind,
       meshData,
       selectorRuntime,
       displayEdgeRuntime,
-      stepParameterSource,
-      sourceSidecar,
+      pose,
+      animation,
       resolved,
       url,
       glbUrl,

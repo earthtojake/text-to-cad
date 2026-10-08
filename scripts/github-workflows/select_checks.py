@@ -249,6 +249,8 @@ RULES: tuple[Rule, ...] = (
     # The DXF suite renders ui's DXF fixture, and holds every JS file in packages/ to having
     # no second layer-intent table.
     Rule(("packages/ui/src/renderers/dxf/__fixtures__/**",), select(skills=[f"{SKILL_SUITES}/dxf/test_snapshot_render.py"])),
+    # The STEP browser fixture's articulation is cadgen's: the articulation suite asserts it is current.
+    Rule(("packages/ui/src/renderers/step/__fixtures__/step/**",), select(cadgen=[f"{CADGEN_SUITE}/test_articulation.py"])),
     Rule(("packages/ui/**/*.js",), select(skills=[f"{SKILL_SUITES}/dxf/test_drawing_checks.py"])),
     Rule(("tests/browser/**", "tests/fixtures/cad/**"), select(flags=["web_viewer"])),
 

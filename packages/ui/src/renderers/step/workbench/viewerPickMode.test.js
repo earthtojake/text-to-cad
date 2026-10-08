@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { VIEWER_PICK_MODE } from "@text-to-cad/core/lib/viewer/constants.js";
 import { syncSelectorPickGroups } from "@text-to-cad/core/lib/viewer/selectorPickGroups.js";
 import { applySceneState } from "@text-to-cad/core/common/applySceneState.js";
-import { resetStepModuleRecordEffects } from "@text-to-cad/core/common/stepModuleEffects.js";
+import { resetRecordEffects } from "@text-to-cad/core/common/recordEffects.js";
 import { attachTubeSkins } from "@text-to-cad/core/common/tubeSkin.js";
 import { viewerHiddenPartIdsForRenderPane, viewerPickModeForRenderPane, viewerSelectedPartIdsForRenderPane, viewerSelectorRuntimeForRenderPane } from "./viewerPickMode.js";
 
@@ -57,7 +57,7 @@ test("Render retains picking proxies while STEP transforms and tube skins still 
     assert.deepEqual(new THREE.Vector3().applyMatrix4(record.effectMatrix).toArray(), [0, 0, 5]);
     assert.deepEqual(Array.from(record.geometry.attributes.position.array.slice(0, 3)), [0, 5, 1]);
   } finally {
-    resetStepModuleRecordEffects([record], THREE);
+    resetRecordEffects([record], THREE);
     geometry.dispose();
     mesh.material.dispose();
   }

@@ -317,11 +317,13 @@ Accepted input fields:
   the docs hero renderer) render one source per page and need nothing.
 - `selectorRuntime` and `displayEdgeRuntime`: preloaded runtimes when a caller
   already owns sidecar loading.
-- `kinematics`: pose values for the model's kinematics — a declared preset name,
-  or `{dof: value}`. Same spelling as the `--kinematics` flag, the snapshot job
-  key and the sidecar section.
-- `stepParameterUrl` or `resolved.stepParameterUrl`: model sidecar
-  (`.step.json`) URL, whose `kinematics` section is compiled here.
+- `articulation` or `resolved.articulation`: cadgen's articulation of the model's
+  kinematics (`cadgen.articulation`), and `controls` or `resolved.controls`: the
+  control vector to pose it at, which cadgen resolved from the job's `kinematics`
+  (a preset name or `{dof: value}`) and validated. A model with no articulation
+  and control values is refused. Together they are the source's `pose`.
+- `animation` or `resolved.animation`: the model's baked animation section, which
+  the source carries as it is (`loadSourceAnimation` compiles it).
 - `quality.tessellation`: explicit STEP tolerances in every preset. When
   omitted, enabled `display.lighting.quality` selects the bounded preview/final
   mesh rung.
@@ -330,8 +332,8 @@ STEP-only options are rejected for non-STEP sources. The old shared `params`
 field is rejected, and so is the retired `stepParameters` spelling; use
 `kinematics`.
 
-Use `stepParameterRuntime(stepParameterSource)` to turn the loaded parameter
-source into the runtime object `buildModel` accepts.
+A source's `pose` (`{articulation, values}`, or null) is the `stepParameters`
+object `buildModel` accepts.
 
 ### `common/cadScene.js`
 
@@ -389,9 +391,9 @@ Common settings:
   filter rendered parts before records are built. Viewer-only fields such as
   `selectedPartIds`, `hiddenPartIds`, and `showEdges` affect visual state.
 - `clip`: normalized clip-plane settings.
-- `stepParameters`: compiled kinematics runtime object, from
-  `stepParameterRuntime()`.
-- `parameterSetup`: set `false` to skip sidecar setup lifecycle calls.
+- `stepParameters`: the pose, `{articulation, values}` (a source's `pose`):
+  cadgen's articulation at a control vector, which the one effects pass plays
+  (`applySceneState`) before a clip's frame is merged over it.
 - `renderPartsIndividually`: build per-part records instead of a whole mesh.
 - `edgeRendering`: declarative edge rendering configuration.
 

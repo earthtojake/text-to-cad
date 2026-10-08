@@ -1,5 +1,5 @@
 import { resolveCadEdgeSettings } from "./cadInk.js";
-import { applyRecordTubeSkin, poseRecordTubeEdges } from "./tubeSkin.js";
+import { poseRecordTubeEdges } from "./tubeSkin.js";
 import { syncRecordBaseEmissiveColor } from "./surfaceMaterialState.js";
 import { applyColorGrading } from "./colorGrading.js";
 import {
@@ -25,12 +25,7 @@ import {
   syncScreenSpaceLineMaterialResolution,
   topologyLineDepthBiasForWidth
 } from "./renderEdges.js";
-import { resolveStepModuleFeatures } from "./stepModule.js";
-import {
-  buildStepModuleContext,
-  createStepModuleEffectsApi,
-  displayTransformForPart
-} from "./stepModuleEffects.js";
+import { displayTransformForPart, resetRecordEffects } from "./recordEffects.js";
 import { applySceneState } from "./applySceneState.js";
 import {
   buildCadEdgeSegmentTexture,
@@ -1113,16 +1108,6 @@ export function applyPartVisualState(THREE, records, {
   }
 }
 
-function resetParameterEffects(THREE, records) {
-  for (const record of Array.isArray(records) ? records : []) {
-    applyRecordTubeSkin(THREE, record, null);
-    record.effectMatrix = null;
-    record.effectStyle = null;
-    record.effectVisible = null;
-    record.effectHighlighted = false;
-  }
-}
-
 function boundsCorners(THREE, bounds) {
   const min = Array.isArray(bounds?.min) ? bounds.min : [0, 0, 0];
   const max = Array.isArray(bounds?.max) ? bounds.max : [1, 1, 1];
@@ -1202,99 +1187,24 @@ export function effectiveBoundsFromRecords(THREE, records, fallbackBounds = null
   return mergeBoundsList(boundsList) || fallbackBounds;
 }
 
-function runParameterSetup(THREE, runtime, parameters, meshData, callbacks = {}) {
-  const definition = parameters?.definition || null;
-  const module = definition?.module || null;
-  if (!definition || !module?.setup) {
-    return;
-  }
-  const effectsByPartId = new Map();
-  const features = resolveStepModuleFeatures(definition, {
-    meshData,
-    selectorRuntime: parameters?.selectorRuntime || null
-  });
-  const ctx = buildStepModuleContext({
-    runtime,
-    stepModuleRuntime: parameters,
-    features,
-    effects: createStepModuleEffectsApi(THREE, {
-      meshData,
-      features,
-      runtime,
-      effectsByPartId
-    }),
-    cleanup: (cleanup) => {
-      if (typeof cleanup === "function") {
-        runtime.cleanups.push(cleanup);
-      }
-    }
-  });
-  try {
-    module.setup(ctx);
-  } catch (error) {
-    callbacks.onWarning?.({
-      title: "STEP parameter setup failed",
-      message: error instanceof Error ? error.message : String(error),
-      error
-    });
-  }
-}
-
-function cleanupParameterRuntime(runtime, parameters, callbacks = {}) {
-  while (runtime.cleanups.length) {
-    try {
-      runtime.cleanups.pop()?.();
-    } catch (error) {
-      callbacks.onWarning?.({
-        title: "STEP parameter cleanup failed",
-        message: error instanceof Error ? error.message : String(error),
-        error
-      });
-    }
-  }
-  const module = parameters?.definition?.module || null;
-  if (!module?.dispose) {
-    return;
-  }
-  const ctx = buildStepModuleContext({
-    runtime,
-    stepModuleRuntime: parameters,
-    features: {},
-    effects: {},
-    cleanup: () => {}
-  });
-  try {
-    module.dispose(ctx);
-  } catch (error) {
-    callbacks.onWarning?.({
-      title: "STEP parameter dispose failed",
-      message: error instanceof Error ? error.message : String(error),
-      error
-    });
-  }
-}
-
+// The pose (`stepParameters`: cadgen's articulation at a control vector) and the frame a
+// caller merges on `callbacks.animation`, through the one effects pass.
 function applyParameters(THREE, runtime, parameters, meshData, callbacks = {}) {
   const { applied } = applySceneState(THREE, {
     runtime,
     meshData,
-    stepParameterRuntime: parameters,
+    pose: parameters,
     animation: callbacks.animation || null,
     onError: ({ phase, error }) => {
       callbacks.onWarning?.({
-        title: phase === "animation" ? "Animation update failed" : "STEP parameter update failed",
+        title: phase === "animation" ? "Animation update failed" : "Pose update failed",
         message: error instanceof Error ? error.message : String(error),
         error
       });
-    },
-    cleanup: (cleanup) => {
-      if (typeof cleanup === "function") {
-        runtime.cleanups.push(cleanup);
-      }
     }
   });
   if (!applied) {
-    resetParameterEffects(THREE, runtime.displayRecords);
+    resetRecordEffects(runtime.displayRecords, THREE);
     for (const record of runtime.displayRecords) {
       applyDisplayRecordTransform(THREE, record);
     }
@@ -2264,7 +2174,6 @@ function normalizeSettings(settings = {}) {
       : normalizeSelection(settings.filterSelection ?? settings.selection),
     clip: normalizeStepClipSettings(settings.clip),
     stepParameters: settings.stepParameters || null,
-    parameterSetup: settings.parameterSetup !== false,
     materialSettings: resolveMaterialSettings(theme, settings),
     materialOverrides: settings.materialOverrides && typeof settings.materialOverrides === "object"
       ? { ...settings.materialOverrides }
@@ -2364,7 +2273,6 @@ export function buildModel(THREE, source, settings = {}) {
     bounds: baseBounds,
     modelBounds: baseBounds,
     modelRadius: centerAndRadiusFromBounds(THREE, baseBounds, normalized.scale).radius,
-    cleanups: [],
     activeClipPlane: null,
     activeClipPlanes: [],
     // Instanced CAD edge draws, one per (component, edge style); see cadEdgeInstances.js.
@@ -2404,7 +2312,6 @@ export function buildModel(THREE, source, settings = {}) {
   // settings object in place between updates.
   let appliedStaticStateKey = null;
   let activeParameters = null;
-  let activeParameterSetup = false;
 
   const syncRuntimeBounds = () => {
     runtime.baseBounds = meshData?.bounds || boundsFromVertices(meshData?.vertices || []);
@@ -2477,18 +2384,7 @@ export function buildModel(THREE, source, settings = {}) {
         surfaceSettings: runtime.surfaceSettings
       });
     }
-    const nextParameterSetup = nextSettings.parameterSetup !== false;
-    const nextParameters = nextSettings.stepParameters || null;
-    if (activeParameters !== nextParameters || activeParameterSetup !== nextParameterSetup) {
-      if (activeParameterSetup) {
-        cleanupParameterRuntime(runtime, activeParameters, nextSettings.callbacks);
-      }
-      activeParameters = nextParameters;
-      activeParameterSetup = nextParameterSetup;
-      if (activeParameterSetup) {
-        runParameterSetup(THREE, runtime, activeParameters, meshData, nextSettings.callbacks);
-      }
-    }
+    activeParameters = nextSettings.stepParameters || null;
     const effectiveBounds = applyParameters(THREE, runtime, activeParameters, meshData, nextSettings.callbacks);
     runtime.bounds = effectiveBounds || runtime.baseBounds;
     runtime.modelBounds = runtime.bounds;
@@ -2635,9 +2531,6 @@ export function buildModel(THREE, source, settings = {}) {
     dispose({ releaseGpu = true } = {}) {
       if (disposed) {
         return;
-      }
-      if (activeParameterSetup) {
-        cleanupParameterRuntime(runtime, activeParameters, currentSettings.callbacks);
       }
       // A failed reconciliation can have attached new records before installing
       // its result array. Include their cached geometries in THIS scene's final

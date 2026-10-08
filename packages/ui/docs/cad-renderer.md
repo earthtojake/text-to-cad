@@ -1148,14 +1148,16 @@ to Select first. No other tool ever sees a selection, so none needs a rule for o
 
 ### Position
 
-Position edits persist when switching tools or tabs, or closing the panel. A STEP
-rebuild keeps Position the tool while its sidecar is read again behind the kinematics in
+Position edits persist when switching tools or tabs, or closing the panel. A STEP's
+Position is over the articulation cadgen resolved from its sidecar's kinematics, inline on
+its catalog entry (`entry.articulation`, versioned by `poseUrl`); the page reads no sidecar.
+A rebuild keeps Position the tool while the new articulation arrives behind the one in
 hand (`workbench/useStepMotion.js`), and keeps the values, and the named pose they were
-chosen as, when the new sidecar's joint parameters and named poses are the ones in hand
-(`stepPoseLogic`, `workbench/stepModuleLoad.js`); when they changed, the pose starts at the
+chosen as, when the new articulation's controls and named poses are the ones in hand
+(`stepPoseLogic`, `workbench/poseLoad.js`); when they changed, the pose starts at the
 new defaults — the old values are never fitted onto other joints. A robot's new revision
 follows the same rule over its driven joints and named poses (`poseLogic`,
-`robot/poseStore.js`). Position goes only when the sidecar has nothing left to move. Reset
+`robot/poseStore.js`). Position goes only when the articulation has nothing left to move. Reset
 explicitly restores STEP defaults or the robot opening pose (including SRDF `home`).
 The Position tool controls joint handles and shows its panel.
 A routine playing in preview sets the Position values aside when it takes the pose and gives them
@@ -1298,9 +1300,9 @@ groups, their BVH, the picking listeners and the highlight overlays every
 frame), pickable lists are one shared empty list, presses and releases cast no
 model ray, and part visual state is not reconciled while a routine plays. The
 pass that leaves them re-runs once and rebuilds the pick state. Independent
-of preview, a routine's feature resolution is memoized per definition and parts
-array (`stepModule.js`), the clip-plane sync is skipped when no section is or
-was active, and the view cube is memoized.
+of preview, the pose names the occurrences each joint carries outright (cadgen's
+articulation resolves no names on the page), the clip-plane sync is skipped when
+no section is or was active, and the view cube is memoized.
 
 No component renders for a playing frame. The viewer's pose pass is one function
 with two callers: React runs it when something it reads changes (a scrub, a

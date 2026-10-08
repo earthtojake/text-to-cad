@@ -63,7 +63,7 @@ test("service generation, revision, source appearance and replacement runtime vi
   assert.equal(cache.get({ ...root, resources: {cacheKey: () => "other-service"} }, a.entry), null);
   assert.ok(cache.get({ ...root }, a.entry), "a replacement client for the same service may reopen a closed tab");
   for (const change of [{ hash: "new" }, { documentHash: "new" }, { appearanceHash: "new" },
-    { url: "http://cad.test/new/" }, { sourceSidecar: { appearance: { material: "new" } } }]) {
+    { url: "http://cad.test/new/" }, { display: { "o1.1": { materialId: "new" } } }]) {
     populate();
     assert.equal(cache.get(root, { ...a.entry, ...change }), null);
     assert.equal(cache.stats().entries, 0, "the obsolete revision is released");

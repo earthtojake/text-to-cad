@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 import {
@@ -12,7 +9,6 @@ import {
   normalizeRenderTessellation,
   tessellationForSnapshotQuality
 } from "./source.js";
-import { SOURCE_SIDECAR_SCHEMA_VERSION } from "./sourceSidecar.js";
 import { renderAssetSourceScope } from "../lib/renderAssetSourceScope.js";
 import {
   createTessellationCache, createHttpTessellationCacheProvider, encodeTessellationCacheBatch,
@@ -295,82 +291,39 @@ test("a warm package's batches stay within the ceiling its cache's transport dec
   assert.ok(batches.every((batch) => batch.bytes <= options.maxBatchBytes));
 });
 
-test("snapshot package appearance composes through the shared source resolver", async (t) => {
+test("a package draws the finish, colour and opacity cadgen composed onto its occurrences", async (t) => {
   const { surfaceInput, surfaceObject } = surfFixture("cam_follower_roller");
   setTessellationCacheProvider(memoryMeshProvider([meshFixture("cam_follower_roller", 1).bytes]));
   t.after(() => { setTessellationCacheProvider(null); });
+  // The descriptor as cadgen serves it for display (`source_sidecar.apply_appearance`): the
+  // assigned occurrence already carries what its material resolves to.
   const descriptor = {
     kind: "assembly-package",
     components: { "appearance-cid": { surfaceInput, surfaceObject } },
-    occurrences: [{ id: "o1.1", name: "roller", component: "appearance-cid" }],
+    occurrences: [{
+      id: "o1.1", name: "roller", component: "appearance-cid",
+      materialId: "polished", materialName: "Polished",
+      material: { roughness: 0.15, metalness: 0.03, clearcoat: 0.8, clearcoatRoughness: 0.26, opacity: 0.5 },
+      baseColor: "#336699", opacity: 0.5
+    }],
     assembly: { root: { id: "o1", name: "appearance", nodeType: "assembly", children: [
       { id: "o1.1", name: "roller", nodeType: "part", children: [] }
     ] } }
   };
   const source = await loadSource({
     kind: "step",
-    documentHash: "c".repeat(64),
-    sourceSidecar: {
-      schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION,
-      documentHash: "c".repeat(64),
-      appearance: {
-        materials: { polished: { name: "Polished", clearcoat: 0.8, roughness: 0.15 } },
-        assignments: { "o1.1": "polished" }
-      }
-    },
-    package: {
-      descriptor,
-      componentUrls: { "appearance-cid": "/appearance/roller.surf" }
-    }
+    package: { descriptor, componentUrls: { "appearance-cid": "/appearance/roller.surf" } }
   });
-  assert.deepEqual(source.meshData.parts[0].material, {
-    roughness: 0.15, metalness: 0.03, clearcoat: 0.8, clearcoatRoughness: 0.26, opacity: 1
-  });
-  assert.equal(source.meshData.parts[0].materialId, "polished");
-  assert.equal(source.meshData.parts[0].materialName, "Polished");
-  assert.equal(descriptor.occurrences[0].material, undefined, "stored package descriptor stays immutable");
+  const [part] = source.meshData.parts;
+  assert.deepEqual(part.material, descriptor.occurrences[0].material);
+  assert.equal(part.materialId, "polished");
+  assert.equal(part.materialName, "Polished");
+  assert.equal(part.color, "#336699");
+  assert.equal(part.opacity, 0.5, "the opacity is the one cadgen folded, not multiplied again here");
 });
 
-async function withTempModule(callback) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "render-source-test-"));
-  try {
-    const modulePath = path.join(root, "part.step.mjs");
-    fs.writeFileSync(modulePath, `
-      export default {
-        manifest: {
-          schemaVersion: 1,
-          parameters: {
-            drive: { type: "number", min: 0, max: 360, default: 0 }
-          }
-        }
-      };
-    `);
-    return await callback(pathToFileURL(modulePath).href);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-}
-
-test("loadSource rejects STEP parameter options for non-STEP sources", async () => {
-  await assert.rejects(
-    () => loadSource({
-      meshData: meshData(),
-      kinematics: { drive: 90 }
-    }),
-    /kinematics is supported only for STEP\/STP sources/
-  );
-  await assert.rejects(
-    () => loadSource({
-      meshData: meshData(),
-      stepParameterUrl: "file:///tmp/part.step.mjs"
-    }),
-    /stepParameterUrl is supported only for STEP\/STP sources/
-  );
-});
-
-// `--kinematics` takes a declared pose NAME as well as {dof: value} JSON. The
-// CLI cannot tell one from the other — the declared names live in the model's
-// kinematics block — so a name arrives as a bare string and is resolved here.
+// A snapshot job carries what cadgen resolved: the articulation and the control vector it
+// validated at the door (a pose NAME is resolved there too). The page plays, it checks nothing.
 let tessellationCache = createTessellationCache();
 function setTessellationCacheProvider(provider) {
   tessellationCache.dispose();
@@ -378,92 +331,39 @@ function setTessellationCacheProvider(provider) {
 }
 const loadSource = (input, options = {}) => loadSourceInput(input, { tessellationCache, ...options });
 
-const HINGE_SIDECAR = {
-  schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION,
-  documentHash: "a".repeat(64),
-  kinematics: {
-    mates: [
-      {
-        name: "swing",
-        kind: "revolute",
-        parent: "#base",
-        child: "#flap",
-        axis: { origin: [0, 0, 0], dir: [0, 0, 1] },
-        limits: { value: [0, 120] }
-      }
-    ],
-    poses: { open: { swing: 90 }, ajar: { swing: 15 } }
-  }
+const HINGE_ARTICULATION = {
+  schemaVersion: 1,
+  controls: [{ id: "swing", label: "swing", unit: "deg", min: 0, max: 120, default: 0 }],
+  joints: [{ id: "swing", parent: null, kind: "revolute", origin: [0, 0, 0], axis: [0, 0, 1],
+    turn: { bias: 0, terms: [["swing", 1]] } }],
+  carries: { swing: ["flap"] },
+  handles: [{ id: "swing", joint: "swing", dof: "turn", control: "swing", weight: 1, label: "swing", unit: "deg", min: 0, max: 120 }],
+  poses: { open: { swing: 90 }, ajar: { swing: 15 } },
+  opening: { swing: 0 }
 };
 
-function stubSidecarFetch(t, sidecarUrl, sidecar = HINGE_SIDECAR) {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (requestUrl) => {
-    assert.equal(String(requestUrl), sidecarUrl);
-    return new Response(JSON.stringify(sidecar), {
-      status: 200,
-      headers: { "content-type": "application/json" }
-    });
-  };
-  t.after(() => {
-    globalThis.fetch = originalFetch;
-  });
-}
-
-function poseJob(kinematics, sidecarUrl) {
+function poseJob(controls, articulation = HINGE_ARTICULATION) {
   return {
     kind: "step",
     meshData: meshData(),
-    kinematics,
-    resolved: {
-      kind: "step",
-      stepParameterUrl: sidecarUrl,
-      documentHash: HINGE_SIDECAR.documentHash,
-      inputPath: "/models/hinge.step"
-    }
+    resolved: { kind: "step", articulation, controls, inputPath: "/models/hinge.step" }
   };
 }
 
-test("a kinematics pose NAME resolves against the model's declared poses", async (t) => {
-  const sidecarUrl = "/__cad/sidecar/hinge.step.json";
-  stubSidecarFetch(t, sidecarUrl);
-
-  const source = await loadSource(poseJob("open", sidecarUrl));
-
-  assert.deepEqual(source.stepParameterSource.renderParameters.values, { swing: 90 });
+test("a job's pose is cadgen's articulation at the control vector cadgen validated", async () => {
+  const source = await loadSource(poseJob({ swing: 90 }));
+  assert.equal(source.pose.articulation, HINGE_ARTICULATION);
+  assert.deepEqual(source.pose.values, { swing: 90 });
 });
 
-test("a pose name the model does not declare names the ones it does", async (t) => {
-  const sidecarUrl = "/__cad/sidecar/hinge.step.json";
-  stubSidecarFetch(t, sidecarUrl);
-
-  await assert.rejects(
-    () => loadSource(poseJob("shut", sidecarUrl)),
-    /Unknown kinematics pose: shut\. This model declares: open, ajar/
-  );
+test("a job with an articulation and no controls poses the opening", async () => {
+  const source = await loadSource(poseJob(undefined));
+  assert.deepEqual(source.pose.values, { swing: 0 });
 });
 
-test("pose VALUES still pass straight through", async (t) => {
-  const sidecarUrl = "/__cad/sidecar/hinge.step.json";
-  stubSidecarFetch(t, sidecarUrl);
-
-  const source = await loadSource(poseJob({ swing: 45 }, sidecarUrl));
-
-  assert.deepEqual(source.stepParameterSource.renderParameters.values, { swing: 45 });
-});
-
-test("refuses a pose name against a model that declares no poses", async (t) => {
-  const sidecarUrl = "/__cad/sidecar/hinge.step.json";
-  stubSidecarFetch(t, sidecarUrl, {
-    schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION,
-    documentHash: HINGE_SIDECAR.documentHash,
-    kinematics: { ...HINGE_SIDECAR.kinematics, poses: {} }
-  });
-
-  await assert.rejects(
-    () => loadSource(poseJob("open", sidecarUrl)),
-    /This model declares no poses; pass \{dof: value\} JSON instead/
-  );
+test("control values against a model with no articulation have nothing to drive", async () => {
+  await assert.rejects(() => loadSource(poseJob({ swing: 45 }, null)), /declares no kinematics/);
+  assert.equal((await loadSource(poseJob(undefined, null))).pose, null);
 });
 
 test("loadSource refuses a render asset cached for a different job source", async (t) => {
@@ -582,32 +482,20 @@ test("loadSource leaves no source scope behind", async (t) => {
   assert.equal(renderAssetSourceScope(), "");
 });
 
-test("loadSource accepts sidecar kinematics for STEP sources", async () => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({
-    schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION,
-    documentHash: HINGE_SIDECAR.documentHash,
-    kinematics: {
-      mates: [{ name: "drive", kind: "revolute", parent: "#base", child: "#rotor",
-        axis: { origin: [0, 0, 0], dir: [0, 0, 1] }, limits: { value: [0, 360] } }]
-    }
-  }), { status: 200, headers: { "content-type": "application/json" } });
-  try {
-    const source = await loadSource({
-      kind: "step",
-      meshData: meshData(),
-      cadPath: "part.step",
-      stepParameterUrl: "/__render_asset/pkg/model.step.json",
-      documentHash: HINGE_SIDECAR.documentHash,
-      kinematics: { drive: 90 }
-    });
+test("loadSource takes an articulation and animation inline for STEP sources", async () => {
+  const animation = { clips: [{ id: "swing", label: "Swing", duration: 4, loop: true, tracks: [] }] };
+  const source = await loadSource({
+    kind: "step",
+    meshData: meshData(),
+    cadPath: "part.step",
+    articulation: HINGE_ARTICULATION,
+    controls: { swing: 90 },
+    animation
+  });
 
-    assert.equal(source.kind, "step");
-    assert.equal(source.stepParameterSource.renderParameters.values.drive, 90);
-    assert.equal(source.stepParameterSource.cadPath, "part.step");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assert.equal(source.kind, "step");
+  assert.deepEqual(source.pose.values, { swing: 90 });
+  assert.equal(source.animation, animation);
 });
 
 test("render display source loading keeps kinematics and supplied CAD runtimes", async () => {
@@ -617,16 +505,15 @@ test("render display source loading keeps kinematics and supplied CAD runtimes",
     display: { mode: "render" },
     cadPath: "hinge.step",
     glbUrl: "/unused-topology.glb",
-    sourceSidecar: HINGE_SIDECAR,
-    documentHash: HINGE_SIDECAR.documentHash,
-    kinematics: { swing: 45 },
+    articulation: HINGE_ARTICULATION,
+    controls: { swing: 45 },
     selectorRuntime: { stale: true },
     displayEdgeRuntime: { stale: true }
   });
   assert.equal(source.kind, "step");
   assert.deepEqual(source.selectorRuntime, { stale: true });
   assert.deepEqual(source.displayEdgeRuntime, { stale: true });
-  assert.deepEqual(source.stepParameterSource.renderParameters.values, { swing: 45 });
+  assert.deepEqual(source.pose.values, { swing: 45 });
 });
 
 test("render-only source loading leaves STEP topology lazy", async (t) => {

@@ -42,13 +42,13 @@ repository (default `main`; a release passes its own commit, and a past release
 is redeployed from its tag). The Vercel project's Root Directory setting (in
 Vercel, not this repo) must point at `apps/docs`.
 
-Hero STEP assets under `public/hero/` are a view of the tree behind the
+Hero STEP assets under `public/hero/planetary/` are a view of the tree behind the
 planetary gear STEP (`assembly.json` + each component's mesh, `<cid>.glb`, as
-cadgen made it at the default tolerances: the one level the hero draws) plus its
-schema-10 sidecar with its animation keyframes, committed as PLAIN files (never LFS — Vercel serves them statically
-with no backend). The hero pins the STEP's document hash (`HERO_DOCUMENT_HASH`
-in `src/components/hero-step-render.tsx`); a rebuild that changes the STEP's
-bytes changes it. Refresh them after rebuilding the model:
+cadgen made it at the default tolerances: the one level the hero draws) plus what
+cadgen resolves its sidecar into: the articulation of its mates
+(`articulation.json`) and its baked animation keyframes (`animation.json`), committed
+as PLAIN files (never LFS — Vercel serves them statically with no backend). The page
+reads no sidecar. Refresh them after rebuilding the model:
 
 ```
 python models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py
@@ -56,10 +56,11 @@ node apps/docs/scripts/sync-hero-step-assets.mjs   # same CADGEN_CACHE_DIR as th
 ```
 
 The sync script asks cadgen for the tree by the STEP's bytes, exports a view of
-it and has cadgen mesh every component, so it never restates a store path. The
-check script (`scripts/check-hero-step-assets.mjs`, part of `npm run check`) pins
-the mesh format and sidecar contracts against @text-to-cad/core so a format or
-schema bump cannot silently break the hero render.
+it, has cadgen mesh every component and write the articulation and animation, so it
+never restates a store path. The check script (`scripts/check-hero-step-assets.mjs`,
+part of `npm run check`) pins the mesh format, articulation and animation contracts
+against @text-to-cad/core so a format or schema bump cannot silently break the hero
+render.
 
 ## The shape of the app
 
@@ -67,7 +68,7 @@ schema bump cannot silently break the hero render.
 src/app/         # routes
 src/components/  # site components incl. the CAD hero renderers
 src/lib/         # site utilities
-public/hero/     # showcase tree view + sidecar, plain files (never LFS)
+public/hero/     # showcase tree view + articulation + animation, plain files (never LFS)
 scripts/         # asset checks
 ```
 

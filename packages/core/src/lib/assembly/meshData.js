@@ -445,6 +445,29 @@ function equalOccurrenceInput(left, right) {
 // Internal provenance seam for cadScene's zero-work exact-row branch. Object
 // identity alone is not proof because buildModel also accepts mutable public
 // mesh data; the current composed result must explicitly own this row.
+/**
+ * The tree's occurrences joined to what cadgen resolved their appearance to (a catalog
+ * entry's `display`: per assigned occurrence, its material id and name, finish, base colour
+ * and opacity). A join by id and nothing more: the page decides no precedence. The stored
+ * descriptor is never mutated; with nothing to join it is returned as it is.
+ */
+export function applyOccurrenceDisplay(descriptor, display) {
+  if (!descriptor || typeof descriptor !== "object" || !display || typeof display !== "object"
+      || !Object.keys(display).length) {
+    return descriptor;
+  }
+  return {
+    ...descriptor,
+    occurrences: (Array.isArray(descriptor.occurrences) ? descriptor.occurrences : []).map((occurrence) => {
+      const resolved = display[String(occurrence?.id || "")];
+      if (!resolved || typeof resolved !== "object") return occurrence;
+      const { baseColor: _unresolved, ...rest } = occurrence;
+      void _unresolved;
+      return { ...rest, ...resolved };
+    })
+  };
+}
+
 export function composedPackageOwnsPartRow(meshData, part) {
   return composedPackageInputs.get(meshData)?.parts?.has(part) === true;
 }
@@ -548,14 +571,14 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
     const overrideAlpha = Array.isArray(rawColor) && rawColor.length >= 4 && Number.isFinite(Number(rawColor[3]))
       ? Number(rawColor[3])
       : null;
-    const materialOpacity = overrideMaterial && Number.isFinite(Number(overrideMaterial.opacity))
-      ? Math.min(Math.max(Number(overrideMaterial.opacity), 0), 1)
-      : 1;
     const componentOpacity = Number(sourceParts[0]?.opacity);
     const sourceOpacity = overrideAlpha === null
       ? (Number.isFinite(componentOpacity) ? Math.min(Math.max(componentOpacity, 0), 1) : 1)
       : Math.min(Math.max(overrideAlpha, 0), 1);
-    const overrideOpacity = sourceOpacity * materialOpacity;
+    // An assigned occurrence's opacity is cadgen's: its STEP alpha times its material's,
+    // resolved once for every reader (`occurrence.opacity`). Any other draws its own alpha.
+    const resolvedOpacity = Number(occurrence?.opacity);
+    const overrideOpacity = Number.isFinite(resolvedOpacity) ? Math.min(Math.max(resolvedOpacity, 0), 1) : sourceOpacity;
     const sourceColor = (overrideColor && linearRgbToHex(overrideColor)) || sourceParts[0]?.color || null;
     const sourceVertices = componentMeshData?.vertices || new Float32Array(0);
     const sourceColors = componentMeshData?.colors || new Float32Array(0);

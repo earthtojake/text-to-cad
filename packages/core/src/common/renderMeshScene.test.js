@@ -21,10 +21,6 @@ import {
 } from "./renderMeshScene.js";
 import { evaluateAnimationClip, normalizeAnimationClips } from "./animationRuntime.js";
 import { resolveAnimationFrame } from "./animationClock.js";
-import { stepModuleFromKinematics } from "./kinematicsModule.js";
-import { normalizeStepModuleDefinition } from "./stepModule.js";
-import { normalizeStepParameterRenderValues } from "./stepParameters.js";
-import { stepParameterRuntime } from "./source.js";
 import { buildComposedPackageMeshData } from "../lib/assembly/meshData.js";
 import { applyExplodedViewProgress, computeExplodedViewLayout } from "../lib/viewer/explodedView.js";
 import { fitCameraDepthToBounds } from "./renderOptions.js";
@@ -390,29 +386,22 @@ const SLIDE_CLIPS = normalizeAnimationClips({ clips: [{
   ] }]
 }] });
 
+// The pose a job carries: cadgen's articulation (one slider lifting Left along z) at a
+// control vector cadgen validated.
 function liftRuntime(liftMm) {
-  // A one-mate kinematics block in the sidecar's RESOLVED form (world axis
-  // numbers), compiled the way loadKinematicsModuleDefinition compiles it.
-  const definition = normalizeStepModuleDefinition(
-    stepModuleFromKinematics({
-      mates: [{
-        name: "lift",
-        kind: "slider",
-        parent: "#Right",
-        child: "#Left",
-        axis: { origin: [0, 0, 0], dir: [0, 0, 1] },
-        limits: { value: [0, 10] }
-      }]
-    }),
-    { url: "/__cad/asset?file=pair.step.json", cadPath: "pair.step" }
-  );
-  return stepParameterRuntime({
-    definition,
-    renderParameters: normalizeStepParameterRenderValues(definition, { lift: liftMm }),
-    selectorRuntime: null,
-    cadPath: "pair.step",
-    sourceUrl: "/__cad/asset?file=pair.step.json"
-  });
+  return {
+    articulation: {
+      schemaVersion: 1,
+      controls: [{ id: "lift", label: "lift", unit: "mm", min: 0, max: 10, default: 0 }],
+      joints: [{ id: "lift", parent: null, kind: "slider", origin: [0, 0, 0], axis: [0, 0, 1],
+        travel: { bias: 0, terms: [["lift", 1]] } }],
+      carries: { lift: ["left"] },
+      handles: [{ id: "lift", joint: "lift", dof: "travel", control: "lift", weight: 1, label: "lift", unit: "mm", min: 0, max: 10 }],
+      poses: {},
+      opening: { lift: 0 }
+    },
+    values: { lift: liftMm }
+  };
 }
 
 // The headless sequence: buildModel from the job's options (which carry the

@@ -1169,7 +1169,25 @@ test("buildModel can render silhouette contours without derived mesh edges", () 
   scene.dispose();
 });
 
-test("buildModel applies selection, clipping, and STEP parameter effects", () => {
+// The pose a scene plays: cadgen's articulation (one slider moving a part along x) at a
+// control vector.
+function slideRuntime(partId, distance) {
+  return {
+    articulation: {
+      schemaVersion: 1,
+      controls: [{ id: "slide", label: "slide", unit: "mm", min: 0, max: 100, default: 0 }],
+      joints: [{ id: "slide", parent: null, kind: "slider", origin: [0, 0, 0], axis: [1, 0, 0],
+        travel: { bias: 0, terms: [["slide", 1]] } }],
+      carries: { slide: [partId] },
+      handles: [],
+      poses: {},
+      opening: { slide: 0 }
+    },
+    values: { slide: distance }
+  };
+}
+
+test("buildModel applies selection, clipping, and the pose", () => {
   const scene = buildModel(THREE, sampleMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     renderPartsIndividually: true,
@@ -1182,64 +1200,19 @@ test("buildModel applies selection, clipping, and STEP parameter effects", () =>
       axis: "x",
       offsets: { x: 0.5 }
     },
-    stepParameters: {
-      definition: {
-        module: {
-          render(ctx) {
-            if (ctx.params.hideLeft) {
-              ctx.effects.visible("left", false);
-            }
-          }
-        },
-        manifest: {},
-        cadPath: "part.step"
-      },
-      parameterValues: {
-        hideLeft: true
-      }
-    }
+    stepParameters: slideRuntime("left", 5)
   });
 
   const left = scene.displayRecords.find((record) => record.partId === "left");
   const right = scene.displayRecords.find((record) => record.partId === "right");
 
-  assert.equal(left.mesh.visible, false);
+  assert.equal(left.mesh.matrix.elements[12], 5, "the pose moved the record");
+  assert.equal(left.mesh.visible, true);
   assert.equal(right.mesh.visible, true);
   assert.equal(right.material.transparent, true);
   assert.equal(right.material.depthWrite, false);
   assert.equal(right.material.opacity, 0.035);
   assert.equal(left.material.clippingPlanes.length, 1);
-  assert.equal(scene.bounds.min[0], 2);
-  assert.equal(scene.bounds.max[0], 3);
-  scene.dispose();
-});
-
-test("buildModel can apply STEP parameter effects while deferring setup lifecycle", () => {
-  let setupCalls = 0;
-  const scene = buildModel(THREE, sampleMeshData(), {
-    theme: cloneThemePresetSettings("workbench-light"),
-    renderPartsIndividually: true,
-    parameterSetup: false,
-    stepParameters: {
-      definition: {
-        module: {
-          setup() {
-            setupCalls += 1;
-          },
-          render(ctx) {
-            ctx.effects.transform("left", { translate: [5, 0, 0] });
-          }
-        },
-        manifest: {},
-        cadPath: "part.step"
-      }
-    }
-  });
-
-  const left = scene.displayRecords.find((record) => record.partId === "left");
-
-  assert.equal(setupCalls, 0);
-  assert.equal(left.mesh.matrix.elements[12], 5);
   assert.equal(scene.bounds.min[0], 2);
   assert.equal(scene.bounds.max[0], 6);
   scene.dispose();
@@ -1248,23 +1221,12 @@ test("buildModel can apply STEP parameter effects while deferring setup lifecycl
 // A camera is grounded on the model's zero pose, so the scene has to keep that
 // box available while `bounds` follows whatever a mate, a parameter or an
 // animation frame has done to the records.
-test("buildModel keeps restBounds at the zero pose while bounds follow the parameter pose", () => {
+test("buildModel keeps restBounds at the zero pose while bounds follow the pose", () => {
   const scene = buildModel(THREE, sampleMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     renderPartsIndividually: true,
-    parameterSetup: false,
     clip: { enabled: true, axis: "x", offset: 0.5 },
-    stepParameters: {
-      definition: {
-        module: {
-          render(ctx) {
-            ctx.effects.transform("right", { translate: [12, 0, 0] });
-          }
-        },
-        manifest: {},
-        cadPath: "part.step"
-      }
-    }
+    stepParameters: slideRuntime("right", 12)
   });
 
   assert.deepEqual(scene.bounds.max, [15, 1, 0], "bounds follow the posed record");
@@ -1272,19 +1234,7 @@ test("buildModel keeps restBounds at the zero pose while bounds follow the param
   assert.deepEqual(scene.restBounds.min, [0, 0, 0]);
   assert.deepEqual(scene.restBounds.max, [3, 1, 0]);
 
-  scene.update({
-    stepParameters: {
-      definition: {
-        module: {
-          render(ctx) {
-            ctx.effects.transform("right", { translate: [40, 0, 0] });
-          }
-        },
-        manifest: {},
-        cadPath: "part.step"
-      }
-    }
-  });
+  scene.update({ stepParameters: slideRuntime("right", 40) });
   assert.deepEqual(scene.bounds.max, [43, 1, 0], "a new pose moves bounds");
   assert.deepEqual(scene.restBounds.max, [3, 1, 0], "and never moves restBounds");
   assert.equal(scene.runtime.activeClipPlane.constant, 1.5, "posing cannot move the clip plane");
@@ -1808,13 +1758,14 @@ test("direct viewer effects and clip passes synchronize shared surfaces without 
   const { set, slot } = record.surfaceInstance;
   const matrix = new THREE.Matrix4();
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
-  const pass = ({ visible = true, opacity = 1, color = "#123abc", mirror = false, selection = {}, deform = false } = {}) => {
+  const turn = { articulation: { schemaVersion: 1,
+    controls: [{ id: "turn", label: "turn", unit: "deg", min: 0, max: 360, default: 0 }],
+    joints: [{ id: "turn", parent: null, kind: "revolute", origin: [0, 0, 0], axis: [0, 0, 1], turn: { bias: 0, terms: [["turn", 1]] } }],
+    carries: { turn: ["o0"] }, handles: [], poses: {}, opening: { turn: 0 } }, values: { turn: 30 } };
+  const pass = ({ visible = true, opacity = 1, selection = {}, deform = false } = {}) => {
     applySceneState(THREE, {
       runtime, meshData: source,
-      stepParameterRuntime: { definition: { manifest: {}, module: { update(ctx) {
-        ctx.effects.style("o0", { color });
-        if (mirror) ctx.effects.transform("o0", { scale: [-1, 2, 1] });
-      } } } },
+      pose: turn,
       animation: { elapsedSec: 0, clip: { id: "pass", label: "Pass", duration: 1, loop: true, tracks: [
         { targets: ["o0"], times: [0], visible: [visible] },
         { targets: ["o0"], times: [0], opacity: [opacity] },
@@ -1829,17 +1780,16 @@ test("direct viewer effects and clip passes synchronize shared surfaces without 
     set.object.getMatrixAt(slot, matrix);
   };
   pass();
-  assert.deepEqual(matrix.elements, record.mesh.matrix.elements);
+  const uploaded = (elements) => elements.map((value) => Math.round(value * 1e5) / 1e5);
+  assert.deepEqual(uploaded(matrix.elements), uploaded(record.mesh.matrix.elements));
   assert.equal(record.material.visible, false);
-  const color = new THREE.Color();
-  set.object.getColorAt(slot, color);
-  assert.equal(color.getHexString(), "123abc", "pose color reaches the instance upload");
-  for (const settings of [{ visible: false }, { opacity: 0.4 }, { mirror: true }, { selection: { selectedPartIds: ["o0"] } }, { selection: { hiddenPartIds: ["o0"] } }]) {
+  assert.notDeepEqual(matrix.elements, new THREE.Matrix4().elements, "the pose's turn reaches the instance upload");
+  for (const settings of [{ visible: false }, { opacity: 0.4 }, { selection: { selectedPartIds: ["o0"] } }, { selection: { hiddenPartIds: ["o0"] } }]) {
     pass(settings);
     assert.deepEqual(matrix.elements, zero.elements);
     assert.equal(record.material.visible, true);
     pass();
-    assert.deepEqual(matrix.elements, record.mesh.matrix.elements, "reactivation uploads the current pose");
+    assert.deepEqual(uploaded(matrix.elements), uploaded(record.mesh.matrix.elements), "reactivation uploads the current pose");
   }
   for (const item of runtime.displayRecords) {
     applyViewerMaterialSettings(THREE, item, { ...scene.runtime.materialSettings, envMapIntensity: 3.25 });

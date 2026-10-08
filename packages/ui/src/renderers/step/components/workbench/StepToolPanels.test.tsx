@@ -280,19 +280,20 @@ it('a short viewer: the tree gives way first, then the details panels, a kept ef
 
 // ---- Position ------------------------------------------------------------------------------------
 
-const hinge = { parameters: [{ id: 'hinge', label: 'hinge', type: 'number', min: -180, max: 180, unit: 'deg' }],
-  defaultParameterValues: { hinge: 0 }, manifest: { poses: { open: { hinge: 90 } } } };
+const hinge = { url: '/hinge.step.json', articulation: { schemaVersion: 1,
+  controls: [{ id: 'hinge', label: 'hinge', unit: 'deg', min: -180, max: 180, default: 0 }],
+  joints: [], carries: {}, handles: [], poses: { open: { hinge: 90 } }, opening: { hinge: 0 } } };
 /** STEP's Position panel as the tool stack draws it (`StepPanels.js`) over a pose runtime, and the strip's Position icon. */
 function Position({ onClose }: { onClose(): void }) {
   const [values, setValues] = useState<Record<string, number>>({ hinge: 0 });
   const [activePose, setActivePose] = useState('');
   const runtime = { definition: hinge, parameterValues: values, activePose,
-    onApplyPose: (name: string) => { setActivePose(name); setValues({ hinge: (hinge.manifest.poses as any)[name].hinge }); },
+    onApplyPose: (name: string) => { setActivePose(name); setValues({ hinge: (hinge.articulation.poses as any)[name].hinge }); },
     onResetMotion: () => { setActivePose(''); setValues({ hinge: 0 }); },
     onParameterChange: (id: string, value: number) => { setActivePose(''); setValues(current => ({ ...current, [id]: value })); } };
   const position = buildPositionSection({ poseRuntime: runtime })!;
   return <>
-    <button type="button" aria-label="Position"><PositionToolIcon custom={!positionValuesAreDefault(values, hinge.defaultParameterValues)} /></button>
+    <button type="button" aria-label="Position"><PositionToolIcon custom={!positionValuesAreDefault(values, hinge.articulation.opening)} /></button>
     <ToolPanel id="position" title={position.title} actions={position.actions} label="Position controls" fit="details" resizable
       collapsible={false} onClose={onClose} closeLabel="Close position">{position.content}</ToolPanel>
   </>;

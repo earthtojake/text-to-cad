@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { advanceAnimationElapsed, animationClipDuration, animationNowMs,
   clampAnimationElapsed, clampAnimationSpeed, createAnimationFramePacer, findAnimationClip,
   firstAnimationClipId } from "@text-to-cad/core/common/animationClock.js";
-import { normalizeParameterValue, normalizeParameterValues } from "@text-to-cad/core/common/parameters.js";
-import { poseValuesForPreset } from "../components/workbench/PoseControlsSection.js";
+import {
+  articulationControl, articulationPoses, clampControlValue, normalizeControlValues, poseControlValues
+} from "@text-to-cad/core/common/articulation.js";
 import { useAnimationClockStore } from "./animationClockStore.js";
-import { stepPoseLogic } from "./stepModuleLoad.js";
+import { stepPoseLogic } from "./poseLoad.js";
 
 // Single command boundary for STEP motion. Refs are published synchronously so
 // queued playback callbacks cannot resurrect the previous motion owner.
@@ -24,11 +25,11 @@ export function useStepMotionControls({
     stepModuleParameterValuesRef.current = values;
     setStepModuleParameterValues(values);
   }, [stepModuleParameterValuesRef, setStepModuleParameterValues]);
+  const articulation = selectedStepModuleDefinition?.articulation || null;
   const resetPosition = useCallback(() => {
     setAppliedStepPoseName("");
-    writeParameters(normalizeParameterValues(selectedStepModuleDefinition,
-      selectedStepModuleDefinition?.defaultParameterValues || {}));
-  }, [selectedStepModuleDefinition, setAppliedStepPoseName, writeParameters]);
+    writeParameters(normalizeControlValues(articulation, null));
+  }, [articulation, setAppliedStepPoseName, writeParameters]);
   // What Position had set when a routine took the pose. A routine plays from the model at rest,
   // so taking the pose puts Position's values aside rather than throwing them away; handing
   // the pose back (leaving preview or the Animation tool, or touching Position) puts them back first. They are a pose
@@ -48,8 +49,8 @@ export function useStepMotionControls({
     resetAnimationClock();
     const held = heldPositionRef.current;
     heldPositionRef.current = null;
-    if (held) writeParameters(normalizeParameterValues(selectedStepModuleDefinition, held));
-  }, [resetAnimationClock, selectedStepModuleDefinition, writeParameters]);
+    if (held) writeParameters(normalizeControlValues(articulation, held));
+  }, [resetAnimationClock, articulation, writeParameters]);
   const activateAnimationControls = useCallback(() => {
     motionRevisionRef.current += 1;
     heldPositionRef.current ||= { ...stepModuleParameterValuesRef.current };
@@ -61,40 +62,36 @@ export function useStepMotionControls({
   }, [activatePositionControls, resetPosition]);
   const handleStepModuleParameterChange = useCallback((parameterId, value) => {
     const id = String(parameterId || "").trim();
-    const parameter = selectedStepModuleDefinition?.parameterMap?.[id];
-    if (!parameter) {
+    const control = articulationControl(articulation, id);
+    if (!control) {
       return;
     }
     activatePositionControls();
-    // Moving a DOF by hand leaves the named pose behind, so the dropdown stops claiming
+    // Moving a control by hand leaves the named pose behind, so the dropdown stops claiming
     // it and goes back to reading the values (the robot's group state does the same).
     setAppliedStepPoseName("");
-    writeParameters({ ...stepModuleParameterValuesRef.current, [id]: normalizeParameterValue(parameter, value) });
-  }, [activatePositionControls, selectedStepModuleDefinition, writeParameters]);
+    writeParameters({ ...stepModuleParameterValuesRef.current, [id]: clampControlValue(control, value) });
+  }, [activatePositionControls, articulation, writeParameters]);
 
   const applyStepModuleParameterValues = useCallback((values) => {
-    if (!selectedStepModuleDefinition) return;
+    if (!articulation) return;
     activatePositionControls();
     setAppliedStepPoseName("");
-    writeParameters(normalizeParameterValues(selectedStepModuleDefinition,
-      { ...stepModuleParameterValuesRef.current, ...values }));
-  }, [activatePositionControls, selectedStepModuleDefinition, writeParameters]);
+    writeParameters(normalizeControlValues(articulation, { ...stepModuleParameterValuesRef.current, ...values }));
+  }, [activatePositionControls, articulation, writeParameters]);
   const handleResetStepModuleParameters = resetMotion;
 
   const handleApplyPose = useCallback((poseName) => {
-    if (!selectedStepModuleDefinition?.manifest?.poses?.[poseName]) {
+    if (!articulationPoses(articulation)[poseName]) {
       return;
     }
     activatePositionControls();
-    const nextParameterValues = normalizeParameterValues(
-      selectedStepModuleDefinition,
-      poseValuesForPreset(selectedStepModuleDefinition, poseName)
-    );
+    const nextParameterValues = poseControlValues(articulation, poseName);
     setAppliedStepPoseName(String(poseName || ""));
     // A pose is written like any other value: where the mechanism is from this
     // frame on. Motion over time belongs to preview mode.
     writeParameters(nextParameterValues);
-  }, [activatePositionControls, selectedStepModuleDefinition, setAppliedStepPoseName, writeParameters]);
+  }, [activatePositionControls, articulation, setAppliedStepPoseName, writeParameters]);
 
   // Every animation command claims ownership before publishing its frame.
   const handleAnimationClipSelect = useCallback((clipId) => {

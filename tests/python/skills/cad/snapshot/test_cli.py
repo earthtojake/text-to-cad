@@ -2220,7 +2220,7 @@ class StepPoseParameterTests(unittest.TestCase):
     stepParametersPath, descriptor paramsPath) are hard teaching errors."""
 
     POSE = {
-        "mates": [{"name": "stroke", "kind": "slider", "parent": "#body", "child": "#ram",
+        "mates": [{"name": "stroke", "kind": "slider", "parent": "#body", "child": "#occ",
                    "axis": {"origin": [0, 0, 0], "dir": [0, 0, 1]},
                    "limits": {"value": [0, 1]}}],
     }
@@ -2270,33 +2270,50 @@ class StepPoseParameterTests(unittest.TestCase):
         named = job_from_argv(["models/part.step", "tmp/o.png", "--kinematics", "open"])
         self.assertEqual("open", named["kinematics"])
 
-    def test_pose_parameters_resolve_the_sidecar_url(self) -> None:
-        from cadgen._internal.source_sidecar import SOURCE_SIDECAR_SCHEMA_VERSION
-
+    def test_pose_values_resolve_to_the_articulation_and_the_control_vector(self) -> None:
         self._step()
         packet = self._resolve(self._job(kinematics={"stroke": 1}))
         resolved = packet["jobs"][0]["resolved"]
-        self.assertIn(".step.json", str(resolved["stepParameterUrl"]))
-        self.assertEqual(resolved["sourceSidecar"]["schemaVersion"], SOURCE_SIDECAR_SCHEMA_VERSION)
-        self.assertNotIn("stepParameterPath", resolved)
+        # The page plays cadgen's articulation at the vector cadgen validated: every control,
+        # the named ones at their values. Nothing of the sidecar reaches the page.
+        self.assertEqual([control["id"] for control in resolved["articulation"]["controls"]], ["stroke"])
+        self.assertEqual(resolved["articulation"]["carries"], {"stroke": ["o1.1"]})
+        self.assertEqual(resolved["controls"], {"stroke": 1.0})
+        for absent in ("sourceSidecar", "stepParameterUrl", "stepParameterPath"):
+            self.assertNotIn(absent, resolved)
 
-    def test_saved_appearance_is_inlined_for_the_shared_source_resolver(self) -> None:
+    def test_a_pose_name_resolves_to_its_control_vector(self) -> None:
+        step_path = self.models / "named.step"
+        step_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
+        write_package(step_path, kinematics={**self.POSE, "poses": {"out": {"stroke": 0.75}}})
+        resolved = self._resolve(self._job(name="named.step", kinematics="out"))["jobs"][0]["resolved"]
+        self.assertEqual(resolved["controls"], {"stroke": 0.75})
+        self.assertEqual(self._resolve(self._job(name="named.step"))["jobs"][0]["resolved"]["controls"], {"stroke": 0.0})
+
+    def test_saved_appearance_is_composed_into_the_descriptor_the_page_draws(self) -> None:
         from cadgen._internal.source_sidecar import write_source_sidecar
+        from cadgen.catalog import result_tree_for
+        from cadgen.store.trees import flatten
 
         step_path = self._step(pose=False)
         appearance = {
             "materials": {
-                "finish": {"name": "Machined finish", "roughness": 0.2, "metalness": 0.7},
+                "finish": {"name": "Machined finish", "roughness": 0.2, "metalness": 0.7, "opacity": 0.5},
             },
             "assignments": {"o1.1": "finish"},
         }
         write_source_sidecar(step_path, {"appearance": appearance})
 
         resolved = self._resolve(self._job())["jobs"][0]["resolved"]
-        self.assertEqual(resolved["sourceSidecar"]["appearance"], appearance)
-        self.assertNotIn("stepParameterUrl", resolved)
-        self.assertNotIn("material", resolved["package"]["descriptor"]["occurrences"][0],
-                         "snapshot resolution must not mutate the stored tree descriptor")
+        occurrence = resolved["package"]["descriptor"]["occurrences"][0]
+        self.assertEqual(occurrence["materialId"], "finish")
+        self.assertEqual(occurrence["materialName"], "Machined finish")
+        self.assertEqual(occurrence["material"]["roughness"], 0.2)
+        self.assertEqual(occurrence["opacity"], 0.5, "the opacity the page draws is cadgen's product")
+        for absent in ("sourceSidecar", "stepParameterUrl", "articulation", "controls"):
+            self.assertNotIn(absent, resolved)
+        self.assertNotIn("material", flatten(result_tree_for(step_path))["occurrences"][0],
+                         "snapshot resolution must not mutate the stored tree")
 
     def test_document_replacement_after_selection_cannot_mix_tree_and_hash(self) -> None:
         step_path = self._step(pose=False)
@@ -2340,13 +2357,16 @@ class StepPoseParameterTests(unittest.TestCase):
         with self.assertRaisesRegex(SidecarBindingError, "documentHash .* does not match"):
             self._resolve(self._job(kinematics={"stroke": 1}))
 
-    def test_animation_never_gates_the_parameter_url(self) -> None:
+    def test_animation_never_gates_the_pose(self) -> None:
         # Animation is independent of kinematics: baked keyframes without
-        # kinematics still give pose values nothing to drive.
+        # kinematics still give pose values nothing to drive, and ride the job on their own.
         step_path = self._step(pose=False)
         write_package(step_path, clips={"demo": cadgen.clip(_rise, duration=1)})
         with self.assertRaisesRegex(SnapshotError, "declares no kinematics"):
             self._resolve(self._job(kinematics={"stroke": 1}))
+        resolved = self._resolve(self._job())["jobs"][0]["resolved"]
+        self.assertEqual([clip["id"] for clip in resolved["animation"]["clips"]], ["demo"])
+        self.assertNotIn("articulation", resolved)
 
     def test_parameters_without_kinematics_teach_the_migration(self) -> None:
         self._step(pose=False)
@@ -2510,7 +2530,7 @@ class StepAnimationFrameTests(unittest.TestCase):
         """Both fields travel through Render; each evaluator reads its own
         declaration from the same document-bound sidecar."""
         pose = {
-            "mates": [{"name": "stroke", "kind": "slider", "parent": "#body", "child": "#ram",
+            "mates": [{"name": "stroke", "kind": "slider", "parent": "#body", "child": "#occ",
                        "axis": {"origin": [0, 0, 0], "dir": [0, 0, 1]},
                        "limits": {"value": [0, 1]}}],
         }

@@ -397,6 +397,9 @@ src/cadgen/
                          #   inside a body; a model's outputs are what they
                          #   declare — a mesh decorator alone is a model that
                          #   writes no STEP
+  articulation.py        # a model's kinematics resolved for a player:
+                         #   controls, joints as affine rows, carries,
+                         #   handles, poses; the reference evaluator
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
   animation.py           # animation clips (cadgen.clip) for @step's

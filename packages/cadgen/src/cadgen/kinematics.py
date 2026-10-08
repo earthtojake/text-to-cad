@@ -18,10 +18,12 @@ dict whose shape mirrors the sidecar's kinematics section exactly::
 Semantics: AUTHORED PLACEMENT IS q=0. A mate declares the one axis its DOF
 moves about (a selector ref resolved to numbers at build time, or literal
 origin/direction) and measures displacement from wherever the author built the
-child. There is no frame snapping and no solver — the viewer evaluates a
-pose as a pure fold over the mate tree (forward kinematics). Closed loops are
-out of scope by design (the same call URDF made); declaring one is an error
-here, not a solver invocation.
+child. There is no frame snapping and no solver: cadgen resolves the mates into
+an articulation (``cadgen.articulation``: joints as affine rows over the
+controls, parents first) and a pose is a pure fold over it (forward
+kinematics), which the viewer plays and ``articulation.joint_matrices``
+evaluates. Closed loops are out of scope by design (the same call URDF made);
+declaring one is an error here, not a solver invocation.
 
 Each decorator's declaration stands alone: a mesh decorator never reads
 @step's kinematics. Sharing happens in the author's source — one module-level

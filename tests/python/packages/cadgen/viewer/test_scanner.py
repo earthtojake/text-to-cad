@@ -169,7 +169,7 @@ class StoreResults(ScannerTestCase):
         self.sidecar("finish.step", {"appearance": {"materials": {"finish": {"name": "Finish", "roughness": 0.9}}, "assignments": {"o1.1": "finish"}}})
         second = self.entry("finish.step")
         self.assertNotEqual(first["appearanceHash"], second["appearanceHash"])
-        self.assertEqual(second["sourceSidecar"]["appearance"]["materials"]["finish"]["roughness"], 0.9)
+        self.assertEqual(second["display"]["o1.1"]["material"]["roughness"], 0.9)
 
     def test_same_bytes_share_one_tree_and_each_document_has_its_own_record(self):
         self.write("a.step", "same bytes\n")
@@ -253,27 +253,43 @@ class StepKind(ScannerTestCase):
         self.assertEqual(self.entry("k.step")["kind"], "part")
 
 
+HINGE = {"mates": [{"name": "hinge", "kind": "revolute", "parent": "#base", "child": "#arm",
+                    "parentId": "o1.1", "childId": "o1.2",
+                    "axis": {"origin": [10, 0, 0], "dir": [0, 0, 1]}, "limits": {"value": [0, 90]}}],
+         "poses": {"open": {"hinge": 90}}}
+HINGE_PACKAGE = {
+    "kind": "assembly-package", "components": {"c0": {}},
+    "occurrences": [{"id": "o1.1", "name": "base", "component": "c0", "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]},
+                    {"id": "o1.2", "name": "arm", "component": "c0", "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]}],
+}
+
+
 class DescriptorGate(ScannerTestCase):
     """``{}`` from ``read_step_catalog_metadata`` suppresses sourceUrl/poseUrl."""
 
-    def test_a_valid_package_publishes_both_urls(self):
+    def test_a_valid_package_publishes_the_articulation_and_both_urls(self):
         self.write("g.step", "x\n")
-        self.sidecar("g.step", {"kinematics": {"joints": []}})
-        self.package("g.step", {"kind": "assembly-package", "components": {"c0": {}}})
+        self.sidecar("g.step", {"kinematics": HINGE})
+        self.package("g.step", HINGE_PACKAGE)
         entry = self.entry("g.step")
         self.assertEqual(asset_query(entry["sourceUrl"])["file"], self.path("g.step.json"))
         self.assertEqual(entry["poseUrl"], entry["sourceUrl"])
+        # What the page plays: cadgen's articulation of the mates, inline, over the tree's occurrences.
+        self.assertEqual([control["id"] for control in entry["articulation"]["controls"]], ["hinge"])
+        self.assertEqual(entry["articulation"]["carries"], {"hinge": ["o1.2"]})
+        self.assertEqual(entry["articulation"]["poses"], {"open": {"hinge": 90.0}})
 
     def test_no_package_suppresses_both(self):
         self.write("g.step", "x\n")
-        self.sidecar("g.step", {"kinematics": {}})
+        self.sidecar("g.step", {"kinematics": HINGE})
         entry = self.entry("g.step")
         self.assertNotIn("sourceUrl", entry)
         self.assertNotIn("poseUrl", entry)
+        self.assertNotIn("articulation", entry)
 
 
-class SidecarTruthiness(ScannerTestCase):
-    """JS ``typeof x === "object"`` and JS truthiness, which Python's differ from."""
+class SidecarSections(ScannerTestCase):
+    """A row carries what each section MEANS, resolved: nothing for a section that declares nothing."""
 
     def _entry(self, sidecar_text: str | None) -> dict:
         self.write("s.step", "x\n")
@@ -282,14 +298,22 @@ class SidecarTruthiness(ScannerTestCase):
         self.package("s.step", {"kind": "assembly-package", "components": {"c0": {}}})
         return self.entry("s.step")
 
-    def test_an_empty_kinematics_object_still_yields_a_pose_url(self):
-        # `{}` is TRUTHY in JS. Python's `or` would drop it.
-        self.assertIn("poseUrl", self._entry(json.dumps({"kinematics": {}})))
+    def test_a_kinematics_block_with_no_mates_poses_nothing(self):
+        entry = self._entry(json.dumps({"kinematics": {}}))
+        self.assertIn("sourceUrl", entry)
+        self.assertNotIn("poseUrl", entry)
+        self.assertNotIn("articulation", entry)
+
+    def test_a_kinematics_block_this_cadgen_cannot_read_is_dropped_quietly(self):
+        entry = self._entry(json.dumps({"kinematics": {"mates": [{"name": "x", "kind": "twist", "child": "#a", "parent": "#b"}]}}))
+        for absent in ("annotationError", "sourceUrl", "poseUrl", "articulation"):
+            self.assertNotIn(absent, entry)
 
     def test_explicit_nulls_yield_no_pose_url(self):
         entry = self._entry(json.dumps({"kinematics": None, "animation": None}))
         self.assertIn("sourceUrl", entry)
         self.assertNotIn("poseUrl", entry)
+        self.assertNotIn("animation", entry)
 
     def test_appearance_has_a_scene_identity_without_changing_the_tree_identity(self):
         self.write("finish.step", "x\n")
@@ -303,9 +327,12 @@ class SidecarTruthiness(ScannerTestCase):
         })
         entry = self.entry("finish.step")
         self.assertEqual(len(entry["appearanceHash"]), 64)
-        self.assertEqual(entry["sourceSidecar"]["appearance"], {
-            "materials": {"finish": {"name": "Finish", "roughness": 0.25}}, "assignments": {"o1.1": "finish"}
-        })
+        # What the appearance resolves to for the page to draw, per assigned occurrence: the
+        # material with every channel, and the opacity cadgen folded.
+        self.assertEqual(entry["display"], {"o1.1": {
+            "materialId": "finish", "materialName": "Finish", "opacity": 1.0,
+            "material": {"roughness": 0.25, "metalness": 0.03, "clearcoat": 0.0, "clearcoatRoughness": 0.26, "opacity": 1.0},
+        }})
         self.assertEqual(asset_query(entry["sourceUrl"])["file"], self.path("finish.step.json"))
         self.assertEqual(entry["hash"], result_tree(Path(self.path("finish.step"))))
         self.assertNotIn("poseUrl", entry)
@@ -332,7 +359,7 @@ class SidecarTruthiness(ScannerTestCase):
         with mock.patch.object(scanner, "asset_for_path", mutate_after_version_read):
             entry = self.entry("race.step")
 
-        self.assertEqual(entry["sourceSidecar"]["appearance"], first)
+        self.assertEqual(entry["display"]["o1.1"]["material"]["roughness"], 0.2)
         self.assertEqual(entry["appearanceHash"], appearance_digest(first))
         self.assertNotEqual(entry["appearanceHash"], appearance_digest(second))
 
@@ -362,7 +389,7 @@ class SidecarTruthiness(ScannerTestCase):
         ]}
         entry = self._entry(json.dumps({"animation": animation}))
         # The keyframes as read, clips in their declared order: the first is the one a viewer opens on.
-        self.assertEqual(entry["sourceSidecar"]["animation"], animation)
+        self.assertEqual(entry["animation"], animation)
         self.assertEqual(len(entry["animationHash"]), 64)
 
     def test_no_animation_no_hash(self):
@@ -381,12 +408,12 @@ class SidecarTruthiness(ScannerTestCase):
 
     def test_an_unreadable_animation_section_is_no_sidecar_not_a_failed_entry(self):
         entry = self._entry(json.dumps({"animation": {"clips": "not clips"}}))
-        self.assertNotIn("sourceSidecar", entry)
+        self.assertNotIn("animation", entry)
         self.assertNotIn("animationHash", entry)
 
     def test_the_catalog_publishes_no_provenance(self):
         entry = self._entry(json.dumps({"sourceKind": "step"}))
-        for forbidden in ("sourceKind", "source", "poseHatchUrl", "moduleUrl", "legacyParamsSidecar", "renderModuleUrl"):
+        for forbidden in ("sourceKind", "source", "poseHatchUrl", "moduleUrl", "legacyParamsSidecar", "renderModuleUrl", "sourceSidecar"):
             self.assertNotIn(forbidden, entry)
 
     def test_the_sidecar_suffix_is_appended_to_the_whole_name(self):

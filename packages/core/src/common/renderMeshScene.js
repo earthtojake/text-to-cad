@@ -813,8 +813,8 @@ export function renderJobContext(meshData, job = {}) {
   };
   const wireframeMode = displayModeIsWireframe(displayMode);
   const edgesVisible = sceneSettings.view.edges.enabled;
-  const selectorRuntime = job.stepParameters?.selectorRuntime || job.selectorRuntime || null;
-  const displayEdgeRuntime = job.stepParameters?.displayEdgeRuntime || job.displayEdgeRuntime || null;
+  const selectorRuntime = job.selectorRuntime || null;
+  const displayEdgeRuntime = job.displayEdgeRuntime || null;
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
     edgesVisible,
     wireframeMode,

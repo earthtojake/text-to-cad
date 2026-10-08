@@ -5,22 +5,17 @@ import {
   buildDefaultAnimationState,
   findAnimationClip
 } from "@text-to-cad/core/common/animationClock.js";
-import {
-  kinematicsModuleDefinitionFromSidecar,
-  loadKinematicsModuleDefinition
-} from "@text-to-cad/core/common/kinematicsModule.js";
+import { articulationControls } from "@text-to-cad/core/common/articulation.js";
 import { loadSourceAnimation } from "@text-to-cad/core/common/animationRuntime.js";
-import { validateSourceSidecar } from "@text-to-cad/core/common/sourceSidecar.js";
 import { entryPoseUrl } from "@text-to-cad/core/lib/entryAssets.js";
 import { useAnimationClockStore } from "./animationClockStore.js";
-import { cadPathForEntry, fileKey as fileKeyOf } from "./entryPaths.js";
+import { fileKey as fileKeyOf } from "./entryPaths.js";
 import { restoreMotionAnimation, restoreMotionParameters } from "./motionRestore.js";
 import { buildParameterValuesCopyText, parseParameterValuesPasteText } from "./parameterControls.js";
-import { resolveStepModuleLoad, stepPoseLogic } from "./stepModuleLoad.js";
-import { stepModuleRequiresTopology } from "./topologyCapabilities.js";
+import { resolvePoseLoad, stepPoseLogic } from "./poseLoad.js";
 import { useStepMotionControls } from "./useStepMotionControls.js";
 
-function sourceAnimationForEntry(entry) { return entry?.sourceSidecar?.animation || null; }
+function sourceAnimationForEntry(entry) { return entry?.animation || null; }
 // A routine that bends a tube plays cadgen's skins for the document's current bytes, which
 // its URL names: a rebuild that moves the tube loads them again, from rest.
 function sourceAnimationKeyForEntry(entry) {
@@ -30,26 +25,27 @@ function sourceAnimationKeyForEntry(entry) {
 }
 
 /**
- * Where a STEP entry's motion comes from: its sidecar's kinematics module, the path the module
- * poses, and the routines' keyframes in the sidecar.
+ * Where a STEP entry's motion comes from: the articulation cadgen resolved from its sidecar's
+ * kinematics (inline on the entry, versioned by `poseUrl`), and the routines' baked keyframes.
  */
 export function stepMotionSources(entry) {
   const moduleUrl = entryPoseUrl(entry);
   const sourceAnimation = sourceAnimationForEntry(entry);
   return {
     moduleUrl,
-    cadPath: moduleUrl ? cadPathForEntry(entry) : "",
+    articulation: moduleUrl && entry?.articulation && typeof entry.articulation === "object" ? entry.articulation : null,
     sourceAnimation,
     animationKey: sourceAnimation ? sourceAnimationKeyForEntry(entry) : ""
   };
 }
 
 /**
- * A STEP's motion: its kinematics module and the Position values over it, and its routines and
- * the playback over them — loaded and held apart (a model may ship either, both, or neither),
+ * A STEP's motion: its articulation and the Position values over it, and its routines and
+ * the playback over them — resolved and held apart (a model may ship either, both, or neither),
  * with one command boundary over both (`useStepMotionControls`).
  *
- * In: the entry on screen, and the stored view to restore the pose from as the sidecar loads.
+ * In: the entry on screen, and the stored view to restore the pose from as the articulation
+ * resolves.
  * Out: what the Position panel and the playbar read and call, what the viewport draws a frame
  * from (`animationRuntime`), and `restore`, which the file's view calls once before the
  * first paint. A routine is never restored: every open starts at rest, and the speed and
@@ -66,7 +62,7 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
   readStoredRef.current = readStored;
   const reportErrorRef = useRef(reportError);
   reportErrorRef.current = reportError;
-  const { moduleUrl, cadPath, sourceAnimation, animationKey } = stepMotionSources(entry);
+  const { moduleUrl, articulation, sourceAnimation, animationKey } = stepMotionSources(entry);
 
   const [stepModuleLoadState, setStepModuleLoadState] = useState({
     url: "",
@@ -92,9 +88,9 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
   const animationStateRef = useRef(animationState);
   const motionRevisionRef = useRef(0);
 
-  // A rebuild writes this file's sidecar again (a new version, bound to the new document), and it is
-  // read again: until it lands, what the last one declared stays in hand, so the model stays posed
-  // and Position stays the tool while it loads. Whether the pose outlives it is the load's to say.
+  // A rebuild writes this file's sidecar again (a new version, bound to the new document), and its
+  // articulation arrives again: until it lands, what the last one declared stays in hand, so the
+  // model stays posed and Position stays the tool. Whether the pose outlives it is the load's to say.
   const kinematicsInHand = stepModuleLoadState.url === moduleUrl ||
     (Boolean(moduleUrl) && stepModuleLoadState.file === fileKey && stepModuleLoadState.status === "ready");
   const definition = kinematicsInHand ? stepModuleLoadState.definition : null;
@@ -150,34 +146,23 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
       setStepModuleParameterValues({});
     }
 
-    const loadMotionRevision = motionRevisionRef.current;
-    const modulePromise = entry?.sourceSidecar
-      ? Promise.resolve().then(() => kinematicsModuleDefinitionFromSidecar(
-          validateSourceSidecar(entry.sourceSidecar, {
-            url: moduleUrl || entry.file,
-            documentHash: entry.documentHash,
-          }),
-          { cadPath: cadPath, url: moduleUrl }
-        ))
-      : loadKinematicsModuleDefinition(moduleUrl, {
-          signal: controller.signal, resources: resources, cadPath: cadPath, documentHash: entry?.documentHash,
-        });
-    modulePromise.then((definition) => {
+    // The articulation is cadgen's, inline on the entry: nothing is fetched or validated here.
+    // It resolves on the next tick, as a load does, so a rebuild's pose carries over below.
+    Promise.resolve().then(() => (articulation ? { url: moduleUrl, articulation } : null)).then((definition) => {
       if (cancelled) {
         return;
       }
       // A reload whose joints and named poses are unchanged keeps the values in hand, and the
       // named pose chosen with them; one that changed them starts at the new defaults, with no
       // attempt to fit the old pose onto the new joints. A first load reads the stored pose,
-      // against the sidecar as it is now.
+      // against the articulation as it is now.
       const kept = reloading && stepPoseLogic(definition) === poseLogicInHand;
       const restoredPose = kept ? { parameterValues: stepModuleParameterValuesRef.current }
         : reloading ? null : readStoredRef.current().pose;
-      // A sidecar with no kinematics section resolves to a NULL definition —
-      // an animation-only model has a sidecar and lands here — so the ready
-      // state is committed from one place that expects that (see
-      // workbench/stepModuleLoad); the Position section is then absent, not empty.
-      const resolved = resolveStepModuleLoad({
+      // An entry with no articulation resolves to a NULL definition — an animation-only model
+      // has a sidecar and lands here — so the ready state is committed from one place that
+      // expects that (workbench/poseLoad); the Position section is then absent, not empty.
+      const resolved = resolvePoseLoad({
         url: moduleUrl,
         definition,
         restored: restoredPose
@@ -210,7 +195,7 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
       cancelled = true;
       controller.abort();
     };
-  }, [fileKey, entry, cadPath, moduleUrl]);
+  }, [fileKey, entry, moduleUrl]);
 
   // The animation half loads the keyframes in the selected sidecar. A document
   // with no animation resolves to no clips and no Animation tool, and a broken
@@ -261,7 +246,6 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
       resetAnimation();
     }
 
-    const loadMotionRevision = motionRevisionRef.current;
     loadSourceAnimation({ animation: sourceAnimation }, {
       signal: controller.signal, tubeSkinsUrl: entry?.tubeSkinsUrl || "", resources
     })
@@ -337,7 +321,7 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
   // Copy and Paste of the Position values, as text a person can keep and paste back.
   const { applyStepModuleParameterValues } = commands;
   const copyParameters = useCallback(async () => {
-    if (!definition?.parameters?.length) {
+    if (!articulationControls(definition?.articulation).length) {
       reportErrorRef.current("No STEP parameters to copy");
       return;
     }
@@ -348,7 +332,7 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
     }
   }, [clipboard, definition, stepModuleParameterValues]);
   const pasteParameters = useCallback(async () => {
-    if (!definition?.parameters?.length) {
+    if (!articulationControls(definition?.articulation).length) {
       reportErrorRef.current("No STEP parameters to paste");
       return;
     }
@@ -364,8 +348,8 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
     }
   }, [applyStepModuleParameterValues, clipboard, definition]);
 
-  // The stored pose, once, before the first paint (the file's view calls it). Definition
-  // normalization happens when the sidecar arrives.
+  // The stored pose, once, before the first paint (the file's view calls it). The values are
+  // normalized against the articulation when it resolves.
   const restore = (restored) => {
     const values = restored.pose?.parameterValues;
     if (values) {
@@ -411,7 +395,7 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
   };
 
   return {
-    definition, loading, topologyRequired: stepModuleRequiresTopology(definition), parameterValues: stepModuleParameterValues,
+    definition, loading, parameterValues: stepModuleParameterValues,
     animationState, animationStateRef, animationRuntime, animationError, positionControls, animationControls,
     onParameterChange: commands.handleStepModuleParameterChange, onPlayToggle: commands.handleAnimationPlayToggle,
     releaseAnimation: commands.releaseAnimation, restore

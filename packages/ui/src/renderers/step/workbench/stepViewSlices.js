@@ -6,12 +6,12 @@ import { entryAssetHash } from "@text-to-cad/core/lib/entryAssets.js";
 // tool, a measurement or a routine's time, which every open starts afresh.
 //
 //   tree       { expandedStepTreeNodeIds, hiddenPartIds, isolatedAssemblyNodeIds }   against the geometry
-//   pose       { parameterValues }                                                     against the motion sidecar
+//   pose       { parameterValues }                                                     against the articulation
 //   largeFile  { selectableTopologyEnabled }                                           against the geometry
 //
 // A slice comes back only when the file it was written against is still the file on screen:
 // a rebuilt model has different topology, so node ids from the old one are not ids at all,
-// and a regenerated sidecar may not have the parameters the stored pose names. The shell
+// and a regenerated articulation may not have the controls the stored pose names. The shell
 // applies that rule from the signatures below; this module says what each slice holds.
 
 const text = value => String(value ?? "").trim();
@@ -20,8 +20,8 @@ const idList = value => (Array.isArray(value) ? [...new Set(value.map(text).filt
 
 /**
  * What each slice is written against. The tree and the large-file decision both turn on the
- * model's geometry and topology; the pose comes out of the sidecar, so a rebuilt sidecar
- * invalidates it.
+ * model's geometry and topology; the pose is over the articulation of a build, so a rebuild
+ * invalidates it (the Position section fits a stored pose to the articulation it resolves).
  * @returns {{ tree: string, pose: string, largeFile: string }}
  */
 export function stepViewSignatures(entry) {
@@ -29,7 +29,7 @@ export function stepViewSignatures(entry) {
     text(entry?.kind).toLowerCase(), text(entry?.hash),
     entryAssetHash(entry, "selectorTopology"), entryAssetHash(entry, "topology"), entryAssetHash(entry, "glb")
   ].filter(Boolean).join(":") || text(entry?.file);
-  const motion = [entryAssetHash(entry, "stepModule"), text(entry?.hash)].filter(Boolean).join(":");
+  const motion = text(entry?.hash);
   return { tree: geometry, pose: motion, largeFile: geometry };
 }
 

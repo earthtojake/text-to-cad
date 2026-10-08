@@ -14,13 +14,10 @@ import {
   surfTessellationCacheKey
 } from "@text-to-cad/core/lib/renderAssetClient.js";
 import {
+  applyOccurrenceDisplay,
   assemblyRootFromTopology,
   buildComposedPackageMeshData
 } from "@text-to-cad/core/lib/assembly/meshData.js";
-import {
-  applySourceAppearance,
-  validateSourceSidecar
-} from "@text-to-cad/core/common/sourceSidecar.js";
 import { mapWithConcurrency } from "@text-to-cad/core/lib/async/concurrency.js";
 import { stepProductName } from "@text-to-cad/core/lib/step/productName.js";
 import {
@@ -60,7 +57,6 @@ import {
   entryMeshAssetSignature,
   entryReferenceAssetSignature,
   entrySelectorTopologyAssetUrl,
-  entrySourceSidecarUrl,
   entryTopologyAssetUrl
 } from "@text-to-cad/core/lib/entryAssets.js";
 import { reclaimIdleSurfWorkers } from "@text-to-cad/core/lib/renderAssetClient.js";
@@ -813,19 +809,14 @@ export function useCadAssets({
       // Component-GLB package: the canonical STEP artifact is a directory. Probe for
       // its assembly.json, fetch each unique component GLB once, and compose them in
       // world space. A non-package descriptor is a stale/unbuilt artifact (throws below).
-      const sourceSidecarUrl = entrySourceSidecarUrl(entry);
-      const inlineSourceSidecar = entry?.sourceSidecar && typeof entry.sourceSidecar === "object"
-        ? validateSourceSidecar(entry.sourceSidecar, {
-            url: sourceSidecarUrl || entry?.file,
-            documentHash: entry?.documentHash,
-          })
-        : null;
       const storedPackageDescriptor = await loadPackageDescriptor(meshUrl, { resources, signal: controller.signal });
       if (controller.signal.aborted) {
         throw abortError();
       }
+      // The tree joined to what cadgen resolved its appearance to (the entry's `display`,
+      // per assigned occurrence): the page draws the finishes and colours it is given.
       const packageDescriptor = storedPackageDescriptor
-        ? applySourceAppearance(storedPackageDescriptor, inlineSourceSidecar?.appearance)
+        ? applyOccurrenceDisplay(storedPackageDescriptor, entry?.display)
         : null;
       if (packageDescriptor && packageDescriptor.kind === "assembly-package") {
         // Progressive publish (design/viewer-memory.md §6): components are

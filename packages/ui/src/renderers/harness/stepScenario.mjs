@@ -29,13 +29,15 @@ const read = (name) => readFile(new URL(name, FIXTURE));
 const MESH_LEVELS = [0, 1, 2, 3];
 
 /**
- * Everything the fixture is, loaded once: the view, the sidecar, the surf bytes by object digest,
- * and each component's stored meshes, decoded so the harness's store can serve them for any input.
+ * Everything the fixture is, loaded once: the view, the sidecar and cadgen's articulation of its
+ * kinematics, the surf bytes by object digest, and each component's stored meshes, decoded so
+ * the harness's store can serve them for any input.
  */
 export async function loadStepFixture() {
   const { decodeComponentTessellation } = await import('@text-to-cad/core/lib/surf/tessellationCache.js');
   const assembly = await read('assembly.json');
   const sidecar = JSON.parse(await read('hinge_block.step.json'));
+  const articulation = JSON.parse(await read('hinge_block.articulation.json'));
   const view = JSON.parse(assembly);
   // `surfaceObject` is the digest of the `.surf` payload itself — the pin a real
   // surface resolution hands back. Deriving it here keeps the fixture to the files
@@ -49,7 +51,7 @@ export async function loadStepFixture() {
     }
     surfaces.set(component.surfaceInput, { cid, bytes, object: createHash('sha256').update(bytes).digest('hex'), meshes });
   }
-  return { assembly, view, sidecar, surfaces, file: 'hinge_block.step' };
+  return { assembly, view, sidecar, articulation, surfaces, file: 'hinge_block.step' };
 }
 
 const leaf = (id, name) => ({ children: [], id, leafPartIds: [id], name, nodeType: 'part' });
@@ -154,7 +156,7 @@ export function stageSinglePartFixture(fixture) {
       children: [{ ...leaf('o1.1', XCAF_ENTRY) }] } }
   };
   const surfaces = new Map([...fixture.surfaces].filter(([input]) => input === original.components[base.component].surfaceInput));
-  return { ...fixture, view, surfaces, sidecar: null, file: 'hinge_base.step', assembly: Buffer.from(JSON.stringify(view)) };
+  return { ...fixture, view, surfaces, sidecar: null, articulation: null, file: 'hinge_base.step', assembly: Buffer.from(JSON.stringify(view)) };
 }
 
 /**
@@ -217,10 +219,11 @@ async function meshStore(fixture, { warm = false } = {}) {
 }
 
 /**
- * The catalog entry the real scanner writes for this document, with the sidecar inline: the file
- * by its absolute path, under the `/models` the harness opens a bare `?file=` name in.
+ * The catalog entry the real scanner writes for this document, with what its sidecar means
+ * inline: the file by its absolute path, under the `/models` the harness opens a bare `?file=`
+ * name in.
  */
-export function stepCatalogEntry({ view, sidecar, assembly, file }) {
+export function stepCatalogEntry({ view, sidecar, articulation, assembly, file }) {
   if (!sidecar) {
     return { file: `/models/${file}`, kind: 'part', url: `/__cad/store?file=${view.tree}&documentHash=${view.documentHash}`,
       hash: view.tree, documentHash: view.documentHash, bytes: assembly.length };
@@ -233,12 +236,13 @@ export function stepCatalogEntry({ view, sidecar, assembly, file }) {
     documentHash: view.documentHash,
     bytes: assembly.length,
     sourceUrl: `/${file}.json`,
-    // Inline: the renderer loads kinematics and animation from the entry and
-    // never fetches the sidecar. The scanner only supplies it when the sidecar
-    // declares the current schema AND a `documentHash` equal to the digest of
-    // the STEP's bytes; a fixture failing either gate silently has no Position
-    // tab and no Animate tool.
-    sourceSidecar: sidecar,
+    // Inline, as the scanner publishes them: cadgen's articulation of the kinematics and the
+    // baked animation. The renderer reads both from the entry and never fetches the sidecar;
+    // the scanner only supplies them when the sidecar declares the current schema AND a
+    // `documentHash` equal to the digest of the STEP's bytes, so a fixture failing either gate
+    // silently has no Position tab and no Animate tool.
+    articulation,
+    animation: sidecar.animation,
     poseUrl: `/${file}.json`,
     animationHash: 'fixture-animation',
   };
@@ -406,7 +410,6 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
     // A mesh the store does not hold: a clean 404, never the HTML shell, which a
     // reader would fail to parse.
     if (url.pathname.includes('/__tess_cache/')) { notFound(response); return; }
-    if (url.pathname.endsWith(`/${fixture.file}.json`)) { if (current.sidecar) json(response, current.sidecar); else notFound(response); return; }
     if (/\.(woff2|ttf)$/.test(url.pathname)) { notFound(response); return; }
     response.setHeader('Content-Type', 'text/html');
     response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/harness.css"><style>body { margin: 0 } #root > div { width: 100vw !important; height: 100vh !important }</style></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>');
