@@ -52,6 +52,35 @@ For every `<joint>`:
 
 Never encode a kinematic fix by offsetting only the visual mesh; correct the joint/link frames instead, unless the mesh is genuinely offset from the link frame.
 
+### CAD Viewer nonlinear four-bar coupling
+
+Standard URDF `<mimic>` is affine and cannot close a nonlinear four-bar linkage. When exact CAD Viewer motion is required, keep the URDF link graph as a tree, expose the physical output joint as the only independent coordinate, and place this namespaced extension on the derived input joint:
+
+```xml
+<robot name="example" xmlns:tcad="https://text-to-cad.dev/urdf">
+  <!-- links and the independent output joint omitted -->
+  <joint name="input_crank_joint" type="revolute">
+    <parent link="ground_link" />
+    <child link="input_crank_link" />
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit lower="-0.6" upper="0.7" />
+    <tcad:four_bar
+      driver="output_joint"
+      input_length="0.026"
+      ground_length="0.220"
+      output_length="0.026"
+      coupler_length="0.220"
+      input_zero="-1.570796326795"
+      output_zero="1.806068683023" />
+  </joint>
+</robot>
+```
+
+Lengths use metres. `input_zero` and `output_zero` are the two moving-link angles, in radians from the ground link direction, when both URDF joint values are zero. The input and driver joints must share one ground link, use coplanar pivots separated by `ground_length`, and use parallel, same-direction axes. The Viewer selects that assembly branch, derives the input angle analytically from `driver`, and hides the dependent joint slider. The complete driver range must remain reachable on that branch, and the dependent joint limits must contain the entire derived input range. A joint cannot declare both `<mimic>` and `<tcad:four_bar>`.
+
+This is a Text-to-CAD vendor extension, not standard URDF behavior. Other consumers ignore the namespaced element; a robot state publisher or hardware driver must publish the same derived joint value to preserve loop closure outside the Viewer.
+
 ## Golden Skeleton
 
 Copy this shape for new robots. It shows the ledger, ordering, a frame-only root, one fixed and one revolute joint, mesh + primitive geometry, and a computed inertial:
