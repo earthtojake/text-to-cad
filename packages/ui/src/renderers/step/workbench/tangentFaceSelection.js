@@ -1,24 +1,23 @@
-// Use the topology's measured edge classification, never proximity or matching
-// face normals: a curved face's normal varies along its boundary.
+// A face's tangent group is cadgen's to decide (the selector table's `tangentGroup`: faces joined
+// across the tangent-class edges of one solid, from the exact BREP's continuity). Faces of one
+// placed component with the same group id are one group; a group never crosses a part, an
+// occurrence or a solid.
 export function buildTangentFaceGraph(references) {
-  const unique = new Map(references.map(reference => [reference.id, reference]));
-  const faces = new Map();
-  const graph = new Map();
-  for (const reference of unique.values()) {
-    if (reference.selectorType !== 'face') continue;
-    if (reference.displaySelector) {
-      faces.set(reference.displaySelector, faces.has(reference.displaySelector) ? null : reference);
-    }
-    graph.set(reference.id, new Set());
+  const faces = [...new Map(references.filter(ref => ref.selectorType === 'face').map(ref => [ref.id, ref])).values()];
+  const graph = new Map(faces.map(face => [face.id, new Set()]));
+  const groups = new Map();
+  for (const face of faces) {
+    const group = face.pickData?.tangentGroup;
+    if (!Number.isInteger(group)) continue;
+    const key = JSON.stringify([face.partId || '', face.occurrenceId || '', face.shapeId || '', group]);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(face);
   }
-  for (const edge of unique.values()) {
-    if (edge.selectorType !== 'edge' || edge.pickData?.visibilityClass !== 'tangent') continue;
-    const adjacent = [...new Set(edge.pickData.adjacentSelectors || [])];
-    if (adjacent.length !== 2) continue;
-    const [a, b] = adjacent.map(selector => faces.get(selector));
-    if (!a || !b || a.occurrenceId !== b.occurrenceId || a.shapeId !== b.shapeId) continue;
-    graph.get(a.id).add(b.id);
-    graph.get(b.id).add(a.id);
+  for (const members of groups.values()) {
+    for (let index = 1; index < members.length; index += 1) {
+      graph.get(members[0].id).add(members[index].id);
+      graph.get(members[index].id).add(members[0].id);
+    }
   }
   return graph;
 }

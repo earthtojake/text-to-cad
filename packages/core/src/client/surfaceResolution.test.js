@@ -25,6 +25,10 @@ function json(value, status = 200) {
   });
 }
 
+// The component's selector table rides every ready row, bound to the same input.
+const S = "5".repeat(64);
+const selectors = (surfaceInput) => ({ object: S, url: `/__cad/store?tree=${TREE}&surfaceInput=${surfaceInput}&object=${S}`, byteLength: 99 });
+
 function ready() {
   return {
     viewId: VIEW,
@@ -35,6 +39,7 @@ function ready() {
         surfaceObject: O,
         url: `/__cad/store?tree=${TREE}&surfaceInput=${D}&object=${O}`,
         byteLength: 1234,
+        selectors: selectors(D),
       },
     },
   };
@@ -55,7 +60,15 @@ test("surface resolution forwards frozen pins and validates a ready CAS ticket",
     surfaceInput: D, surfaceObject: O,
     surfUrl: `/__cad/store?tree=${TREE}&surfaceInput=${D}&object=${O}`,
     byteLength: 1234,
+    selectorsObject: S,
+    selectorsUrl: `/__cad/store?tree=${TREE}&surfaceInput=${D}&object=${S}`,
+    selectorsByteLength: 99,
   });
+  // A ready row without its table, or with one bound to another input, is no ticket.
+  for (const broken of [{ selectors: undefined }, { selectors: selectors("f".repeat(64)) }, { selectors: { ...selectors(D), byteLength: 0 } }]) {
+    globalThis.fetch = async () => json({ ...ready(), components: { part: { ...ready().components.part, ...broken } } });
+    await assert.rejects(resolveSurfaceComponents(descriptor, [{ cid: "part", surfaceInput: D }]), /selector table/);
+  }
   assert.equal(request.url, "/__cad/surfaces");
   assert.equal(request.options.headers["x-cadgen-viewer"], "1");
   assert.deepEqual(request.body, {
@@ -87,7 +100,7 @@ test("a row ready before the rest of its request is announced at once, and once"
   t.after(() => { globalThis.fetch = original; });
   const D2 = "f".repeat(64), O2 = "9".repeat(64);
   const row = (surfaceInput, object) => ({ surfaceInput, state: "ready", surfaceObject: object,
-    url: `/__cad/store?tree=${TREE}&surfaceInput=${surfaceInput}&object=${object}`, byteLength: 10 });
+    url: `/__cad/store?tree=${TREE}&surfaceInput=${surfaceInput}&object=${object}`, byteLength: 10, selectors: selectors(surfaceInput) });
   let polls = 0;
   globalThis.fetch = async () => {
     polls += 1;
@@ -110,7 +123,7 @@ test("a failed component fails alone, with its own error, and the request goes o
   t.after(() => { globalThis.fetch = original; });
   const D2 = "f".repeat(64), D3 = "7".repeat(64), O2 = "9".repeat(64);
   const row = (surfaceInput, object) => ({ surfaceInput, state: "ready", surfaceObject: object,
-    url: `/__cad/store?tree=${TREE}&surfaceInput=${surfaceInput}&object=${object}`, byteLength: 10 });
+    url: `/__cad/store?tree=${TREE}&surfaceInput=${surfaceInput}&object=${object}`, byteLength: 10, selectors: selectors(surfaceInput) });
   let polls = 0;
   globalThis.fetch = async () => {
     polls += 1;
@@ -269,7 +282,7 @@ test("a request for more components than one POST may name is sent in chunks of 
     }
     return json({ viewId: VIEW, components: Object.fromEntries(body.components.map(({ cid }) => [cid, {
       surfaceInput: D, state: "ready", surfaceObject: O,
-      url: `/__cad/store?tree=${TREE}&surfaceInput=${D}&object=${O}`, byteLength: 10,
+      url: `/__cad/store?tree=${TREE}&surfaceInput=${D}&object=${O}`, byteLength: 10, selectors: selectors(D),
     }])) });
   };
   const requests = Array.from({ length: 150 }, (_, index) => ({ cid: `part${index}`, surfaceInput: D, surfaceObject: O }));
@@ -286,7 +299,7 @@ test("a failing chunk fails the whole request with its own error", async (t) => 
     const body = JSON.parse(options.body);
     return json({ viewId: VIEW, components: Object.fromEntries(body.components.map(({ cid }) => [cid, cid === "part70"
       ? { surfaceInput: D, state: "failed", error: "bad face", code: "extract" }
-      : { surfaceInput: D, state: "ready", surfaceObject: O, url: `/__cad/store?tree=${TREE}&surfaceInput=${D}&object=${O}`, byteLength: 10 }])) });
+      : { surfaceInput: D, state: "ready", surfaceObject: O, url: `/__cad/store?tree=${TREE}&surfaceInput=${D}&object=${O}`, byteLength: 10, selectors: selectors(D) }])) });
   };
   const requests = Array.from({ length: 100 }, (_, index) => ({ cid: `part${index}`, surfaceInput: D, surfaceObject: O }));
   await assert.rejects(resolveSurfaceComponents(descriptor, requests), (error) => error instanceof SurfaceResolutionError && error.cid === "part70");

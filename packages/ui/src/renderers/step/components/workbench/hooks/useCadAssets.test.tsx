@@ -196,7 +196,8 @@ it('keeps a surface a refinement resolved through the next progressive publish',
   const owner = createTessellationCache({ provider: { probeMany: probe, getProbed: vi.fn(), getManyProbed: many } });
   const resolving = { ...client, resolveSurfaceComponents: vi.fn(async (_descriptor, requested) => new Map(
     requested.map(({ cid, surfaceInput }) => [cid, { surfaceInput, surfaceObject: 'a'.repeat(64),
-      surfUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}`, byteLength: 100 }]))) };
+      surfUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}`, byteLength: 100,
+      selectorsUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}&selectors=1` }]))) };
   try {
     const opened = renderHook(() => assets(model, resolving, owner.createSession()));
     let loading;
@@ -204,10 +205,10 @@ it('keeps a surface a refinement resolved through the next progressive publish',
     await waitFor(() => expect(opened.result.current.lodPackage?.components).toHaveLength(8));
     await waitFor(() => expect(held).toHaveLength(1));
     const component = opened.result.current.lodPackage.components[0];
-    expect(component.surfUrl).toBe('');
+    expect(component.selectorsUrl).toBe('');
     // What the viewport's refinement does with an empty URL (`useViewportLod`): resolve, then ask.
     const resolved = await act(() => component.resolveSurface(new AbortController().signal));
-    const request = lodPayloadRequest({ ...component, identity: resolved.identity, surfUrl: resolved.surfUrl }, 0);
+    const request = lodPayloadRequest({ ...component, identity: resolved.identity, selectorsUrl: resolved.selectorsUrl }, 0);
     act(() => held.splice(0).forEach(release => release()));
     await waitFor(() => expect(opened.result.current.lodPackage.components.length).toBeGreaterThan(8));
     const payload = { meshData: component.meshData, lodRequest: request };
@@ -244,7 +245,8 @@ it('has cadgen mesh a cold component in its surface request, then reads that mes
         object: createHash('sha256').update(bytes).digest('hex'), ...tessellationPayloadFacts(bytes) });
       encoded.set(mesh.tessellationInput, { bytes, row: mesh });
       return [cid, { surfaceInput, surfaceObject: 'a'.repeat(64), byteLength: 100, mesh,
-        surfUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}` }];
+        surfUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}`,
+        selectorsUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}&selectors=1` }];
     }));
   }) };
   try {
@@ -285,7 +287,8 @@ it('draws the rest of a model when cadgen cannot mesh one component, and reports
       }
       ready.set(cid, { surfaceInput, surfaceObject: 'a'.repeat(64), byteLength: 100,
         mesh: encoded.get(tessellationCacheKey(surfaceInput, options.tessellation)).row,
-        surfUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}` });
+        surfUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}`,
+        selectorsUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}&selectors=1` });
     }
     return ready;
   }) };
@@ -313,7 +316,8 @@ function surfFixtures(names: string[]) {
     const bytes = new Uint8Array(fs.readFileSync(path.join(dir, `${name}.l1.glb`)));
     const row = validateTessellationProbeRow({ schemaVersion: MESH_INDEX_SCHEMA,
       object: createHash('sha256').update(bytes).digest('hex'), ...tessellationPayloadFacts(bytes) });
-    return { ...manifest[name], bytes, row, surf: new Uint8Array(fs.readFileSync(path.join(dir, `${name}.surf`))) };
+    return { ...manifest[name], bytes, row, surf: new Uint8Array(fs.readFileSync(path.join(dir, `${name}.surf`))),
+      selectors: new Uint8Array(fs.readFileSync(path.join(dir, `${name}.selectors.json`))) };
   });
 }
 
@@ -330,11 +334,14 @@ it('has cadgen mesh a cold part for its topology, and asks again for a part whos
     components: Object.fromEntries(Object.entries(parts).map(([cid, part]) => [cid, { surfaceInput: part.surfaceInput }])),
     assembly: { root: { id: 'root', nodeType: 'assembly', children: occurrences.map(({ id }) => ({ id, nodeType: 'part', children: [] })) } } };
   const surfUrl = cid => `https://cad-assets.test/__cad/store?surfaceInput=${parts[cid].surfaceInput}`;
+  const selectorsUrl = cid => `${surfUrl(cid)}&selectors=1`;
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (String(url).includes('assembly.json')) return new Response(JSON.stringify(descriptor));
     const cid = Object.keys(parts).find(key => String(url).includes(parts[key].surfaceInput));
-    return cid ? new Response(parts[cid].surf.slice(), { headers: { 'content-length': String(parts[cid].surf.byteLength) } })
-      : new Response(null, { status: 404 });
+    if (!cid) return new Response(null, { status: 404 });
+    // The selector table (what selectors read) or the SURF (what recognition reads).
+    const bytes = String(url).includes('selectors=1') ? parts[cid].selectors : parts[cid].surf;
+    return new Response(bytes.slice(), { headers: { 'content-length': String(bytes.byteLength) } });
   }));
   // The host's mesh store: empty until cadgen meshes a component in a surface request naming a tier.
   const stored = new Map();
@@ -359,7 +366,8 @@ it('has cadgen mesh a cold part for its topology, and asks again for a part whos
       return new Map(requested.filter(request => !failed.includes(request)).map(({ cid }) => {
         if (options.tessellation) stored.set(parts[cid].row.tessellationInput, parts[cid]);
         return [cid, { surfaceInput: parts[cid].surfaceInput, surfaceObject: parts[cid].surfaceObject, surfUrl: surfUrl(cid),
-          byteLength: parts[cid].surf.byteLength, ...(options.tessellation ? { mesh: parts[cid].row } : {}) }];
+          selectorsUrl: selectorsUrl(cid), byteLength: parts[cid].surf.byteLength,
+          ...(options.tessellation ? { mesh: parts[cid].row } : {}) }];
       }));
     } };
   const model = { ...entry('cold-step', 'assembly'), sourceFormat: 'step', file: 'cold-step.step',

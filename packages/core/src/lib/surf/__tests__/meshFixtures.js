@@ -30,6 +30,11 @@ export function surfFixture(name) {
   return { bytes, arrayBuffer: () => bytes.slice().buffer, surfaceInput, surfaceObject };
 }
 
+/** One fixture component's selector table, as cadgen stored it beside the SURF (parsed). */
+export function selectorTableFixture(name) {
+  return JSON.parse(fs.readFileSync(new URL(`${name}.selectors.json`, FIXTURES), "utf8"));
+}
+
 /** One fixture component's stored mesh at a viewer LOD level, with its probe row. */
 export function meshFixture(name, level = 1) {
   const bytes = new Uint8Array(fs.readFileSync(new URL(`${name}.l${level}.glb`, FIXTURES)));

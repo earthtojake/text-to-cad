@@ -197,7 +197,8 @@ test("a component that failed in its request fails alone; the ready ones beside 
   const inputs = { c0: hex("1"), bad: hex("2"), c2: hex("3") };
   const object = hex("e");
   const ready = cid => ({ surfaceInput: inputs[cid], state: "ready", surfaceObject: object, byteLength: 10,
-    url: `/__cad/store?tree=${view.tree}&surfaceInput=${inputs[cid]}&object=${object}` });
+    url: `/__cad/store?tree=${view.tree}&surfaceInput=${inputs[cid]}&object=${object}`,
+    selectors: { object: hex("5"), byteLength: 10, url: `/__cad/store?tree=${view.tree}&surfaceInput=${inputs[cid]}&object=${hex("5")}` } });
   const client = createCadClient({ fetch: async () => new Response(JSON.stringify({ viewId: view.viewId, components: {
     c0: ready("c0"),
     bad: { surfaceInput: inputs.bad, state: "failed", error: "component bad: OCCT did not mesh 2 face(s)", code: "mesh" },

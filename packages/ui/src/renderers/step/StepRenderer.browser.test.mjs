@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, afterEach, before, test } from 'node:test';
 import { PNG } from 'pngjs';
 import { parseCadRefToken } from '@text-to-cad/core/lib/cadRefs.js';
-import { serveStepHarness } from '../harness/stepScenario.mjs';
+import { loadStepFixture, serveStepHarness } from '../harness/stepScenario.mjs';
 import { TOOL_PANEL_REFERENCE_HEIGHT, TOOL_PANEL_WIDTH } from '../../../dist/renderers/kit/tools/toolStackLayout.js';
 
 // The STEP renderer end to end in a real browser, over the committed two-part
@@ -329,6 +329,48 @@ test('a STEP opens in Select with the tools its sidecar earns, its Features in t
   await pane.locator('section[aria-label="Features"][style*="max-height: 64px"]').waitFor();
   assert.equal(await featuresPanel.locator('[data-tool-panel-body]').evaluate(node => node.scrollHeight > node.clientHeight), true, 'the tree scrolls its rows');
   assert.deepEqual(await stackOverflow(), [0, 0], 'and the stack still has nothing to scroll');
+  assert.deepEqual(errors, []);
+});
+
+test('a pick names its face or edge by the id cadgen minted in the selector table, and Group edges grows it to the table\'s chain', async () => {
+  const view = await open();
+  const { page, pane, at, errors } = view;
+  // The table the surface request served for the base, as cadgen stored it beside the surface:
+  // the ids a pick must answer with are its rows', joined to the mesh by ordinal, never the page's.
+  const fixture = await loadStepFixture();
+  const base = fixture.view.occurrences.find(occurrence => occurrence.name === 'base');
+  const table = JSON.parse(fixture.surfaces.get(fixture.view.components[base.component].surfaceInput).selectors.bytes.toString());
+  const rows = (name, columns) => table[name].map(row => Object.fromEntries(table.tables[columns].map((column, index) => [column, row[index]])));
+  const top = rows('faces', 'faceColumns').find(face => face.normal && face.normal[2] > 0.5);
+  const edges = rows('edges', 'edgeColumns');
+  const rim = edges.find(edge => edge.curveType === 'line' && edge.bbox.min[0] === 10 && edge.bbox.max[0] === 10
+    && edge.bbox.min[2] === 5 && edge.bbox.max[2] === 5);
+  assert.ok(top && rim, 'the base has a top face and a top rim edge along +X');
+  // A selected reference id ends in the selector the pick resolved to (`topology|<part>|<type>|<selector>`).
+  const selected = () => page.evaluate(() => window.cadHarness.a.controller.readState().selectedReferenceIds.map(id => id.split('|').pop()));
+  await pane.getByRole('button', { name: 'Expand base', exact: true }).click();
+  // The part's topology lands after the row opens, and a press before it lands picks the part:
+  // press until a face answers, then hold it to cadgen's id.
+  for (let attempt = 0; attempt < 50 && !(await selected()).some(id => /\.f\d+$/.test(id)); attempt += 1) {
+    await page.mouse.click(...at([6, 6, 5]));
+    await page.waitForTimeout(100);
+  }
+  assert.deepEqual(await selected(), [`${base.id}.${top.localId}`], 'the top face is the table\'s row, under its occurrence');
+  await page.mouse.click(...at([10, 6, 5]));
+  await page.waitForFunction(() => /\.e\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds[0] || ''));
+  assert.deepEqual(await selected(), [`${base.id}.${rim.localId}`], 'the rim edge is the table\'s row');
+  // Group edges: the pick grows to the edges of the table's chain, which for a box edge is itself
+  // alone (its ends each meet two edges at a right angle), however close the neighbours lie.
+  await page.evaluate(() => document.activeElement instanceof HTMLInputElement && document.activeElement.blur());
+  await pane.getByRole('button', { name: /^Select mode: / }).click();
+  await page.locator('[role=menu][aria-label="Select mode"]').getByRole('menuitemcheckbox', { name: 'Group edges', exact: true }).click();
+  // A checkbox item keeps its menu open for the next one; Escape puts it away.
+  await page.keyboard.press('Escape');
+  await page.locator('[role=menu]').waitFor({ state: 'detached' });
+  await page.mouse.click(...at([10, 6, 5]));
+  await page.waitForFunction(() => /\.e\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds[0] || ''));
+  const chain = edges.filter(edge => edge.chain === rim.chain).map(edge => `${base.id}.${edge.localId}`);
+  assert.deepEqual((await selected()).sort(), chain.sort(), 'the grown selection is the table\'s chain');
   assert.deepEqual(errors, []);
 });
 

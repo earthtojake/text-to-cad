@@ -35,7 +35,12 @@ the last release disposes shared GPU/BVH state.
 ## 2. The demand boundary
 
 Render-only loads do not construct selector topology until it is requested,
-and viewport refinement keeps that boundary.
+and viewport refinement keeps that boundary. Selector topology is cadgen's
+selector table (served on the surface request's ready row, `selectorsUrl`)
+joined to the component's stored mesh by ordinal (`lib/surf/selectorTable.js`):
+the ids, metrics, flags, adjacency, chains and tangent groups are the table's,
+and the join adds only each face's triangle range and each edge's segment
+range in the mesh on screen.
 
 - Unused components replace only display arrays. A component with active
   topology replaces its selectors at the same concrete tessellation before

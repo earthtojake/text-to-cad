@@ -1,10 +1,12 @@
 import { surfTessellationCacheKey } from "@text-to-cad/core/lib/renderAssetClient.js";
 import { lodTessellationForLevel, normalizeLodLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 
+// `url` is the component's selector table (`selectorsUrl`), what a level's payload reads
+// its selectors from.
 export function lodPayloadRequest(component, level) {
   return Object.freeze({ descriptor: component.descriptor, file: component.file,
-    cid: component.cid, baseMesh: component.meshData, baseLevel: component.level, identity: component.identity, url: component.surfUrl,
-    key: surfTessellationCacheKey(component.surfUrl, lodTessellationForLevel(level), component.identity) });
+    cid: component.cid, baseMesh: component.meshData, baseLevel: component.level, identity: component.identity, url: component.selectorsUrl,
+    key: surfTessellationCacheKey(component.selectorsUrl, lodTessellationForLevel(level), component.identity) });
 }
 
 export function matchesLodPayloadRequest(request, context, cid, level, url) {

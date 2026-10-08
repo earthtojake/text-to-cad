@@ -303,7 +303,7 @@ export async function loadRenderSurf(url, {
 } = {}) {
   // The worker builds only the display payload. A stored mesh carries
   // geometry, display edges, bounds and appearance, so this path skips both
-  // selector construction and the .surf request.
+  // the selector join and the selector table request.
   const cacheKey = surfTessellationCacheKey(url, tessellation, identity);
   const meshData = await loadCached(glbCache, cacheKey, async () => {
     return (await loadSurfPayload(url, {
@@ -610,13 +610,14 @@ export function peekRenderDisplayEdgeBundle(glbUrl, { resources } = {}) {
   return peekCached(displayEdgeCache, cadResourceCacheKey(resources, glbUrl));
 }
 
-// --- Exact-surface topology ------------------------------------------------
+// --- Exact topology ----------------------------------------------------------
 //
-// The .surf carries the same topology the GLB's STEP_TOPOLOGY tables did.
+// cadgen's selector table carries the topology the GLB's STEP_TOPOLOGY tables
+// did, and the page joins it to the stored mesh (surf/selectorTable.js).
 // Worker requests declare whether they need render data, selectors, or both.
-// Initial display uses render only; selection and measurement synthesize the
-// selector bundle on demand. LOD requests both only for already-used topology;
-// later demand must use the displayed level's concrete tessellation key.
+// Initial display uses render only; selection and measurement join the table
+// on demand. LOD requests both only for already-used topology; later demand
+// must use the displayed level's concrete tessellation key.
 
 const surfPayloadCache = new Map();
 
@@ -817,19 +818,17 @@ function capabilityCacheKey(capabilities) {
 
 async function loadSurfPayloadInline(url, { signal, resources, tessellation, identity, capabilities, tessellationCache } = {}) {
   const [
-    { parseSurf },
     {
       decodeComponentTessellation,
       surfIndexFromCacheEntry,
       tessellationCacheKey,
     },
     { buildMeshDataFromSurf },
-    { buildSelectorBundleFromSurf },
+    { joinSelectorTable, parseSelectorTable },
   ] = await Promise.all([
-    import("./surf/container.js"),
     import("./surf/tessellationCache.js"),
     import("./surf/surfMeshData.js"),
-    import("./surf/surfSelectorBundle.js"),
+    import("./surf/selectorTable.js"),
   ]);
   const surfaceInput = String(identity?.surfaceInput || "");
   const surfaceObject = String(identity?.surfaceObject || "");
@@ -847,17 +846,18 @@ async function loadSurfPayloadInline(url, { signal, resources, tessellation, ide
       signal, probe, strictProbe: true,
     });
   if (!cached) throw new TessellationCacheProbeMissError(probe);
-  // Drawing needs only the mesh; selectors also need the SURF's topology tables.
+  const meshData = capabilities.render ? buildMeshDataFromSurf(surfIndexFromCacheEntry(cached), cached.component) : null;
+  // Drawing needs only the mesh; selectors also need the component's selector table
+  // (`url`: the one its surface request answered with), joined to this mesh.
   if (!capabilities.selectors) {
-    return { meshData: buildMeshDataFromSurf(surfIndexFromCacheEntry(cached), cached.component) };
+    return { meshData };
   }
-  if (!url) throw new Error("Exact SURF bytes are not ready for this component");
+  if (!url) throw new Error("The selector table is not ready for this component");
   const buffer = await loadRenderArrayBuffer(url, { signal, resources });
-  assertNotGitLfsPointer(buffer, url, "SURF render asset");
-  const { index } = parseSurf(buffer);
+  assertNotGitLfsPointer(buffer, url, "selector table asset");
   return {
-    ...(capabilities.render ? { meshData: buildMeshDataFromSurf(index, cached.component) } : {}),
-    bundle: buildSelectorBundleFromSurf(index, cached.component),
+    ...(meshData ? { meshData } : {}),
+    bundle: joinSelectorTable(parseSelectorTable(buffer), cached.component),
   };
 }
 
@@ -897,8 +897,10 @@ async function loadSurfPayload(url, {
 
 /**
  * Render data and, when requested, selectors for one concrete tessellation.
- * A render-only refinement passes selectors:false; the caller reconciles any
- * topology demanded during that load before publishing new triangles.
+ * `url` is the component's selector table (its surface ticket's `selectorsUrl`),
+ * read only with `selectors`. A render-only refinement passes selectors:false;
+ * the caller reconciles any topology demanded during that load before
+ * publishing new triangles.
  */
 export async function loadRenderSurfPayloadAtLevel(url, {
   signal,
@@ -920,7 +922,9 @@ export async function loadRenderSurfPayloadAtLevel(url, {
   });
 }
 
-export async function loadRenderSurfSelectorBundle(surfUrl, {
+/** The selector bundle of one component at one tessellation: cadgen's selector table
+ * (`selectorsUrl`, its surface ticket's) joined to the mesh at that level. */
+export async function loadRenderSurfSelectorBundle(selectorsUrl, {
   signal,
   resources,
   tessellation,
@@ -928,9 +932,9 @@ export async function loadRenderSurfSelectorBundle(surfUrl, {
   memoryEstimateBytes,
   tessellationCache,
 } = {}) {
-  const cacheKey = surfTessellationCacheKey(surfUrl, tessellation, identity);
+  const cacheKey = surfTessellationCacheKey(selectorsUrl, tessellation, identity);
   const bundle = await loadCached(selectorCache, cacheKey, async () => {
-    return (await loadSurfPayload(surfUrl, {
+    return (await loadSurfPayload(selectorsUrl, {
       signal,
       resources,
       tessellation,

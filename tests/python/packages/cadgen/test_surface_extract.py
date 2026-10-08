@@ -278,13 +278,13 @@ class TightBoundsTest(unittest.TestCase):
                 self.assertAlmostEqual(value, radius, places=4)
 
     def test_component_bounds_match_the_radius(self) -> None:
+        from cadgen._internal.selector_table import build_selector_table
         from cadgen._internal.surface_extract import extract_surface_component, read_surf
-        from cadgen._internal.surf_tables import selector_bundle_from_surf_index
 
         radius, height = 7.5, 4.0
-        index, _ = read_surf(bytes(extract_surface_component(self._nurbs_cylinder(radius, height))))
-        bundle = selector_bundle_from_surf_index(index)
-        bbox = bundle.manifest["bbox"]
+        shape = self._nurbs_cylinder(radius, height)
+        index, _ = read_surf(bytes(extract_surface_component(shape)))
+        bbox = build_selector_table(shape, index)["bbox"]
         self.assertAlmostEqual(bbox["max"][0], radius, places=4)
         self.assertAlmostEqual(bbox["max"][1], radius, places=4)
         self.assertAlmostEqual(bbox["min"][0], -radius, places=4)

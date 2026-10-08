@@ -46,7 +46,7 @@ One word per concept; the code uses these words and no others.
 | **stale / current**, **gate** | the freshness state and the check that decides it |
 | **claim** | what a write does to an object it finds already present: its mtime becomes now, less two ticks of its clock, so the sweeper's grace window covers it and the claiming process keeps what it verified of it (§8) |
 | **evict** | drop a derived entry to keep the store under its cap; only the derived kinds are ever evicted (§8) |
-| **obsolete** | a surface or mesh entry an older extractor or mesher of cadgen's wrote: no reader of this cadgen asks for it again, and the sweeper retires it once it is a week old (§2, §8) |
+| **obsolete** | a surface, selector-table or mesh entry an older extractor, table scheme or mesher of cadgen's wrote: no reader of this cadgen asks for it again, and the sweeper retires it once it is a week old (§2, §8) |
 | **worker / spare / extra**, **job** | daemon vocabulary (the daemon's own documentation) |
 
 Retired words: node, package, manifest, ref (as a store concept), scope, blob.
@@ -69,6 +69,7 @@ One word is NOT retired, and it has exactly one meaning:
   index/output/<sha256(output path)>  {model}: which script wrote the file at this path
   index/component/<cid>               geometry-input entries → encoded BREP and intrinsic recipe
   index/surface/<surfaceInput>        attested extraction inputs → SURF object hash
+  index/selector/<surfaceInput>-s<scheme>  a surface's selector table (refs, facts, chains) → object hash
   index/bounds/<sha256(bounds key)>   bounding boxes of stored geometry, inline
   index/mesh/<key>                    a component's mesh at one tessellation → GLB object hash
   index/drawing/<sha256(scheme + document hash)>  a 2D drawing's render payload → object hash
@@ -91,12 +92,13 @@ in use: a surface entry whose producer's extraction scheme and SURF format are
 no newer than this cadgen's and not both the same
 (`surfaces.obsolete_entry`; an eager-only one, which names no producer, was
 keyed under an older SURF format), a mesh entry keyed by an older mesher or
-mesh format (`meshes.obsolete_key`), or a mesh keyed by an obsolete
+mesh format (`meshes.obsolete_key`), a selector table keyed by an older table
+scheme (`selectors.obsolete_key`), or a mesh or table keyed by an obsolete
 surface's input. No reader of this cadgen computes those keys again, but an
 older cadgen sharing the store still may, and a read never writes. So the
 sweeper retires an obsolete entry, with every object only it named, once it
 was last written a week ago (`gc.OBSOLETE_RETIRE_AFTER_SECONDS`), and an
-obsolete surface with its meshes, once the youngest is (§8): an older cadgen
+obsolete surface with its meshes and table, once the youngest is (§8): an older cadgen
 still in use derives each again at most once a week, and an upgrade's
 leftovers go within about a week. A newer cadgen's entry is never obsolete.
 Kernel versions are not ordered here: an entry of another build123d or OCP is
@@ -132,8 +134,9 @@ operations always execute.
 `objects/` is the **artifact side**: what geometry exists. `index/model`,
 `index/output` are the **code side**: what source produced a result and
 what it depended on. `index/bounds`, `index/component`, `index/surface`,
-`index/mesh`, `index/drawing` and `index/skin` remember reusable derivations;
-surface, mesh and drawing jobs consume only immutable artifact inputs. `index/drawing` is a
+`index/selector`, `index/mesh`, `index/drawing` and `index/skin` remember
+reusable derivations; surface, selector, mesh and drawing jobs consume only
+immutable artifact inputs. `index/drawing` is a
 2D document's flattened render payload: its key hashes the extraction scheme
 (payload shape × the drawing library's release) together with the document's
 content hash, so the same bytes are never flattened twice and an upgrade lands
@@ -330,6 +333,25 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   their labels, with no component read, and an `axis={"ref": ...}` reads the
   SURF of the one component its occurrence places
   (`_internal/kinematics_resolve.py`).
+
+  Every surface is derived with the component's **selector table**
+  (`_internal/selector_table.py`, stored by `store/selectors.py` under
+  `index/selector/<surfaceInput>-s<scheme>`): the one place a ref's facts are
+  minted. From the exact BREP and the SURF it holds, per face, edge and vertex,
+  the local id a ref ends in (`f7`, `e3`, `v2`), the exact metrics and
+  parameters the SURF carries, the plane normals, whether an entity can be
+  referenced, its relevance, every adjacency (face–edge, edge–vertex), each
+  edge's chain and each face's tangent group — the sets the viewer's connected
+  selection grows a pick to. The CAD Viewer joins the table to the mesh's face
+  and edge tables by ordinal and composes `occurrenceId + "." + localId`; the
+  CLI (`assembly_lookup`) reads the same table from a view's
+  `components/<cid>.selectors.json`. So a ref the page shows resolves in
+  `inspect` to the entity it names, and nothing in a browser mints one. The
+  table is served by the surface request's ready row (`selectors`) through the
+  same store route as the surface, and a surface without its table is not
+  ready: the request derives it again, from the stored surface and BREP. The
+  scheme is bumped for any change in what the table holds, and an older
+  scheme's entry is obsolete (§2).
 
   Meshes are derived the same way, and by cadgen alone. `derive` with
   `tessellations` meshes each component after its surface
@@ -1191,15 +1213,16 @@ pass scans the store once (names, sizes, mtimes), marks once, and removes three
 kinds of thing:
 
 1. **Retired kinds and obsolete entries.** The folders in `RETIRED_KINDS`
-   (`index/op`, §2) go, and so do the obsolete surface and mesh entries a
-   week old (§2), with every object only those entries named; a younger
+   (`index/op`, §2) go, and so do the obsolete surface, selector-table and
+   mesh entries a week old (§2), with every object only those entries named; a younger
    obsolete entry stays, objects and all, like a current one. An entry naming
    an object the grace window still keeps waits for the next pass, so that
    object goes with its entry rather than with the next full sweep, and an
    entry written again since the scan stays.
 2. **Evicted entries**, only under a cap: the derived kinds -- `mesh`,
-   `surface`, `component`, `bounds`, `drawing`, `skin` -- least recently written
-   first, until the store fits 80% of the cap. Sizes are deduplicated: an
+   `surface`, `selector`, `component`, `bounds`, `drawing`, `skin` -- least
+   recently written first, until the store fits 80% of the cap. Sizes are
+   deduplicated: an
    object goes only when nothing that stays still needs it, so evicting a
    component entry whose BREP a current tree places frees only the entry.
    When what no pass may remove leaves less room than the fifth of the cap
@@ -1217,9 +1240,9 @@ kinds of thing:
 
 **Recently used means recently written.** A hit is a read (§5). An entry's age
 is when a build or a derivation last wrote it -- a publish rewrites every
-component entry its tree has; a derivation writes the surface, mesh, bounds,
-drawing or skin entry it computed -- and an object's is when a publish last wrote or
-claimed it. A display cache that is only ever read ages, goes when the cap needs
+component entry its tree has; a derivation writes the surface, selector, mesh,
+bounds, drawing or skin entry it computed -- and an object's is when a publish
+last wrote or claimed it. A display cache that is only ever read ages, goes when the cap needs
 the room, and costs one recomputation when it is next shown. Evicting never
 changes an answer: every reader treats a missing entry or object as a miss.
 
@@ -1272,7 +1295,7 @@ gone, and passes resume: its records and trees are then a format nothing here
 reads, like any older cadgen's. The other way round needs only a week: a newer
 cadgen treats an older format as garbage, which is how an upgrade frees the
 space the old one used, and an older cadgen still in use rebuilds what it
-needs -- an obsolete surface or mesh entry at most once a week (§2). A pass
+needs -- an obsolete surface, selector-table or mesh entry at most once a week (§2). A pass
 never touches anything outside its own folders: object shards
 named by two hex digits, and the `index/` folders in `INDEX_KINDS` and
 `RETIRED_KINDS`. This is why a new field that names objects, in a record, a
@@ -1295,7 +1318,7 @@ with every request):
 
 - larger than `max(cap, after + cap/5)` -- `after` being where its last pass
   under that cap ended -- gets a full pass with the cap;
-- otherwise, a store holding a retired kind, or holding surfaces or meshes that
+- otherwise, a store holding a retired kind, or holding surfaces, selector tables or meshes that
   no retiring pass under this cadgen's versions (`gc.producer_versions`: the
   extractor's and the mesher's) has looked at for a day, gets a retiring pass,
   which retires the retired entries and the week-old obsolete ones and sweeps

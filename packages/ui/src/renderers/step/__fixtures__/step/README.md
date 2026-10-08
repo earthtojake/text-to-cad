@@ -21,12 +21,14 @@ one revolute mate. Every property is there for a test:
 | file | bytes | the request it answers |
 | --- | ---: | --- |
 | `assembly.json` | 3,010 | `GET /__cad/store?file=<tree>/assembly.json&documentHash=…` — the view descriptor. Carries `kind: "assembly-package"`, the `tree`, the `viewId`, the attested `surfaceProducer`, two components, two occurrences and the model box. |
-| `components/552fc5fd1b854ab4.surf` | 13,966 | `GET /__cad/store?tree=…&surfaceInput=…&object=…` for the base. Exact surfaces and topology: what picking and measuring read. |
+| `components/552fc5fd1b854ab4.surf` | 13,966 | `GET /__cad/store?tree=…&surfaceInput=…&object=…` for the base. Exact surfaces: what feature recognition reads. |
 | `components/df492f79c6123df5.surf` | 10,478 | the same, for the arm. |
+| `components/552fc5fd1b854ab4.selectors.json` | 8,355 | the same route, by the table's own digest (the `selectors` of a `POST /__cad/surfaces` ready row), for the base. cadgen's selector table: the ids, facts, adjacency, chains and tangent groups picking and measuring join to the mesh. |
+| `components/df492f79c6123df5.selectors.json` | 6,499 | the same, for the arm. |
 | `components/<cid>.l<level>.glb` | 3,044–15,064 | the store's meshes (GLB bodies), one per component and LOD level 0–3: what the harness's mesh store serves (`/__tess_cache/` probe, batch and single reads), and what a `POST /__cad/surfaces` naming a tessellation answers with. |
 | `hinge_block.step.json` | 2,217 | **no request at all.** The harness puts it inline on the catalog entry as `sourceSidecar`, which is what the real scanner does, and the renderer reads the kinematics and the routine's keyframes straight from there. |
 
-Total 81,643 bytes with the meshes. No Git attribute applies here (`git check-attr -a` on these
+Total 96,497 bytes with the meshes and tables. No Git attribute applies here (`git check-attr -a` on these
 paths prints nothing), and the repository carries no LFS. Keep it that way — an
 LFS pointer would be rejected by name at `renderAssetClient.js`'s SURF reader.
 
@@ -79,6 +81,16 @@ with the repo's Python whenever the mesh format or the mesher moves:
 
 ```sh
 .venv/bin/python packages/ui/src/renderers/step/__fixtures__/step/source/make_meshes.py
+```
+
+The selector tables are cadgen's own too: `source/make_selectors.py` rebuilds
+the two parts, builds each table from its exact BREP and SURF
+(`cadgen._internal.selector_table`), and writes it in the committed `.surf`'s
+ordinals, matched as the meshes are. Run it after `make_meshes.py`, and
+whenever the table's schema or scheme moves:
+
+```sh
+.venv/bin/python packages/ui/src/renderers/step/__fixtures__/step/source/make_selectors.py
 ```
 
 Regenerate when the view schema or the sidecar schema moves, or when readers

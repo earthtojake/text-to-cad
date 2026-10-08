@@ -26,8 +26,22 @@ from tests.python.support.paths import REPO_ROOT, add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal.glb_topology import STEP_TOPOLOGY_SCHEMA_VERSION
+from cadgen._internal.selector_table import SELECTOR_TABLE_SCHEMA_VERSION
 
 ROOT = REPO_ROOT
+
+
+class SelectorTableSchemaVersionMirrorTest(unittest.TestCase):
+    def test_python_and_js_declare_the_same_selector_table_schema_version(self) -> None:
+        source = (ROOT / "packages/core/src/lib/surf/selectorTable.js").read_text(encoding="utf-8")
+        match = re.search(r"^export const SELECTOR_TABLE_SCHEMA_VERSION = (\d+);$", source, re.MULTILINE)
+        self.assertIsNotNone(match, "@text-to-cad/core must declare SELECTOR_TABLE_SCHEMA_VERSION")
+        self.assertEqual(
+            SELECTOR_TABLE_SCHEMA_VERSION,
+            int(match.group(1)),
+            "cadgen and @text-to-cad/core disagree on the selector table's schemaVersion; the page refuses "
+            "a table of another schema, so a bump has to land in both languages together",
+        )
 
 
 class TopologySchemaVersionMirrorTest(unittest.TestCase):

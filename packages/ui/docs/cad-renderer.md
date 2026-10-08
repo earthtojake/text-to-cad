@@ -937,13 +937,17 @@ whose bounds intersect the active plane receive the two extra stencil passes;
 disabling clipping releases the fill and materials without disposing the model's
 geometry. Open/non-manifold meshes cannot guarantee a solid section fill.
 
-**Group faces.** Clicking a face selects its connected
-chain across edges classified as tangent by the loaded STEP topology; sharp,
-unknown, boundary and nonmanifold edges stop the chain. Selection never crosses
-occurrences or solid shapes. Shift-click adds a chain, or removes it if the whole
-chain is already selected. The resulting faces use the existing highlight and
-Copy Reference controls. An assembly part loads its topology on the first press, as
-with the Faces filter. This changes selection only, not CAD geometry.
+**Group faces and Group edges.** Clicking a face selects its tangent group and
+clicking an edge its chain: both are cadgen's, read off the component's selector
+table (`tangentGroup`, `chain`: faces joined across tangent-class edges, edges
+that continue one another at a shared vertex, each decided once from the exact
+BREP), and the page grows the pick to the rows of the same id in the same
+occurrence and solid. Sharp, unknown, boundary and nonmanifold edges stop a
+group; a corner stops a chain. Selection never crosses occurrences or solid
+shapes. Shift-click adds a group, or removes it if the whole group is already
+selected. The resulting faces use the existing highlight and Copy Reference
+controls. An assembly part loads its topology on the first press, as with the
+Faces filter. This changes selection only, not CAD geometry.
 
 Group edges uses tessellated edge endpoints within the same solid/occurrence and
 a shared face, with a 0.00001 model-unit endpoint tolerance. It follows corners

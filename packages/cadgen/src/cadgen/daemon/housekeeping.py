@@ -161,7 +161,7 @@ class Housekeeper:
             return _summary(report)
         # A full pass retires obsolete entries too; without one, a store that holds
         # surfaces or meshes earns a pass when none under these versions ran today.
-        obsolete = (any((resolved / "index" / kind).is_dir() for kind in ("surface", "mesh"))
+        obsolete = (any((resolved / "index" / kind).is_dir() for kind in ("surface", "selector", "mesh"))
                     and self._retire_due(root, versions))
         retired = found.retired and self._clock() - self._retired_at.get(root, float("-inf")) >= DEFAULT_GRACE_SECONDS
         if obsolete or retired:

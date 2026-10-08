@@ -215,7 +215,7 @@ export function useViewportLod({ sampleCamera, lodPackage, modelKey = "", applyC
         });
         const load = (mesh = null) => {
           const request = lodPayloadRequest(component, level);
-          return loadRenderSurfPayloadAtLevel(component.surfUrl, {
+          return loadRenderSurfPayloadAtLevel(component.selectorsUrl, {
             signal, tessellationCache, resources,
             tessellation: lodTessellationForLevel(level),
             identity: mesh ? { ...component.identity, tessellationProbe: mesh } : component.identity,
@@ -227,10 +227,11 @@ export function useViewportLod({ sampleCamera, lodPackage, modelKey = "", applyC
           // A level cadgen has not meshed yet, or selectors for a part that opened warm before its
           // surface was named: the surface request names both and has cadgen mesh this level.
           if (signal.aborted || typeof component.resolveSurface !== "function"
-              || (component.surfUrl && !isTessellationCacheProbeMissError(error))) throw error;
+              || (component.selectorsUrl && !isTessellationCacheProbeMissError(error))) throw error;
           const resolved = await component.resolveSurface(signal, lodTessellationForLevel(level) || {});
           component.identity = resolved.identity;
           component.surfUrl = resolved.surfUrl;
+          component.selectorsUrl = resolved.selectorsUrl;
           return load(resolved.mesh);
         }).finally(() => {
           syncSurfWorkerMemory();

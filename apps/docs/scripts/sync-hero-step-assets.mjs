@@ -73,8 +73,9 @@ try {
 
   // Ship only what the browser fetches: the descriptor and each component's
   // mesh, which `packageSourceFromBaseUrl` finds beside the surf path the
-  // descriptor names. The .surf (selectors) and .brep (exact geometry) exist
-  // for picking and exports, which the hero never does.
+  // descriptor names. The .surf (exact surfaces), the selector table and the
+  // .brep (exact geometry) exist for picking, recognition and exports, which
+  // the hero never does.
   fs.rmSync(heroTreeDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(heroTreeDir, "components"), { recursive: true });
   fs.copyFileSync(path.join(viewDir, "assembly.json"), path.join(heroTreeDir, "assembly.json"));
