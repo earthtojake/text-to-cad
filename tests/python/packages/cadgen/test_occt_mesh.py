@@ -26,7 +26,8 @@ def _component():
     from build123d import Box, Cylinder
 
     from cadgen._internal.component_package import decode_display_shape, prepare_geometry_component
-    from cadgen._internal.surface_extract import extract_surface_component, read_surf
+    from cadgen._internal.surf_container import read_surf
+    from cadgen._internal.surface_extract import extract_surface_component
 
     prepared = prepare_geometry_component(Box(20, 20, 10) - Cylinder(4, 10))
     entry, payload = prepared["entry"], prepared["payload"]

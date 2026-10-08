@@ -173,6 +173,34 @@ class SnapshotListTests(unittest.TestCase):
     def test_focus_lists_only_what_it_keeps(self) -> None:
         self.assertEqual(["#o1.2"], [row["ref"] for row in self.focused.parts])
 
+    def test_listing_a_stored_model_loads_no_kernel(self) -> None:
+        # The rows are read from the tree, its SURFs and the mesh index: a process that lists
+        # (the snapshot CLI) never pays for OCCT. Run where nothing else has loaded it.
+        import os
+        import subprocess
+        import sys
+
+        from tests.python.support.paths import repo_path
+
+        source = str(repo_path("packages/cadgen/src"))
+        env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [source, os.environ.get("PYTHONPATH")]))}
+        script = (
+            "import json, sys\n"
+            "from pathlib import Path\n"
+            "from cadgen._internal.doors import document_snapshot\n"
+            "from cadgen.store.view import view_dir_for\n"
+            "from cadgen.snapshot_parts import list_rows\n"
+            "from cadgen.tessellation_policy import DEFAULT_TESSELLATION\n"
+            "document, tree = document_snapshot(Path(sys.argv[1]))\n"
+            "package = view_dir_for(tree, document_hash=document)\n"
+            "descriptor = json.loads((package / 'assembly.json').read_text())\n"
+            "rows = list_rows(descriptor, package, selection=None, tessellation=DEFAULT_TESSELLATION)\n"
+            "print(json.dumps([len(rows), sorted(name for name in sys.modules if name.split('.')[0] in ('OCP', 'build123d'))]))\n"
+        )
+        done = subprocess.run([sys.executable, "-c", script, str(self.workspace / "asm.step")],
+                              capture_output=True, text=True, check=True, cwd=self.workspace, env=env)
+        self.assertEqual([2, []], json.loads(done.stdout.strip().splitlines()[-1]), done.stderr)
+
 
 class FilterOccurrencesTests(unittest.TestCase):
     ROWS = [{"id": "o1.1", "name": "plate"}, {"id": "o1.2.1", "name": "pin"}, {"id": "o1.2.2", "name": "nut"}]

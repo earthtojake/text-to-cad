@@ -95,10 +95,8 @@ def _build_fixture():
 class SurfaceExtractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        from cadgen._internal.surface_extract import (
-            extract_surface_component,
-            read_surf,
-        )
+        from cadgen._internal.surf_container import read_surf
+        from cadgen._internal.surface_extract import extract_surface_component
 
         cls.shape = _build_fixture().wrapped
         cls.data = extract_surface_component(cls.shape)
@@ -231,7 +229,8 @@ class SurfaceExtractTest(unittest.TestCase):
         self.assertLessEqual({"line", "circle", "bspline"}, kinds)
 
     def test_container_roundtrip_and_the_previous_format_still_reads(self) -> None:
-        from cadgen._internal.surface_extract import SURF_VERSION, read_surf
+        from cadgen._internal.surf_container import read_surf
+        from cadgen._internal.surface_extract import SURF_VERSION
         from cadgen.store.surfaces import validate_surface_bytes
 
         index, _ = read_surf(bytes(self.data))
@@ -266,7 +265,8 @@ class TightBoundsTest(unittest.TestCase):
         return BRepBuilderAPI_NurbsConvert(solid.wrapped, True).Shape()
 
     def test_nurbs_cylinder_face_bounds_match_the_radius(self) -> None:
-        from cadgen._internal.surface_extract import extract_surface_component, read_surf
+        from cadgen._internal.surf_container import read_surf
+        from cadgen._internal.surface_extract import extract_surface_component
 
         radius, height = 7.5, 4.0
         index, _ = read_surf(bytes(extract_surface_component(self._nurbs_cylinder(radius, height))))
@@ -278,7 +278,8 @@ class TightBoundsTest(unittest.TestCase):
                 self.assertAlmostEqual(value, radius, places=4)
 
     def test_component_bounds_match_the_radius(self) -> None:
-        from cadgen._internal.surface_extract import extract_surface_component, read_surf
+        from cadgen._internal.surf_container import read_surf
+        from cadgen._internal.surface_extract import extract_surface_component
         from cadgen._internal.surf_tables import selector_bundle_from_surf_index
 
         radius, height = 7.5, 4.0

@@ -75,7 +75,7 @@ def read_component_topology_bundle(surf_path: Path) -> SurfTopologyBundle | None
         data = surf_path.read_bytes()
     except OSError:
         return None
-    from cadgen._internal.surface_extract import read_surf
+    from cadgen._internal.surf_container import read_surf
 
     try:
         index, _ = read_surf(data)

@@ -106,7 +106,8 @@ def main() -> None:
     from cadgen._internal import occt_mesh
     from cadgen._internal.component_package import decode_display_shape, prepare_geometry_component
     from cadgen._internal.surf_tables import selector_bundle_from_surf_index
-    from cadgen._internal.surface_extract import extract_surface_component, read_surf
+    from cadgen._internal.surf_container import read_surf
+    from cadgen._internal.surface_extract import extract_surface_component
 
     ladder = write_ladder()["levels"]
     manifest = {}
