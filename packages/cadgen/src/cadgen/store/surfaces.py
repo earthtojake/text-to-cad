@@ -272,13 +272,14 @@ def _derive_meshes(entry: dict, surface: dict, tessellations: list[tuple[float, 
     return True
 
 
-def _derive_selectors(entry: dict, surface: dict, keep_going: Callable[[], bool] | None,
-                      shape: Any = None) -> bool:
+def _derive_selectors(entry: dict, surface: dict, shape: Any = None) -> None:
     """Store the component's selector table (``_internal/selector_table``) when the
-    store lacks it; False when told to stop. ``shape`` is the decoded component
-    when the caller has it in hand (a fresh extraction); otherwise the BREP is
-    decoded again, as a mesh decodes it. Any failure is a ``MeshProductionError``
-    naming it (``_meshing``), reported with the component's."""
+    store lacks it. It is the surface's own derivation, a few milliseconds after
+    the extraction, so nothing asks ``keep_going`` again between the two.
+    ``shape`` is the decoded component when the caller has it in hand (a fresh
+    extraction); otherwise the BREP is decoded again, as a mesh decodes it. Any
+    failure is a ``MeshProductionError`` naming it (``_meshing``), reported with
+    the component's."""
     from cadgen._internal.component_package import decode_display_shape
     from cadgen._internal.selector_table import build_selector_table, selector_table_bytes
     from cadgen._internal.surface_extract import read_surf
@@ -286,16 +287,13 @@ def _derive_selectors(entry: dict, surface: dict, keep_going: Callable[[], bool]
 
     key = selectors.selector_key(surface["surfaceInput"])
     if selectors.probe(key) is not None:
-        return True
-    if keep_going is not None and not keep_going():
-        return False
+        return
     with _meshing():
         index, _floats = read_surf(read_verified_object(surface["object"]))
         if shape is None:
             shape = decode_display_shape(entry, read_verified_object(entry["brep"]))
         table = build_selector_table(getattr(shape, "wrapped", shape), index)
         selectors.write(key, surface["object"], selector_table_bytes(table))
-    return True
 
 
 def _geometry_entry(surface: dict) -> dict:
@@ -416,8 +414,8 @@ def derive(tree_hash: str, cids: list[str] | None = None, *, force: bool = False
         if actual != prior:
             write_entry("surface", expected["surfaceInput"], actual)
         try:
-            meshed = (_derive_selectors(entry, actual, keep_going, shape=shape)
-                      and (not tessellations or _derive_meshes(entry, actual, tessellations, keep_going)))
+            _derive_selectors(entry, actual, shape=shape)
+            meshed = not tessellations or _derive_meshes(entry, actual, tessellations, keep_going)
         except MeshProductionError as error:
             # One component's mesh failing, whatever failed (``_meshing``), leaves the rest
             # of the request to be done: they are stored before the failure is reported,

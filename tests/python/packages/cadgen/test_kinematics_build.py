@@ -254,7 +254,7 @@ class KinematicsBuildTests(unittest.TestCase):
         refused = AssertionError("mate ends need no component topology")
         with mock.patch("cadgen.store.view.export_view", side_effect=refused), \
                 mock.patch("cadgen.store.view.materialize_view_surfaces", side_effect=refused), \
-                mock.patch("cadgen.assembly_lookup._read_component_bundle", side_effect=refused):
+                mock.patch("cadgen.assembly_lookup._read_component_table", side_effect=refused):
             self.assertEqual(0, self._build(script))
         (mate,) = self._sidecar(script)["kinematics"]["mates"]
         self.assertEqual((mate["parentId"], mate["childId"]), ("o1.1", "o1.2"))
