@@ -6,12 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-import {
-  RENDER_TESSELLATION_FLOORS,
-  loadSource as loadSourceInput,
-  normalizeRenderTessellation,
-  tessellationForSnapshotQuality
-} from "./source.js";
+import { loadSource as loadSourceInput } from "./source.js";
 import { SOURCE_SIDECAR_SCHEMA_VERSION } from "./sourceSidecar.js";
 import { renderAssetSourceScope } from "../lib/renderAssetSourceScope.js";
 import {
@@ -19,6 +14,12 @@ import {
   tessellationCacheKey,
 } from "../lib/surf/tessellationCache.js";
 import { encodeMeshFixture, memoryMeshProvider, meshFixture, probeRowFor, surfFixture } from "../lib/surf/__tests__/meshFixtures.js";
+import { TEST_TESSELLATION_LADDER, installTestTessellationLadder } from "../lib/surf/testing.js";
+
+installTestTessellationLadder();
+// The tolerances cadgen names in a resolved job: its standard and coarse rungs.
+const STANDARD = TEST_TESSELLATION_LADDER.levels[TEST_TESSELLATION_LADDER.defaultLevel];
+const COARSE = TEST_TESSELLATION_LADDER.levels[0];
 
 // A host's mesh store that records every key probed, and meshes on request what `produce` holds.
 function recordingMeshStore(requested = [], { stored = [], produce = [] } = {}) {
@@ -90,46 +91,22 @@ function meshData() {
   };
 }
 
-test("snapshot tessellation is explicit, finite and restricted to exact surfaces", async () => {
-  assert.deepEqual(normalizeRenderTessellation(undefined), {});
-  assert.deepEqual(normalizeRenderTessellation({ chordTolerance: .0001, angleTolerance: .025 }),
-    { chordTolerance: .0001, angleTolerance: .025 });
-  for (const value of [0, -1, NaN, Infinity, "0.01"]) {
-    assert.throws(() => normalizeRenderTessellation({ chordTolerance: value }), /positive finite/);
+test("a resolved job's tessellation is cadgen's, named whole; a page that draws from the store needs one", async () => {
+  await assert.rejects(() => loadSource({ ...rollerPackage(), resolved: { tessellation: { chordTolerance: 0.001 } } }),
+    /resolved\.tessellation must name a positive chordTolerance and angleTolerance/);
+  setTessellationCacheProvider(memoryMeshProvider([]));
+  try {
+    const { resolved: _resolved, ...unnamed } = rollerPackage();
+    await assert.rejects(() => loadSource(unnamed), /names the tessellation to draw \(resolved\.tessellation\)/);
+  } finally {
+    setTessellationCacheProvider(null);
   }
-  assert.throws(() => normalizeRenderTessellation({ quality: "high" }), /Unknown/);
-  assert.throws(() => normalizeRenderTessellation([]), /must be an object/);
-  // A floor, not a preference: below it the page tessellates until the
-  // renderer dies and the caller only sees a lost driver connection.
-  assert.throws(() => normalizeRenderTessellation({ chordTolerance: 1e-12 }), /at least 0.00001/);
-  assert.throws(() => normalizeRenderTessellation({ angleTolerance: 1e-6 }), /at least 0.005/);
-  assert.deepEqual(normalizeRenderTessellation(RENDER_TESSELLATION_FLOORS), { ...RENDER_TESSELLATION_FLOORS });
-  await assert.rejects(() => loadSource({ meshData: meshData(),
-    quality: { tessellation: { chordTolerance: .001 } } }), /only for STEP/);
-  await assert.rejects(() => loadSource({ kind: "step", meshData: meshData(),
-    quality: { tessellation: { chordTolerance: .001 } } }), /exact-surface STEP package/);
-});
-
-test("snapshot quality selects bounded shared tessellation policy", () => {
-  assert.deepEqual(tessellationForSnapshotQuality({}), {});
-  assert.deepEqual(tessellationForSnapshotQuality({ display: { mode: "render", lighting: { quality: "preview" } } }), {});
-  assert.deepEqual(
-    tessellationForSnapshotQuality({ display: { mode: "render", lighting: { quality: "final" } } }),
-    { chordTolerance: 0.00015, angleTolerance: 0.35 }
-  );
-  assert.deepEqual(tessellationForSnapshotQuality({
-    display: { mode: "render", lighting: { quality: "final" } },
-    quality: { tessellation: { chordTolerance: 0.001 } }
-  }), { chordTolerance: 0.001 });
-  assert.throws(() => tessellationForSnapshotQuality({
-    display: { mode: "render", lighting: { quality: "ultra" } }
-  }), /quality/i);
 });
 
 // The roller as a one-component package, bound to its fixture identity.
 function rollerPackage(extra = {}) {
   const { surfaceInput, surfaceObject } = surfFixture("cam_follower_roller");
-  return { kind: "step", package: {
+  return { kind: "step", resolved: { tessellation: STANDARD }, package: {
     descriptor: { components: { roller: { surfaceInput, surfaceObject } },
       occurrences: [{ id: "o1.1", name: "roller", component: "roller" }],
       assembly: { root: { id: "o1", name: "macro", nodeType: "assembly", children: [
@@ -158,8 +135,8 @@ test("a package's missing meshes are asked of the host once, then read as stored
   for (const stage of ["probeMs", "produceMs", "cacheReadMs", "meshBuildMs"]) {
     assert.ok(coldStages.sourceLoad[stage] >= 0, stage);
   }
-  // An explicit macro tessellation reads its own mesh, keyed by its own tolerances.
-  const coarseJob = { ...rollerPackage(), quality: { tessellation: { chordTolerance: 2e-3, angleTolerance: 1.4 } } };
+  // Another tessellation reads its own mesh, keyed by its own tolerances.
+  const coarseJob = { ...rollerPackage(), resolved: { tessellation: COARSE } };
   const coarse = await loadSource(coarseJob);
   assert.ok(coarse.meshData.indices.length < canonical.meshData.indices.length);
   assert.notEqual(requested[0], requested[1]);
@@ -203,15 +180,15 @@ test("a static package reads each component's own mesh file; a component nothing
       : new Response(null, { status: 404 });
   };
   t.after(() => { globalThis.fetch = oldFetch; setTessellationCacheProvider(null); });
-  // The docs hero: no mesh store at all, a mesh beside each surf.
+  // The docs hero: no mesh store at all, a mesh beside each surf, drawn at the
+  // tessellation cadgen exported it at -- the page names none.
   setTessellationCacheProvider(null);
-  const job = rollerPackage({ meshUrls: { roller: "/hero/components/roller.glb" } });
-  const source = await loadSource(job);
+  const { resolved: _named, ...job } = rollerPackage({ meshUrls: { roller: "/hero/components/roller.glb" } });
+  const source = await loadSourceInput(job);
   assert.ok(source.meshData.indices.length > 0);
   assert.deepEqual(fetched, ["/hero/components/roller.glb"], "only the mesh file is read");
-  // A mesh at another tessellation is not this component's mesh at that tessellation.
-  await assert.rejects(loadSource({ ...job, quality: { tessellation: { chordTolerance: 2e-3, angleTolerance: 1.4 } } }),
-    /is not its mesh at this tessellation/);
+  // A mesh at another tessellation is not this component's mesh at the one a job names.
+  await assert.rejects(loadSource({ ...job, resolved: { tessellation: COARSE } }), /is not its mesh at this tessellation/);
   await assert.rejects(loadSource(rollerPackage()), /cadgen meshes every component before a page draws it/);
 });
 
@@ -262,7 +239,7 @@ async function loadWarmPackage(t, count, providerOptions = {}) {
   const options = typeof providerOptions === "function" ? providerOptions(entryBytes) : providerOptions;
   setTessellationCacheProvider(createHttpTessellationCacheProvider({ origin: "http://cache.test", ...options }));
   const stageTimings = {};
-  const source = await loadSource({ kind: "step", package: {
+  const source = await loadSource({ kind: "step", resolved: { tessellation: STANDARD }, package: {
     descriptor: { components, occurrences, assembly: { root: { id: "root", nodeType: "assembly",
       children: occurrences.map(({ id }) => ({ id, nodeType: "part", children: [] })) } } }, componentUrls,
   } }, { stageTimings });
@@ -309,6 +286,7 @@ test("snapshot package appearance composes through the shared source resolver", 
   };
   const source = await loadSource({
     kind: "step",
+    resolved: { tessellation: STANDARD },
     documentHash: "c".repeat(64),
     sourceSidecar: {
       schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION,

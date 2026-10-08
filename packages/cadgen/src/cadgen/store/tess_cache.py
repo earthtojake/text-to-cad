@@ -19,7 +19,7 @@ __all__ = [
     "TESS_CACHE_BATCH_MAX_NAMES", "TESS_CACHE_BATCH_VERSION",
     "TESS_CACHE_METADATA_MAX_BYTES", "encode_tessellation_cache_batch",
     "is_tessellation_cache_key", "parse_tess_cache_admission",
-    "produce_tess_cache", "read_tess_cache_batch", "read_tess_cache_probe",
+    "produce_meshes", "produce_tess_cache", "read_tess_cache_batch", "read_tess_cache_probe",
     "read_tessellation_cache", "tessellation_cache_dir",
 ]
 
@@ -111,11 +111,21 @@ def read_tess_cache_probe(body: bytes | None) -> dict | None:
 
 
 def produce_tess_cache(body: bytes | None) -> dict | None:
-    """Mesh what a probe found missing, and answer as the probe would.
+    """Mesh what a probe found missing, and answer as the probe would: the
+    snapshot host's ``POST /__tess_cache/produce`` (:func:`produce_meshes`)."""
+    inputs = _request_items(body, "tessellationInputs")
+    if inputs is None or any(type(key) is not str for key in inputs):
+        return None
+    return {"entries": produce_meshes(inputs)}
+
+
+def produce_meshes(wanted) -> dict:
+    """``{key: mesh index record}`` for every key the store holds once what it
+    lacked has been meshed.
 
     The meshing is build-pool work (``kind: meshes`` artifact jobs), the missing
-    keys dealt across the pool (``artifacts.deal``), so a host that serves
-    this -- the snapshot host -- never imports the kernel itself. A key whose
+    keys dealt across the pool (``artifacts.deal``), so a process that asks --
+    the snapshot host, a STEP list -- never imports the kernel itself. A key whose
     surface the store does not hold, or that asks for finer than anything may be
     meshed, stays missing, and is never dealt: no job, or worker, starts for it.
     A component that fails to mesh fails the request once every other key is done
@@ -125,10 +135,7 @@ def produce_tess_cache(body: bytes | None) -> dict | None:
     from cadgen.store.index import read_entry
     from cadgen.store.meshes import meshable_key, probe
 
-    inputs = _request_items(body, "tessellationInputs")
-    if inputs is None or any(type(key) is not str for key in inputs):
-        return None
-    rows = {key: probe(key) for key in dict.fromkeys(inputs)}
+    rows = {key: probe(key) for key in dict.fromkeys(wanted)}
 
     def meshable(key):
         # The surface entry's presence, not its validity: the job verifies the
@@ -141,7 +148,7 @@ def produce_tess_cache(body: bytes | None) -> dict | None:
         resolve_artifacts([{"kind": "meshes", "keys": keys}
                            for keys in deal(missing, per_started_worker=MESHES_PER_STARTED_WORKER)])
         rows.update((key, probe(key)) for key in missing)
-    return {"entries": {key: row for key, row in rows.items() if row is not None}}
+    return {key: row for key, row in rows.items() if row is not None}
 
 
 def read_tess_cache_batch(body: bytes | None) -> bytes | None:

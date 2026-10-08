@@ -88,6 +88,7 @@ _NAMED_FIELDS = {
     "mesh": ("object",),
     "drawing": ("object",),
     "skin": ("object",),
+    "section": ("object",),
     "bounds": (),
 }
 _STOP_EVERY = 256

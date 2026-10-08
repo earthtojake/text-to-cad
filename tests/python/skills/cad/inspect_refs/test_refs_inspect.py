@@ -188,7 +188,7 @@ class StepSceneTests(unittest.TestCase):
 
     def test_face_edge_and_shape_ordinals_match_display_extraction(self):
         from cadgen._internal.surface_extract import extract_surface_component
-        from cadgen._internal.surface_extract import read_surf
+        from cadgen._internal.surf_container import read_surf
         # Compare using the scene's canonical BREP, before its world placement.
         scene = read_scene(self.path)
         selection = scene.resolve("#pin_1")

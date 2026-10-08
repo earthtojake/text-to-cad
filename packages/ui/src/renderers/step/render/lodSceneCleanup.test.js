@@ -6,6 +6,10 @@ import { disposeViewerCadScene } from "./lodSceneCleanup.js";
 import { createLodSceneAdoption } from "./lodSceneAdoption.js";
 import { createLodScheduler } from "./lodScheduler.js";
 import { renderMemoryAccounting } from "./renderMemoryAccounting.js";
+import { installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 const bounds = { min: [0, 0, 0], max: [2, 1, 1] };
 function mesh(n) {

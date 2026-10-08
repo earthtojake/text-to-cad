@@ -4,6 +4,8 @@
 // real meshes (cadgen/store/meshes.py encode_payload); nothing in the product
 // imports this module. Browser-safe, so browser tests can use it too.
 
+import { TESSELLATION_LADDER } from "./fixtures/tessellationLadder.js";
+import { installTessellationLadder } from "./lodPolicy.js";
 import {
   MESH_EDGE_CLASSES,
   MESH_PAYLOAD_VERSION,
@@ -16,6 +18,14 @@ import {
 } from "./tessellationCache.js";
 
 const UNSIGNED_SHORT_VERTEX_LIMIT = 65535;
+
+/** The display ladder a cadgen server publishes, as cadgen wrote it for the tests. */
+export const TEST_TESSELLATION_LADDER = TESSELLATION_LADDER;
+
+/** Install that ladder, as a host installs the one its server publishes. */
+export function installTestTessellationLadder() {
+  return installTessellationLadder(TESSELLATION_LADDER);
+}
 
 /**
  * A synthetic stored-mesh body for `component`, laid out as cadgen writes one: either

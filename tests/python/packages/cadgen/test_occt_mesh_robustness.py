@@ -32,7 +32,8 @@ IDENTITY = [1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0]
 
 
 def _surf_index(topods) -> dict:
-    from cadgen._internal.surface_extract import extract_surface_component, read_surf
+    from cadgen._internal.surf_container import read_surf
+    from cadgen._internal.surface_extract import extract_surface_component
 
     return read_surf(extract_surface_component(topods))[0]
 

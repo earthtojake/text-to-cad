@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { lodPayloadRequest, matchesLodPayloadRequest } from "./lodPayloadRequest.js";
+import { installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 test("a payload is pinned to its loaded descriptor, component and full concrete tessellation key", () => {
   const descriptorComponent = { cid: "a", surfaceInput: "d".repeat(64) };

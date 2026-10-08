@@ -327,7 +327,7 @@ class LifecycleTests(DescriptorFixture, unittest.TestCase):
         original = snapshot.descriptor()
         first = snapshot.materialize("root")
         with mock.patch.object(mat, "_bytes_for_object", side_effect=AssertionError("object lookup")), \
-             mock.patch("cadgen._internal.surface_extract.read_surf", side_effect=AssertionError("SURF lookup")), \
+             mock.patch("cadgen._internal.surf_container.read_surf", side_effect=AssertionError("SURF lookup")), \
              mock.patch("cadgen.store.trees.get_tree", side_effect=AssertionError("tree lookup")):
             second = snapshot.materialize("root")
         self.assertEqual(cp._shape_brep_bytes(first), cp._shape_brep_bytes(second))

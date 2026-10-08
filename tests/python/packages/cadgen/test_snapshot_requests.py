@@ -342,19 +342,6 @@ class SectionPlaneTests(_Workspace):
         with self.assertRaisesRegex(SnapshotError, r"render output 0 has unknown key\(s\): format"):
             self.prepared(mode="section", outputs=[{"path": "cut.png", "format": "svg"}])
 
-    def test_the_planes_match_the_page_that_cuts(self) -> None:
-        source = repo_path("packages/core/src/common/renderMeshScene.js").read_text(encoding="utf-8")
-        declared = re.search(r"export const SECTION_PLANES = Object\.freeze\(\[(.*?)\]\)", source)
-        self.assertIsNotNone(declared, "renderMeshScene.js no longer declares SECTION_PLANES")
-        self.assertEqual(tuple(re.findall(r'"(\w+)"', declared.group(1))), snapshot_core.SECTION_PLANES)
-        # The page reads exactly the keys Python validates: nothing else of `section`.
-        read = set(re.findall(r"\bsection\??\.(\w+)", source)) - {"segmentCount"}
-        self.assertEqual(set(snapshot_core.SECTION_KEYS), read)
-
-
-class SizingTests(_Workspace):
-    """S6/S7: a size is one of the listed profiles or a ranged whole number of pixels."""
-
     def size(self, **job) -> tuple[int, int]:
         output = self.resolve(self.stl_job(**job))["jobs"][0]["outputs"][0]
         return output["width"], output["height"]

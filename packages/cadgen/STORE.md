@@ -74,6 +74,7 @@ One word is NOT retired, and it has exactly one meaning:
   index/mesh/<key>                    a component's mesh at one tessellation → GLB object hash
   index/drawing/<sha256(scheme + document hash)>  a 2D drawing's render payload → object hash
   index/skin/<sha256(scheme + document + animation + meshes)>  a document's tube skins → object hash
+  index/section/<sha256(scheme + BREP + plane)>    one component's exact cut by one plane → object hash
 ```
 
 Nothing else lives under the root. A build's progress is process state, not
@@ -134,9 +135,9 @@ operations always execute.
 `objects/` is the **artifact side**: what geometry exists. `index/model`,
 `index/output` are the **code side**: what source produced a result and
 what it depended on. `index/bounds`, `index/component`, `index/surface`,
-`index/selector`, `index/mesh`, `index/drawing` and `index/skin` remember
-reusable derivations; surface, selector, mesh and drawing jobs consume only
-immutable artifact inputs. `index/drawing` is a
+`index/selector`, `index/mesh`, `index/drawing`, `index/skin` and
+`index/section` remember reusable derivations; surface, selector, mesh, drawing
+and section jobs consume only immutable artifact inputs. `index/drawing` is a
 2D document's flattened render payload: its key hashes the extraction scheme
 (payload shape × the drawing library's release) together with the document's
 content hash, so the same bytes are never flattened twice and an upgrade lands
@@ -145,7 +146,12 @@ same for a document's bending tubes as a CAD view plays them
 (`_internal/tube_skin_payload.py`): its key hashes the payload's scheme, the
 document's content hash, the digest of the sidecar animation that bends them and
 the mesh entries they bind, so an edited clip, a new mesher or a new binding rule
-lands on a new key. `index/document` is the document lookup: `sha256(file bytes)` → the
+lands on a new key. `index/section` is one component's exact section (`store/sections.py`): an
+OCCT cut of its BREP by a plane in its own coordinates, made by a build-pool
+`sections` job. Its key hashes the section scheme, the BREP's codec and object
+hash, and the plane (unit normal and offset, rounded before they key or cut
+anything), so every occurrence a plane meets the same way shares one entry,
+and a new scheme lands on new keys. `index/document` is the document lookup: `sha256(file bytes)` → the
 tree describing those bytes (plus a mesh ledger keyed by format × tolerances
 × pose × appearance — the bare mesh doors read and write it, and a script run notes its
 declared meshes there too, so the two front doors never redo each other's work).
@@ -1220,9 +1226,9 @@ kinds of thing:
    object goes with its entry rather than with the next full sweep, and an
    entry written again since the scan stays.
 2. **Evicted entries**, only under a cap: the derived kinds -- `mesh`,
-   `surface`, `selector`, `component`, `bounds`, `drawing`, `skin` -- least
-   recently written first, until the store fits 80% of the cap. Sizes are
-   deduplicated: an
+   `surface`, `selector`, `component`, `bounds`, `drawing`, `skin`, `section`
+   -- least recently written first, until the store fits 80% of the cap. Sizes
+   are deduplicated: an
    object goes only when nothing that stays still needs it, so evicting a
    component entry whose BREP a current tree places frees only the entry.
    When what no pass may remove leaves less room than the fifth of the cap
@@ -1241,8 +1247,8 @@ kinds of thing:
 **Recently used means recently written.** A hit is a read (§5). An entry's age
 is when a build or a derivation last wrote it -- a publish rewrites every
 component entry its tree has; a derivation writes the surface, selector, mesh,
-bounds, drawing or skin entry it computed -- and an object's is when a publish
-last wrote or claimed it. A display cache that is only ever read ages, goes when the cap needs
+bounds, drawing, skin or section entry it computed -- and an object's is when a
+publish last wrote or claimed it. A display cache that is only ever read ages, goes when the cap needs
 the room, and costs one recomputation when it is next shown. Evicting never
 changes an answer: every reader treats a missing entry or object as a miss.
 

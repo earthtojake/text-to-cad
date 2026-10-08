@@ -142,7 +142,7 @@ test("points are collected per colour as flat coordinates", () => {
     { type: "point", layer: "0", color: null, geometry: [1, 2] },
     { type: "point", layer: "0", color: null, geometry: [3, 4] }
   ]);
-  assert.deepEqual(drawable.points, [{ color: null, coordinates: [1, 2, 3, 4] }]);
+  assert.deepEqual(drawable.points, [{ color: null, opacity: 1, coordinates: [1, 2, 3, 4] }]);
 });
 
 test("the default pen stays null through prepare, so one payload serves both themes", () => {
@@ -171,8 +171,8 @@ test("an unknown path command is refused, naming it", () => {
 
 test("a payload from another schema version is refused with the upgrade to make", () => {
   assert.throws(
-    () => prepareDrawing({ ...payload([]), schemaVersion: 2 }, { Path2D: RecordingPath }),
-    /schemaVersion 2, but this build reads version 1.*Update cadgen and the app together/s
+    () => prepareDrawing({ ...payload([]), schemaVersion: 1 }, { Path2D: RecordingPath }),
+    /schemaVersion 1, but this build reads version 2.*Update cadgen and the app together/s
   );
   assert.throws(() => prepareDrawing(null, { Path2D: RecordingPath }), /needs a drawing payload object/);
   assert.throws(
@@ -220,6 +220,28 @@ test("strokes are a constant screen width, whatever the zoom", () => {
     drawDrawing(ctx, drawable, { transform: { scale, offsetX: 0, offsetY: 0 }, foreground: "#111" });
     const width = ctx.calls.filter(([name]) => name === "lineWidth").at(-1)[1];
     assert.equal(width * scale, DRAWING_HAIRLINE_CSS_PX);
+  }
+});
+
+test("a primitive's own width and opacity are its pen, still constant on screen", () => {
+  const drawable = prepare([
+    { type: "lines", layer: "hatch", color: "#111827", opacity: 0.2, width: 1, geometry: [[0, 0, 1, 1]] },
+    { type: "path", layer: "outline", color: null, width: 3, geometry: [["M", 0, 0], ["L", 1, 0]] },
+    { type: "lines", layer: "0", color: null, geometry: [[0, 0, 0, 1]] },
+    { type: "filled-paths", layer: "fill", color: "#d1d5db", opacity: 0.72, geometry: [[["M", 0, 0], ["L", 1, 0], ["L", 1, 1], ["Z"]]] }
+  ]);
+  assert.deepEqual(drawable.strokes.map(({ color, opacity, width }) => [color, opacity, width]),
+    [["#111827", 0.2, 1], [null, 1, 3], [null, 1, DRAWING_HAIRLINE_CSS_PX]]);
+  const ctx = recordingContext();
+  const alphas = [];
+  Object.defineProperty(ctx, "globalAlpha", { set(value) { alphas.push(value); } });
+  drawDrawing(ctx, drawable, { transform: { scale: 4, offsetX: 0, offsetY: 0 }, foreground: "#111" });
+  assert.deepEqual(ctx.calls.filter(([name]) => name === "lineWidth").map(([, value]) => value * 4),
+    [1, 3, DRAWING_HAIRLINE_CSS_PX]);
+  assert.deepEqual(alphas, [0.72, 0.2, 1, 1]);
+  for (const bad of [{ opacity: 2 }, { opacity: "0.5" }, { width: 0 }, { width: -1 }]) {
+    assert.throws(() => prepare([{ type: "lines", layer: "0", color: null, geometry: [], ...bad }]),
+      /primitives\[0\]: (opacity|width) must be/);
   }
 });
 

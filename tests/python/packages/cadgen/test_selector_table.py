@@ -25,7 +25,8 @@ from cadgen._internal.selector_table import (  # noqa: E402
     read_selector_table,
     selector_table_bytes,
 )
-from cadgen._internal.surface_extract import extract_surface_component, read_surf  # noqa: E402
+from cadgen._internal.surf_container import read_surf  # noqa: E402
+from cadgen._internal.surface_extract import extract_surface_component  # noqa: E402
 
 
 def _table(part):

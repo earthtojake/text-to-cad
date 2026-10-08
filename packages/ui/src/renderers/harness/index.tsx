@@ -3,6 +3,9 @@ import { useState } from 'react';
 import { FileViewer } from '@text-to-cad/ui/file-viewer';
 import type { FileSource } from '@text-to-cad/ui/file-viewer';
 import { createCadClient } from '@text-to-cad/core/client';
+// The display ladder a cadgen server publishes, as cadgen wrote it for the tests (`make_fixtures.py`):
+// this page is the host, and a host installs the ladder before a STEP model is drawn.
+import { installTestTessellationLadder } from '@text-to-cad/core/lib/surf/testing.js';
 import { createTabStore, memoryTabRecord, useTabViewerState } from '@text-to-cad/ui/tab-store';
 import type { TabRecordStorage, TabStore } from '@text-to-cad/ui/tab-store';
 import { createStepRenderer } from '@text-to-cad/ui/renderers/step';
@@ -18,6 +21,7 @@ import type { ViewerCommands as CadCommands } from '@text-to-cad/ui/renderers/wo
 // The one file both panes open, by its absolute path, as a CAD Viewer names files: a fixture server
 // lists each of its files under `/models`, so `?file=arm.urdf` (for a test whose fixture is not the
 // default mesh) is `/models/arm.urdf`.
+installTestTessellationLadder();
 const requested = new URLSearchParams(location.search).get('file') || 'part.stl';
 const file = requested.startsWith('/') ? requested : `/models/${requested}`;
 const captures: { file: string; size: number; type: string; references: unknown }[] = [];

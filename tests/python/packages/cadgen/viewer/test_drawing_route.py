@@ -120,7 +120,9 @@ class ItServesTheDrawing(DrawingRouteTestCase):
         # The viewer serves bytes to render, never a save-as.
         self.assertNotIn("content-disposition", {name.lower() for name in headers})
         payload = json.loads(body)
-        self.assertEqual(payload["schemaVersion"], 1)
+        from cadgen.drawing_payload import DRAWING_PAYLOAD_SCHEMA_VERSION
+
+        self.assertEqual(payload["schemaVersion"], DRAWING_PAYLOAD_SCHEMA_VERSION)
         self.assertEqual(payload["units"]["insunits"], 4)
         self.assertEqual(len(payload["bounds"]), 4)
         self.assertTrue(payload["primitives"])

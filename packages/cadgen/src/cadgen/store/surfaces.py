@@ -248,7 +248,7 @@ def _derive_meshes(entry: dict, surface: dict, tessellations: list[tuple[float, 
     is not a failure, and its own error is the job's."""
     from cadgen._internal.component_package import decode_display_shape
     from cadgen._internal.occt_mesh import mesh_component
-    from cadgen._internal.surface_extract import read_surf
+    from cadgen._internal.surf_container import read_surf
     from cadgen.store import meshes
 
     surface_key = surface["surfaceInput"]
@@ -282,7 +282,7 @@ def _derive_selectors(entry: dict, surface: dict, shape: Any = None) -> None:
     the component's."""
     from cadgen._internal.component_package import decode_display_shape
     from cadgen._internal.selector_table import build_selector_table, selector_table_bytes
-    from cadgen._internal.surface_extract import read_surf
+    from cadgen._internal.surf_container import read_surf
     from cadgen.store import selectors
 
     key = selectors.selector_key(surface["surfaceInput"])

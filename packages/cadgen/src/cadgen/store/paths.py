@@ -14,7 +14,8 @@ from pathlib import Path
 
 # "document" is the ARTIFACT side (sha256 of a file's bytes → its tree); every
 # other kind is the code/dependency side. STORE.md §2, the law.
-INDEX_KINDS = ("model", "document", "output", "component", "surface", "selector", "bounds", "mesh", "drawing", "skin")
+INDEX_KINDS = ("model", "document", "output", "component", "surface", "selector", "bounds", "mesh", "drawing",
+               "skin", "section")
 
 # Kinds an older cadgen wrote and this one never reads: the sweeper removes
 # them, with every object only they named (STORE.md §8). A folder under index/
@@ -25,7 +26,7 @@ RETIRED_KINDS = ("op",)
 # The kinds eviction may drop (STORE.md §8): derivations that a build or a
 # reader recomputes on a miss. Records, document entries and output entries
 # are never evicted.
-DERIVED_KINDS = ("component", "surface", "selector", "bounds", "mesh", "drawing", "skin")
+DERIVED_KINDS = ("component", "surface", "selector", "bounds", "mesh", "drawing", "skin", "section")
 
 def store_root() -> Path:
     override = os.environ.get("CADGEN_CACHE_DIR", "").strip()

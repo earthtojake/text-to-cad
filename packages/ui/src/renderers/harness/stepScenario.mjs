@@ -182,11 +182,13 @@ export function reviseFixture(fixture, revision) {
  * batch read and a single read.
  */
 async function meshStore(fixture, { warm = false } = {}) {
-  const [cache, { encodeMeshFixture }, { lodTessellationForLevel }] = await Promise.all([
+  const [cache, { encodeMeshFixture }, { lodTessellationForLevel }, { installTestTessellationLadder }] = await Promise.all([
     import('@text-to-cad/core/lib/surf/tessellationCache.js'),
     import('@text-to-cad/core/lib/surf/testing.js'),
     import('@text-to-cad/core/lib/surf/lodPolicy.js'),
+    import('@text-to-cad/core/lib/surf/testing.js'),
   ]);
+  installTestTessellationLadder();
   const stored = new Map();
   const produce = (surfaceInput, tessellation = {}) => {
     const surface = fixture.surfaces.get(surfaceInput);
@@ -194,7 +196,7 @@ async function meshStore(fixture, { warm = false } = {}) {
     const key = cache.tessellationCacheKey(surfaceInput, tessellation);
     if (!stored.has(key)) {
       // The fixture level these tolerances name, else the standard tier's shape under their key.
-      const level = MESH_LEVELS.find(candidate => cache.tessellationCacheKey(surfaceInput, lodTessellationForLevel(candidate) || {}) === key) ?? 1;
+      const level = MESH_LEVELS.find(candidate => cache.tessellationCacheKey(surfaceInput, lodTessellationForLevel(candidate)) === key) ?? 1;
       const { component, partColor } = surface.meshes.get(level);
       const bytes = encodeMeshFixture(component, { surfaceInput, surfaceObject: surface.object, tessellation, partColor });
       const row = cache.validateTessellationProbeRow({ schemaVersion: cache.MESH_INDEX_SCHEMA,

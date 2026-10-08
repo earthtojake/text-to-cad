@@ -100,6 +100,7 @@ def _cmd_info(as_json: bool) -> int:
         "mesh": "mesh entries",
         "drawing": "drawing render payloads",
         "skin": "tube skins (a document's bending tubes, bound)",
+        "section": "component sections (a BREP cut by a plane)",
     }
     for kind, count in payload["index"].items():
         print(f"index/{kind:<10} {count} {labels[kind]}")
@@ -292,7 +293,7 @@ def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
         help="retire old index kinds, mark and sweep unreachable objects; with --max-size, evict to a cap first",
         description=(
             "Removes the index kinds this cadgen no longer defines (index/op) and every object nothing reaches: "
-            "not a record's or a document's tree, not named by a mesh, surface, selector, component, bounds, drawing or skin "
+            "not a record's or a document's tree, not named by a mesh, surface, selector, component, bounds, drawing, skin or section "
             "entry, and not written or claimed within the grace window. --max-size first evicts those derived "
             "entries, least recently written first, until the store fits 80%% of the cap (the newest keep a "
             "fifth of the cap when records and documents leave less room); records, document entries and "

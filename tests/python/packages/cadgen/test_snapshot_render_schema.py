@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import inspect
-import re
 import tempfile
 import unittest
 from pathlib import Path
 
-from tests.python.support.paths import add_repo_path, repo_path
+from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
@@ -159,16 +158,6 @@ class RenderTessellationLimitsTest(unittest.TestCase):
         validate_render_tessellation(dict(MIN_RENDER_TESSELLATION))
         validate_render_tessellation({"chordTolerance": 0.0005, "angleTolerance": 0.10})
         validate_render_tessellation(None)
-
-    def test_the_floors_match_the_page_that_tessellates(self):
-        source = repo_path("packages/core/src/common/source.js").read_text(encoding="utf-8")
-        block = re.search(r"RENDER_TESSELLATION_FLOORS = Object\.freeze\(\{(.*?)\}\)", source, re.S)
-        self.assertIsNotNone(block, "source.js no longer declares RENDER_TESSELLATION_FLOORS")
-        declared = {
-            key: float(value)
-            for key, value in re.findall(r"(\w+):\s*([0-9.e-]+)", block.group(1))
-        }
-        self.assertEqual(declared, MIN_RENDER_TESSELLATION)
 
 
 if __name__ == "__main__":

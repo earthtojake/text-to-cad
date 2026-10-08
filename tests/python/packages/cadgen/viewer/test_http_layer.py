@@ -215,7 +215,12 @@ class ServerInfo(HttpLayerTestCase):
         # Where a developer's relative links resolve, spelled with "/". A viewer has no root.
         self.assertEqual(info["start"], self.fixture.root.replace(os.sep, "/"))
         self.assertIsInstance(info["pick"], bool)
-        self.assertEqual(list(info), ["app", "identityToken", "autoReload", "platform", "user", "start", "pick", "port", "pid"])
+        # The display tessellation ladder the page draws STEP models by is cadgen's, and said here.
+        from cadgen.tessellation_policy import ladder_payload
+
+        self.assertEqual(info["tessellation"], ladder_payload())
+        self.assertEqual(list(info), ["app", "identityToken", "autoReload", "platform", "tessellation", "user",
+                                      "start", "pick", "port", "pid"])
         self.assertEqual(headers["cache-control"], "no-store")
 
     def test_json_is_compact_and_not_ascii_escaped(self):

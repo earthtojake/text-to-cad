@@ -123,6 +123,32 @@ cadgen step snapshot part.step cut.svg --mode section --section XZ:12.5
 Those are the only two keys, a `section` outside section mode is refused, and a
 plane that misses the model returns an empty drawing with a warning.
 
+The cut is exact. cadgen sections each part's BREP with the plane, in the part's
+own coordinates (`cadgen.store.sections`, a build-pool job cached by part and
+plane in the store's `section` index), so a cylinder cut across its axis is a
+circle of its true radius, never the chords of a tessellation. `--focus` and
+`--hide` pick the parts that are cut. The loops are drawn as a 2D drawing
+payload (`cadgen.section_drawing`): each part's closed loops filled even-odd and
+hatched at 45 degrees, dash-dot centre lines through the cut's box, and the
+outlines in the appearance's foreground (or `display.edges.color`). A `.png` is
+that payload painted by the snapshot page with the same drawing code a DXF is,
+with a cut locator in the corner and, with `--view-labels`, the plane's label; a
+`.svg` is written by cadgen itself, y up as drawn, and a job whose outputs are
+all `.svg` starts no browser. Section mode is for STEP/STP inputs; a mesh or a
+robot description has no solids to section.
+
+## Listing a STEP model's parts
+
+`--mode list` on a STEP/STP input is answered by cadgen from the tree and the
+store (`cadgen.snapshot_parts`) and starts no browser. Each row is one placed
+occurrence, in the tree's order: `ref` and `name` are the occurrence's id and
+name exactly as every selector resolves them
+(`cadgen.assembly_lookup.assembly_occurrence_rows`), `bounds` is the component's
+exact box placed by the occurrence's transform (rounded to 1e-3), and
+`triangleCount`/`vertexCount` are the stored display mesh's at the tessellation a
+view would draw (meshed in the build pool when the store has none). `--focus` and
+`--hide` narrow the rows the way they narrow a section.
+
 ## Sizes
 
 An output is sized by `--size-profile` (`output.sizeProfile`) — `simple`

@@ -29,6 +29,7 @@ import json
 import struct
 from typing import Any
 
+from cadgen._internal.surf_container import SURF_MAGIC
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
@@ -46,7 +47,6 @@ from OCP.TopTools import (
 )
 from OCP.TopoDS import TopoDS
 
-SURF_MAGIC = b"SURF"
 # 2: shape membership, selector-table metadata (surfaceType/curveType/
 #    params/continuity/dihedral/flags), edge faceOrds.
 # 3: no tessellation inputs. Loops are edge references, a B-spline surface
@@ -562,14 +562,6 @@ def extract_surface_component(
         + json_bytes
         + payload
     )
-
-
-def read_surf(data: bytes) -> tuple[dict, memoryview]:
-    if data[:4] != SURF_MAGIC:
-        raise ValueError("not a SURF container")
-    version, json_len = struct.unpack_from("<II", data, 4)
-    index = json.loads(data[12:12 + json_len].decode("utf-8"))
-    return index, memoryview(data)[12 + json_len:]
 
 
 def _shape_hash(shape) -> int:

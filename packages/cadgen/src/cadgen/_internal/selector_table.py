@@ -277,7 +277,7 @@ def capabilities() -> dict[str, Any]:
 
 def build_selector_table(shape, index: Mapping[str, Any]) -> dict[str, Any]:
     """The table of one unlocated component: ``shape`` (a ``TopoDS_Shape``) and the
-    SURF index extracted from it (``surface_extract.read_surf``)."""
+    SURF index extracted from it (``surf_container.read_surf``)."""
     faces = list(index.get("faces") or [])
     edges = list(index.get("edges") or [])
     shapes_meta = list(index.get("shapes") or [{"ord": 1, "kind": "shape", "volume": None}])

@@ -1,4 +1,4 @@
-import type { CadEditingPreview } from '@text-to-cad/core/client';
+import type { CadEditingPreview, CadTessellationLadder } from '@text-to-cad/core/client';
 import type { LibraryModel } from '@text-to-cad/ui/library';
 import type { UpdateNotice } from '@text-to-cad/ui/update';
 import type { Bridge, CallOptions, ToolResult } from './bridge';
@@ -9,7 +9,7 @@ import type { Bridge, CallOptions, ToolResult } from './bridge';
  * needs to start on it alone; a view makes one call a second (`cad_sync`) and reaches the viewer's
  * routes through `cad_http`.
  */
-export const PROTOCOL = 5;
+export const PROTOCOL = 6;
 
 /** What an opening tool tells the page to show. The server decides all of it. */
 export interface Launch {
@@ -21,6 +21,8 @@ export interface Launch {
   /** The server's version and platform: the page starts on the launch alone. */
   version?: string;
   platform?: string;
+  /** The display tessellation ladder the page draws STEP models by (cadgen's policy). */
+  tessellation?: CadTessellationLadder;
   /** The home's library as it stood, so the home draws its cards without asking first. */
   recents?: Recent[];
   /** Whether this computer has a file chooser for the home's Open. */

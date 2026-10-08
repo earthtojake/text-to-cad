@@ -59,8 +59,10 @@ __all__ = [
 
 # Bumped when the payload's SHAPE changes. It rides in the payload (a client
 # checks it before drawing) and in the cache key (an old shape is not served
-# from the store after an upgrade).
-DRAWING_PAYLOAD_SCHEMA_VERSION = 1
+# from the store after an upgrade). 2: a primitive may carry its own screen
+# `width` (CSS pixels) and `opacity`, which a STEP section's drawing uses
+# (cadgen.section_drawing); a DXF's never does.
+DRAWING_PAYLOAD_SCHEMA_VERSION = 2
 
 # The layout foreground handed to ezdxf, and therefore the exact colour every
 # default-pen primitive comes back wearing. Not in the ACI palette; see the

@@ -46,7 +46,8 @@ def _match(rows, fresh, key):
 def main() -> None:
     from cadgen._internal import occt_mesh
     from cadgen._internal.component_package import decode_display_shape, prepare_geometry_component
-    from cadgen._internal.surface_extract import extract_surface_component, read_surf
+    from cadgen._internal.surf_container import read_surf
+    from cadgen._internal.surface_extract import extract_surface_component
     from cadgen.store.meshes import decode_payload, encode_payload
 
     view = json.loads((FIXTURE / "assembly.json").read_text(encoding="utf-8"))
