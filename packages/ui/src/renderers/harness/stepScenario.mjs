@@ -241,7 +241,6 @@ export function stepCatalogEntry({ view, sidecar, articulation, assembly, file }
     hash: view.tree,
     documentHash: view.documentHash,
     bytes: assembly.length,
-    sourceUrl: `/${file}.json`,
     // Inline, as the scanner publishes them: cadgen's articulation of the kinematics and the
     // baked animation. The renderer reads both from the entry and never fetches the sidecar;
     // the scanner only supplies them when the sidecar declares the current schema AND a

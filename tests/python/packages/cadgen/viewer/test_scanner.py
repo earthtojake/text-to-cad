@@ -265,15 +265,14 @@ HINGE_PACKAGE = {
 
 
 class DescriptorGate(ScannerTestCase):
-    """``{}`` from ``read_step_catalog_metadata`` suppresses sourceUrl/poseUrl."""
+    """``{}`` from ``read_step_catalog_metadata`` suppresses the articulation and its poseUrl."""
 
-    def test_a_valid_package_publishes_the_articulation_and_both_urls(self):
+    def test_a_valid_package_publishes_the_articulation_and_its_url(self):
         self.write("g.step", "x\n")
         self.sidecar("g.step", {"kinematics": HINGE})
         self.package("g.step", HINGE_PACKAGE)
         entry = self.entry("g.step")
-        self.assertEqual(asset_query(entry["sourceUrl"])["file"], self.path("g.step.json"))
-        self.assertEqual(entry["poseUrl"], entry["sourceUrl"])
+        self.assertEqual(asset_query(entry["poseUrl"])["file"], self.path("g.step.json"))
         # What the page plays: cadgen's articulation of the mates, inline, over the tree's occurrences.
         self.assertEqual([control["id"] for control in entry["articulation"]["controls"]], ["hinge"])
         self.assertEqual(entry["articulation"]["carries"], {"hinge": ["o1.2"]})
@@ -283,7 +282,6 @@ class DescriptorGate(ScannerTestCase):
         self.write("g.step", "x\n")
         self.sidecar("g.step", {"kinematics": HINGE})
         entry = self.entry("g.step")
-        self.assertNotIn("sourceUrl", entry)
         self.assertNotIn("poseUrl", entry)
         self.assertNotIn("articulation", entry)
 
@@ -300,18 +298,16 @@ class SidecarSections(ScannerTestCase):
 
     def test_a_kinematics_block_with_no_mates_poses_nothing(self):
         entry = self._entry(json.dumps({"kinematics": {}}))
-        self.assertIn("sourceUrl", entry)
         self.assertNotIn("poseUrl", entry)
         self.assertNotIn("articulation", entry)
 
     def test_a_kinematics_block_this_cadgen_cannot_read_is_dropped_quietly(self):
         entry = self._entry(json.dumps({"kinematics": {"mates": [{"name": "x", "kind": "twist", "child": "#a", "parent": "#b"}]}}))
-        for absent in ("annotationError", "sourceUrl", "poseUrl", "articulation"):
+        for absent in ("annotationError", "poseUrl", "articulation"):
             self.assertNotIn(absent, entry)
 
     def test_explicit_nulls_yield_no_pose_url(self):
         entry = self._entry(json.dumps({"kinematics": None, "animation": None}))
-        self.assertIn("sourceUrl", entry)
         self.assertNotIn("poseUrl", entry)
         self.assertNotIn("animation", entry)
 
@@ -333,7 +329,6 @@ class SidecarSections(ScannerTestCase):
             "materialId": "finish", "materialName": "Finish", "opacity": 1.0,
             "material": {"roughness": 0.25, "metalness": 0.03, "clearcoat": 0.0, "clearcoatRoughness": 0.26, "opacity": 1.0},
         }})
-        self.assertEqual(asset_query(entry["sourceUrl"])["file"], self.path("finish.step.json"))
         self.assertEqual(entry["hash"], result_tree(Path(self.path("finish.step"))))
         self.assertNotIn("poseUrl", entry)
 
@@ -413,14 +408,14 @@ class SidecarSections(ScannerTestCase):
 
     def test_the_catalog_publishes_no_provenance(self):
         entry = self._entry(json.dumps({"sourceKind": "step"}))
-        for forbidden in ("sourceKind", "source", "poseHatchUrl", "moduleUrl", "legacyParamsSidecar", "renderModuleUrl", "sourceSidecar"):
+        for forbidden in ("sourceKind", "source", "sourceUrl", "poseHatchUrl", "moduleUrl", "legacyParamsSidecar", "renderModuleUrl", "sourceSidecar"):
             self.assertNotIn(forbidden, entry)
 
     def test_the_sidecar_suffix_is_appended_to_the_whole_name(self):
         self.write("u.STP", "x\n")
-        self.sidecar("u.STP", {"kinematics": {}})
-        self.package("u.STP", {"kind": "assembly-package", "components": {"c0": {}}})
-        self.assertEqual(asset_query(self.entry("u.STP")["sourceUrl"])["file"], self.path("u.STP.json"))
+        self.sidecar("u.STP", {"kinematics": HINGE})
+        self.package("u.STP", HINGE_PACKAGE)
+        self.assertEqual(asset_query(self.entry("u.STP")["poseUrl"])["file"], self.path("u.STP.json"))
 
     # A sidecar this build cannot read is no sidecar: the document renders, with
     # no kinematics, no materials and no routine, and the entry says nothing
@@ -432,7 +427,7 @@ class SidecarSections(ScannerTestCase):
         self.package("stale.step", {"kind": "assembly-package", "components": {"c0": {}}})
 
         entry = self.entry("stale.step")
-        for absent in ("annotationError", "sourceUrl", "poseUrl"):
+        for absent in ("annotationError", "poseUrl"):
             self.assertNotIn(absent, entry)
         self.assertTrue(entry["url"].startswith("/__cad/store?file="))
         self.assertEqual(entry["documentHash"], hashlib.sha256(b"new\n").hexdigest())
@@ -442,7 +437,7 @@ class SidecarSections(ScannerTestCase):
         self.write("old.step.json", json.dumps({"schemaVersion": 6, "kinematics": {}}))
         self.package("old.step", {"kind": "assembly-package", "components": {"c0": {}}})
         entry = self.entry("old.step")
-        for absent in ("annotationError", "sourceUrl", "poseUrl"):
+        for absent in ("annotationError", "poseUrl"):
             self.assertNotIn(absent, entry)
 
     def test_invalid_appearance_drops_the_sidecar_without_an_entry_field(self):
@@ -452,7 +447,7 @@ class SidecarSections(ScannerTestCase):
         })
         self.package("bad-finish.step", {"kind": "assembly-package", "components": {"c0": {}}})
         entry = self.entry("bad-finish.step")
-        for absent in ("annotationError", "sourceUrl", "appearanceHash"):
+        for absent in ("annotationError", "appearanceHash"):
             self.assertNotIn(absent, entry)
 
 

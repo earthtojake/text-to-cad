@@ -403,8 +403,8 @@ def read_step_catalog_metadata(descriptor, source_path=None, *, document_hash=No
 
     ``assembly.json`` is the flattened tree (``result_descriptor``). ``None``, a
     non-dict, or a ``kind`` that is not ``assembly-package`` all answer ``{}``
-    — and that is what suppresses ``sourceUrl``/``poseUrl`` even when the
-    sidecar exists and declares kinematics.
+    — and that is what suppresses the articulation and its ``poseUrl`` even
+    when the sidecar exists and declares kinematics.
     """
     if not descriptor or not isinstance(descriptor, dict):
         return {}
@@ -541,13 +541,6 @@ def _build_step_entry(source_path, extension, *, document_hash, tree) -> dict:
         "documentHash": document_hash,
         "bytes": len(descriptor_body.encode("utf-8")),
     }
-    if metadata.get("hasSourceSidecar"):
-        # The model-side sidecar is mutable independently of the STEP bytes.
-        # Its URL therefore carries the ordinary asset version while the STEP
-        # tree URL remains content-addressed.
-        sidecar_asset = asset_for_path(source_sidecar_path(source_path))
-        if sidecar_asset:
-            entry["sourceUrl"] = sidecar_asset["url"]
     appearance = metadata.get("appearance")
     if appearance is not None:
         from cadgen._internal.source_sidecar import appearance_digest
@@ -560,11 +553,12 @@ def _build_step_entry(source_path, extension, *, document_hash, tree) -> dict:
     if articulation is not None:
         # The articulation of the typed mates, inline: exactly what the page plays. Its URL
         # is the sidecar's mutable asset route, whose version token says when the
-        # articulation was written again.
+        # articulation was written again (the sidecar changes apart from the STEP bytes,
+        # whose tree URL stays content-addressed).
+        sidecar_path = source_sidecar_path(source_path)
+        sidecar_asset = asset_for_path(sidecar_path) if metadata.get("hasSourceSidecar") else None
         entry["articulation"] = articulation
-        entry["poseUrl"] = entry.get("sourceUrl") or local_asset_url_for_path(
-            source_sidecar_path(source_path)
-        )
+        entry["poseUrl"] = (sidecar_asset or {}).get("url") or local_asset_url_for_path(sidecar_path)
     animation = metadata.get("animation")
     if animation is not None:
         from cadgen._internal.source_sidecar import animation_digest, bends_a_tube
