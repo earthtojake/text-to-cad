@@ -200,6 +200,13 @@ counts events.
 - **Nothing outside the contract is passed on**: unknown fields, tool names that are
   not `cad_*`, names outside an event's vocabulary, free-text strings are refused. The receiver keeps no IP address, and
   sends PostHog none.
+- **A refusal is logged, and says why.** Every released client is accepted, so a 400 is
+  garbage or a bug losing a real person's counts, and Vercel's per-status counts are a paid
+  feature. Each refusal is one `console.warn` line: `telemetry /v1/events refused 400:
+  <rule> (schema N, cadgen X.Y.Z)`, where the rule is a field's path or a vocabulary and
+  the release is logged only when it reads as one. Never a value, an install id or a
+  service's message (`handler.mjs`: `reasonOf`); an error that is ours is logged by its
+  name or string code alone (`TimeoutError`, `posthog_503`).
 - **No browser posts.** Both POSTs must be `application/json` (`415` otherwise) and
   carry no `Origin` header (`403`): cadgen posts from Python, which sends none, and a
   browser sends one with every POST, a form's, `sendBeacon`'s and a no-cors fetch's included.

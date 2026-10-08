@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import { handle } from './handler.mjs';
 import { versions } from './versions.mjs';
 
@@ -205,6 +205,79 @@ test('anything outside the contract is refused and stores nothing', async () => 
   assert.equal((await send(store, 'POST', '/v1/events', '{')).status, 400);
   assert.equal((await send(store, 'POST', '/v1/events', 'x'.repeat(20_000))).status, 400);
   assert.deepEqual([store.rows, store.countries], [[], []]);
+});
+
+// What a handler logs while a request runs, by level.
+async function logged(run) {
+  const lines = { warn: [], error: [] };
+  const warn = mock.method(console, 'warn', (...args) => lines.warn.push(args.join(' ')));
+  const error = mock.method(console, 'error', (...args) => lines.error.push(args.join(' ')));
+  try { await run(); } finally { warn.mock.restore(); error.mock.restore(); }
+  return lines;
+}
+
+test('a refused request is logged by the rule it broke and the release that sent it: never a value it carried', async () => {
+  const store = memory();
+  const lines = await logged(async () => {
+    await send(store, 'POST', '/v1/events', { ...BATCH, events: [BATCH.events[0], { name: 'view', calls: 0 }] });
+    await send(store, 'POST', '/v1/events', { ...BATCH, version: '0.9.1', next_thing: 1 }); // a newer release's field
+    await send(store, 'POST', '/v1/events', '{');
+    await send(store, 'POST', '/v1/forget', { install: 'someone@example.com' });
+    await send(store, 'POST', '/v1/events', BATCH, { origin: 'https://example.com' });
+    await send(store, 'POST', '/v1/events', BATCH); // taken: nothing to say
+  });
+  assert.deepEqual(lines.warn, [
+    'telemetry /v1/events refused 400: events[1].calls counts nothing (schema 3, cadgen 0.8.0)',
+    'telemetry /v1/events refused 400: unknown field next_thing (schema 3, cadgen 0.9.1)',
+    'telemetry /v1/events refused 400: the body is not JSON',
+    'telemetry /v1/forget refused 400: not an install id',
+    'telemetry /v1/events refused 403: not from a browser',
+  ]);
+  assert.deepEqual(lines.error, []);
+});
+
+test('what a refusal logs carries nothing of the request\'s choosing: no key, value, version or path', async () => {
+  const secrets = ['/Users/someone/secret.step', 'someone@example.com', '8c347ec3-1342-4db5-a19a-491cbc8c5900', 'secret bracket'];
+  const store = memory();
+  const lines = await logged(async () => {
+    for (const secret of secrets) {
+      for (const bad of [
+        { ...BATCH, [secret]: 1 }, // an unknown key is the caller's to name
+        { ...BATCH, version: secret },
+        { ...BATCH, platform: secret },
+        { ...BATCH, channel: secret },
+        { ...BATCH, events: [{ name: 'tool', tool: secret, calls: 1 }] },
+        { ...BATCH, events: [{ name: 'tool', tool: 'cad_show', calls: 1, [secret]: 1 }] },
+        { ...BATCH, events: [{ ...CRASH, frames: [{ file: secret, function: 'make' }] }] },
+        { ...BATCH, events: [{ ...CRASH, frames: [{ ...CRASH.frames[0], [secret]: 1 }] }] },
+        { ...BATCH, client: { [secret]: 1 } },
+        { ...BATCH, schema: secret },
+        { ...BATCH, install: secret },
+      ]) await send(store, 'POST', '/v1/events', bad);
+      await send(store, 'POST', '/v1/events', BATCH, { origin: secret });
+      await send(store, 'POST', `/v1/${secret}`, BATCH, { 'content-type': secret }); // refused on its type, at a path of its own
+    }
+  });
+  assert.ok(lines.warn.length > 40);
+  for (const line of lines.warn) for (const secret of secrets) assert.ok(!line.includes(secret), line);
+  assert.ok(lines.warn.includes('telemetry request refused 415: the body must be application/json'));
+});
+
+test('a failed request is logged by its name or code, never a number or a message', async () => {
+  const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+  assert.equal(timeout.code, 23); // the legacy number a DOMException carries, which says nothing
+  const cases = [
+    [timeout, 'TimeoutError'],
+    [Object.assign(new Error('PostHog answered 503 for 8c347ec3-1342-4db5-a19a-491cbc8c59be'), { code: 'posthog_503' }), 'posthog_503'],
+    [new TypeError('fetch failed for someone@example.com'), 'TypeError'],
+  ];
+  for (const [failure, name] of cases) {
+    const store = { ...memory(), async forget() { throw failure; } };
+    const lines = await logged(async () => {
+      assert.equal((await send(store, 'POST', '/v1/forget', { install: INSTALL })).status, 500);
+    });
+    assert.deepEqual(lines.error, [`telemetry request failed: ${name}`]);
+  }
 });
 
 test('a browser cannot post: a request with an Origin header, or a body that is not JSON, stores nothing', async () => {

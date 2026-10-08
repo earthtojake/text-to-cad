@@ -69,7 +69,10 @@ export function exceptionOf(row) {
 
 /** A row as PostHog properties: its context, its own fields, and where it came from; nothing unset. */
 export function propertiesOf(row, country) {
-  const properties = { distinct_id: row.install_id, session: row.session_id, $geoip_disable: true };
+  // The session twice: `session`, which the counts are read by, and PostHog's own `$session_id`, which error
+  // tracking counts an issue's sessions by. A process's id is a UUIDv4, not the v7 PostHog's sessions table
+  // wants, so it sits out that table's aggregations; nothing else reads it.
+  const properties = { distinct_id: row.install_id, session: row.session_id, $session_id: row.session_id, $geoip_disable: true };
   const fields = row.event === 'exception' ? ['where', 'tool', 'count'] : FIELDS[row.event];
   for (const key of [...CONTEXT, ...fields]) if (row[key] !== null && row[key] !== undefined) properties[key] = row[key];
   if (row.event === 'exception') properties.$exception_list = exceptionOf(row);

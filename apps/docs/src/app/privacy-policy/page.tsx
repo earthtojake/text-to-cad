@@ -163,7 +163,9 @@ export default function PrivacyPolicyPage() {
             Telemetry is kept by PostHog for as long as our plan with it keeps events, currently one
             year, then deleted. We do not store IP addresses with it. Your install ID travels in the
             body of each request, which our host’s request logs do not record, and we never combine
-            telemetry with those logs. Turning telemetry off deletes everything stored under your
+            telemetry with those logs. The one exception is a batch our server refuses as malformed:
+            its logs then keep the name of the rule it broke and the cadgen version that sent it,
+            never your install ID or any other value from it. Turning telemetry off deletes everything stored under your
             install ID; PostHog carries the deletion out in the background, which can take some days.
             If our server cannot be reached at that moment, cadgen asks again until it can.
           </li>

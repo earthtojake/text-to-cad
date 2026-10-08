@@ -26,9 +26,36 @@ const reply = (status, body, cache = 'no-store') => new Response(body === undefi
   headers: { 'cache-control': cache, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
 });
 
-// An error by its code and kind only: a service's message can quote what it was sent, an install id among
-// them, and the host's logs keep each line beside the caller's IP address.
-const codeOf = error => error?.code ?? error?.name ?? 'error';
+// An error by its code or its name only: a service's message can quote what it was sent, an install id among
+// them, and the host's logs keep each line beside the caller's IP address. Only a string code counts:
+// `AbortSignal.timeout` rejects with a `TimeoutError` whose legacy numeric `code` is 23, which reads as nothing.
+const codeOf = error => (typeof error?.code === 'string' && error.code) || (typeof error?.name === 'string' && error.name) || 'error';
+
+// A refused request is logged, because the host's per-status counts are not ours to read: every released
+// client is accepted, so a 400 is a garbage request or a bug that is losing a real person's counts. The
+// line names a reason and nothing a request carried. `Invalid` messages name a field's path (`events[2].count`),
+// a vocabulary or a rule, never the value that broke it -- except an unknown field, which names the caller's
+// own key: kept only when it is a plain name (what a newer client adds), else left out.
+const PLAIN_NAME = /^[a-z][a-z_]{0,31}$/;
+const KEPT_MESSAGE = /^[A-Za-z0-9_.,:'\[\] -]{1,200}$/;
+export function reasonOf(message) {
+  const reason = String(message).replace(/\bunknown field (.*)$/s, (_, key) => (PLAIN_NAME.test(key) ? `unknown field ${key}` : 'unknown field'));
+  return KEPT_MESSAGE.test(reason) ? reason : 'invalid';
+}
+// The release that sent it, when it says so as a release does (`0.7.17`): a version nothing else could be.
+const RELEASE = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+const senderOf = batch => {
+  const parts = [];
+  if (Number.isInteger(batch?.schema) && batch.schema >= 0 && batch.schema < 100) parts.push(`schema ${batch.schema}`);
+  if (typeof batch?.version === 'string' && RELEASE.test(batch.version)) parts.push(`cadgen ${batch.version}`);
+  return parts.length ? ` (${parts.join(', ')})` : '';
+};
+// Which endpoint, by a name of ours: a path is the caller's to choose.
+const ENDPOINTS = new Set(['/v1/events', '/v1/forget']);
+const refuse = (status, path, reason, batch) => {
+  console.warn(`telemetry ${ENDPOINTS.has(path) ? path : 'request'} refused ${status}: ${reason}${senderOf(batch)}`);
+  return reply(status, { error: reason });
+};
 
 async function json(request) {
   const text = await request.text();
@@ -47,6 +74,7 @@ async function json(request) {
 export async function handle(request, store, { missing = [], country, versions } = {}) {
   const { pathname } = new URL(request.url);
   const path = pathname.replace(/\/+$/, '');
+  let batch; // what /v1/events parsed, for the line a refusal logs
   try {
     // Unhealthy without its settings, or with a service that will not take its keys: a deploy's check fails
     // rather than shipping an API that drops every batch or cannot delete what an opt-out asks it to. The
@@ -69,11 +97,12 @@ export async function handle(request, store, { missing = [], country, versions }
     // browser sends one with every POST, a form's, `sendBeacon`'s and a no-cors fetch's included. And only
     // JSON is read, which a page can post to another site only after a CORS preflight nothing here approves.
     if (request.method === 'POST') {
-      if (request.headers.has('origin')) return reply(403, { error: 'not from a browser' });
-      if (!JSON_TYPE.test(request.headers.get('content-type') ?? '')) return reply(415, { error: 'the body must be application/json' });
+      if (request.headers.has('origin')) return refuse(403, path, 'not from a browser');
+      if (!JSON_TYPE.test(request.headers.get('content-type') ?? '')) return refuse(415, path, 'the body must be application/json');
     }
     if (path === '/v1/events' && request.method === 'POST') {
-      const rows = rowsOf(await json(request));
+      batch = await json(request);
+      const rows = rowsOf(batch);
       await store.insert(rows, { country: COUNTRY.test(country ?? '') ? country : null });
       return reply(204);
     }
@@ -81,13 +110,13 @@ export async function handle(request, store, { missing = [], country, versions }
     // caller's IP address, and must never pair the two.
     if (path === '/v1/forget' && request.method === 'POST') {
       const { install } = await json(request) ?? {};
-      if (!isUuid(install)) return reply(400, { error: 'not an install id' });
+      if (!isUuid(install)) return refuse(400, path, 'not an install id');
       await store.forget(install);
       return reply(204);
     }
     return reply(404, { error: 'not found' });
   } catch (error) {
-    if (error instanceof Invalid) return reply(400, { error: error.message });
+    if (error instanceof Invalid) return refuse(400, path, reasonOf(error.message), batch);
     console.error('telemetry request failed:', codeOf(error));
     return reply(500, { error: 'internal error' });
   }
