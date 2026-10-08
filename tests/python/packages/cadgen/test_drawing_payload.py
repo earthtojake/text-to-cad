@@ -36,7 +36,7 @@ from cadgen.drawing_payload import (  # noqa: E402
 )
 
 PRIMITIVE_TYPES = frozenset(
-    {"point", "lines", "path", "filled-paths", "filled-polygon"}
+    {"point", "lines", "path", "filled-paths", "filled-polygon", "text"}
 )
 
 
@@ -96,27 +96,28 @@ class EveryEntityKindSurvives(DrawingFixture):
         self.assertLessEqual(set(expected_types), self.types(payload))
         self.assertIsNotNone(payload["bounds"])
 
-    def test_text_is_outlined_into_filled_paths(self) -> None:
+    def test_text_is_a_text_primitive(self) -> None:
         payload = self.payload(
             "text.dxf", lambda doc, msp: msp.add_text("AB", height=2).set_placement((0, 0))
         )
-        self.assertDrawn(payload, {"filled-paths"})
+        self.assertDrawn(payload, {"text"})
 
-    def test_mtext_is_outlined_into_filled_paths(self) -> None:
+    def test_mtext_is_one_text_primitive_per_line(self) -> None:
         payload = self.payload(
             "mtext.dxf",
             lambda doc, msp: msp.add_mtext("AB\nCD", dxfattribs={"char_height": 2}),
         )
-        self.assertDrawn(payload, {"filled-paths"})
+        self.assertDrawn(payload, {"text"})
+        self.assertEqual([primitive["text"] for primitive in payload["primitives"]], ["AB", "CD"])
 
     def test_a_rendered_dimension_brings_its_lines_arrows_and_text(self) -> None:
         payload = self.payload(
             "dim.dxf",
             lambda doc, msp: msp.add_linear_dim(base=(0, -5), p1=(0, 0), p2=(10, 0)).render(),
         )
-        # The arrow heads are filled polygons and the measurement text is
-        # outlined: a dimension that arrived as bare lines would have lost both.
-        self.assertDrawn(payload, {"lines", "filled-polygon", "filled-paths"})
+        # The arrow heads are filled polygons and the measurement is text: a
+        # dimension that arrived as bare lines would have lost both.
+        self.assertDrawn(payload, {"lines", "filled-polygon", "text"})
 
     def test_a_solid_hatch_is_a_filled_path(self) -> None:
         def build(doc, msp):
@@ -190,6 +191,64 @@ class EveryEntityKindSurvives(DrawingFixture):
             "an empty drawing has no extent; [0,0,0,0] is a box a client would zoom to",
         )
         self.assertEqual(payload["schemaVersion"], DRAWING_PAYLOAD_SCHEMA_VERSION)
+
+
+class TextStaysText(DrawingFixture):
+    """A string arrives as its characters, placed by ezdxf, never as glyph outlines."""
+
+    def texts(self, payload):
+        return [primitive for primitive in payload["primitives"] if primitive["type"] == "text"]
+
+    def test_a_text_carries_its_string_font_size_width_and_placement(self) -> None:
+        def build(doc, msp):
+            msp.add_text("NOTE %%c10", height=2.5, dxfattribs={"color": 1}).set_placement((10, 20))
+
+        payload = self.payload("note.dxf", build)
+        (text,) = self.texts(payload)
+        self.assertEqual(text["text"], "NOTE Ø10", "a control code is the character it stands for")
+        self.assertEqual((text["color"], text["height"]), ("#ff0000", 2.5))
+        self.assertEqual(text["transform"], [1, 0, 0, 1, 10, 20], "baseline-left at the insert point")
+        self.assertGreater(text["width"], 2.5 * 4, "the advance ezdxf measured for eight characters")
+        self.assertEqual(set(payload["fonts"][text["font"]]), {"family", "weight", "italic"})
+        # The box a fit holds: from the insert point along the advance and up the cap height.
+        minimum_x, minimum_y, maximum_x, maximum_y = payload["bounds"]
+        self.assertEqual(minimum_x, 10)
+        self.assertLess(minimum_y, 20)
+        self.assertAlmostEqual(maximum_x, 10 + text["width"], places=3)
+        self.assertGreaterEqual(maximum_y, 22.5)
+
+    def test_rotation_alignment_and_width_factor_are_in_the_transform(self) -> None:
+        from ezdxf.enums import TextEntityAlignment
+
+        def build(doc, msp):
+            msp.add_text("UP", height=2, rotation=90, dxfattribs={"width": 0.5}).set_placement((5, 5))
+            msp.add_text("MID", height=2).set_placement((50, 0), align=TextEntityAlignment.CENTER)
+
+        up, middle = self.texts(self.payload("placed.dxf", build))
+        self.assertEqual(up["transform"], [0, 0.5, -1, 0, 5, 5], "turned a quarter, squeezed along its baseline")
+        self.assertAlmostEqual(middle["transform"][4] + middle["width"] / 2, 50, places=3)
+
+    def test_a_clipped_block_keeps_its_text_outlined_so_the_clip_applies(self) -> None:
+        from ezdxf import xclip
+
+        def build(doc, msp):
+            block = doc.blocks.new("TAG")
+            block.add_text("CLIPPED", height=2).set_placement((0, 0))
+            insert = msp.add_blockref("TAG", (0, 0))
+            xclip.XClip(insert).set_block_clipping_path([(0, -1), (4, -1), (4, 3), (0, 3)])
+
+        payload = self.payload("clipped.dxf", build)
+        self.assertEqual(self.texts(payload), [])
+        self.assertIn("filled-paths", self.types(payload))
+
+    def test_a_sheet_of_notes_costs_bytes_per_character_not_per_outline(self) -> None:
+        def build(doc, msp):
+            for row in range(40):
+                msp.add_text(f"NOTE {row:03d}: BREAK ALL SHARP EDGES 0.2 MAX", height=2.5).set_placement((0, row * 5))
+
+        encoded = encode_drawing_payload(self.payload("notes.dxf", build))
+        # Outlined, each of these lines was ~20 KB of glyph paths.
+        self.assertLess(len(encoded) / 40, 300)
 
 
 class ColourResolution(DrawingFixture):

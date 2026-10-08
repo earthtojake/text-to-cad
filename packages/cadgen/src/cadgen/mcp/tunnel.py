@@ -24,6 +24,19 @@ The page asks for every GET as a byte range of at most that (``Range``), and a
 longer body answers with its first part, ``content-range`` and an ``etag``
 (``cadgen.viewer.response``): the page reads the rest a range at a time, from
 the same body. Any reply still longer is not sent: that request fails (502).
+
+A long body is produced once. The reply carrying its first part keeps the whole
+of it, and the page asks for every later part naming it (``if-range: <its
+etag>``): those parts are cut from what was kept, never by running the route
+again, which re-read the file and the store and hashed the whole body for every
+4 MiB. A kept body goes when its last part is sent, after
+``KEPT_BODY_SECONDS``, or to make room under ``KEPT_BODIES_MAX_BYTES``; a part
+asked for after that runs the route, as every part once did.
+
+A drawing the store has not drawn yet renders off the request
+(``cadgen.viewer.drawings``): here a request waits on it only briefly
+(``DRAWING_HOLD_SECONDS``), since calls share a host's few slots, and the 202
+has the page ask again a moment later (``DRAWING_RETRY_MS``).
 """
 
 from __future__ import annotations
@@ -32,8 +45,10 @@ import base64
 import email.utils
 import gzip
 import io
+import re
 import threading
 import time
+from collections import OrderedDict
 from typing import Any
 
 from cadgen.viewer import url_norm
@@ -55,6 +70,14 @@ GZIP_JSON_MIN_BYTES = 4 * 1024
 # 5.6 MB. The MCP TypeScript SDK's stdio reader takes 10 MiB a message unless a host sets more
 # (Claude Code reads 16 MiB, Claude Desktop sets 32 MiB). The page's `TUNNEL_REPLY_MAX_BYTES`.
 MAX_REPLY_BYTES = 4 * 1024 * 1024
+# A long body kept for its later parts (the module docstring): for how long, and in all at most.
+KEPT_BODY_SECONDS = 60.0
+KEPT_BODIES_MAX_BYTES = 256 * 1024 * 1024
+# How long a drawing request waits on its render, and when the page asks again (the module
+# docstring): about one call a second while a large drawing renders, as a view's sync makes.
+DRAWING_HOLD_SECONDS = 0.25
+DRAWING_RETRY_MS = 750
+_CONTENT_RANGE = re.compile(r"bytes [0-9]+-([0-9]+)/([0-9]+)")
 
 
 class _CapturedHandler:
@@ -107,6 +130,8 @@ class ViewerTunnel:
         self._lock = threading.Lock()
         self._clock = clock
         self._revisions: dict[str, tuple[float, str]] = {}
+        # Long bodies kept for their later parts, by etag: (bytes, content type, extra headers, when).
+        self._kept: OrderedDict[str, tuple[bytes, str, tuple, float]] = OrderedDict()
 
     @property
     def app(self):
@@ -119,6 +144,7 @@ class ViewerTunnel:
                     app.recents = self._recents
                 # The server's recorder: a person's answer on a card here is the CAD app's.
                 app.analytics, app.consent_by = self._analytics, "app"
+                app.drawings.hold_seconds, app.drawings.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS
                 self._app = app
             return self._app
 
@@ -169,9 +195,14 @@ class ViewerTunnel:
             # its views share, and a held one keeps another view's model load waiting. The feed paces
             # an answer that brings nothing new itself.
             query = url_norm.Query([pair for pair in query if pair[0] != "after"])
+        byte_range = lowered.get("range") if method == "GET" else None
+        if byte_range and lowered.get("if-range"):
+            part = self._kept_part(lowered["if-range"], byte_range)
+            if part is not None:
+                return part
         request = Request(raw_method=method, path=path, query=query, headers=lowered, read_body=lambda: body)
         handler = _CapturedHandler()
-        response = Response(handler, head_only=request.is_head, byte_range=lowered.get("range") if method == "GET" else None)
+        response = Response(handler, head_only=request.is_head, byte_range=byte_range, on_parts=self._keep)
         try:
             self.app.handle(request, response)
         except Exception:
@@ -183,4 +214,40 @@ class ViewerTunnel:
         if handler.close_connection:
             return _result(502, {"content-type": "application/json; charset=utf-8"},
                            b'{"ok":false,"error":"the file changed or could not be read completely"}')
+        return _result(handler.status, handler.headers, handler.wfile.getvalue())
+
+    # A long body's later parts, cut from the body its first part kept (the module docstring).
+
+    def _keep(self, etag: str, data: bytes, content_type: str, extra_headers: tuple) -> None:
+        if len(data) > KEPT_BODIES_MAX_BYTES:
+            return
+        with self._lock:
+            self._kept.pop(etag, None)
+            self._kept[etag] = (data, content_type, extra_headers, self._clock())
+            self._prune_kept()
+
+    def _prune_kept(self) -> None:
+        now = self._clock()
+        total = sum(len(kept[0]) for kept in self._kept.values())
+        for etag in list(self._kept):
+            data, _type, _extra, when = self._kept[etag]
+            if total <= KEPT_BODIES_MAX_BYTES and now - when <= KEPT_BODY_SECONDS:
+                continue
+            del self._kept[etag]
+            total -= len(data)
+
+    def _kept_part(self, etag: str, byte_range: str) -> dict[str, Any] | None:
+        with self._lock:
+            self._prune_kept()
+            kept = self._kept.get(etag)
+        if kept is None:
+            return None
+        data, content_type, extra_headers, _when = kept
+        handler = _CapturedHandler()
+        Response(handler, byte_range=byte_range).send_bytes(200, data, content_type, extra_headers, etag=etag)
+        sent = _CONTENT_RANGE.fullmatch(handler.headers.get("content-range", ""))
+        if sent is None or int(sent.group(1)) + 1 == int(sent.group(2)):
+            # The last part (or the whole body): nothing will ask for this body again.
+            with self._lock:
+                self._kept.pop(etag, None)
         return _result(handler.status, handler.headers, handler.wfile.getvalue())

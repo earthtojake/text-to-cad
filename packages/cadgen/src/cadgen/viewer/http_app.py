@@ -263,10 +263,13 @@ class CadApp:
     def __init__(self, *, host: str, port: int, dist_dir: str = "", start: str | None = None, identity: str | None = None):
         from cadgen._internal.picker import available
 
+        from .drawings import DrawingRenders
         from .surfaces import SurfaceSubscribers
         from .warm import CatalogWarmer
 
         self.surface_subscribers = SurfaceSubscribers()
+        # The drawing route's renders, off the request and one per drawing (``drawings.py``).
+        self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
         # What a watched build saves, its catalog row computed before a read asks (``warm.py``).
         self.catalog_warm = CatalogWarmer()
         self.start = to_posix_path(os.path.abspath(start if start is not None else _working_folder()))
@@ -309,8 +312,9 @@ class CadApp:
 
     def restart_is_safe(self) -> bool:
         """``SourceReloader``'s idle gate: nothing this restart would destroy -- no request
-        in flight, and no compile the build route started and left running."""
-        return self.busy_requests() == 0 and not self.ops.client.any_in_flight()
+        in flight, no compile the build route started and left running, and no drawing it is
+        rendering."""
+        return self.busy_requests() == 0 and not self.ops.client.any_in_flight() and not self.drawings.any_in_flight()
 
     # --- server info ------------------------------------------------------
 
@@ -818,19 +822,18 @@ class CadApp:
         response.stream_file(str(payload), stat_result, content_type, RAW_FILE_HEADERS)
 
     def _handle_drawing(self, request, response, query):
-        """A ``.dxf`` flattened to 2D primitives (``drawings.py`` owns both rules).
+        """A ``.dxf`` flattened to 2D primitives (``drawings.py`` owns the rules).
 
         NOT in ``_UNCOUNTED_ROUTES``: that set is for polls and parked waits,
-        and this one does real work — up to a second of CPU on a large drawing
-        — that a development restart would throw away, exactly like a compile.
+        and this one starts real work — a render that a development restart
+        would throw away, exactly like a compile (``restart_is_safe`` waits
+        for it as well).
 
         The payload is already JSON bytes from the store's ``drawing`` index,
         so it goes out through ``send_bytes`` rather than being decoded and
         re-encoded on the way past.
         """
-        from .drawings import drawing_payload_response
-
-        status, body = drawing_payload_response(query.get("file") or "")
+        status, body = self.drawings.response(query.get("file") or "")
         if isinstance(body, bytes):
             response.send_bytes(status, body, "application/json; charset=utf-8")
             return

@@ -590,6 +590,37 @@ class TunnelBodyTest(unittest.TestCase):
             self.assertNotIn("encoding", reply)
             self.assertEqual(base64.b64decode(reply["body"]), body)
 
+    def test_a_long_bodys_later_parts_are_cut_from_it_not_produced_again(self) -> None:
+        from cadgen.mcp.tunnel import MAX_REPLY_BYTES, ViewerTunnel
+
+        body = os.urandom(2 * MAX_REPLY_BYTES + 5)
+        runs = []
+
+        class Routes:
+            def handle(self, request, response) -> None:
+                runs.append(request.path)
+                response.send_bytes(200, body, "application/octet-stream")
+
+        tunnel = ViewerTunnel()
+
+        def part(first: int, etag: str = "") -> dict:
+            headers = {"range": f"bytes={first}-{first + MAX_REPLY_BYTES - 1}", **({"if-range": etag} if etag else {})}
+            with mock.patch.object(ViewerTunnel, "app", Routes()):
+                return tunnel.serve(method="GET", url="http://cad.invalid/__cad/drawing?file=/m/a.dxf", headers=headers, body=b"")
+
+        def read() -> bytes:
+            first = part(0)
+            etag = first["headers"]["etag"]
+            replies = [first] + [part(offset, etag) for offset in range(MAX_REPLY_BYTES, len(body), MAX_REPLY_BYTES)]
+            self.assertEqual({reply["headers"]["etag"] for reply in replies}, {etag})
+            return b"".join(base64.b64decode(reply["body"]) for reply in replies)
+
+        self.assertEqual(read(), body)
+        self.assertEqual(len(runs), 1, "the route ran for a later part")
+        # Its last part sent, the body is not kept: the next read produces it again, once.
+        self.assertEqual(read(), body)
+        self.assertEqual(len(runs), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

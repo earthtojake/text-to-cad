@@ -72,6 +72,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -144,6 +145,19 @@ def temp_suffix() -> str:
     file leaked in the deep tail stays invisible to ``git add -A``.
     """
     return f".{os.getpid()}.{os.urandom(4).hex()}.tmp"
+
+
+STAGE_PREFIX = ".cadgen-stage-"
+"""The name a build's STEP staging folder starts with. The folder sits beside the output."""
+
+_TEMP_NAME = re.compile(r"\.\d+\.[0-9a-f]{8}\.tmp$")
+
+
+def is_transient_name(name: str) -> bool:
+    """Whether a folder entry exists only while cadgen writes: a :func:`temp_suffix` file or a
+    :data:`STAGE_PREFIX` folder. Both appear beside an output, so a sibling build can leave one
+    in a folder a model lists."""
+    return name.startswith(STAGE_PREFIX) or _TEMP_NAME.search(name) is not None
 
 
 def _held(error: OSError, target_path: Path | str) -> bool:

@@ -375,7 +375,7 @@ def _connect(address: str) -> transport.Channel:
         return transport.connect(address, key)
     except transport.AuthenticationError:
         # A live lock owner repairs a replaced key after rejecting this handshake.
-        # Its accept thread and this client observe the rejection concurrently, so
+        # Its handshake thread and this client observe the rejection concurrently, so
         # give the owner a bounded window to finish the atomic publication. An empty
         # key is a recovery probe when external cleanup removed the file entirely.
         # Windows replacement can spend two 750 ms sharing-violation ladders,

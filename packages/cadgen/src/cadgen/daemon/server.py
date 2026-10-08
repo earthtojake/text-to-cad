@@ -68,6 +68,9 @@ WORKER_SILENCE_TIMEOUT_SECONDS = 120.0
 # ones -- the resident daemon an upgrade replaces.
 LOCK_HANDOVER_SECONDS = 5.0
 LOCK_POLL_SECONDS = 0.02
+# How long shutdown waits for the handshake threads of peers still authenticating. Each
+# ends within transport.HANDSHAKE_POLL_SECONDS of the listener's close.
+HANDSHAKE_JOIN_SECONDS = 2.0
 
 # Parser modules are imported by the WORKERS, never by this process. They are ordinary
 # cadgen modules, so a worker imports them from the same distribution this file was
@@ -544,6 +547,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         ended = "cancelled" if left.is_set() else "crashed"
         if ended == "crashed":
             telemetry.worker_died(exc.exit_status)
+        # Record the same death evidence in the ledger without relaying a stderr chunk.
+        stderr_tail.append(f"\n{exc}\n")
         _log(f"{tool}: worker {worker.pid} died mid-job: {exc}")
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"workerDied": {"pid": worker.pid, "detail": str(exc),
@@ -823,6 +828,10 @@ def serve() -> int:
         raise
     finally:
         _release_address()
+        # The accept loop (this thread) has returned, so no handshake is starting. One
+        # still pending drops its peer within a poll slice of the close; wait for it, so
+        # no handshake thread wakes into the interpreter's finalization.
+        server.join(HANDSHAKE_JOIN_SECONDS)
         telemetry.close()  # its last batch, kept for the next process to send: a local write, after the address is free
         _HOUSEKEEPER.stop()
         _POOL.shutdown()
