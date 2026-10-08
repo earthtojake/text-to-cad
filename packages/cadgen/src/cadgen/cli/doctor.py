@@ -99,13 +99,19 @@ def _probe_kernel() -> tuple[str, str]:
     crashes the interpreter or takes the ~2.5 s import cannot take the report
     down with it, and so this process never carries the kernel itself.
     """
+    import os
     import subprocess
 
     try:
+        # Both ends name utf-8: the child's stdio would otherwise be the ANSI code page
+        # on Windows, which cannot carry every path or every localized loader error.
         result = subprocess.run(
             [sys.executable, "-c", "import OCP; print(OCP.__file__)"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="backslashreplace",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
             timeout=300,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
