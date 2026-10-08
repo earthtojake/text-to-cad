@@ -38,6 +38,9 @@ AXIS = "<axis><xyz>0 0 1</xyz></axis>"
 # (case name, sdf text, expected code, expected severity)
 CASES = [
     ("world_model_frame_collision", '<sdf version="1.12"><world name="w"><model name="arm"><link name="base"/></model><frame name="arm" attached_to="world"/></world></sdf>', "cross_type_name_collision", "error"),
+    # Below SDFormat 1.7 libsdformat renames the frame (`arm_frame`) and warns (World.cc, Model.cc).
+    ("world_model_frame_collision_1_6", '<sdf version="1.6"><world name="w"><model name="arm"><link name="base"/></model><frame name="arm" attached_to="world"/></world></sdf>', "cross_type_name_collision", "warning"),
+    ("model_link_frame_collision_1_6", '<sdf version="1.6"><model name="m"><link name="base"/><link name="tool"/><frame name="base" attached_to="tool"/></model></sdf>', "cross_type_name_collision", "warning"),
     ("world_missing_model_reference", '<sdf version="1.12"><world name="w"><model name="arm"><link name="base"/></model><frame name="tool" attached_to="missing"/></world></sdf>', "unresolved_reference", "error"),
     ("world_names_do_not_leak_into_model", '<sdf version="1.12"><world name="w"><model name="arm"><link name="base"/></model><model name="table"><link name="surface"><pose relative_to="arm">0 0 0 0 0 0</pose></link></model></world></sdf>', "unresolved_reference", "error"),
     ("world_frame_model_cycle", '<sdf version="1.12"><world name="w"><frame name="f" attached_to="m"/><model name="m"><pose relative_to="f">0 0 0 0 0 0</pose><link name="base"/></model></world></sdf>', "frame_cycle", "error"),
