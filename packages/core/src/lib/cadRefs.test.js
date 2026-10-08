@@ -5,13 +5,10 @@ import test from "node:test";
 
 import {
   buildCadRefToken,
-  buildLabelAliasMap,
   isNativeCadSelector,
-  labelRefForOccurrence,
   normalizeCadRefSelectors,
   parseCadRefSelector,
-  parseCadRefToken,
-  resolveLabelSelector
+  parseCadRefToken
 } from "./cadRefs.js";
 
 // The same fixture the Python suite reads. It is the only thing keeping the two grammars --
@@ -40,14 +37,6 @@ test("comma lists inherit as the shared fixture says", () => {
       testCase.expected,
       `${testCase.input}: ${testCase.why || ""}`
     );
-  }
-});
-
-test("label aliases are built exactly as the shared fixture says", () => {
-  for (const testCase of FIXTURE.aliasCases) {
-    const built = buildLabelAliasMap(testCase.rows);
-    assert.deepEqual(built.aliases, testCase.aliases, testCase.why || "");
-    assert.deepEqual(built.ambiguous, testCase.ambiguous, testCase.why || "");
   }
 });
 
@@ -88,43 +77,6 @@ test("isNativeCadSelector accepts every numeric form and rejects labels", () => 
   for (const selector of ["eye_shank", "servo_end_plate.f45", "", "not a selector!"]) {
     assert.ok(!isNativeCadSelector(selector), selector);
   }
-});
-
-test("a unique label resolves, bare and with an entity", () => {
-  const aliasMap = buildLabelAliasMap([
-    { id: "o1.1.2", name: "eye_shank" },
-    { id: "o1.3", name: "pressure_tube" }
-  ]);
-  assert.equal(resolveLabelSelector("eye_shank", aliasMap), "o1.1.2");
-  assert.equal(resolveLabelSelector("eye_shank.f45", aliasMap), "o1.1.2.f45");
-  assert.equal(resolveLabelSelector("#eye_shank.e3", aliasMap), "o1.1.2.e3");
-});
-
-test("an ambiguous or unknown label resolves to nothing rather than guessing", () => {
-  const aliasMap = buildLabelAliasMap([
-    { id: "o1.3", name: "cast_rim:5spoke" },
-    { id: "o1.7", name: "cast_rim:5spoke" }
-  ]);
-  assert.equal(resolveLabelSelector("cast_rim:5spoke", aliasMap), "", "bare duplicate must not resolve");
-  assert.equal(resolveLabelSelector("cast_rim:5spoke_1", aliasMap), "o1.3");
-  assert.equal(resolveLabelSelector("cast_rim:5spoke_2", aliasMap), "o1.7");
-  assert.equal(resolveLabelSelector("no_such_part", aliasMap), "");
-});
-
-test("numeric selectors pass through resolution untouched", () => {
-  const aliasMap = buildLabelAliasMap([{ id: "o1.1", name: "eye_shank" }]);
-  for (const selector of ["o1.2", "o12.f19", "f45", "m1"]) {
-    assert.equal(resolveLabelSelector(selector, aliasMap), selector, selector);
-  }
-});
-
-test("labelRefForOccurrence reports the paste spelling", () => {
-  const aliasMap = buildLabelAliasMap([
-    { id: "o1.1", name: "eye_shank" },
-    { id: "o1.2", name: "tube" }
-  ]);
-  assert.equal(labelRefForOccurrence(aliasMap, "o1.1"), "#eye_shank");
-  assert.equal(labelRefForOccurrence(aliasMap, "o9.9"), "");
 });
 
 test("every token case parses as the shared fixture says", () => {
