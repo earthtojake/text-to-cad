@@ -184,7 +184,9 @@ reference host `basic-host` does.
   read, and the cache verifies a tessellation's digest of the whole as of any
   body. The server refuses any reply still longer (502), and an agent's
   screenshot longer than that, rather than send it. 4 MiB loads as fast as 8 MiB
-  did.
+  did. The server produces such a body once: each later part names it
+  (`if-range: <etag>`) and is cut from the body the first part kept, never by
+  running the route again.
 - **One file.** The build inlines scripts, styles, workers (as blobs) and the
   drawing editor's fonts (as data URIs) into `dist/index.html`, and fails if
   anything would be left outside it: the host serves one resource and nothing

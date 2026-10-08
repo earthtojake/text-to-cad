@@ -1,10 +1,10 @@
 /**
- * The drawing on screen: one `GET /__cad/drawing` for the file, batched into
- * paths once.
+ * The drawing on screen: `GET /__cad/drawing` for the file (asked again while
+ * the server renders it: `client.drawing`), batched into paths once.
  *
  * The client never parses DXF. ezdxf does the reading on the server — text
- * outlined, dimensions exploded, hatches filled, blocks placed — and what
- * arrives is a flat list of five primitive shapes in drawing coordinates. That
+ * placed, dimensions exploded, hatches filled, blocks placed — and what arrives
+ * is a flat list of five primitive shapes and text in drawing coordinates. That
  * is the whole of this renderer's input.
  */
 import { useEffect, useMemo, useState } from "react";
