@@ -418,9 +418,10 @@ STEP or GLB its model exports, which are files of their own.
   `setRenderMode` are declined in words (a board drawn layer by layer says its Display settings
   are the person's, in the view); `select` and `clearSelection` are answered on a board or a
   schematic with its index and declined otherwise; the view is the file view's camera once
-  moved (and a board's Display, its one renderer slice); the navbar has nothing of the plot's.
-  A board drawn layer by layer has its Display menu in the view's bottom-left corner
-  (`data-viewport-actions`), where a 3D view's sits on its cube.
+  moved (and a board's Display, its one renderer slice). In the navbar, the plot has its alert
+  card's icon while the card is put away and, for a board drawn layer by layer, its Display menu,
+  portaled into `view.navbarSlot` (`data-view-controls`) after that icon, where a 3D view's
+  sits; no Preview.
 - **Failures.** A non-200 is the ordinary actionable card with the SERVER's sentence — a
   machine without KiCad (or WireViz and Graphviz) is told how to install it, an unreadable
   document why; a payload from a cadgen that disagrees about `schemaVersion` gets the version

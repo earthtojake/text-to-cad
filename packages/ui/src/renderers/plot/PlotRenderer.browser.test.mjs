@@ -195,7 +195,8 @@ test('a press on a pad’s pixels selects that pad and lights them; from the bot
   assert.ok(near(pixel(lit, x, y), highlight, 40), `the pad is lit where it is: ${pixel(lit, x, y)}`);
   // From the bottom the board is mirrored: J1 pad 2 (sheet 5, 17.54) is at the right, where the top
   // view has bare board, and a press there picks it and lights it there.
-  await pane.getByRole('button', { name: 'Display', exact: true }).click();
+  // Display is where a 3D view's is: at the navbar's right end, in the view's controls.
+  await pane.locator('[data-viewer-navbar] [data-view-controls]').getByRole('button', { name: 'Display', exact: true }).click();
   await page.getByRole('combobox', { name: 'View from' }).click();
   await page.getByRole('option', { name: 'Bottom' }).click();
   await page.keyboard.press('Escape');

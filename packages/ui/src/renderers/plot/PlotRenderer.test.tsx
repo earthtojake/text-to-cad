@@ -133,6 +133,9 @@ async function open(name: string, { strict = false, crossProbe = undefined as un
   return { pane, get controller() { return controller; }, dispose: () => client.dispose() };
 }
 
+// The navbar's right end, in order: the alert's icon, then the view's controls (`data-view-controls`).
+const navbarControls = (pane: HTMLElement) => [...pane.querySelectorAll('[data-viewer-navbar] > :last-child button')].map((button) => button.getAttribute('aria-label'));
+
 const opened = async (pane: HTMLElement) => {
   await waitFor(() => expect(pane.querySelector('[data-plot-surface] [aria-busy="false"]')).not.toBeNull());
   await waitFor(() => expect(frames.length).toBeGreaterThan(0));
@@ -207,8 +210,9 @@ it('a board with its index has Select and Measure, its parts and nets, and hands
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Select', 'Draw', 'Measure']);
   for (const name of ['Orbit', 'Explode', 'Clip', 'Position', 'Preview']) expect(inPane.queryByRole('button', { name }), name).toBeNull();
-  // A board drawn layer by layer has its Display dropdown in the bottom-left corner, where a 3D view's sits on its cube.
-  expect(inPane.getByRole('button', { name: 'Display' })).not.toBeNull();
+  // A board drawn layer by layer has its Display where a 3D view's is, the view's controls at the navbar's right end; no Preview.
+  expect([...pane.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')].map((button) => button.getAttribute('aria-label'))).toEqual(['Display']);
+  expect(navbarControls(pane).at(-1)).toBe('Display');
   // The tree: parts by kind, then nets; what KiCad reported is the alert card's.
   expect(inPane.getByRole('button', { name: 'Parts' })).not.toBeNull();
   expect(inPane.getByRole('button', { name: 'Nets' })).not.toBeNull();
@@ -337,6 +341,9 @@ it('a board with suggestions alone puts its card away: an amber icon in the navb
   await opened(pane);
   const icon = await waitFor(() => { const found = navbarAction(pane, '2 suggestions'); expect(found).not.toBeNull(); return found!; });
   expect(icon.querySelector('svg')!.getAttribute('class')).toMatch(/text-amber-500/);
+  // The icon first at the navbar's right end, then the board's Display, as an alert's icon precedes a 3D view's.
+  expect(navbarControls(pane)).toEqual(['2 suggestions', 'Display']);
+  expect(pane.querySelector('[data-view-controls]')!.contains(within(pane).getByRole('button', { name: 'Display' }))).toBe(true);
   expect(within(pane).queryByRole('alert')).toBeNull();
   await act(async () => { icon.click(); });
   const card = within(within(pane).getByRole('alert'));
@@ -437,6 +444,7 @@ it('a schematic with its index has Select alone, its symbols and nets, and hands
   // A distance or a sketch on a schematic's layout means nothing to the design: no Measure, no Draw.
   expect(within(tools).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Select']);
   expect(inPane.queryByRole('button', { name: 'Display' })).toBeNull();
+  expect(navbarControls(pane)).toEqual([]);
   expect(inPane.getByRole('list', { name: 'Schematic' })).not.toBeNull();
   expect(inPane.queryByRole('button', { name: 'Checks' })).toBeNull();
   await act(async () => { inPane.getByRole('button', { name: 'Expand ICs' }).click(); });

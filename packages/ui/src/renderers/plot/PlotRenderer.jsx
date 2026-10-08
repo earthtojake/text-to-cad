@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@text-to-cad/ui/utils";
 import { parseBoardRefSelector, splitBoardRefSelectors } from "@text-to-cad/core/lib/boardRefs.js";
 import { usePromptDestination, useViewerHost } from "../../host/context.js";
@@ -23,7 +24,7 @@ import DisplayPopover from "../kit/shell/DisplayPopover.jsx";
 import ViewerAlertCard, { useAlertDismissal } from "../kit/status/ViewerAlertCard.jsx";
 import ViewerLoadingOverlay from "../kit/status/ViewerLoadingOverlay.js";
 import { ViewUpdateStatus } from "../kit/status/ViewUpdateStatus.jsx";
-import { VIEWPORT_ACTION_HEIGHT_PX, VIEWPORT_CUBE_BOTTOM_PX, VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "../kit/shell/viewportLayout.js";
+import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "../kit/shell/viewportLayout.js";
 import { ViewportTopRight } from "../kit/shell/ViewportTopRight.jsx";
 import { attachLiveBinding } from "../kit/shell/liveBinding.js";
 import { useWhenSettled } from "../kit/shell/useWhenSettled.js";
@@ -58,8 +59,6 @@ const SAVE_DELAY_MS = 180;
 // theme (a schematic's light sheet in the dark, a board's dark one in the light), the tool panels
 // over it stand nearly opaque (`lib/floatingSurface.js`).
 const CONTRASTING_CHROME_ALPHA = "90%";
-// A board's Display button: in the bottom-left corner, under the tool column, which stops short of it.
-const DISPLAY_POSITION = Object.freeze({ bottom: VIEWPORT_CUBE_BOTTOM_PX, left: VIEWPORT_INSET_PX, height: VIEWPORT_ACTION_HEIGHT_PX });
 const lightColour = (hex) => {
   const match = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
   if (!match) return null;
@@ -390,12 +389,11 @@ function PlotSurface({ view, data }) {
         <canvas ref={canvasRef} aria-label={`${words.label}: ${view.file.name}`} role="img"
           className={cn("absolute inset-0 block touch-none select-none", dragging ? "cursor-grabbing" : inspector.available ? "cursor-default" : "cursor-grab")} />
         {boardChrome && drawing ? <DrawingOverlay {...boardDrawing.overlay} /> : null}
-        {/* The board's Display settings in the bottom-left corner, where a 3D file's sit on its cube. */}
-        {boardChrome && layered ? <div className="pointer-events-auto absolute z-20 flex items-center" style={DISPLAY_POSITION} data-viewport-actions="">
-          <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} boundary={rootElement}>
-            <BoardDisplaySection display={boardDisplay} onChange={changeBoardDisplay} />
-          </DisplayPopover>
-        </div> : null}
+        {/* The board's Display settings at the navbar's right end, where a 3D view's are (its `navbarSlot`),
+            after the alert's icon. A board has no Preview. */}
+        {boardChrome && layered && view.navbarSlot ? createPortal(<DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} boundary={rootElement}>
+          <BoardDisplaySection display={boardDisplay} onChange={changeBoardDisplay} />
+        </DisplayPopover>, view.navbarSlot) : null}
         {boardChrome ? <ToolColumn tools={tools} layout={toolStack} onLayoutChange={changeToolStack} mobile={mobile}>
           {/* Draw's controls lead the stack while it is up, and once there is ink, Copy Drawing at their foot. */}
           {drawing ? <ToolPanel id="drawing" label="Drawing controls" collapsible={false}

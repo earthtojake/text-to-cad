@@ -125,8 +125,9 @@ none.
   icon). They are the navbar's 24px icon buttons with 14px icons, 4px apart, with hints
   below them, in the box FileViewer hands the renderer for them (`navbarSlot`,
   `data-view-controls`). Display's dropdown opens down from its button, end-aligned, and
-  never taller than the viewer below it. A view that is not 3D has neither, and neither
-  does a view drawn as a picture, one that is loading or failed to load, or preview, which
+  never taller than the viewer below it. A view that is not 3D has neither — but a KiCad
+  board, whose Display is in the same place, with no Preview (see
+  [A KiCad board](#a-kicad-board)) — and neither does a view drawn as a picture, one that is loading or failed to load, or preview, which
   has the page to itself and draws its own in their place (see
   [preview](#camera-animation-and-preview)).
 - **Playbar** (preview's, a file with routines only) sits at bottom-centre, on a
@@ -343,7 +344,8 @@ plot without one is the picture alone.
   pane's size too; the sketch goes with a Quick Edit as the view with its ink. A host's or the
   agent's selection while it is up shows under the ink and leaves the sketch alone, and a
   capture never carries the hover.
-- **Display** (its button in the view's bottom-left corner, one **Display** section): **Mode**,
+- **Display** (its button where a 3D view's is, at the navbar's right end, after the findings'
+  icon; a board has no Preview; one **Display** section): **Mode**,
   presets as a 3D view's are ([render-mode.md](./render-mode.md)) — **Board** (every layer but
   the courtyards), **Copper**, **Assembly** (silkscreen, fab and courtyards) and **Placement** —
   then **View from** Top or Bottom (the board mirrored, its bottom layers drawn over its top) and,
