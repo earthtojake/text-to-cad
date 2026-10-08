@@ -22,7 +22,6 @@ import {
   validateSourceSidecar
 } from "@text-to-cad/core/common/sourceSidecar.js";
 import { mapWithConcurrency } from "@text-to-cad/core/lib/async/concurrency.js";
-import { stepProductName } from "@text-to-cad/core/lib/step/productName.js";
 import {
   lodDefaultLevel,
   lodTessellationForLevel,
@@ -216,7 +215,7 @@ function failedPartNames(descriptor, failures) {
   const names = [];
   for (const occurrence of descriptor?.occurrences || []) {
     if (!failed.has(String(occurrence?.component || ""))) continue;
-    const name = String(stepProductName(occurrence?.name) || occurrence?.id || occurrence?.component).trim();
+    const name = String(occurrence?.name || occurrence?.id || occurrence?.component).trim();
     if (name && !names.includes(name)) names.push(name);
   }
   return names;

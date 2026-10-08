@@ -142,14 +142,14 @@ it('names a face or edge by its own label, else by its part and kind, never by i
  expect(screen.queryByText('o1.1.e4')).toBeNull();
 });
 
-it('never heads a reference with an XCAF label entry: a single-part file names its part after the file',()=>{
- // A cadgen single-part STEP: the occurrence carries `=>[0:1:1:2]` where a name belongs, and the
- // tree's root is the part, named after the file.
- const meshData={parts:[{id:'o1.1',occurrenceId:'o1.1',name:'=>[0:1:1:2]'}]};
+it('names the part of a single-part file with no name of its own after the file',()=>{
+ // A part the STEP gave no name goes by its occurrence id in the tree, and the tree's root is the
+ // part, named after the file.
+ const meshData={parts:[{id:'o1.1',occurrenceId:'o1.1',name:'o1.1'}]};
  const root=new Map([['__step_model__','l_bracket.step']]);
  const partName=(id:string)=>root.get(id)||'';
  const face=(ord:number)=>({id:`o1.1.f${ord}`,normalizedSelector:`o1.1.f${ord}`,selectorType:'face',occurrenceId:'o1.1',
-   label:`Face o1.1.f${ord}`,pickData:{surfaceType:'plane',name:null,sourceName:'=>[0:1:1:2]'}});
+   label:`Face o1.1.f${ord}`,pickData:{surfaceType:'plane',name:null,sourceName:null}});
  const {rerender}=render(<StepReferenceSection references={[face(11)]} meshData={meshData} partName={partName}/>);
  expect(heading()).toBe('l_bracket · face 11');
  // The picker's entries read the same.

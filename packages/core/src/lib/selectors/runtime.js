@@ -1,6 +1,5 @@
 import { buildCadRefToken } from "../cadRefs.js";
 import { mergeBounds } from "../urdf/kinematics.js";
-import { stepProductName } from "../step/productName.js";
 
 function isObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -219,10 +218,10 @@ function referenceIdForRow(displaySelector, selectorType, partId) {
 
 function referenceSummary(selectorType, row) {
   if (selectorType === "occurrence") {
-    return String(stepProductName(row.name) || stepProductName(row.sourceName) || row.id || "").trim();
+    return String(row.name || row.sourceName || row.id || "").trim();
   }
   if (selectorType === "shape") {
-    const name = stepProductName(row.name) || stepProductName(row.sourceName);
+    const name = row.name || row.sourceName;
     const detail = `${row.kind || "shape"}${row.volume ? ` volume=${row.volume}` : row.area ? ` area=${row.area}` : ""}`;
     return name ? `${name} ${detail}` : detail;
   }
@@ -408,9 +407,8 @@ function buildReference({
       selectorType,
       rowIndex,
       localId: String(row.localId || "") || null,
-      // An XCAF label entry standing for a name is none (`step/productName.js`).
-      name: stepProductName(row.name) || null,
-      sourceName: stepProductName(row.sourceName) || null,
+      name: row.name || null,
+      sourceName: row.sourceName || null,
       kind: row.kind || null,
       bbox: row.bbox || null,
       surfaceType: row.surfaceType || null,

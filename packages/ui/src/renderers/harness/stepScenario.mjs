@@ -139,23 +139,22 @@ export function stageProgressiveFixture(fixture) {
 
 /**
  * The base alone, staged as the SINGLE-PART STEP cadgen writes: one component, one occurrence,
- * `entryKind: "part"`, and — as in every such file cadgen writes — the part under a root product
- * OCCT named by its label entry, `=>[0:1:1:2]`, which the reader hands back as the occurrence's,
- * the root's and the view's name. It carries no sidecar: kinematics need two parts.
+ * `entryKind: "part"`, the part under a root product the STEP gives no name (so the view names
+ * the root by its id) and named as its own product names it, `base`. It carries no sidecar:
+ * kinematics need two parts.
  */
 export function stageSinglePartFixture(fixture) {
   const original = fixture.view;
-  const XCAF_ENTRY = '=>[0:1:1:2]';
   const base = original.occurrences.find(occurrence => occurrence.name === 'base');
   const view = {
     ...original,
-    entryKind: 'part', label: XCAF_ENTRY,
+    entryKind: 'part', label: 'o1',
     components: { [base.component]: original.components[base.component] },
-    occurrences: [{ ...base, id: 'o1.1', name: XCAF_ENTRY }],
+    occurrences: [{ ...base, id: 'o1.1' }],
     bbox: { min: [-10, -10, -5], max: [10, 10, 5] },
     stats: { ...original.stats, occurrenceCount: 1, shapeCount: 1 },
-    assembly: { root: { id: 'o1', name: XCAF_ENTRY, nodeType: 'assembly', leafPartIds: ['o1.1'],
-      children: [{ ...leaf('o1.1', XCAF_ENTRY) }] } }
+    assembly: { root: { id: 'o1', name: 'o1', nodeType: 'assembly', leafPartIds: ['o1.1'],
+      children: [{ ...leaf('o1.1', 'base') }] } }
   };
   const surfaces = new Map([...fixture.surfaces].filter(([input]) => input === original.components[base.component].surfaceInput));
   return { ...fixture, view, surfaces, sidecar: null, file: 'hinge_base.step', assembly: Buffer.from(JSON.stringify(view)) };
@@ -297,7 +296,7 @@ function harnessBundle() {
  *   `release(gate)` is called, so the package's three publishes are a test's to place
  *   rather than a race; `declare(false)` then serves its descriptor without the `bbox` it
  *   declares. `singlePart` serves the base alone as a cadgen single-part STEP
- *   (`stageSinglePartFixture`), its part named by an XCAF label entry. `warmCache` serves a mesh
+ *   (`stageSinglePartFixture`), its part named `base` in `hinge_base.step`. `warmCache` serves a mesh
  *   store that already holds every component at the standard tier (`meshStore`); without it the
  *   store is cold, and a component's mesh is made when its surface request asks for it.
  */
