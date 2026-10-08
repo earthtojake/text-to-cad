@@ -101,7 +101,7 @@ const NO_PREVIEW = () => {};
  *   by a renderer with no tools: the shell then has no active tool and a saved tab records none.
  * @param {boolean} [options.previewable]  The renderer's view is 3D and offers Preview: the model fullscreen,
  *   orbiting, its tools put away. Each renderer of a 3D view declares it; without it (a 2D view) there is no
- *   Preview at all — no control on top of the cube, not a disabled one — and anything that asks for Preview leaves
+ *   Preview at all — no control in the navbar, not a disabled one — and anything that asks for Preview leaves
  *   the normal view on screen (`previewing` stays false, `setPreviewing` does nothing).
  * @param {{ previewing: boolean, set: (previewing: boolean) => void }} [options.preview]  Preview mode
  *   (`usePreviewState`), when the renderer holds that state itself: a renderer whose own gates
@@ -117,8 +117,9 @@ const NO_PREVIEW = () => {};
  *   renderer's document load. `busy`: nothing to show yet. `updating`: a newer revision is loading behind the scene on
  *   screen. The rest are for a renderer whose document is more than a download — see `loadReport.js`.
  * @param {object | null} [options.animation]  A playbar runtime (with its own `clock`), when the file has
- *   routines. Routines play in preview alone: the shell then puts them in its Playback settings and the
- *   playbar under the model, and leaving preview hands the runtime's `onRelease` the model back at rest.
+ *   routines. Routines play in preview alone: the shell then puts them on the playbar under the model
+ *   (its Routines, the transport, its Playback settings), and leaving preview hands the runtime's
+ *   `onRelease` the model back at rest.
  * @param {{ commands?: Record<string, (...args: any[]) => void>, declined?: Record<string, string>,
  *   state?: () => object, resource?: () => object }} [options.live]  Live commands this renderer adds (by name) or
  *   declines (name to the error its caller reads), and extra fields for the live state. Every name in
@@ -218,8 +219,8 @@ export function useRendererShell({
   const recordRef = useRef(null);
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;
-  // Preview's Playback settings — orbit on or off and its speed, Autoplay, the routine's chosen
-  // speed and loop — are the file's: kept between leaving and re-entering preview, and in its view.
+  // Preview's settings — its Orbit (on or off, and its speed), and the playbar's Autoplay and the
+  // routine's chosen speed and loop — are the file's: kept between leaving and re-entering preview, and in its view.
   const [playback, setPlaybackState] = useState(() => restored.playback);
   const setPlayback = useCallback(patch => setPlaybackState(current => normalizePlayback({ ...current, ...patch })), []);
   const rendererStateRef = useRef(rendererState);
@@ -521,7 +522,7 @@ export function useRendererShell({
   return {
     // Renderer-facing.
     toolMode, selectTool, selectDefaultTool, tools, idle, previewable, previewing, setPreviewing,
-    // Preview's Playback settings, the file's own: orbit and its speed, Autoplay, and the routine's chosen speed and loop.
+    // Preview's settings, the file's own: orbit and its speed, Autoplay, and the routine's chosen speed and loop.
     autoplay, setAutoplay, playback, setPlayback,
     // Deliver a prompt context through the host, reporting a failure as the viewport's alert.
     reportActionError, deliverPrompt, requestRender: () => viewerRef.current?.requestRender?.(),

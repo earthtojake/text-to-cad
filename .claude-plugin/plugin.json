@@ -1,6 +1,6 @@
 {
   "name": "text-to-cad",
-  "version": "0.7.13",
+  "version": "0.7.17",
   "description": "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.",
   "author": {
     "name": "earthtojake",

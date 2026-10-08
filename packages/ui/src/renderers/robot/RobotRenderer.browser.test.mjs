@@ -169,9 +169,9 @@ async function open(t, file, { panel = true } = {}) {
     },
     // A selection is React state: it is on screen a render after whatever changed it.
     waitPressed: count => page.waitForFunction(wanted => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === wanted, count),
-    // Display: its button on top of the cube, beside Preview.
-    displayButton: () => pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Display', exact: true }),
-    // Display's settings: a dropdown from on top of the cube, portaled out of the viewer.
+    // Display: its button at the navbar's right end, before Preview.
+    displayButton: () => pane.locator('[data-view-controls]').getByRole('button', { name: 'Display', exact: true }),
+    // Display's settings: a dropdown from the navbar, portaled out of the viewer.
     displayPanel: () => page.locator('[data-display-popover]'),
     // The tool stack's panels on screen, top to bottom, by their accessible names.
     stack: () => pane.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels

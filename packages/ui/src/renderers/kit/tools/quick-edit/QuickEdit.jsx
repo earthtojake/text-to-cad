@@ -169,6 +169,7 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
     Promise.resolve(outcome).then(result => {
       const message = failure(result);
       if (message) throw new Error(message);
+      try { host.usage?.used("quickEdit"); } catch { /* counting a use never fails it */ }
       if (action === "copy") showCopied();
       else clearAll();
     }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)))

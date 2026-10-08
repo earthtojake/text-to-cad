@@ -250,7 +250,12 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "", shown 
         if (action === ARTIFACT_ACTION_ERROR) {
           finished = true;
           stopPolling();
-          settle({ status: "failed", error: serverErrorMessage(status) });
+          // The exception class rides along (`errorType`): a file that refused to be read
+          // gets different advice from one whose contents failed to compile.
+          settle({
+            status: "failed", error: serverErrorMessage(status),
+            ...(status?.errorType ? { failure: { kind: "compile", errorType: String(status.errorType) } } : {})
+          });
           return;
         }
         if (action === ARTIFACT_ACTION_ATTACH) {

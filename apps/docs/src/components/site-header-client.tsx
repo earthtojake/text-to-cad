@@ -1,8 +1,9 @@
 "use client";
 
+import { Menu } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,17 +61,95 @@ function VersionLink({ version }: { version: string }) {
     return null;
   }
 
+  // Shown as the release is tagged: v0.7.14 for the 0.7.14 the release stamps.
+  const label = `v${normalizedVersion}`;
+
+  // A phone's header needs 349px for it beside the CAD logo and the burger, so it shows from 360px,
+  // the logo in or not. Between the phone and desktop layouts it stays out, as before.
   return (
     <a
-      className="hidden rounded-md px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground md:inline-flex"
+      className="hidden rounded-md px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground min-[360px]:inline-flex sm:hidden md:inline-flex"
       href={`${GITHUB_REPO_URL}/releases`}
       target="_blank"
       rel="noreferrer"
-      aria-label={`Open GitHub releases for version ${normalizedVersion}`}
-      title={`Open GitHub releases for version ${normalizedVersion}`}
+      aria-label={`Open GitHub releases for ${label}`}
+      title={`Open GitHub releases for ${label}`}
     >
-      {normalizedVersion}
+      {label}
     </a>
+  );
+}
+
+/** A phone's section links: a burger that drops them down under the header. A disclosure, not an
+ * application menu, so each section stays a plain link in the tab order after the button. Escape,
+ * a click outside, focus moving on past it, or choosing a section closes it. */
+function SectionMenu({ activeSection }: { activeSection: string }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnPointerOutside = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", closeOnPointerOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <nav
+      ref={menuRef}
+      aria-label="Primary"
+      className="relative flex items-center self-stretch sm:hidden"
+      onBlur={(event) => {
+        // Focus moved on to something past the menu. Focus lost to nothing -- a tap that focuses
+        // nothing, or leaving the window -- is not the reader moving on; a tap outside closes it.
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
+      <Button
+        ref={buttonRef}
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="text-muted-foreground hover:text-foreground"
+        aria-label="Sections"
+        aria-expanded={open}
+        aria-controls="section-menu"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Menu className="size-4" />
+      </Button>
+      <div
+        id="section-menu"
+        hidden={!open}
+        className="absolute top-full left-0 z-50 mt-1 flex min-w-40 origin-top-left flex-col rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 motion-reduce:animate-none"
+      >
+        {NAV_SECTIONS.map(({ id, label }) => (
+          <a
+            key={id}
+            href={`/#${id}`}
+            aria-current={activeSection === id ? "location" : undefined}
+            onClick={() => setOpen(false)}
+            className={`rounded-md px-2.5 py-2 text-ui transition hover:bg-secondary hover:text-foreground ${activeSection === id ? "text-foreground" : "text-muted-foreground"}`}
+          >
+            {label}
+          </a>
+        ))}
+      </div>
+    </nav>
   );
 }
 
@@ -86,9 +165,9 @@ export function SiteHeaderClient({
   version: string;
 }) {
   const [activeSection, setActiveSection] = useState<string>(NAV_SECTIONS[0].id);
-  // The hero's wordmark in sight (below this header). On a desktop, once it is out of sight --
-  // scrolled away, or a page without one -- the CAD logo slides into the header's corner, before the
-  // section links: the brand still in view, and a way back home. A phone shows the logo throughout.
+  // The hero's wordmark in sight (below this header). Once it is out of sight -- scrolled away, or a
+  // page without one -- the CAD logo slides into the header's corner, pushing the section links (a
+  // phone's section menu) right: the brand still in view, and a way back home.
   const [wordmarkInSight, setWordmarkInSight] = useState(heroWordmark);
 
   useEffect(() => {
@@ -143,16 +222,17 @@ export function SiteHeaderClient({
         )} stars`;
 
   return (
-    <header className="sticky top-0 z-40 h-14 shrink-0 overflow-hidden border-b border-border bg-background">
+    // Clipped across, never down: a phone's section menu drops below the header.
+    <header className="sticky top-0 z-40 h-14 shrink-0 overflow-x-clip border-b border-border bg-background">
       <div className="mx-auto flex h-full w-full max-w-[1200px] items-center gap-3 px-4 sm:px-6">
         <Link
           href="/"
           aria-label="text-to-cad home"
           className={cn(
             "flex w-[46px] shrink-0 items-center overflow-hidden transition-[width,margin,opacity,visibility] duration-300 ease-out",
-            // On a desktop, out of the row while the wordmark shows: no width, the row's gap taken back,
-            // and out of the tab order. A phone, with no section links to fill the corner, always shows it.
-            wordmarkInSight && "sm:invisible sm:-mr-3 sm:w-0 sm:opacity-0"
+            // Out of the row while the wordmark shows: no width, the row's gap taken back, and out of
+            // the tab order.
+            wordmarkInSight && "invisible -mr-3 w-0 opacity-0"
           )}
         >
           <Image
@@ -179,6 +259,7 @@ export function SiteHeaderClient({
             </a>
           ))}
         </nav>
+        <SectionMenu activeSection={activeSection} />
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <VersionLink version={version} />

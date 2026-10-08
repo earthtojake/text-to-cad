@@ -445,16 +445,29 @@ class CadApp:
         installed wheel takes no lock and keeps no counter: ``auto_reload`` is
         False there and this is a straight call.
         """
-        if not self.auto_reload or request.path in _UNCOUNTED_ROUTES:
-            self._dispatch(request, response)
-            return
-        with self._request_lock:
-            self._busy_requests += 1
         try:
-            self._dispatch(request, response)
-        finally:
+            if not self.auto_reload or request.path in _UNCOUNTED_ROUTES:
+                self._dispatch(request, response)
+                return
             with self._request_lock:
-                self._busy_requests -= 1
+                self._busy_requests += 1
+            try:
+                self._dispatch(request, response)
+            finally:
+                with self._request_lock:
+                    self._busy_requests -= 1
+        except (BrokenPipeError, ConnectionResetError):
+            raise  # the page left: no crash of ours
+        except Exception as error:
+            # Past every route's own answer: a crash of this server's, answered as each front end answers
+            # one (a 500), and counted by telemetry (``cadgen/analytics.py``).
+            self._crashed(error)
+            raise
+
+    def _crashed(self, error: BaseException, *, bugs_only: bool = False) -> None:
+        """A route that failed: counted as a crash when it is one (``analytics.signature``), never failing it."""
+        if self.analytics is not None:
+            self.analytics.crashed(error, "route", bugs_only=bugs_only)
 
     def _dispatch(self, request, response) -> None:
         method = request.method
@@ -513,6 +526,7 @@ class CadApp:
                     # res.json() got an HTML parse error instead of a status.
                     response.send_json(404, {"error": "Not found"})
             except Exception as error:  # noqa: BLE001
+                self._crashed(error, bugs_only=True)  # a bad request is the caller's; a mistake in our code is a crash
                 response.send_json(400, {"error": str(error)})
             return
 
@@ -527,14 +541,15 @@ class CadApp:
                 if pathname == "/__cad/artifact":
                     self._handle_artifact_build(request, response, query)
                 elif pathname in ("/__cad/analytics", "/__cad/analytics/activity") and self.analytics is not None:
-                    if int(request.headers.get("content-length") or 0) > 4096:
+                    # A page's crash report carries its frames (``_report_activity``): room for them, and no more.
+                    if int(request.headers.get("content-length") or 0) > (16384 if pathname.endswith("/activity") else 4096):
                         response.send_empty(413, [("connection", "close")])
                         return
                     payload = json.loads(request.body() or b"{}")
                     if type(payload) is not dict:
                         raise ValueError("an analytics request is an object")
                     if pathname == "/__cad/analytics":
-                        response.send_json(200, self._consent(payload.get("share"), card=payload.get("card") is True))
+                        response.send_json(200, self._consent(payload.get("share")))
                     else:
                         self._report_activity(payload)
                         response.send_empty(204)
@@ -611,6 +626,7 @@ class CadApp:
                 else:
                     response.send_empty(405, [("allow", "POST")])
             except Exception as error:  # noqa: BLE001
+                self._crashed(error, bugs_only=True)  # a bad request is the caller's; a mistake in our code is a crash
                 # Note the asymmetry with the GET funnel: this one carries
                 # ok:false and that one does not.
                 response.send_json(400, {"ok": False, "error": str(error)})
@@ -715,20 +731,18 @@ class CadApp:
         else:
             response.send_json(200, {"path": to_posix_path(os.path.abspath(chosen))})
 
-    # --- anonymous usage analytics -----------------------------------------
+    # --- usage stats (telemetry) --------------------------------------------
 
-    def _consent(self, share=None, *, card: bool = False) -> dict:
-        """The page's analytics card and the app menu's toggle: whether to ask (nothing chosen, and an answer
-        could be kept), whether sharing is on and why, and, from the person's click, their answer. A
-        card answers only an open question, so one still up in another view never undoes an answer
-        just given (``card``); the toggle changes it whenever."""
+    def _consent(self, share=None) -> dict:
+        """The app menu's Share usage stats toggle: whether sharing is on and why, and, from the person's
+        click, their answer, which changes it whenever. Nothing asks: telemetry is on by default once a
+        ``cadgen`` command has said so (``cadgen/analytics.py``)."""
         from cadgen.analytics import PRIVACY_URL
 
-        if isinstance(share, bool) and (not card or self.analytics.status()["reason"] == "unasked"):
+        if isinstance(share, bool):
             self.analytics.choose(share, by=self.consent_by)
         found = self.analytics.status()
-        return {"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
-                "policy": PRIVACY_URL}
+        return {"sharing": found["sharing"], "reason": found["reason"], "policy": PRIVACY_URL}
 
     def _version(self) -> dict:
         """The page's update button (``cadgen/updates.py``): whether a newer text-to-cad is out, from
@@ -739,10 +753,17 @@ class CadApp:
         return {"notice": updates.notice()}
 
     def _report_activity(self, payload: dict) -> None:
-        """What the page did: a person touched it (``touched``). Noted in memory, and sent only with
-        consent. (A model it shows is counted when it joins the library: ``_change_recents``.)"""
+        """What the page did: a person touched it (``touched``), a Quick Edit was sent (``quickEdit``), or
+        the page crashed (``crash``: its signature, made by the page as ``cadgen.analytics.signature``
+        makes one, and taken only if it is one). Noted in memory, and sent only with consent. (A model it
+        shows is counted when it joins the library: ``_change_recents``.)"""
         if payload.get("touched") is True:
             self.analytics.viewed()
+        if payload.get("quickEdit") is True:
+            self.analytics.used("quick_edit")
+        crash = payload.get("crash")
+        if isinstance(crash, dict) and crash.get("where") == "page":
+            self.analytics.crashed(crash)
 
     # --- routes ----------------------------------------------------------
 

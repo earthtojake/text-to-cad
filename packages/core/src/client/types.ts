@@ -33,8 +33,8 @@ export interface CadRecent {
   /** The picture's name, for `thumbnail()`, and when it was taken. */
   thumbnail: string | null; pictured: number | null;
 }
-/** The person's analytics answer, and whether to ask (`/__cad/analytics`): `reason` says who decided. */
-export interface CadConsent { ask: boolean; sharing: boolean; reason: 'unasked' | 'choice' | 'environment' | 'unavailable'; policy: string }
+/** Whether the person's usage stats are sent (`/__cad/analytics`; nothing asks): `reason` says who decided. */
+export interface CadConsent { sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string }
 /** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`). */
 export interface CadUpdateNotice { latest: string; version: string; text: string; prompt: string; instructions: string }
 export interface CadCatalog { entries: CadEntry[]; [key: string]: unknown }
@@ -160,14 +160,17 @@ export interface CadWorkspaceService {
   pick(): Promise<string | null>;
   /** Show a file, by its absolute path, in the desktop's file manager. */
   reveal(path: string): Promise<void>;
-  /** The person's analytics answer; with `share`, their answer (a card's counts only while the question is open). */
-  consent(share?: boolean, from?: 'card' | 'settings'): Promise<CadConsent>;
+  /** Whether the person's usage stats are sent; with `share`, their answer (the app menu's toggle). */
+  consent(share?: boolean): Promise<CadConsent>;
   /** The features the person can turn off, as they left them; with `change`, their change of some. */
   features(change?: Record<string, boolean>): Promise<Record<string, boolean>>;
   /** Whether a newer text-to-cad is out: the update button's notice, or null. */
   version(): Promise<{ notice: CadUpdateNotice | null }>;
-  /** What the page did (a person touched it): noted by the server, sent only with consent. Never fails. */
-  reportActivity(activity: { touched?: boolean }): void;
+  /**
+   * What the page did -- a person touched it, sent a Quick Edit, or the page crashed (`crashOf`) --
+   * noted by the server and sent only with consent. Never fails.
+   */
+  reportActivity(activity: CadActivity): void;
   requestArtifactStatus(file: string, options?: CadRequestOptions): Promise<CadArtifactResult>;
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
@@ -206,4 +209,23 @@ export interface CadClientOptions {
    * (`TESS_BATCH_MAX_BYTES`). Unset, the server's bound alone applies.
    */
   maxBatchBytes?: number;
+}
+
+/** A page's crash, as telemetry takes one (`crashOf`): never its message, a value or a URL. */
+export interface CadPageCrash {
+  where: 'page';
+  /** The error's name, such as `TypeError`; `<?>` for one that is no plain name. */
+  type: string;
+  /** Whether the page went on: an error a view's boundary caught, not one that stopped it. */
+  handled: boolean;
+  /** Its innermost frames, oldest first: a script file's own name (or `<?>`), a function, a place, and for
+   * one of the page's own chunks its debug id, by which PostHog finds the chunk's source map. */
+  frames: { file: string; function: string; line: number; column: number; chunk_id?: string }[];
+}
+
+/** What `reportActivity` tells the page's server. */
+export interface CadActivity {
+  touched?: boolean;
+  quickEdit?: boolean;
+  crash?: CadPageCrash;
 }
