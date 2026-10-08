@@ -66,7 +66,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^packages/ui/src/.*\.test\.tsx?$",                        # packages/ui vitest.config.ts
             r"^apps/web/(src|scripts)/.*\.test\.[cm]?js$",              # apps/web/scripts/run-tests.mjs
             r"^apps/mcp/src/.*\.test\.tsx?$",                          # apps/mcp vitest.config.mjs
-            r"^apps/docs/src/lib/api/[^/]*\.test\.mjs$",          # apps/docs `check` (node --test)
+            r"^apps/api/src/[^/]*\.test\.mjs$",                   # test-api.sh (node --test)
             r"^scripts/brand/[^/]*\.test\.mjs$",                          # test-docs.sh
             r"^scripts/bench/viewer-memory/[^/]*\.test\.mjs$",          # test-js.sh --select core
             r"^scripts/test/check-(dependencies|kit-boundaries)\.test\.mjs$",  # test-js.sh
@@ -245,7 +245,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for(f"{SKILLS}/cad/__init__.py")["skills_tests"], [f"{SKILLS}/cad"])
 
     def test_cadgen_runs_its_suites_its_hosts_and_the_wheel(self):
-        self.assertEqual(jobs_for("packages/cadgen/src/cadgen/step.py"), GATED - {"core-js", "mcp", "docs"})
+        self.assertEqual(jobs_for("packages/cadgen/src/cadgen/step.py"), GATED - {"core-js", "mcp", "api", "docs"})
         chosen = tests_for("packages/cadgen/src/cadgen/step.py")
         self.assertEqual(chosen["cadgen_tests"], [CADGEN])
         self.assertEqual(chosen["skills_tests"], [f"{SKILLS}/cad", f"{SKILLS}/dxf"])
@@ -286,6 +286,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(jobs_for("apps/mcp/src/App.tsx"), {"mcp", "skills", "packaging"})
         self.assertEqual(jobs_for("apps/docs/src/app/page.tsx"), {"docs", "core-js", "skills"})
         self.assertEqual(jobs_for("apps/docs/public/brand/logo.svg"), {"docs", "skills"})
+        self.assertEqual(jobs_for("apps/api/src/versions.mjs"), {"api", "skills"})
+        self.assertEqual(jobs_for("apps/api/vercel.json"), {"api", "skills"})
         # apps/web's tests resolve the links in its Markdown, so what they link to is web input.
         self.assertEqual(jobs_for("apps/web/README.md"), {"web", "skills"})
         for target in selector.web_link_targets():
@@ -297,13 +299,14 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-viewer-launch.sh": {"web", "skills"},
             "scripts/test/test-installed.sh": {"packaging", "skills"},
             "scripts/test/test-docs.sh": {"docs", "skills"},
+            "scripts/test/test-api.sh": {"api", "skills"},
             "scripts/test/test-js.sh": {"core-js", "web", "mcp", "skills"},
             "scripts/test/check-dependencies.mjs": {"core-js", "web", "mcp", "skills"},
             "scripts/test/test-global.sh": {"skills"},
             "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "mcp", "docs"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "mcp", "api", "docs"},
             "scripts/brand/generate-logos.mjs": {"docs", "skills"},
             "scripts/bench/viewer-memory/helpers.mjs": {"core-js", "skills"},
         }

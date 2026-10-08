@@ -12,9 +12,9 @@
 # this workflow with `full` when it finds no such run.
 #
 # Check names are the jobs' concerns: `core-js` tests packages/core, `web` tests
-# packages/ui and apps/web and drives the bundled viewer, `mcp` tests apps/mcp. main
-# requires Version Check, cadgen (Linux), cadgen (Windows), core-js, web, skills, docs and
-# packaging; not `mcp`.
+# packages/ui and apps/web and drives the bundled viewer, `mcp` tests apps/mcp, `api` tests
+# apps/api. main requires Version Check, cadgen (Linux), cadgen (Windows), core-js, web,
+# skills, docs and packaging; not `mcp` or `api`.
 name: Test
 
 on:
@@ -68,6 +68,7 @@ jobs:
       web_client: ${{ steps.select.outputs.web_client }}
       web_viewer: ${{ steps.select.outputs.web_viewer }}
       mcp: ${{ steps.select.outputs.mcp }}
+      api: ${{ steps.select.outputs.api }}
       skills: ${{ steps.select.outputs.skills }}
       light_policy: ${{ steps.select.outputs.light_policy }}
       light_tests: ${{ steps.select.outputs.light_tests }}
@@ -323,6 +324,30 @@ jobs:
       - name: Run the CAD app tests and build it
         run: scripts/test/test-js.sh --select mcp
 
+  # api.texttocad.dev (apps/api): the version feed's and the telemetry receiver's tests. It has no
+  # dependencies, so Node is all it installs.
+  api:
+    name: api
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Run the API tests
+        run: scripts/test/test-api.sh
+
   # The repository's policy gates and the skills' own suites, in two phases. The light
   # contracts -- policy and skill tests that read only the repository's text -- run on every
   # change, first, with nothing but Python and Node installed: one that needs more fails
@@ -397,8 +422,8 @@ jobs:
           # shellcheck disable=SC2086
           scripts/test/test-python.sh --select skills --print-weights $TESTS
 
-  # The docs site: its static asset contract, the analytics receiver's tests, lint, the
-  # Next build and icon verification, and the animated brand marks.
+  # The docs site: its static asset contract, lint, the Next build and icon verification, and
+  # the animated brand marks.
   docs:
     name: docs
     needs: changes
