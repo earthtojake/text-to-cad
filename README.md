@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/earthtojake/text-to-cad/raw/e3d1fb99932614f3433bcb521a8c2f6d0c2644b2/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
+<img src="https://github.com/earthtojake/text-to-cad/raw/a6b4a2f5c138e74bfdc255321267c7ee8ff6696b/apps/docs/public/brand/logo-texttocad-animated.svg" alt="text-to-cad" width="800">
 
 Give your agent CAD superpowers.
 
@@ -15,7 +15,7 @@ Give your agent CAD superpowers.
 [![cadgen](https://img.shields.io/pypi/v/cadgen?style=for-the-badge&logo=pypi&logoColor=white&label=cadgen)](https://pypi.org/project/cadgen/)
 [![build123d](https://img.shields.io/badge/build123d-0.11-2F6FB0?style=for-the-badge)](https://github.com/gumyr/build123d)
 [![Open CASCADE](https://img.shields.io/badge/Open%20CASCADE-7.9-E2001A?style=for-the-badge)](https://dev.opencascade.org)
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://github.com/earthtojake/text-to-cad/blob/e3d1fb99932614f3433bcb521a8c2f6d0c2644b2/packages/cadgen/pyproject.toml)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://github.com/earthtojake/text-to-cad/blob/a6b4a2f5c138e74bfdc255321267c7ee8ff6696b/packages/cadgen/pyproject.toml)
 [![Node.js](https://img.shields.io/badge/Node.js-20+-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 
 </div>
@@ -110,7 +110,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.7.16", "cadgen", "mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.7.17", "cadgen", "mcp"],
       "env": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -297,8 +297,9 @@ paths, contents or prompts. The first `cadgen` command says so once, and sending
 also deletes what was sent, with `uvx cadgen telemetry off`, **Share usage stats** in either app's menu (the logo at
 the top left, over any model), or by asking your agent. `DO_NOT_TRACK=1` or `CADGEN_TELEMETRY=0` turns it off for
 one process, and `CADGEN_TELEMETRY=1` on, without changing your setting; nothing is sent by default in CI or from a
-development install. A command run without the build daemon keeps its
-counts in a small file in cadgen's state folder until the next of these sends them; turning telemetry off deletes it.
+development install. Nothing waits to send: what a command counts without the build daemon, and what any part of
+cadgen counted since its last send when it exits, waits in small files in cadgen's state folder until the next part
+of cadgen sends it in the background; turning telemetry off deletes them.
 Offline, nothing is sent and everything works. See
 the [privacy policy](https://www.texttocad.dev/privacy-policy).
 
@@ -343,4 +344,4 @@ robot description files, simulation, and local review.
 ## 🛠️ Contributing
 
 Branch from `main` and open PRs against `main`. For the local workflow, testing in
-agent apps and validation, see [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/e3d1fb99932614f3433bcb521a8c2f6d0c2644b2/CONTRIBUTING.md).
+agent apps and validation, see [CONTRIBUTING.md](https://github.com/earthtojake/text-to-cad/blob/a6b4a2f5c138e74bfdc255321267c7ee8ff6696b/CONTRIBUTING.md).
