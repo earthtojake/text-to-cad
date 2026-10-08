@@ -15,6 +15,8 @@ import { createTessellationCache } from "./surf/tessellationCache.js";
 import { everyKeyMeshProvider } from "./surf/__tests__/meshFixtures.js";
 
 const fixture = readFileSync(new URL("./surf/fixtures/sun_gear.surf", import.meta.url));
+// What a selector read fetches: the component's selector table, bound to that surface.
+const table = readFileSync(new URL("./surf/fixtures/sun_gear.selectors.json", import.meta.url));
 const identity = {
   surfaceInput: createHash("sha256").update("test surface input").digest("hex"),
   surfaceObject: createHash("sha256").update(fixture).digest("hex"),
@@ -47,7 +49,7 @@ test("revisions reuse meshes and exact selector payloads without fetching unchan
   let fetches = 0;
   t.mock.method(globalThis, "fetch", async () => {
     fetches += 1;
-    return new Response(fixture);
+    return new Response(table);
   });
   const first = url("1");
   const second = url("2");
@@ -77,7 +79,7 @@ test("revisions reuse meshes and exact selector payloads without fetching unchan
 });
 
 test("snapshot source collision guard remains active even with an object identity", async (t) => {
-  t.mock.method(globalThis, "fetch", async () => new Response(fixture));
+  t.mock.method(globalThis, "fetch", async () => new Response(table));
   const asset = url("3");
   const scopedIdentity = { ...identity, surfaceInput: createHash("sha256").update("scoped input").digest("hex") };
   setRenderAssetSourceScope("snapshot-A.step");

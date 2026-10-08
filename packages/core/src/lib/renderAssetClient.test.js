@@ -614,12 +614,13 @@ test("the surf leash is byte-bounded: large entries evict oldest-first down to t
 });
 
 test("surf payloads and selector bundles live on one bounded leash and re-decode after eviction", async (t) => {
-  const surfBytes = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "surf/fixtures/sun_gear.surf"));
+  // What a selector read fetches: the component's selector table (cadgen's), never the SURF.
+  const tableBytes = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "surf/fixtures/sun_gear.selectors.json"));
   const originalFetch = globalThis.fetch;
   let fetches = 0;
   globalThis.fetch = async () => {
     fetches += 1;
-    return new Response(surfBytes.buffer.slice(surfBytes.byteOffset, surfBytes.byteOffset + surfBytes.byteLength), { status: 200 });
+    return new Response(tableBytes.buffer.slice(tableBytes.byteOffset, tableBytes.byteOffset + tableBytes.byteLength), { status: 200 });
   };
   t.after(() => {
     globalThis.fetch = originalFetch;
@@ -629,7 +630,7 @@ test("surf payloads and selector bundles live on one bounded leash and re-decode
   const first = await loadRenderSurf(url(0));
   assert.ok(first.vertices instanceof Float32Array);
   assert.equal(fetches, 0, "display reads only the stored mesh");
-  // Selector construction is deferred: the surf is fetched when selection is first used.
+  // The selector join is deferred: the table is fetched when selection is first used.
   await loadRenderSurfSelectorBundle(url(0));
   assert.equal(fetches, 1);
   for (let i = 1; i < 30; i += 1) {
@@ -647,16 +648,17 @@ test("surf payloads and selector bundles live on one bounded leash and re-decode
   assert.ok(meshStore.counts.reads - reads >= 31, "every display, the evicted one again, read its mesh");
 });
 
-test("display reads only the stored mesh and constructs selectors on first use", async (t) => {
+test("display reads only the stored mesh and joins selectors on first use", async (t) => {
   const surfBytes = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "surf/fixtures/sun_gear.surf"));
   const surfBuffer = surfBytes.buffer.slice(surfBytes.byteOffset, surfBytes.byteOffset + surfBytes.byteLength);
   const { index } = parseSurf(surfBuffer);
-  const url = `https://cache.test/cached/components/cached-${Date.now()}.surf`;
+  const tableBytes = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "surf/fixtures/sun_gear.selectors.json"));
+  const url = `https://cache.test/cached/components/cached-${Date.now()}.selectors.json`;
   let fetches = 0;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => {
     fetches += 1;
-    return new Response(surfBuffer.slice(0), { status: 200 });
+    return new Response(tableBytes.buffer.slice(tableBytes.byteOffset, tableBytes.byteOffset + tableBytes.byteLength), { status: 200 });
   };
   setTessellationCacheProvider(everyKeyMeshProvider());
   t.after(() => {
@@ -679,8 +681,9 @@ test("display reads only the stored mesh and constructs selectors on first use",
   );
   assert.equal(bundle.manifest.faces.length, index.faces.length);
   assert.equal(bundle.manifest.edges.length, index.edges.length);
-  assert.equal(bundle.manifest.faces[0][5], index.faces[0].area, "exact stored face area survives");
-  assert.equal(bundle.manifest.edges[0][5], index.edges[0].length, "exact stored edge length survives");
+  const column = (columns, name) => bundle.manifest.tables[columns].indexOf(name);
+  assert.equal(bundle.manifest.faces[0][column("faceColumns", "area")], index.faces[0].area, "exact stored face area survives");
+  assert.equal(bundle.manifest.edges[0][column("edgeColumns", "length")], index.edges[0].length, "exact stored edge length survives");
 });
 
 test("a corrupt stored body is a probe miss for its caller to ask for again, never a fallback", async (t) => {
@@ -734,11 +737,11 @@ test("an admitted probe whose body vanished is a probe miss, reading nothing els
 });
 
 test("obsolete concrete surf levels release browser cache references only", async (t) => {
-  const surfBytes = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "surf/fixtures/sun_gear.surf"));
-  const surfBuffer = surfBytes.buffer.slice(surfBytes.byteOffset, surfBytes.byteOffset + surfBytes.byteLength);
-  const url = `https://cache.test/release/components/release-${Date.now()}.surf`;
+  const tableBytes = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "surf/fixtures/sun_gear.selectors.json"));
+  const tableBuffer = tableBytes.buffer.slice(tableBytes.byteOffset, tableBytes.byteOffset + tableBytes.byteLength);
+  const url = `https://cache.test/release/components/release-${Date.now()}.selectors.json`;
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(surfBuffer.slice(0), { status: 200 });
+  globalThis.fetch = async () => new Response(tableBuffer.slice(0), { status: 200 });
   t.after(() => { globalThis.fetch = originalFetch; });
 
   const meshData = await loadRenderSurf(url);

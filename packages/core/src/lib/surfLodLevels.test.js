@@ -16,7 +16,7 @@ import {
   lodTessellationForLevel,
 } from "./surf/lodPolicy.js";
 import { TESSELLATION_VERSION, createTessellationCache } from "./surf/tessellationCache.js";
-import { everyKeyMeshProvider, memoryMeshProvider, meshFixture, surfFixture } from "./surf/__tests__/meshFixtures.js";
+import { everyKeyMeshProvider, memoryMeshProvider, meshFixture, selectorTableFixture, surfFixture } from "./surf/__tests__/meshFixtures.js";
 
 // Read the producer generation from the constant rather than spelling it out:
 // this asserts the key's SHAPE, and every producer change bumps that number.
@@ -30,12 +30,14 @@ const identityFor = () => ({ surfaceInput: SUN_GEAR.surfaceInput, surfaceObject:
 const surfTessellationCacheKey = (url, tessellation, identity = identityFor(url)) =>
   cacheKey(url, tessellation, identity);
 
+// A selector read fetches the component's selector table (cadgen's); the SURF is never read for it.
+const SUN_GEAR_TABLE = JSON.stringify(selectorTableFixture("sun_gear"));
 function withSurfFetch(t) {
   const originalFetch = globalThis.fetch;
   let fetches = 0;
   globalThis.fetch = async () => {
     fetches += 1;
-    return new Response(SUN_GEAR.arrayBuffer(), { status: 200 });
+    return new Response(SUN_GEAR_TABLE, { status: 200 });
   };
   t.after(() => {
     globalThis.fetch = originalFetch;
