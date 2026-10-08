@@ -334,24 +334,6 @@ export function solveUrdfLinkWorldTransforms(urdfData, jointValuesByName = {}) {
   return linkTransforms;
 }
 
-export function linkOriginInFrame(urdfData, jointValuesByName, linkName, frameLinkName) {
-  const normalizedLinkName = String(linkName || "").trim();
-  const normalizedFrameLinkName = String(frameLinkName || "").trim();
-  if (!normalizedLinkName || !normalizedFrameLinkName) {
-    return null;
-  }
-  const linkWorldTransforms = solveUrdfLinkWorldTransforms(urdfData, jointValuesByName);
-  const linkWorldTransform = linkWorldTransforms.get(normalizedLinkName);
-  const frameWorldTransform = linkWorldTransforms.get(normalizedFrameLinkName);
-  if (!linkWorldTransform || !frameWorldTransform) {
-    return null;
-  }
-  return transformPoint(
-    invertRigidTransform(frameWorldTransform),
-    transformPoint(linkWorldTransform, [0, 0, 0])
-  );
-}
-
 function resolveVisualMesh(meshesByUrl, meshUrl, partFileRef) {
   const lookupKey = meshUrl || partFileRef;
   if (!lookupKey) {
