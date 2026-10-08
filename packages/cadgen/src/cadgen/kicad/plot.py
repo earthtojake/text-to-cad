@@ -359,6 +359,7 @@ def _findings(report: list[tuple], index) -> tuple:
     """The DRC report's findings on the index (KiCad's frame), each item with a board reference to
     what it names. KiCad places an arc at its centre: its reference names the arc's middle."""
     from cadgen.kicad.board_index import Finding, FindingItem, script_frame
+    from cadgen.kicad.phrasing import summarize
 
     to_script = script_frame(index.origin)
     return tuple(
@@ -368,6 +369,7 @@ def _findings(report: list[tuple], index) -> tuple:
                 FindingItem(text=text, ref=index.item_ref(uuid, to_script(*index.on_copper(uuid, at)) if at else None), at=at)
                 for text, uuid, at in items
             ),
+            summary=summarize(check, kind, description, [text for text, _uuid, _at in items]),
         )
         for check, severity, kind, description, items in report
     )

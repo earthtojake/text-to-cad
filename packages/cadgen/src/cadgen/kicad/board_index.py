@@ -254,6 +254,7 @@ class Finding:
     type: str
     description: str
     items: tuple[FindingItem, ...] = ()
+    summary: str = ""  # one plain sentence (`cadgen.kicad.phrasing`); KiCad's own words when empty
 
 
 @dataclass(frozen=True)
@@ -427,6 +428,7 @@ class BoardIndex:
                 {
                     "check": finding.check, "severity": finding.severity, "type": finding.type,
                     "description": finding.description,
+                    "summary": finding.summary or finding.description,
                     "items": [
                         {"text": item.text, "ref": item.ref, "at": xy(item.at) if item.at is not None else None}
                         for item in finding.items

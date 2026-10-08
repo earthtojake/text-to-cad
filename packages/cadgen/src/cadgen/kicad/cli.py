@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 from cadgen.kicad.install import KicadInstall
+from cadgen.kicad.phrasing import summarize
 
 __all__ = ["Finding", "KicadRunError", "erc_findings", "drc_findings", "run_kicad_cli"]
 
@@ -96,13 +97,14 @@ class Finding:
     type: str  # KiCad's own key, e.g. "clearance", "pin_not_connected"
     description: str
     items: tuple[tuple[str, tuple[float, float] | None], ...]
+    summary: str = ""  # one plain sentence (`cadgen.kicad.phrasing`); KiCad's own words when empty
 
     def render(self) -> str:
         where = "; ".join(
             text + (f" at ({position[0]:g}, {position[1]:g})" if position is not None else "")
             for text, position in self.items
         )
-        return f"{self.severity} [{self.check} {self.type}] {self.description}" + (f": {where}" if where else "")
+        return f"{self.severity} [{self.check} {self.type}] {self.summary or self.description}" + (f": {where}" if where else "")
 
     def as_json(self) -> dict:
         return {
@@ -110,6 +112,7 @@ class Finding:
             "severity": self.severity,
             "type": self.type,
             "description": self.description,
+            "summary": self.summary or self.description,
             "items": [
                 {"description": text, "position": list(position) if position is not None else None}
                 for text, position in self.items
@@ -139,13 +142,17 @@ def erc_findings(report: Path) -> list[Finding]:
     found: list[Finding] = []
     for sheet in data.get("sheets", []):
         for violation in sheet.get("violations", []):
+            kind = str(violation.get("type", ""))
+            description = str(violation.get("description", ""))
+            items = _items(violation.get("items", []), None)
             found.append(
                 Finding(
                     check="erc",
                     severity=str(violation.get("severity", "error")),
-                    type=str(violation.get("type", "")),
-                    description=str(violation.get("description", "")),
-                    items=_items(violation.get("items", []), None),
+                    type=kind,
+                    description=description,
+                    items=items,
+                    summary=summarize("erc", kind, description, [text for text, _ in items]),
                 )
             )
     return _unique(found)
@@ -157,13 +164,17 @@ def drc_findings(report: Path, *, to_script: Callable[[float, float], tuple[floa
     found: list[Finding] = []
     for key, check in (("violations", "drc"), ("unconnected_items", "unconnected"), ("schematic_parity", "parity")):
         for violation in data.get(key, []) or []:
+            kind = str(violation.get("type", ""))
+            description = str(violation.get("description", ""))
+            items = _items(violation.get("items", []), to_script)
             found.append(
                 Finding(
                     check=check,
                     severity=str(violation.get("severity", "error")),
-                    type=str(violation.get("type", "")),
-                    description=str(violation.get("description", "")),
-                    items=_items(violation.get("items", []), to_script),
+                    type=kind,
+                    description=description,
+                    items=items,
+                    summary=summarize(check, kind, description, [text for text, _ in items]),
                 )
             )
     return _unique(found)
