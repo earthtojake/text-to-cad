@@ -490,7 +490,7 @@ test("loadSource takes an articulation and animation inline for STEP sources", a
     cadPath: "part.step",
     articulation: HINGE_ARTICULATION,
     controls: { swing: 90 },
-    animation
+    sourceAnimation: animation
   });
 
   assert.equal(source.kind, "step");

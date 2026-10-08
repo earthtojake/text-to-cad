@@ -412,7 +412,7 @@ function stepPose(kind, articulation, controls) {
 // the tessellation the page draws, written by cadgen). This maps that layout to a
 // loadSource package input. The caller fetches `${baseUrl}/assembly.json`
 // itself (it may want to cache or inline it) and spreads extra fields
-// (articulation, controls, animation, cadPath) into the returned object.
+// (articulation, controls, sourceAnimation, cadPath) into the returned object.
 export function packageSourceFromBaseUrl(baseUrl, descriptor) {
   const base = String(baseUrl || "").replace(/\/+$/, "");
   if (!base) {
@@ -454,12 +454,14 @@ export async function loadSource(input, options = {}) {
   const tessellation = tessellationForSnapshotQuality(inputObject);
   assertStepOnlyOption(kind, rawTessellation, "quality.tessellation");
   // What the document's sidecar means, resolved by cadgen: the articulation and the
-  // control vector to pose it at, and the baked animation. The page reads no sidecar.
+  // control vector to pose it at, and the baked animation (`resolved.animation` in a job,
+  // whose own top-level `animation` is the frame REQUEST; `sourceAnimation` for a direct
+  // caller). The page reads no sidecar.
   const articulation = inputObject.articulation || resolved.articulation || options.articulation || null;
   const controls = inputObject.controls ?? resolved.controls ?? options.controls;
-  const animation = inputObject.animation || resolved.animation || options.animation || null;
+  const animation = inputObject.sourceAnimation || resolved.animation || options.sourceAnimation || null;
   const cadPath = String(inputObject.cadPath || resolved.inputPath || options.cadPath || "").trim();
-  assertStepOnlyOption(kind, animation, "animation");
+  assertStepOnlyOption(kind, animation, "sourceAnimation");
   const pose = stepPose(kind, articulation, controls);
 
   let meshData = explicitMeshData;

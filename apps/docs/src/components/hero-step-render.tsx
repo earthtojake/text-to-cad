@@ -257,7 +257,7 @@ export function HeroStepRender() {
         const source = await loadSource({
           ...packageSourceFromBaseUrl(HERO_PACKAGE_BASE_URL, descriptor),
           articulation,
-          animation: heroAnimation,
+          sourceAnimation: heroAnimation,
           cadPath: HERO_STEP_CAD_PATH,
         }, { resources });
         const animation = await loadSourceAnimation({ animation: source.animation });

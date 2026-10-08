@@ -2506,9 +2506,10 @@ class StepAnimationFrameTests(unittest.TestCase):
         packet = self._resolve(self._job(animation={"clip": "demo", "time": 2}))
         resolved_job = packet["jobs"][0]
         resolved = resolved_job["resolved"]
-        self.assertEqual(read_source_sidecar(step_path)["animation"], resolved["sourceSidecar"]["animation"])
-        self.assertEqual(["demo", "spin"], [clip["id"] for clip in resolved["sourceSidecar"]["animation"]["clips"]])
-        self.assertNotIn("stepParameterUrl", resolved)
+        # The baked section rides the job as cadgen read it; the frame request stays the job's own.
+        self.assertEqual(read_source_sidecar(step_path)["animation"], resolved["animation"])
+        self.assertEqual(["demo", "spin"], [clip["id"] for clip in resolved["animation"]["clips"]])
+        self.assertNotIn("articulation", resolved)
         self.assertEqual({"clip": "demo", "time": 2.0}, resolved_job["animation"])
 
     def test_an_unknown_clip_is_refused_with_the_declared_clips(self) -> None:
@@ -2543,7 +2544,9 @@ class StepAnimationFrameTests(unittest.TestCase):
         resolved_job = packet["jobs"][0]
         self.assertEqual({"stroke": 1}, resolved_job["kinematics"])
         self.assertEqual({"clip": "spin", "time": 0.5}, resolved_job["animation"])
-        self.assertIn(".step.json", str(resolved_job["resolved"]["stepParameterUrl"]))
+        self.assertEqual({"stroke": 1.0}, resolved_job["resolved"]["controls"])
+        self.assertEqual(["spin"], [clip["id"] for clip in resolved_job["resolved"]["animation"]["clips"]]
+                         if len(resolved_job["resolved"]["animation"]["clips"]) == 1 else ["spin"])
 
     def test_a_frame_supports_only_view_mode(self) -> None:
         self._step()

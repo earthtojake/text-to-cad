@@ -320,8 +320,9 @@ Accepted input fields:
   control vector to pose it at, which cadgen resolved from the job's `kinematics`
   (a preset name or `{dof: value}`) and validated. A model with no articulation
   and control values is refused. Together they are the source's `pose`.
-- `animation` or `resolved.animation`: the model's baked animation section, which
-  the source carries as it is (`loadSourceAnimation` compiles it).
+- `sourceAnimation` or `resolved.animation`: the model's baked animation section,
+  which the source carries as it is (`loadSourceAnimation` compiles it). A job's own
+  top-level `animation` is its frame request, not the section.
 - `quality.tessellation`: explicit STEP tolerances in every preset. When
   omitted, enabled `display.lighting.quality` selects the bounded preview/final
   mesh rung.
@@ -679,15 +680,15 @@ import { loadSource } from "@text-to-cad/core/common/source.js";
 import { buildModel } from "@text-to-cad/core/common/cadScene.js";
 import { renderModel } from "@text-to-cad/core/common/renderModel.js";
 
-// `articulation` and `animation` are what cadgen resolved the model's sidecar into: a
-// catalog entry's, a snapshot job's `resolved`, or a static package's files.
+// `articulation` and `sourceAnimation` are what cadgen resolved the model's sidecar into:
+// a catalog entry's, a snapshot job's `resolved`, or a static package's files.
 const source = await loadSource({
   kind: "step",
   glbUrl: "/models/.part.step.glb",
   cadPath: "models/part.step",
   articulation,
   controls: { drive: 180 },
-  animation
+  sourceAnimation
 });
 
 const model = buildModel(THREE, source, {
