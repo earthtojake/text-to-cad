@@ -24,8 +24,8 @@ exits, each batch stamped with the time it arrives:
 - ``files`` (the apps): how many distinct files of each format (``step``, ``stl``, ...) a CAD view
   showed for the first time that day -- told apart here, by path, and sent as a number;
 - ``build`` (the daemon): for each format and who asked (``VIAS``), how many builds, how each
-  ended (``OUTCOMES``: failed, lost its worker, or stopped when whoever asked left), how many the
-  store answered without building, and how long they took;
+  ended (``OUTCOMES``: failed, lost its worker, or stopped: whoever asked left, or someone stopped its
+  worker), how many the store answered without building, and how long they took;
 - ``snapshot`` (the daemon, told by the command that rendered it): for each format, how many
   renders, how many failed, and how long they took;
 - ``feature``: how many builds made an assembly or declared mesh exports, snapshots posed joints or
@@ -182,7 +182,8 @@ PROCESSES = frozenset({"app", "viewer", "daemon"})
 # Who asked for a build: a model script (``python model.py``) or a ``cadgen`` command (``cadgen step build``, ...).
 VIAS = frozenset({"script", "command"})
 # How a build ended: built; failed (the model raised, or its command refused what it was given); crashed (its
-# worker died under it); or cancelled (whoever asked left before it ended, and it was stopped).
+# worker died under it); or cancelled (whoever asked left before it ended, and it was stopped, or someone
+# stopped its worker: ``cadgen.daemon.pool.stopped``).
 OUTCOMES = frozenset({"ok", "failed", "crashed", "cancelled"})
 # Why a CAD tool's call failed, named where it failed (``cadgen.mcp.server.ToolFailed``), never read from its
 # message. The caller's: it named no file (``no_path``), one by a relative path (``relative_path``), a path with
@@ -225,7 +226,9 @@ CRASHES_PENDING = 16  # past this many different crashes waiting, a process coun
 # given (a model that failed, a file that is not there, an argument it cannot take). Where cadgen reports a
 # failure to the person anyway -- a build's, a command's -- only these are crashes, and only where Python
 # raised them in cadgen's own code: never at a ``raise`` (``_RAISED``), where cadgen says the person's
-# mistake in these words too ("@step returned a dict" is a TypeError).
+# mistake in these words too ("@step returned a dict" is a TypeError). So cadgen code that takes what the
+# person gave it -- a value, a name to forward (``cadgen.build123d``) -- checks it and says so at a raise:
+# Python's error from using it unchecked would read as cadgen's own mistake.
 BUGS = (AttributeError, LookupError, TypeError, NameError, AssertionError, ZeroDivisionError, RecursionError,
         NotImplementedError)
 _RAISED = re.compile(r"(?:^|:)\s*raise\b")

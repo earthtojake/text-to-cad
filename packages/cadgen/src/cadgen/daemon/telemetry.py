@@ -90,8 +90,9 @@ def close() -> None:
 
 @_quiet
 def worker_died(status: Any) -> None:
-    """A worker that died under a job -- not one stopped because whoever asked left -- or could not start
-    for one: a crash, its exit status what there is to tell (a native fault, or killed for memory)."""
+    """A worker that died under a job -- not one stopped because whoever asked left, or by someone's stop
+    signal (``pool.stopped``) -- or could not start for one: a crash, its exit status what there is to
+    tell (a native fault, or killed for memory)."""
     from cadgen.analytics import died
 
     if _RECORDER is not None:

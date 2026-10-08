@@ -41,6 +41,9 @@ class SrgbColorTest(unittest.TestCase):
         for bad in ("nope", "#12", "#1234567", ""):
             with self.assertRaises(ValueError):
                 srgb(bad)
+        for bad in (None, 0x2E3742, (46, 55, 66)):
+            with self.assertRaisesRegex(TypeError, "colour string, got"):
+                srgb(bad)
 
 
 if __name__ == "__main__":

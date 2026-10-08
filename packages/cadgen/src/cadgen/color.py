@@ -39,6 +39,8 @@ def linear_to_srgb(channel: float) -> float:
 
 
 def _parse_hex(value: str) -> tuple[int, int, int]:
+    if not isinstance(value, str):
+        raise TypeError(f"expected a '#rgb' or '#rrggbb' colour string, got {type(value).__name__}")
     text = value.strip().lstrip("#")
     if len(text) == 3:
         text = "".join(ch * 2 for ch in text)

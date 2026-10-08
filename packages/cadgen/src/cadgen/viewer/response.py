@@ -29,6 +29,12 @@ hashing it again.
 HEAD suppression lives in each writer rather than at method dispatch. Under
 HTTP/1.1 keep-alive a HEAD that ships a body does not merely waste bytes — it
 desynchronises the connection exactly like an undrained request body.
+
+A client that hangs up is routine (the page cancels component loads constantly):
+every write onto its socket, headers included, takes any ``ConnectionError``
+(a broken pipe, a reset, Windows' WSAECONNABORTED) as the page having left. The
+connection is closed, every later write is skipped, and nothing is raised, so
+no route, fallback or crash report ever answers a socket nobody is reading.
 """
 
 from __future__ import annotations
@@ -86,7 +92,7 @@ class Request:
 class Response:
     """Writes one response onto a ``BaseHTTPRequestHandler``."""
 
-    __slots__ = ("_handler", "_head_only", "_range", "_on_parts", "written")
+    __slots__ = ("_handler", "_head_only", "_range", "_on_parts", "written", "gone")
 
     def __init__(self, handler, head_only: bool = False, byte_range: str | None = None, on_parts=None):
         self._handler = handler
@@ -94,6 +100,7 @@ class Response:
         self._range = byte_range
         self._on_parts = on_parts
         self.written = False
+        self.gone = False  # the client hung up: nothing more is written
 
     def _span(self, length: int) -> tuple[int, int] | None:
         """The part of a ``length``-byte body the range asks for; None for the whole body."""
@@ -130,25 +137,35 @@ class Response:
     # --- header plumbing ---------------------------------------------------
 
     def _begin(self, status: int, headers: Iterable[tuple[str, Any]]) -> None:
-        handler = self._handler
-        handler.send_response_only(status)
-        # Node sends Date on every response and no Server header at all.
-        handler.send_header("date", handler.date_time_string())
-        for name, value in headers:
-            handler.send_header(name, str(value))
-        handler.end_headers()
+        # Written, even to a client that has gone: this response was the answer, and no
+        # fallback may write another after it.
         self.written = True
+        if self.gone:
+            return
+        handler = self._handler
+        try:
+            handler.send_response_only(status)
+            # Node sends Date on every response and no Server header at all.
+            handler.send_header("date", handler.date_time_string())
+            for name, value in headers:
+                handler.send_header(name, str(value))
+            handler.end_headers()
+        except ConnectionError:
+            self._left()
+
+    def _left(self) -> None:
+        """The client hung up (the module docstring): close, and write nothing more. No traceback
+        either, into the launcher's stdout, which the launch smoke test parses."""
+        self.gone = True
+        self._handler.close_connection = True
 
     def _write(self, data: bytes) -> None:
-        if self._head_only or not data:
+        if self._head_only or not data or self.gone:
             return
         try:
             self._handler.wfile.write(data)
-        except (BrokenPipeError, ConnectionResetError):
-            # An abandoned fetch is routine (the client cancels component loads
-            # constantly). Do not let it print a traceback into the launcher's
-            # stdout, which the launch smoke test parses.
-            self._handler.close_connection = True
+        except ConnectionError:
+            self._left()
 
     # --- writers -----------------------------------------------------------
 
@@ -227,7 +244,7 @@ class Response:
                 headers.append(("content-type", content_type))
             headers.extend(extra_headers)
             self._begin(206 if span else 200, headers)
-            if self._head_only:
+            if self._head_only or self.gone:
                 return
             try:
                 handle.seek(first)
@@ -238,8 +255,8 @@ class Response:
                         raise OSError("the file is shorter than it was")
                     self._handler.wfile.write(chunk)
                     remaining -= len(chunk)
-            except (BrokenPipeError, ConnectionResetError):
-                self._handler.close_connection = True
+            except ConnectionError:
+                self._left()
             except OSError:
                 # Headers are already gone, so a clean end() would present a
                 # TRUNCATED body as a complete response — and content-length would

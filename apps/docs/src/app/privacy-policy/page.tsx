@@ -67,7 +67,7 @@ export default function PrivacyPolicyPage() {
                 “KeyError”), whether the program carried on, and where in code it failed -- file paths
                 inside cadgen, Python’s standard library, cadgen’s own open-source dependencies or the
                 CAD app’s and viewer’s page scripts, with function names and line numbers -- or, for a
-                build worker that stopped, its exit status. Any part of the failure in your own code is
+                build worker that crashed, its exit status. Any part of the failure in your own code is
                 replaced by a placeholder, and a crash report never includes the error’s message, any
                 values, your files, or file or folder names.
               </li>

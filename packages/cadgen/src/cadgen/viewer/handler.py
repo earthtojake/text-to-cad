@@ -68,7 +68,7 @@ class CadHTTPServer(ThreadingHTTPServer):
         # genuine faults reach stderr; the launcher's stdout must stay clean
         # because the launch smoke test parses it.
         exc = sys.exc_info()[1]
-        if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
+        if isinstance(exc, ConnectionError):  # a broken pipe, a reset, Windows' WSAECONNABORTED
             return
         super().handle_error(request, client_address)
 
@@ -309,7 +309,7 @@ def make_handler_class(app):
                 self.wfile.flush()
             except socket.timeout:
                 self.close_connection = True
-            except (BrokenPipeError, ConnectionResetError):
+            except ConnectionError:
                 self.close_connection = True
 
     return CadRequestHandler
