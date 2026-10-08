@@ -11,8 +11,12 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Sequence
 
+_EDGE = "the board edge"
+
 _ITEMS: tuple[tuple[re.Pattern, Callable[[re.Match], str]], ...] = (
-    (re.compile(r"^Pad (\S+)(?: \[([^\]]*)\])? of (\S+)"),
+    (re.compile(r"^.+ on Edge\.Cuts"), lambda m: _EDGE),
+    (re.compile(r"^NPTH pad(?: \[[^\]]*\])? of (\S+)"), lambda m: f"a {m[1]} mounting hole"),
+    (re.compile(r"^(?:(?:PTH|SMD) )?[Pp]ad (\S+)(?: \[([^\]]*)\])? of (\S+)"),
      lambda m: f"{m[3]} pad {m[1]}" + (f" ({m[2]})" if m[2] and m[2] != m[1] else "")),
     (re.compile(r"^Symbol (\S+) Pin (\S+) \[([^,\]]*)"),
      lambda m: f"{m[1]} pin {m[2]}" + (f" ({m[3]})" if m[3] and m[3] != m[2] else "")),
@@ -43,14 +47,21 @@ def _mm(value: str) -> str:
 def _limits(description: str) -> tuple[str, str] | None:
     """(required, actual) from a message like "... clearance 0.2000 mm; actual 0.1500 mm)"."""
     actual = _ACTUAL.search(description)
-    required = _MM.search(description)
-    if not actual or not required or required.start() >= actual.start():
+    if not actual:
         return None
-    return _mm(required[1]), _mm(actual[1])
+    required = list(_MM.finditer(description[: actual.start()]))  # the one nearest "; actual", not a number in a rule name
+    if not required:
+        return None
+    return _mm(required[-1][1]), _mm(actual[1])
 
 
 def _two(names: Sequence[str]) -> str | None:
     return f"{names[0]} and {names[1]}" if len(names) >= 2 else None
+
+
+def _off_edge(names: Sequence[str]) -> str | None:
+    """The first item that is not the board edge itself."""
+    return next((name for name in names if name != _EDGE), None)
 
 
 def _cap(text: str) -> str:
@@ -61,9 +72,9 @@ def _cap(text: str) -> str:
 _SENTENCES: dict[str, Callable[[list[str], tuple[str, str] | None], str | None]] = {
     "clearance": lambda n, l: l and _two(n) and f"{_cap(_two(n))} are {l[1]} apart; the rules need {l[0]}",
     "hole_clearance": lambda n, l: l and n and f"{_cap(n[0])} is {l[1]} from a hole; the rules need {l[0]}",
-    "copper_edge_clearance": lambda n, l: l and n and f"{_cap(n[0])} is {l[1]} from the board edge; the rules need {l[0]}",
-    "track_width": lambda n, l: l and n and f"{_cap(n[0])} is {l[1]} wide; the rules need {l[0]}",
-    "annular_width": lambda n, l: l and n and f"{_cap(n[0])} has a {l[1]} ring of copper round its hole; the rules need {l[0]}",
+    "copper_edge_clearance": lambda n, l: l and _off_edge(n) and f"{_cap(_off_edge(n))} is {l[1]} from the board edge; the rules need {l[0]}",
+    "track_width": lambda n, l: l and n and f"{_cap(n[0])} is {l[1]} wide; the rules need at least {l[0]}",
+    "annular_width": lambda n, l: l and n and f"{_cap(n[0])} has a {l[1]} ring of copper round its hole; the rules need at least {l[0]}",
     "courtyards_overlap": lambda n, l: _two(n) and f"{_cap(_two(n))} overlap",
     "shorting_items": lambda n, l: _two(n) and f"{_cap(_two(n))} short two nets together",
     "unconnected_items": lambda n, l: _two(n) and f"{_cap(_two(n))} still need a track",
