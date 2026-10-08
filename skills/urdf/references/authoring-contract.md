@@ -79,6 +79,8 @@ Standard URDF `<mimic>` is affine and cannot close a nonlinear four-bar linkage.
 
 Lengths use metres. `input_zero` and `output_zero` are the two moving-link angles, in radians from the ground link direction, when both URDF joint values are zero. The input and driver joints must share one ground link, use coplanar pivots separated by `ground_length`, and use parallel, same-direction axes. The Viewer selects that assembly branch, derives the input angle analytically from `driver`, and hides the dependent joint slider. The complete driver range must remain reachable on that branch, and the dependent joint limits must contain the entire derived input range. A joint cannot declare both `<mimic>` and `<tcad:four_bar>`.
 
+`urdf validate` checks the element itself: one per joint, every length positive, both zero angles, a revolute or continuous joint, and a `driver` that is a revolute or continuous joint on the same ground link, with no mimic cycle through it. It treats the derived joint as a mimic joint, so an SRDF group state cannot set it. The linkage's geometry (coplanar pivots `ground_length` apart, parallel axes, closure over the driver's range) is checked when the Viewer loads the robot.
+
 This is a Text-to-CAD vendor extension, not standard URDF behavior. Other consumers ignore the namespaced element; a robot state publisher or hardware driver must publish the same derived joint value to preserve loop closure outside the Viewer.
 
 ## Golden Skeleton

@@ -27,6 +27,14 @@ KNOWN_VISUAL_CHILDREN = {"origin", "geometry", "material"}
 KNOWN_COLLISION_CHILDREN = {"origin", "geometry"}
 KNOWN_INERTIAL_CHILDREN = {"origin", "mass", "inertia"}
 
+# The CAD Viewer's nonlinear coupling of a four-bar linkage (`<tcad:four_bar>` on the derived
+# joint), as the urdf skill's authoring contract specifies it.
+TCAD_URDF_NAMESPACE = "https://text-to-cad.dev/urdf"
+FOUR_BAR_TAG = f"{{{TCAD_URDF_NAMESPACE}}}four_bar"
+FOUR_BAR_LENGTHS = ("input_length", "ground_length", "output_length", "coupler_length")
+FOUR_BAR_ZEROS = ("input_zero", "output_zero")
+FOUR_BAR_JOINT_TYPES = {"revolute", "continuous"}
+
 _UNKNOWN_ELEMENT_HINT = "Unknown elements are silently ignored by consumers; check for typos."
 _INERTIA_KEYS = ("ixx", "ixy", "ixz", "iyy", "iyz", "izz")
 _AXIS_UNIT_TOLERANCE = 1e-3
@@ -204,6 +212,7 @@ def validate_urdf_xml(
     joint_names: list[str] = []
     joint_types_by_name: dict[str, str] = {}
     mimic_targets_by_joint: dict[str, str] = {}
+    four_bar_drivers_by_joint: dict[str, str] = {}
     parent_by_child: dict[str, str] = {}
     children: set[str] = set()
     joints_by_parent: dict[str, list[str]] = {}
@@ -286,6 +295,9 @@ def validate_urdf_xml(
         mimic_target = _validate_mimic(joint_element, result, display, joint_path, joint_name=name)
         if mimic_target:
             mimic_targets_by_joint[name] = mimic_target
+        four_bar_driver = _validate_four_bar(joint_element, result, display, joint_path, joint_name=name, joint_type=joint_type)
+        if four_bar_driver:
+            four_bar_drivers_by_joint[name] = four_bar_driver
         joints.append(
             UrdfJoint(
                 name=name,
@@ -294,7 +306,8 @@ def validate_urdf_xml(
                 child_link=child_link,
                 lower=lower,
                 upper=upper,
-                mimic=bool(mimic_target),
+                # A four-bar's derived joint is driven as a mimic's is: no planning variable either.
+                mimic=bool(mimic_target or four_bar_driver),
             )
         )
 
@@ -308,7 +321,9 @@ def validate_urdf_xml(
             path="/robot",
             hint="Legal URDF, but URDF-to-SDF conversion creates a frame per joint and per link, which then collide.",
         )
-    _validate_mimic_graph(mimic_targets_by_joint, joint_types_by_name, result, display)
+    four_bar_drivers = _validate_four_bar_drivers(four_bar_drivers_by_joint, joints, result, display)
+    # A four-bar's joint follows its driver as a mimic follows its target: one graph for cycles.
+    _validate_mimic_graph({**four_bar_drivers, **mimic_targets_by_joint}, joint_types_by_name, result, display)
     _warn_movable_links_without_inertial(root, joints, result, display)
 
     # --- tree checks (only meaningful when the structure above resolved) ---
@@ -1102,6 +1117,83 @@ def _validate_mimic(
                 path=mimic_path,
             )
     return target
+
+
+def _validate_four_bar(
+    joint_element: ET.Element,
+    result: FindingsReport,
+    display: str,
+    joint_path: str,
+    *,
+    joint_name: str,
+    joint_type: str,
+) -> str | None:
+    """The joint's `<tcad:four_bar>`, read as the CAD Viewer reads it: its driver, or None.
+
+    What closing the linkage needs of the joint frames (one ground link, parallel axes, pivots
+    `ground_length` apart, a reachable driver range) is the Viewer's to check when it solves it.
+    """
+    elements = joint_element.findall(FOUR_BAR_TAG)
+    if not elements:
+        return None
+    path = f"{joint_path}/tcad:four_bar"
+    label = f"joint {joint_name!r} tcad:four_bar"
+    if len(elements) > 1:
+        result.add("error", "multiple_four_bar", f"{display} {label} is declared more than once", path=path)
+    if joint_element.find("mimic") is not None:
+        result.add("error", "mimic_and_four_bar", f"{display} joint {joint_name!r} cannot declare both mimic and tcad:four_bar", path=path)
+    if joint_type and joint_type not in FOUR_BAR_JOINT_TYPES:
+        result.add("error", "four_bar_joint_type", f"{display} {label} needs a revolute or continuous joint, not {joint_type!r}", path=path)
+    element = elements[0]
+    for attr_name in FOUR_BAR_LENGTHS:
+        _positive_float_attr(element, attr_name, result, display, label=f"{label} {attr_name}", path=path)
+    for attr_name in FOUR_BAR_ZEROS:
+        _float_attr(element, attr_name, result, display, label=f"{label} {attr_name}", path=path)
+    driver = str(element.attrib.get("driver") or "").strip()
+    if not driver:
+        result.add("error", "missing_four_bar_driver", f"{display} {label} requires a 'driver' joint", path=path)
+        return None
+    if driver == joint_name:
+        result.add("error", "self_four_bar_driver", f"{display} {label} cannot drive itself", path=path)
+        return None
+    return driver
+
+
+def _validate_four_bar_drivers(
+    drivers_by_joint: dict[str, str],
+    joints: list[UrdfJoint],
+    result: FindingsReport,
+    display: str,
+) -> dict[str, str]:
+    """Each four-bar's driver: an angular joint on the same ground link. Returns the ones that are."""
+    joints_by_name = {joint.name: joint for joint in joints}
+    valid: dict[str, str] = {}
+    for joint_name, driver_name in drivers_by_joint.items():
+        path = f"/robot/joint[@name='{joint_name}']/tcad:four_bar"
+        driver = joints_by_name.get(driver_name)
+        if driver is None:
+            result.add("error", "missing_four_bar_driver", f"{display} joint {joint_name!r} tcad:four_bar driver {driver_name!r} is not a joint", path=path)
+            continue
+        if driver.joint_type not in FOUR_BAR_JOINT_TYPES:
+            result.add(
+                "error",
+                "four_bar_driver_type",
+                f"{display} joint {joint_name!r} tcad:four_bar driver {driver_name!r} must be revolute or continuous, not {driver.joint_type!r}",
+                path=path,
+            )
+            continue
+        dependent = joints_by_name[joint_name]
+        if dependent.parent_link and driver.parent_link and dependent.parent_link != driver.parent_link:
+            result.add(
+                "error",
+                "four_bar_ground_link",
+                f"{display} joint {joint_name!r} and its tcad:four_bar driver {driver_name!r} must share one ground link"
+                f" (parents {dependent.parent_link!r} and {driver.parent_link!r})",
+                path=path,
+            )
+            continue
+        valid[joint_name] = driver_name
+    return valid
 
 
 def _validate_mimic_graph(
