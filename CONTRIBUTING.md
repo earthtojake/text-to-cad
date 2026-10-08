@@ -261,7 +261,7 @@ diff content: a comment in a module selects what the module's code would.
 | web | `packages/ui`, `apps/web` and the files its Markdown links to, `packages/cadgen` and `scripts/bundle`, `tests/browser`, the viewer scripts | the UI's units and browser specs (ui changes only), the client's units, then the bundle, the launch smoke test and the format/camera gates through the real backend (anything the served client or the backend reads) |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's host-adapter units (jsdom) and its one-file build |
 | skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load cadgen or its runtime (`packages/cadgen`, `scripts/bundle`), the cad and dxf suites (the same, and each skill's documented examples), dfm and dfam-check (their skills) |
-| docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (static asset contract, the analytics receiver's tests, lint, Next build, icon verification) and the animated brand marks |
+| docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (static asset contract, the telemetry receiver's tests, lint, Next build, icon verification) and the animated brand marks |
 | packaging | `packages/cadgen`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts | clean bundle, layout, wheel contents, installed CLI behavior |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
@@ -692,12 +692,23 @@ green: that is the release. `Publish Release`, on the merge commit:
    the release commit carries none of it — `check-builds.sh`, the
    wheel-contents check, `python -m build`, and an `unzip -l` assertion that
    the wheel about to ship really holds `_runtime/node`, `_runtime/browser`,
-   `_runtime/viewer` and every `_runtime/native` tracer.
+   `_runtime/viewer` and every `_runtime/native` tracer. The pages' source maps,
+   which the bundle builds and the wheel leaves out, are gathered too
+   (`scripts/release/sourcemaps.py`): every chunk a crash on the CAD Viewer or
+   the CAD app can name, by the debug id its build stamped on it, with its map
+   -- a page whose maps PostHog could not use stops the release here.
 4. **Install test.** The built wheel into a fresh venv — `cadgen --help`,
    `cadgen viewer --help`, `cadgen doctor skills/cad` — then
    `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is
    uploaded as a workflow artifact (`cadgen-<version>`).
-5. **PyPI** (on `main` only), with `skip-existing`, so a rerun is a no-op. Then
+5. **Source maps, then PyPI** (on `main` only). The maps go to PostHog first
+   (`posthog-cli sourcemap upload`, pinned), each filed under its chunk's debug
+   id, which the chunk's text and its map decide together
+   (`@text-to-cad/core/chunk-ids`; rolldown's own names the code alone): one id
+   names one map in every page and version, so no page's or version's map
+   overwrites another's, and a later release that ships the same chunk and map
+   uploads it once. Then the
+   wheel, with `skip-existing`, so a rerun is a no-op. Then
    the job waits until PyPI's simple index, which uv resolves a pin through,
    lists the version: usually seconds.
 6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
@@ -705,9 +716,10 @@ green: that is the release. `Publish Release`, on the merge commit:
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, which moves
    the version feed that tells installs a release is out; and the `v<VERSION>`
-   tag and the GitHub Release, with the wheel and sdist from that same artifact
-   and the plugin ZIP attached as release assets (PyPI stays the install
-   channel; the release page is the provenance copy).
+   tag and the GitHub Release, with the wheel and sdist from that same artifact,
+   the plugin ZIP and the source maps (`cadgen-sourcemaps-<version>.zip`, to
+   upload a version's maps again) attached as release assets (PyPI stays the
+   install channel; the release page is the provenance copy).
 
 `main` has the new pins from the merge on, a few minutes before PyPI has the
 wheel. Only an install of `main` itself sees that: a command that names no
@@ -735,8 +747,9 @@ README link to a file outside that tree pointed at the release commit on GitHub.
 A release whose plugin did not change adds no commit. There are two copies:
 
 - `latest`, the newest release, which every install command names. It also
-  carries the marketplace catalog, listing the plugin at the branch's root, and
-  Codex's manifest and config.
+  carries the marketplace catalog, listing the plugin at the branch's root,
+  Codex's manifest and config, and the Agent Plugins standard's `plugin.json`
+  and `mcp.json`.
 - `claude-plugin`, which claude.ai's directory listing tracks. Its
   `claude.mcp.json` names the directory as its channel and marks its copies
   auto-updated (below).
@@ -773,13 +786,13 @@ install channel, in the server's environment (`CADGEN_INSTALL_CHANNEL`), and add
 `CADGEN_AUTO_UPDATED=1` where something other than the person keeps the copy up to
 date: the store that reviewed it, or the app that installed it. The processes the
 server starts (the Viewer, the daemon) inherit both. cadgen reports the channel
-with analytics and says a new release is out only to a copy that is not
+with telemetry and says a new release is out only to a copy that is not
 auto-updated (`cadgen/_internal/channel.py`, `cadgen/updates.py`); it never
 decides by a channel's name, since its core may not know a host. They are
 environment, never flags: an install of `main` pins the last release, and a cadgen
 ignores a variable it does not know but refuses a flag, so a new setting would
 stop every such server until the next release. Nothing works them out at
-runtime, so a plugin that ships somewhere new writes its own, and the analytics
+runtime, so a plugin that ships somewhere new writes its own, and the telemetry
 receiver (`apps/docs/src/lib/api/events.mjs`) learns its channel;
 `test_plugin_manifests.py`, `test_plugin_branch.py` and `test_plugin_zip.py`
 hold each one:
@@ -791,6 +804,7 @@ hold each one:
 | `gemini-extension.json` | `gemini-github`, auto-updated | no: Gemini updates it | the checked-in file |
 | the README's Claude Desktop config | `claude-desktop` | yes | the README |
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
+| `mcp.json` on `main` and `latest`, beside `plugin.json`: the [Agent Plugins](https://agent-plugins.org) standard's, which VS Code reads before Claude's manifest | `agent-plugins` | yes | the checked-in file |
 | `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
 | `claude-plugin`'s `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
 | the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
@@ -861,8 +875,8 @@ docs after the PyPI upload, so the feed names a release only once it can be
 installed. Only a copy nothing else updates reads it (its channel, "The plugin
 branch" above): a store's copy (the Claude or OpenAI directory, the Cursor
 Marketplace) and Gemini's extension never check and are never told, since their
-store or Gemini updates them. A change to the analytics schema (`schema.sql`) is run on the database
-before the deploy that ships it (`apps/docs/README.md`).
+store or Gemini updates them. Telemetry passes through the same routes to PostHog: a deploy needs the
+project's PostHog settings in Vercel, which `/v1/health` checks (`apps/docs/README.md`).
 
 ### Resuming and republishing
 
@@ -952,8 +966,21 @@ by both.
 requests `Prepare Release` opens start their checks. It needs Contents and Pull
 requests write on this repository; nothing merges with it, so it need not be an
 admin's.
-`build-test` needs no protection: the irreversible steps never run there, and
-neither do the install branches need it: `Publish Release` is their only writer. Keep
+`build-test` needs no protection: the irreversible steps never run there. The
+install branches, `latest` and `claude-plugin`, have two rulesets. Install
+branches refuses their deletion and any force push, from anyone. Install
+branches: release only lets only a deploy key update them, so `Publish Release`
+is their only writer: it pushes them with its own write deploy key, whose private
+half is the `INSTALL_BRANCHES_KEY` secret, and anyone else's push is refused, an
+admin's or an agent's with an admin's credentials included. Its gate stops a
+release on `main` that lacks the secret, before the PyPI upload. GitHub allows no
+exception for the workflow's own token on a personal account's repository. To
+replace the key, add a new write deploy key, set the secret to its private half,
+then delete the old key. The source map upload needs three more secrets, which the
+gate checks the same way: `POSTHOG_CLI_API_KEY`, a PostHog personal API key scoped to
+the telemetry project with `error_tracking:write` alone (not the receiver's, which
+lives in Vercel); `POSTHOG_CLI_PROJECT_ID`; and `POSTHOG_CLI_HOST`
+(`https://us.posthog.com` or `https://eu.posthog.com`). Keep
 the repository tag ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*`
 beside the bare form) and immutable releases.
 

@@ -12,7 +12,7 @@ The root npm workspace and lockfile resolve dependencies; no source aliases
 or consumer-owned declarations are required.
 
 **DEPENDED ON BY** — nothing in the repo imports it. It is a website, not an install;
-`cadgen mcp` and `cadgen viewer` send their consented analytics to its `/v1` routes over HTTPS.
+`cadgen mcp` and `cadgen viewer` send their telemetry to its `/v1` routes over HTTPS.
 
 The package migration is a pure refactor: the site's UI, UX, functionality, content and static
 CAD showcases remain unchanged. Normal development, checks and deployment use
@@ -120,7 +120,9 @@ also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
 pale highlight on charcoal. Every Copy is a plain icon button, one size with the buttons beside the install
 message that open it in an app, and each icon button has a tooltip. Install in Codex, the official listing, is
 the one blue button. Every button shows a pointer. Every section title
-shares one heading scale, and the header lists Overview, Install, Skills and
+shares one heading scale. Each title, a section's or an install's, links to its
+own anchor (`#install`, `#cursor`), as GitHub's headings do, so following it puts
+that address in the bar. The header lists Overview, Install, Skills and
 Contributing, the active link following the visible section; a phone's header has
 a burger that drops them down. The header shows the version as its release tag
 names it (`v<VERSION>`), on a phone 360px or wider too. Overview opens with Available for
@@ -131,14 +133,17 @@ A logo leads to its install. Then the plugin's description, which every manifest
 and the README's Overview say word for word (`test_plugin_manifests.py` holds
 them to one text). Install
 leads with the message to send to an agent, monospace like the commands, with buttons that open it
-in Claude Code (Claude Desktop), Codex or Cursor, prefilled and unsent, beside Copy; then a sub-section per agent app, its update
+in Claude Code (Claude Desktop), Codex or Cursor, prefilled and unsent, beside Copy; under it, one
+sentence says what text-to-cad sends and how to turn it off, with the privacy policy (`telemetryNote`:
+only what holds for every release that sends anything by default, since a copy that has not updated
+reads it too); then a sub-section per agent app, its update
 and remove commands folded under Update or reinstall; Codex leads with a button to its listing in
 Codex's plugin directory, its commands, update and remove folded under Manual install. Other Agents
 (the Skills CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the
 content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
-together: the plugin's description, the install message,
+together: the plugin's description, the install message and what it sends,
 each install's commands (to install, update and remove it), the skills and
 Contributing. Both speak to whoever installs text-to-cad, a person or their agent,
 and the README says more: numbered steps to install it yourself and fuller notes
@@ -148,7 +153,7 @@ hero and the agents carousel. The page's copy lives in `src/lib/content.ts`, whi
 `/install` redirects to the Install section (`/#install`, `next.config.ts`): the stable address
 of the full install instructions, which the CAD app's update button links to.
 `tests/python/global/test_plugin_manifests.py` holds the description, the install
-message and every install, update and remove command to one text. The unboxed wordmark and one prominent tagline
+message, what it sends and every install, update and remove command to one text. The unboxed wordmark and one prominent tagline
 sit above the independently framed CAD demo. “100% open source and free.” follows
 “Give your agent CAD superpowers.” in blue, using a lighter brand shade on dark
 surfaces. The app owns
@@ -157,59 +162,71 @@ without importing another app or the CAD UI package. Keep the palette aligned
 with `packages/ui/src/styles/tokens.css` when the viewer's base theme changes.
 
 
-## api.texttocad.dev: the version feed and CAD's analytics
+## api.texttocad.dev: the version feed and cadgen's telemetry
 
 The same project answers `api.texttocad.dev` (a second domain on it). Its `/v1`
 routes serve the version feed cadgen's daily check reads (`cadgen/updates.py` in
-`packages/cadgen`), and receive CAD's anonymous usage analytics
-(`cadgen/analytics.py`), from the CAD app (`cadgen mcp`) and the browser viewer
-(`cadgen viewer`, presentation `browser`); `www.texttocad.dev/v1/...` reaches the same routes. Clients
-know only `api.texttocad.dev`, so the service can move to another host without
-a release of cadgen.
+`packages/cadgen`), and receive cadgen's telemetry (`cadgen/analytics.py`): the usage
+counts the CAD app (`cadgen mcp`), the browser viewer (`cadgen viewer`) and the build
+daemon send, which it checks and passes on to PostHog. `www.texttocad.dev/v1/...`
+reaches the same routes. Clients know only `api.texttocad.dev`, so the service behind it
+can change without a release of cadgen.
 
 | Route | What it does |
 | --- | --- |
-| `GET /v1/versions` | The version feed, the same for everyone: `{latest}` → `200`, kept by Vercel's edge until the next deploy (`src/lib/api/versions.mjs`). `latest` is this app's version, which the release stamps from `VERSION`. Only a copy installed by hand reads it; a store's copy never checks. It reads no database. |
-| `POST /v1/events` | One batch: `{schema: 2, install, session, version, channel, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `channel` is where the install came from, as its package named it: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `claude-desktop`, `claude-directory`, `openai-directory`, `cursor-marketplace`, `dev` or `unknown`. A schema 1 batch (cadgen 0.7.7 to 0.7.11) says how the install was made, `source` (`store` or `manual`), in place of `channel`: its rows keep that as `source`, with the channel `unknown`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. One event per tool and per `file`, and one `view` at most. Anything else is `400` and stores nothing (`src/lib/api/events.mjs`). The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
-| `POST /v1/forget` | `{install}`: deletes every row sent under an install id → `204`. `cadgen analytics off` calls it; the random id is the only authority needed. The id rides in the body because Vercel's request logs keep each path beside the caller's IP. |
-| `GET /v1/prune` | The daily cron (`vercel.json`): deletes rows older than 13 months. Needs `Authorization: Bearer $CRON_SECRET`. |
-| `GET /v1/health` | → `200`, or `503` naming a missing setting (`DATABASE_URL`, `CRON_SECRET`), or the database's error code when it cannot take a batch (unreachable, or tables missing a column after a schema change that `schema.sql` was not re-run for). `Deploy Docs` checks it. |
+| `GET /v1/versions` | The version feed, the same for everyone: `{latest}` → `200`, kept by Vercel's edge until the next deploy (`src/lib/api/versions.mjs`). `latest` is this app's version, which the release stamps from `VERSION`. Only a copy installed by hand reads it; a store's copy never checks. It asks no service. |
+| `POST /v1/events` | One batch: `{schema: 3, install, session, process, version, channel, platform, arch, client: {name, version}, presentation, events: [...]}` → `204`, once PostHog has taken it. `process` is the sender: `app` (the CAD app), `viewer` (the browser viewer) or `daemon` (the build daemon, which names no `client` or `presentation`). `channel` is where the install came from, as its package named it: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `claude-desktop`, `claude-directory`, `openai-directory`, `cursor-marketplace`, `agent-plugins`, `dev` or `unknown`. Each event counts what the process saw since its last batch, one event per thing counted (`FIELDS` in `src/lib/api/events.mjs`): `tool` `{tool, calls, errors}`; `view` `{calls}`; `files` `{kind, count}`, distinct files of a format shown for the first time that day; `build` `{kind, via, count, failed, crashed, cancelled, cached, seconds, longest}`, builds of a format by who asked (`script` or `command`); `snapshot` `{kind, count, failed, seconds}`; `feature` `{feature, count}` (`assembly`, `declared_mesh`, `kinematics`, `animation`, `drawing`, `quick_edit`); `health` `{workers, crashes, recycles, refusals}`, the daemon's build workers; `exception` `{where, tool?, type, handled, status?, frames: [{file, function, line?, column?, chunk_id?}], count}`, one crash and how many times it happened: where (`tool`, `route`, `request`, `build`, `command` or `page`), the error's type, whether the process went on, and up to 30 innermost frames, each a file inside cadgen, the standard library, a dependency or the page's assets (never an absolute path, `..` or a drive), with the person's own code `<user>`, and a page's frame in one of its own chunks that chunk's debug id (`chunk_id`), under which the release uploaded its source map; a dead worker's exit status in `status`. Never a message. Schemas 1 and 2 (cadgen 0.7.7 to 0.7.15) are read too: they name no `process` (the browser viewer's `presentation` was `browser`; anything else was the CAD app), a schema 1 batch says how the install was made (`source`: `store` or `manual`) in place of `channel`, and their `file` event named one distinct file by a salted code, of which the receiver passes on the format alone, as `files`. Anything else is `400` and passes nothing on. |
+| `POST /v1/forget` | `{install}`: deletes the install's person in PostHog and every event sent under its id → `204` once PostHog has queued it (it deletes in the background). `cadgen telemetry off` calls it; the random id is the only authority needed. The id rides in the body because Vercel's request logs keep each path beside the caller's IP. |
+| `GET /v1/health` | → `200`, or `503` naming a missing or malformed setting (`POSTHOG_REGION`, `POSTHOG_PROJECT_KEY`, `POSTHOG_PERSONAL_KEY`, `POSTHOG_PROJECT_ID`), or PostHog's status when it will not take the personal key for the project, or `posthog_project_key` when `POSTHOG_PROJECT_KEY` is another project's. `Deploy Docs` checks it, so a deploy verifies all four settings. |
+
+Each event of a batch becomes one PostHog event (`src/lib/api/posthog.mjs`): `tool_used`,
+`view_used`, `files_shown`, `models_built`, `snapshots_rendered`, `feature_used`,
+`daemon_health` or, for a crash, `$exception`, which PostHog's error tracking groups into
+issues (`$exception_list`: the type, a value that is only ever a dead worker's exit
+status, `mechanism.handled`, and raw frames, only cadgen's own or the page's `in_app`),
+with the install id as its distinct id, the batch's context (`session`,
+`process`, `version`, `channel`, `source`, `platform`, `arch`, `client`, `client_version`,
+`presentation`) and the event's own counts as properties, and `country`: the ISO code
+Vercel places the request in (`x-vercel-ip-country`), left out where it cannot tell.
+PostHog's own location lookup is off for every event (`$geoip_disable`): the receiver
+posts from Vercel's servers, and nothing finer than the country is wanted. An event is a
+window's counts, so a question adds up a property (`calls`, `count`, `seconds`): it never
+counts events.
 
 - **Every release keeps counting.** The receiver reads every schema a released
   cadgen sends, for as long as that release can still be running: a copy nobody
   updates is counted like a current one. A new schema adds a reader beside the old
-  ones in `events.mjs`, and `schema.sql` only ever adds (a column, a default),
-  never renames or drops one, so it can run before the deploy while the live
-  receiver still writes the columns it knows.
-- **Nothing outside the contract is stored**: unknown fields, tool names that are
-  not `cad_*`, free-text strings are refused. No IP address is stored, and the one
-  header read, the country, is kept only in `countries`' weekly and monthly totals
-  (`ZZ` where Vercel could not tell). Those totals are kept indefinitely and an
-  opt-out leaves them: nothing in them names an install.
+  ones in `events.mjs`.
+- **Nothing outside the contract is passed on**: unknown fields, tool names that are
+  not `cad_*`, names outside an event's vocabulary, free-text strings are refused. The receiver keeps no IP address, and
+  sends PostHog none.
 - **No browser posts.** Both POSTs must be `application/json` (`415` otherwise) and
   carry no `Origin` header (`403`): cadgen posts from Python, which sends none, and a
-  browser sends one with every POST, a form's, `sendBeacon`'s and a no-cors fetch's
-  included. There are no CORS headers.
-- **The privacy policy describes this table.** A new field is a change to
+  browser sends one with every POST, a form's, `sendBeacon`'s and a no-cors fetch's included.
+  There are no CORS headers.
+- **The privacy policy describes these events.** A new field is a change to
   `src/app/privacy-policy/page.tsx` in the same PR.
-- **Portable.** `src/lib/api/handler.mjs` is a plain `fetch(Request) →
-  Response` handler over a store (`insert`, `seen`, `tally`, `forget`, `prune`, `ready`);
+- **Portable.** `src/lib/api/handler.mjs` is a plain `fetch(Request) → Response` handler
+  over a store (`insert`, `forget`, `ready`); `posthog.mjs` is PostHog's, and
   `app/v1/[...route]/route.ts` is all that ties it to Next.js, and to Vercel (the
-  country header). `postgres.mjs` is the store for any Postgres (`DATABASE_URL`,
-  the pooled string); `schema.sql` creates its tables. The driver loads on first request, so the build and the
-  tests (`npm test`, part of `check`) need no database.
+  country header). The tests (`npm test`, part of `check`) hand the store a `fetch` of
+  their own, so they need no network.
 
-Setup, once: a Postgres database (Neon today) with `schema.sql` run in it; the
-domain `api.texttocad.dev` on the docs Vercel project (a DNS-only CNAME at
-Cloudflare, like `www`); and two of the project's own production environment
-variables, set as Sensitive in the Vercel dashboard: `DATABASE_URL` (the pooled
-connection string) and `CRON_SECRET` (any long random string; Vercel sends it to
-the prune cron as `Authorization: Bearer …`). Nothing in GitHub holds them. A
-changed value takes effect with the next deploy, and `Deploy Docs` checks
-`api.texttocad.dev/v1/health`, which answers `503` while either is missing.
-A schema change means running `schema.sql` again (it is idempotent, and only
-adds) on the database before deploying; a deploy that went out without it fails
-that check.
+Setup, once: a PostHog project; the domain `api.texttocad.dev` on the docs Vercel
+project (a DNS-only CNAME at Cloudflare, like `www`); and four of the project's own
+production environment variables, set as Sensitive in the Vercel dashboard:
+`POSTHOG_REGION` (`us` or `eu`, where the PostHog project lives),
+`POSTHOG_PROJECT_KEY` (the project's API key, which captures), `POSTHOG_PERSONAL_KEY`
+(a personal API key with `person:write`, which deletes, and `project:read`, which health
+checks the project with; scope it to this project alone), and
+`POSTHOG_PROJECT_ID`. Nothing in GitHub holds them. A changed value takes effect with
+the next deploy, and `Deploy Docs` checks `api.texttocad.dev/v1/health`, which answers
+`503` while any is missing, PostHog refuses the personal key, or the project key is
+another project's: the deploy is where the settings are checked, since Vercel keeps
+Sensitive values write-only and nothing else can read them back.
+
+Retention is PostHog's: events go after the period its plan keeps them (a year on the
+free plan), and the privacy policy says so.
 
 The feed changes with each release, which deploys the site after its PyPI
 upload, so `latest` never names a release that cannot be installed yet. Only a
@@ -217,46 +234,23 @@ copy installed by hand reads it: a store's copy (`claude-directory`,
 `openai-directory`, `cursor-marketplace`) never checks and is never told, since its
 store updates it.
 A Vercel Firewall rate-limit rule on `/v1/*` (answering `429`) is recommended: a
-real client sends at most once a minute per running app, so a per-IP limit well
-above that turns a flood away at no cost to real clients.
+real client sends at most once every five minutes per running process, and once more
+as it exits, so a per-IP limit well above that turns a flood away at no cost to real
+clients.
 
-A client keeps a batch it could not send (offline, a `5xx` while the receiver is
-down, a `404` before it is deployed, a firewall's `403` or a `429`) and sends it again
-with the next one, for as long as its app runs; a deletion an opt-out owes is asked
-for again the same way. It drops only a batch the receiver read and refused (`400`,
-`413`, `415` or `422`): that batch would be refused again.
+A client keeps a batch it could not send (offline, a `5xx` while the receiver or
+PostHog is down, a `404` before it is deployed, a firewall's `403` or a `429`) and sends
+it again with the next one, for as long as its process runs; a deletion an opt-out owes is
+asked for again the same way. It drops only a batch the receiver read and refused
+(`400`, `413`, `415` or `422`): that batch would be refused again.
 
-What it answers: how many people use CAD (installs: one per machine and OS user,
-a new one after an opt-out and back), how often (active days and minutes, from
-when rows arrive: a server sends at most once a minute, and only when used), and
-on how many files (distinct `file` codes per install), and where (installs per
-country, each ISO week and calendar month, in UTC). A server nobody used sends
-nothing.
-
-```sql
--- daily, weekly and monthly active installs
-select count(distinct install_id) filter (where received_at > now() - interval '1 day')   as dau,
-       count(distinct install_id) filter (where received_at > now() - interval '7 days')  as wau,
-       count(distinct install_id) filter (where received_at > now() - interval '30 days') as mau
-from events;
-
--- how often: active days and active minutes per install, last 30 days
-select install_id, count(distinct received_at::date) as active_days,
-       count(distinct date_trunc('minute', received_at)) as active_minutes
-from events where received_at > now() - interval '30 days' group by 1 order by 2 desc;
-
--- unique files worked on per install, and by format, last 30 days
-select install_id, count(distinct file) as files from events
-where event = 'file' and received_at > now() - interval '30 days' group by 1 order by 2 desc;
-select kind, count(distinct (install_id, file)) as files from events where event = 'file' group by 1 order by 2 desc;
-
--- tool calls and failure rate, last 30 days
-select tool, sum(calls) as calls, round(100.0 * sum(errors) / sum(calls), 1) as error_pct
-from events where event = 'tool' and received_at > now() - interval '30 days'
-group by 1 order by 2 desc;
-
--- where: installs per country this month, and each country's weeks over time
-select country, installs from countries
-where period = 'month' and starts = date_trunc('month', now() at time zone 'UTC')::date order by 2 desc;
-select starts, country, installs from countries where period = 'week' order by 1 desc, 3 desc;
-```
+What it answers, in PostHog: how many people use CAD (installs: one per machine and OS
+user, a new one after an opt-out and back), how often (active days, from when events
+arrive: a process sends at most every five minutes, and only when used), which CAD tools
+are used and how often they fail (`tool_used`: sum of `calls` and `errors` by `tool`), on
+how many files (`files_shown`: sum of `count` by `kind`, each file once a day per
+process), how many models are built and how that goes (`models_built`: sums of `count`,
+`failed`, `crashed`, `cancelled`, `cached` and `seconds` by `kind` and `via`, and the
+largest `longest`), snapshots likewise (`snapshots_rendered`), which features are used
+(`feature_used`), how the daemon's workers fare (`daemon_health`), and where (installs by
+`country`). A process nobody used sends nothing.

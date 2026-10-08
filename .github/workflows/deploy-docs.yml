@@ -79,10 +79,10 @@ jobs:
             fi
           done
           urls="https://www.texttocad.dev https://texttocad.dev"
-          # A ref with the analytics API (apps/docs/src/app/v1) is checked through api.texttocad.dev's
-          # health too: a 503 while the project's DATABASE_URL or CRON_SECRET is missing (both live in
-          # the Vercel project, never here) or its database cannot take a batch fails the deploy. An
-          # older ref -- a past release redeployed -- has no API, and deploys as it always did.
+          # A ref with the telemetry API (apps/docs/src/app/v1) is checked through api.texttocad.dev's
+          # health too: a 503 while the project's PostHog settings are missing (they live in the Vercel
+          # project, never here) or PostHog refuses its keys fails the deploy. An older ref -- a past
+          # release redeployed -- has no API, and deploys as it always did.
           if [ -d apps/docs/src/app/v1 ]; then
             urls="$urls https://api.texttocad.dev/v1/health"
           fi

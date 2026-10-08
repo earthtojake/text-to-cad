@@ -6,8 +6,9 @@ import { cn } from "@text-to-cad/ui/utils";
 import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
 import { FILE_SHEET_PRECISION_SLIDER_CLASSES } from "../../inspector/FileSheet.js";
 
-// The transport owns play/pause and scrubbing; routine, speed and loop are preview's Playback
-// settings (`PlaybackMenu.jsx`).
+// The transport owns play/pause and scrubbing; the routines and the routine's speed, loop and
+// autoplay are the playbar's two menus at either end of it (`PlaybackMenu.jsx`), which the shell
+// hands it.
 //
 // Every animation source shares this transport UI. It only edits the clip and clock state of
 // the runtime it is handed; evaluating a clip is its owner's. Routines play in preview alone,
@@ -52,7 +53,7 @@ function AnimationTransport({ runtime, disabled = false }) {
   const activeClip = runtime?.clips?.find(clip => clip.id === runtime?.activeClipId);
   const duration = Math.max(Number(activeClip?.duration) || 1, 0.001);
   const iconClass = "size-3.5";
-  return <div className="flex h-6 min-w-0 flex-1 items-center gap-2" data-animation-transport>
+  return <div className="flex h-6 min-w-0 flex-1 items-center gap-1" data-animation-transport>
     <ToolbarButton tooltip={false} disabled={disabled} tooltipSide="top"
       onClick={() => runtime?.onPlayToggle?.()} label={`${runtime?.playing ? "Pause" : "Play"} animation`}>
       {runtime?.playing ? <Pause className={iconClass} strokeWidth={1.5} aria-hidden="true"/> : <Play className={iconClass} strokeWidth={1.5} aria-hidden="true"/>}
@@ -66,16 +67,18 @@ function AnimationTransport({ runtime, disabled = false }) {
 
 /**
  * The playbar: transport in one transparent row under the model, centered: preview's animation
- * control, with `trailing` (Playback settings' cog) at its right end. Preview has no cube to make
- * room for.
+ * control, with `leading` (the Routines list) at its left end and `trailing` (Playback settings'
+ * cog) at its right. Its buttons sit 4px apart, as the navbar's and preview's corner's do, and the
+ * scrubber as far from the button on either side of it. Preview has no cube to make room for.
  */
-export function ViewportAnimationBar({ runtime, disabled = false, className, trailing = null }) {
+export function ViewportAnimationBar({ runtime, disabled = false, className, leading = null, trailing = null }) {
 
   if (!animationControlsHaveContent(runtime)) return null;
   return <div role="toolbar" aria-label="Animation playback" data-preview-hover-hold="" style={{ "--viewport-bottom-inset": VIEWPORT_BOTTOM_CENTER }} className={cn(
-    'absolute bottom-[var(--viewport-bottom-inset)] left-1/2 z-30 flex w-80 max-w-[calc(100%-24px)] -translate-x-1/2 translate-y-1/2 items-center gap-2 px-5 py-4',
+    'absolute bottom-[var(--viewport-bottom-inset)] left-1/2 z-30 flex w-96 max-w-[calc(100%-24px)] -translate-x-1/2 translate-y-1/2 items-center gap-1 px-5 py-4',
     className,
   )}>
+    {leading}
     <AnimationTransport runtime={runtime} disabled={disabled}/>
     {trailing}
   </div>;

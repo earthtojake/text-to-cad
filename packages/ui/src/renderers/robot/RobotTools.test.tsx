@@ -162,9 +162,9 @@ it('robot Select defaults match Links and Position remains an explicit tool', as
   expect(robot.stack()).toEqual(['Position controls']);
   expect(robot.knobs()).toBe(1);
 
-  // Display is not a tool: its dropdown, from on top of the cube, opens over Position and leaves it
-  // the tool, with its knobs and panel; Escape puts it away.
-  fireEvent.click(within(robot.pane.querySelector<HTMLElement>('[data-viewport-actions]')!).getByRole('button', { name: 'Display' }));
+  // Display is not a tool: its dropdown, from the navbar's right end, opens over Position and leaves
+  // it the tool, with its knobs and panel; Escape puts it away.
+  fireEvent.click(within(robot.pane.querySelector<HTMLElement>('[data-view-controls]')!).getByRole('button', { name: 'Display' }));
   await waitFor(() => expect(document.querySelector('[data-display-popover]')).not.toBeNull());
   expect(robot.toolNames()).toEqual(['Select:false', 'Position:true']);
   expect(robot.stack()).toEqual(['Position controls']);
@@ -192,9 +192,9 @@ it('robot Select defaults match Links and Position remains an explicit tool', as
   robot.client.dispose();
 });
 
-it('a robot is a 3D view: Display and Preview sit on top of its cube', async () => {
+it('a robot is a 3D view: Display and Preview sit at the navbar\'s right end', async () => {
   const robot = await openRobot();
-  const actions = robot.pane.querySelector<HTMLElement>('[data-viewport-actions]')!;
+  const actions = robot.pane.querySelector<HTMLElement>('[data-viewer-navbar] [data-view-controls]')!;
   expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display', 'Preview']);
   robot.client.dispose();
 });

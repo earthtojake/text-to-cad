@@ -1430,7 +1430,10 @@ def generate_step_targets(
     reported: list[dict[str, object]] = []
 
     def _emit(spec: EntrySpec, outcome: str, tree: str | None) -> None:
+        from cadgen.daemon.telemetry import job_reused
         from cadgen.store.trees import tree_kind_for
+
+        job_reused(outcome in ("current", "skipped-peer"))  # in a build worker: telemetry's cache hit, or not
         reported.append(
             {
                 "ok": True,
@@ -1498,7 +1501,10 @@ def generate_step_targets(
                 # A current model can still owe declared mesh exports (deleted
                 # file, changed declaration): heal them from the store package
                 # without leaving the no-op path.
-                _produce_declared_mesh_exports(spec, logger=logger, source_tree=tree)
+                if _produce_declared_mesh_exports(spec, logger=logger, source_tree=tree):
+                    from cadgen.daemon.telemetry import job_reused
+
+                    job_reused(False)  # meshes written now: not all of it was the store's
                 _emit(spec, "current", tree)
                 _tree_event(spec, "current")
             current_refs = {spec.source_ref for spec in current_specs}
@@ -1577,6 +1583,9 @@ def generate_dxf_targets(
     reported: list[dict[str, object]] = []
 
     def _emit(spec: EntrySpec, outcome: str) -> None:
+        from cadgen.daemon.telemetry import job_reused
+
+        job_reused(outcome in ("current", "skipped-peer"))  # in a build worker: telemetry's cache hit, or not
         reported.append(
             {
                 "ok": True,

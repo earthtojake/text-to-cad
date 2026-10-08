@@ -7,6 +7,7 @@ import {
   pluginDescription,
   skillGroups,
   support,
+  telemetryNote,
 } from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
@@ -29,6 +30,8 @@ export function GET() {
     "```text",
     agentInstallMessage,
     "```",
+    "",
+    `${telemetryNote} See the [privacy policy](${absoluteUrl("/privacy-policy")}).`,
     "",
     ...installs.flatMap((item) => [
       `### ${item.agent}`,

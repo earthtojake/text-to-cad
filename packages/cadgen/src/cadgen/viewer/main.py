@@ -51,6 +51,7 @@ introduce a search in any form.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import errno
 import json
 import os
@@ -545,6 +546,8 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
     is the child's own announcement, which it writes only once it is bound and
     attached, so the URL printed here answers its first request.
     """
+    from cadgen.analytics import for_others
+
     child_argv = [item for item in argv if item != "--detach"]
     if "--json" not in child_argv:
         child_argv.append("--json")
@@ -562,6 +565,8 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 close_fds=True,
+                # It outlives this command, so it goes by the person's telemetry settings, not this shell's.
+                env=for_others(os.environ),
                 **popen_options,
             )
     except OSError as error:
@@ -684,12 +689,13 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     server.app = app
     server.RequestHandlerClass = make_handler_class(app)
 
-    # Anonymous usage analytics, sent only with consent (``cadgen/analytics.py``): this process's
-    # recorder, which the page asks about and reports to (``/__cad/analytics``). It never raises,
-    # and no request waits on it.
-    from cadgen.analytics import Recorder  # noqa: PLC0415
+    # Telemetry's usage counts, sent by default once a ``cadgen`` command has said so and never after a no
+    # (``cadgen/analytics.py``): this process's recorder, which the page asks about and reports to
+    # (``/__cad/analytics``). It never raises, and no request waits on it.
+    from cadgen.analytics import Recorder, collect_crashes  # noqa: PLC0415
 
-    analytics = Recorder()
+    analytics = Recorder(process="viewer")
+    collect_crashes(analytics.crashed)  # what fails in this process, wherever it is caught, is this recorder's
     analytics.started(client={"name": "cadgen-viewer", "version": app.viewer_version}, presentation="browser")
     analytics.start()
     app.analytics = analytics
@@ -699,13 +705,34 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
 
     updates.refresh()
 
+    last_batch: list[threading.Thread] = []
+    last_batch_lock = threading.Lock()
+
+    def keep_last_batch() -> threading.Thread:
+        # What telemetry counted since its last batch, crashes among it, kept beside the settings for
+        # the next process to send (``Recorder.close``: a local file, never the network). Started as
+        # soon as the viewer is asked to exit, however it is asked, or the exit would beat it.
+        with last_batch_lock:
+            if not last_batch:
+                last_batch.append(threading.Thread(target=analytics.close, name="cadgen-viewer-last-batch", daemon=True))
+                last_batch[0].start()
+            return last_batch[0]
+
+    def hard_exit() -> None:
+        # A launch waiting for the port waits a few seconds, and an in-flight
+        # stream must not outlive that: the port is given up now, and the
+        # process goes once its last batch is kept (a moment at most).
+        with contextlib.suppress(OSError):
+            server.server_close()
+        keep_last_batch().join(1.0)
+        os._exit(0)
+
     def shutdown(_signum=None, _frame=None):
         # shutdown() blocks until serve_forever returns, and calling it from a
         # signal handler running ON the serving thread deadlocks. Dispatch it.
         threading.Thread(target=server.shutdown, daemon=True).start()
-        # Hard-exit fallback: a launch waiting for the port waits a few seconds,
-        # and an in-flight stream must not outlive that.
-        timer = threading.Timer(0.5, os._exit, (0,))
+        keep_last_batch()
+        timer = threading.Timer(0.5, hard_exit)
         timer.daemon = True
         timer.start()
 
@@ -762,7 +789,7 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
             reloader.stop()
         if restart["argv"] is None:
             server.server_close()  # the port is free now: a launch waiting for it starts at once
-        analytics.close()  # the last send, waited for at most a couple of seconds
+        keep_last_batch().join(1.0)  # the last batch, kept for the next process to send: a local write
 
     if restart["argv"] is not None:
         # Returns only when the re-exec itself failed, and then the port is

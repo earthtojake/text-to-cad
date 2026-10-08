@@ -654,6 +654,20 @@ class Detach(LauncherFixture):
         self.assertIn("no announcement within 0s; stopped it", stderr.getvalue())
 
 
+    def test_the_detached_server_goes_by_the_settings_not_this_shells_telemetry_switch(self) -> None:
+        stderr = io.StringIO()
+        child = mock.Mock(returncode=1)
+        child.poll.return_value = 1
+        with mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": self.state, "DO_NOT_TRACK": "1",
+                                          "CADGEN_TELEMETRY": "0"}), \
+                mock.patch.object(main_module.subprocess, "Popen", return_value=child) as popen, \
+                contextlib.redirect_stderr(stderr):
+            main_module.launch_detached(["--port", "1"], as_json=True)
+        env = popen.call_args.kwargs["env"]
+        self.assertEqual(env["CADGEN_STATE_DIR"], self.state)
+        self.assertNotIn("DO_NOT_TRACK", env)
+        self.assertNotIn("CADGEN_TELEMETRY", env)
+
 class PrewarmsTheDaemon(LauncherFixture):
     """After its announcement a launch starts the build daemon, whose workers import
     build123d before any build asks: a session's first build finds them warm."""
@@ -698,6 +712,47 @@ class Stop(LauncherFixture):
         self.assertEqual(child.wait(timeout=5), 0, "the server exits cleanly")
         code, _, stderr = self.run_to_exit(["stop", "--port", str(port)])
         self.assertEqual((code, stderr), (1, f"No CAD Viewer is running on port {port}.\n"))
+
+    def test_a_stopped_viewer_keeps_its_last_batch_for_the_next_process(self) -> None:
+        # It sends every five minutes, so a viewer stopped sooner, and every viewer's last minutes, go in its
+        # last batch. Its exit asks no network (the receiver here would take ten seconds to answer): the batch
+        # is kept beside the settings, for the next process to send.
+        batches: list[dict] = []
+
+        class Receiver(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802 - http.server's name
+                batches.append(json.loads(self.rfile.read(int(self.headers.get("content-length") or 0))))
+                time.sleep(10)  # a network that hangs, not a wait for a condition
+                self.send_response(204)
+                self.end_headers()
+
+            def log_message(self, *args) -> None:
+                pass
+
+        receiver = ThreadingHTTPServer(("127.0.0.1", 0), Receiver)
+        receiver.daemon_threads = True
+        threading.Thread(target=receiver.serve_forever, daemon=True).start()
+        self.addCleanup(receiver.server_close)
+        self.addCleanup(receiver.shutdown)
+        port = free_port()
+        child = self.launch(["--dist", self.make_dist(), "--port", str(port), "--json"],
+                            CADGEN_TELEMETRY="1", DO_NOT_TRACK="",
+                            CADGEN_API_URL=f"http://127.0.0.1:{receiver.server_address[1]}/v1")
+        self.wait_for_url_line(child)
+        request = urllib.request.Request(f"http://127.0.0.1:{port}/__cad/analytics/activity", data=b'{"touched":true}',
+                                         method="POST", headers={"content-type": "application/json",
+                                                                 main_module.POST_GUARD_HEADER: "1"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            self.assertEqual(response.status, 204)
+        began = time.monotonic()
+        code, _, _ = self.run_to_exit(["stop", "--port", str(port)])
+        self.assertEqual(code, 0)
+        self.assertEqual(child.wait(timeout=10), 0)
+        self.assertLess(time.monotonic() - began, 5)
+        self.assertEqual(batches, [])
+        kept = [json.loads(line) for line in Path(self.state, "telemetry-batches.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([(entry["batch"]["process"], [event["name"] for event in entry["batch"]["events"]]) for entry in kept],
+                         [("viewer", ["view"])])
 
     def test_stop_never_asks_another_program_or_another_users_viewer(self) -> None:
         stranger = FakeViewer(user="someone-else" if os.name == "nt" else -1)

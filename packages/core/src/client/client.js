@@ -237,9 +237,9 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         throw new Error(detail?.error || 'Could not reveal this file in the file manager.');
       }
     },
-    consent(share, from) {
+    consent(share) {
       return share === undefined ? request('/__cad/analytics', { operation: 'consent' })
-        : request('/__cad/analytics', { method: 'POST', headers: JSON_POST, body: { share, ...(from === 'card' ? { card: true } : {}) }, operation: 'consent' });
+        : request('/__cad/analytics', { method: 'POST', headers: JSON_POST, body: { share }, operation: 'consent' });
     },
     features(change) {
       return change === undefined ? request('/__cad/features', { operation: 'features' })
