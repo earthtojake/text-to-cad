@@ -370,11 +370,12 @@ what it counted -- a build it made with no daemon to ask, a snapshot, a drawing,
 crash -- to a running build daemon over its local socket, never starting one, and
 gives up after a moment (`daemon.client.HAND_OVER_SECONDS`); with no daemon to take
 it, it keeps it in a small file beside the settings for the next process that sends
-(`analytics.spool`). Two waits
-remain, bounded, each for something only the network can do: a process's last
-telemetry send as it exits -- a server's, or the build daemon's
-(`analytics.CLOSE_SECONDS`) -- and `cadgen telemetry off`, which waits for the
-deletion it asks for (still owed, and asked again, when nobody answers). The
+(`analytics.spool`). A process that exits sends nothing either: its last batch --
+a server's, or the build daemon's -- is kept in a file beside the settings, and the
+next process that sends sends it in the background, a moment after it starts
+(`analytics.KEPT`). One wait remains, bounded, for something only the network can
+do: `cadgen telemetry off`, which waits for the deletion it asks for (still owed,
+and asked again, when nobody answers). The
 pages load nothing from the internet: everything they show ships in the wheel.
 Installing needs the network (cadgen itself, and the headless browser the first
 snapshot fetches), and nothing after it does. The law is the package's, not the

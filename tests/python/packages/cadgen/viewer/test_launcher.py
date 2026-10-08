@@ -713,6 +713,47 @@ class Stop(LauncherFixture):
         code, _, stderr = self.run_to_exit(["stop", "--port", str(port)])
         self.assertEqual((code, stderr), (1, f"No CAD Viewer is running on port {port}.\n"))
 
+    def test_a_stopped_viewer_keeps_its_last_batch_for_the_next_process(self) -> None:
+        # It sends every five minutes, so a viewer stopped sooner, and every viewer's last minutes, go in its
+        # last batch. Its exit asks no network (the receiver here would take ten seconds to answer): the batch
+        # is kept beside the settings, for the next process to send.
+        batches: list[dict] = []
+
+        class Receiver(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802 - http.server's name
+                batches.append(json.loads(self.rfile.read(int(self.headers.get("content-length") or 0))))
+                time.sleep(10)  # a network that hangs, not a wait for a condition
+                self.send_response(204)
+                self.end_headers()
+
+            def log_message(self, *args) -> None:
+                pass
+
+        receiver = ThreadingHTTPServer(("127.0.0.1", 0), Receiver)
+        receiver.daemon_threads = True
+        threading.Thread(target=receiver.serve_forever, daemon=True).start()
+        self.addCleanup(receiver.server_close)
+        self.addCleanup(receiver.shutdown)
+        port = free_port()
+        child = self.launch(["--dist", self.make_dist(), "--port", str(port), "--json"],
+                            CADGEN_TELEMETRY="1", DO_NOT_TRACK="",
+                            CADGEN_API_URL=f"http://127.0.0.1:{receiver.server_address[1]}/v1")
+        self.wait_for_url_line(child)
+        request = urllib.request.Request(f"http://127.0.0.1:{port}/__cad/analytics/activity", data=b'{"touched":true}',
+                                         method="POST", headers={"content-type": "application/json",
+                                                                 main_module.POST_GUARD_HEADER: "1"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            self.assertEqual(response.status, 204)
+        began = time.monotonic()
+        code, _, _ = self.run_to_exit(["stop", "--port", str(port)])
+        self.assertEqual(code, 0)
+        self.assertEqual(child.wait(timeout=10), 0)
+        self.assertLess(time.monotonic() - began, 5)
+        self.assertEqual(batches, [])
+        kept = [json.loads(line) for line in Path(self.state, "telemetry-batches.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([(entry["batch"]["process"], [event["name"] for event in entry["batch"]["events"]]) for entry in kept],
+                         [("viewer", ["view"])])
+
     def test_stop_never_asks_another_program_or_another_users_viewer(self) -> None:
         stranger = FakeViewer(user="someone-else" if os.name == "nt" else -1)
         self.addCleanup(stranger.close)

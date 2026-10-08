@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 7, 2026">
+    <LegalPage title="Privacy Policy" updated="October 8, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -185,9 +185,10 @@ export default function PrivacyPolicyPage() {
             from a development install. Your choice is kept on your computer, as the{" "}
             <code>telemetry</code> setting in cadgen’s settings file, through restarts and updates, and
             one choice counts for every part of cadgen; a no stays a no. Turning telemetry off also turns
-            off analytics in an earlier version still installed, and deletes what it sent. A command run
-            without cadgen’s build daemon keeps its counts in a small file beside that setting until the
-            next part of cadgen sends them; turning telemetry off deletes that file too.
+            off analytics in an earlier version still installed, and deletes what it sent. Nothing waits to
+            send: what a command counts without cadgen’s build daemon, and what any part of cadgen counted
+            since its last send when it exits, wait in small files beside that setting until the next part
+            of cadgen sends them; turning telemetry off deletes those files too.
           </li>
           <li>
             To turn telemetry off, run <code>uvx cadgen telemetry off</code>, use{" "}

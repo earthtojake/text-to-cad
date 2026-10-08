@@ -17,7 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 from cadgen import cli
-from cadgen.analytics import (CLOSE_SECONDS, NOTICE_ENV, NOTICE_TEXT, PRIVACY_URL, Recorder, _post, choose, forget_pending,
+from cadgen.analytics import (KEPT, NOTICE_ENV, NOTICE_TEXT, PRIVACY_URL, Recorder, _post, choose, forget_pending,
                               notify, status)
 from cadgen.cli import telemetry as telemetry_cli
 from cadgen.mcp.protocol import RequestContext, RpcError
@@ -554,16 +554,63 @@ class NeverInTheWayTest(_Tmp):
             self.assertLess(time.monotonic() - began, 1)
             release.set()
 
-    def test_an_exiting_server_waits_for_its_last_send_only_so_long(self) -> None:
+    def test_an_exiting_process_waits_on_nothing_and_the_next_one_sends_its_last_batch(self) -> None:
         hang = threading.Event()
+        self.addCleanup(hang.set)
         choose(True, by="cli", path=self.path)
-        recorder = Recorder(path=self.path, send=lambda payload: hang.wait(30))
-        recorder.started(client={"name": "codex-mcp-client"}, presentation="tabs")
-        recorder.called("cad_show", True)
+        exiting = Recorder(path=self.path, send=lambda payload: hang.wait(30))
+        exiting.started(client={"name": "codex-mcp-client"}, presentation="tabs")
+        exiting.called("cad_show", True)
         began = time.monotonic()
-        recorder.close()
-        self.assertLess(time.monotonic() - began, CLOSE_SECONDS + 1)
-        hang.set()
+        exiting.close()  # the network hangs: an exit never asks it
+        self.assertLess(time.monotonic() - began, 1)
+        self.assertTrue((self.tmp / KEPT).exists())
+        sent: list[dict] = []
+        answers = [False, True]  # offline first: kept again, then taken
+        following = Recorder(process="viewer", path=self.path, send=lambda payload: sent.append(payload) or answers.pop(0))
+        following.send_kept()
+        following.send_kept()
+        self.assertEqual(len(sent), 2)
+        self.assertEqual(sent[0], sent[1])
+        self.assertEqual((sent[1]["process"], sent[1]["session"], sent[1]["client"]),
+                         ("app", exiting._session, {"name": "codex-mcp-client", "version": ""}))
+        self.assertEqual(sent[1]["events"], [{"name": "tool", "tool": "cad_show", "calls": 1, "errors": 0}])
+        following.send_kept()
+        self.assertEqual(len(sent), 2)  # sent once taken, never again
+
+    def test_a_kept_batch_is_sent_only_under_the_answer_it_was_kept_under(self) -> None:
+        choose(True, by="cli", path=self.path)
+        exiting = Recorder(path=self.path, send=lambda payload: True)
+        exiting.called("cad_show", True)
+        exiting.close()
+        choose(False, by="app", path=self.path, forget=lambda id: True)  # a no deletes what was kept
+        self.assertFalse((self.tmp / KEPT).exists())
+        exiting = Recorder(path=self.path, send=lambda payload: True)
+        exiting.called("cad_show", True)
+        exiting.close()  # under a no: nothing to keep
+        self.assertFalse((self.tmp / KEPT).exists())
+        choose(True, by="cli", path=self.path)
+        exiting = Recorder(path=self.path, send=lambda payload: True)
+        exiting.called("cad_show", True)
+        exiting.close()
+        with mock.patch.dict("os.environ", {"CADGEN_TELEMETRY": "0"}):  # a process that may not send leaves them
+            Recorder(path=self.path, send=lambda payload: self.fail("sent")).send_kept()
+        self.assertTrue((self.tmp / KEPT).exists())
+        with mock.patch("cadgen.analytics.time.time", return_value=time.time() + 60):
+            choose(True, by="app", path=self.path)  # another answer since: what was kept under the last is not sent
+        Recorder(path=self.path, send=lambda payload: self.fail("sent")).send_kept()
+        self.assertFalse((self.tmp / KEPT).exists())
+
+    def test_a_started_recorder_sends_what_was_kept_a_moment_after_it_starts(self) -> None:
+        choose(True, by="cli", path=self.path)
+        exiting = Recorder(path=self.path, send=lambda payload: True)
+        exiting.called("cad_show", True)
+        exiting.close()
+        sent = threading.Event()
+        started = Recorder(path=self.path, send=lambda payload: sent.set() or True, kept_after=0)
+        started.start()
+        self.addCleanup(started.close)
+        self.assertTrue(sent.wait(10))
 
 
 if __name__ == "__main__":

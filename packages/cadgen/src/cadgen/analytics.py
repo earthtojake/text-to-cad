@@ -90,8 +90,9 @@ Telemetry never gets in the way of CAD:
   safe default: not sharing, nothing sent, nothing said.
 - No tool call, build or command waits on the network, and none needs it: offline, everything
   works and nothing is sent. Noting use is in memory; sending, and the deletion an opt-out asks
-  for, run on a background thread. The one wait is the last send as a process exits, bounded by
-  ``CLOSE_SECONDS``.
+  for, run on a background thread. Nothing waits on it, an exit included: what a process noted since
+  its last batch is kept beside the settings as it exits (``close``), and the next process that
+  sends sends it, in the background, soon after it starts.
 - A batch the receiver did not take (offline, a slow or broken receiver, or none answering
   there yet) is kept for the next one; it is never an error. One the receiver read and refused
   (``REFUSED``) is dropped: it would be refused again, and take everything after it down with it.
@@ -147,11 +148,16 @@ FLUSH_SECONDS = 300
 # How long a send waits for the receiver. Sends run in the background, so this delays nothing; a
 # shorter wait would give up on a batch a cold receiver was still storing, and send it twice.
 TIMEOUT_SECONDS = 10
-CLOSE_SECONDS = 2  # the most an exiting process waits for its last send
+# How soon after it starts a process sends the batches others kept as they exited (``Recorder.close``):
+# a moment, so a start is never slowed and a short session's batch does not wait a whole window.
+KEPT_SECONDS = 10
 # Where a command keeps what it counted when no daemon can take it (``spool``), beside the settings, and
 # the most it keeps there: past it, a command's counts are dropped until a sender takes the rest.
 SPOOL = "telemetry-spool.jsonl"
 SPOOL_BYTES = 256 * 1024
+# Where an exiting process keeps its last batch (``Recorder.close``), whole, for the next process that
+# sends; a file of its own, which a cadgen from before it never reads, capped as the spool is.
+KEPT = "telemetry-batches.jsonl"
 HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take``)
 # The page's plumbing: a view's once-a-second sync, its viewer requests (the home's re-reads of its
 # library every couple of seconds among them) and its capture replies say nothing about use and would
@@ -751,27 +757,20 @@ def spool(counts: dict[str, Any], *, path: Path | None = None) -> bool:
         path = path or settings_path()
         if not status(path=path, probe=False)["sharing"]:
             return False
-        line = json.dumps({"answer": list(_answer(_read(path) or {})), "counts": counts}, separators=(",", ":"))
-        kept = path.with_name(SPOOL)
-        with exclusive(path.with_name(LOCK)):
-            size = kept.stat().st_size if kept.exists() else 0
-            if size + len(line) + 1 > SPOOL_BYTES:
-                return False
-            with open(kept, "a", encoding="utf-8") as handle:
-                handle.write(line + "\n")
-        return True
+        return _keep(path, SPOOL, {"answer": list(_answer(_read(path) or {})), "counts": counts})
     except Exception:  # noqa: BLE001 - a count kept or not never fails the command that made it
         LOG.debug("could not keep a command's counts", exc_info=True)
         return False
 
 
-def _take_spool(path: Path) -> list[dict[str, Any]]:
-    """What commands kept (``spool``), taken whole by one process: moved aside under the settings lock,
-    so no line is taken twice or lost to a command appending meanwhile."""
-    kept = path.with_name(SPOOL)
+def _take_spool(path: Path, name: str = SPOOL, key: str = "counts") -> list[dict[str, Any]]:
+    """What commands kept (``spool``), or exiting processes (``KEPT``, each line a ``batch``), taken whole
+    by one process: moved aside under the settings lock, so no line is taken twice or lost to a process
+    appending meanwhile."""
+    kept = path.with_name(name)
     if not kept.exists():
         return []
-    taken = path.with_name(f"{SPOOL}{temp_suffix()}")
+    taken = path.with_name(f"{name}{temp_suffix()}")
     with exclusive(path.with_name(LOCK)):
         try:
             replace_atomic(kept, taken)
@@ -786,15 +785,36 @@ def _take_spool(path: Path) -> list[dict[str, Any]]:
     for line in lines:
         with contextlib.suppress(ValueError):
             entry = json.loads(line)
-            if isinstance(entry, dict) and isinstance(entry.get("counts"), dict):
+            if isinstance(entry, dict) and isinstance(entry.get(key), dict):
                 found.append(entry)
     return found
 
 
+def _keep(path: Path, name: str, entry: dict[str, Any]) -> bool:
+    """One line appended to the kept file ``name`` beside the settings, under the settings lock: past
+    ``SPOOL_BYTES`` nothing more is kept. A local write, never the network."""
+    line = json.dumps(entry, separators=(",", ":"))
+    kept = path.with_name(name)
+    with exclusive(path.with_name(LOCK)):
+        size = kept.stat().st_size if kept.exists() else 0
+        if size + len(line) + 1 > SPOOL_BYTES:
+            return False
+        with open(kept, "a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+    return True
+
+
 def _drop_spool(path: Path) -> None:
-    """A no: what commands kept for sending is deleted, not left to be dropped later."""
+    """A no: what commands and exiting processes kept for sending is deleted, not left to be dropped later."""
     with contextlib.suppress(OSError), exclusive(path.with_name(LOCK)):
         path.with_name(SPOOL).unlink(missing_ok=True)
+        path.with_name(KEPT).unlink(missing_ok=True)
+
+
+def _outcome(sent: Any) -> str:
+    """What a send returned, read as ``ok``, ``refused`` or ``failed`` (``_post``; a test's sender may say
+    ``True`` or ``False``)."""
+    return "ok" if sent is True else "failed" if sent in (False, None) else sent
 
 
 def _guarded(default: Callable[[], Any]):
@@ -868,16 +888,17 @@ class _Tally:
 class Recorder:
     """Notes one process's use -- tool calls, view activity, files on screen, builds, snapshots,
     features and the daemon's health -- and sends it while sharing is on. Every method is guarded
-    (see the module docstring): it never raises, and none but ``close`` waits on the network."""
+    (see the module docstring): it never raises, and none waits on the network."""
 
     def __init__(self, *, process: str = "app", path: Path | None = None,
                  send: Callable[[dict[str, Any]], Any] | None = None, interval: float = FLUSH_SECONDS,
-                 collect: Callable[[Recorder], Any] | None = None) -> None:
+                 collect: Callable[[Recorder], Any] | None = None, kept_after: float = KEPT_SECONDS) -> None:
         self.path = path
         # Called as each batch is made, to note what is counted elsewhere (the daemon's pool, ``cadgen.daemon.telemetry``).
         self._collect = collect
         self._send = send or (lambda payload: _post(f"{api_url()}/events", payload))
         self._interval = interval
+        self._kept_after = kept_after
         self._lock = threading.Lock()
         self._session = str(uuid.uuid4())
         self._context: dict[str, Any] = {"process": process if process in PROCESSES else "app", "version": "unknown",
@@ -1065,17 +1086,36 @@ class Recorder:
     @_guarded(lambda: False)
     def flush(self) -> bool:
         """Send what was used since the last batch, if sharing is on; drop it if not. A deletion still owed
-        is asked for first. A batch with no use in it is not sent. It waits on the network: only the
-        background sender and ``close`` call it."""
+        is asked for first, then the batches exiting processes kept (``send_kept``). A batch with no use in
+        it is not sent. It waits on the network: only the background sender calls it."""
         if self._collect is not None:
             self._collect(self)
         self._drain()
         settings = self.path or settings_path()
         forget_pending(path=settings)
+        self.send_kept()
+        taken = self._batch(settings)
+        if taken is None:
+            return False
+        payload, sending, choices = taken
+        outcome = _outcome(self._send(payload))
+        if outcome == "failed":  # kept for the next batch, added to whatever came since -- unless a choice
+            with self._lock:     # made here while it was on its way cleared it (two answers can share a tick)
+                if self._choices == choices:
+                    self._tally.merge(sending)
+        # refused: dropped, or it would be refused again with everything after it
+        if outcome == "ok":
+            self._owe_deletion_if_gone(settings, payload["install"])
+        return outcome == "ok"
+
+    def _batch(self, settings: Path) -> tuple[dict[str, Any], _Tally, int] | None:
+        """The batch of what this process noted since its last, taken from it: its payload, what it counts,
+        and the choices made here when it was taken -- or ``None``, with nothing to send under the answer in
+        force, which drops what was noted under another. Reads the settings, never the network."""
         with self._lock:
             if not self._tally:  # nothing to send, nor an answer to read: the next use reads its own
                 self._basis = _UNREAD
-                return False
+                return None
         found = dict(UNAVAILABLE) if self._off else status(path=self.path, probe=False)
         decided = _answer((_read(settings) or {}) if found["sharing"] else {})  # which answer is in force (``_answer``)
         with self._lock:
@@ -1087,23 +1127,37 @@ class Recorder:
             # not whether it came later: Windows' clock moves in 16 ms steps, so a yes and the batch it lands
             # in can share a time.
             if not found["sharing"] or decided != basis:
-                return False
+                return None
             sending, later = tally.split(MAX_EVENTS)
             self._tally.merge(later)  # past the batch's room: the next batch's
         events = sending.events()
         if not events:
-            return False
-        outcome = self._send({"schema": SCHEMA, "install": found["id"], "session": self._session, **context,
-                              "events": events})
-        outcome = "ok" if outcome is True else "failed" if outcome in (False, None) else outcome
-        if outcome == "failed":  # kept for the next batch, added to whatever came since -- unless a choice
-            with self._lock:     # made here while it was on its way cleared it (two answers can share a tick)
-                if self._choices == choices:
-                    self._tally.merge(sending)
-        # refused: dropped, or it would be refused again with everything after it
-        if outcome == "ok":
-            self._owe_deletion_if_gone(settings, found["id"])
-        return outcome == "ok"
+            return None
+        return ({"schema": SCHEMA, "install": found["id"], "session": self._session, **context, "events": events},
+                sending, choices)
+
+    @_guarded(lambda: None)
+    def send_kept(self) -> None:
+        """Send the batches processes kept as they exited (``close``), each as it was made, while this one
+        may send: only those made under the answer in force now, as their process would have. Those the
+        receiver did not take are kept again for a later send. It waits on the network: only the
+        background sender calls it."""
+        settings = self.path or settings_path()
+        if self._off or not status(path=self.path, probe=False)["sharing"]:
+            return  # left for a process that may send: a no deletes them (``choose``)
+        kept = _take_spool(settings, KEPT, "batch")
+        answer = list(_answer(_read(settings) or {}))
+        for index, entry in enumerate(kept):
+            if entry.get("answer") != answer:
+                continue
+            outcome = _outcome(self._send(entry["batch"]))
+            if outcome == "failed":  # offline, or the receiver is down: this one and the rest wait for later
+                for rest in kept[index:]:
+                    if rest.get("answer") == answer:
+                        _keep(settings, KEPT, rest)
+                return
+            if outcome == "ok" and isinstance(entry["batch"].get("install"), str):
+                self._owe_deletion_if_gone(settings, entry["batch"]["install"])
 
     def _owe_deletion_if_gone(self, path: Path, install_id: str) -> None:
         """A batch can land after the deletion an opt-out asked for (said here or in another process
@@ -1122,10 +1176,13 @@ class Recorder:
 
     @_guarded(lambda: None)
     def start(self) -> None:
-        """Send every ``interval`` seconds (``FLUSH_SECONDS``), in the background, until ``close``."""
+        """Send every ``interval`` seconds (``FLUSH_SECONDS``), in the background, until ``close`` -- and, a
+        moment after it starts (``KEPT_SECONDS``), what processes kept as they exited."""
         stop = self._timer = threading.Event()
 
         def loop() -> None:
+            if not stop.wait(self._kept_after):
+                self.send_kept()
             while not stop.wait(self._interval):
                 self.flush()
 
@@ -1133,10 +1190,17 @@ class Recorder:
 
     @_guarded(lambda: None)
     def close(self) -> None:
-        """The last send, as the process exits: waited for at most ``CLOSE_SECONDS``, then left behind."""
+        """As the process exits: what it noted since its last batch is kept beside the settings, whole
+        (``KEPT``), for the next process that sends (``send_kept``) -- never sent from here, so an exit
+        waits on nothing but a local file."""
         if self._timer is not None:
             self._timer.set()
-        self._background(self.flush).join(CLOSE_SECONDS)
+        if self._collect is not None:
+            self._collect(self)
+        settings = self.path or settings_path()
+        taken = self._batch(settings)
+        if taken is not None:
+            _keep(settings, KEPT, {"answer": list(_answer(_read(settings) or {})), "batch": taken[0]})
 
     def _background(self, work: Callable[[], Any]) -> threading.Thread:
         def run() -> None:

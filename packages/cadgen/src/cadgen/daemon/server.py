@@ -823,7 +823,7 @@ def serve() -> int:
         raise
     finally:
         _release_address()
-        telemetry.close()  # its last batch: a moment at most, after the address is free for a successor
+        telemetry.close()  # its last batch, kept for the next process to send: a local write, after the address is free
         _HOUSEKEEPER.stop()
         _POOL.shutdown()
 

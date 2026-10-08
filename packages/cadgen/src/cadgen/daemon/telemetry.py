@@ -77,7 +77,8 @@ def start(pool_stats: Callable[[], dict[str, Any]]) -> None:
 
 @_quiet
 def close() -> None:
-    """The last batch, as the daemon stops: waited for a moment at most (``analytics.CLOSE_SECONDS``)."""
+    """The last batch, as the daemon stops: kept beside the settings for the next process to send
+    (``Recorder.close``), never sent from here."""
     global _RECORDER
     from cadgen import analytics
 

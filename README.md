@@ -109,7 +109,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.7.16", "cadgen", "mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.7.17", "cadgen", "mcp"],
       "env": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -296,8 +296,9 @@ paths, contents or prompts. The first `cadgen` command says so once, and sending
 also deletes what was sent, with `uvx cadgen telemetry off`, **Share usage stats** in either app's menu (the logo at
 the top left, over any model), or by asking your agent. `DO_NOT_TRACK=1` or `CADGEN_TELEMETRY=0` turns it off for
 one process, and `CADGEN_TELEMETRY=1` on, without changing your setting; nothing is sent by default in CI or from a
-development install. A command run without the build daemon keeps its
-counts in a small file in cadgen's state folder until the next of these sends them; turning telemetry off deletes it.
+development install. Nothing waits to send: what a command counts without the build daemon, and what any part of
+cadgen counted since its last send when it exits, waits in small files in cadgen's state folder until the next part
+of cadgen sends it in the background; turning telemetry off deletes them.
 Offline, nothing is sent and everything works. See
 the [privacy policy](https://www.texttocad.dev/privacy-policy).
 

@@ -285,8 +285,10 @@ class DaemonTelemetryTest(unittest.TestCase):
             recorder._send = lambda payload: self.sent.append(payload) or True
             self.assertTrue(recorder.flush())
             stats.update(imports=3, recycles=1, memoryRefusals=2, crashes=9)
-            telemetry.close()
+            telemetry.close()  # its last batch is kept for the next process to send
             self.assertIsNone(telemetry._RECORDER)
+            self.assertEqual(len(self.sent), 1)
+        analytics.Recorder(path=self.tmp / "settings.json", send=lambda payload: self.sent.append(payload) or True).send_kept()
         # The pool's own crashes take in workers killed because their client left: never read here.
         self.assertEqual([payload["events"] for payload in self.sent], [
             [{"name": "health", "workers": 2, "crashes": 0, "recycles": 0, "refusals": 0}],
