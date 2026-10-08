@@ -9,8 +9,9 @@ inherit them. They are environment, not flags, because a plugin's config pins a 
 cadgen that may predate a setting: a cadgen ignores an environment variable it does not know,
 where a flag it does not know would stop the server.
 
-cadgen reads a channel as a token and nothing more: analytics report it, and nothing decides by
-its name but ``dev``, a development install (and an editable install of a source tree). A process
+cadgen reads a channel as a token and nothing more: telemetry reports it, and nothing decides by
+its name but ``dev``, a development install (and a source tree, installed editable or imported from
+a checkout by path), which hears of no release and sends no telemetry by default. A process
 no plugin's server started -- a skill's ``cadgen`` command, the CAD Viewer a skill opens -- is
 ``unknown``: a skills-only install, or cadgen run by hand. Which app runs a server is not a
 channel either: the MCP handshake says that (``clientInfo``), so a plugin several apps read names
@@ -26,6 +27,7 @@ from __future__ import annotations
 import functools
 import os
 import re
+from pathlib import Path
 
 ENV = "CADGEN_INSTALL_CHANNEL"
 AUTO_UPDATED_ENV = "CADGEN_AUTO_UPDATED"
@@ -41,9 +43,15 @@ def is_channel(value: object) -> bool:
 
 @functools.cache
 def _source_tree() -> bool:
+    """An editable install, or cadgen imported from a checkout by path -- as the build daemon and its
+    workers are (``PYTHONPATH`` names the checkout's ``src`` first), where the first metadata found
+    can be a build's leftover rather than the editable install's record."""
     from cadgen._internal.editable import editable_source
 
-    return editable_source() is not None
+    if editable_source() is not None:
+        return True
+    package = Path(__file__).resolve().parents[1]  # cadgen/
+    return package.parent.name == "src" and (package.parents[1] / "pyproject.toml").is_file()
 
 
 def channel() -> str:

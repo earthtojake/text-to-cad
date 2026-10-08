@@ -29,7 +29,7 @@ it('names the folders down to a path, and the one holding it, on every filesyste
   expect([parentFolder(FILE), parentFolder('/a.step'), parentFolder('/'), parentFolder('C:/a.step')]).toEqual(['/home/me/models/parts', '/', '/', 'C:/']);
 });
 
-it('starts in the open file\'s folder and climbs by its last three folders, the ones above in the ellipsis\'s menu: a folder opens in place, a file is the pick', async () => {
+it('starts in the open file\'s folder: a press opens a subfolder inline, a double-click opens it in the explorer\'s place, a crumb climbs back, the folders above are the ellipsis\'s', async () => {
   const user = userEvent.setup();
   const onOpen = vi.fn();
   const source = { list: vi.fn(list), search: vi.fn() };
@@ -39,22 +39,76 @@ it('starts in the open file\'s folder and climbs by its last three folders, the 
   // Its subfolders, then its files, the open file marked.
   expect(rows()).toEqual(['directory:/home/me/models/parts/brackets', `file:${FILE}*`]);
   expect(crumbs()).toEqual(['Folders above', 'me', 'models', 'parts*']);
-  // A folder opens where the explorer is, and a file in it is the pick, by its absolute path.
-  await user.click(row('/home/me/models/parts/brackets'));
+  // A press opens the subfolder inline, under itself and a little further in; the explorer stays where it is.
+  const brackets = row('/home/me/models/parts/brackets');
+  await user.click(brackets);
   await screen.findByText('b.step');
-  expect([rows(), crumbs()]).toEqual([['file:/home/me/models/parts/brackets/b.step'], ['Folders above', 'models', 'parts', 'brackets*']]);
+  expect(rows()).toEqual(['directory:/home/me/models/parts/brackets', 'file:/home/me/models/parts/brackets/b.step', `file:${FILE}*`]);
+  expect([brackets.getAttribute('aria-expanded'), brackets.style.paddingLeft, row('/home/me/models/parts/brackets/b.step').style.paddingLeft])
+    .toEqual(['true', '8px', '18px']);
+  // Its rows hang from a faint line under its chevron, as every tree's do.
+  expect([brackets.querySelectorAll('[data-tree-guide]').length,
+    row('/home/me/models/parts/brackets/b.step').querySelectorAll('[data-tree-guide]').length]).toEqual([0, 1]);
+  expect(crumbs()).toEqual(['Folders above', 'me', 'models', 'parts*']);
+  // A file in it is the pick, by its absolute path; pressed again, the folder closes.
   await user.click(row('/home/me/models/parts/brackets/b.step'));
   expect(onOpen.mock.calls).toEqual([['/home/me/models/parts/brackets/b.step']]);
-  // A crumb climbs back to its folder.
+  await user.click(brackets);
+  expect([rows(), brackets.getAttribute('aria-expanded')]).toEqual([['directory:/home/me/models/parts/brackets', `file:${FILE}*`], 'false']);
+  // A double-click opens it in the explorer's place.
+  await user.dblClick(row('/home/me/models/parts/brackets'));
+  await screen.findByRole('button', { name: 'brackets' });
+  expect([rows(), crumbs()]).toEqual([['file:/home/me/models/parts/brackets/b.step'], ['Folders above', 'models', 'parts', 'brackets*']]);
+  // A crumb climbs back to its folder, where the folder double-clicked is not left open inline.
   await user.click(screen.getByRole('button', { name: 'parts' }));
   await screen.findByText('brackets');
-  expect(crumbs()).toEqual(['Folders above', 'me', 'models', 'parts*']);
+  expect([rows(), crumbs()]).toEqual([['directory:/home/me/models/parts/brackets', `file:${FILE}*`], ['Folders above', 'me', 'models', 'parts*']]);
   // The ellipsis holds the folders above the breadcrumb's three.
   await user.click(screen.getByRole('button', { name: 'Folders above' }));
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['/', 'home']);
   await user.click(screen.getByRole('menuitem', { name: 'home' }));
   await screen.findByText('me');
   expect([rows(), crumbs()]).toEqual([['directory:/home/me'], ['/', 'home*']]);
+});
+
+it('walks the rows on screen by keyboard: Right opens a folder inline and Left closes it, Up and Down step through what it holds', async () => {
+  render(<FolderExplorer source={{ list: vi.fn(list), search: vi.fn() }} file={FILE} onOpen={vi.fn()} />);
+  await screen.findByText('brackets');
+  const brackets = row('/home/me/models/parts/brackets');
+  brackets.focus();
+  fireEvent.keyDown(brackets, { key: 'ArrowRight' });
+  await screen.findByText('b.step');
+  fireEvent.keyDown(brackets, { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(row('/home/me/models/parts/brackets/b.step'));
+  fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(row(FILE));
+  fireEvent.keyDown(brackets, { key: 'ArrowLeft' });
+  expect(rows()).toEqual(['directory:/home/me/models/parts/brackets', `file:${FILE}*`]);
+});
+
+it('keeps every crumb whole: the folders that do not fit beside the one it is in go into the ellipsis, the farthest first', async () => {
+  const user = userEvent.setup();
+  // jsdom lays nothing out: here the folder the explorer is in is cut while any folder above it
+  // shares the row with it, and fits once it is alone beside the ellipsis.
+  const restores: (() => void)[] = [];
+  const stub = (key: 'scrollWidth' | 'clientWidth', width: (crumb: HTMLElement) => number) => {
+    const inherited = Object.getOwnPropertyDescriptor(Element.prototype, key)!;
+    Object.defineProperty(HTMLElement.prototype, key, { configurable: true, get(this: HTMLElement) {
+      return this.getAttribute('aria-current') === 'location' ? width(this) : inherited.get!.call(this);
+    } });
+    restores.push(() => { delete (HTMLElement.prototype as any)[key]; });
+  };
+  const beside = (crumb: HTMLElement) => crumb.closest('nav')!.querySelectorAll('button:not([aria-current]):not([aria-label])').length;
+  stub('scrollWidth', () => 200);
+  stub('clientWidth', crumb => beside(crumb) ? 120 : 200);
+  try {
+    render(<FolderExplorer source={{ list: vi.fn(list), search: vi.fn() }} file={FILE} onOpen={vi.fn()} />);
+    await screen.findByText('brackets');
+    expect(crumbs()).toEqual(['Folders above', 'parts*']);
+    // The ellipsis holds every folder above it, down to the nearest.
+    await user.click(screen.getByRole('button', { name: 'Folders above' }));
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['/', 'home', 'me', 'models']);
+  } finally { while (restores.length) restores.pop()!(); }
 });
 
 it('filters by searching under its folder once typing pauses, each keystroke cancelling the search before, and says when the search stopped early', async () => {

@@ -59,6 +59,23 @@ test("the file's name opens the explorer under it, over the view, its long folde
   await explorer.waitFor({ state: "detached" });
 });
 
+test("the explorer opens with its filter taking the keyboard, under a breadcrumb of whole folder names: those that do not fit beside the folder it is in are the ellipsis's", async () => {
+  await reset();
+  const deep = "/work/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.txt";
+  await page.evaluate((path) => { window.harness.a.files.set(path, "root-a planetary"); window.harness.open(path); }, deep);
+  await waitPayload("root-a planetary");
+  await pane().locator("[data-file-name]").click();
+  const crumbs = page.locator('[data-file-explorer] nav[aria-label="Folders"] button');
+  await page.locator('[data-file-explorer] [data-path$="planetary_gear_assembly.txt"]').waitFor();
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Filter files");
+  // Every crumb is its folder's whole name; "assemblies" did not fit beside the rest, so it went into the ellipsis.
+  assert.deepEqual(await crumbs.evaluateAll((buttons) => buttons.map((button) => [button.getAttribute("aria-label") || button.textContent, button.scrollWidth <= button.clientWidth])),
+    [["Folders above", true], ["STEP", true], ["planetary_gear_assembly", true]]);
+  await crumbs.first().click();
+  assert.deepEqual(await page.getByRole("menuitem").allTextContents(), ["/", "work", "assemblies"]);
+  await page.keyboard.press("Escape");
+});
+
 test("sources, instances and cancelled opens stay isolated", async () => {
   await reset();
   await page.evaluate(() => window.harness.setRoot("root-b"));

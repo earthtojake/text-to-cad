@@ -14,6 +14,12 @@ if [ -z "${PYTHON_BIN:-}" ]; then
 fi
 export PYTHON_BIN  # the bundler builds the file tracer with this interpreter's zig
 
+# The paths a run is narrowed to: test-python.sh and test-global.sh take them as arguments,
+# and only the test files at or under one of them run. Empty, the default, runs every file.
+# CI passes what scripts/github-workflows/select_checks.py selected for a change.
+TEST_PATHS=()
+SELECTED_TEST_FILES=0
+
 # The packaged runtime (packages/cadgen/src/cadgen/_runtime) is BUILT, never committed,
 # so a fresh checkout has none of it -- the snapshot suites drive the browser bundle, the
 # policy suite reads the emitted Node builders, and every build loads the file tracer.
@@ -26,6 +32,11 @@ export PYTHON_BIN  # the bundler builds the file tracer with this interpreter's 
 ensure_packaged_runtime() {
   local runtime="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
   local name
+  # PYTHON_TEST_RUNTIME=0: the selected tests read none of it, and the interpreter may lack
+  # what building it takes. A test that does read it then fails on the missing file.
+  if [ "${PYTHON_TEST_RUNTIME:-1}" = "0" ]; then
+    return 0
+  fi
   for name in node/mesh-export.mjs browser/snapshot-render.js browser/render.html; do
     if [ ! -f "$runtime/$name" ]; then
       section "Building cadgen's packaged runtime (missing $name)"
@@ -59,14 +70,23 @@ run_python_unittest() {
 
   section "$name"
 
+  local found=0
   while IFS= read -r test_file; do
-    test_files+=("$test_file")
+    found=$((found + 1))
+    if is_selected_test "$test_file"; then
+      test_files+=("$test_file")
+    fi
   done < <(find "$REPO_ROOT/$start_dir" -name 'test*.py' -print | sort)
 
-  if [ "${#test_files[@]}" -eq 0 ]; then
+  if [ "$found" -eq 0 ]; then
     echo "No Python tests found under $start_dir" >&2
     return 1
   fi
+  if [ "${#test_files[@]}" -eq 0 ]; then
+    echo "   (none of the selected paths)" >&2
+    return 0
+  fi
+  SELECTED_TEST_FILES=$((SELECTED_TEST_FILES + ${#test_files[@]}))
 
   for path_entry in "$@"; do
     if [[ "$path_entry" = /* ]]; then
@@ -94,6 +114,28 @@ run_python_unittest() {
   PYTHONPATH="$python_path${PYTHONPATH:+:$PYTHONPATH}" \
     "$PYTHON_BIN" "$SCRIPT_DIR/unittest_files.py" --top "$REPO_ROOT" \
       --jobs "${CADGEN_TEST_JOBS:-$(test_jobs)}" ${extra[@]+"${extra[@]}"} "${test_files[@]}"
+}
+
+is_selected_test() {
+  local file="$1"
+  local path
+  [ "${#TEST_PATHS[@]}" -eq 0 ] && return 0
+  for path in "${TEST_PATHS[@]}"; do
+    path="$REPO_ROOT/${path%/}"
+    if [ "$file" = "$path" ] || [[ "$file" == "$path"/* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# A narrowed run that matched nothing selected a path that holds no test: say so, rather
+# than pass having run nothing.
+require_selected_tests() {
+  if [ "${#TEST_PATHS[@]}" -gt 0 ] && [ "$SELECTED_TEST_FILES" -eq 0 ]; then
+    echo "No test file at or under: ${TEST_PATHS[*]}" >&2
+    exit 1
+  fi
 }
 
 test_jobs() {

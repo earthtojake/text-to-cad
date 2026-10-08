@@ -1,8 +1,8 @@
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import PlaybackMenu from '../../../../../dist/renderers/kit/tools/PlaybackMenu.js';
+import PlaybackMenu, { OrbitMenu, RoutineMenu } from '../../../../../dist/renderers/kit/tools/PlaybackMenu.js';
 import { ViewportAnimationBar, animationControlsHaveContent } from '../../../../../dist/renderers/kit/tools/playbar/ViewportAnimationBar.js';
 import { createAnimationClock } from '../../../../../dist/renderers/kit/tools/playbar/animationClock.js';
 
@@ -30,23 +30,47 @@ it('plays, scrubs and follows the renderer\'s live clock, with no restart button
   expect(screen.getByRole('button', { name: 'Pause animation' })).toBeTruthy();
 });
 
+const twoRoutines = [{ id: 'turn', label: 'Turn', duration: 8 }, { id: 'open', label: 'Open', duration: 3 }];
+const labels = () => screen.getAllByRole('button').map(button => button.getAttribute('aria-label'));
+
 it('keeps routine, speed and loop out of the transport even with several clips', () => {
-  render(bar(clocks(), routine({ clips: [{ id: 'turn', label: 'Turn', duration: 8 }, { id: 'open', label: 'Open', duration: 3 }] })));
-  expect(screen.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Play animation']);
+  render(bar(clocks(), routine({ clips: twoRoutines })));
+  expect(labels()).toEqual(['Play animation']);
   expect(screen.getByRole('slider', { name: 'Animation time' })).toBeTruthy();
 });
 
-it('ends with what it is handed after the transport: preview\'s Playback settings', () => {
-  render(bar(clocks(), routine(), { trailing: <button type="button" aria-label="Playback settings" /> }));
-  expect(screen.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Play animation', 'Playback settings']);
+it('starts with the Routines it is handed and ends with Playback settings, the transport between them', () => {
+  const runtime = routine({ clips: twoRoutines });
+  render(bar(clocks(), runtime, { leading: <RoutineMenu animation={runtime} />,
+    trailing: <PlaybackMenu animation={runtime} autoplay={false} onAutoplayChange={vi.fn()} /> }));
+  expect(labels()).toEqual(['Routines', 'Play animation', 'Playback settings']);
 });
 
-it('has one Playback settings menu: the routine\'s Speed, Loop and Autoplay, then the orbit', async () => {
+it("lists several routines at the playbar's left as a playlist, the one in hand checked; one routine has no list", async () => {
   const user = userEvent.setup();
-  const onMenuOpenChange = vi.fn(), onAutoplayChange = vi.fn(), onOrbitChange = vi.fn(), onOrbitSpeedChange = vi.fn();
+  const onOpenChange = vi.fn();
+  const runtime = routine({ clips: twoRoutines });
+  const view = render(<RoutineMenu animation={runtime} onOpenChange={onOpenChange} />);
+  await user.click(screen.getByRole('button', { name: 'Routines' }));
+  // Preview holds its chrome up while the list is open.
+  expect(onOpenChange).toHaveBeenLastCalledWith(true);
+  const list = screen.getByRole('menu', { name: 'Routines' });
+  expect(within(list).getAllByRole('menuitemradio').map(item => [item.textContent, item.getAttribute('aria-checked')]))
+    .toEqual([['Turn', 'true'], ['Open', 'false']]);
+  // Choosing one plays it next and closes the list.
+  await user.click(within(list).getByRole('menuitemradio', { name: 'Open' }));
+  expect(runtime.onClipSelect).toHaveBeenLastCalledWith('open');
+  expect(screen.queryByRole('menu')).toBeNull();
+  view.unmount();
+  render(<RoutineMenu animation={routine()} />);
+  expect(screen.queryByRole('button', { name: 'Routines' })).toBeNull();
+});
+
+it("has the routine's Speed, Loop and Autoplay in the playbar's Playback settings, and nothing of the orbit", async () => {
+  const user = userEvent.setup();
+  const onMenuOpenChange = vi.fn(), onAutoplayChange = vi.fn();
   const runtime = routine({ speed: 1.25 });
-  render(<PlaybackMenu animation={runtime} autoplay={false} onAutoplayChange={onAutoplayChange} orbit onOrbitChange={onOrbitChange}
-    orbitSpeed={1} onOrbitSpeedChange={onOrbitSpeedChange} onOpenChange={onMenuOpenChange} />);
+  render(<PlaybackMenu animation={runtime} autoplay={false} onAutoplayChange={onAutoplayChange} onOpenChange={onMenuOpenChange} />);
   await user.click(screen.getByRole('button', { name: 'Playback settings' }));
   // Preview holds its chrome open while the menu is open.
   expect(onMenuOpenChange).toHaveBeenLastCalledWith(true);
@@ -56,9 +80,8 @@ it('has one Playback settings menu: the routine\'s Speed, Loop and Autoplay, the
   // Ticking a checkbox leaves the menu open.
   await user.click(screen.getByRole('menuitemcheckbox', { name: 'Autoplay' }));
   expect(onAutoplayChange).toHaveBeenLastCalledWith(true);
-  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Orbit' }));
-  expect(onOrbitChange).toHaveBeenLastCalledWith(false);
-  expect(screen.getByRole('menuitem', { name: 'Orbit speed: 1×' })).toBeTruthy();
+  expect(screen.getAllByRole('menuitemcheckbox').map(item => item.textContent)).toEqual(['Loop', 'Autoplay']);
+  expect(screen.queryByRole('menuitem', { name: /Orbit/ })).toBeNull();
   await user.click(speed);
   const speeds = (await screen.findAllByRole('menuitemradio')).map(item => item.textContent);
   // An authored speed the presets lack is listed, so the menu never shows nothing checked.
@@ -69,19 +92,19 @@ it('has one Playback settings menu: the routine\'s Speed, Loop and Autoplay, the
   expect(runtime.onSpeedChange).toHaveBeenLastCalledWith(2);
 });
 
-it('offers a static file\'s orbit alone, and a routine picker only with several routines', async () => {
+it("has preview's Orbit, on or off and its Speed, in the Orbit menu", async () => {
   const user = userEvent.setup();
-  const view = render(<PlaybackMenu animation={null} autoplay={false} onAutoplayChange={vi.fn()} orbit={false} onOrbitChange={vi.fn()}
-    orbitSpeed={0.5} onOrbitSpeedChange={vi.fn()} />);
-  await user.click(screen.getByRole('button', { name: 'Playback settings' }));
-  expect((await screen.findAllByRole('menuitemcheckbox')).map(item => item.textContent)).toEqual(['Orbit']);
-  expect(screen.queryByRole('menuitem', { name: /Routine/ })).toBeNull();
-  expect(screen.getByRole('menuitem', { name: 'Orbit speed: 0.5×' })).toBeTruthy();
-  view.unmount();
-  render(<PlaybackMenu animation={routine({ clips: [{ id: 'turn', label: 'Turn', duration: 8 }, { id: 'open', label: 'Open', duration: 3 }] })}
-    autoplay onAutoplayChange={vi.fn()} orbit onOrbitChange={vi.fn()} orbitSpeed={1} onOrbitSpeedChange={vi.fn()} />);
-  await user.click(screen.getByRole('button', { name: 'Playback settings' }));
-  expect((await screen.findByRole('menuitem', { name: /Routine/ })).textContent).toContain('Turn');
+  const onOrbitChange = vi.fn(), onSpeedChange = vi.fn();
+  render(<OrbitMenu orbit onOrbitChange={onOrbitChange} speed={0.5} onSpeedChange={onSpeedChange} />);
+  await user.click(screen.getByRole('button', { name: 'Orbit' }));
+  const menu = screen.getByRole('menu', { name: 'Orbit' });
+  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Orbit' }));
+  expect(onOrbitChange).toHaveBeenLastCalledWith(false);
+  // Ticking it leaves the menu open, on its Speed.
+  await user.click(within(screen.getByRole('menu', { name: 'Orbit' })).getByRole('menuitem', { name: 'Orbit speed: 0.5×' }));
+  (await screen.findByRole('menuitemradio', { name: '5×' })).focus();
+  await user.keyboard('{Enter}');
+  expect(onSpeedChange).toHaveBeenLastCalledWith(5);
 });
 
 it('does not exist for a file without routines, loading or failed', () => {

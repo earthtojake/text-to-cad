@@ -31,7 +31,15 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewport.props = null; });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewport.props = null; document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()); });
+
+// The navbar FileViewer hands a renderer: the box at its right end Display and Preview go in.
+function navbarSlot() {
+  const slot = document.createElement('div');
+  slot.setAttribute('data-test-navbar', '');
+  document.body.append(slot);
+  return slot;
+}
 
 function mount(host = testHost(), state?: unknown) {
   const save = vi.fn();
@@ -41,7 +49,7 @@ function mount(host = testHost(), state?: unknown) {
   const preferences = { getSnapshot: () => settings, subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
     update: (patch: any) => { settings = { ...settings, ...patch }; listeners.forEach(listener => listener()); } };
   const props = { source: { id: 'one' }, file: { path: '/models/one.harness', name: 'one.harness', kind: 'file' }, document: null,
-    onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
+    navbarSlot: navbarSlot(), onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
     state, onStateChange: save, onNavigationActionsChange: navigation, reload() {}, data: { services: { preferences } } };
   const view = render(<ViewerHostContext.Provider value={host}><HarnessRenderer {...(props as any)} /></ViewerHostContext.Provider>);
   const canvas = view.container.querySelector('[data-stand-in-viewport] > canvas') as HTMLCanvasElement;

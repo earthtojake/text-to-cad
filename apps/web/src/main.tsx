@@ -2,6 +2,7 @@ import { FileWarning } from 'lucide-react';
 import { EmptyState } from '@text-to-cad/ui/navigation';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createCrashReporter } from '@text-to-cad/core/client';
 import { ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
 import { createTabStore } from '@text-to-cad/ui/tab-store';
 import { createWebCadClient } from './host/cadClient.js';
@@ -23,16 +24,29 @@ function StartingView({ error }: { error?: Error }) {
 
 const element = document.getElementById('root');
 if (!element) throw new Error('Missing #root mount point.');
-const root = createRoot(element);
 // The catalog is read every two seconds while the tab is seen: a hidden tab asks nothing and is read
 // again the moment it is shown (`host/cadClient.js`).
 const client = createWebCadClient();
+// The page's crashes -- an error nothing caught, or one a view's boundary caught -- told to this
+// Viewer's server for its telemetry (`cadgen/analytics.py`), each once a page and never its message.
+const reportCrash = createCrashReporter(crash => client.reportActivity({ crash }));
+const onError = (event: ErrorEvent) => reportCrash(event.error);
+const onRejection = (event: PromiseRejectionEvent) => reportCrash(event.reason);
+window.addEventListener('error', onError);
+window.addEventListener('unhandledrejection', onRejection);
+const root = createRoot(element, {
+  // Logged as React logs one, and counted: the page went on, with the view's "could not display".
+  onCaughtError: (error, info) => { console.error(error, info.componentStack); reportCrash(error, { handled: true }); },
+});
 let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
 if (!icon) { icon = document.createElement('link'); icon.rel = 'icon'; document.head.append(icon); }
 icon.type = 'image/png'; icon.href = faviconUrl;
 document.title = 'CAD';
 const controller = new AbortController();
-function dispose() { controller.abort(); root.unmount(); client.dispose(); window.removeEventListener('pagehide', onPageHide); }
+function dispose() {
+  controller.abort(); root.unmount(); client.dispose(); window.removeEventListener('pagehide', onPageHide);
+  window.removeEventListener('error', onError); window.removeEventListener('unhandledrejection', onRejection);
+}
 function onPageHide(event: PageTransitionEvent) { if (!event.persisted) dispose(); }
 window.addEventListener('pagehide', onPageHide);
 if (import.meta.hot) import.meta.hot.dispose(dispose);

@@ -1459,6 +1459,35 @@ def _write_pdf(docs, sheets: Sequence[Sheet], path: Path) -> None:
         partial.unlink(missing_ok=True)
 
 
+def _counted(run: Callable[..., list[Path]]) -> Callable[..., list[Path]]:
+    """``run``, counted for telemetry (``cadgen/analytics.py``): a drawing made, or a mistake in
+    cadgen's own code making one. A drawing is made in the script's own process, which sends nothing
+    itself: both are handed to a running build daemon, as a command hands it its snapshots
+    (``cadgen.daemon.client.hand_over``), and neither ever changes what the drawing does."""
+
+    @functools.wraps(run)
+    def counted(*args: Any, **kwargs: Any) -> list[Path]:
+        try:
+            drawn = run(*args, **kwargs)
+        except Exception as error:
+            try:
+                from cadgen import analytics
+
+                analytics.report(error, "build", bugs_only=True)  # the person's own mistakes are theirs
+            except Exception:  # noqa: BLE001 - a crash report never adds a failure to one
+                pass
+            raise
+        try:
+            from cadgen.daemon.client import hand_over
+
+            hand_over({"features": ["drawing"]})
+        except Exception:  # noqa: BLE001 - a count never fails the drawing it counts
+            pass
+        return drawn
+
+    return counted
+
+
 def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | None = None):
     """Declare an engineering drawing. The function returns a :class:`Sheet` or a
     list of them; calling it (the script's ``__main__`` does) writes one PDF with a
@@ -1514,6 +1543,6 @@ def eng_drawing(func: Callable[..., Any] | None = None, *, out: str | Path | Non
             return [target]
 
         run.__cadgen_eng_drawing__ = True  # type: ignore[attr-defined]
-        return run
+        return _counted(run)
 
     return apply(func) if func is not None else apply

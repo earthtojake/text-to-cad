@@ -79,7 +79,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "viewer stop": ("cadgen.cli.viewer_stop", "ask the CAD Viewer on a port to exit"),
     # CAD inside an agent host's panels. The host starts it, one process per thread.
     "mcp": ("cadgen.cli.mcp", "serve CAD to an agent host over MCP (stdio)"),
-    "analytics": ("cadgen.cli.analytics", "show or change CAD's anonymous usage analytics: status, on, off"),
+    "telemetry": ("cadgen.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
 }
 
 # A skill's pin is the version in the launch command its SKILL.md teaches
@@ -188,6 +188,10 @@ _RETIRED: dict[tuple[str, ...], str] = {
         "cadgen step build IN.step OUT.step. A model's maintained meshes are declared "
         "with @stl/@threemf/@glb and written by python <model>.py."
     ),
+    ("analytics",): (
+        "cadgen analytics has been renamed: use cadgen telemetry status|on|off. DO_NOT_TRACK=1 or "
+        "CADGEN_TELEMETRY=0 in an app's environment turns it off there."
+    ),
     ("srdf", "snapshot"): (
         "cadgen srdf snapshot does not exist: an SRDF's geometry comes from the URDF "
         "beside it, so it has no snapshot door of its own. Use cadgen snapshot "
@@ -276,8 +280,40 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # No command says a newer text-to-cad is out: it cannot tell which plugin, if any, it came
-    # with, so the CAD app and the CAD Viewer say it (`cadgen/updates.py`).
-    return _run(command, entry[0], rest)
+    # with, so the CAD app and the CAD Viewer say it (`cadgen/updates.py`). What a command does say,
+    # once and before its work, is what those two send by default (`cadgen/analytics.py`).
+    if command not in _UNTOLD:
+        _tell()
+    try:
+        return _run(command, entry[0], rest)
+    except Exception as error:
+        _report(error)
+        raise
+
+
+def _report(error: Exception) -> None:
+    """A command that failed past its own reporting -- a crash of cadgen's -- handed to a running daemon
+    for telemetry (``cadgen.analytics.report``); the traceback is the person's, as ever."""
+    try:
+        from cadgen.analytics import report
+    except Exception:  # noqa: BLE001 - a crash report never adds a failure to one
+        return
+    report(error, "command", handled=False)
+
+
+# Commands that never carry the analytics notice: a CAD app's server, whose output only the host's log
+# reads; the daemon's supervisor, writing to its own log; and `telemetry`, which says it its own way.
+_UNTOLD = frozenset({"mcp", "daemon", "telemetry"})
+
+
+def _tell() -> None:
+    """Say, once, what CAD's apps send by default (``cadgen.analytics.notify``): one line on stderr,
+    never in a command's output or its way."""
+    try:
+        from cadgen.analytics import notify
+    except Exception:  # noqa: BLE001 - the notice never fails the command it rides on
+        return
+    notify()
 
 
 def _run(command: str, module_name: str, rest: list[str]) -> int:
@@ -298,5 +334,22 @@ def _run(command: str, module_name: str, rest: list[str]) -> int:
     import inspect  # only the dispatcher needs it; `--help` and the daemon handoff do not.
 
     if "prog" in inspect.signature(module.main).parameters:
-        return int(module.main(rest, prog=f"cadgen {command}") or 0)
-    return int(module.main(rest) or 0)
+        def run() -> int:
+            return int(module.main(rest, prog=f"cadgen {command}") or 0)
+    else:
+        def run() -> int:
+            return int(module.main(rest) or 0)
+    kind = None if daemon_tool is None or "-h" in rest or "--help" in rest else _build_kind(daemon_tool)
+    if kind is None:
+        return run()
+    from cadgen.daemon import telemetry
+
+    return telemetry.cold_build(kind, "command", run)  # no daemon answered it: counted here
+
+
+def _build_kind(tool: str) -> str | None:
+    try:
+        from cadgen.daemon.telemetry import command_kind
+    except Exception:  # noqa: BLE001 - counting never stops a command
+        return None
+    return command_kind(tool)

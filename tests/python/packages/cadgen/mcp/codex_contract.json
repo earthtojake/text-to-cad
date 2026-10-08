@@ -477,7 +477,7 @@
     "openWorldHint": true,
     "readOnlyHint": false
    },
-   "description": "Report whether CAD sends anonymous usage analytics (counts of tool calls, view activity and distinct files, never file names, contents or prompts), or turn them off. Call with action off only when the user asks.",
+   "description": "Report whether cadgen sends usage stats (counts of tool calls, view activity, files shown, builds and snapshots) and crash reports (where cadgen's own code failed, never a message), tagged with a random ID and never file names, paths, contents or prompts, or turn them off. Call with action off only when the user asks.",
    "icons": [
     {
      "mimeType": "image/svg+xml",
@@ -500,8 +500,8 @@
     },
     "type": "object"
    },
-   "name": "cad_analytics",
-   "title": "CAD analytics"
+   "name": "cad_telemetry",
+   "title": "CAD telemetry"
   },
   {
    "_meta": {

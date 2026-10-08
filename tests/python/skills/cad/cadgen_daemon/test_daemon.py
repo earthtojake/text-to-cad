@@ -135,6 +135,22 @@ class CadgenDaemonTests(unittest.TestCase):
             raise RuntimeError(f"daemon address never appeared:\n{cls.log_path.read_text(encoding='utf-8')}")
 
     @classmethod
+    def _wait_for_no_request_in_flight(cls, timeout: float = 30.0) -> None:
+        """Block until the supervisor counts no request in flight. A job's thread sends its exit frame
+        and only then leaves the count, so on a loaded runner the next test's request can still find
+        the last test's job in flight -- and a restart then drains it rather than taking the no-work path."""
+        env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(cls.address)}
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with mock.patch.dict(os.environ, env):
+                os.environ.pop("CADGEN_DAEMON_CHILD", None)
+                status = daemon_client.status() or {}
+            if status.get("inflight") == 0:
+                return
+            time.sleep(0.05)
+        raise AssertionError(f"a request was still in flight after {timeout:.0f}s:\n{cls.log_path.read_text(encoding='utf-8')}")
+
+    @classmethod
     def _live_worker_pids(cls) -> set[int]:
         """The pool's worker pids, asked while the supervisor still answers."""
         env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(cls.address)}
@@ -259,7 +275,9 @@ class CadgenDaemonTests(unittest.TestCase):
 
     def test_c_version_token_mismatch_triggers_restart(self) -> None:
         # Also pinned in test_daemon_routing; kept here because it is what retires the
-        # class's first daemon before test_d starts a fresh one.
+        # class's first daemon before test_d starts a fresh one. The no-work path: with a
+        # request in flight the daemon drains first, keeping its address (test_daemon_routing).
+        self._wait_for_no_request_in_flight()
         frames = _raw_request(
             self.address,
             {"tool": "run", "argv": ["box.py"], "cwd": str(self.model_dir), "token": -1},

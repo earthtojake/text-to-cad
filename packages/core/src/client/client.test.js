@@ -302,8 +302,8 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   await client.reveal('/models/a.step');
   await assert.rejects(client.reveal('/models/gone.step'), /no longer there/);
   await client.consent();
-  await client.consent(true, 'card');
-  await client.consent(false, 'settings');
+  await client.consent(true);
+  await client.consent(false);
   await client.features({ quickEdit: false });
   await client.version();
   client.reportActivity({ touched: true });
@@ -317,7 +317,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/__cad/pick', 'POST', '1', null],
     ['/__cad/reveal', 'POST', '1', { path: '/models/a.step' }], ['/__cad/reveal', 'POST', '1', { path: '/models/gone.step' }],
     ['/__cad/analytics', 'GET', null, null],
-    ['/__cad/analytics', 'POST', '1', { share: true, card: true }], ['/__cad/analytics', 'POST', '1', { share: false }],
+    ['/__cad/analytics', 'POST', '1', { share: true }], ['/__cad/analytics', 'POST', '1', { share: false }],
     ['/__cad/features', 'POST', '1', { quickEdit: false }],
     ['/__cad/version', 'GET', null, null],
     ['/__cad/analytics/activity', 'POST', '1', { touched: true }],

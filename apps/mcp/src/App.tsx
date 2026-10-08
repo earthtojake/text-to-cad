@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
-import { Maximize2 } from 'lucide-react';
-import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
+import { Maximize } from 'lucide-react';
+import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { useFeatures } from '@text-to-cad/ui/features';
 import { UpdateButton, useUpdateNotice } from '@text-to-cad/ui/update';
 import { viewerLinks } from '@text-to-cad/ui/links';
@@ -73,12 +73,15 @@ function Frame({ bridge, context, insets, inline = false, bottomCenter, overlay 
   </div>;
 }
 
-/** Inline, the card's way to full size: the navbar's last control, and the home's. */
+/**
+ * Inline, the card's way to full size: the last of the navbar's own controls (the view's follow it), and the home's.
+ * Corner brackets, never the diagonal arrows: those are Preview's, a button along.
+ */
 function FullSizeButton({ bridge }: { bridge: Bridge }) {
   const expand = () => void bridge.request('ui/request-display-mode', { mode: 'fullscreen' }).catch(() => {});
   return <TooltipHint content="Full size">
     <Button variant="ghost" size="icon-xs" className="size-6 text-muted-foreground hover:text-foreground" aria-label="Full size" onClick={expand}>
-      <Maximize2 className="size-3.5" aria-hidden="true" />
+      <Maximize className="size-3.5" aria-hidden="true" />
     </Button>
   </TooltipHint>;
 }
@@ -97,6 +100,9 @@ function Superseded({ still }: { still: string | null }) {
  */
 export default function App({ bridge, server, launch: initial, presentation = 'tabs' }: { bridge: Bridge; server: Server; launch: Launch; presentation?: Presentation }) {
   const surface = initial.surface || initial.page;
+  // The host's file handler shows the file it opened, and only that: what the agent shows goes to
+  // its thread's tab, never here (the server refuses it too).
+  const alone = surface === 'file';
   // Inline, the server named this view (the agent reads it by that name); a tab names itself.
   const view = useMemo(() => initial.view ?? newViewId(), [initial.view]);
   const live = useMemo(createLiveRegistry, []);
@@ -120,7 +126,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // This view's one call to the server each second: what it shows, the agent's requests for it,
   // and what changed in what it watches (`host/sync.ts`).
   const sync = useMemo(() => createViewSync(server, { id: view, surface, model: () => shown.current }, {
-    show: launch => setShowing(previous => ({ launch, sequence: previous.sequence + 1 })),
+    show: launch => { if (!alone) setShowing(previous => ({ launch, sequence: previous.sequence + 1 })); },
     capture: async () => {
       const controller = live.current();
       if (!controller) throw new Error('No model is showing in this CAD view.');
@@ -128,7 +134,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     },
     state: () => describeView(live.current(), shown.current),
     connection: connected => setLost(!connected),
-  }), [server, view, surface, live]);
+  }), [server, view, surface, alone, live]);
   const reporter = useMemo<ViewReporter>(() => ({
     showing(model) {
       shown.current = model;
@@ -173,9 +179,9 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return () => { lifetime.abort(); stop(); window.removeEventListener('pointerdown', touched, true); window.removeEventListener('focus', touched); };
   }, [bridge, sync, superseded]);
 
-  // Asked once, of everyone, unless their environment answered or no answer could be kept
-  // (`cadgen/analytics.py`): the card, and the app menu's toggle after it.
-  const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(client.consent);
+  // The usage stats cadgen sends (its telemetry), the same as the browser viewer's: nothing asks here (a
+  // cadgen command says it once), and the app menu's switch changes it.
+  const { appSettings: analyticsSettings } = useAnalyticsConsent(client.consent);
   // The app menu's features (Quick edit), on until the person turns one off: kept by the server beside
   // the analytics answer, one choice for the sidebar, every thread's tab and the browser viewer.
   const { features, appSettings: featureSettings } = useFeatures(client.features);
@@ -198,9 +204,8 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}
     overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
-    <ModelView launch={launch} sequence={showing.sequence} bridge={bridge} client={client} tunnel={tunnel}
+    <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings} features={features}
-      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}
       update={updateNotice ? <UpdateButton notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
         onLink={openLink} /> : null}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}

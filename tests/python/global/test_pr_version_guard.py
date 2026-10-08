@@ -1,13 +1,20 @@
-"""The PR version guard distinguishes inherited releases from branch changes."""
+"""A pull request releases when it changes VERSION; the guard decides when it may.
+
+Run on the pull request's merge commit, as Version Check runs it: the first parent is the
+target branch as it is now, so a release the branch inherited is not one it makes.
+"""
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 from tests.python.support.paths import repo_path
+
+REPOSITORY = "owner/repo"
 
 
 class PrVersionGuardTests(unittest.TestCase):
@@ -21,15 +28,11 @@ class PrVersionGuardTests(unittest.TestCase):
         self.git("config", "core.hooksPath", str(self.root / "no-hooks"))
         self.write_version("0.5.0")
         self.commit("Initial release")
-        self.old_base = self.git("rev-parse", "HEAD").strip()
+        self.git("tag", "v0.5.0")
         self.git("switch", "-c", "feature")
         (self.root / "README.md").write_text("Feature work\n", encoding="utf-8")
         self.commit("Feature work")
         self.git("switch", "main")
-        self.write_version("0.5.1")
-        self.commit("Canonical release")
-        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
-        self.git("switch", "feature")
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(
@@ -43,37 +46,95 @@ class PrVersionGuardTests(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "-m", message)
 
-    def check(self, branch: str = "feature", base: str = "main") -> subprocess.CompletedProcess[str]:
+    def release_on_main(self, version: str) -> None:
+        self.git("switch", "main")
+        self.write_version(version)
+        self.commit(f"Release {version}")
+        self.git("tag", f"v{version}")
+
+    def check(self, head_repo: str = REPOSITORY) -> subprocess.CompletedProcess[str]:
+        """The guard on the merge commit GitHub would test: main with the branch merged in."""
+        self.git("switch", "--detach", "main")
+        self.git("merge", "--no-ff", "--no-edit", "feature")
         return subprocess.run(
-            ["bash", str(repo_path("scripts/release/check-pr-version.sh")),
-             base, branch, self.git("rev-parse", "HEAD").strip()],
+            ["bash", str(repo_path("scripts/release/check-pr-version.sh")), head_repo],
             cwd=self.root, text=True, capture_output=True, check=False,
+            env={**os.environ, "GITHUB_REPOSITORY": REPOSITORY},
         )
 
-    def test_inherited_main_release_is_not_a_pr_version_bump(self) -> None:
-        self.git("merge", "--no-edit", "main")
-        self.assertTrue(self.git("diff", self.old_base, "HEAD", "--", "VERSION"))
+    def bump_feature(self, version: str) -> None:
+        self.git("switch", "feature")
+        self.write_version(version)
+        self.commit(f"Bump to {version}")
+
+    def test_a_branch_that_leaves_version_alone_releases_nothing(self) -> None:
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("releases nothing", result.stdout)
 
-    def test_older_feature_without_a_version_edit_is_allowed(self) -> None:
+    def test_a_release_the_branch_inherited_is_not_one_it_makes(self) -> None:
+        self.release_on_main("0.5.1")
+        self.git("switch", "feature")
+        self.git("merge", "--no-edit", "main")
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("releases nothing", result.stdout)
 
-    def test_normal_branch_cannot_introduce_a_version_change(self) -> None:
-        self.git("merge", "--no-edit", "main")
-        self.write_version("0.5.2")
-        self.commit("Unapproved bump")
+    def test_a_branch_of_this_repository_may_release(self) -> None:
+        self.bump_feature("0.5.1")
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("releases 0.5.1", result.stdout)
+        self.assertIn("Merging it releases it", result.stdout)
+
+    def test_a_fork_may_not_release(self) -> None:
+        self.bump_feature("0.5.1")
+        result = self.check(head_repo="someone/fork")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("fork", result.stderr)
+
+    def test_a_version_behind_the_target_branch_is_refused(self) -> None:
+        self.bump_feature("0.4.9")
         result = self.check()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("not release/*", result.stderr)
+        self.assertIn("not past 0.5.0", result.stderr)
 
-    def test_release_branch_can_introduce_a_version_change(self) -> None:
-        self.git("merge", "--no-edit", "main")
-        self.write_version("0.5.2")
-        self.commit("Release bump")
-        result = self.check("release/0.5.2")
+    def test_a_bump_another_pull_request_released_first_releases_nothing(self) -> None:
+        # Both bumped to 0.5.1 and the other merged first: the merge takes the identical
+        # line from both sides, so this one no longer changes VERSION.
+        self.bump_feature("0.5.1")
+        self.release_on_main("0.5.1")
+        result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("releases nothing", result.stdout)
 
-    def test_missing_target_history_fails_closed(self) -> None:
-        self.assertNotEqual(self.check(base="missing").returncode, 0)
+    def test_a_release_must_pass_the_latest_tag(self) -> None:
+        self.git("tag", "v0.6.0")
+        self.bump_feature("0.5.1")
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("latest release, v0.6.0", result.stderr)
+
+    def test_a_release_too_large_for_the_push_path_filter_is_refused(self) -> None:
+        # GitHub matches a push's paths against its first 300 changed files, so Publish Release
+        # might not start for a release that changes more.
+        self.git("switch", "feature")
+        for index in range(300):
+            (self.root / f"file-{index:03}.txt").write_text(f"{index}\n", encoding="utf-8")
+        self.commit("Many files")
+        self.bump_feature("0.5.1")
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("first 300", result.stderr)
+
+    def test_it_refuses_anything_but_a_merge_commit(self) -> None:
+        result = subprocess.run(
+            ["bash", str(repo_path("scripts/release/check-pr-version.sh")), REPOSITORY],
+            cwd=self.root, text=True, capture_output=True, check=False,
+            env={**os.environ, "GITHUB_REPOSITORY": REPOSITORY},
+        )
+        self.assertNotEqual(result.returncode, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
