@@ -98,7 +98,9 @@ the CAD Viewer shows.
 cadgen urdf snapshot path/to/robot.urdf review.png
 ```
 
-It accepts `.urdf` only. Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
+It accepts `.urdf` only. Pose the robot with `--joint-values` — `{joint: value}` JSON in degrees (metres for a
+prismatic joint), each value within the joint's limits or the request is refused before
+anything renders,
 joints you do not name staying at their defaults, where the CAD Viewer opens the robot (the
 `"jointValues"` job field is the same thing in a packet). The snapshot draws the robot with the
 viewer's own scene, so it shows what the viewer shows, and a link mesh that cannot be loaded

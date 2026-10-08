@@ -8,10 +8,7 @@ picking the first renders the wrong wheel and looks like success.
 
 from __future__ import annotations
 
-import json
 import unittest
-
-from tests.python.support.paths import repo_path
 
 from cadgen.label_refs import (
     LabelResolutionError,
@@ -22,18 +19,82 @@ from cadgen.label_refs import (
 )
 
 
-FIXTURE_PATH = repo_path("packages", "core", "src", "lib", "cadRefs.parity.json")
+ALIAS_CASES = [
+    {
+        "why": "unique labels get a bare alias and no number",
+        "rows": [
+            {"id": "o1.1", "name": "eye_shank"},
+            {"id": "o1.2", "name": "pressure_tube"},
+        ],
+        "aliases": {"eye_shank": "o1.1", "pressure_tube": "o1.2"},
+        "ambiguous": {},
+    },
+    {
+        "why": "duplicates get numbered aliases in occurrence-tree order; the bare name is ambiguous",
+        "rows": [
+            {"id": "o1.3", "name": "cast_rim:5spoke"},
+            {"id": "o1.7", "name": "cast_rim:5spoke"},
+        ],
+        "aliases": {"cast_rim:5spoke_1": "o1.3", "cast_rim:5spoke_2": "o1.7"},
+        "ambiguous": {"cast_rim:5spoke": ["cast_rim:5spoke_1", "cast_rim:5spoke_2"]},
+    },
+    {
+        "why": "ordering is numeric per path segment, so o1.10 sorts AFTER o1.2",
+        "rows": [
+            {"id": "o1.10", "name": "bolt"},
+            {"id": "o1.2", "name": "bolt"},
+        ],
+        "aliases": {"bolt_1": "o1.2", "bolt_2": "o1.10"},
+        "ambiguous": {"bolt": ["bolt_1", "bolt_2"]},
+    },
+    {
+        "why": "a numbered alias never collides with a label an author actually wrote",
+        "rows": [
+            {"id": "o1.1", "name": "servo_end_mount"},
+            {"id": "o1.2", "name": "servo_end_mount"},
+            {"id": "o1.3", "name": "servo_end_mount_1"},
+        ],
+        "aliases": {"servo_end_mount_2": "o1.1", "servo_end_mount_3": "o1.2", "servo_end_mount_1": "o1.3"},
+        "ambiguous": {"servo_end_mount": ["servo_end_mount_2", "servo_end_mount_3"]},
+    },
+    {
+        "why": "names that cannot be labels are reachable numerically only",
+        "rows": [
+            {"id": "o1.1", "name": "o1.4"},
+            {"id": "o1.2", "name": "f12"},
+            {"id": "o1.3", "name": "m2"},
+            {"id": "o1.4", "name": "5spoke"},
+            {"id": "o1.5", "name": "has space"},
+            {"id": "o1.6", "name": "has.dot"},
+            {"id": "o1.7", "name": ""},
+        ],
+        "aliases": {},
+        "ambiguous": {},
+    },
+    {
+        "why": "group (non-leaf) rows are addressable too",
+        "rows": [
+            {"id": "o1.1", "name": "damper_body"},
+            {"id": "o1.1.1", "name": "pressure_tube"},
+        ],
+        "aliases": {"damper_body": "o1.1", "pressure_tube": "o1.1.1"},
+        "ambiguous": {},
+    },
+    {
+        "why": "a row may carry the render package's `occurrenceId` spelling instead of `id`",
+        "rows": [
+            {"occurrenceId": "o1.1", "name": "eye_shank"},
+            {"id": "o1.2", "name": "pressure_tube"},
+        ],
+        "aliases": {"eye_shank": "o1.1", "pressure_tube": "o1.2"},
+        "ambiguous": {},
+    },
+]
 
 
-def _alias_cases() -> list[dict]:
-    return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))["aliasCases"]
-
-
-class AliasFixtureParityTest(unittest.TestCase):
-    """The same alias cases the JS suite asserts, so both languages number identically."""
-
+class AliasCasesTest(unittest.TestCase):
     def test_every_alias_case_matches(self) -> None:
-        for case in _alias_cases():
+        for case in ALIAS_CASES:
             with self.subTest(why=case.get("why", "")):
                 built = build_label_aliases(case["rows"])
                 self.assertEqual(case["aliases"], built["aliases"])

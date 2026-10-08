@@ -44,10 +44,8 @@ class ArtifactKind:
 # A tree: assembly.json + content-addressed components/<cid>.glb.
 STEP_PACKAGE = ArtifactKind(name="step-package")
 
-# Phases the JS builders introduce. None of the STEP phase names fit their work, so they
-# declare their own here rather than growing the shared PHASE_LABELS dict.
-PHASE_PARSE = "parse"
-PHASE_MESH = "mesh"
+# The phase a drawing introduces. None of the STEP phase names fit its work, so it is
+# declared here rather than growing the shared PHASE_LABELS dict.
 PHASE_WRITE = "write"
 
 # A generated drawing: the product is the `.dxf` file itself (the viewer parses

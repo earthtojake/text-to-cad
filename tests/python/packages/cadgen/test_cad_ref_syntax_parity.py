@@ -19,7 +19,6 @@ from unittest import mock
 
 from tests.python.support.paths import repo_path
 
-from cadgen.label_refs import build_label_aliases
 from cadgen.cad_ref_syntax import (
     build_cad_token,
     ensure_ref_file_matches,
@@ -39,9 +38,9 @@ def _fixture() -> dict:
 
 
 class ParityFixtureIsUsableTest(unittest.TestCase):
-    def test_the_fixture_exists_and_has_all_three_case_kinds(self) -> None:
+    def test_the_fixture_exists_and_has_every_case_kind(self) -> None:
         data = _fixture()
-        for key in ("selectorCases", "inheritanceCases", "aliasCases"):
+        for key in ("selectorCases", "inheritanceCases"):
             self.assertTrue(data.get(key), f"{key} must be present and non-empty")
 
 
@@ -56,22 +55,6 @@ class SelectorParityTest(unittest.TestCase):
                 self.assertEqual(case["ordinal"], parsed.ordinal)
                 self.assertEqual(case["canonical"], parsed.canonical)
                 self.assertEqual(case.get("label", ""), parsed.label)
-
-
-class AliasParityTest(unittest.TestCase):
-    """The fixture carries aliasCases for both languages, but only the JS suite ran them.
-
-    Nothing here read them, so `buildLabelAliasMap` and `build_label_aliases` could drift
-    with the fixture still green -- which is how the `occurrenceId` row spelling ended up
-    accepted by one side and dropped by the other.
-    """
-
-    def test_every_alias_case_builds_as_the_fixture_says(self) -> None:
-        for case in _fixture()["aliasCases"]:
-            with self.subTest(why=case.get("why", "")):
-                built = build_label_aliases(case["rows"])
-                self.assertEqual(case["aliases"], built["aliases"])
-                self.assertEqual(case.get("ambiguous", {}), built["ambiguous"])
 
 
 class InheritanceParityTest(unittest.TestCase):

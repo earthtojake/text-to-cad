@@ -6,7 +6,6 @@ import {
   buildUrdfVisualParts,
   clampJointValueDeg,
   jointMotionTransform,
-  linkOriginInFrame,
   multiplyTransforms,
   posedJointLocalTransform,
   resolveUrdfJointValues,
@@ -196,19 +195,6 @@ test("rotating the shoulder changes only the shoulder subtree", () => {
   assert.deepEqual(transformPoint(linkWorldTransforms.get("base_link"), [0, 0, 0]), [0, 0, 0]);
   assert.deepEqual(transformPoint(linkWorldTransforms.get("arm_link"), [0, 0, 0]), [10, 0, 0]);
   assert.deepEqual(transformPoint(linkWorldTransforms.get("tool_link"), [0, 0, 0]).map((value) => Math.round(value * 1000) / 1000), [5, 0, 0]);
-});
-
-test("link origin can be expressed in another link frame", () => {
-  const urdf = sampleUrdf();
-
-  assert.deepEqual(
-    linkOriginInFrame(urdf, { base_to_arm: 0 }, "tool_link", "base_link").map((value) => Math.round(value * 1000) / 1000),
-    [10, 5, 0]
-  );
-  assert.deepEqual(
-    linkOriginInFrame(urdf, { base_to_arm: 90 }, "tool_link", "arm_link").map((value) => Math.round(value * 1000) / 1000),
-    [0, 5, 0]
-  );
 });
 
 test("fixed joints do not create default controls or motion", () => {

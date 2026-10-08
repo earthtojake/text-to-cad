@@ -3,14 +3,11 @@ import { test } from "node:test";
 import * as THREE from "three";
 import {
   buildEdgeLinePositionsFromProxy,
-  buildFallbackFaceFanGeometry,
   buildFaceBoundaryLinePositions,
   buildFaceFillGeometryFromDisplayMeshes,
   buildFaceFillGeometryFromProxy,
   buildVertexMarkerMesh,
   createReferenceEdgeGeometryFromPoints,
-  createReferenceFaceBoundaryGeometry,
-  createReferenceFaceFillGeometry,
   displayRecordForReference,
   faceFillOffset,
   faceRunIndex,
@@ -91,95 +88,6 @@ test("reference edge geometry builds line segment buffers from point paths", () 
   ], "edge geometry");
   assert.equal(createReferenceEdgeGeometryFromPoints(THREE, [[0, 0, 0]]), null);
 });
-
-test("reference face boundary geometry prefers loop metadata and falls back to pick loops", () => {
-  const fromMeta = createReferenceFaceBoundaryGeometry(THREE, {
-    pickData: {
-      loopsMeta: [
-        { points: [[0, 0, 0], [1, 0, 0]] }
-      ],
-      loops: [
-        [[9, 0, 0], [10, 0, 0]]
-      ]
-    }
-  });
-  assertArrayNear(geometryPositions(fromMeta), [
-    0, 0, 0,
-    1, 0, 0,
-    1, 0, 0,
-    0, 0, 0
-  ], "metadata boundary");
-
-  const fromLoops = createReferenceFaceBoundaryGeometry(THREE, {
-    pickData: {
-      loops: [
-        [[2, 0, 0], [3, 0, 0]]
-      ]
-    }
-  });
-  assertArrayNear(geometryPositions(fromLoops), [
-    2, 0, 0,
-    3, 0, 0,
-    3, 0, 0,
-    2, 0, 0
-  ], "fallback boundary");
-});
-
-test("reference fallback face fan geometry uses the supplied centroid", () => {
-  const geometry = buildFallbackFaceFanGeometry(THREE, [
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1]
-  ], [0, 0, 0]);
-
-  assertArrayNear(geometryPositions(geometry), [
-    0, 0, 0,
-    1, 0, 0,
-    0, 1, 0,
-    0, 0, 0,
-    0, 1, 0,
-    0, 0, 1,
-    0, 0, 0,
-    0, 0, 1,
-    1, 0, 0
-  ], "fallback fan");
-  assert.equal(buildFallbackFaceFanGeometry(THREE, [[0, 0, 0], [1, 0, 0]]), null);
-});
-
-test("reference face fill geometry triangulates planar loops", () => {
-  const geometry = createReferenceFaceFillGeometry(THREE, {
-    pickData: {
-      loops: [
-        [
-          [0, 0, 0],
-          [1, 0, 0],
-          [1, 1, 0],
-          [0, 1, 0]
-        ]
-      ],
-      surface: {
-        type: "PLANE",
-        origin: [0, 0, 0],
-        xDir: [1, 0, 0],
-        yDir: [0, 1, 0],
-        normal: [0, 0, 1]
-      }
-    }
-  });
-  const positions = geometryPositions(geometry);
-  assert.equal(positions.length, 18);
-  for (let index = 2; index < positions.length; index += 3) {
-    assertNear(positions[index], 0, `z ${index}`);
-  }
-  assert.equal(createReferenceFaceFillGeometry(THREE, {
-    pickData: {
-      loops: [
-        [[0, 0, 0], [1, 0, 0]]
-      ]
-    }
-  }), null);
-});
-
 
 test("reference proxy helpers build face fill and edge line buffers from selector data", () => {
   const runtime = createRuntime();

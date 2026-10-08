@@ -86,6 +86,13 @@ if __name__ == "__main__":
   face or circular edge yields its axis, a planar face its center+normal) or
   literals (`origin=(x, y, z), direction=(x, y, z)`). Refs resolve ONCE at
   build into world numbers; the viewer does arithmetic, never topology.
+- **`limits`** are required for every DOF a mate declares: `(lo, hi)` for
+  `revolute` (degrees) and `slider` (model units), and a pair for BOTH
+  sub-DOFs of a `cylindrical` mate
+  (`limits={"turn": (0, 360), "travel": (0, 40)}`). `couple(...)` takes
+  `limits=(lo, hi)` too; a coupling without one spans `(0, 1)`. A pose preset
+  or a `--kinematics` value outside a DOF's limits is refused, naming the DOF,
+  the value and its range.
 - **ZERO IS THE ARTIFACT AS WRITTEN.** Every DOF's rest value is 0 — the
   placement the author built. There is no `default=`; a presentation pose is a
   preset. A model that must be WRITTEN at another configuration is authored
