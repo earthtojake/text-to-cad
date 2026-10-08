@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { TREE_INDENT_PX, TreeRowSurface, TreeRowChevron, TreeRowGuides, TreeRowLabel } from "@text-to-cad/ui/primitives/tree-row";
+import { ROW_NAME_UNDER_ACTIONS, TREE_INDENT_PX, TreeRowSurface, TreeRowChevron, TreeRowGuides, TreeRowLabel } from "@text-to-cad/ui/primitives/tree-row";
 import { TreeFilterHighlight, TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
 import { cn } from "@text-to-cad/ui/utils";
 import ToolPanel, { ToolPanelClose } from "../kit/tools/ToolPanel.jsx";
 import RobotComponentDetails, { RobotLinkDetails, RobotLinksSummary } from "./LinkDetails.jsx";
-import RobotVisibilityButton from "./RobotVisibilityButton.jsx";
+import RobotVisibilityButton, { ROBOT_ROW_ACTIONS_WIDTH } from "./RobotVisibilityButton.jsx";
 import { robotVisibilityState } from "./visibility.js";
 import { useTreeSearch } from "../kit/inspector/modelTreeSearch.js";
 import { buildRobotTree, robotComponentNodeId, robotLinkFacts, robotLinkNodeId, robotTreeAncestorIds } from "./robotTree.js";
@@ -33,6 +33,14 @@ function initialExpansion(tree) {
   return expanded;
 }
 
+// A row with geometry carries the eye (`RobotVisibilityButton`): it takes no width from the row;
+// the name fades out under it, always while it is on, otherwise on hover.
+function rowActions(visibility) {
+  if (!visibility.ids.length) return { style: null, name: "" };
+  return { style: { "--row-actions": ROBOT_ROW_ACTIONS_WIDTH },
+    name: visibility.allHidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover };
+}
+
 function rowHandlers(node, selection) {
   const link = node.kind === "link";
   return {
@@ -43,8 +51,8 @@ function rowHandlers(node, selection) {
   };
 }
 
-// Rows carry no icon: every row is a link (a named mesh object is the rare leaf, and
-// its place under a link already says what it is), so an icon told nobody anything.
+// Rows carry no icon: a row is a link, or one of its visuals (or a named object of a
+// visual's mesh) as a leaf whose place under the link already says what it is.
 //
 // `pinned` is the robot's one root: there is nothing to collapse it into, so it has no
 // chevron and takes no indent level — its children start at the tree's left edge, and
@@ -53,9 +61,9 @@ function rowHandlers(node, selection) {
 function RobotRow({ node, depth = 0, pinned = false, highlighted, expanded, toggle, selection, rowRefs, hiddenIds, onVisibilityChange }) {
   const open = pinned || expanded.has(node.id), branch = node.children.length > 0;
   const { choose, enter, leave } = rowHandlers(node, selection);
-  const visibility = robotVisibilityState(node.partIds, hiddenIds);
+  const visibility = robotVisibilityState(node.partIds, hiddenIds), actions = rowActions(visibility);
   return <li className="min-w-0" ref={element => { if (element) rowRefs.current.set(node.id, element); else rowRefs.current.delete(node.id); }}>
-    <TreeRowSurface dense active={highlighted.has(node.id)} className={cn("group/row gap-0 pr-0", visibility.allHidden && "opacity-50", highlighted.has(node.id) && "ring-1 ring-inset ring-ring/50")} style={{ paddingLeft: depth * TREE_INDENT_PX }}
+    <TreeRowSurface dense active={highlighted.has(node.id)} className="group/row gap-0 pr-0" style={{ paddingLeft: depth * TREE_INDENT_PX, ...actions.style }}
       onMouseEnter={enter} onMouseLeave={leave}>
       {/* Its owners' faint lines, each under its 16px disclosure column. */}
       <TreeRowGuides depth={depth} column={16}/>
@@ -64,7 +72,7 @@ function RobotRow({ node, depth = 0, pinned = false, highlighted, expanded, togg
         onClick={() => toggle(node)}><TreeRowChevron expanded={open}/></button> : <span className="w-4 shrink-0"/>}
       <button type="button" aria-label={`Select ${node.label}`} aria-pressed={highlighted.has(node.id)}
         onClick={choose} onFocus={enter} onBlur={leave}
-        className={cn("flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", pinned && "pl-2")}>
+        className={cn("flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", pinned && "pl-2", actions.name)}>
         {/* Name first: in a narrow panel the joint takes the truncation, never the link. */}
         <TreeRowLabel className="max-w-full shrink-0">{node.label}</TreeRowLabel>
         {node.detail && <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{node.detail}</TreeRowLabel>}
@@ -80,12 +88,12 @@ function RobotRow({ node, depth = 0, pinned = false, highlighted, expanded, togg
 function RobotSearchRow({ match, highlighted, cursor, selection, hiddenIds, onVisibilityChange }) {
   const { entry, indices, alias } = match, { node } = entry;
   const { choose, enter, leave } = rowHandlers(node, selection);
-  const visibility = robotVisibilityState(node.partIds, hiddenIds);
+  const visibility = robotVisibilityState(node.partIds, hiddenIds), actions = rowActions(visibility);
   const owners = entry.prefix.slice(0, -1);
   return <li className="min-w-0" data-search-row={node.id}>
-    <TreeRowSurface dense active={highlighted.has(node.id)} cursor={cursor} className={cn("group/row gap-0 pr-0", visibility.allHidden && "opacity-50", highlighted.has(node.id) && "ring-1 ring-inset ring-ring/50")} onMouseEnter={enter} onMouseLeave={leave}>
+    <TreeRowSurface dense active={highlighted.has(node.id)} cursor={cursor} className="group/row gap-0 pr-0" style={actions.style || undefined} onMouseEnter={enter} onMouseLeave={leave}>
       <button type="button" aria-label={`Select ${node.label}`} aria-pressed={highlighted.has(node.id)} onClick={choose}
-        className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pl-2 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        className={cn("flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pl-2 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", actions.name)}>
         <TreeRowLabel className="max-w-full shrink-0"><TreeFilterHighlight indices={indices} text={entry.label}/></TreeRowLabel>
         {alias
           ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground"><TreeFilterHighlight indices={alias.indices} text={alias.text}/>{node.joint?.type ? ` · ${node.joint.type}` : ""}</TreeRowLabel>

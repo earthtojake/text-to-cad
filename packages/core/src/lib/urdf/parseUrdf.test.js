@@ -302,3 +302,21 @@ test("tcad:four_bar rejects a linkage that cannot close", () => {
     /four-bar/
   );
 });
+
+test("a visual is labelled by its own name, and by its geometry when it has none", () => {
+  const visual = (attributes, geometry) => new FakeElement("visual", attributes, [new FakeElement("geometry", {}, [geometry])]);
+  const robot = new FakeElement("robot", { name: "bucket_robot" }, [
+    new FakeElement("link", { name: "bucket" }, [
+      visual({ name: "shell" }, new FakeElement("mesh", { filename: "meshes/bucket.stl" })),
+      visual({ name: "  lip " }, new FakeElement("box", { size: "0.1 0.1 0.01" })),
+      visual({}, new FakeElement("mesh", { filename: "meshes/bucket.stl" })),
+      visual({ name: "" }, new FakeElement("cylinder", { radius: "0.01", length: "0.2" }))
+    ])
+  ]);
+  const urdfData = withFakeDomParser(new FakeDocument(robot), () => parseUrdf("<robot />", { sourceUrl: "/robots/bucket.urdf" }));
+  const visuals = urdfData.links[0].visuals;
+  assert.deepEqual(visuals.map((entry) => entry.label), ["shell", "lip", "bucket.stl", "cylinder"]);
+  // The name labels the visual; its identity and its file are unchanged.
+  assert.deepEqual(visuals.map((entry) => entry.id), ["bucket:v1", "bucket:v2", "bucket:v3", "bucket:v4"]);
+  assert.equal(visuals[0].filename, "meshes/bucket.stl");
+});

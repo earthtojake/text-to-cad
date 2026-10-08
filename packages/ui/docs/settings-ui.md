@@ -339,12 +339,6 @@ stack.
   keeps its height. If what cannot give way still does not fit, the column
   itself scrolls — a panel is never cut. On mobile the tree starts closed and,
   opened, may take the whole column, giving way as other panels join it.
-- **Robot visibility.** Links and visual components have a trailing eye action in
-  both the tree and its search results. It appears on hover or keyboard focus,
-  stays visible when geometry is hidden, and uses the shared tooltip. A link
-  controls only its own visuals, not child links. Hidden rows are muted; a
-  partially hidden link hides its remaining visuals on the next press. Selected
-  robot rows keep an inset outline as well as their accent fill.
 - **Closing the tree.** Select's tree (Features, Links) does not fold: the X at
   its filter row's end ("Close features") closes it, `hidden` and kept mounted
   with its expansion, filter, selection and scroll, and Select stays the tool —
@@ -425,7 +419,9 @@ open, and the explorer's compact indent: 10px a level (`TREE_INDENT_PX`), each l
 hung from a faint line under their owner's chevron (`TreeRowGuides`), as the explorer's
 are; its filter row is a heading's 28px, the box 20px tall and close to the row's walls. An assembly row's
 actions, shown on hover and kept while they are on, are **Isolate** then the **Hide/Reveal** eye; a part file has no
-Isolate. They float over the row's right end rather than taking width from it:
+Isolate. A Links row that draws something — a link with visuals, or one visual —
+has the eye alone, in its search hit too: a link's hides its own visuals, never its
+child links, and on a partly hidden link hides the rest. They float over the row's right end rather than taking width from it:
 the name runs the row's full width and, while an action shows, fades out half a
 rem before them (a mask, `ROW_NAME_UNDER_ACTIONS`), so nothing is drawn behind the
 buttons and the row keeps its own colour.

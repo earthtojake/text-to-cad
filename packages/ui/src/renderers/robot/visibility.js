@@ -1,13 +1,8 @@
 const EMPTY = Object.freeze([]);
 
-/** A link controls its own visuals, never the joints or links below it. */
+/** A link controls its own visuals, never the joints or links below it; a partly hidden one is not hidden. */
 export function robotVisibilityState(partIds = EMPTY, hiddenIds = new Set()) {
-  const hiddenCount = partIds.filter(id => hiddenIds.has(id)).length;
-  return {
-    ids: partIds,
-    allHidden: partIds.length > 0 && hiddenCount === partIds.length,
-    someHidden: hiddenCount > 0 && hiddenCount < partIds.length,
-  };
+  return { ids: partIds, allHidden: partIds.length > 0 && partIds.every(id => hiddenIds.has(id)) };
 }
 
 /** Keep only loaded part identities; return a new array for every visibility edit. */

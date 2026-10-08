@@ -497,6 +497,9 @@ export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
     const visuals = childElementsByTag(linkElement, "visual").map((visualElement, index) => {
       const geometryElement = childElementsByTag(visualElement, "geometry")[0];
       const meshElement = geometryElement ? childElementsByTag(geometryElement, "mesh")[0] : null;
+      // The visual's own `name` is what its author called it, and what tells several
+      // visuals of one link apart; without one, it is named for its geometry.
+      const visualName = String(visualElement.getAttribute("name") || "").trim();
       const visualBase = {
         id: `${name}:v${index + 1}`,
         // As written, for inspection; `localTransform` below is what rendering uses.
@@ -517,7 +520,7 @@ export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
         return {
           ...visualBase,
           filename,
-          label: labelForMeshFilename(filename),
+          label: visualName || labelForMeshFilename(filename),
           meshUrl: resolveResource ? resolveResource(filename) : resolveMeshUrl(filename, sourceUrl || "/"),
           localTransform: multiplyTransforms(
             parseOriginTransform(childElementsByTag(visualElement, "origin")[0]),
@@ -534,7 +537,7 @@ export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
       }
       return {
         ...visualBase,
-        label: primitive.type,
+        label: visualName || primitive.type,
         primitive,
         localTransform: parseOriginTransform(childElementsByTag(visualElement, "origin")[0])
       };

@@ -1456,7 +1456,8 @@ Links are the rows, carrying no icon; a child link sits under its parent link
 and shows the joint between them as muted text (`shoulder_pan · revolute`); the
 visual components (`robotComponents` in core's `lib/urdf/robotParts.js`) are leaves under that
 link, after its child links. Every visual contributes a component, including STL
-meshes and built-in primitives. A mesh with named objects still splits into
+meshes and built-in primitives, named by its URDF `name` or, without one, by its
+geometry (`bucket.stl`, `box`). A mesh with named objects still splits into
 those objects; an unsliceable mesh stays whole as one selectable component. Every link appears once: a cycle, a second parent or a
 missing parent cannot hang the builder or drop a link, and orphans become
 roots. A root that is only a frame — no geometry, no mass, and one child
@@ -1488,14 +1489,14 @@ tool: a pick under another tool returns to Select, leaving Select clears it, and
 Escape clears it. A click acts at once, as a STEP's does; a
 robot has no double-click at all.
 
-Each link or component row has a hide/reveal action, also in search results.
+Each link or component row has the Hide/Reveal eye of an assembly row
+(`settings-ui.md`), also in search results.
 A link hides its own visuals, leaving child links visible and all joints active.
 A partially hidden link hides its remaining visuals; a fully hidden one reveals
 all of them. Hidden geometry is excluded from rendering, picking and selection
 highlights. The scene retains its meshes for reveal without rebuilding them.
 Hidden component ids are saved with the file view against its revision; a live
-reload retains only ids still present. Selected robot rows have an inset outline
-as well as their accent fill.
+reload retains only ids still present.
 
 The `tcad:four_bar` extension is a nonlinear mimic in core's URDF parser and
 kinematics solver. Its dependent joint has no Position slider or joint handle;

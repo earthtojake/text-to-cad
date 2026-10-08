@@ -16,13 +16,13 @@ import { writeGlb } from '@text-to-cad/core/glb/writeGlb.js';
 // robot. Scene, pose store and handle adapter have unit tests; these are the flows a
 // person actually uses.
 
-const box = (size, xyz, rgba) => `<visual><origin xyz="${xyz}"/><geometry><box size="${size}"/></geometry><material name="m${rgba.replaceAll(' ', '')}"><color rgba="${rgba}"/></material></visual>`;
+const box = (size, xyz, rgba, name = '') => `<visual${name ? ` name="${name}"` : ''}><origin xyz="${xyz}"/><geometry><box size="${size}"/></geometry><material name="m${rgba.replaceAll(' ', '')}"><color rgba="${rgba}"/></material></visual>`;
 const limit = (lower, upper) => `<limit lower="${lower}" upper="${upper}" effort="1" velocity="1"/>`;
 const ARM_URDF = `<?xml version="1.0"?>
 <robot name="arm">
   <link name="base_footprint"/>
   <link name="base">${box('0.4 0.4 0.1', '0 0 0.05', '0.3 0.3 0.35 1')}</link>
-  <link name="upper_arm">${box('0.5 0.08 0.08', '0.25 0 0', '0.9 0.5 0.1 1')}</link>
+  <link name="upper_arm">${box('0.5 0.08 0.08', '0.25 0 0', '0.9 0.5 0.1 1', 'upper_arm_shell')}</link>
   <link name="carriage">${box('0.1 0.1 0.1', '0 0 0', '0.1 0.4 0.9 1')}</link>
   <link name="camera">${box('0.06 0.06 0.06', '0 0 0', '0.1 0.7 0.3 1')}</link>
   <link name="finger_left">${box('0.02 0.02 0.08', '0 0 0.09', '0.8 0.8 0.2 1')}</link>
@@ -414,7 +414,7 @@ test('a robot can enter Position with sidebar controls: knobs drag joints, the c
   assert.deepEqual(robot.errors, []);
 });
 
-test('Select picks links at once; a selection lives only under Select; Links shows what the description says and follows what it names', async (t) => {
+test('Select picks a visual at once; a selection lives only under Select; Links shows what the description says and follows what it names', async (t) => {
   const robot = await open(t, 'arm.srdf');
   const { page, pane } = robot;
   await robot.openPosition();
@@ -504,8 +504,13 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await page.mouse.move(...onScreen(spots.shoulder));
   await page.mouse.down(); await page.mouse.up();
   await robot.settle();
-  assert.deepEqual(await robot.pressedRows(), ['Select upper_arm'], 'selected by the next frame');
-  assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedLinks, ['upper_arm']);
+  // A pick selects the visual under the pointer, named by its URDF `name`, and opens its link
+  // so the visual's row is on screen under it; the Reference is headed by that name.
+  assert.deepEqual(await robot.pressedRows(), ['Select upper_arm_shell'], 'selected by the next frame');
+  assert.deepEqual(await page.evaluate(() => (({ selectedLinks, selectedPartIds }) => [selectedLinks, selectedPartIds])(window.cadHarness.a.controller.readState())),
+    [[], ['upper_arm:v1']]);
+  assert.equal(await pane.getByRole('button', { name: 'Collapse upper_arm', exact: true }).getAttribute('aria-expanded'), 'true', 'its link opens');
+  assert.equal(await reference.getByRole('heading').innerText(), 'upper_arm_shell');
   // The shared camera bar provides zoom framing for robots too.
   assert.equal(await pane.getByRole('button', { name: 'Zoom controls', exact: true }).count(), 0);
   assert.equal(await pane.getByLabel('Zoom level percent', { exact: true }).count(), 0);
@@ -515,11 +520,19 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await robot.pressed([], 'a click on nothing clears');
   await page.mouse.click(...onScreen(spots.lift));
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 1);
-  await robot.pressed(['Select carriage']);
-  assert.match(await reference.innerText(), /tool/, 'the end effector mounted on the link');
-  // Shift adds a link to the selection, as it adds a named object.
+  // A visual with no name of its own is named for its geometry.
+  await robot.pressed(['Select box']);
+  // Shift adds a visual to the selection, from another link too.
   await page.keyboard.down('Shift'); await page.mouse.click(...onScreen(spots.shoulder)); await page.keyboard.up('Shift');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 2);
+  await robot.pressed(['Select box', 'Select upper_arm_shell']);
+  assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedPartIds.sort(), ['carriage:v1', 'upper_arm:v1']);
+  assert.equal(await reference.getByRole('heading').innerText(), 'Components');
+  // A link is still selected by its row, with what the description says about it.
+  await pane.getByRole('button', { name: 'Select carriage', exact: true }).click();
+  await robot.pressed(['Select carriage']);
+  assert.match(await reference.innerText(), /tool/, 'the end effector mounted on the link');
+  await page.keyboard.down('Shift'); await pane.getByRole('button', { name: 'Select upper_arm', exact: true }).click(); await page.keyboard.up('Shift');
   await robot.pressed(['Select carriage', 'Select upper_arm']);
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedLinks.sort(), ['carriage', 'upper_arm']);
   await page.keyboard.press('Escape');
@@ -557,9 +570,24 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   assert.deepEqual(robot.errors, []);
 });
 
-test('a reload of the tab brings the pose back, and nothing of the tool or the Display dropdown, and a pose is dropped when the description changed', async (t) => {
+test('a reload of the tab brings the pose and the hidden visuals back, and nothing of the tool or the Display dropdown, and both are dropped when the description changed', async (t) => {
   const robot = await open(t, 'arm.urdf');
   const { page, pane } = robot;
+  // A link's eye hides its own visuals and leaves its child links; the eye stays crossed out
+  // while they are hidden, and Reveal draws exactly what was there.
+  const shown = (await robot.capture()).data;
+  await pane.getByRole('button', { name: 'Hide upper_arm', exact: true }).click();
+  await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).waitFor();
+  await robot.settled();
+  assert.ok(!(await robot.capture()).data.equals(shown), 'the hidden visual is not drawn');
+  await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).click();
+  // Off the row, which lights its link while the pointer is on it.
+  const surface = await robot.surface();
+  await page.mouse.move(surface.x + surface.width - 90, surface.y + surface.height / 2);
+  await robot.settled();
+  assert.ok((await robot.capture()).data.equals(shown), 'and Reveal draws it again');
+  await pane.getByRole('button', { name: 'Hide upper_arm', exact: true }).click();
+  await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).waitFor();
   await robot.openPosition();
   await page.waitForFunction(() => window.__cadJointHandles?.().length > 0);
   await robot.type('shoulder', 25);
@@ -576,13 +604,16 @@ test('a reload of the tab brings the pose back, and nothing of the tool or the D
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {}).some(record => record?.renderer?.pose?.value?.jointValues?.nod === 12));
   const record = await page.evaluate(() => window.cadHarness.state.renderers[JSON.stringify(['/models/arm.urdf', 'robot'])]);
   assert.deepEqual([record.renderer.pose.value.jointValues.shoulder, record.renderer.pose.value.jointValues.lift], [25, 0.2]);
-  assert.deepEqual(Object.keys(record.renderer), ['pose'], 'one slice: the pose, and no selection or tree');
+  assert.deepEqual(Object.keys(record.renderer).sort(), ['pose', 'visibility'], 'two slices: the pose and the hidden visuals, and no selection or tree');
+  assert.deepEqual(record.renderer.visibility.value, { hiddenPartIds: ['upper_arm:v1'] });
   assert.equal('tool' in record, false, 'the view keeps no tool');
   assert.match(record.renderer.pose.signature, /arm\.urdf-1$/);
+  assert.equal(record.renderer.visibility.signature, record.renderer.pose.signature, 'both against the description');
   await page.evaluate(() => window.cadHarness.mounted(true));
   // The tool is never saved: the reloaded file opens in Select, Display shut.
   await robot.linksPanel().waitFor();
   assert.deepEqual(await robot.toolNames(), ['Select:true', 'Position:false']);
+  await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).waitFor();
   assert.equal(await robot.displayPanel().count(), 0, 'it comes back with Display shut');
   await robot.openPosition();
   await robot.jointField('shoulder').waitFor();
@@ -601,6 +632,9 @@ test('a reload of the tab brings the pose back, and nothing of the tool or the D
   await robot.openPosition();
   await robot.jointField('shoulder').waitFor();
   assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue()], ['0°', '0 m'], 'a pose belongs to the description it was made on');
+  await robot.tool('Select').click();
+  await pane.getByRole('button', { name: 'Hide upper_arm', exact: true }).waitFor();
+  assert.equal(await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).count(), 0, 'and so do its hidden visuals');
   assert.deepEqual(robot.errors, []);
 });
 
