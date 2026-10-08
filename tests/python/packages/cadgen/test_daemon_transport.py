@@ -239,7 +239,7 @@ class ServerShutdownTest(unittest.TestCase):
         native.accept.side_effect = [stranger, connection]
         repair = mock.Mock()
 
-        def authenticate(peer, authkey, timeout):
+        def authenticate(peer, authkey, timeout, cancelled):
             self.assertEqual((authkey, timeout), (b"secret", transport.HANDSHAKE_TIMEOUT_SECONDS))
             if peer is stranger:
                 raise transport.mpc.AuthenticationError("stale")
@@ -424,6 +424,21 @@ class ServerShutdownTest(unittest.TestCase):
         self.assertTrue(challenge and challenge.startswith(b"#CHALLENGE#"), challenge)
         return peer
 
+    def connect_in_thread(self, listener):
+        """A client connecting on a thread of its own, so a listener that never serves
+        it fails the test by its join rather than hanging it."""
+        connected, failed = [], []
+
+        def connect():
+            try:
+                connected.append(transport.connect(listener.address, b"test-key"))
+            except BaseException as exc:
+                failed.append(exc)
+
+        thread = threading.Thread(target=connect, daemon=True)
+        thread.start()
+        return thread, connected, failed
+
     def test_real_pending_accept_exits_without_an_application_channel(self):
         listener = self.real_listener()
         entered = threading.Event()
@@ -475,16 +490,7 @@ class ServerShutdownTest(unittest.TestCase):
         listener = self.real_listener(handshake_timeout=60)
         thread, results, errors = self.accept_in_thread(listener)
         self.silent_peer(listener)
-        connected, failed = [], []
-
-        def connect():
-            try:
-                connected.append(transport.connect(listener.address, b"test-key"))
-            except BaseException as exc:
-                failed.append(exc)
-
-        client = threading.Thread(target=connect, daemon=True)
-        client.start()
+        client, connected, failed = self.connect_in_thread(listener)
         client.join(10)
         self.assertFalse(client.is_alive(), "a silent peer's handshake held up the next client's")
         thread.join(10)
@@ -528,6 +534,81 @@ class ServerShutdownTest(unittest.TestCase):
         with results[0] as accepted:
             late.send_bytes(b"late")
             self.assertEqual(accepted.recv(10), b"late")
+
+    def test_real_close_ends_a_silent_peers_handshake_and_join_waits_for_it(self):
+        # A handshake thread still waiting on its peer when the process exits wakes into a
+        # finalizing interpreter, which CPython before 3.14 can crash on (#528). close()
+        # ends a pending handshake within a poll slice, not at the handshake timeout, and
+        # join() returns once its thread has.
+        listener = self.real_listener(handshake_timeout=60)
+        before = set(threading.enumerate())
+        thread, results, errors = self.accept_in_thread(listener)
+        silent = self.silent_peer(listener)
+        handshakes = [t for t in set(threading.enumerate()) - before if t.name == "cadgen-handshake"]
+        self.assertEqual(len(handshakes), 1, "the silent peer's handshake was not running")
+        listener.close()
+        self.assertTrue(listener.join(10), "a handshake thread outlived close and join")
+        self.assertFalse(handshakes[0].is_alive())
+        self.assertEqual(silent.recv(10), b"", "the closed listener kept a peer mid-handshake")
+        thread.join(10)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((results, errors), ([None], []))
+
+    def test_real_handshake_thread_that_cannot_start_drops_its_peer_and_keeps_accepting(self):
+        listener = self.real_listener()
+        original_start = threading.Thread.start
+        refused = []
+
+        def start(thread):
+            if thread.name == "cadgen-handshake" and not refused:
+                refused.append(thread)
+                raise RuntimeError("can't start new thread")
+            return original_start(thread)
+
+        with mock.patch.object(threading.Thread, "start", new=start):
+            thread, results, errors = self.accept_in_thread(listener)
+            with self.assertRaises(OSError):
+                transport.connect(listener.address, b"test-key")
+            client, connected, failed = self.connect_in_thread(listener)
+            client.join(10)
+        self.assertFalse(client.is_alive(), "the listener stopped accepting after a thread failed to start")
+        self.assertEqual((len(refused), errors, failed), (1, [], []))
+        thread.join(10)
+        self.assertFalse(thread.is_alive())
+        with connected[0] as sender, results[0] as accepted:
+            sender.send(b"served")
+            self.assertEqual(accepted.recv(10), b"served")
+
+    def test_real_accept_holds_for_no_new_peer_while_one_is_stalled(self):
+        # With 50 silent peers connecting at once, the next client waited about 5 s:
+        # accept() held a tenth of a second for each in turn. Once one handshake has
+        # outlived its hold, accept() takes the next peers without one. The hold is a
+        # minute for the second silent peer here, so a hold for it fails by the join.
+        listener = self.real_listener(handshake_timeout=60)
+        native_accept = listener._listener.accept
+        native_waits = threading.Semaphore(0)
+
+        def accept():
+            native_waits.release()
+            return native_accept()
+
+        with mock.patch.object(listener._listener, "accept", side_effect=accept):
+            thread, results, errors = self.accept_in_thread(listener)
+            self.assertTrue(native_waits.acquire(timeout=10))
+            self.silent_peer(listener)
+            # The accept that took it, then the next: its handshake outlived the hold.
+            self.assertTrue(native_waits.acquire(timeout=10))
+            with mock.patch.object(transport, "HANDSHAKE_HOLD_SECONDS", 60):
+                self.silent_peer(listener)
+                client, connected, failed = self.connect_in_thread(listener)
+                client.join(10)
+            self.assertFalse(client.is_alive(), "accept held for a peer while another was stalled")
+            thread.join(10)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((errors, failed), ([], []))
+        with connected[0] as sender, results[0] as accepted:
+            sender.send(b"served")
+            self.assertEqual(accepted.recv(10), b"served")
 
     def test_real_rejected_stale_key_is_republished_and_retried(self):
         with tempfile.TemporaryDirectory(prefix="cadgen-auth-repair-") as tmp:

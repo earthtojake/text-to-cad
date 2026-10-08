@@ -1346,10 +1346,14 @@ authkey, and the daemon proves it back, on a thread of its own
 (`cadgen.daemon.transport.Server`). Accepting waits a tenth of a second for that
 before it takes the next connection; one that finishes later is handed over
 then, and one that has not finished in ten seconds is dropped — its client
-reads a daemon closing while it connects, and connects again. The handshake
-used to run on the accept thread with no deadline, so one connection whose
-challenge never reached its reader (another viewer thread had read it off a
-reused file descriptor) held every later request until the viewer exited.
+reads a daemon closing while it connects, and connects again. While one is
+pending past its tenth of a second, accepting waits for no new connection, so a
+burst of silent ones delays no one. A daemon (or a build's private broker) that
+stops drops the connections still proving the key, and waits for their threads
+before it exits. The handshake used to run on the accept thread with no
+deadline, so one connection whose challenge never reached its reader (another
+viewer thread had read it off a reused file descriptor) held every later request
+until the viewer exited.
 
 The **store root is a field on every request** (`store_root`), applied per
 job in the worker, never inherited from whichever build spawned the daemon:

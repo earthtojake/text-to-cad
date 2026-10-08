@@ -55,8 +55,16 @@ _AUTHKEY_BYTES = 32
 HANDSHAKE_TIMEOUT_SECONDS = 10.0
 # How long accept() waits on one peer's handshake before it accepts the next. Responsive
 # clients finish well inside it, so they are still handed out one at a time, in the order
-# they connected; a slower one finishes in the background (Server).
+# they connected; a slower one finishes in the background (Server). While one that
+# outlived its hold is still pending, accept() holds for no new peer: fifty silent peers
+# at once would otherwise cost the next client five seconds.
 HANDSHAKE_HOLD_SECONDS = 0.1
+# How often a pending handshake looks up from its peer to see whether the listener has
+# closed. close() never closes a pending peer's connection itself: its handshake thread
+# may be reading it, and closing a descriptor another thread reads frees its number for
+# the next socket -- the race that stalled the daemon. Each handshake closes its own,
+# within one slice of close(), and Server.join() waits for that.
+HANDSHAKE_POLL_SECONDS = 0.05
 
 
 def supported() -> bool:
@@ -418,46 +426,61 @@ def _wake_listener(address: str, family: str) -> None:
 
 
 class _Deadline:
-    """A connection whose handshake reads must all arrive before one deadline.
+    """A connection whose handshake reads must all arrive before one deadline, and
+    stop when ``cancelled()`` says so.
 
     The stdlib handshake calls ``send_bytes`` and ``recv_bytes`` and nothing else.
-    Polling before each read turns silence into TimeoutError; a message that has begun
-    to arrive is read whole, as every handshake message is one small write (one pipe
+    Polling before each read, in slices of HANDSHAKE_POLL_SECONDS, turns silence into
+    TimeoutError and a close into ConnectionAbortedError; a message that has begun to
+    arrive is read whole, as every handshake message is one small write (one pipe
     message).
     """
 
-    def __init__(self, connection, timeout: float) -> None:
+    def __init__(self, connection, timeout: float, cancelled: Callable[[], bool]) -> None:
         self._connection = connection
         self._deadline = time.monotonic() + timeout
+        self._cancelled = cancelled
 
     def send_bytes(self, payload) -> None:
         self._connection.send_bytes(payload)
 
     def recv_bytes(self, maxlength=None) -> bytes:
-        if not self._connection.poll(max(0.0, self._deadline - time.monotonic())):
-            raise TimeoutError("the peer did not finish the authkey handshake in time")
-        return self._connection.recv_bytes(maxlength)
+        while not self._cancelled():
+            remaining = max(0.0, self._deadline - time.monotonic())
+            if self._connection.poll(min(remaining, HANDSHAKE_POLL_SECONDS)):
+                return self._connection.recv_bytes(maxlength)
+            if remaining <= HANDSHAKE_POLL_SECONDS:
+                raise TimeoutError("the peer did not finish the authkey handshake in time")
+        raise ConnectionAbortedError("the listener closed during the authkey handshake")
 
 
-def _authenticate(connection, authkey: bytes, timeout: float) -> None:
-    """What ``mpc.Listener.accept`` runs after its native accept, within ``timeout``.
+def _authenticate(connection, authkey: bytes, timeout: float, cancelled: Callable[[], bool]) -> None:
+    """What ``mpc.Listener.accept`` runs after its native accept, within ``timeout``, or
+    until ``cancelled()``.
 
     The same two stdlib calls in the same order, so the challenges, their MACs and the
     wire format are the stdlib's own: the peer proves it holds the key, then we do.
     """
-    peer = _Deadline(connection, timeout)
+    peer = _Deadline(connection, timeout, cancelled)
     mpc.deliver_challenge(peer, authkey)
     mpc.answer_challenge(peer, authkey)
 
 
 class _Handshake:
-    """One accepted peer, authenticating on its own thread."""
+    """One accepted peer, authenticating on its own thread.
 
-    __slots__ = ("connection", "finished")
+    ``claimed``: its thread has taken the connection. Until then accept() owns it, and
+    drops it if the thread cannot be started. ``stalled``: accept() stopped waiting for
+    it before it finished.
+    """
+
+    __slots__ = ("connection", "finished", "claimed", "stalled")
 
     def __init__(self, connection) -> None:
         self.connection = connection
         self.finished = False
+        self.claimed = False
+        self.stalled = False
 
 
 class Server:
@@ -473,8 +496,10 @@ class Server:
     peer is accepted natively and authenticated on a thread of its own, within
     HANDSHAKE_TIMEOUT_SECONDS. accept() waits HANDSHAKE_HOLD_SECONDS for that and then
     accepts the next peer. A peer that answers later is handed out by a later accept(),
-    which its handshake wakes if it is waiting natively. close() waits for no handshake;
-    one that finishes after it is closed unused.
+    which its handshake wakes if it is waiting natively. close() waits for no handshake:
+    each one still pending drops its peer within HANDSHAKE_POLL_SECONDS of it, and one
+    that finishes after it is closed unused. join() waits for those threads, so none
+    wakes from a socket wait into a finalizing interpreter.
     """
 
     def __init__(
@@ -499,6 +524,10 @@ class Server:
         self._accept_guard = threading.Lock()
         # Authenticated peers not yet handed out, in the order they finished.
         self._ready: collections.deque = collections.deque()
+        # Every handshake thread accept() started that may still be running (join()).
+        self._threads: set[threading.Thread] = set()
+        # Pending handshakes accept() stopped waiting for: while any is, it holds for none.
+        self._stalled = 0
         self._accepting = False
         self._woken = False
         self._closed = False
@@ -533,32 +562,58 @@ class Server:
                             with contextlib.suppress(OSError):
                                 self._listener.close()
                             self._wake_failed = False
-                with self._guard:
-                    if self._closed:
-                        if connection is not None:
-                            with contextlib.suppress(OSError):
-                                connection.close()
-                        return None
                 if connection is None:
+                    with self._guard:
+                        if self._closed:
+                            return None
                     time.sleep(0.01)  # never a busy loop on a broken listener
                     continue
                 handshake = _Handshake(connection)
+                thread = threading.Thread(target=self._run_handshake, args=(handshake,),
+                                          name="cadgen-handshake", daemon=True)
+                with self._guard:
+                    if self._closed:
+                        with contextlib.suppress(OSError):
+                            connection.close()
+                        return None
+                    # Registered under the guard that close() sets, so a join() after
+                    # close() sees every handshake this accept() starts.
+                    self._threads = {t for t in self._threads if t.is_alive()}
+                    self._threads.add(thread)
+                    hold = 0.0 if self._stalled else HANDSHAKE_HOLD_SECONDS
                 try:
-                    threading.Thread(target=self._run_handshake, args=(handshake,),
-                                     name="cadgen-handshake", daemon=True).start()
-                except BaseException:
-                    with contextlib.suppress(OSError):
-                        connection.close()
-                    raise
+                    thread.start()
+                except BaseException as error:
+                    with self._guard:
+                        dropped = not handshake.claimed
+                        if dropped:
+                            handshake.finished = True
+                            self._threads.discard(thread)
+                    if dropped:
+                        with contextlib.suppress(OSError):
+                            connection.close()
+                    if not isinstance(error, Exception):
+                        raise
+                    # No thread for this peer (the process is out of them, say): its client
+                    # reads a daemon closing while it connects and connects again. The
+                    # listener is fine, so keep serving the rest.
+                    continue
                 with self._changed:
-                    self._changed.wait_for(lambda: handshake.finished or self._ready or self._closed,
-                                           HANDSHAKE_HOLD_SECONDS)
+                    self._changed.wait_for(lambda: handshake.finished or self._ready or self._closed, hold)
+                    if not handshake.finished:
+                        handshake.stalled = True
+                        self._stalled += 1
 
     def _run_handshake(self, handshake: _Handshake) -> None:
         """One peer's handshake, on its own thread: queue it for accept(), or drop it."""
+        with self._guard:
+            if handshake.finished:
+                return  # accept() could not start this thread and dropped its peer
+            handshake.claimed = True
         authenticated = False
         try:
-            _authenticate(handshake.connection, self._authkey, self._handshake_timeout)
+            _authenticate(handshake.connection, self._authkey, self._handshake_timeout,
+                          lambda: self._closed)
             authenticated = True
         except mpc.AuthenticationError:
             if self._on_authentication_error is not None:
@@ -575,6 +630,8 @@ class Server:
                     with contextlib.suppress(OSError):
                         handshake.connection.close()
                 handshake.finished = True
+                if handshake.stalled:
+                    self._stalled -= 1
                 self._changed.notify_all()
                 if queued and self._accepting and not self._woken:
                     # accept() moved on and waits natively for the next peer: wake it to
@@ -611,6 +668,21 @@ class Server:
             for connection in unused:
                 with contextlib.suppress(OSError):
                     connection.close()
+
+    def join(self, timeout: float) -> bool:
+        """Wait up to ``timeout`` for the handshake threads to end; True if none is left.
+
+        After close(), each ends within HANDSHAKE_POLL_SECONDS. Call it once the accept
+        owner has returned: a handshake that a running accept() has yet to start is not
+        waited for.
+        """
+        deadline = time.monotonic() + timeout
+        with self._guard:
+            threads = list(self._threads)
+        for thread in threads:
+            if thread.ident is not None:
+                thread.join(max(0.0, deadline - time.monotonic()))
+        return not any(thread.is_alive() for thread in threads)
 
     @property
     def closed(self) -> bool:
