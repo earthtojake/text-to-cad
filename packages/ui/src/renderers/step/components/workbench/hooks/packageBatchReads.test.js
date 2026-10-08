@@ -4,6 +4,10 @@ import { createCadClient, SurfaceResolutionError } from "@text-to-cad/core/clien
 import { isTessellationCacheProbeMissError } from "@text-to-cad/core/lib/surf/tessellationCache.js";
 import { createSurfaceTicketBatches, createTessellationBodyBatches } from "./packageBatchReads.js";
 import { createInitialDisplayPlans } from "../../../render/initialDisplayLod.js";
+import { TEST_TESSELLATION_LADDER, installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 const KIB = 1024, MIB = 1024 * KIB;
 const cids = count => Array.from({ length: count }, (_, index) => `c${index}`);
@@ -232,7 +236,9 @@ test("initial plans probe the standard tier a chunk at a time, growing from eigh
   assert.equal(await plans.plan("c1"), null, "a component the store has no standard mesh for is cold");
   for (const [cid] of components) await plans.plan(cid);
   assert.deepEqual(calls.map(([, count]) => count), [8, 16, 32, 64, 128, 256, 243]);
-  assert.ok(calls.every(([tessellation]) => tessellation === undefined), "no tier but the standard one is asked");
+  const standard = TEST_TESSELLATION_LADDER.levels[TEST_TESSELLATION_LADDER.defaultLevel];
+  assert.ok(calls.every(([tessellation]) => JSON.stringify(tessellation) === JSON.stringify(standard)),
+    "no tier but the standard one is asked");
   assert.equal(plans.peek("c2").cacheProbe.object, "o-input-c2");
   assert.equal(plans.peek("c3"), null);
 });

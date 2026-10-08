@@ -9,7 +9,7 @@
 // samples and receives level swaps through a callback.
 
 import {
-  LOD_CHORD_LEVELS,
+  lodChordLevels,
   nextLevel,
   normalizeLodLevel,
   projectedChordErrorPx,
@@ -67,7 +67,7 @@ export function createLodScheduler({
   onLimitation = null,
   onIdle = null,
   debounceMs = LOD_DEBOUNCE_MS,
-  levels = LOD_CHORD_LEVELS,
+  levels = lodChordLevels(),
   minimumLevel = 0,
   setTimeoutFn = (...args) => setTimeout(...args),
   clearTimeoutFn = (handle) => clearTimeout(handle),

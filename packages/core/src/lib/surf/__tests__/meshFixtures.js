@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 
 import { lodTessellationForLevel } from "../lodPolicy.js";
+import { installTestTessellationLadder } from "../testing.js";
 import {
   MESH_INDEX_SCHEMA,
   decodeComponentTessellation,
@@ -32,6 +33,7 @@ export function surfFixture(name) {
 
 /** One fixture component's stored mesh at a viewer LOD level, with its probe row. */
 export function meshFixture(name, level = 1) {
+  installTestTessellationLadder();
   const bytes = new Uint8Array(fs.readFileSync(new URL(`${name}.l${level}.glb`, FIXTURES)));
   const { surfaceInput, surfaceObject } = MANIFEST[name];
   return { bytes, surfaceInput, surfaceObject, tessellation: lodTessellationForLevel(level), row: probeRowFor(bytes) };

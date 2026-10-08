@@ -40,7 +40,7 @@ import re
 import struct
 from typing import TYPE_CHECKING, Any
 
-from cadgen.metadata import MESH_ANGULAR_TOLERANCE_MIN, MESH_TOLERANCE_MIN
+from cadgen.tessellation_policy import DEFAULT_TESSELLATION, TESSELLATION_FLOORS
 from cadgen.store.index import entry_path, write_entry
 from cadgen.store.objects import object_path, put_object
 
@@ -61,12 +61,14 @@ MAX_INDEX_BYTES = 16 * 1024
 # colour once. tessellationCache.js MESH_MAX_JSON_BYTES is the same number.
 MAX_JSON_BYTES = 64 * 1024 * 1024
 MAX_SAFE_INTEGER = 2**53 - 1
-DEFAULT_CHORD = 0.0015
-DEFAULT_ANGLE = 0.35
+# The standard rung of the display ladder (cadgen.tessellation_policy): what a key
+# that names no tolerances means.
+DEFAULT_CHORD = DEFAULT_TESSELLATION["chordTolerance"]
+DEFAULT_ANGLE = DEFAULT_TESSELLATION["angleTolerance"]
 # The finest tolerances anything may ask to have meshed, the same floors a model's
-# or a door's tolerance is held to where it enters (cadgen.metadata).
-MIN_CHORD = MESH_TOLERANCE_MIN
-MIN_ANGLE = MESH_ANGULAR_TOLERANCE_MIN
+# or a door's tolerance is held to where it enters (cadgen.tessellation_policy).
+MIN_CHORD = TESSELLATION_FLOORS["chordTolerance"]
+MIN_ANGLE = TESSELLATION_FLOORS["angleTolerance"]
 # The class codes of the edge table, in this order (tessellationCache.js MESH_EDGE_CLASSES).
 EDGE_CLASSES = ("none", "feature", "tangent", "seam", "degenerate", "boundary", "nonManifold", "unknown")
 _EDGE_CODES = {name: code for code, name in enumerate(EDGE_CLASSES)}

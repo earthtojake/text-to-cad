@@ -30,6 +30,8 @@ import sys
 import threading
 from pathlib import Path
 
+from cadgen.tessellation_policy import ladder_payload
+
 from . import reload as dev_reload
 from .backend import absolute_path, asset_path
 from .cadgen_ops import CadgenOps
@@ -329,6 +331,9 @@ class CadApp:
             "autoReload": self.auto_reload,
             # Which file manager Reveal opens: darwin, win32 or linux.
             "platform": sys.platform if sys.platform in ("darwin", "win32") else "linux",
+            # The display tessellation ladder the page draws STEP models by: cadgen's
+            # policy (cadgen.tessellation_policy), never written down in the page.
+            "tessellation": ladder_payload(),
             # Whose viewer this is: a launch reuses, replaces or stops only its own user's.
             "user": os_user(),
             # Where a developer's relative ?file= resolves, in the page. Not a boundary.

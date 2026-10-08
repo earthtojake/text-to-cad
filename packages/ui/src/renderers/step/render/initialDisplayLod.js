@@ -1,4 +1,4 @@
-import { LOD_DEFAULT_LEVEL, lodTessellationForLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
+import { lodDefaultLevel, lodTessellationForLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 import { TESS_PROBE_MAX_KEYS } from "@text-to-cad/core/lib/surf/tessellationCache.js";
 
 // The first probe of a package covers the loader's first publish (`PROGRESSIVE_PUBLISH_FIRST_COMPONENTS`).
@@ -38,7 +38,7 @@ function storedMeshPlan(row, reason, maxInFlightBytes) {
   const estimatedBytes = Number(row?.byteLength) + Number(row?.decodedBytes);
   if (!Number.isSafeInteger(estimatedBytes) || estimatedBytes <= 0) return null;
   return {
-    level: LOD_DEFAULT_LEVEL,
+    level: lodDefaultLevel(),
     estimatedBytes,
     fitsDecodeCap: estimatedBytes <= Math.max(1, Number(maxInFlightBytes) || 1),
     reason,
@@ -51,7 +51,7 @@ export async function probeInitialDisplayLod({
   rejectedCacheObjects = new Set(),
   probeEntries = (...args) => tessellationCache.probeCachedTessellationEntries(...args),
 }) {
-  const hits = await probeEntries([surfaceInput], lodTessellationForLevel(LOD_DEFAULT_LEVEL), { signal });
+  const hits = await probeEntries([surfaceInput], lodTessellationForLevel(lodDefaultLevel()), { signal });
   return initialDisplayLodFromProbe(hits.get(surfaceInput), { surfaceObject, maxInFlightBytes, rejectedCacheObjects });
 }
 
@@ -91,7 +91,7 @@ export function createInitialDisplayPlans({
       const planned = (async () => {
         const chunk = chunks[index];
         const inputs = [...new Set(chunk.map(([, component]) => inputOf(component)))];
-        const hits = await probeEntries(inputs, lodTessellationForLevel(LOD_DEFAULT_LEVEL), { signal });
+        const hits = await probeEntries(inputs, lodTessellationForLevel(lodDefaultLevel()), { signal });
         for (const [cid, component] of chunk) {
           plans.set(cid, initialDisplayLodFromProbe(hits.get(inputOf(component)),
             { surfaceObject: component?.surfaceObject, maxInFlightBytes }));

@@ -3,14 +3,7 @@ import {
   buildComposedPackageMeshData
 } from "../lib/assembly/meshData.js";
 import { buildMeshDataFromSurf } from "../lib/surf/surfMeshData.js";
-import { lodTessellationForLevel } from "../lib/surf/lodPolicy.js";
 import { validateSnapshotRenderJob } from "./snapshotJobValidation.js";
-import { resolveViewSettings } from "./viewSettings.js";
-import {
-  SCENE_QUALITY,
-  resolveSceneQuality,
-  resolveRenderQuality
-} from "./sceneSettings.js";
 import {
   TESS_PROBE_MAX_KEYS,
   decodeComponentTessellation,
@@ -183,62 +176,21 @@ async function fetchComponentMeshBuffer(url, cid, options) {
   throw new Error(`Failed to load component mesh ${cid}: HTTP ${lastStatus}${hint}`);
 }
 
-// Floors for an explicit macro tessellation request. Chord tolerance is
-// RELATIVE to the component's bounding diagonal and angle tolerance is
-// radians, so these sit ~100x finer than the tessellator's own defaults
-// (1.5e-3 / 0.35 rad) — beyond any display need at any output size. Below
-// them a job is not a render, it is a memory bomb: the page tessellates until
-// the renderer dies, which reaches the caller as an opaque lost driver
-// connection instead of a rejected request. Mirrored as
-// MIN_RENDER_TESSELLATION in cadgen/snapshot_core.py, which refuses the same
-// job before a browser is even launched (parity-tested from the Python side).
-export const RENDER_TESSELLATION_FLOORS = Object.freeze({
-  chordTolerance: 1e-5,
-  angleTolerance: 5e-3
-});
-
-export function normalizeRenderTessellation(value) {
-  if (value === undefined || value === null) return {};
-  if (!isObject(value) || Array.isArray(value)) {
-    throw new Error("quality.tessellation must be an object");
+// The tolerances a resolved STEP job's components are drawn at: cadgen decides them
+// (cadgen.tessellation_policy.snapshot_tessellation) and names both in the job.
+// A static package (the docs hero) ships one mesh per component beside its tree and
+// names none: each file is drawn at the tessellation cadgen exported it at.
+function resolvedTessellation(resolved) {
+  const tessellation = isObject(resolved?.tessellation) ? resolved.tessellation : null;
+  if (!tessellation) return null;
+  const { chordTolerance, angleTolerance } = tessellation;
+  if (![chordTolerance, angleTolerance].every((value) => typeof value === "number" && value > 0 && Number.isFinite(value))) {
+    throw new Error(`resolved.tessellation must name a positive chordTolerance and angleTolerance; got ${JSON.stringify(tessellation)}`);
   }
-  const result = {};
-  for (const [key, raw] of Object.entries(value)) {
-    if (!Object.hasOwn(RENDER_TESSELLATION_FLOORS, key)) {
-      throw new Error(`Unknown quality.tessellation field: ${key}`);
-    }
-    if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
-      throw new Error(`quality.tessellation.${key} must be a positive finite number`);
-    }
-    if (raw < RENDER_TESSELLATION_FLOORS[key]) {
-      throw new Error(
-        `quality.tessellation.${key} must be at least ${RENDER_TESSELLATION_FLOORS[key]}; ` +
-        "finer sampling exhausts the renderer instead of improving the image"
-      );
-    }
-    result[key] = raw;
-  }
-  return result;
+  return { chordTolerance, angleTolerance };
 }
 
-export function tessellationForSnapshotQuality(input = {}) {
-  validateSnapshotRenderJob(input);
-  const explicit = input.quality?.tessellation;
-  if (explicit != null) {
-    return normalizeRenderTessellation(explicit);
-  }
-  const view = resolveViewSettings(input.display ?? {});
-  const quality = view.lighting.enabled
-    ? resolveRenderQuality(view.lighting.quality)
-    : resolveSceneQuality(SCENE_QUALITY.INTERACTIVE);
-  // Final uses the existing finest bounded rung. Preview and CAD inspection
-  // retain the canonical L1 cache request.
-  return quality.snapshotLodLevel > 1
-    ? lodTessellationForLevel(quality.snapshotLodLevel)
-    : {};
-}
-
-async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = null, diagnostics = null, tessellationCache = null, options = {}) {
+async function loadPackageMeshData(packageInfo, tessellation = null, appearance = null, diagnostics = null, tessellationCache = null, options = {}) {
   const measure = (name, started) => {
     if (diagnostics) diagnostics[name] = (diagnostics[name] || 0) + performance.now() - started;
   };
@@ -256,6 +208,9 @@ async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = 
   const inputOf = (cid) => String(components[cid]?.surfaceInput || "");
   if (diagnostics) diagnostics.componentCount = cids.length;
   const probeStarted = performance.now();
+  if (tessellationCache && !tessellation) {
+    throw new Error("a package drawn from cadgen's mesh store names the tessellation to draw (resolved.tessellation)");
+  }
   const probes = await tessellationCache?.probeCachedTessellationEntries(cids.map(inputOf), tessellation) || new Map();
   measure("probeMs", probeStarted);
   const usable = (cid) => {
@@ -372,7 +327,7 @@ async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = 
     measure("meshReadMs", readStarted);
     const surfaceObject = String(components[cid]?.surfaceObject || "");
     const decoded = decodeComponentTessellation(bytes, {
-      surfaceInput: inputOf(cid), ...(surfaceObject ? { surfaceObject } : {}), tessellation,
+      surfaceInput: inputOf(cid), ...(surfaceObject ? { surfaceObject } : {}), ...(tessellation ? { tessellation } : {}),
     });
     if (!decoded) {
       throw new Error(`Assembly package component ${cid}: ${url} is not its mesh at this tessellation`);
@@ -528,9 +483,7 @@ export async function loadSource(input, options = {}) {
   );
   refuseFamilySceneKind(rawKind);
   const kind = normalizeKind(rawKind);
-  const rawTessellation = inputObject.quality?.tessellation;
-  const tessellation = tessellationForSnapshotQuality(inputObject);
-  assertStepOnlyOption(kind, rawTessellation, "quality.tessellation");
+  const tessellation = resolvedTessellation(resolved);
   const kinematics = inputObject.kinematics ?? options.kinematics;
   const stepParameterUrl = String(
     inputObject.stepParameterUrl || resolved.stepParameterUrl || options.stepParameterUrl || ""
@@ -586,9 +539,6 @@ export async function loadSource(input, options = {}) {
       glbUrl: "",
       cadPath
     };
-  }
-  if (rawTessellation !== undefined && rawTessellation !== null) {
-    throw new Error("quality.tessellation requires an exact-surface STEP package; existing mesh data cannot be retessellated");
   }
   const glbUrl = String(inputObject.glbUrl || resolved.glbUrl || options.glbUrl || "").trim();
   const url = String(typeof input === "string" ? input : inputObject.url || resolved.url || glbUrl || "").trim();

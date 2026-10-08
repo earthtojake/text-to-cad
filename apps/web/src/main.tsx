@@ -3,6 +3,7 @@ import { EmptyState } from '@text-to-cad/ui/navigation';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createCrashReporter } from '@text-to-cad/core/client';
+import { installTessellationLadder } from '@text-to-cad/core/lib/surf/lodPolicy.js';
 import { ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
 import { createTabStore } from '@text-to-cad/ui/tab-store';
 import { createWebCadClient } from './host/cadClient.js';
@@ -54,6 +55,8 @@ root.render(<StartingView />);
 // The update notice comes with the server's description, so the update button draws with the page.
 void Promise.all([client.serverInfo({ signal: controller.signal }), client.version().then(reply => reply.notice ?? null, () => null)]).then(([server, notice]) => {
   if (controller.signal.aborted) return;
+  // The display tessellation ladder is cadgen's: the server says it, the page draws by it.
+  installTessellationLadder(server.tessellation);
   root.render(<StrictMode><App client={client} server={server} tabStore={tabStore} notice={notice} /></StrictMode>);
 }).catch(error => {
   if (!controller.signal.aborted) root.render(<StartingView error={error} />);

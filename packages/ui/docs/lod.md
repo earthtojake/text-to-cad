@@ -26,6 +26,14 @@ display concern only.
 
 ## 1. Where a model starts
 
+The rungs are cadgen's (`cadgen.tessellation_policy`): which levels exist, the
+chord and angle tolerances each means and which one a model opens at arrive with
+the server's description -- the CAD Viewer's server info, the CAD app's launch --
+and the host installs them before a STEP model is drawn
+(`installTessellationLadder`, `@text-to-cad/core/lib/surf/lodPolicy.js`). The
+viewport only picks a rung from its camera, with the hysteresis of §2; every mesh
+request and cache key names both tolerances of the rung it asks for.
+
 Every mesh the viewer draws is cadgen's (OCCT's mesh of the exact BREP, stored
 by cadgen); the browser never tessellates. Every component opens at the
 standard level, whatever the size of its assembly

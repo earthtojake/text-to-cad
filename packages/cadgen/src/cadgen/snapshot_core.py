@@ -38,6 +38,7 @@ from cadgen.assets import require_browser_runtime
 from cadgen.coordination import PHASE_RENDER, resolve as resolve_progress
 from cadgen.results import SnapshotFile, SnapshotResult, SnapshotTimings
 from cadgen.section_drawing import SECTION_FRAMES
+from cadgen.tessellation_policy import TESSELLATION_FLOORS
 from cadgen._internal.atomic_replace import write_bytes_atomic
 
 
@@ -108,16 +109,12 @@ RETIRED_OUTPUT_SETTINGS_KEYS = {"paddingPercent": "padding"}
 OUTPUT_PADDING_RANGE = (0, 0.15)
 OUTPUT_RENDER_SCALE_RANGE = (1, 3)
 SUPPORTED_QUALITY_KEYS = frozenset({"tessellation"})
-# Floors for `quality.tessellation`. Chord tolerance is RELATIVE to each
-# component's bounding diagonal and angle tolerance is radians, so these are
-# ~100x finer than the tessellator's defaults (1.5e-3 / 0.35 rad) and past any
-# display need at any output size. Below them the page tessellates until the
-# renderer dies, and the caller sees a lost Playwright driver connection rather
-# than a rejected request — so the request is rejected here, before a browser
-# is launched. Mirrored as RENDER_TESSELLATION_FLOORS in
-# packages/core/src/common/source.js (that file validates the same job in
-# the page; the parity is tested).
-MIN_RENDER_TESSELLATION = {"chordTolerance": 1e-5, "angleTolerance": 5e-3}
+# Floors for `quality.tessellation`: the finest anything may ask cadgen to mesh
+# (cadgen.tessellation_policy). Chord tolerance is RELATIVE to each component's
+# bounding diagonal and angle tolerance is radians, so these are ~100x finer than
+# the standard rung and past any display need at any output size; a finer request
+# is refused here, before anything is meshed or a browser launched.
+MIN_RENDER_TESSELLATION = dict(TESSELLATION_FLOORS)
 SUPPORTED_OUTPUT_KEYS = frozenset(
     {
         "path",
@@ -1018,10 +1015,9 @@ def normalize_snapshot_job_packet(raw_payload: object) -> tuple[bool, list[objec
         return False, list(raw_payload["jobs"])
     return True, [raw_payload]
 def validate_render_tessellation(value: object) -> None:
-    """Refuse an unusable ``quality.tessellation`` here, where the caller still
-    gets a message. The page validates the same field (source.js) because it
-    also serves the viewer, but by then the cost of an absurd request is a dead
-    renderer and no explanation."""
+    """Refuse an unusable ``quality.tessellation`` here, the one place it is
+    checked: the page draws the tolerances the resolved job names
+    (``cadgen.tessellation_policy.snapshot_tessellation``)."""
     if value is None:
         return
     if not is_plain_object(value):

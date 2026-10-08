@@ -7,6 +7,9 @@ other by the SURF's digest and to a fixed test surface input
 (``sha256("cadgen-test-fixture:<name>")``, recorded in ``fixtures.json``).
 ``sun_gear.selector.json`` is the selector oracle: cadgen's own selector
 tables for that SURF (``cadgen._internal.surf_tables``).
+``tessellationLadder.js`` is cadgen's display ladder
+(``cadgen.tessellation_policy.ladder_payload``), which a JS test installs as a
+host installs the one its server publishes (``../testing.js``).
 
 The shapes are built here, not read from ``models/``. Run from the repository
 root with the repo's Python whenever cadgen's SURF or mesh output changes:
@@ -27,8 +30,6 @@ from build123d import (
 )
 
 HERE = Path(__file__).resolve().parent
-# lodPolicy.js LOD_TESSELLATION_LEVELS (the coarse and default rungs).
-LEVELS = {0: (2e-3, 1.4), 1: (1.5e-3, 0.35)}
 # The selector manifest's face-proxy run layout (surfSelectorBundle.js).
 FACE_RUN_COLUMNS = ["occurrenceRow", "primitiveIndex", "triangleStart", "triangleCount", "faceRow"]
 
@@ -83,12 +84,31 @@ def mixed():
     return part
 
 
+LADDER_MODULE_HEAD = (
+    "// Written by cadgen (make_fixtures.py, from cadgen.tessellation_policy.ladder_payload): the\n"
+    "// display ladder a cadgen server publishes, for tests to install as a host does. Regenerate it;\n"
+    "// a Python test holds it equal to cadgen's.\n"
+    "export const TESSELLATION_LADDER = "
+)
+
+
+def write_ladder() -> dict:
+    """``tessellationLadder.js``: the ladder a server publishes, for the JS tests."""
+    from cadgen.tessellation_policy import ladder_payload
+
+    ladder = ladder_payload()
+    text = LADDER_MODULE_HEAD + json.dumps(ladder, separators=(", ", ": ")) + ";\n"
+    (HERE / "tessellationLadder.js").write_text(text, encoding="utf-8")
+    return ladder
+
+
 def main() -> None:
     from cadgen._internal import occt_mesh
     from cadgen._internal.component_package import decode_display_shape, prepare_geometry_component
     from cadgen._internal.surf_tables import selector_bundle_from_surf_index
     from cadgen._internal.surface_extract import extract_surface_component, read_surf
 
+    ladder = write_ladder()["levels"]
     manifest = {}
     for name, build, levels in (("sun_gear", sun_gear, (0, 1)), ("cam_follower_roller", cam_follower_roller, (0, 1)),
                                 ("mixed", mixed, (0, 1))):
@@ -102,7 +122,7 @@ def main() -> None:
         (HERE / f"{name}.surf").write_bytes(surf)
         meshes = {}
         for level in levels:
-            chord, angle = LEVELS[level]
+            chord, angle = ladder[level]["chordTolerance"], ladder[level]["angleTolerance"]
             body = occt_mesh.mesh_component(decode_display_shape(entry, payload).wrapped, index,
                                             surface_input=surface_input, surface_object=surface_object,
                                             chord=chord, angle=angle)

@@ -24,7 +24,7 @@ import {
 import { mapWithConcurrency } from "@text-to-cad/core/lib/async/concurrency.js";
 import { stepProductName } from "@text-to-cad/core/lib/step/productName.js";
 import {
-  LOD_DEFAULT_LEVEL,
+  lodDefaultLevel,
   lodTessellationForLevel,
   normalizeLodLevel
 } from "@text-to-cad/core/lib/surf/lodPolicy.js";
@@ -878,7 +878,7 @@ export function useCadAssets({
         const staticSurfUrl = component => (component?.surf ? resolvePackageAssetUrl(meshUrl, component.surf, resources) : "");
         // A cold component opens at the standard level, as a warm one does: cadgen meshes it there in
         // the same request that derives its surface, and nothing is tessellated here.
-        const coldTessellation = {};
+        const coldTessellation = lodTessellationForLevel(lodDefaultLevel());
         // The first geometry waits on the first chunk's probe and the first batch's read: nothing
         // is read ahead of them until a lane is past its body read.
         let firstBodyRead;
@@ -906,7 +906,7 @@ export function useCadAssets({
           release: token => viewerMemoryPolicy.release(token),
           // A payload this page already holds needs no body read.
           skip: (cid, row) => Boolean(peekRenderSurf("", {
-            tessellation: lodTessellationForLevel(LOD_DEFAULT_LEVEL),
+            tessellation: lodTessellationForLevel(lodDefaultLevel()),
             identity: { surfaceInput: row.surfaceInput, surfaceObject: row.surfaceObject },
           })),
           signal: controller.signal,
@@ -960,13 +960,13 @@ export function useCadAssets({
               identity.surfUrl || "",
               { resources, tessellationCache,
                       signal: controller.signal,
-                tessellation: lodTessellationForLevel(LOD_DEFAULT_LEVEL),
+                tessellation: lodTessellationForLevel(lodDefaultLevel()),
                 identity: { ...identity, tessellationProbe: cacheProbe || null,
                   ...(tessellationEntry ? { tessellationEntry } : {}) },
                 memoryEstimateBytes: estimatedBytes,
               },
             );
-            meshData.lodLevel = LOD_DEFAULT_LEVEL;
+            meshData.lodLevel = lodDefaultLevel();
             return meshData;
           },
           // Byte-aware admission: every component is sized by its stored mesh's probe row before

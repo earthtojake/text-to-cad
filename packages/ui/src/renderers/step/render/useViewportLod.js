@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { loadRenderSurfPayloadAtLevel, reclaimIdleSurfWorkers, releaseSurfWorkers, releaseRenderSurfLevel } from "@text-to-cad/core/lib/renderAssetClient.js";
 import { completedPackages, renderAssetCacheStatsWithPackages } from "./completedPackageCache.js";
 import { estimateMeshRenderCost } from "@text-to-cad/core/lib/render/meshCost.js";
-import { LOD_DEFAULT_LEVEL, lodTessellationForLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
+import { lodDefaultLevel, lodTessellationForLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 import { isTessellationCacheProbeMissError } from "@text-to-cad/core/lib/surf/tessellationCache.js";
 import { normalizeSceneQuality, resolveSceneQuality, SCENE_QUALITY } from "@text-to-cad/core/common/sceneSettings.js";
 
@@ -58,7 +58,7 @@ function lodEnabled() {
 }
 
 export function viewportLodMinimumLevel(target = typeof window !== "undefined" ? window : null) {
-  return Number(target?.__CAD_VIEWER_MIN_LOD__ ?? LOD_DEFAULT_LEVEL);
+  return Number(target?.__CAD_VIEWER_MIN_LOD__ ?? lodDefaultLevel());
 }
 
 export function dispatchViewportLodStatus(status, target = typeof window !== "undefined" ? window : null,

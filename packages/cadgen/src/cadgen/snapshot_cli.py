@@ -1224,6 +1224,8 @@ def resolve_step_render_job(
     if not package_dir.is_dir():
         raise SnapshotError(f"STEP/STP render input has no tree in the store: {package_dir}")
 
+    from cadgen.tessellation_policy import snapshot_tessellation
+
     resolved: dict[str, object] = {
         "rootPath": str(root_path),
         "inputPath": str(input_path),
@@ -1232,6 +1234,8 @@ def resolve_step_render_job(
         # The hash of the tree this job renders: the geometry's identity in the
         # result (cadgen.results.SnapshotFile.tree), never a directory.
         "tree": selected_tree,
+        # The tolerances its components are drawn at: cadgen's policy, never the page's.
+        "tessellation": snapshot_tessellation(job),
     }
     # tree (the canonical render artifact for every STEP model): inline
     # the assembly.json and pre-resolve one asset URL per unique component so the renderer
@@ -1248,10 +1252,9 @@ def resolve_step_render_job(
         # Nothing is drawn, so no browser starts.
         from cadgen.snapshot_parts import list_rows
 
-        quality = job.get("quality") if is_plain_object(job.get("quality")) else {}
         try:
             parts = list_rows(descriptor, package_dir, selection=normalized_selection,
-                              tessellation=quality.get("tessellation") or {})
+                              tessellation=resolved["tessellation"])
         except ValueError as error:
             raise SnapshotError(str(error)) from None
         if debug_enabled:

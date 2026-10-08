@@ -6,6 +6,10 @@ import {
   probeInitialDisplayLod,
   producedDisplayLodPlan,
 } from "./initialDisplayLod.js";
+import { TEST_TESSELLATION_LADDER, installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 const MIB = 1024 * 1024;
 
@@ -28,7 +32,8 @@ test("a stored standard mesh opens the component without a SURF URL, sized by it
   assert.equal(hit.cacheProbe, standard);
   assert.equal(hit.plan.estimatedBytes, 4 * MIB);
   assert.equal(hit.plan.fitsDecodeCap, true);
-  assert.deepEqual(cache.requested, [undefined], "the standard tier, and no other, is asked");
+  assert.deepEqual(cache.requested, [TEST_TESSELLATION_LADDER.levels[TEST_TESSELLATION_LADDER.defaultLevel]],
+    "the standard tier, and no other, is asked, by both its tolerances");
 });
 
 test("a missing, mismatched, refused or unsized standard entry leaves the component cold", async () => {

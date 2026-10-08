@@ -3,10 +3,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { LOD_TESSELLATION_LEVELS, nextLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
+import { lodTessellationLevels, nextLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 
 import { createLodScheduler } from "./lodScheduler.js";
 import { estimateViewportLodMemory } from "./viewportLodMemory.js";
+import { installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 // A camera sample factory over a fake model: per-cid distances, 1000px / 45deg.
 function sampleWith(distances) {
@@ -80,7 +84,7 @@ test("a stationary camera corrects the coarse angular tier and later progressive
   assert.equal(nextLevel({ diagonal: 10, cameraDistance: 10000,
     camera: camera.camera, viewportHeightPx: camera.viewportHeightPx }, 0), 0,
   "projected chord error alone considers the coarse mesh settled");
-  assert.ok(LOD_TESSELLATION_LEVELS[0].angleTolerance > LOD_TESSELLATION_LEVELS[1].angleTolerance,
+  assert.ok(lodTessellationLevels()[0].angleTolerance > lodTessellationLevels()[1].angleTolerance,
     "the standard floor must still repair coarse angular tessellation");
   scheduler.onCameraSample(camera);
   clock.fire(); await tick(); await tick();

@@ -4,6 +4,10 @@ import test from "node:test";
 import { dispatchViewportLodStatus, syncViewportLodLimitation, viewportLodMinimumLevel, viewportLodSampleForQuality } from "./useViewportLod.js";
 import { settledLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 import { createViewerMemoryPolicy } from "./viewerMemoryPolicy.js";
+import { installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 test("partial fallback retains the unresolved camera target and only clears after it resolves", () => {
   const policy = createViewerMemoryPolicy();

@@ -12,11 +12,14 @@ import {
   surfTessellationCacheKey as cacheKey,
 } from "./renderAssetClient.js";
 import {
-  LOD_DEFAULT_LEVEL,
+  lodDefaultLevel,
   lodTessellationForLevel,
 } from "./surf/lodPolicy.js";
 import { TESSELLATION_VERSION, createTessellationCache } from "./surf/tessellationCache.js";
 import { everyKeyMeshProvider, memoryMeshProvider, meshFixture, surfFixture } from "./surf/__tests__/meshFixtures.js";
+import { installTestTessellationLadder } from "./surf/testing.js";
+
+installTestTessellationLadder();
 
 // Read the producer generation from the constant rather than spelling it out:
 // this asserts the key's SHAPE, and every producer change bumps that number.
@@ -60,7 +63,7 @@ test("mesh identity includes component, effective tolerances, producer and paylo
   );
   assert.notEqual(
     surfTessellationCacheKey("u.surf", lodTessellationForLevel(0)),
-    surfTessellationCacheKey("u.surf", lodTessellationForLevel(LOD_DEFAULT_LEVEL)),
+    surfTessellationCacheKey("u.surf", lodTessellationForLevel(lodDefaultLevel())),
     "coarse L0 and canonical L1 have different concrete selector/mesh identities",
   );
 });

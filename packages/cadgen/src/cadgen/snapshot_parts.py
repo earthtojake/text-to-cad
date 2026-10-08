@@ -11,8 +11,9 @@ descriptor's order:
 - ``bounds`` is that row's box: the component's exact box (from its SURF),
   placed by the occurrence's transform, rounded to a nanometre;
 - ``triangleCount`` and ``vertexCount`` are the stored display mesh's
-  (``cadgen.store.meshes``) at the tessellation the snapshot would draw, meshed
-  in the build pool when the store has none.
+  (``cadgen.store.meshes``) at the tessellation a view of the same job would
+  draw (``cadgen.tessellation_policy.snapshot_tessellation``), meshed in the
+  build pool when the store has none.
 
 ``focus``/``hide`` select the same way the page's scene does for a view: an
 occurrence matches a ref that IS its id, an ancestor group's id (``o1.2``
@@ -80,11 +81,11 @@ def _rounded(values: Sequence[float]) -> list:
 
 def _mesh_counts(descriptor: Mapping[str, Any], cids: set[str], tessellation: Mapping[str, float]) -> dict:
     """``{cid: (triangles, vertices)}`` from the stored meshes at ``tessellation``."""
-    from cadgen.store.meshes import DEFAULT_ANGLE, DEFAULT_CHORD, tessellation_key
+    from cadgen.store.meshes import tessellation_key
     from cadgen.store.tess_cache import produce_meshes
 
-    chord = float(tessellation.get("chordTolerance", DEFAULT_CHORD))
-    angle = float(tessellation.get("angleTolerance", DEFAULT_ANGLE))
+    chord = float(tessellation["chordTolerance"])
+    angle = float(tessellation["angleTolerance"])
     components = descriptor.get("components") if isinstance(descriptor.get("components"), Mapping) else {}
     keys = {}
     for cid in sorted(cids):

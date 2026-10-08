@@ -4,6 +4,10 @@ import * as THREE from "three";
 import { lodSceneMayMove, sampleLodCamera } from "./lodCameraSample.js";
 import { createLodScheduler } from "./lodScheduler.js";
 import { desiredLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
+import { installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 const bounds = (min, max) => ({ min, max });
 const cube = (x, y = 0, z = 0) => bounds([x - .5, y - .5, z - .5], [x + .5, y + .5, z + .5]);

@@ -13,9 +13,16 @@ export interface CadEntry {
   bytes?: number;
   [key: string]: unknown;
 }
+/** cadgen's display tessellation ladder (`cadgen.tessellation_policy`): what each LOD rung means. */
+export interface CadTessellationLadder {
+  levels: { chordTolerance: number; angleTolerance: number }[];
+  defaultLevel: number;
+}
 export interface CadServerInfo {
   autoReload?: boolean;
   identityToken?: string;
+  /** The display tessellation ladder the page draws STEP models by. */
+  tessellation?: CadTessellationLadder;
   /** The folder the server was started in, where a developer's relative `?file=` resolves. */
   start?: string;
   /** Whether this computer has a file chooser for the home's Open. */
