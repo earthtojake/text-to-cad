@@ -33,7 +33,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 from typing import Any, Iterable
 
 __all__ = ["Request", "Response", "STREAM_CHUNK_BYTES"]
@@ -194,31 +193,32 @@ class Response:
         """200 (206 for a range: read from where it starts), chunked, never buffered whole.
 
         A 500MB GLB must not become 500MB of RSS, and 200 concurrent asset GETs
-        must stay bounded at ``STREAM_CHUNK_BYTES`` per thread. The stat answers
-        existence and content-length up front, so the status line is always
+        must stay bounded at ``STREAM_CHUNK_BYTES`` per thread. Opening the file
+        and calling fstat on that handle answers existence and content-length
+        up front, so the status line is always
         correct. A part's ``etag`` is the file's inode, size and time: a rewrite
         changes it.
         """
-        span = self._span(stat_result.st_size)
-        first, last = span or (0, stat_result.st_size - 1)
-        headers: list[tuple[str, Any]] = [
-            ("cache-control", "no-store"),
-            ("content-length", last - first + 1),
-        ]
-        if span:
-            headers += [("content-range", f"bytes {first}-{last}/{stat_result.st_size}"),
-                        ("etag", f'"{stat_result.st_ino:x}-{stat_result.st_size:x}-{stat_result.st_mtime_ns:x}"')]
-        if content_type:
-            headers.append(("content-type", content_type))
-        headers.extend(extra_headers)
-        self._begin(206 if span else 200, headers)
-        if self._head_only:
-            return
-        try:
-            with open(file_path, "rb") as handle:
-                if not span:
-                    shutil.copyfileobj(handle, self._handler.wfile, STREAM_CHUNK_BYTES)
-                    return
+        with open(file_path, "rb") as handle:
+            # Routing may have statted an inode replaced atomically before open.
+            # Headers and every byte below must describe the same open file.
+            stat_result = os.fstat(handle.fileno())
+            span = self._span(stat_result.st_size)
+            first, last = span or (0, stat_result.st_size - 1)
+            headers: list[tuple[str, Any]] = [
+                ("cache-control", "no-store"),
+                ("content-length", last - first + 1),
+            ]
+            if span:
+                headers += [("content-range", f"bytes {first}-{last}/{stat_result.st_size}"),
+                            ("etag", f'"{stat_result.st_ino:x}-{stat_result.st_size:x}-{stat_result.st_mtime_ns:x}"')]
+            if content_type:
+                headers.append(("content-type", content_type))
+            headers.extend(extra_headers)
+            self._begin(206 if span else 200, headers)
+            if self._head_only:
+                return
+            try:
                 handle.seek(first)
                 remaining = last - first + 1
                 while remaining:
@@ -227,15 +227,15 @@ class Response:
                         raise OSError("the file is shorter than it was")
                     self._handler.wfile.write(chunk)
                     remaining -= len(chunk)
-        except (BrokenPipeError, ConnectionResetError):
-            self._handler.close_connection = True
-        except OSError:
-            # Headers are already gone, so a clean end() would present a
-            # TRUNCATED body as a complete response — and content-length would
-            # be a lie some clients accept silently. Kill the socket instead, so
-            # the failure is unambiguous.
-            self._handler.close_connection = True
-            try:
-                self._handler.connection.shutdown(2)
+            except (BrokenPipeError, ConnectionResetError):
+                self._handler.close_connection = True
             except OSError:
-                pass
+                # Headers are already gone, so a clean end() would present a
+                # TRUNCATED body as a complete response — and content-length would
+                # be a lie some clients accept silently. Kill the socket instead, so
+                # the failure is unambiguous.
+                self._handler.close_connection = True
+                try:
+                    self._handler.connection.shutdown(2)
+                except OSError:
+                    pass

@@ -9,6 +9,7 @@ tests build a tiny profile tree of their own, shaped like Orca's.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -54,6 +55,24 @@ class OrcaPresetsTests(unittest.TestCase):
             process, system = orca_presets.complete(index, "process", "My 0.20mm")
             self.assertEqual((process["layer_height"], process["wall_loops"]), ("0.2", "3"))
             self.assertEqual(system, "0.20mm @Acme")
+
+    def test_relative_preset_file_resolves_an_absolute_index(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            profile_tree(root)
+            index, _ = orca_presets.index_presets([root])
+            relative = os.path.relpath(root / "user/default/process/mine.json")
+            process, system = orca_presets.complete(index, "process", relative)
+            self.assertEqual((process["layer_height"], process["wall_loops"]), ("0.2", "3"))
+            self.assertEqual(system, "0.20mm @Acme")
+
+    def test_absolute_preset_file_resolves_a_relative_index(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            profile_tree(root)
+            index, _ = orca_presets.index_presets([Path(os.path.relpath(root))])
+            process, _ = orca_presets.complete(index, "process", str(root / "user/default/process/mine.json"))
+            self.assertEqual(process["layer_height"], "0.2")
 
     def test_list_shows_only_selectable_presets(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:

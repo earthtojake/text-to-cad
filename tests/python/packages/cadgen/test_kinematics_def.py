@@ -41,6 +41,31 @@ def _arm_block(**overrides):
 
 
 class ConstructorTests(unittest.TestCase):
+    def test_literal_axes_reject_nonfinite_coordinates(self) -> None:
+        for value in (float("nan"), float("inf"), -float("inf")):
+            for field in ("origin", "direction"):
+                with self.subTest(value=value, field=field):
+                    arguments = {"origin": (0, 0, 0), "direction": (0, 0, 1)}
+                    arguments[field] = (value, 0, 1)
+                    with self.assertRaisesRegex(ValueError, "kinematics:.*finite"):
+                        slider("lift", parent="#base", child="#mast", limits=(0, 10), **arguments)
+
+    def test_ranges_and_coupling_ratios_reject_nonfinite_numbers(self) -> None:
+        for value in (float("nan"), float("inf"), -float("inf")):
+            for field in ("mate limits", "coupling ratio", "coupling limits"):
+                with self.subTest(value=value, field=field):
+                    with self.assertRaises(ValueError):
+                        if field == "mate limits":
+                            slider("lift", parent="#base", child="#mast", axis="#mast.f1", limits=(0, value))
+                        elif field == "coupling ratio":
+                            couple("sync", {"lift": value})
+                        else:
+                            couple("sync", {"lift": 1}, limits=(0, value))
+
+    def test_an_unbounded_turn_names_a_finite_range_to_use_instead(self) -> None:
+        with self.assertRaisesRegex(ValueError, r"mate 'spin' limits must .*\(-180, 180\)"):
+            revolute("spin", parent="#base", child="#rotor", axis="#rotor.f1", limits=(-float("inf"), float("inf")))
+
     def test_a_mate_serializes_its_declaration(self) -> None:
         mate = revolute("elbow", parent="#upper_arm", child="#forearm",
                         axis="#forearm.pivot_bore", limits=(0, 150))
@@ -115,6 +140,18 @@ class ConstructorTests(unittest.TestCase):
 
 
 class NormalizeTests(unittest.TestCase):
+    def test_pose_presets_reject_nonfinite_positions(self) -> None:
+        for value in (float("nan"), float("inf"), -float("inf")):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "kinematics:.*finite"):
+                normalize_kinematics(_arm_block(poses={"bad": {"elbow": value}}), where="@step")
+
+    def test_json_spelling_uses_the_same_finite_axis_checks(self) -> None:
+        with self.assertRaisesRegex(ValueError, "kinematics:.*finite"):
+            normalize_kinematics({"mates": [{"name": "lift", "kind": "slider", "parent": "#base",
+                                             "child": "#mast", "origin": [0, 0, 0],
+                                             "direction": [0, float("inf"), 1], "limits": [0, 10]}]},
+                                 where="step build")
+
     def test_a_full_declaration_normalizes_to_the_sidecar_shape(self) -> None:
         defn = normalize_kinematics(_arm_block(), where="@step")
         self.assertEqual(

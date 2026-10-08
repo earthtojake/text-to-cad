@@ -129,6 +129,11 @@ def validate_sdf_root(
             path="/sdf",
         )
 
+    # Below SDFormat 1.7 libsdformat renames a link, joint or frame whose name another
+    # element of its scope already holds (``_link``/``_joint``/``_frame``) and warns;
+    # from 1.7 on the same collision is DUPLICATE_NAME.
+    renames = _version_before(version, (1, 7))
+
     meaningful_tags = {"model", "world", "actor", "light", "include", "plugin"}
     if not any(local_name(child.tag) in meaningful_tags for child in list(root)):
         result.add(
@@ -141,14 +146,18 @@ def validate_sdf_root(
     _check_unique_named(children(root, "world"), result, "/sdf", "world")
     _check_unique_named(children(root, "model"), result, "/sdf", "model")
 
+    _check_unique_named(children(root, "light"), result, "/sdf", "light")
+    for light_element in children(root, "light"):
+        _validate_light(light_element, result, {"world"}, "/sdf")
+
     for include_element in children(root, "include"):
         _validate_include(include_element, result, "/sdf/include")
     for plugin_element in children(root, "plugin"):
         _validate_plugin(plugin_element, result, "/sdf/plugin")
     for world_element in children(root, "world"):
-        _validate_world(world_element, result, resolved_base_dir)
+        _validate_world(world_element, result, resolved_base_dir, renames=renames)
     for model_element in children(root, "model"):
-        _validate_model(model_element, result, resolved_base_dir, parent_targets={"world"})
+        _validate_model(model_element, result, resolved_base_dir, parent_targets={"world"}, renames=renames)
 
     return result
 
@@ -163,7 +172,12 @@ def raise_for_validation_errors(result: FindingsReport, *, strict: bool = False)
         raise SdfSourceError(format_findings(findings))
 
 
-def _validate_world(world_element: ET.Element, result: FindingsReport, base_dir: Path) -> None:
+def _version_before(version: str, floor: tuple[int, int]) -> bool:
+    match = re.match(r"^(\d+)\.(\d+)", version)
+    return bool(match) and (int(match.group(1)), int(match.group(2))) < floor
+
+
+def _validate_world(world_element: ET.Element, result: FindingsReport, base_dir: Path, *, renames: bool) -> None:
     world_name = _required_name(world_element, result, _path("world", world_element), "world")
     world_path = _path("world", world_element, fallback="/sdf/world")
     if not world_name:
@@ -175,10 +189,17 @@ def _validate_world(world_element: ET.Element, result: FindingsReport, base_dir:
 
     frames = children(world_element, "frame")
     frame_names = _names(frames)
+    models = children(world_element, "model")
+    includes = children(world_element, "include")
+    model_names = _names(models) + [name for include in includes if (name := _child_text(include, "name"))]
     targets.update(frame_names)
+    targets.update(model_names)
+    _check_cross_type_scope_names(
+        result, world_path, renames=renames, frame=set(frame_names), model=set(model_names),
+    )
     for frame_element in frames:
         _validate_frame(frame_element, result, targets, world_path)
-    _validate_frame_cycles(frames, result, world_path)
+    _validate_frame_cycles(frames, result, world_path, posed_models=[*models, *includes])
 
     for pose_element in children(world_element, "pose"):
         _validate_pose(pose_element, result, f"{world_path}/pose", targets)
@@ -190,7 +211,7 @@ def _validate_world(world_element: ET.Element, result: FindingsReport, base_dir:
     for plugin_element in children(world_element, "plugin"):
         _validate_plugin(plugin_element, result, f"{world_path}/plugin")
     for model_element in children(world_element, "model"):
-        _validate_model(model_element, result, base_dir, parent_targets=targets)
+        _validate_model(model_element, result, base_dir, parent_targets=targets, renames=renames)
 
 
 def _validate_model(
@@ -199,6 +220,7 @@ def _validate_model(
     base_dir: Path,
     *,
     parent_targets: set[str],
+    renames: bool,
 ) -> None:
     model_name = _required_name(model_element, result, _path("model", model_element), "model")
     model_path = _path("model", model_element, fallback="/sdf/model")
@@ -221,6 +243,7 @@ def _validate_model(
     _check_cross_type_scope_names(
         result,
         model_path,
+        renames=renames,
         link=set(_names(link_elements)),
         joint=set(_names(joint_elements)),
         frame=set(_names(frame_elements)),
@@ -244,7 +267,6 @@ def _validate_model(
         "world",
         "__model__",
         model_name,
-        *parent_targets,
         *link_names,
         *joint_names,
         *frame_names,
@@ -252,7 +274,7 @@ def _validate_model(
     }
 
     for pose_element in children(model_element, "pose"):
-        _validate_pose(pose_element, result, f"{model_path}/pose", local_targets)
+        _validate_pose(pose_element, result, f"{model_path}/pose", parent_targets)
 
     for static_element in children(model_element, "static"):
         _validate_boolean_text(static_element, result, f"{model_path}/static", "static")
@@ -293,7 +315,7 @@ def _validate_model(
                 )
 
     for nested_model in nested_model_elements:
-        _validate_model(nested_model, result, base_dir, parent_targets=local_targets)
+        _validate_model(nested_model, result, base_dir, parent_targets=local_targets, renames=renames)
 
 
 def _validate_link(
@@ -375,6 +397,12 @@ def _validate_joint(
         _validate_link_reference(parent_link, result, link_names, f"{joint_path}/parent", allow_world=True)
     if child_link:
         _validate_link_reference(child_link, result, link_names, f"{joint_path}/child", allow_world=False)
+    if parent_link and parent_link == child_link:
+        result.add(
+            "error", "joint_parent_same_as_child",
+            f"joint {joint_name!r} must connect different parent and child frames, not {parent_link!r}",
+            path=joint_path,
+        )
 
     for pose_element in children(joint_element, "pose"):
         _validate_pose(pose_element, result, f"{joint_path}/pose", targets)
@@ -644,8 +672,16 @@ def _validate_pose(
         _check_reference(relative_to, result, pose_path, "relative_to", targets)
 
 
-def _validate_frame_cycles(frames: list[ET.Element], result: FindingsReport, owner_path: str) -> None:
-    frame_names = set(_names(frames))
+def _validate_frame_cycles(
+    frames: list[ET.Element], result: FindingsReport, owner_path: str,
+    *, posed_models: list[ET.Element] | None = None,
+) -> None:
+    models = posed_models or []
+    model_names = {
+        _child_text(model, "name") if model.tag == "include" else _name(model)
+        for model in models
+    } - {""}
+    frame_names = set(_names(frames)) | model_names
     edges: dict[str, str] = {}
     for frame in frames:
         name = _name(frame)
@@ -653,6 +689,15 @@ def _validate_frame_cycles(frames: list[ET.Element], result: FindingsReport, own
         if not target:
             pose_element = _first_child(frame, "pose")
             target = str(pose_element.attrib.get("relative_to") or "").strip() if pose_element is not None else ""
+        if name and target in frame_names:
+            edges[name] = target
+
+    # World models are pose nodes too: a frame attached to a model that is
+    # positioned relative to that frame is a cycle through the model node.
+    for model in models:
+        name = _child_text(model, "name") if model.tag == "include" else _name(model)
+        pose = _first_child(model, "pose")
+        target = str(pose.attrib.get("relative_to") or "").strip() if pose is not None else ""
         if name and target in frame_names:
             edges[name] = target
 
@@ -994,15 +1039,26 @@ def _validate_mesh_scale_child(shape: ET.Element, result: FindingsReport, scale_
 def _check_cross_type_scope_names(
     result: FindingsReport,
     scope_path: str,
+    *,
+    renames: bool,
     **names_by_kind: set[str],
 ) -> None:
     # SDFormat frame-graph names (links, joints, frames, nested models) share
-    # one namespace per scope; libsdformat rejects cross-type collisions.
+    # one namespace per scope; libsdformat rejects cross-type collisions from
+    # SDFormat 1.7, and below it renames the later element and warns.
     kinds = sorted(names_by_kind)
     for index, first_kind in enumerate(kinds):
         for second_kind in kinds[index + 1:]:
             shared = sorted(names_by_kind[first_kind] & names_by_kind[second_kind])
-            if shared:
+            if shared and renames:
+                result.add(
+                    "warning",
+                    "cross_type_name_collision",
+                    f"{first_kind} and {second_kind} names collide in the same scope: {shared!r}; "
+                    "below SDFormat 1.7 libsdformat renames the later one and references to it may miss",
+                    path=scope_path,
+                )
+            elif shared:
                 result.add(
                     "error",
                     "cross_type_name_collision",

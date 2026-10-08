@@ -14,6 +14,7 @@ from unittest import mock
 from cadgen.daemon import server
 from cadgen.daemon.broker import Broker
 from cadgen.daemon.jobs import JobLedger
+from cadgen.viewer.build_progress import build_progress_snapshot
 from cadgen.viewer.preview import preview_status
 from tests.python.support.store_fixtures import seed_result
 from tests.python.support.tmp_root import generated_cad_directory
@@ -210,6 +211,13 @@ class CoalescedPreviewRequests(unittest.TestCase):
         self.assertEqual(status["state"], "failed" if exit_code else "done")
         if exit_code:
             self.assertEqual(status["error"], "save refused")
+            # The follower is the latest job listed for the output; it carries the
+            # owner's reason, so the viewer never falls back to the generic sentence.
+            self.assertEqual(follower["error"], "save refused")
+            snapshot = build_progress_snapshot(self.output, jobs=self.ledger.snapshot())
+            self.assertEqual(snapshot["failed"]["error"], "save refused")
+        else:
+            self.assertIsNone(follower["error"])
         self.ledger.observe(worker.event(99, preview={"output": str(self.output), "tree": "late"}))
         self.assertEqual(self.feed(), status, "Late producer events must remain fenced after completion")
         # A later real request must still advance ordering despite the retained
