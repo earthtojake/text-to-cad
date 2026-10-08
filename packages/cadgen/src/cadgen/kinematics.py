@@ -37,6 +37,7 @@ to geometry at build time.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any, Mapping
 
 __all__ = [
@@ -89,6 +90,8 @@ def _vector3(value: object, *, label: str, mate: str) -> tuple[float, float, flo
         except (TypeError, ValueError):
             pass
         else:
+            if not all(math.isfinite(v) for v in (x, y, z)):
+                raise _fail(f"mate {mate!r} {label} must contain only finite numbers, got {value!r}")
             return (x, y, z)
     raise _fail(f"mate {mate!r} {label} must be a 3-vector of numbers, got {value!r}")
 
@@ -135,6 +138,8 @@ def _normalize_limits(limits: object, *, mate: str, kind: str) -> dict[str, list
             except (TypeError, ValueError):
                 pass
             else:
+                if not math.isfinite(lo) or not math.isfinite(hi):
+                    raise _fail(f"mate {mate!r} {label} limits must contain only finite numbers, got {value!r}")
                 if hi <= lo:
                     raise _fail(f"mate {mate!r} {label} limits must be (lo, hi) with hi > lo, got {value!r}")
                 return [lo, hi]
@@ -272,12 +277,16 @@ def couple(name, gears, *, limits=None) -> Coupling:
             normalized[str(dof)] = float(ratio)
         except (TypeError, ValueError):
             raise _fail(f"couple {text!r} ratio for {dof!r} must be a number, got {ratio!r}") from None
+        if not math.isfinite(normalized[str(dof)]):
+            raise _fail(f"couple {text!r} ratio for {dof!r} must be finite, got {ratio!r}")
     if limits is None:
         bounds = [0.0, 1.0]
     else:
         if not (isinstance(limits, (list, tuple)) and len(limits) == 2 and float(limits[1]) > float(limits[0])):
             raise _fail(f"couple {text!r} limits must be a (lo, hi) pair with hi > lo, got {limits!r}")
         bounds = [float(limits[0]), float(limits[1])]
+        if not all(math.isfinite(value) for value in bounds):
+            raise _fail(f"couple {text!r} limits must contain only finite numbers, got {limits!r}")
     return Coupling(name=text, gears=normalized, limits=bounds)
 
 
@@ -377,6 +386,8 @@ def _validated_pose_values(block: Mapping[str, Any], values: Mapping[str, Any], 
             resolved[dof_name] = float(value)
         except (TypeError, ValueError):
             raise _fail(f"{where} value for {dof_name!r} must be a number, got {value!r}") from None
+        if not math.isfinite(resolved[dof_name]):
+            raise _fail(f"{where} value for {dof_name!r} must be finite, got {value!r}")
     return resolved
 
 

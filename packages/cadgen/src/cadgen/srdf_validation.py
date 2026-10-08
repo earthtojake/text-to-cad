@@ -421,6 +421,18 @@ def _joint_names_for_group(
         if isinstance(joint, dict) and str(joint.get("type") or "") != "fixed" and not bool(joint.get("mimic")):
             _append_unique(names, [joint_name])
 
+    # MoveIt includes the parent joint of each explicitly included link.
+    # Include only that joint, not the link's entire ancestor chain.
+    for link_name in group.link_names:
+        for joint_name, joint in joints.items():
+            if (
+                isinstance(joint, dict)
+                and joint.get("child") == link_name
+                and str(joint.get("type") or "") != "fixed"
+                and not bool(joint.get("mimic"))
+            ):
+                _append_unique(names, [joint_name])
+
     for chain in group.chains:
         chain_joint_names = []
         for joint_name in _joint_path_for_chain(urdf_robot, base_link=chain.base_link, tip_link=chain.tip_link):

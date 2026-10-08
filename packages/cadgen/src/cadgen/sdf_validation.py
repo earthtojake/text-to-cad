@@ -373,6 +373,12 @@ def _validate_joint(
         _validate_link_reference(parent_link, result, link_names, f"{joint_path}/parent", allow_world=True)
     if child_link:
         _validate_link_reference(child_link, result, link_names, f"{joint_path}/child", allow_world=False)
+    if parent_link and parent_link == child_link:
+        result.add(
+            "error", "joint_parent_same_as_child",
+            f"joint {joint_name!r} must connect different parent and child frames, not {parent_link!r}",
+            path=joint_path,
+        )
 
     for pose_element in children(joint_element, "pose"):
         _validate_pose(pose_element, result, f"{joint_path}/pose", targets)
