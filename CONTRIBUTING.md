@@ -261,7 +261,8 @@ diff content: a comment in a module selects what the module's code would.
 | web | `packages/ui`, `apps/web` and the files its Markdown links to, `packages/cadgen` and `scripts/bundle`, `tests/browser`, the viewer scripts | the UI's units and browser specs (ui changes only), the client's units, then the bundle, the launch smoke test and the format/camera gates through the real backend (anything the served client or the backend reads) |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's host-adapter units (jsdom) and its one-file build |
 | skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load cadgen or its runtime (`packages/cadgen`, `scripts/bundle`), the cad and dxf suites (the same, and each skill's documented examples), dfm and dfam-check (their skills) |
-| docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (static asset contract, the telemetry receiver's tests, lint, Next build, icon verification) and the animated brand marks |
+| api | `apps/api`, `test-api.sh` | `npm --prefix apps/api test`: the version feed's and the telemetry receiver's tests (no install) |
+| docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (static asset contract, lint, Next build, icon verification) and the animated brand marks |
 | packaging | `packages/cadgen`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts | clean bundle, layout, wheel contents, installed CLI behavior |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
@@ -389,6 +390,8 @@ Canonical source directories are:
   build ships inside the cadgen wheel as `cadgen/_runtime/mcp` — built at
   release time, never committed.
 - `apps/docs/` for the site.
+- `apps/api/` for `api.texttocad.dev`, the version feed and the telemetry receiver
+  cadgen talks to: a Vercel project of its own, with no dependencies.
 - `packages/cadgen/` for the Python distribution and bundled runtime assets.
 - `packages/core/` for non-React CAD/client code.
 - `packages/ui/` for FileViewer, renderers, controls and shared styles.
@@ -714,8 +717,8 @@ green: that is the release. `Publish Release`, on the merge commit:
 6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
    alone onto `latest` and `claude-plugin`, in one atomic push. Only now does
    an installer see the version.
-7. **Announce** (on `main` only), after the branches: `Deploy Docs`, which moves
-   the version feed that tells installs a release is out; and the `v<VERSION>`
+7. **Announce** (on `main` only), after the branches: `Deploy Docs`, whose
+   header names the release; and the `v<VERSION>`
    tag and the GitHub Release, with the wheel and sdist from that same artifact,
    the plugin ZIP and the source maps (`cadgen-sourcemaps-<version>.zip`, to
    upload a version's maps again) attached as release assets (PyPI stays the
@@ -793,7 +796,7 @@ environment, never flags: an install of `main` pins the last release, and a cadg
 ignores a variable it does not know but refuses a flag, so a new setting would
 stop every such server until the next release. Nothing works them out at
 runtime, so a plugin that ships somewhere new writes its own, and the telemetry
-receiver (`apps/docs/src/lib/api/events.mjs`) learns its channel;
+receiver (`apps/api/src/events.mjs`) learns its channel;
 `test_plugin_manifests.py`, `test_plugin_branch.py` and `test_plugin_zip.py`
 hold each one:
 
@@ -869,14 +872,15 @@ skill and policy scans still run after upload.
 ### The version feed
 
 cadgen's daily version check reads `api.texttocad.dev/v1/versions`
-(`apps/docs/src/lib/api/versions.mjs`): `latest` is the docs app's version,
-which the release PR stamps from `VERSION`, and `Publish Release` deploys the
-docs after the PyPI upload, so the feed names a release only once it can be
-installed. Only a copy nothing else updates reads it (its channel, "The plugin
+(`apps/api/src/versions.mjs`): `latest` is the newest release PyPI's simple
+index lists, the index uv resolves every pin through, so the feed names a
+release the moment it can be installed (within the hour Vercel's edge keeps a
+reply), and no release deploys it. Only a copy nothing else updates reads it (its channel, "The plugin
 branch" above): a store's copy (the Claude or OpenAI directory, the Cursor
 Marketplace) and Gemini's extension never check and are never told, since their
-store or Gemini updates them. Telemetry passes through the same routes to PostHog: a deploy needs the
-project's PostHog settings in Vercel, which `/v1/health` checks (`apps/docs/README.md`).
+store or Gemini updates them. Telemetry passes through the same API to PostHog: a deploy (`Deploy API`, on every
+change to `apps/api` on `main`) needs the project's PostHog settings in Vercel, which
+`/v1/health` checks (`apps/api/README.md`).
 
 ### Resuming and republishing
 
@@ -929,6 +933,10 @@ release, from a ref that defaults to `main`:
 gh workflow run deploy-docs.yml -f ref=main
 gh workflow run deploy-docs.yml -f ref=v0.5.0  # a past release: its tag
 ```
+
+`Deploy API` (`.github/workflows/deploy-api.yml`) deploys `api.texttocad.dev`
+on every change to `apps/api` on `main`, and redeploys `main` on dispatch
+(`gh workflow run deploy-api.yml`). It follows no release.
 
 ### Local and manual fallbacks
 
@@ -1022,6 +1030,7 @@ npm --prefix apps/web run test        # the Viewer's CLIENT half only
 scripts/test/test-python.sh              # includes the Viewer's BACKEND suite
 scripts/test/test-python.sh --select viewer   # the Viewer's backend alone (~11 s)
 npm --prefix apps/docs run check
+npm --prefix apps/api test               # api.texttocad.dev, no install needed
 ```
 
 Use `AGENTS.md` or `scripts/README.md` for path-specific validation when you are
