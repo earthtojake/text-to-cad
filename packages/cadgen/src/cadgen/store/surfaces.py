@@ -219,6 +219,13 @@ def mesh_records(entry: dict, producer: dict, tessellations) -> dict[str, dict |
             (meshes.tessellation_key(surface_key, chord, angle) for chord, angle in normalize_tessellations(tessellations))}
 
 
+def selector_record(entry: dict, producer: dict) -> dict | None:
+    """The stored selector-table index record of one component, None while absent."""
+    from cadgen.store import selectors
+
+    return selectors.probe(selectors.selector_key(surface_input(entry, producer)))
+
+
 @contextlib.contextmanager
 def _meshing():
     """Whatever fails inside, as the ``MeshProductionError`` that names it (its type
@@ -262,6 +269,32 @@ def _derive_meshes(entry: dict, surface: dict, tessellations: list[tuple[float, 
             body = mesh_component(getattr(shape, "wrapped", shape), index, surface_input=surface_key,
                                   surface_object=surface["object"], chord=chord, angle=angle)
             meshes.write(meshes.tessellation_key(surface_key, chord, angle), body)
+    return True
+
+
+def _derive_selectors(entry: dict, surface: dict, keep_going: Callable[[], bool] | None,
+                      shape: Any = None) -> bool:
+    """Store the component's selector table (``_internal/selector_table``) when the
+    store lacks it; False when told to stop. ``shape`` is the decoded component
+    when the caller has it in hand (a fresh extraction); otherwise the BREP is
+    decoded again, as a mesh decodes it. Any failure is a ``MeshProductionError``
+    naming it (``_meshing``), reported with the component's."""
+    from cadgen._internal.component_package import decode_display_shape
+    from cadgen._internal.selector_table import build_selector_table, selector_table_bytes
+    from cadgen._internal.surface_extract import read_surf
+    from cadgen.store import selectors
+
+    key = selectors.selector_key(surface["surfaceInput"])
+    if selectors.probe(key) is not None:
+        return True
+    if keep_going is not None and not keep_going():
+        return False
+    with _meshing():
+        index, _floats = read_surf(read_verified_object(surface["object"]))
+        if shape is None:
+            shape = decode_display_shape(entry, read_verified_object(entry["brep"]))
+        table = build_selector_table(getattr(shape, "wrapped", shape), index)
+        selectors.write(key, surface["object"], selector_table_bytes(table))
     return True
 
 
@@ -317,6 +350,9 @@ def derive(tree_hash: str, cids: list[str] | None = None, *, force: bool = False
            keep_going: Callable[[], bool] | None = None, tessellations: Any = None) -> dict:
     """Derive the surfaces of ``cids`` (every component when None) and return their records.
 
+    Each surface is stored with the component's selector table
+    (``cadgen.store.selectors``): the refs, facts and connected sets the page and the
+    CLI resolve a pick by, minted here once from the exact BREP.
     ``tessellations`` (``[{chordTolerance, angleTolerance}, ...]``) also meshes each
     component at every tolerance it is missing, into the store's mesh entries
     (``cadgen.store.meshes``): what the CAD Viewer, snapshots and mesh exports draw.
@@ -355,6 +391,7 @@ def derive(tree_hash: str, cids: list[str] | None = None, *, force: bool = False
         expected_object = (expected_objects or {}).get(expected["surfaceInput"])
         if expected_object is None and force and prior is not None:
             expected_object = prior["object"]
+        shape = None
         if entry["kind"] == "eager-only":
             payload = read_verified_object(entry["eagerSurface"])
             validate_surface_bytes(payload)
@@ -379,7 +416,8 @@ def derive(tree_hash: str, cids: list[str] | None = None, *, force: bool = False
         if actual != prior:
             write_entry("surface", expected["surfaceInput"], actual)
         try:
-            meshed = not tessellations or _derive_meshes(entry, actual, tessellations, keep_going)
+            meshed = (_derive_selectors(entry, actual, keep_going, shape=shape)
+                      and (not tessellations or _derive_meshes(entry, actual, tessellations, keep_going)))
         except MeshProductionError as error:
             # One component's mesh failing, whatever failed (``_meshing``), leaves the rest
             # of the request to be done: they are stored before the failure is reported,

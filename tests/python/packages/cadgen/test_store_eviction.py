@@ -476,6 +476,11 @@ class Obsolete(StoreSweepCase):
         self.raw_entry("mesh", key, {"schemaVersion": 1, "object": digest}, age)
         return key
 
+    def selector_entry(self, surface_input: str, scheme: int, digest: str, age: float = 8 * DAY) -> str:
+        key = f"{surface_input}-s{scheme}"
+        self.raw_entry("selector", key, {"schemaVersion": 1, "object": digest}, age)
+        return key
+
     @staticmethod
     def older_producer() -> dict:
         from cadgen.store import surfaces
@@ -486,14 +491,19 @@ class Obsolete(StoreSweepCase):
     def seed_versions(self) -> dict[str, str]:
         """Surfaces and meshes of this cadgen's versions, an older one's and a newer
         one's; returns the objects by what wrote them."""
-        from cadgen.store import meshes, surfaces
+        from cadgen.store import meshes, selectors, surfaces
 
         now = {"scheme": surfaces.EXTRACTION_SCHEME, "surfFormat": surfaces.SURF_FORMAT,
                "build123d": "0.11.1", "ocp": "7.9.3.1", "cadqueryOcp": "7.9.3.1.1"}
         mesher, payload = meshes.TESSELLATOR_VERSION, meshes.PAYLOAD_VERSION
         objects = {name: self.old_object(name.encode()) for name in (
             "older surface", "current surface", "newer surface", "pinned surface",
-            "older mesher's mesh", "older surface's mesh", "current mesh", "newer mesher's mesh")}
+            "older mesher's mesh", "older surface's mesh", "current mesh", "newer mesher's mesh",
+            "older scheme's table", "older surface's table", "current table", "newer scheme's table")}
+        self.selector_entry("2" * 64, selectors.SELECTOR_SCHEME - 1, objects["older scheme's table"])
+        self.selector_entry("1" * 64, selectors.SELECTOR_SCHEME, objects["older surface's table"])
+        self.selector_entry("2" * 64, selectors.SELECTOR_SCHEME, objects["current table"])
+        self.selector_entry("2" * 64, selectors.SELECTOR_SCHEME + 1, objects["newer scheme's table"])
         self.surface_entry("1" * 64, {**now, "scheme": now["scheme"] - 1, "surfFormat": now["surfFormat"] - 1},
                            objects["older surface"])
         self.surface_entry("2" * 64, now, objects["current surface"])
@@ -516,19 +526,20 @@ class Obsolete(StoreSweepCase):
         objects = self.seed_versions()
         before = self.snapshot()
         dry = gc.collect(retired_only=True, dry_run=True)
-        self.assertEqual(dry.obsolete, {"surface": 2, "mesh": 2})
+        self.assertEqual(dry.obsolete, {"surface": 2, "selector": 2, "mesh": 2})
         self.assertEqual(self.snapshot(), before, "a dry run removes nothing")
 
         report = gc.collect(retired_only=True)
-        self.assertEqual(report.obsolete, {"surface": 2, "mesh": 2})
-        gone = {"older surface", "older mesher's mesh", "older surface's mesh"}
+        self.assertEqual(report.obsolete, {"surface": 2, "selector": 2, "mesh": 2})
+        gone = {"older surface", "older mesher's mesh", "older surface's mesh",
+                "older scheme's table", "older surface's table"}
         self.assertEqual({name for name, digest in objects.items() if not has_object(digest)}, gone,
                          "a pinned surface a current entry names stays, and so does a newer cadgen's work")
         self.assertTrue(has_object(tree) and has_object(brep))
         self.assertEqual(gc.collect(retired_only=True).obsolete, {}, "nothing is obsolete twice")
 
     def test_an_obsolete_entry_goes_only_once_a_week_old(self) -> None:
-        from cadgen.store import gc, meshes
+        from cadgen.store import gc, meshes, selectors
         from cadgen.store.objects import has_object
 
         tree, brep = self.seed_document()
@@ -536,7 +547,7 @@ class Obsolete(StoreSweepCase):
         mesher, payload = meshes.TESSELLATOR_VERSION, meshes.PAYLOAD_VERSION
         objects = {name: self.old_object(name.encode()) for name in (
             "old surface", "young surface", "young surface's old mesh",
-            "old surface with a young mesh", "that young mesh")}
+            "old surface with a young mesh", "that young mesh", "old surface with a young table", "that young table")}
         old, young = week + HOUR, week - DAY
         self.surface_entry("1" * 64, self.older_producer(), objects["old surface"], age=old)
         self.surface_entry("2" * 64, self.older_producer(), objects["young surface"], age=young)
@@ -544,19 +555,23 @@ class Obsolete(StoreSweepCase):
         # This cadgen's mesher and format, keyed by an obsolete surface: known obsolete only by that surface.
         self.surface_entry("3" * 64, self.older_producer(), objects["old surface with a young mesh"], age=old)
         self.mesh_entry("3" * 64, mesher, payload, objects["that young mesh"], age=young)
+        # And this cadgen's selector table scheme, keyed the same way.
+        self.surface_entry("4" * 64, self.older_producer(), objects["old surface with a young table"], age=old)
+        self.selector_entry("4" * 64, selectors.SELECTOR_SCHEME, objects["that young table"], age=young)
 
         # A full pass -- what `cadgen store gc` runs -- holds to the same week as the daemon's.
         report = gc.collect()
         self.assertEqual(report.obsolete, {"surface": 1, "mesh": 1})
         self.assertEqual({name for name, digest in objects.items() if not has_object(digest)},
                          {"old surface", "young surface's old mesh"},
-                         "a younger obsolete entry keeps its objects, and an obsolete surface stays with its younger mesh")
+                         "a younger obsolete entry keeps its objects, and an obsolete surface stays with its younger mesh or table")
         self.assertTrue(has_object(tree) and has_object(brep))
 
-        for kind in ("surface", "mesh"):
+        for kind in ("surface", "selector", "mesh"):
             for path in (self.store / "index" / kind).iterdir():
                 self.old(path, old)
-        self.assertEqual(gc.collect(retired_only=True).obsolete, {"surface": 2, "mesh": 1}, "a week later they go")
+        self.assertEqual(gc.collect(retired_only=True).obsolete, {"surface": 3, "selector": 1, "mesh": 1},
+                         "a week later they go")
         self.assertFalse(any(has_object(digest) for digest in objects.values()))
 
     def test_an_obsolete_entry_written_again_during_the_pass_stays(self) -> None:
@@ -595,7 +610,7 @@ class Obsolete(StoreSweepCase):
 
         housekeeper = daemon()
         line = housekeeper.look(str(self.store), cap)
-        self.assertIn("retired obsolete mesh entries (2), surface entries (2)", line)
+        self.assertIn("retired obsolete mesh entries (2), selector entries (2), surface entries (2)", line)
         self.assertFalse(has_object(objects["older surface"]))
         self.assertIsNone(housekeeper.look(str(self.store), cap), "not once per idle moment")
         self.assertIsNone(daemon().look(str(self.store), cap), "nor once per daemon start")

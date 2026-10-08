@@ -5,9 +5,10 @@ three kinds of thing:
 
 - **Retired kinds and obsolete entries.** The ``index/`` folders in
   ``RETIRED_KINDS`` (the operation cache's ``index/op``) go, with every object
-  only their entries named; so do the surface and mesh entries an older
-  extractor or mesher of cadgen's wrote, which no reader of this cadgen asks
-  for again (``surfaces.obsolete_entry``, ``meshes.obsolete_key``, and a mesh
+  only their entries named; so do the surface, selector-table and mesh entries
+  an older extractor, table scheme or mesher of cadgen's wrote, which no
+  reader of this cadgen asks for again (``surfaces.obsolete_entry``,
+  ``selectors.obsolete_key``, ``meshes.obsolete_key``, and a mesh or table
   keyed by such a surface's input), once last written
   ``OBSOLETE_RETIRE_AFTER_SECONDS`` ago (a week): an older cadgen sharing the
   store may still read them, and a read never writes.
@@ -83,6 +84,7 @@ _UNITS = {"": 1, "k": 1024, "m": 1024**2, "g": 1024**3, "t": 1024**4}
 _NAMED_FIELDS = {
     "component": ("brep", "eagerSurface"),
     "surface": ("object",),
+    "selector": ("object",),
     "mesh": ("object",),
     "drawing": ("object",),
     "bounds": (),
@@ -357,6 +359,10 @@ def _obsolete(kind: str, key: str, entry: dict | None) -> bool:
         from cadgen.store.meshes import obsolete_key
 
         return obsolete_key(key)
+    if kind == "selector":
+        from cadgen.store.selectors import obsolete_key
+
+        return obsolete_key(key)
     if kind == "surface":
         from cadgen.store.surfaces import obsolete_entry
 
@@ -380,15 +386,16 @@ def _read_entries(found: Scan, kinds, should_stop: Callable[[], bool]) -> list[_
 
 def _split_obsolete(rows: list[_Entry], retire_before: float) -> tuple[list[_Entry], list[_Entry]]:
     """``rows`` as (kept, retiring): the obsolete entries last written by
-    ``retire_before``, and the rest. A mesh keyed by an obsolete surface's input
-    is obsolete with it: no reader of this cadgen computes that input again. A
-    younger obsolete entry stays like a current one, with its objects, and so
-    does an obsolete surface while a mesh keyed by it is younger: that mesh is
-    known obsolete only by its surface."""
+    ``retire_before``, and the rest. A mesh or selector table keyed by an
+    obsolete surface's input is obsolete with it: no reader of this cadgen
+    computes that input again. A younger obsolete entry stays like a current
+    one, with its objects, and so does an obsolete surface while a mesh or
+    table keyed by it is younger: that entry is known obsolete only by its
+    surface."""
     gone = {row.key for row in rows if row.kind == "surface" and row.obsolete}
     for row in rows:
-        row.obsolete = row.obsolete or (row.kind == "mesh" and row.key[:64] in gone)
-    held = {row.key[:64] for row in rows if row.kind == "mesh" and row.obsolete and row.mtime > retire_before}
+        row.obsolete = row.obsolete or (row.kind in ("mesh", "selector") and row.key[:64] in gone)
+    held = {row.key[:64] for row in rows if row.kind in ("mesh", "selector") and row.obsolete and row.mtime > retire_before}
     current: list[_Entry] = []
     obsolete: list[_Entry] = []
     for row in rows:
@@ -401,9 +408,11 @@ def producer_versions() -> dict[str, list[int]]:
     """The versions an entry is obsolete against. The daemon notes, per store and
     per these versions, when its last retiring pass ran (``daemon/housekeeping.py``)."""
     from cadgen.store.meshes import PAYLOAD_VERSION, TESSELLATOR_VERSION
+    from cadgen.store.selectors import SELECTOR_SCHEME
     from cadgen.store.surfaces import EXTRACTION_SCHEME, SURF_FORMAT
 
-    return {"surface": [EXTRACTION_SCHEME, SURF_FORMAT], "mesh": [TESSELLATOR_VERSION, PAYLOAD_VERSION]}
+    return {"surface": [EXTRACTION_SCHEME, SURF_FORMAT], "selector": [SELECTOR_SCHEME],
+            "mesh": [TESSELLATOR_VERSION, PAYLOAD_VERSION]}
 
 
 @dataclass
@@ -507,7 +516,7 @@ def collect(
     found = scan() if found is None else found
     report.records = len(found.entries["model"])
     report.bytes_before = report.bytes_after = found.total
-    if retired_only and not found.retired and not (found.entries["surface"] or found.entries["mesh"]):
+    if retired_only and not found.retired and not (found.entries["surface"] or found.entries["selector"] or found.entries["mesh"]):
         return report
     try:
         if stop():

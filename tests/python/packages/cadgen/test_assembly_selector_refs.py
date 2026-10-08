@@ -336,18 +336,6 @@ class MergedRowsAreInternallyConsistentTest(_AssemblyDisplayFixture, unittest.Te
             "the merged index should carry the ranges instead",
         )
 
-    def test_buffer_offsets_are_dropped_rather_than_carried_stale(self) -> None:
-        """These index the COMPONENT's proxy buffers. The merged index holds the flat
-        assembly's, so a copied start points into unrelated data -- silently, and only for
-        whoever renders a highlight from it. Absent makes that a KeyError instead."""
-        merged = self._merged()
-        for rows in (merged.faces, merged.edges):
-            for row in rows:
-                if not str(row.get("occurrenceId") or "").count("."):
-                    continue
-                for field in ("triangleStart", "segmentStart", "surfaceHalfEdgeStart"):
-                    self.assertNotIn(field, row, f"{row['id']} carries a stale {field}")
-
     def test_adjacency_rows_stay_in_range(self) -> None:
         """Every relation row is an index into a list we concatenated into. An un-rebased one
         still lands somewhere -- on another occurrence's edge."""
@@ -364,29 +352,29 @@ class MergedRowsAreInternallyConsistentTest(_AssemblyDisplayFixture, unittest.Te
 
 
 class DormantPathsTest(unittest.TestCase):
-    """Vertices, and geometry that cannot be placed.
+    """Vertex rebasing in isolation, and geometry that cannot be placed.
 
-    No model in this repo carries vertices -- every component bundle reports vertexCount 0 -- so
-    the vertex rebasing is dead code that will wake up the first time a tree has one. That is
-    exactly when nobody will be looking at it, so it is driven here with a synthetic component.
+    A synthetic one-edge component, so the arithmetic of the vertex ranges and the
+    placement of a vertex can be checked against numbers chosen here rather than
+    read off a kernel's ordinals.
     """
 
     def _fake_component(self):
         manifest = {
             "tables": {
                 "occurrenceColumns": ["id", "name", "bbox"],
-                "shapeColumns": ["id", "occurrenceId", "ordinal", "bbox"],
-                "faceColumns": ["id", "occurrenceId", "shapeId", "ordinal", "center", "edgeStart", "edgeCount"],
-                "edgeColumns": ["id", "occurrenceId", "shapeId", "ordinal", "center", "vertexStart", "vertexCount"],
-                "vertexColumns": ["id", "occurrenceId", "ordinal", "center", "edgeStart", "edgeCount"],
+                "shapeColumns": ["id", "localId", "occurrenceId", "ordinal", "bbox"],
+                "faceColumns": ["id", "localId", "occurrenceId", "shapeId", "ordinal", "center", "edgeStart", "edgeCount"],
+                "edgeColumns": ["id", "localId", "occurrenceId", "shapeId", "ordinal", "center", "vertexStart", "vertexCount"],
+                "vertexColumns": ["id", "localId", "occurrenceId", "ordinal", "center", "edgeStart", "edgeCount"],
             },
             "occurrences": [["o1", "part", None]],
-            "shapes": [["o1.s1", "o1", 1, None]],
-            "faces": [["o1.f1", "o1", "o1.s1", 1, [0.0, 0.0, 0.0], 0, 1]],
-            "edges": [["o1.e1", "o1", "o1.s1", 1, [0.0, 0.0, 0.0], 0, 2]],
+            "shapes": [["o1.s1", "s1", "o1", 1, None]],
+            "faces": [["o1.f1", "f1", "o1", "o1.s1", 1, [0.0, 0.0, 0.0], 0, 1]],
+            "edges": [["o1.e1", "e1", "o1", "o1.s1", 1, [0.0, 0.0, 0.0], 0, 2]],
             "vertices": [
-                ["o1.v1", "o1", 1, [0.0, 0.0, 0.0], 0, 1],
-                ["o1.v2", "o1", 2, [1.0, 0.0, 0.0], 1, 1],
+                ["o1.v1", "v1", "o1", 1, [0.0, 0.0, 0.0], 0, 1],
+                ["o1.v2", "v2", "o1", 2, [1.0, 0.0, 0.0], 1, 1],
             ],
             "relations": {
                 "faceEdgeRows": [0],

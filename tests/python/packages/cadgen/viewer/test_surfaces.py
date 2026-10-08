@@ -61,17 +61,47 @@ class SurfaceRequests(unittest.TestCase):
         return self.manager.resolve(json.dumps(request or self.request).encode())
 
     def test_ready_request_never_initializes_native_work_and_serves_only_pinned_bytes(self):
+        from cadgen.store import selectors
+
         record = surfaces.derive(self.tree)[self.cid]
+        table = selectors.probe(selectors.selector_key(self.entry["surfaceInput"]))
+        self.assertIsNotNone(table, "the surface is derived with its selector table")
         with mock.patch("cadgen.daemon.artifacts.submit_artifact", side_effect=AssertionError("unexpected job")), \
              mock.patch.object(surfaces, "producer_identity", side_effect=AssertionError("kernel forbidden")):
             result = self.resolve()
             row = result["components"][self.cid]
             self.assertEqual(row["state"], "ready")
             self.assertEqual(row["surfaceObject"], record["object"])
+            # The table rides the ready row, served by the same store route as the surface.
+            self.assertEqual(row["selectors"], {
+                "object": table["object"], "byteLength": table["byteLength"],
+                "url": row["url"].replace(record["object"], table["object"]),
+            })
             self.assertEqual(pinned_surface_object(self.tree, self.entry["surfaceInput"], record["object"]),
                              object_path(record["object"]))
+            self.assertEqual(pinned_surface_object(self.tree, self.entry["surfaceInput"], table["object"]),
+                             object_path(table["object"]))
             self.assertIsNone(pinned_surface_object(self.tree, "f" * 64, record["object"]))
+            self.assertIsNone(pinned_surface_object(self.tree, "f" * 64, table["object"]))
             self.assertIsNone(pinned_surface_object(self.tree, self.entry["surfaceInput"], "f" * 64))
+
+    def test_a_surface_without_its_table_is_pending_until_the_job_restores_it(self):
+        from cadgen.store import selectors
+        from cadgen.store.index import remove_entry
+
+        surfaces.derive(self.tree)
+        key = selectors.selector_key(self.entry["surfaceInput"])
+        remove_entry("selector", key)  # evicted (STORE.md §8): the surface alone is not ready
+        future = SubscriberFuture()
+        with mock.patch("cadgen.daemon.artifacts.submit_artifact", return_value=future) as submit:
+            pending = self.resolve()
+            self.assertEqual(pending["components"][self.cid]["state"], "pending")
+            self.assertEqual(submit.call_count, 1)
+            surfaces.derive(self.tree)
+            future.set_result({})
+            ready = self.resolve({**self.request, "job": pending["job"]})["components"][self.cid]
+        self.assertEqual(ready["state"], "ready")
+        self.assertEqual(ready["selectors"]["object"], selectors.probe(key)["object"])
 
     def test_request_validates_only_named_surface_inputs_without_rebuilding_whole_view(self):
         surface_input = surfaces.surface_input
@@ -293,6 +323,8 @@ assert view and all('surfaceObject' not in entry for entry in view['components']
         self.assertEqual(status, 200, payload)
         row = json.loads(payload)["components"][self.cid]
         self.assertEqual(fixture.request("GET", row["url"])[::2], (200, object_path(record["object"]).read_bytes()))
+        self.assertEqual(fixture.request("GET", row["selectors"]["url"])[::2],
+                         (200, object_path(row["selectors"]["object"]).read_bytes()))
         wrong = row["url"].replace(record["object"], "f" * 64)
         self.assertEqual(fixture.request("GET", wrong)[0], 404)
         url = "/__cad/store?" + urlencode({"file": self.tree + "/assembly.json", "surfaceProducer": json.dumps(self.producer)})
