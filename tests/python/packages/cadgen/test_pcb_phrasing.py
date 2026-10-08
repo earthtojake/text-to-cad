@@ -86,6 +86,15 @@ class SummarizeTest(unittest.TestCase):
             "U2 pin 7 (VDD) is a power input that nothing powers",
         )
 
+    def test_pins_of_conflicting_types(self):
+        self.assertEqual(
+            summarize("erc", "pin_to_pin", "Pins of type Unspecified and Passive are connected",
+                      ["Symbol U1 Pin 3 [IO, Unspecified, Line]", "Symbol R1 Pin 1 [~, Passive, Line]"]),
+            "U1 pin 3 (IO) and R1 pin 1 (~) are connected, but their pin types (unspecified and passive) conflict",
+        )
+        self.assertEqual(summarize("erc", "pin_to_pin", "Something else", ["Symbol U1 Pin 3 [IO, Unspecified, Line]", "Symbol R1 Pin 1 [~, Passive, Line]"]),
+                         "Something else")
+
     def test_unrouted(self):
         self.assertEqual(
             summarize("unconnected", "unconnected_items", "Missing connection between items",

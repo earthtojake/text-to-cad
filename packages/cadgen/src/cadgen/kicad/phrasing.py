@@ -86,13 +86,18 @@ _SENTENCES: dict[str, Callable[[list[str], tuple[str, str] | None], str | None]]
     "pin_not_connected": lambda n, l: n and f"{_cap(n[0])} isn't connected to anything",
     "power_pin_not_driven": lambda n, l: n and f"{_cap(n[0])} is a power input that nothing powers",
     "label_dangling": lambda n, l: n and f"{_cap(n[0])} connects to nothing",
-    "pin_to_pin": lambda n, l: _two(n) and f"{_cap(_two(n))} are connected but shouldn't be (two outputs, or an output and power)",
 }
 
 
 def summarize(check: str, type: str, description: str, items: Sequence[str]) -> str:
     """One sentence for a finding: its items by name, then what is wrong with them."""
+    names = [name_item(text) for text in items]
+    if type == "pin_to_pin":  # KiCad's one message for every pin-type conflict, with the two types in it
+        types = re.search(r"Pins of type (.+?) and (.+?) are connected", description)
+        if types and _two(names):
+            return f"{_cap(_two(names))} are connected, but their pin types ({types[1].lower()} and {types[2].lower()}) conflict"
+        return description
     sentence = _SENTENCES.get(type)
     if sentence is None:
         return description
-    return sentence([name_item(text) for text in items], _limits(description)) or description
+    return sentence(names, _limits(description)) or description
