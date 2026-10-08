@@ -72,7 +72,7 @@ __all__ = [
 PLOT_SCHEMA_VERSION = 2
 # The derivation's own revision, in the cache key beside the schema version: a fix that changes
 # what a payload holds, not its shape, bumps it so the store never serves the old payloads.
-_REVISION = 4
+_REVISION = 5
 #: KiCad's default colour theme behind a board, and behind a schematic sheet.
 BOARD_BACKGROUND = "#001023"
 SCHEMATIC_BACKGROUND = "#F5F4EF"
@@ -392,6 +392,9 @@ def _board_payload(inputs: _Inputs, install) -> dict:
         staged = stage_files(inputs.files, Path(folder))
         stage = staged.parent
         index = read_index(tree, project=staged.with_suffix(".kicad_pro"))
+        from cadgen.kicad.review import net_currents, review
+
+        reviewed = review(index, net_currents(staged.with_suffix(".kicad_pro")))
         # One DRC: what is still unconnected (the ratsnest), and every finding the viewer lists.
         run_kicad_cli(install, ["pcb", "drc", "--format", "json", "-o", "drc.json", staged.name], cwd=stage)
         report = _drc_report(stage / "drc.json")
@@ -447,7 +450,7 @@ def _board_payload(inputs: _Inputs, install) -> dict:
         if drills:
             layers.append({"id": "drills", "kind": "drill", "side": "both", "svg": _drill_layer(page, list(drills))})
     width, height = _svg_size(page)
-    sheet = replace(index, findings=_findings(report, index)).mapped(lambda x, y: (x - offset[0], y - offset[1]))
+    sheet = replace(index, findings=_findings(report, index) + reviewed).mapped(lambda x, y: (x - offset[0], y - offset[1]))
     return {
         "kind": "board",
         "sheets": [{"name": path.stem, "width": width, "height": height, "background": BOARD_BACKGROUND, "layers": layers}],

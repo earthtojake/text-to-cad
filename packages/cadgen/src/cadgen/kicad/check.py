@@ -30,6 +30,7 @@ from __future__ import annotations
 import copy
 import shutil
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -78,8 +79,25 @@ _OUTLINE_ITEMS = ("gr_line", "gr_arc", "gr_circle", "gr_rect", "gr_poly", "gr_cu
 
 
 def is_blocking(finding: Finding) -> bool:
-    """An error stops a build; an unrouted connection only makes the board a draft."""
-    return finding.severity == "error" and finding.check != "unconnected"
+    """An error stops a build; an unrouted connection only makes the board a draft; the review only advises."""
+    return finding.severity == "error" and finding.check not in ("unconnected", "review")
+
+
+def _reviewed(tree: list, project: Path, currents: Mapping[str, float] | None = None) -> list[Finding]:
+    """The review's findings on a board (``cadgen.kicad.review``), in the script's coordinates."""
+    from cadgen.kicad.board_index import read_index
+    from cadgen.kicad.review import net_currents, review
+
+    index = read_index(tree, project=project)
+    to_script = _to_script(_origin(tree))
+    return [
+        Finding(
+            check=found.check, severity=found.severity, type=found.type, description=found.description,
+            items=tuple((item.text, to_script(*item.at) if item.at else None) for item in found.items),
+            summary=found.summary,
+        )
+        for found in review(index, net_currents(project) if currents is None else currents)
+    ]
 
 
 def fixes(findings) -> list[str]:
@@ -202,6 +220,7 @@ def build_board(board: Board, *, name: str, install: KicadInstall | None = None,
             )
         findings = erc_findings(stage / "erc.json") + board_findings
         filled = _merge_fills(pcb_tree, (stage / f"{name}.kicad_pcb").read_text())
+        findings += _reviewed(filled, stage / f"{name}.kicad_pro", board.net_currents)
     return BoardBuild(findings=tuple(findings), name=name, pro=texts.pro, sch=texts.sch, pcb=sexpr.dumps(filled), dru=texts.dru)
 
 
@@ -253,4 +272,5 @@ def check_project(path: Path, *, install: KicadInstall | None = None) -> Project
                     items=(),
                 ))
             findings.extend(board_findings)
+            findings.extend(_reviewed(tree, stage / f"{stem}.kicad_pro"))
     return ProjectCheck(findings=tuple(findings))

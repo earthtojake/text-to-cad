@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -26,6 +27,36 @@ DIMENSION = (
     """board.raw('(dimension (type aligned) (layer "Dwgs.User") (uuid "00000000-0000-4000-8000-0000000000d1")"""
     """ (pts (xy 130 85) (xy 165 85)) (height -2) (format (units 3) (units_format 1) (precision 4))"""
     """ (style (thickness 0.1) (arrow_length 1.27) (text_position_mode 0) (extension_height 0.58642) (extension_offset 0.5)))')"""
+)
+
+# The suite's blinky has no IC, so the review's board is the smallest model with a ``power_in`` pin: a
+# linear regulator, its input decoupled by a capacitor ``{cap_x}`` mm along from the pad.
+REGULATOR = textwrap.dedent(
+    '''
+    from cadgen import build123d as bd
+    from cadgen import pcb
+
+
+    @pcb
+    def regulator():
+        with bd.BuildSketch() as outline:
+            bd.Rectangle(30, 20)
+        board = pcb.Board(outline=outline.sketch)
+        vin, gnd = board.net("VIN", power_flag=True), board.net("GND", power_flag=True)
+        vout = board.net("VOUT")
+        u1 = board.part("Regulator_Linear:AMS1117-3.3", footprint="Package_TO_SOT_SMD:SOT-223-3_TabPin2")
+        c1 = board.part("Device:C", footprint="Capacitor_SMD:C_0603_1608Metric", value="10u")
+        board.connect(vin, u1["VI"], c1[1])
+        board.connect(vout, u1["VO"])
+        board.connect(gnd, u1["GND"], c1[2])
+        board.place(u1, at=(0, 0))
+        board.place(c1, at=({cap_x}, 5))
+        return board
+
+
+    if __name__ == "__main__":
+        regulator()
+    '''
 )
 
 
@@ -120,6 +151,27 @@ class PcbPlotAndValidateTest(unittest.TestCase):
         self.assertEqual([item["ref"] for item in unrouted["items"]], ["#R1.2", "#D1.2"])
         pads = {(pad["part"], pad["number"]): pad["at"] for pad in draft["board"]["pads"]}
         self.assertEqual([item["at"] for item in unrouted["items"]], [pads["R1", "2"], pads["D1", "2"]])
+
+    def test_the_review_rides_every_plot_and_validate_without_blocking(self) -> None:
+        """A regulator's input capacitor 10 mm past its pad (see ``REGULATOR``) is advised on, never blocked."""
+        from cadgen import pcb
+        from cadgen.kicad.plot import build_plot
+
+        project = self.folder / "regulator"
+        project.mkdir()
+        (project / "regulator.py").write_text(REGULATOR.format(cap_x=10), encoding="utf-8")
+        env = dict(os.environ, CADGEN_DAEMON="0", PYTHONPATH=str(CADGEN_SRC))
+        built = subprocess.run([sys.executable, "regulator.py"], cwd=project, env=env, capture_output=True, text=True, timeout=600)
+        self.assertEqual(built.returncode, 0, built.stderr)
+        payload = build_plot(project / "regulator.kicad_pcb")
+        review = [finding for finding in payload["board"]["findings"] if finding["check"] == "review"]
+        self.assertEqual([finding["type"] for finding in review], ["decoupling_far"])
+        self.assertIn("aim for under 3 mm", review[0]["summary"])
+        self.assertTrue(all(item["ref"] for item in review[0]["items"]))
+        checked = pcb.validate(project / "regulator.kicad_pcb")
+        [advice] = [issue for issue in checked.issues if issue.code == "review.decoupling_far"]
+        self.assertEqual(advice.severity, "warning")
+        self.assertTrue(all(finding.get("summary") for finding in payload["board"]["findings"]))
 
     def test_read_board_sees_the_copper_kicad_poured(self) -> None:
         from cadgen import pcb

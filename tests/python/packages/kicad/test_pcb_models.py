@@ -132,7 +132,7 @@ class PcbModelsTest(unittest.TestCase):
         built = self.run_script("blinky.py")
         self.assertEqual(built.returncode, 0, built.stderr)
         self.assertEqual(built.stdout.strip().splitlines()[-1], "built blinky.kicad_pcb (draft: 1 unrouted connection)")
-        self.assertIn("Missing connection between items", built.stderr)
+        self.assertIn("still need a track", built.stderr)  # the finding's plain summary, not KiCad's wording
 
     def test_kicads_errors_write_nothing(self) -> None:
         # A resistor with neither pin connected: KiCad's ERC reports both pins.
