@@ -456,6 +456,8 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   rebuilds outputs whose input hashes may have been captured after a mid-build
   edit, as well as outputs predating distinct occurrence colours.
   This is one source rebuild; existing geometry and surface objects remain reusable.
+  A record with no `closure.own` leaves nothing out of its listings, which is
+  how it hashed them, so it needs no new schema.
   Document mappings remain payload schema4: saved bytes stay
   authoritative and are reparsed without guessing colours that the document
   does not contain. There are no directory or document-byte-key salts. Trees
@@ -496,7 +498,7 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   "sourceKind": "python",
   "tree": "64429167…",
   "documentTree": "b291420a…",
-  "closure": {"hash": "e341ac84…", "files": ["link_robot.py", "lib/frame.py"], "shas": {"link_robot.py": "ast1:…", "lib/frame.py": "slice4:…"}, "names": {"lib/frame.py": ["WIDTH", "bar"]}, "wholes": {"lib/frame.py": "ast1:…"}, "static": false},
+  "closure": {"hash": "e341ac84…", "files": ["link_robot.py", "lib/frame.py"], "shas": {"link_robot.py": "ast1:…", "lib/frame.py": "slice4:…"}, "names": {"lib/frame.py": ["WIDTH", "bar"]}, "wholes": {"lib/frame.py": "ast1:…"}, "own": {}, "static": false},
   "children": [
     {"model": "/abs/models/assemblies/src/link_robot/link_arm.py::link_arm", "tree": "c161092b…"},
     {"model": "/abs/models/assemblies/src/link_robot/link_pin.py::link_pin", "tree": "265aee57…"}
@@ -519,7 +521,8 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   data file the build read, whoever opened it -- Python's `open`, numpy, an
   OCCT reader in C++ (§5, every read is seen). Nothing is declared. A file
   read is not an input when the build wrote it, when it is one of the model's
-  own outputs, when it is code (Python source is the reach above; a compiled
+  own outputs (the documents and meshes its decorators declare, and the
+  sidecar beside its STEP), when it is code (Python source is the reach above; a compiled
   library is the environment's), or when it lies in the environment: the
   interpreter and its packages, cadgen, the store, and the folders the
   operating system owns (fonts, time zones). Three kinds of entry are not files: `<folder>/`, a folder
@@ -545,6 +548,16 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   closures by construction. `closure.static: true` marks a record whose
   inputs are not files (a document re-emitted by `cadgen step build`); the
   gate's clause 2 does not re-hash files for it.
+- **A listing leaves out the model's own outputs** (`closure.own`): each one
+  written in the listed folder, and each folder there one was written into,
+  recorded per listing, so every re-hash -- gate clause 2, `cadgen store why`,
+  the publish rule, the annotation refresh -- leaves out the same names. They
+  are never its inputs, as a file it reads back is not: the listing is taken
+  when the body returns, before a first build publishes them, and a rebuild
+  lists the previous run's. So a model that lists its own folder is current
+  after its first build. A sibling model's outputs stay in, since a body may
+  list the folder to find them: a model that lists a folder its siblings build
+  into reads stale once after their outputs first appear there.
 - **Functions by reach** (`cadgen.store.reach`, the walk in
   `cadgen.store.closure`): a non-model file in the closure is hashed by the
   part of it the model can execute, not by its whole text, so editing a helper
@@ -736,6 +749,8 @@ of:
    A literal imported from a model file is compared as a value: a comment,
    a body edit or a new helper in that file leaves the importer current; a
    changed value (or the name no longer bound to a literal) makes it stale.
+   A listed folder is re-hashed less the model's own outputs its
+   `closure.own` records (§3).
 3. **Any recorded child is stale, or its current tree hash differs from the
    pinned hash.** Protects against a child whose RESULT changed — and lets a
    child edit that yields identical geometry leave the parent current.
@@ -811,7 +826,8 @@ Each with the failure it prevents.
   file, its size and its mtime while the capture is open. Every reader ends
   there: Python's `open`, numpy, build123d's importers, OCCT, FreeType.
   Folders come from Python's `os.listdir` / `os.scandir` audit events, by
-  frame: the import system's listings and cadgen's own are not the model's.
+  frame: the import system's listings and cadgen's own are not the model's,
+  and a listing leaves out the model's own outputs (§3).
   The gate's own reading inside a build (a child's files and outputs, hashed
   to decide whether it is current) is paused on its thread: a child is an
   input by its result. Prevents: a model whose data changed reading as
