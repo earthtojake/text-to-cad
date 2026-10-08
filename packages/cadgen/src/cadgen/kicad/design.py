@@ -160,13 +160,23 @@ class NetClass:
 class Net:
     """A connection between pins. Named nets with one name are one net."""
 
-    __slots__ = ("_board", "_name", "netclass", "power_flag", "_index")
+    __slots__ = ("_board", "_name", "netclass", "power_flag", "current", "_index")
 
-    def __init__(self, board: "Board", name: str | None, *, netclass: str | None, power_flag: bool, index: int):
+    def __init__(
+        self,
+        board: "Board",
+        name: str | None,
+        *,
+        netclass: str | None,
+        power_flag: bool,
+        index: int,
+        current: float | None = None,
+    ):
         self._board = board
         self._name = name
         self.netclass = netclass
         self.power_flag = power_flag
+        self.current = current
         self._index = index
 
     @property
@@ -532,13 +542,26 @@ class Circuit:
 
     # -- the netlist --
 
-    def net(self, name: str | None = None, *, netclass: str | None = None, power_flag: bool = False) -> Net:
+    def net(
+        self,
+        name: str | None = None,
+        *,
+        netclass: str | None = None,
+        power_flag: bool = False,
+        current: float | None = None,
+    ) -> Net:
         """A net. One name is one net; ``net()`` with no name makes a net named after its first pin.
 
         ``power_flag=True`` marks a net that is powered from off the board (a
         connector, a battery): KiCad's ERC needs a PWR_FLAG on such a net, or it
         reports its power inputs as undriven.
+
+        ``current`` is what the net carries, in amperes: the review checks its tracks are wide enough.
         """
+        if current is not None:
+            current = float(current)
+            if not current > 0:
+                raise DesignError(f"a net's current is in amperes and positive, not {current:g}")
         if name is not None:
             name = str(name).strip()
             if not name:
@@ -549,6 +572,10 @@ class Circuit:
                     raise DesignError(f"net {name!r} is already in net class {existing.netclass!r}")
                 if netclass is not None:
                     existing.netclass = netclass
+                if current is not None and existing.current not in (None, current):
+                    raise DesignError(f"net {name!r} already carries {existing.current:g} A")
+                if current is not None:
+                    existing.current = current
                 if power_flag and not existing.power_flag:
                     self.libraries.symbol("power:PWR_FLAG")
                     existing.power_flag = True
@@ -557,7 +584,9 @@ class Circuit:
             # The schematic draws KiCad's PWR_FLAG for this net. Look it up now, while
             # the build's trace is watching, so its library is one of the inputs.
             self.libraries.symbol("power:PWR_FLAG")
-        net = Net(self, name, netclass=netclass, power_flag=bool(power_flag), index=len(self._nets))
+        net = Net(
+            self, name, netclass=netclass, power_flag=bool(power_flag), index=len(self._nets), current=current
+        )
         self._nets.append(net)
         if name is not None:
             self._named_nets[name] = net
@@ -568,6 +597,11 @@ class Circuit:
         """Every net that has at least one pin, in the order they were made."""
         used = set(id(net) for net in self._pin_nets.values())
         return [net for net in self._nets if id(net) in used]
+
+    @property
+    def net_currents(self) -> dict[str, float]:
+        """Each used net the script gave a current, by name: what the review's track check reads."""
+        return {net.name: net.current for net in self.nets if net.current is not None}
 
     def part(
         self,

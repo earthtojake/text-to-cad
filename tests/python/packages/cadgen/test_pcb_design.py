@@ -53,6 +53,18 @@ class PcbDesignTest(unittest.TestCase):
         with self.assertRaisesRegex(DesignError, "ref R3 is used twice"):
             board.part("Test:R", footprint="Test:R_0603", ref="R3")
 
+    def test_a_net_carries_the_current_its_script_gives(self) -> None:
+        board = self.board()
+        vbus = board.net("VBUS", current=2.0)
+        self.assertEqual(vbus.current, 2.0)
+        self.assertIs(board.net("VBUS"), vbus)
+        self.assertEqual(board.net("VBUS", current=2.0).current, 2.0)
+        with self.assertRaisesRegex(DesignError, "already carries 2 A"):
+            board.net("VBUS", current=3.0)
+        with self.assertRaisesRegex(DesignError, "positive"):
+            board.net("V3V3", current=0)
+        self.assertIsNone(board.net("SDA").current)
+
     def test_a_pin_joins_one_net(self) -> None:
         board = self.board()
         r1 = board.part("Test:R", footprint="Test:R_0603")

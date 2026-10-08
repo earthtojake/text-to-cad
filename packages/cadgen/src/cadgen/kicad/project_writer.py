@@ -105,4 +105,7 @@ def project_document(board: Board, *, project: str, root_uuid: str) -> str:
         "sheets": [[root_uuid, "Root"]],
         "text_variables": {},
     }
+    if board.net_currents:
+        # KiCad keeps no current per net; the review reads it from here (cadgen.kicad.review.net_currents).
+        document["cadgen"] = {"net_currents": dict(sorted(board.net_currents.items()))}
     return json.dumps(document, indent=2, sort_keys=True) + "\n"

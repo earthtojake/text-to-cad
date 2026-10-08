@@ -279,6 +279,15 @@ class PcbDocumentsTest(unittest.TestCase):
         self.assertEqual(project["net_settings"]["netclass_patterns"], [{"netclass": "Power", "pattern": "VIN"}])
         self.assertEqual(project["board"]["design_settings"]["rules"]["min_clearance"], board.rules.min_clearance)
 
+    def test_the_project_keeps_each_nets_current(self) -> None:
+        board = self.board()
+        board.net("VIN", current=2.0)  # VIN is on two pins, so it is a used net
+        document = json.loads(project_texts(board, name="amp").pro)
+        self.assertEqual(document["cadgen"], {"net_currents": {"VIN": 2.0}})
+
+    def test_a_project_without_currents_has_no_cadgen_section(self) -> None:
+        self.assertNotIn("cadgen", json.loads(project_texts(self.board(), name="amp").pro))
+
     def test_custom_rules_are_the_projects_kicad_dru(self) -> None:
         from cadgen.kicad.design import DesignError
 
