@@ -1,11 +1,9 @@
-// The viewer half of the mates FK evaluator (design/pose-animation-split.md).
+// The mates FK evaluator.
 //
 // The sidecar's kinematics block is pure data: typed mates over one resolved
 // axis each (world-at-rest numbers, baked by the build), linear couplings, and
 // named pose presets. This module folds DOF values through the mate tree into
-// one delta matrix per mated occurrence subtree — no solver, no flips, and the
-// same math the Python exporter runs, so a slider position and an exported
-// pose agree to the bit.
+// one delta matrix per mated occurrence subtree — no solver, no flips.
 //
 // Semantics: THE ARTIFACT AS WRITTEN is q=0. A mate's motion is displacement
 // about its axis from the written placement, expressed in world-at-rest

@@ -82,10 +82,9 @@ in [the drawing contract](../ui/docs/drawing.md); the mechanism is
   comparison. View Reset clears display overrides and disables those tools. The grouped contract and the rig it drives:
   [docs/render-pipeline.md](docs/render-pipeline.md).
 - **Kinematics and choreography are data, independently**: the FK
-  evaluator (`kinematicsRuntime.js`) folds sidecar mate data into
-  transforms and is the operation-for-operation twin of the Python
-  evaluator (`cadgen/_internal/kinematics_fk.py`) — a viewer slider and an
-  exported bake agree to the bit. The animation runtime
+  evaluator (`kinematicsRuntime.js`) folds the sidecar's mate data, which
+  cadgen declares, validates and resolves, into per-occurrence transforms.
+  The animation runtime
   (`animationRuntime.js`) interpolates the keyframes in `sidecar.animation`,
   `{clips: [{id, label, duration, loop, tracks}, ...]}`, which cadgen bakes
   from the model's Python clips when it builds. Each track drives one channel
@@ -155,7 +154,6 @@ docs/              # subsystem docs (the map below)
 
 Contract mirrors that must stay in lockstep (each has a sync test):
 `lib/cadRefs.js` ↔ `cadgen/cad_ref_syntax.py`;
-`common/kinematicsRuntime.js` ↔ `cadgen/_internal/kinematics_fk.py`;
 mesh keys, GLB bodies (their canonical JSON and tables) and mesh-index records
 (`lib/surf/tessellationCache.js`, a reader only: cadgen is the one writer) ↔
 `cadgen/store/meshes.py`.

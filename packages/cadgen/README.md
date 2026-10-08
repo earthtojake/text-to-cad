@@ -428,7 +428,8 @@ src/cadgen/
                          #   builds and how that goes, counted)
   _internal/             # the engine: generation pipeline, tree builder,
                          #   filetrace (every file a build opens),
-                         #   FK (kinematics_fk/resolve), animation_bake
+                         #   kinematics_resolve (mate axes to numbers),
+                         #   animation_bake
                          #   (clips to keyframes), mesh_export (the mesh
                          #   writers, a clip's GLB sampling, their ledger),
                          #   cli_from_function, doors (documents by bytes),

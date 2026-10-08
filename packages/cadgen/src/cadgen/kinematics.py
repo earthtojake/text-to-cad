@@ -1,8 +1,7 @@
 """Typed mates: the model's kinematics, declared as pure data.
 
 The ``kinematics=`` kwarg on ``@step``/``@stl``/``@glb``/``@threemf`` takes ONE
-dict whose shape mirrors the sidecar's kinematics section exactly
-(design/pose-animation-split.md)::
+dict whose shape mirrors the sidecar's kinematics section exactly::
 
     KINEMATICS = {
         "mates": [
@@ -19,10 +18,10 @@ dict whose shape mirrors the sidecar's kinematics section exactly
 Semantics: AUTHORED PLACEMENT IS q=0. A mate declares the one axis its DOF
 moves about (a selector ref resolved to numbers at build time, or literal
 origin/direction) and measures displacement from wherever the author built the
-child. There is no frame snapping and no solver — evaluation is a pure fold
-over the mate tree (forward kinematics), identical in the Python exporter and
-the viewer runtime. Closed loops are out of scope by design (the same call
-URDF made); declaring one is an error here, not a solver invocation.
+child. There is no frame snapping and no solver — the viewer evaluates a
+pose as a pure fold over the mate tree (forward kinematics). Closed loops are
+out of scope by design (the same call URDF made); declaring one is an error
+here, not a solver invocation.
 
 Each decorator's declaration stands alone: a mesh decorator never reads
 @step's kinematics. Sharing happens in the author's source — one module-level
@@ -272,8 +271,8 @@ def fastened(name, *, parent, child) -> Mate:
 
 def couple(name, gears, *, limits=None) -> Coupling:
     """A virtual DOF driving real DOFs linearly: ``couple("curl", {"mcp": 50, ...})``
-    means setting curl=x sets mcp to 50*x (and so on). Ratios are plain numbers —
-    couplings are data, evaluated identically by both FK runtimes."""
+    means setting curl=x adds 50*x to mcp (and so on). Ratios are plain numbers:
+    a coupling is data, never a function."""
     text = _mate_name(name)
     if not isinstance(gears, Mapping) or not gears:
         raise _fail(f"couple {text!r} gears must be a non-empty dict of {{dof: ratio}}")
