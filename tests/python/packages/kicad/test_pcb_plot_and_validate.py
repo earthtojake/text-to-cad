@@ -203,6 +203,36 @@ class PcbPlotAndValidateTest(unittest.TestCase):
         self.assertEqual((nets["J1", "1"], nets["R1", "1"], nets["J1", "2"], nets["D1", "1"]), ("VBUS", "VBUS", "GND", "GND"))
         self.assertEqual(nets["R1", "2"], nets["D1", "2"])
         self.assertTrue(all(item["net"] for item in index["wires"] + index["labels"]))
+        findings = index["findings"]
+        self.assertIsInstance(findings, list)
+        self.assertTrue(all(finding["check"] == "erc" and finding["summary"] for finding in findings))
+
+    def test_a_pin_left_open_is_an_erc_finding_naming_its_pin(self) -> None:
+        from cadgen.kicad.plot import build_plot
+
+        # A build refuses a schematic KiCad's ERC faults, so take the finished one and cut the
+        # connector's first pin loose: its wire and the VBUS label on the wire's far end.
+        text = (self.folder / "finished" / "blinky.kicad_sch").read_text(encoding="utf-8")
+        for marker in ('(global_label "VBUS"', "(wire\n\t\t(pts\n\t\t\t(xy 33.02 31.75)"):
+            start = text.index(marker)
+            depth = 0
+            for end, char in enumerate(text[start:], start=start):
+                depth += (char == "(") - (char == ")")
+                if depth == 0:
+                    break
+            text = text[:start] + text[end + 1 :].lstrip("\n\t")
+        cut = self.folder / "cut"
+        cut.mkdir()
+        (cut / "blinky.kicad_sch").write_text(text, encoding="utf-8")
+        (cut / "blinky.kicad_pro").write_bytes((self.folder / "finished" / "blinky.kicad_pro").read_bytes())
+        index = build_plot(cut / "blinky.kicad_sch")["schematic"]
+        pads = {f"#{pin['part']}.{pin['number']}" for pin in index["pins"]}
+        unconnected = [finding for finding in index["findings"] if finding["type"] == "pin_not_connected"]
+        self.assertTrue(unconnected, index["findings"])
+        for finding in unconnected:
+            self.assertIn(finding["items"][0]["ref"], pads)
+            self.assertEqual(finding["items"][0]["sheet"], 0)
+        self.assertIn("#J1.1", [finding["items"][0]["ref"] for finding in unconnected])
 
     def test_the_payload_is_cached_by_the_documents_bytes(self) -> None:
         from cadgen.kicad.plot import plot_payload_bytes

@@ -461,7 +461,7 @@ def _board_payload(inputs: _Inputs, install) -> dict:
 
 def _schematic_payload(inputs: _Inputs, install) -> dict:
     from cadgen.kicad.cli import run_kicad_cli
-    from cadgen.kicad.schematic_index import payload_index, stage_files
+    from cadgen.kicad.schematic_index import erc_payload, payload_index, stage_files
 
     path = inputs.document
     if not inputs.files[0][1].lstrip().startswith(b"(kicad_sch"):
@@ -483,6 +483,8 @@ def _schematic_payload(inputs: _Inputs, install) -> dict:
             index = payload_index(staged, install, list(pictures))
         except ValueError as error:
             raise PlotError(str(error)) from None
+        run_kicad_cli(install, ["sch", "erc", "--format", "json", "-o", "erc.json", staged.name], cwd=staged.parent)
+        index["findings"] = erc_payload(staged.parent / "erc.json", index)
         sheets = []
         for name in (sheet["name"] for sheet in index["sheets"]):  # the index's order: KiCad's pages
             svg = _strip_stamps(pictures[name].read_text(encoding="utf-8"))

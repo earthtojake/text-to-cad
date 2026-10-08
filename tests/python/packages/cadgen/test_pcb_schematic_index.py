@@ -12,6 +12,7 @@ plots). KiCad's own netlist and plot of the same are the KiCad suite's
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -34,7 +35,7 @@ from cadgen.kicad import sexpr  # noqa: E402
 from cadgen.kicad.design import Board  # noqa: E402
 from cadgen.kicad.ids import Ids  # noqa: E402
 from cadgen.kicad.project_writer import project_document  # noqa: E402
-from cadgen.kicad.schematic_index import Net, Part, Pin, SchematicView, read_index, read_schematic  # noqa: E402
+from cadgen.kicad.schematic_index import Net, Part, Pin, SchematicView, erc_payload, read_index, read_schematic  # noqa: E402
 from cadgen.kicad.schematic_writer import schematic_document  # noqa: E402
 
 
@@ -269,6 +270,46 @@ class HierarchyTest(unittest.TestCase):
         self.assertEqual([(part.ref, part.units[0].sheet) for part in aligned.parts], [("R1", 0), ("R3", 1)])
         self.assertEqual({pin.sheet for pin in aligned.pins}, {0, 1})
         self.assertEqual(aligned.as_json()["sheets"][2], {"name": "Missing", "path": "", "file": "", "title": ""})
+
+
+class ErcPayloadTest(unittest.TestCase):
+    """KiCad's ERC report, each item pointed at the pin or net it names. KiCad's ERC JSON writes a
+    position as page millimetres divided by 100 (verified on KiCad 10), as these inputs do."""
+
+    INDEX = {
+        "sheets": [{"name": "t", "path": "/", "file": "t.kicad_sch", "title": ""}],
+        "pins": [{"part": "U2", "number": "7", "name": "VDD", "type": "power_in", "unit": 1, "sheet": 0,
+                  "net": "VDD", "at": [50.8, 25.4], "end": [53.34, 25.4], "hidden": False}],
+        "labels": [{"net": "SDA", "sheet": 0, "text": "SDA", "kind": "local", "at": [76.2, 30.48], "outline": []}],
+    }
+
+    def report(self, violations, path="/"):
+        folder = tempfile.mkdtemp()
+        report = Path(folder) / "erc.json"
+        report.write_text(json.dumps({"coordinate_units": "mm", "sheets": [{"path": path, "violations": violations}]}))
+        return report
+
+    def test_a_pin_finding_names_the_pin(self):
+        (found,) = erc_payload(self.report([{"severity": "error", "type": "power_pin_not_driven",
+            "description": "Input Power pin not driven by any Output Power pins",
+            "items": [{"description": "Symbol U2 Pin 7 [VDD, Power input, Line]", "pos": {"x": 0.508, "y": 0.254}}]}]), self.INDEX)
+        self.assertEqual(found["items"][0]["ref"], "#U2.7")
+        self.assertEqual(found["items"][0]["at"], [50.8, 25.4])
+        self.assertEqual(found["items"][0]["sheet"], 0)
+        self.assertEqual(found["summary"], "U2 pin 7 (VDD) is a power input that nothing powers")
+
+    def test_a_label_finding_names_its_net(self):
+        (found,) = erc_payload(self.report([{"severity": "warning", "type": "label_dangling", "description": "Label not connected",
+            "items": [{"description": "Label 'SDA'", "pos": {"x": 0.762, "y": 0.3048}}]}]), self.INDEX)
+        self.assertEqual(found["items"][0]["ref"], "#net:SDA")
+
+    def test_no_position_or_an_undrawn_sheet_still_lists(self):
+        (a,) = erc_payload(self.report([{"severity": "error", "type": "x", "description": "d",
+            "items": [{"description": "Symbol U9"}]}]), self.INDEX)
+        self.assertEqual(a["items"][0], {"text": "Symbol U9", "ref": "#U9", "at": None, "sheet": 0})
+        (b,) = erc_payload(self.report([{"severity": "error", "type": "x", "description": "d",
+            "items": [{"description": "Something", "pos": {"x": 0.01, "y": 0.01}}]}], path="/elsewhere/"), self.INDEX)
+        self.assertEqual(b["items"][0], {"text": "Something", "ref": None, "at": None, "sheet": None})
 
 
 if __name__ == "__main__":
