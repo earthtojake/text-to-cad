@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { handle } from './handler.mjs';
-import { versions } from './versions.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
 const SESSION = '0b1e6f1a-6a52-4c39-9d43-2f5e0f0b9d11';
@@ -240,11 +238,10 @@ test('health fails without a setting, or with keys the service refuses, naming n
 test('the version feed is the same for everyone, kept at the edge, and answers without the telemetry service', async () => {
   const feed = { latest: '0.9.0' };
   const down = { ...memory(), async ready() { throw new Error('unreachable'); } };
-  const reply = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: feed, missing: ['POSTHOG_REGION'] });
-  assert.deepEqual([reply.status, await reply.json()], [200, feed]);
-  assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=86400');
-});
-
-test("this release's feed names it, and nothing else", () => {
-  assert.deepEqual(versions, { latest: readFileSync(new URL('../../../VERSION', import.meta.url), 'utf8').trim() });
+  const reply = await handle(new Request('https://api.texttocad.dev/v1/versions/'), down, { versions: async () => feed, missing: ['POSTHOG_REGION'] });
+  assert.deepEqual([reply.status, reply.headers.get('content-type'), await reply.json()], [200, 'application/json', feed]);
+  assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800');
+  // No feed to give: an error the edge keeps nowhere, which a released cadgen takes as a check that failed.
+  const none = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: async () => null });
+  assert.deepEqual([none.status, none.headers.get('cache-control')], [503, 'no-store']);
 });
