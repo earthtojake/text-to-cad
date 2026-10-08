@@ -9,6 +9,6 @@
  * cannot be installed yet. Only a copy installed by hand reads it: a store's copy never checks, since
  * its store updates it.
  */
-import site from '../../../package.json' with { type: 'json' };
+import site from '../../docs/package.json' with { type: 'json' };
 
 export const versions = Object.freeze({ latest: site.version });

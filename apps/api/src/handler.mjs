@@ -1,7 +1,7 @@
 /**
  * api.texttocad.dev: what cadgen talks to -- the version feed its daily check reads, and the receiver
- * cadgen's telemetry is sent to -- served by this site (`app/v1/[...route]/route.ts`; the domain is this
- * project's too). A plain fetch handler over a `store` (PostHog's, posthog.mjs), so the host it runs on and
+ * cadgen's telemetry is sent to -- served by this project's one function (`api/v1.js`, which vercel.json
+ * sends every /v1 path to). A plain fetch handler over a `store` (PostHog's, posthog.mjs), so the host it runs on and
  * the service behind it can change without a release of anything that calls it (README.md).
  *
  *   GET    /v1/versions        the version feed (versions.mjs) -> 200, the same for everyone

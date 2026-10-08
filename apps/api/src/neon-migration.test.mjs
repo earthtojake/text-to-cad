@@ -1,8 +1,8 @@
-// ONE-OFF, with ../../../scripts/migrate-neon-to-posthog.mjs: delete both once the migration has run.
+// ONE-OFF, with ../scripts/migrate-neon-to-posthog.mjs: delete both once the migration has run.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { batchesOf, COLUMNS, eventsOf, goneInstalls, sql } from '../../../scripts/migrate-neon-to-posthog.mjs';
+import { batchesOf, COLUMNS, eventsOf, goneInstalls, sql } from '../scripts/migrate-neon-to-posthog.mjs';
 import { rowsOf } from './events.mjs';
 import { EVENTS, propertiesOf } from './posthog.mjs';
 

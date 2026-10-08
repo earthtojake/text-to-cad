@@ -363,7 +363,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "README.md": {"CADGEN_INSTALL_CHANNEL": "claude-desktop"},
         })
         # Every channel any package names is one the analytics receiver takes.
-        receiver = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "api" / "events.mjs").read_text(encoding="utf-8")
+        receiver = (REPO_ROOT / "apps" / "api" / "src" / "events.mjs").read_text(encoding="utf-8")
         named = {env["CADGEN_INSTALL_CHANNEL"] for env in said.values()} | {"claude-directory", "cursor-github",
                                                                            "openai-directory", "dev"}
         for channel in sorted(named):

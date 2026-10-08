@@ -246,5 +246,5 @@ test('the version feed is the same for everyone, kept at the edge, and answers w
 });
 
 test("this release's feed names it, and nothing else", () => {
-  assert.deepEqual(versions, { latest: readFileSync(new URL('../../../../../VERSION', import.meta.url), 'utf8').trim() });
+  assert.deepEqual(versions, { latest: readFileSync(new URL('../../../VERSION', import.meta.url), 'utf8').trim() });
 });
