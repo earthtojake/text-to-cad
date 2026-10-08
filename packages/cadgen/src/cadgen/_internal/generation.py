@@ -1487,20 +1487,20 @@ def generate_step_targets(
 
         job_reused(outcome in ("current", "skipped-peer"))  # in a build worker: telemetry's cache hit, or not
         entry = {
-                "ok": True,
-                # Read off the tree (store.trees.tree_kind): part or assembly is
-                # what the returned shape was, never something a model declares.
-                "kind": tree_kind_for(tree) or "part",
-                "outcome": outcome,
-                # The document the run wrote, and the hash of the result tree it came
-                # from. A mesh-only model declares no STEP, so it answers with the mesh
-                # it wrote -- a path the caller can open, never the tree hash, which
-                # names nothing on disk. ABSOLUTE in the JSON result, as every door's
-                # is (a machine reader may not share this cwd); the human line below
-                # shows it relative to the cwd.
-                "document": _reported_document(spec),
-                "tree": tree,
-            }
+            "ok": True,
+            # Read off the tree (store.trees.tree_kind): part or assembly is
+            # what the returned shape was, never something a model declares.
+            "kind": tree_kind_for(tree) or "part",
+            "outcome": outcome,
+            # The document the run wrote, and the hash of the result tree it came
+            # from. A mesh-only model declares no STEP, so it answers with the mesh
+            # it wrote -- a path the caller can open, never the tree hash, which
+            # names nothing on disk. ABSOLUTE in the JSON result, as every door's
+            # is (a machine reader may not share this cwd); the human line below
+            # shows it relative to the cwd.
+            "document": _reported_document(spec),
+            "tree": tree,
+        }
         if spec.pcb_path is not None:
             entry["unrouted"] = _board_unrouted(spec)
         reported.append(entry)
@@ -1770,6 +1770,9 @@ def generate_pcb_targets(
     reported: list[dict[str, object]] = []
 
     def _emit(spec: EntrySpec, outcome: str, unrouted: int | None) -> None:
+        from cadgen.daemon.telemetry import job_reused
+
+        job_reused(outcome in ("current", "skipped-peer"))  # in a build worker: telemetry's cache hit, or not
         reported.append(
             {
                 "ok": True,
@@ -1860,6 +1863,9 @@ def generate_harness_targets(
     reported: list[dict[str, object]] = []
 
     def _emit(spec: EntrySpec, outcome: str) -> None:
+        from cadgen.daemon.telemetry import job_reused
+
+        job_reused(outcome in ("current", "skipped-peer"))  # in a build worker: telemetry's cache hit, or not
         reported.append(
             {
                 "ok": True,

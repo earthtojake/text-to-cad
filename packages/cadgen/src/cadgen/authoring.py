@@ -1155,7 +1155,7 @@ def _build(defn: ModelDef) -> int:
 
         # Counted here as the daemon counts the builds it answers: no daemon answered this one.
         return telemetry.cold_build(
-            "dxf" if defn.fmt == "dxf" else "step", "script",
+            {"dxf": "dxf", "pcb": "kicad_pcb", "harness": "harness"}.get(defn.fmt, "step"), "script",
             lambda: run_model_argv([*target, *argv], prog=f"python {defn.script_path.name}"),
             meshes=bool(defn.mesh_exports),
         )

@@ -83,6 +83,17 @@ class DaemonTelemetryTest(unittest.TestCase):
         self.assertEqual(self.sent[-1]["process"], "daemon")
         self.assertNotIn("/w/", json.dumps(self.sent))
 
+    def test_a_board_or_a_harness_script_is_counted_as_its_format(self) -> None:
+        # Told apart by the document the script declares, as a drawing is.
+        telemetry.build(RUN, {"id": "e:job-1", "outputs": ["/w/blinky.kicad_pcb", "/w/blinky.step"]}).finish(0, None, 3.0)
+        telemetry.build(RUN, {"id": "e:job-2", "outputs": ["/w/cable.harness.yml"]}).finish(1, None, 1.0)
+        self.assertEqual(self.events(), [
+            {"name": "build", "kind": "harness", "via": "script", "count": 1, "failed": 1, "crashed": 0, "cancelled": 0, "cached": 0,
+             "seconds": 1.0, "longest": 1.0},
+            {"name": "build", "kind": "kicad_pcb", "via": "script", "count": 1, "failed": 0, "crashed": 0, "cancelled": 0, "cached": 0,
+             "seconds": 3.0, "longest": 3.0},
+        ])
+
     def test_a_jobs_crashes_and_its_reuse_ride_its_exit_frame(self) -> None:
         # In a build worker (worker.serve): what cadgen decided as the job ran, for the daemon.
         crash = {"where": "build", "type": "KeyError", "handled": True,
