@@ -86,8 +86,8 @@ class NameValidation(TessCacheTestCase):
         self.assertEqual(tess_cache_key_from_route_path(self.route(f"{GOOD_KEY}.tess")), GOOD_KEY)
 
     def test_traversal_separators_hidden_names_and_spaces_are_refused(self):
-        # The cache lives OUTSIDE every served root, so containment cannot help
-        # here: this pattern is the whole defence.
+        # The cache lives outside every folder a file is served from, so containment
+        # cannot help here: this pattern is the whole defence.
         for name in (
             "../escape.tess",
             "sub/dir.tess",

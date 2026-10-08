@@ -1,6 +1,6 @@
 {
   "name": "cad-skills-docs",
-  "version": "0.7.10",
+  "version": "0.7.17",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/analytics/*.test.mjs",
+    "test": "node --test src/lib/api/*.test.mjs",
     "check": "node scripts/check-hero-step-assets.mjs && npm test && npm run lint && npm run build && npm run icon:verify",
     "predev": "npm run icon:generate",
     "prebuild": "npm run icon:generate",
@@ -23,7 +23,6 @@
     "lucide-react": "^1.48.0",
     "meshoptimizer": "^1.2.0",
     "next": "16.3.6",
-    "postgres": "^3.4.9",
     "radix-ui": "^1.6.7",
     "react": "19.3.0",
     "react-dom": "19.3.0",

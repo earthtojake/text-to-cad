@@ -7,16 +7,16 @@
     "displayName": "CAD"
   },
   "metadata": {
-    "description": "Give your agent CAD superpowers."
+    "description": "Design 3D models"
   },
-  "description": "Give your agent CAD superpowers.",
-  "version": "0.7.10",
+  "description": "Design 3D models",
+  "version": "0.7.17",
   "plugins": [
     {
       "name": "text-to-cad",
       "source": "./",
-      "description": "Give your agent CAD superpowers. The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.",
-      "version": "0.7.10",
+      "description": "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.",
+      "version": "0.7.17",
       "author": {
         "name": "earthtojake"
       },

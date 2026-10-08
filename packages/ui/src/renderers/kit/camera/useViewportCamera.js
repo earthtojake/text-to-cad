@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { applyPerspectiveSnapshot, cancelCameraTransition, captureRuntimeViewportFitScale, readPerspectiveSnapshot, readScopedPerspectiveSnapshot, recenterRuntimeTarget, setRuntimeZoomPercent, syncRuntimeViewportFraming, transitionCameraToViewPreset, zoomRuntimeToBounds } from "./runtimeCamera.js";
 import { runtimeModelKeyMatches } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
+import { requestSceneFrame } from "../viewport/sceneFrames.js";
 import { perspectiveSnapshotEqual, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot } from "@text-to-cad/core/lib/perspective.js";
 import { DEFAULT_VIEW_DIRECTION, VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_FACE_BY_ID, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState, readViewPlaneOrientation, runtimeFramingBounds } from "./viewportCameraKit.js";
 
@@ -134,12 +135,12 @@ export function useViewportCamera({
         previewCameraRef.current = null;
       }
       controls.enableDamping = true;
-      // Preview orbits only if its Playback settings say so: a preview entered with the orbit
+      // Preview orbits only if the file's Orbit says so: a preview entered with the orbit
       // off holds its fresh fit to the frame, not a frame later.
       controls.autoRotate = entering && previewOrbit && previewOrbitSpeed > 0;
       captureRuntimeViewportFitScale(runtime);
       syncViewPlaneOrientation(runtime);
-      runtime.requestRender?.();
+      requestSceneFrame(runtime, false);
     });
   };
   useLayoutEffect(() => {
@@ -168,7 +169,8 @@ export function useViewportCamera({
       syncViewPlaneOrientation(runtime);
     }
     if (reset) {
-      // Asking for the fit hands the camera back to it: a later revision frames itself again.
+      // Asking for the fit hands the camera back to it: a model still arriving is framed again,
+      // whole, when it has.
       runtime.userMovedCamera = false;
       return true;
     }
@@ -187,6 +189,8 @@ export function useViewportCamera({
   }, []);
   // Stable, and built only from refs and setters: the view cube is memoized, so a viewer
   // render that changed nothing of the cube's (every animation frame) does not redraw it.
+  // A face the cube turns to, or a drag across it, makes the view the user's, as a drag on the
+  // model does: the completion fit of a model still arriving leaves it alone.
   const activateViewPlaneFace = useCallback((faceId) => {
     const runtime = runtimeRef.current;
     const face = VIEW_PLANE_FACE_BY_ID[faceId];
@@ -195,7 +199,9 @@ export function useViewportCamera({
     }
     activeViewPlaneFaceRef.current = face.id;
     setActiveViewPlaneFace(face.id);
-    return transitionCameraToViewPreset(runtime, face);
+    const turned = transitionCameraToViewPreset(runtime, face);
+    if (turned) runtime.userMovedCamera = true;
+    return turned;
   }, []);
   // Dragging the view cube orbits the camera, as dragging Fusion's does: the cube turns with
   // the pointer, so the camera turns the other way. Same orbit as the arrow keys.
@@ -212,11 +218,13 @@ export function useViewportCamera({
     if (!orbited) {
       return false;
     }
+    runtime.userMovedCamera = true;
     activeViewPlaneFaceRef.current = "";
     setActiveViewPlaneFace("");
     emitPerspectiveChange(runtime);
     syncViewPlaneOrientation(runtime);
-    runtime.requestRender?.();
+    // An orbit by the cube is a camera move, as a drag on the model is: the shadow maps are kept.
+    requestSceneFrame(runtime, false);
     return true;
   }, []);
   return {

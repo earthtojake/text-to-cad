@@ -8,26 +8,33 @@ VERSION_FILE="$REPO_ROOT/$VERSION_PATH"
 # shellcheck source=release-tags.sh
 source "$SCRIPT_DIR/release-tags.sh"
 
-PART=""
-SET_VERSION=""
+TARGET=""
+BASE="origin/main"
 DRY_RUN=0
 CHECK_INCREMENTED_FROM=""
 
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/release/bump-version.sh major|minor|patch [--dry-run]
-  scripts/release/bump-version.sh --set-version X.Y.Z [--dry-run]
+  scripts/release/bump-version.sh major|minor|patch|X.Y.Z [--base REF] [--dry-run]
   scripts/release/bump-version.sh --check-incremented-from REF
 
-Writes the canonical release version to VERSION. Nothing else: the release PR
-commits it, scripts/release/sync-version.mjs stamps the derived metadata and
-scripts/release/pin-cadgen-requirements.sh the skill pins, and Publish Release
-tags the merge. Prepare Release is the normal caller; running it by hand is the
-local fallback for that same PR.
+Makes this branch a release. Sets VERSION to the next major, minor or patch
+version after the one on BASE (or to X.Y.Z, which must be greater), then stamps
+the derived metadata and every cadgen pin from it (sync-version.mjs: package,
+plugin and lockfile versions, the plugin server configs, each skill's launch
+command). The pull request that carries the change releases that version when
+it merges: Publish Release runs on the merge.
+
+The bump is relative to BASE, not to this branch, so running it again after
+BASE moves (another pull request released first) moves the bump with it, and
+running it twice changes nothing. BASE must already be merged into this branch,
+or the stamps would conflict with BASE's.
 
 Options:
-  --dry-run                    Show the planned edit without changing the file.
+  --base REF                   The branch this release merges into (default
+                               origin/main, fetched first).
+  --dry-run                    Show the planned version without changing files.
   --check-incremented-from REF Exit non-zero unless VERSION is greater than the
                                version recorded at git ref REF.
 EOF
@@ -67,26 +74,6 @@ bump_version() {
   esac
 }
 
-semver_greater() {
-  local left="$1"
-  local right="$2"
-  local left_major left_minor left_patch right_major right_minor right_patch
-  validate_semver "$left"
-  validate_semver "$right"
-  IFS=. read -r left_major left_minor left_patch <<< "$left"
-  IFS=. read -r right_major right_minor right_patch <<< "$right"
-
-  if [ "$((10#$left_major))" -ne "$((10#$right_major))" ]; then
-    [ "$((10#$left_major))" -gt "$((10#$right_major))" ]
-    return
-  fi
-  if [ "$((10#$left_minor))" -ne "$((10#$right_minor))" ]; then
-    [ "$((10#$left_minor))" -gt "$((10#$right_minor))" ]
-    return
-  fi
-  [ "$((10#$left_patch))" -gt "$((10#$right_patch))" ]
-}
-
 version_at_ref() {
   local ref="$1"
   [ -n "$ref" ] || die "base ref must not be empty"
@@ -95,22 +82,18 @@ version_at_ref() {
   fi
   git -C "$REPO_ROOT" cat-file -e "$ref:$VERSION_PATH" 2>/dev/null ||
     die "no $VERSION_PATH at $ref"
-  git -C "$REPO_ROOT" show "$ref:$VERSION_PATH"
+  git -C "$REPO_ROOT" show "$ref:$VERSION_PATH" | tr -d '[:space:]'
 }
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    major|minor|patch)
-      [ -z "$PART" ] || die "provide only one semver bump part"
-      PART="$1"
-      ;;
-    --set-version)
-      [ "$#" -ge 2 ] || die "--set-version requires a value"
-      SET_VERSION="$2"
+    --base)
+      [ "$#" -ge 2 ] || die "--base requires a ref"
+      BASE="$2"
       shift
       ;;
-    --set-version=*)
-      SET_VERSION="${1#--set-version=}"
+    --base=*)
+      BASE="${1#--base=}"
       ;;
     --dry-run)
       DRY_RUN=1
@@ -127,8 +110,12 @@ while [ "$#" -gt 0 ]; do
       usage
       exit 0
       ;;
-    *)
+    -*)
       die "unknown argument: $1"
+      ;;
+    *)
+      [ -z "$TARGET" ] || die "provide one of major, minor, patch or X.Y.Z"
+      TARGET="$1"
       ;;
   esac
   shift
@@ -137,57 +124,50 @@ done
 cd "$REPO_ROOT"
 
 if [ -n "$CHECK_INCREMENTED_FROM" ]; then
-  if [ -n "$PART" ] || [ -n "$SET_VERSION" ] || [ "$DRY_RUN" -eq 1 ]; then
+  if [ -n "$TARGET" ] || [ "$DRY_RUN" -eq 1 ]; then
     die "--check-incremented-from cannot be combined with a bump"
   fi
   current_version="$(read_version)"
-  base_version="$(version_at_ref "$CHECK_INCREMENTED_FROM" | tr -d '[:space:]')"
+  base_version="$(version_at_ref "$CHECK_INCREMENTED_FROM")"
   validate_semver "$base_version"
-  if ! semver_greater "$current_version" "$base_version"; then
+  if ! version_greater "$current_version" "$base_version"; then
     die "current version $current_version must be greater than $base_version from $CHECK_INCREMENTED_FROM"
   fi
   echo "Canonical release version is incremented from $CHECK_INCREMENTED_FROM: $base_version -> $current_version"
   exit 0
 fi
 
-if [ -n "$PART" ] && [ -n "$SET_VERSION" ]; then
-  die "provide exactly one of major/minor/patch or --set-version"
-fi
-if [ -z "$PART" ] && [ -z "$SET_VERSION" ]; then
-  die "provide exactly one of major/minor/patch or --set-version"
-fi
-if [ -n "$SET_VERSION" ]; then
-  validate_semver "$SET_VERSION"
+[ -n "$TARGET" ] || die "provide one of major, minor, patch or X.Y.Z"
+
+# The base as it is now: a release that landed since the last fetch is what this one follows.
+case "$BASE" in
+  origin/*)
+    git fetch --quiet origin "${BASE#origin/}" ||
+      echo "warning: could not fetch $BASE; bumping from the copy already here." >&2
+    ;;
+esac
+git rev-parse --verify --quiet "$BASE^{commit}" >/dev/null || die "no such base: $BASE"
+if ! git merge-base --is-ancestor "$BASE" HEAD; then
+  die "this branch does not contain $BASE. Merge it first (git merge $BASE), then bump: the stamps would otherwise conflict with $BASE's."
 fi
 
-current_version="$(read_version)"
-if [ -n "$SET_VERSION" ]; then
-  next_version="$SET_VERSION"
-else
-  next_version="$(bump_version "$current_version" "$PART")"
-fi
+base_version="$(version_at_ref "$BASE")"
+case "$TARGET" in
+  major|minor|patch) next_version="$(bump_version "$base_version" "$TARGET")" ;;
+  *)
+    validate_semver "$TARGET"
+    version_greater "$TARGET" "$base_version" ||
+      die "$TARGET is not greater than $base_version, the version on $BASE"
+    next_version="$TARGET"
+    ;;
+esac
 
-if [ "$next_version" = "$current_version" ]; then
-  # Naming the version you are already on is a pin, not a mistake: it is how a
-  # caller says "leave this alone" without having to know what the version is.
-  # Resolving a major/minor/patch bump to no change IS a mistake -- that one
-  # still fails.
-  if [ -z "$SET_VERSION" ]; then
-    die "next version matches current version: $current_version"
-  fi
-  echo "Requested version matches current version: $current_version; nothing to change."
-  exit 0
-fi
-
-echo "Version bump: $current_version -> $next_version"
-echo "- $VERSION_PATH (canonical release version)"
-
+echo "Release: $base_version ($BASE) -> $next_version"
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "Dry run only; no files changed."
-  echo "Release workflow: gh workflow run release-prepare.yml --ref main -f bump=<patch|minor|major>"
   exit 0
 fi
 
 printf '%s\n' "$next_version" > "$VERSION_FILE"
-echo "Updated $VERSION_PATH."
-echo "Release workflow: gh workflow run release-prepare.yml --ref main -f bump=<patch|minor|major>"
+node "$SCRIPT_DIR/sync-version.mjs"
+echo "This branch releases $next_version when its pull request merges."

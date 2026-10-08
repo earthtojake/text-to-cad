@@ -1,5 +1,18 @@
 import { normalizeStepModuleParameterValues } from "@text-to-cad/core/common/stepModule.js";
 
+const canonical = value => (Array.isArray(value) ? value.map(canonical)
+  : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]))
+    : value);
+
+// What a STEP's pose is made of: the parameters its joints are driven by (each one's id, kind,
+// range, default and unit) and its named poses, as one comparable string ("" for nothing to pose).
+// A rebuild whose sidecar declares the same keeps the pose in hand; one that declares anything
+// else starts at the new defaults, since a pose is never fitted onto joints that changed. The
+// definition's `url` is not part of it: a rebuild writes the sidecar again under a new version.
+export function stepPoseLogic(definition) {
+  return definition ? JSON.stringify(canonical([definition.parameters || [], definition.manifest?.poses || {}])) : "";
+}
+
 // What the Position section commits once a model's sidecar has resolved.
 //
 // A NULL definition is a documented outcome, not a failure: a sidecar with no

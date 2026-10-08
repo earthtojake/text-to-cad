@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import inspect
 import threading
+from collections.abc import Mapping
 from typing import Any
 
 from build123d import Compound
@@ -68,7 +69,10 @@ def attach_child(child: Any, parent: Any) -> bool:
     # A current pin was resolved at the decorated call.  One verified snapshot
     # owns every use of that exact tree within this private construction.  A
     # queued job still resolves in ordinary order, even if another input already
-    # captured the tree it eventually returns.
+    # captured the tree it eventually returns. Only the descriptor is used here:
+    # the prototypes decode from the objects when they are read (source_scene),
+    # so the bytes are not retained, and a closure the gate verified is not
+    # read again.
     tree = child.__dict__.get("_lazy_tree")
     if tree is None:
         tree = child.tree_hash()
@@ -76,7 +80,7 @@ def attach_child(child: Any, parent: Any) -> bool:
     snapshot = descriptors.get(tree)
     if snapshot is None:
         try:
-            snapshot = capture_tree(tree)
+            snapshot = capture_tree(tree, retain_payloads=False)
         except (OSError, ValueError):
             child.tree_hash()  # preserve the ordinary missing-pin diagnostic
             raise
@@ -305,58 +309,116 @@ def links(owner: Any) -> list[dict] | None:
     return result
 
 
+class _DeferredPrototypes(Mapping):
+    """A source scene's prototypes, decoded on first read, once per component
+    identity, from the verified bytes of the pins they come from. The edge
+    policy reads a stored component's topology without them
+    (``step_scene_mesh._prototype_topologies``), so a build whose components'
+    facts are all stored decodes none. ``decoded`` counts the decodes."""
+
+    def __init__(self) -> None:
+        self._entries: dict[int, dict] = {}
+        self._natives: dict[str, Any] = {}
+        self.decoded = 0
+
+    def defer(self, key: int, entry: dict) -> None:
+        self._entries[key] = entry
+
+    def __iter__(self):
+        return iter(self._entries)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __getitem__(self, key: int) -> Any:
+        entry = self._entries[key]
+        identity = entry["contentHash"]
+        if identity not in self._natives:
+            from cadgen._internal.component_package import decode_geometry_component
+            from cadgen.store.objects import read_verified_object
+
+            self._natives[identity] = decode_geometry_component(entry, read_verified_object(entry["brep"])).wrapped
+            self.decoded += 1
+        return self._natives[identity]
+
+
+class _DeferredFaceColors(Mapping):
+    """A source scene's per-face colours, mapped onto a prototype's faces when
+    first read (``step_scene_package._face_colors_from_recipe``)."""
+
+    def __init__(self, prototypes: _DeferredPrototypes) -> None:
+        self._prototypes = prototypes
+        self._recipes: dict[int, dict] = {}
+        self._colors: dict[int, dict] = {}
+
+    def defer(self, key: int, recipe: dict) -> None:
+        self._recipes[key] = recipe
+
+    def __iter__(self):
+        return iter(self._recipes)
+
+    def __len__(self) -> int:
+        return len(self._recipes)
+
+    def __getitem__(self, key: int) -> dict:
+        if key not in self._colors:
+            from cadgen._internal.step_scene_package import _face_colors_from_recipe
+
+            self._colors[key] = _face_colors_from_recipe(self._recipes[key], self._prototypes[key])
+        return self._colors[key]
+
+
 def source_scene(owner: Any, output_path: Any):
     """An invocation-owned source scene for the explicit publication pipeline.
 
     Native scene/export callers do not opt in.  The build pipeline needs real
     occurrence/topology/appearance data for its adaptive edge policy, but no
-    initial XCAF document.  One private native decode per component supplies
-    it.  Separate child calls keep separate prototype keys, just as their
-    ordinary private materializations would, so topology counts do not change.
-    The only consumers before final publication read these native shapes;
-    saving reconstructs its own private canonical document as before.
+    initial XCAF document.  Separate child calls keep separate prototype keys,
+    just as their ordinary private materializations would, so topology counts
+    do not change. Each key names the stored component it comes from
+    (``prototype_components``), so the policy reads that component's topology
+    by its BREP, and a prototype is decoded, once per component, only when it
+    is read (a component whose topology is not stored yet). The only consumers
+    before final publication read the scene; saving reconstructs its own private
+    canonical document as before.
     """
     children = _inputs(owner)
     if children is None:
         return None
     from build123d import Location
-    from cadgen._internal.component_package import decode_geometry_component
     from cadgen._internal.step_scene_loader import _location_transform_matrix
-    from cadgen._internal.step_scene_package import _face_colors_from_recipe
     from cadgen._internal.step_scene_types import LoadedStepScene, OccurrenceNode, _identity_transform_matrix
     from cadgen.store.materialize import _location_from_matrix
     from cadgen.store.trees import capture_tree
 
-    scene = LoadedStepScene(output_path.expanduser().resolve(), [], {}, source_kind="python",
+    prototypes = _DeferredPrototypes()
+    scene = LoadedStepScene(output_path.expanduser().resolve(), [], prototypes, source_kind="python",
                             disposable_prototypes=True)
-    descriptors, decoded = {}, {}
+    scene.prototype_face_colors = _DeferredFaceColors(prototypes)
+    descriptors = {}
     groups = []
     for child_index, child in enumerate(children, 1):
         tree = child.__dict__["_lazy_tree"]
         if tree not in descriptors:
             try:
-                descriptors[tree] = capture_tree(tree)
+                descriptors[tree] = capture_tree(tree, retain_payloads=False)
             except (OSError, ValueError):
                 child.tree_hash()  # preserve the ordinary missing-pin diagnostic
                 raise
-        descriptor, payloads = descriptors[tree]
+        descriptor, _ = descriptors[tree]
         occurrences = {row["id"]: row for row in descriptor["occurrences"]}
         keys = {}
         placement = child.__dict__.get("_lazy_placement")
         placement = placement if placement is not None else Location()
         for cid, entry in descriptor["components"].items():
-            identity = entry["contentHash"]
-            if identity not in decoded:
-                decoded[identity] = decode_geometry_component(entry, payloads[entry["brep"]]).wrapped
-            native = decoded[identity]
             key = len(scene.prototype_shapes) + 1
             keys[cid] = key
-            scene.prototype_shapes[key] = native
+            prototypes.defer(key, entry)
+            scene.prototype_components[key] = (str(entry["codec"]), str(entry["brep"]))
             if entry.get("color") is not None:
                 scene.prototype_colors[key] = tuple(entry["color"])
-            colors = _face_colors_from_recipe(entry["faceColors"], native)
-            if colors:
-                scene.prototype_face_colors[key] = colors
+            if entry["faceColors"]:
+                scene.prototype_face_colors.defer(key, entry["faceColors"])
 
         def group(node, path, *, child_root=False):
             occurrence = occurrences.get(node["id"])

@@ -14,10 +14,10 @@ import {
   resolveRenderQuality
 } from "./sceneSettings.js";
 import {
-  TESS_BATCH_MAX_BYTES,
   TESS_PROBE_MAX_KEYS,
   decodeComponentTessellation,
   surfIndexFromCacheEntry,
+  tessBatchMaxBytes,
 } from "../lib/surf/tessellationCache.js";
 import {
   loadRenderDisplayEdgeBundle,
@@ -261,10 +261,12 @@ async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = 
   const misses = [];
 
   // Probe metadata is tiny. Full bodies are fetched only in admitted TESB
-  // groups whose observed framing stays under the host's 32 MiB bound. Each
-  // group is decoded, copied into render-owned arrays and dropped before the
-  // next group, so a warm assembly never retains all raw cache bodies beside
-  // the final mesh.
+  // groups whose observed framing stays under the batch bound: the server's
+  // 32 MiB, or the lower ceiling the cache's transport declares
+  // (`batchMaxBytes`). Each group is decoded, copied into render-owned arrays
+  // and dropped before the next group, so a warm assembly never retains all
+  // raw cache bodies beside the final mesh.
+  const batchMaxBytes = tessBatchMaxBytes(tessellationCache?.batchMaxBytes);
   const groups = [];
   let group = [];
   let framedBytes = 12;
@@ -284,10 +286,10 @@ async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = 
     }
     const entryBytes = 4 + ((probe.byteLength + 3) & ~3);
     if (group.length >= TESS_PROBE_MAX_KEYS
-      || (group.length && framedBytes + entryBytes > TESS_BATCH_MAX_BYTES)) flush();
+      || (group.length && framedBytes + entryBytes > batchMaxBytes)) flush();
     group.push({ cid, surfaceInput, surfaceObject, probe });
     framedBytes += entryBytes;
-    if (framedBytes >= TESS_BATCH_MAX_BYTES || entryBytes + 12 > TESS_BATCH_MAX_BYTES) flush();
+    if (framedBytes >= batchMaxBytes || entryBytes + 12 > batchMaxBytes) flush();
   }
   flush();
 
@@ -296,7 +298,7 @@ async function loadPackageMeshData(packageInfo, tessellation = {}, appearance = 
   for (const entries of groups) {
     const readStarted = performance.now();
     let bodies;
-    if (entries.length === 1 && entries[0].probe.byteLength + 16 > TESS_BATCH_MAX_BYTES) {
+    if (entries.length === 1 && entries[0].probe.byteLength + 16 > batchMaxBytes) {
       const entry = entries[0];
       bodies = [await tessellationCache?.getCachedEntryBytes(entry.surfaceInput, tessellation, { probe: entry.probe })];
     } else {

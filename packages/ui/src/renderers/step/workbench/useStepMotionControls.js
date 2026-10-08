@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { advanceAnimationElapsed, animationClipDuration, animationNowMs,
-  clampAnimationElapsed, clampAnimationSpeed, findAnimationClip, firstAnimationClipId,
-  shouldPublishAnimationFrame } from "@text-to-cad/core/common/animationClock.js";
+  clampAnimationElapsed, clampAnimationSpeed, createAnimationFramePacer, findAnimationClip,
+  firstAnimationClipId } from "@text-to-cad/core/common/animationClock.js";
 import { normalizeParameterValue, normalizeParameterValues } from "@text-to-cad/core/common/parameters.js";
 import { poseValuesForPreset } from "../components/workbench/PoseControlsSection.js";
 import { useAnimationClockStore } from "./animationClockStore.js";
+import { stepPoseLogic } from "./stepModuleLoad.js";
 
 // Single command boundary for STEP motion. Refs are published synchronously so
 // queued playback callbacks cannot resurrect the previous motion owner.
@@ -30,11 +31,14 @@ export function useStepMotionControls({
   }, [selectedStepModuleDefinition, setAppliedStepPoseName, writeParameters]);
   // What Position had set when a routine took the pose. A routine plays from the model at rest,
   // so taking the pose puts Position's values aside rather than throwing them away; handing
-  // the pose back (leaving preview, or touching Position) puts them back first.
+  // the pose back (leaving preview, or touching Position) puts them back first. They are a pose
+  // like any other: an update whose joints and named poses are unchanged keeps them (a routine
+  // may play on through it), and one that changed them drops them.
   const heldPositionRef = useRef(null);
-  useEffect(() => { heldPositionRef.current = null; }, [selectedStepModuleDefinition]);
+  const poseLogic = useMemo(() => stepPoseLogic(selectedStepModuleDefinition), [selectedStepModuleDefinition]);
+  useEffect(() => { heldPositionRef.current = null; }, [poseLogic]);
   // Handing the pose to Position stops the routine and rewinds its clock, and nothing more: the
-  // transport preferences preview's Playback settings set (the routine, its speed, the loop) are the
+  // transport preferences preview's playbar sets (the routine, its speed, the loop) are the
   // person's, and a joint nudge or a trip to another tool keeps them for the next play.
   const activatePositionControls = useCallback(() => {
     motionRevisionRef.current += 1;
@@ -220,8 +224,9 @@ export function useStepMotionControls({
   // The playback loop. The clock is published through the external store rather
   // than React state so a playing clip re-renders only the render pane and the
   // time slider; the paused elapsed time is written back to React state once,
-  // when playback stops. Frame pacing (shouldPublishAnimationFrame) keeps a
-  // heavy assembly from saturating the main thread.
+  // when playback stops. Frame pacing (createAnimationFramePacer) keeps a heavy
+  // assembly from saturating the main thread, and only a run of overrunning
+  // frames is saturation: one that misses a vsync publishes on.
   useEffect(() => {
     if (
       !selectedActiveAnimationClip ||
@@ -239,12 +244,11 @@ export function useStepMotionControls({
     let cancelled = false;
     let previousTimeMs = animationNowMs();
     // A published frame is measured by the gap to the next callback, which
-    // includes the downstream render, and the next publish waits that long
-    // again. previousTimeMs only advances on a publish, so time skipped this way
-    // still lands in the next delta and playback stays wall-clock accurate.
-    let publishedAtMs = NaN;
-    let publishCostMs = 0;
-    let measuringPublish = false;
+    // includes the downstream render; once the last few all overran, the next
+    // publish waits about twice that. previousTimeMs only advances on a publish,
+    // so time skipped this way still lands in the next delta and playback stays
+    // wall-clock accurate.
+    const pacer = createAnimationFramePacer();
     setAnimationClock(clampAnimationElapsed(animationStateRef.current.elapsedSec, duration));
 
     const tick = (timeMs) => {
@@ -252,18 +256,13 @@ export function useStepMotionControls({
       if (cancelled || currentState.enabled === false || !currentState.playing || currentState.activeClipId !== clip.id) {
         return;
       }
-      if (measuringPublish) {
-        publishCostMs = timeMs - publishedAtMs;
-        measuringPublish = false;
-      }
-      if (!shouldPublishAnimationFrame({ timeMs, publishedAtMs, publishCostMs })) {
+      if (!pacer.shouldPublish(timeMs)) {
         frameId = window.requestAnimationFrame(tick);
         return;
       }
       const deltaSec = Math.max((timeMs - previousTimeMs) / 1000, 0);
       previousTimeMs = timeMs;
-      publishedAtMs = timeMs;
-      measuringPublish = true;
+      pacer.published(timeMs);
       const { elapsedSec, playing } = advanceAnimationElapsed({
         elapsedSec: getAnimationClock(),
         deltaSec,

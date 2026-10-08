@@ -2,7 +2,7 @@
 
 The per-verb shims that used to enforce the pin on every invocation are gone;
 doctor re-homes that value as an explicit command, so its contract is pinned here:
-report the install, resolve a requirements.txt from a file/dir/cwd, exit 0 on
+report the install, resolve a SKILL.md from a file/dir/cwd, exit 0 on
 match-or-nothing-to-check, exit 3 (the historical shim code) on a mismatch, and
 exit 4 when the CAD kernel is installed but cannot be loaded -- naming Smart App
 Control on Windows, where a refused ``OCP`` load is otherwise a bare
@@ -41,11 +41,35 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
 REFUSED = "ImportError: DLL load failed while importing OCP: Access is denied."
 
 
+def skill_text(version: str) -> str:
+    """A SKILL.md whose launch command pins ``version``, as the release stamps one."""
+    return f"- `cadgen` means `uvx --no-config --managed-python --python 3.13 --from cadgen=={version} cadgen`\n"
+
+
 class DoctorTests(unittest.TestCase):
     def setUp(self) -> None:
         patcher = mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd"))
         patcher.start()
         self.addCleanup(patcher.stop)
+        # The report reads what CAD's apps share from the state directory: a fresh one, never this machine's.
+        state = TemporaryDirectory()
+        self.addCleanup(state.cleanup)
+        self.state = Path(state.name)
+        # A plugin's install outside CI, where telemetry's default holds.
+        environment = mock.patch.dict("os.environ", {"CADGEN_STATE_DIR": state.name, "DO_NOT_TRACK": "", "CADGEN_TELEMETRY": "",
+                                                     "CADGEN_INSTALL_CHANNEL": "claude-github", "CI": ""})
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def test_the_report_says_what_cads_apps_share(self) -> None:
+        with TemporaryDirectory() as tmp:
+            _, out, _ = _run([tmp])
+        self.assertIn("sharing  off: not until a cadgen command says so", out)
+        # Told, and nothing chosen: on by default, from the day it was said.
+        (self.state / "settings.json").write_text('{"telemetry": {"notifiedAt": 1790000000, "notice": 1}}', encoding="utf-8")
+        with TemporaryDirectory() as tmp:
+            _, out, _ = _run([tmp])
+        self.assertRegex(out, r"sharing  on: by default, since cadgen said so on \d{4}-\d{2}-\d{2}\n")
 
     def test_the_report_names_the_kernel_it_loaded(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -63,7 +87,7 @@ class DoctorTests(unittest.TestCase):
             code, out, err = _run([tmp])
         self.assertEqual(code, 0)
         self.assertIn("kernel   not installed", out)
-        self.assertIn("pip install -r requirements.txt", out)
+        self.assertIn("uvx --no-config", out, "the launch command is what brings the kernel")
         self.assertNotIn("FAILED", err)
 
     def test_a_kernel_that_will_not_load_exits_4(self) -> None:
@@ -88,7 +112,7 @@ class DoctorTests(unittest.TestCase):
         # The install is wrong before the kernel is: fixing the pin may fix both.
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
                 TemporaryDirectory() as tmp:
-            (Path(tmp) / "requirements.txt").write_text("cadgen==0.0.0.dev0\n", encoding="utf-8")
+            (Path(tmp) / "SKILL.md").write_text(skill_text("0.0.0.dev0"), encoding="utf-8")
             code, _, err = _run([tmp])
         self.assertEqual(code, 3)
         self.assertIn("kernel   FAILED", err)
@@ -96,17 +120,17 @@ class DoctorTests(unittest.TestCase):
 
     def test_matching_pin_passes_and_names_the_file(self) -> None:
         with TemporaryDirectory() as tmp:
-            req = Path(tmp) / "requirements.txt"
-            req.write_text(f"cadgen=={cadgen.__version__}\n", encoding="utf-8")
-            code, out, _ = _run([str(req)])
+            skill = Path(tmp) / "SKILL.md"
+            skill.write_text(skill_text(cadgen.__version__), encoding="utf-8")
+            code, out, _ = _run([str(skill)])
         self.assertEqual(code, 0)
         self.assertIn("OK", out)
-        self.assertIn(str(req), out)
+        self.assertIn(str(skill), out)
 
     def mismatch(self, editable: str | None) -> tuple[int, str]:
         with mock.patch.object(doctor, "_editable_source", return_value=editable), \
                 TemporaryDirectory() as tmp:
-            (Path(tmp) / "requirements.txt").write_text("cadgen==0.0.0.dev0\n", encoding="utf-8")
+            (Path(tmp) / "SKILL.md").write_text(skill_text("0.0.0.dev0"), encoding="utf-8")
             code, _, err = _run([tmp])
         return code, err
 
@@ -114,14 +138,13 @@ class DoctorTests(unittest.TestCase):
         code, err = self.mismatch(None)
         self.assertEqual(code, 3)
         self.assertIn("MISMATCH", err)
-        self.assertIn("pip install -r requirements.txt", err)
+        self.assertIn("--from cadgen==0.0.0.dev0 cadgen", err, "the skill's own launch command runs its pin")
 
     def test_an_editable_install_is_told_to_re_record_itself_not_to_replace_itself(self) -> None:
         # An editable install's version is a snapshot taken when it was
         # installed, so its code can already BE the pinned version while the
-        # metadata is behind. `pip install -r requirements.txt` would exchange
-        # the source tree for a published release -- the wrong fix, and the one
-        # the report used to name for every mismatch.
+        # metadata is behind. The skill's launch command would run a published
+        # release instead of the source tree -- the wrong fix.
         source = str(Path("/src/packages/cadgen"))
         code, err = self.mismatch(source)
         self.assertEqual(code, 3)
@@ -129,7 +152,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("EDITABLE", err)
         self.assertIn(f"pip install -e {source}", err)
         self.assertIn("recorded when", err, "the report says WHY the version is stale")
-        self.assertNotIn("\n  python -m pip install -r requirements.txt\n", err)
+        self.assertNotIn("--from cadgen==", err)
 
     def test_an_editable_source_is_read_off_this_install(self) -> None:
         # In a checkout cadgen IS editable; a wheel install records no

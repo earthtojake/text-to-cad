@@ -1,10 +1,7 @@
-"""The catalog-scan contract, ported from ``scanner.test.mjs``.
+"""The catalog-row contract: what ``catalog_entry`` answers for one file, named by its absolute path.
 
-The strongest check on this module is not here: it is the byte-for-byte diff of
-a whole catalog against the Node scanner over a real tree. What these pin is
-the behaviour that diff cannot see on any one machine — the branches a
-particular corpus happens not to reach, and the JS/Python semantics that agree
-on well-formed input and part company on the edges.
+What these pin is the behaviour of the row itself — the branches a particular file reaches,
+and the JS/Python semantics that agree on well-formed input and part company on the edges.
 """
 
 from __future__ import annotations
@@ -17,25 +14,26 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 
-from cadgen.viewer.scanner import (
-    CAD_CATALOG_SCHEMA_VERSION,
-    is_served_cad_asset,
-    node_basename,
-    path_is_inside,
-    path_relative,
-    scan_cad_directory,
-    sort_catalog_entries,
-    source_format_for_path,
-    step_kind_from_topology,
-)
+from cadgen import catalog
+from cadgen._internal.shared_read import open_shared_for_read
+from cadgen.viewer import scanner
+from cadgen.viewer.scanner import catalog_entry, is_served_cad_asset, source_format_for_path
 from cadgen.viewer.store_paths import result_snapshot, result_tree
 
 from tests.python.support.store_fixtures import seed_result
 
 
+def asset_query(url: str) -> dict:
+    """The ``file`` and ``v`` an asset URL carries."""
+    parsed = urlsplit(url)
+    assert parsed.path == "/__cad/asset", url
+    return {key: values[0] for key, values in parse_qs(parsed.query).items()}
+
+
 class ScannerTestCase(unittest.TestCase):
-    """A temp root plus a temp cadgen store, with the env pointed at both."""
+    """A temp folder plus a temp cadgen store, with the env pointed at it."""
 
     def setUp(self) -> None:
         self.tmp = tempfile.mkdtemp()
@@ -43,13 +41,11 @@ class ScannerTestCase(unittest.TestCase):
         self.root = os.path.join(self.tmp, "models")
         os.makedirs(self.root)
         cache = os.path.join(self.tmp, "cache")
-        os.makedirs(os.path.join(cache, "packages"))
-        # Set AFTER the app would have been constructed: the cache root is read
-        # from the environment on every call, never memoised at import.
+        os.makedirs(cache)
+        # The cache root is read from the environment on every call, never memoised at import.
         previous = os.environ.get("CADGEN_CACHE_DIR")
         os.environ["CADGEN_CACHE_DIR"] = cache
         self.addCleanup(self._restore_cache_dir, previous)
-        self.cache = cache
 
     @staticmethod
     def _restore_cache_dir(previous) -> None:
@@ -60,61 +56,60 @@ class ScannerTestCase(unittest.TestCase):
 
     # --- helpers ----------------------------------------------------------
 
+    def path(self, rel: str) -> str:
+        return os.path.join(self.root, rel)
+
     def write(self, rel: str, text: str) -> str:
-        path = os.path.join(self.root, rel)
+        path = self.path(rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        # Bytes, not text mode: several tests assert byte counts and served
-        # bodies exactly, and text mode would write \r\n on Windows.
+        # Bytes, not text mode: tests assert byte counts exactly, and text mode
+        # would write \r\n on Windows.
         Path(path).write_bytes(text.encode("utf-8"))
         return path
 
     def package(self, rel: str, descriptor) -> str:
         """Seed ``root/<rel>``'s result in the store; returns the tree hash."""
-        return seed_result(Path(self.root, rel), descriptor)
+        return seed_result(Path(self.path(rel)), descriptor)
 
     def sidecar(self, rel: str, payload: dict) -> str:
-        document = Path(self.root, rel)
+        document = Path(self.path(rel))
         body = dict(payload)
         body["schemaVersion"] = 9
         body["documentHash"] = hashlib.sha256(document.read_bytes()).hexdigest()
         return self.write(f"{rel}.json", json.dumps(body))
 
-    def scan(self) -> list[dict]:
-        return scan_cad_directory(self.root)["entries"]
-
-    def files(self) -> list[str]:
-        return [entry["file"] for entry in self.scan()]
-
-    def entry(self, name: str) -> dict:
-        for entry in self.scan():
-            if entry["file"] == name:
-                return entry
-        raise AssertionError(f"no entry {name!r} in {self.files()}")
+    def entry(self, rel: str) -> dict:
+        found = catalog_entry(self.path(rel))
+        self.assertIsNotNone(found, rel)
+        return found
 
 
-class ArtifactsOnly(ScannerTestCase):
-    def test_model_scripts_never_list(self):
+class OneRowPerNamedFile(ScannerTestCase):
+    def test_the_written_artifact_has_a_row_and_a_model_script_none(self):
         self.write("drawing.dxf.py", "print(1)")
         self.write("model.py", "print(1)")
-        self.assertEqual(self.scan(), [])
-
-    def test_the_written_artifact_is_the_entry(self):
-        self.write("drawing.dxf.py", "print(1)")
         self.write("outline.dxf", "0\nSECTION\n")
-        self.assertEqual(self.files(), ["outline.dxf"])
+        self.assertIsNone(catalog_entry(self.path("drawing.dxf.py")))
+        self.assertIsNone(catalog_entry(self.path("model.py")))
+        self.assertEqual(self.entry("outline.dxf")["file"], self.path("outline.dxf").replace(os.sep, "/"))
 
+    def test_a_file_under_a_hidden_folder_has_its_row_and_a_hidden_file_none(self):
+        # Named, never found: a hidden FOLDER on the way is no reason to refuse it.
+        self.write(".worktree/part.stl", "x")
+        self.write(".hidden.stl", "x")
+        os.makedirs(self.path("folder.step"))
+        self.assertEqual(self.entry(".worktree/part.stl")["kind"], "stl")
+        for rel in (".hidden.stl", "folder.step", "gone.stl"):
+            with self.subTest(rel=rel):
+                self.assertIsNone(catalog_entry(self.path(rel)))
 
-    def test_the_schema_version_is_4(self):
-        self.assertEqual(scan_cad_directory(self.root)["schemaVersion"], 4)
-        self.assertEqual(CAD_CATALOG_SCHEMA_VERSION, 4)
-
-    def test_a_falsy_root_raises_and_a_missing_one_scans_empty(self):
-        with self.assertRaises(ValueError):
-            scan_cad_directory("")
-        self.assertEqual(
-            scan_cad_directory(os.path.join(self.tmp, "nope")),
-            {"schemaVersion": 4, "entries": []},
-        )
+    def test_only_the_source_extensions_have_rows(self):
+        for name in ("a.step", "b.stp", "c.stl", "d.3mf", "e.glb", "f.dxf", "g.urdf", "h.srdf", "i.sdf"):
+            self.write(name, "x")
+            self.assertIsNotNone(catalog_entry(self.path(name)), name)
+        for name in ("j.json", "k.js", "l.txt", "m.py", "n", "o.stepx"):
+            self.write(name, "x")
+            self.assertIsNone(catalog_entry(self.path(name)), name)
 
 
 class EntryShape(ScannerTestCase):
@@ -123,69 +118,39 @@ class EntryShape(ScannerTestCase):
         entry = self.entry("outline.dxf")
         self.assertEqual(list(entry), ["file", "kind", "url", "hash", "bytes"])
         self.assertEqual(entry["kind"], "dxf")
-        self.assertIn("outline.dxf?v=", entry["url"])
         self.assertEqual(len(entry["hash"]), 64)
         self.assertEqual(entry["bytes"], 10)
         self.assertNotIn("relations", entry)
 
-
-    def test_file_refs_are_posix_by_contract_because_they_become_urls(self):
-        self.write("sub dir/arm.urdf", '<robot name="a"/>')
-        self.assertEqual(self.files(), ["sub dir/arm.urdf"])
-
-    @unittest.skipIf(
-        os.name == "nt",
-        "'*' is not a legal NTFS filename character; this URL-encoding corpus exists only on POSIX",
-    )
-    def test_the_v_token_and_url_encoding(self):
-        self.write("a b(c)*d~e.stl", "x")
-        entry = self.entry("a b(c)*d~e.stl")
-        # encodeURIComponent leaves !~*'() alone and escapes the space.
-        self.assertTrue(entry["url"].startswith("/a%20b(c)*d~e.stl?v="))
-        stat_result = os.stat(os.path.join(self.root, "a b(c)*d~e.stl"))
-        self.assertEqual(entry["url"].split("?v=")[1].count("-"), 1)
-        self.assertEqual(entry["bytes"], stat_result.st_size)
+    @unittest.skipIf(os.name == "nt", "'*' is not a legal NTFS filename character")
+    def test_the_url_names_the_file_by_its_absolute_path_and_its_version(self):
+        path = self.write("sub dir/a b(c)*d~e.stl", "x")
+        stat_result = os.stat(path)
+        query = asset_query(self.entry("sub dir/a b(c)*d~e.stl")["url"])
+        self.assertEqual(query["file"], path)
+        # The ?v= token: base36(size)-base36(mtime_ns), from one stat.
+        self.assertEqual(query["v"], scanner.file_version(stat_result.st_size, stat_result.st_mtime_ns))
 
     def test_kind_comes_from_the_lowercased_extension(self):
-        for name, kind in (
-            ("a.STL", "stl"),
-            ("b.3MF", "3mf"),
-            ("c.GLB", "glb"),
-            ("d.SDF", "sdf"),
-        ):
+        for name, kind in (("a.STL", "stl"), ("b.3MF", "3mf"), ("c.GLB", "glb"), ("d.SDF", "sdf")):
             self.write(name, "x")
             self.assertEqual(self.entry(name)["kind"], kind)
         self.assertEqual(source_format_for_path("x.STP", ".STP"), "stp")
 
+    def test_a_named_link_is_its_targets_bytes_and_a_dangling_one_has_no_row(self):
+        real = self.write("real.stl", "same")
+        os.symlink(real, self.path("link.stl"))
+        os.symlink(self.path("nowhere.stl"), self.path("dangling.stl"))
+        self.assertEqual(self.entry("link.stl")["hash"], self.entry("real.stl")["hash"])
+        self.assertEqual(self.entry("link.stl")["file"], self.path("link.stl").replace(os.sep, "/"))
+        self.assertIsNone(catalog_entry(self.path("dangling.stl")))
+
 
 class StoreResults(ScannerTestCase):
-    def test_selected_first_scan_defers_every_other_row_without_asset_claims(self):
-        self.write("a.step", "a\n")
-        self.write("b.step", "b\n")
-        self.package("a.step", {"kind": "assembly-package", "components": {"c0": {}}})
-        self.package("b.step", {"kind": "assembly-package", "components": {"c0": {}}})
-
-        entries = scan_cad_directory(
-            self.root, preferred_file="a.step", defer_unpreferred=True
-        )["entries"]
-        selected = next(entry for entry in entries if entry["file"] == "a.step")
-        pending = next(entry for entry in entries if entry["file"] == "b.step")
-        self.assertNotIn("catalogPending", selected)
-        self.assertTrue(selected["hash"])
-        self.assertEqual(pending, {"file": "b.step", "catalogPending": True})
-
-        missing = scan_cad_directory(
-            self.root, preferred_file="missing.step", defer_unpreferred=True
-        )["entries"]
-        self.assertTrue(all(entry.get("catalogPending") is True for entry in missing))
-
     def test_unchanged_step_entry_reuses_immutable_tree_metadata(self):
-        import cadgen.viewer.scanner as scanner
-
         self.write("cached.step", "same bytes\n")
         self.package("cached.step", {"kind": "assembly-package", "components": {"c0": {}}})
-        original = scanner.result_descriptor
-        with mock.patch.object(scanner, "result_descriptor", wraps=original) as descriptor:
+        with mock.patch.object(scanner, "result_descriptor", wraps=scanner.result_descriptor) as descriptor:
             first = self.entry("cached.step")
             second = self.entry("cached.step")
         self.assertEqual(first, second)
@@ -214,36 +179,53 @@ class StoreResults(ScannerTestCase):
         c = self.package("c.step", {"kind": "assembly-package", "components": {"c0": {}}})
         self.assertEqual(a, b, "one tree for one result")
         self.assertEqual(a, c, "different document bytes may describe the same geometry")
-        self.assertEqual(result_tree(os.path.join(self.root, "c.step")), c)
-        self.assertEqual(result_tree(os.path.join(self.root, "a.step")), a)
-        self.assertEqual(result_tree(os.path.join(self.root, "sub", "b.step")), b)
-
-    def test_a_missing_file_has_no_tree(self):
-        self.assertIsNone(result_tree(os.path.join(self.root, "gone.step")))
+        self.assertEqual(result_tree(self.path("c.step")), c)
+        self.assertEqual(result_tree(self.path("a.step")), a)
+        self.assertEqual(result_tree(self.path("sub/b.step")), b)
+        self.assertIsNone(result_tree(self.path("gone.step")))
 
     def test_a_step_with_no_result_has_no_hash_and_no_bytes(self):
         self.write("bare.step", "ISO-10303-21;\n")
         entry = self.entry("bare.step")
         self.assertTrue(entry["url"].startswith("/__cad/store?file=unbuilt-"))
         self.assertNotIn("&v=", entry["url"])
-        self.assertEqual(entry["hash"], "")
-        self.assertEqual(entry["bytes"], 0)
-        self.assertEqual(entry["kind"], "part")
+        self.assertEqual((entry["hash"], entry["bytes"], entry["kind"]), ("", 0, "part"))
 
-    def test_the_store_file_param_names_the_tree_with_no_leading_slash(self):
-        self.write("p.step", "x\n")
-        tree = self.package("p.step", {"kind": "assembly-package", "components": {"c0": {}}})
-        entry = self.entry("p.step")
-        self.assertEqual(entry["url"], f"/__cad/store?file={tree}&documentHash={entry['documentHash']}")
-
-    def test_hash_and_bytes_describe_the_flattened_tree_not_the_step(self):
+    def test_the_store_url_names_the_tree_and_its_bytes_describe_the_flattened_tree(self):
         from cadgen.viewer.store_paths import result_descriptor
 
         self.write("p.step", "a much longer step body than the descriptor\n")
         tree = self.package("p.step", {"kind": "assembly-package", "components": {"c0": {}}})
         entry = self.entry("p.step")
+        self.assertEqual(entry["url"], f"/__cad/store?file={tree}&documentHash={entry['documentHash']}")
         self.assertEqual(entry["hash"], tree)
         self.assertEqual(entry["bytes"], len(json.dumps(result_descriptor(tree)).encode("utf-8")))
+
+
+class UnreadableTree(ScannerTestCase):
+    """A document whose tree the store can no longer read whole lists as unbuilt, until the
+    store is repaired: the repair (a compile publishing the document again) restores the lost
+    object at its own hash, so nothing in the row's key moves, and a row kept from before the
+    repair listed the document as unbuilt for as long as the server ran."""
+
+    def test_a_lost_component_lists_the_document_unbuilt_until_the_store_is_repaired(self):
+        from cadgen.store.objects import object_path, put_object
+
+        self.write("pair.step", "pair\n")
+        tree = self.package("pair.step", {"components": {"left": {}, "right": {}}})
+        brep = next(iter(json.loads(object_path(tree).read_bytes())["components"].values()))["brep"]
+        payload = object_path(brep).read_bytes()
+        object_path(brep).unlink()
+
+        lost = self.entry("pair.step")
+        # Nothing in it says it can be loaded: no tree hash, and no URL naming the tree.
+        self.assertEqual((lost["hash"], lost["bytes"]), ("", 0))
+        self.assertNotIn(tree, lost["url"])
+
+        self.assertEqual(put_object(payload, repair=True), brep)  # the same bytes, at their hash
+        repaired = self.entry("pair.step")
+        self.assertEqual((repaired["kind"], repaired["hash"]), ("assembly", tree))
+        self.assertEqual(repaired["documentHash"], lost["documentHash"])
 
 
 class StepKind(ScannerTestCase):
@@ -255,9 +237,7 @@ class StepKind(ScannerTestCase):
     def test_the_tree_decides_kind_not_the_entry_kind_text(self):
         # One occurrence is a part whatever the seeded descriptor claimed: the
         # flattened tree's entryKind comes from store.trees.tree_kind.
-        self.assertEqual(
-            self._kind({"kind": "assembly-package", "entryKind": "  ASSEMBLY  "}), "part"
-        )
+        self.assertEqual(self._kind({"kind": "assembly-package", "entryKind": "  ASSEMBLY  "}), "part")
 
     def test_two_occurrences_make_an_assembly(self):
         self.assertEqual(
@@ -265,10 +245,7 @@ class StepKind(ScannerTestCase):
         )
 
     def test_a_root_object_alone_does_not_make_an_assembly(self):
-        self.assertEqual(
-            self._kind({"kind": "assembly-package", "assembly": {"root": {}}}), "part"
-        )
-
+        self.assertEqual(self._kind({"kind": "assembly-package", "assembly": {"root": {}}}), "part")
 
     def test_no_package_is_a_part(self):
         self.write("k.step", "x\n")
@@ -278,17 +255,13 @@ class StepKind(ScannerTestCase):
 class DescriptorGate(ScannerTestCase):
     """``{}`` from ``read_step_catalog_metadata`` suppresses sourceUrl/poseUrl."""
 
-    def _entry_with_sidecar(self, descriptor) -> dict:
+    def test_a_valid_package_publishes_both_urls(self):
         self.write("g.step", "x\n")
         self.sidecar("g.step", {"kinematics": {"joints": []}})
-        self.package("g.step", descriptor)
-        return self.entry("g.step")
-
-    def test_a_valid_package_publishes_both_urls(self):
-        entry = self._entry_with_sidecar({"kind": "assembly-package", "components": {"c0": {}}})
-        self.assertTrue(entry["sourceUrl"].startswith("/g.step.json?v="))
+        self.package("g.step", {"kind": "assembly-package", "components": {"c0": {}}})
+        entry = self.entry("g.step")
+        self.assertEqual(asset_query(entry["sourceUrl"])["file"], self.path("g.step.json"))
         self.assertEqual(entry["poseUrl"], entry["sourceUrl"])
-
 
     def test_no_package_suppresses_both(self):
         self.write("g.step", "x\n")
@@ -307,7 +280,6 @@ class SidecarTruthiness(ScannerTestCase):
             self.sidecar("s.step", json.loads(sidecar_text))
         self.package("s.step", {"kind": "assembly-package", "components": {"c0": {}}})
         return self.entry("s.step")
-
 
     def test_an_empty_kinematics_object_still_yields_a_pose_url(self):
         # `{}` is TRUTHY in JS. Python's `or` would drop it.
@@ -329,18 +301,16 @@ class SidecarTruthiness(ScannerTestCase):
             "occurrences": [{"id": "o1.1", "name": "part", "component": "cid", "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]}],
         })
         entry = self.entry("finish.step")
-        self.assertIn("appearanceHash", entry)
         self.assertEqual(len(entry["appearanceHash"]), 64)
         self.assertEqual(entry["sourceSidecar"]["appearance"], {
             "materials": {"finish": {"name": "Finish", "roughness": 0.25}}, "assignments": {"o1.1": "finish"}
         })
-        self.assertTrue(entry["sourceUrl"].startswith("/finish.step.json?v="))
-        self.assertEqual(entry["hash"], result_tree(Path(self.root, "finish.step")))
+        self.assertEqual(asset_query(entry["sourceUrl"])["file"], self.path("finish.step.json"))
+        self.assertEqual(entry["hash"], result_tree(Path(self.path("finish.step"))))
         self.assertNotIn("poseUrl", entry)
 
     def test_catalog_binds_inline_sidecar_and_scene_hash_to_one_read(self):
         from cadgen._internal.source_sidecar import appearance_digest
-        import cadgen.viewer.scanner as scanner
 
         self.write("race.step", "x\n")
         first = {"materials": {"finish": {"name": "Finish", "roughness": 0.2}}, "assignments": {"o1.1": "finish"}}
@@ -353,8 +323,8 @@ class SidecarTruthiness(ScannerTestCase):
         })
         original_asset_for_path = scanner.asset_for_path
 
-        def mutate_after_version_read(repo_root, file_path):
-            asset = original_asset_for_path(repo_root, file_path)
+        def mutate_after_version_read(file_path):
+            asset = original_asset_for_path(file_path)
             self.sidecar("race.step", {"appearance": second})
             return asset
 
@@ -366,13 +336,8 @@ class SidecarTruthiness(ScannerTestCase):
         self.assertNotEqual(entry["appearanceHash"], appearance_digest(second))
 
     def test_catalog_keeps_tree_and_document_hash_from_one_snapshot(self):
-        import cadgen.viewer.scanner as scanner
-
         path = Path(self.write("document-race.step", "first\n"))
-        tree = self.package("document-race.step", {
-            "kind": "assembly-package",
-            "components": {"cid": {}},
-        })
+        tree = self.package("document-race.step", {"kind": "assembly-package", "components": {"cid": {}}})
         selected = result_snapshot(path)
         self.assertEqual(selected, (hashlib.sha256(b"first\n").hexdigest(), tree))
 
@@ -387,27 +352,25 @@ class SidecarTruthiness(ScannerTestCase):
         self.assertEqual(entry["documentHash"], hashlib.sha256(b"first\n").hexdigest())
         self.assertNotEqual(entry["documentHash"], hashlib.sha256(path.read_bytes()).hexdigest())
 
-
     def test_embedded_animation_is_pinned_to_the_catalog_snapshot(self):
         animation = {"language": "javascript", "source": "export const clips = {};"}
         entry = self._entry(json.dumps({"animation": animation}))
         self.assertEqual(entry["sourceSidecar"]["animation"], animation)
         self.assertEqual(len(entry["animationHash"]), 64)
-        self.assertNotIn("renderModuleUrl", entry)
 
     def test_no_animation_no_hash(self):
         self.assertNotIn("animationHash", self._entry(None))
 
     def test_the_catalog_publishes_no_provenance(self):
         entry = self._entry(json.dumps({"sourceKind": "step"}))
-        for forbidden in ("sourceKind", "source", "poseHatchUrl", "moduleUrl", "legacyParamsSidecar"):
+        for forbidden in ("sourceKind", "source", "poseHatchUrl", "moduleUrl", "legacyParamsSidecar", "renderModuleUrl"):
             self.assertNotIn(forbidden, entry)
 
     def test_the_sidecar_suffix_is_appended_to_the_whole_name(self):
         self.write("u.STP", "x\n")
         self.sidecar("u.STP", {"kinematics": {}})
         self.package("u.STP", {"kind": "assembly-package", "components": {"c0": {}}})
-        self.assertTrue(self.entry("u.STP")["sourceUrl"].startswith("/u.STP.json?v="))
+        self.assertEqual(asset_query(self.entry("u.STP")["sourceUrl"])["file"], self.path("u.STP.json"))
 
     # A sidecar this build cannot read is no sidecar: the document renders, with
     # no kinematics, no materials and no routine, and the entry says nothing
@@ -419,24 +382,18 @@ class SidecarTruthiness(ScannerTestCase):
         self.package("stale.step", {"kind": "assembly-package", "components": {"c0": {}}})
 
         entry = self.entry("stale.step")
-        self.assertNotIn("annotationError", entry)
-        self.assertNotIn("sourceUrl", entry)
-        self.assertNotIn("poseUrl", entry)
+        for absent in ("annotationError", "sourceUrl", "poseUrl"):
+            self.assertNotIn(absent, entry)
         self.assertTrue(entry["url"].startswith("/__cad/store?file="))
         self.assertEqual(entry["documentHash"], hashlib.sha256(b"new\n").hexdigest())
 
     def test_a_schema_six_sidecar_is_a_hard_cutover_and_is_dropped_quietly(self):
         self.write("old.step", "x\n")
-        self.write(
-            "old.step.json",
-            json.dumps({"schemaVersion": 6, "kinematics": {}}),
-        )
+        self.write("old.step.json", json.dumps({"schemaVersion": 6, "kinematics": {}}))
         self.package("old.step", {"kind": "assembly-package", "components": {"c0": {}}})
-
         entry = self.entry("old.step")
-        self.assertNotIn("annotationError", entry)
-        self.assertNotIn("sourceUrl", entry)
-        self.assertNotIn("poseUrl", entry)
+        for absent in ("annotationError", "sourceUrl", "poseUrl"):
+            self.assertNotIn(absent, entry)
 
     def test_invalid_appearance_drops_the_sidecar_without_an_entry_field(self):
         self.write("bad-finish.step", "x\n")
@@ -444,11 +401,9 @@ class SidecarTruthiness(ScannerTestCase):
             "appearance": {"materials": {"finish": {"name": "Finish", "roughness": "glossy"}}, "assignments": {"o1.1": "finish"}}
         })
         self.package("bad-finish.step", {"kind": "assembly-package", "components": {"c0": {}}})
-
         entry = self.entry("bad-finish.step")
-        self.assertNotIn("annotationError", entry)
-        self.assertNotIn("sourceUrl", entry)
-        self.assertNotIn("appearanceHash", entry)
+        for absent in ("annotationError", "sourceUrl", "appearanceHash"):
+            self.assertNotIn(absent, entry)
 
 
 class SrdfPairing(ScannerTestCase):
@@ -458,117 +413,72 @@ class SrdfPairing(ScannerTestCase):
         self.write("arm.srdf", '<robot name="arm"/>')
         relation = self.entry("arm.srdf")["relations"]["urdf"]
         self.assertEqual(list(relation), ["file", "url", "hash", "bytes"])
-        self.assertEqual(relation["file"], "arm.urdf")
+        self.assertEqual(relation["file"], self.path("arm.urdf").replace(os.sep, "/"))
+        self.assertEqual(asset_query(relation["url"])["file"], self.path("arm.urdf"))
 
     def test_a_prolog_of_declaration_comment_and_doctype_is_skipped(self):
         self.write("z.urdf", '<robot name="z"/>')
-        self.write(
-            "z.srdf",
-            '<?xml version="1.0"?><!-- c --><!DOCTYPE robot><robot name="z"/>',
-        )
-        self.assertEqual(self.entry("z.srdf")["relations"]["urdf"]["file"], "z.urdf")
+        self.write("z.srdf", '<?xml version="1.0"?><!-- c --><!DOCTYPE robot><robot name="z"/>')
+        self.assertEqual(self.entry("z.srdf")["relations"]["urdf"]["file"], self.path("z.urdf").replace(os.sep, "/"))
 
-
-    def test_ambiguity_yields_no_pairing(self):
+    def test_ambiguity_a_nameless_robot_and_another_directory_never_pair(self):
         self.write("one.urdf", '<robot name="dup"/>')
         self.write("two.urdf", '<robot name="dup"/>')
         self.write("dup.srdf", '<robot name="dup"/>')
-        self.assertNotIn("relations", self.entry("dup.srdf"))
-
-    def test_a_robot_with_no_name_never_pairs(self):
         self.write("n.urdf", "<robot/>")
         self.write("n.srdf", "<robot/>")
-        self.assertNotIn("relations", self.entry("n.srdf"))
-
-    def test_a_urdf_in_another_directory_never_pairs(self):
         self.write("deep/far.urdf", '<robot name="far"/>')
         self.write("far.srdf", '<robot name="far"/>')
-        self.assertNotIn("relations", self.entry("far.srdf"))
+        for rel in ("dup.srdf", "n.srdf", "far.srdf"):
+            with self.subTest(rel=rel):
+                self.assertNotIn("relations", self.entry(rel))
 
 
-class SymlinkPolicy(ScannerTestCase):
-    def test_directory_symlinks_are_followed_on_purpose(self):
-        os.makedirs(os.path.join(self.tmp, "library_real"))
-        Path(self.tmp, "library_real", "part.step").write_text("x\n", encoding="utf-8")
-        os.symlink(os.path.join(self.tmp, "library_real"), os.path.join(self.root, "library"))
-        # The literal POSIX spelling, never os.path.join.
-        self.assertEqual(self.files(), ["library/part.step"])
+class ReadsNeverBlockDeletion(ScannerTestCase):
+    """A catalog read that has a model open must not stop the user deleting it.
 
-    def test_a_symlink_loop_terminates_with_exactly_one_entry(self):
-        self.write("model.step", "x\n")
-        os.symlink(".", os.path.join(self.root, "loop"))
-        self.assertEqual(len([f for f in self.files() if f.endswith("model.step")]), 1)
+    POSIX never lets a reader's handle refuse an unlink; Windows does, unless the reader asked
+    for delete sharing, and a plain ``open()`` does not. On Windows these fail with
+    ``WinError 32`` the moment a hash goes back to a plain ``open``; off Windows they pin the
+    row's tolerance of a file that vanishes mid-read.
+    """
 
-    def test_broken_symlinks_are_skipped_not_fatal(self):
-        self.write("ok.stl", "x")
-        os.symlink(os.path.join(self.tmp, "nowhere.stl"), os.path.join(self.root, "dangling.stl"))
-        self.assertEqual(self.files(), ["ok.stl"])
+    def delete_while_open(self, target, *, before_open: bool = False):
+        """An opener that deletes ``target`` while (or just before) it is read."""
+        self.deleted = []
 
-    def test_file_symlinks_are_followed_and_not_deduplicated(self):
-        self.write("real.stl", "same")
-        os.symlink(os.path.join(self.root, "real.stl"), os.path.join(self.root, "link.stl"))
-        entries = self.scan()
-        self.assertEqual([e["file"] for e in entries], ["link.stl", "real.stl"])
-        self.assertEqual(entries[0]["hash"], entries[1]["hash"])
+        def opener(path):
+            if os.path.realpath(path) != os.path.realpath(target):
+                return open_shared_for_read(path)
+            if before_open:
+                os.unlink(path)
+                return open_shared_for_read(path)
+            handle = open_shared_for_read(path)
+            os.unlink(path)
+            self.deleted.append(path)
+            return handle
 
-    def test_an_earlier_sorted_alias_hides_the_real_directory(self):
-        # The flip side of the visited-real-path loop guard, not a separate
-        # rule: dedup is by DIRECTORY, so only the first spelling is walked.
-        os.makedirs(os.path.join(self.root, "real"))
-        Path(self.root, "real", "part.stl").write_text("x", encoding="utf-8")
-        os.symlink(os.path.join(self.root, "real"), os.path.join(self.root, "Alink"))
-        self.assertEqual(self.files(), ["Alink/part.stl"])
+        return opener
 
-    def test_a_link_out_of_the_root_is_served(self):
-        outside = os.path.join(self.tmp, "outside")
-        os.makedirs(outside)
-        Path(outside, "secret.step").write_text("outside\n", encoding="utf-8")
-        os.symlink(os.path.join(outside, "secret.step"), os.path.join(self.root, "escape.step"))
-        self.assertEqual(self.files(), ["escape.step"])
+    def test_a_model_deleted_while_its_row_hashes_it_is_deleted(self):
+        model = self.write("probe.stl", "solid probe\nendsolid probe\n")
+        with mock.patch.object(scanner, "open_shared_for_read", self.delete_while_open(model)):
+            catalog_entry(model)
+        self.assertEqual(self.deleted, [model])
+        self.assertIsNone(catalog_entry(model))
 
+    def test_a_model_gone_before_its_row_opens_it_leaves_the_row_standing(self):
+        model = self.write("probe.stl", "solid probe\nendsolid probe\n")
+        with mock.patch.object(scanner, "open_shared_for_read", self.delete_while_open(model, before_open=True)):
+            self.assertEqual(catalog_entry(model)["hash"], "")
+        self.assertIsNone(catalog_entry(model))
 
-class WalkRules(ScannerTestCase):
-    def test_skipped_directories_and_hidden_names(self):
-        for skipped in ("dist", "build", "coverage", "node_modules", "__pycache__", "viewer", "__cadgen__"):
-            self.write(f"{skipped}/x.stl", "x")
-        self.write(".hidden/secret.stl", "x")
-        self.write(".dotfile.stl", "x")
-        self.write("kept.stl", "x")
-        self.assertEqual(self.files(), ["kept.stl"])
-
-
-    def test_the_depth_cap_stops_the_walk(self):
-        current = self.root
-        for level in range(70):
-            current = os.path.join(current, f"d{level}")
-            os.makedirs(current)
-            Path(current, f"f{level}.stl").write_text("x", encoding="utf-8")
-        files = self.files()
-        # Files at the root are collected at depth 0, so d<k> is entered at
-        # depth k+1 and the guard admits k <= 63.
-        self.assertEqual(len(files), 64)
-        self.assertTrue(any(f.endswith("d63/f63.stl") for f in files))
-        self.assertFalse(any(f.endswith("d64/f64.stl") for f in files))
-
-    def test_only_the_source_extensions_become_entries(self):
-        for name in ("a.step", "b.stp", "c.stl", "d.3mf", "e.glb", "f.dxf", "g.urdf", "h.srdf", "i.sdf"):
-            self.write(name, "x")
-        for name in ("j.json", "k.js", "l.txt", "m.py", "n", "o.stepx"):
-            self.write(name, "x")
-        self.assertEqual(len(self.scan()), 9)
-
-
-class NaturalOrder(ScannerTestCase):
-    def test_numeric_runs_compare_as_integers(self):
-        for name in ("v2.10.step", "v2.9.step", "v10.1.step"):
-            self.write(name, "x")
-        self.assertEqual(self.files(), ["v2.9.step", "v2.10.step", "v10.1.step"])
-
-    def test_ties_preserve_the_walk_order_and_the_sort_is_non_mutating(self):
-        entries = [{"file": "b"}, {"file": "A"}, {"file": "a"}, {"file": "B"}]
-        ordered = sort_catalog_entries(entries)
-        self.assertEqual([e["file"] for e in ordered], ["A", "a", "b", "B"])
-        self.assertEqual([e["file"] for e in entries], ["b", "A", "a", "B"])
+    def test_a_step_deleted_while_its_digest_is_read_is_deleted(self):
+        document = self.write("part.step", "ISO-10303-21;\nEND-ISO-10303-21;\n")
+        with mock.patch.object(catalog, "open_shared_for_read", self.delete_while_open(document)):
+            catalog.artifact_file_hash(Path(document))
+        self.assertEqual(len(self.deleted), 1)
+        self.assertFalse(os.path.exists(document))
 
 
 class ServedAssetGate(unittest.TestCase):
@@ -579,7 +489,6 @@ class ServedAssetGate(unittest.TestCase):
         self.assertTrue(is_served_cad_asset("/root/part.stp.json"))
         self.assertFalse(is_served_cad_asset("/root/random.js"))
         self.assertFalse(is_served_cad_asset("/root/part.anim.js"))
-        # The render module beside a document IS served, on its full pair of suffixes.
         self.assertFalse(is_served_cad_asset("/root/part.step.js"))
         self.assertFalse(is_served_cad_asset("/root/PART.STP.JS"))
         self.assertFalse(is_served_cad_asset("/root/.hidden.step.js"))
@@ -589,37 +498,8 @@ class ServedAssetGate(unittest.TestCase):
         self.assertFalse(is_served_cad_asset("/root/notes.txt"))
 
     def test_the_hidden_check_is_on_the_basename_only(self):
-        # A model root that itself lives under a hidden absolute path must
-        # still serve; hidden components BELOW the root are the backend's job.
+        # A hidden folder on the way is no reason to refuse a file that is named.
         self.assertTrue(is_served_cad_asset("/home/u/.models/part.step"))
-
-
-class PathHelpers(unittest.TestCase):
-
-    def test_path_is_inside_treats_realpath_as_alias_equality(self):
-        tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
-        real_root = os.path.join(tmp, "root")
-        os.makedirs(os.path.join(real_root, "sub"))
-        Path(real_root, "sub", "part.step").write_text("x", encoding="utf-8")
-        alias = os.path.join(tmp, "alias")
-        os.symlink(real_root, alias)
-        self.assertTrue(path_is_inside(os.path.join(alias, "sub", "part.step"), alias))
-        self.assertTrue(path_is_inside(os.path.join(real_root, "sub", "part.step"), alias))
-        self.assertTrue(path_is_inside(os.path.join(alias, "sub", "part.step"), real_root))
-        self.assertFalse(path_is_inside(os.path.join(tmp, "outside.step"), alias))
-
-    def test_a_dotdot_after_a_symlinked_component_is_still_refused(self):
-        # The lexical branch runs FIRST and collapses "..", which is the whole
-        # reason realpath may not be the primary check.
-        tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
-        root = os.path.join(tmp, "root")
-        outside = os.path.join(tmp, "outside")
-        os.makedirs(root)
-        os.makedirs(outside)
-        os.symlink(outside, os.path.join(root, "lib"))
-        self.assertFalse(path_is_inside(os.path.join(root, "lib", "..", "..", "x.step"), root))
 
 
 if __name__ == "__main__":

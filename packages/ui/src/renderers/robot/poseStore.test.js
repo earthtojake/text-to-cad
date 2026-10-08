@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseArmSrdf, parseArmUrdf } from "./__tests__/robotFixtures.js";
-import { createPoseStore, movableJoints } from "./poseStore.js";
+import { ARM_URDF, parseArmSrdf, parseArmUrdf } from "./__tests__/robotFixtures.js";
+import { createPoseStore, movableJoints, poseLogic } from "./poseStore.js";
 
 const joint = (store, name) => store.joints.find(candidate => candidate.name === name);
 
@@ -58,4 +58,19 @@ test("values carried onto a description keep its known joints, clamped to its li
   const { values } = store.getSnapshot();
   assert.ok(Math.abs(values.pitch - 90) < 1e-3);
   assert.deepEqual([values.lift, values.yaw, "gone" in values, "camera_mount" in values, "finger_mirror" in values], [0.2, 0, false, false, false]);
+});
+
+test("what poses a robot is its driven joints and its named poses: a revision with the same keeps the pose, and the named pose it was chosen as", () => {
+  const logic = poseLogic(parseArmUrdf());
+  assert.equal(poseLogic(parseArmUrdf()), logic, "the same description, read again");
+  assert.equal(poseLogic(parseArmUrdf(ARM_URDF.replace('box size="1 0.2 0.2"', 'box size="2 0.2 0.2"'))), logic, "a longer arm is posed the same way");
+  assert.notEqual(poseLogic(parseArmUrdf(ARM_URDF.replace('upper="0.5"', 'upper="0.8"'))), logic, "a joint's range is part of it");
+  assert.notEqual(poseLogic(parseArmUrdf(ARM_URDF.replace('<joint name="camera_mount" type="fixed">', '<joint name="camera_mount" type="continuous"><axis xyz="0 0 1"/>'))),
+    logic, "so is a joint that became one a person drives");
+  assert.notEqual(poseLogic(parseArmSrdf()), logic, "and so are the named poses");
+  assert.equal(createPoseStore(parseArmSrdf()).logic, poseLogic(parseArmSrdf()));
+  // The named pose the values were chosen as comes with them, matching or not.
+  const carried = createPoseStore(parseArmSrdf(), { finger: 0.04, wheel: 40 }, "grip/open");
+  assert.equal(carried.getSnapshot().groupStateId, "grip/open");
+  assert.equal(createPoseStore(parseArmSrdf(), { finger: 0.04, wheel: 40 }).getSnapshot().groupStateId, "", "where none is carried, the values match none");
 });

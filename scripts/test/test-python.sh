@@ -3,7 +3,7 @@ set -euo pipefail
 
 # The repo's Python suites.
 #
-#   scripts/test/test-python.sh [--keep-going] [--select GROUP] [--print-weights]
+#   scripts/test/test-python.sh [--keep-going] [--select GROUP] [--print-weights] [PATH...]
 #
 # --select picks one group instead of all of them:
 #   cadgen   the cadgen package suite, the CAD Viewer backend included (92% of the time)
@@ -13,11 +13,12 @@ set -euo pipefail
 #
 # --print-weights prints one `WEIGHT<TAB>path<TAB>seconds` line per slow file on
 # stdout: the first thing to read when a run is slow.
+#
+# PATHs narrow the group to the test files at or under them (repo-relative); CI passes
+# the files and directories a change selected.
 
 # shellcheck source=scripts/test/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-
-LIST_SKILLS_SCRIPT="$REPO_ROOT/scripts/utils/list-skills.sh"
 
 # --keep-going: run every suite and report all of them, instead of stopping at the first
 # failure. Opt-in, because stopping early is the right default for a developer waiting on a
@@ -33,7 +34,8 @@ while [ "$#" -gt 0 ]; do
     --select) SELECT="${2:?--select wants a group}"; shift ;;
     --select=*) SELECT="${1#--select=}" ;;
     --print-weights) PYTHON_TEST_PRINT_WEIGHTS=1 ;;
-    *) echo "test-python.sh: unknown argument $1" >&2; exit 2 ;;
+    -*) echo "test-python.sh: unknown argument $1" >&2; exit 2 ;;
+    *) TEST_PATHS+=("$1") ;;
   esac
   shift
 done
@@ -80,7 +82,8 @@ if [ "$SELECT" = "viewer" ]; then
 fi
 
 if [ "$SELECT" = "all" ] || [ "$SELECT" = "skills" ]; then
-  while IFS= read -r skill; do
+  for skill_md in skills/*/SKILL.md; do
+    skill="$(basename "$(dirname "$skill_md")")"
     test_dir="tests/python/skills/$skill"
     if [ -d "$test_dir" ]; then
       # Skills no longer vendor cadgen; they import the distribution. In a checkout that is
@@ -89,8 +92,10 @@ if [ "$SELECT" = "all" ] || [ "$SELECT" = "skills" ]; then
       run_suite "$skill skill Python tests" "$test_dir" \
         "skills/$skill/scripts" "packages/cadgen/src"
     fi
-  done < <("$LIST_SKILLS_SCRIPT")
+  done
 fi
+
+require_selected_tests
 
 if [ "${#failed_suites[@]}" -gt 0 ]; then
   printf '\n==> FAILING SUITES (%d)\n' "${#failed_suites[@]}"

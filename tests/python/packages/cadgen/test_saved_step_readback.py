@@ -78,6 +78,122 @@ class SavedStepReadbackTest(unittest.TestCase):
         raw.assert_called_once()
         self.assert_same_document(expected, forced)
 
+    def test_writer_input_moves_exactly_when_the_saved_bytes_do(self):
+        """The root's authored name and finishes never reach a saved STEP, so they
+        never move its writer input; geometry, a name or a placement moves both."""
+        from build123d import Compound, Location, Solid
+        from cadgen.store.build import build_tree_through_step
+
+        def assembly(label="root", size=2, name="b", offset=10):
+            box = Solid.make_box(size, 3, 4)
+            box.label, box.color = "a", (.8, .1, .1, 1)
+            pin = Solid.make_cylinder(1, 5).moved(Location((offset, 0, 0)))
+            pin.label = name
+            return Compound(children=[box, pin], label=label)
+
+        def finish(metalness):
+            return {"definitions": {"steel": {"name": "Steel", "metalness": metalness, "roughness": .3}},
+                    "assignments": [{"targets": ["#a"], "material": "steel"}]}
+
+        def written(tag, shape, materials=None):
+            _, _, stats, step_hash = build_tree_through_step(
+                shape, self.root / tag / "part.step", root_name="root", materials=materials,
+            )
+            return step_hash, stats["writerInput"]
+
+        base, part = written("base", assembly(), finish(1)), written("part", self.shape())
+        relabeled_part = self.shape()
+        relabeled_part.label = "renamed"
+        for case, reference, other, same in (
+            ("assembly root name", base, written("renamed", assembly(label="renamed"), finish(1)), True),
+            ("part root name", part, written("renamed-part", relabeled_part), True),
+            ("finish", base, written("finish", assembly(), finish(.5)), True),
+            ("geometry", base, written("geometry", assembly(size=3), finish(1)), False),
+            ("member name", base, written("name", assembly(name="c"), finish(1)), False),
+            ("placement", base, written("placement", assembly(offset=11), finish(1)), False),
+        ):
+            with self.subTest(case):
+                self.assertEqual(other[0] == reference[0], same, "saved bytes")
+                self.assertEqual(other[1] == reference[1], same, "writer input")
+
+    def test_a_kept_document_is_neither_written_nor_read_back_unless_forced(self):
+        from cadgen.store.build import build_tree_through_step
+
+        expected = self.seed()
+        kept = {"stepHash": expected[3], "documentTree": expected[2]["documentTree"], "bbox": expected[1]["bbox"],
+                "documentOccurrenceMap": expected[2]["documentOccurrenceMap"],
+                "documentNodeMap": expected[2]["documentNodeMap"]}
+        offered = []
+
+        def keep(writer_input):
+            offered.append(writer_input)
+            return kept
+
+        relabeled = self.shape()
+        relabeled.label = "renamed"
+        with mock.patch("cadgen.step_export.export_build123d_step_file", side_effect=AssertionError("kept document written")), \
+                mock.patch("cadgen._internal.step_scene_loader.load_step_scene", side_effect=AssertionError("kept document read")):
+            tree_hash, tree, stats, step_hash = build_tree_through_step(
+                relabeled, self.root / "kept" / "part.step", root_name="root", kept_document=keep,
+            )
+        self.assertEqual(offered, [expected[2]["writerInput"]])
+        self.assertTrue(stats["documentKept"])
+        self.assertEqual((step_hash, stats["documentTree"]), (expected[3], expected[2]["documentTree"]))
+        self.assertEqual(stats["documentNodeMap"], expected[2]["documentNodeMap"])
+        self.assertEqual(tree["bbox"], expected[1]["bbox"])
+        self.assertNotEqual(tree_hash, expected[0], "the authored label is part of the result")
+        self.assertFalse((self.root / "kept" / "part.step").exists())
+        forced = build_tree_through_step(relabeled, self.root / "forced" / "part.step", root_name="root",
+                                         force=True, kept_document=keep)
+        self.assertEqual(len(offered), 1, "a forced build never offers to keep")
+        self.assertNotIn("documentKept", forced[2])
+        self.assertEqual(forced[3], expected[3])
+
+    def test_a_document_is_kept_only_while_its_record_bytes_and_tree_all_agree(self):
+        from types import SimpleNamespace
+
+        from cadgen._internal.generation import _kept_document
+        from cadgen.store.objects import object_path
+        from cadgen.store.records import write_record
+
+        expected = self.seed()
+        script = self.root / "model.py"
+        spec = SimpleNamespace(source="generated", script_path=script,
+                               generator_metadata=SimpleNamespace(entry_function="model"))
+        write_record(f"{script}::model", {
+            "tree": expected[0], "documentTree": expected[2]["documentTree"], "stepHash": expected[3],
+            "writerInput": expected[2]["writerInput"], "documentOccurrenceMap": expected[2]["documentOccurrenceMap"],
+            "documentNodeMap": expected[2]["documentNodeMap"],
+        })
+        on_disk = (expected[3], None)
+        kept = _kept_document(spec, expected[2]["writerInput"], on_disk)
+        self.assertEqual((kept["stepHash"], kept["documentTree"]), (expected[3], expected[2]["documentTree"]))
+        self.assertIsNone(_kept_document(spec, "0" * 64, on_disk), "another writer input")
+        self.assertIsNone(_kept_document(spec, expected[2]["writerInput"], ("f" * 64, None)), "other bytes on disk")
+        object_path(expected[2]["documentTree"]).unlink()
+        self.assertIsNone(_kept_document(spec, expected[2]["writerInput"], on_disk), "an incomplete document tree")
+
+    def test_a_sidecar_with_unchanged_bytes_keeps_its_file(self):
+        # A viewer versions the sidecar by its file stamp, so rewriting the same bytes (a label
+        # edit whose document is kept) would reload the model for nothing.
+        from cadgen._internal.generation import _publish_sidecar
+
+        staged, saved = self.root / "stage" / "part.step", self.root / "saved" / "part.step"
+        staged_sidecar, saved_sidecar = (path.with_name("part.step.json") for path in (staged, saved))
+        for sidecar in (staged_sidecar, saved_sidecar):
+            sidecar.parent.mkdir()
+            sidecar.write_bytes(b'{"documentHash": "same"}')
+        before = os.stat(saved_sidecar)
+        _publish_sidecar(staged, saved)
+        after = os.stat(saved_sidecar)
+        self.assertEqual((after.st_ino, after.st_mtime_ns), (before.st_ino, before.st_mtime_ns))
+        staged_sidecar.write_bytes(b'{"documentHash": "new"}')
+        _publish_sidecar(staged, saved)
+        self.assertEqual(saved_sidecar.read_bytes(), b'{"documentHash": "new"}')
+        self.assertFalse(staged_sidecar.exists(), "a changed sidecar is moved into place")
+        _publish_sidecar(staged, saved)
+        self.assertFalse(saved_sidecar.exists(), "a build that stages no sidecar removes the saved one")
+
     def test_new_geometry_digest_is_a_raw_miss_even_with_an_existing_path_record(self):
         from cadgen._internal.step_scene_loader import load_step_scene
         from cadgen.store.records import note_output, write_record

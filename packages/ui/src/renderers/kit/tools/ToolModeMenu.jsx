@@ -3,7 +3,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger
 } from "@text-to-cad/ui/primitives/dropdown-menu";
 import { cn } from "@text-to-cad/ui/utils";
-import { FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
+import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { TOOL_PANEL_BUTTON_CLASS } from "./ToolPanel.jsx";
 
 /**

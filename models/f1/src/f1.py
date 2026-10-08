@@ -121,8 +121,8 @@ ANIMATION_JS = r'''// Choreography for the F1 concept car.
 // kinematics on a TREE, so a loop needs a solver and the solver lives here,
 // where arbitrary JS is allowed. The teardown belongs here regardless.
 //
-// The solves are exported by name as well as used by the clips, so they can be
-// checked under node without a viewer.
+// `clips` is the only export. The renderer refuses a module that exports any
+// other name, and with it every clip, so the solves below stay module-private.
 //
 // WHAT STEERING MOVES, AND WHY IT IS NOT EVERYTHING. The upright, wheel,
 // brake, track rod and rack move. The pushrods and rockers deliberately DO
@@ -134,7 +134,7 @@ ANIMATION_JS = r'''// Choreography for the F1 concept car.
 // ---------------------------------------------------------------- hardpoints
 // Mirrors of the constants in src/lib/spec.py. Keep in sync by hand — these are
 // a render-time copy, spec.py remains the source of truth.
-export const HP = {
+const HP = {
   // DRS four-bar (all in the y = DRS_LINK_Y plane)
   DRS_PIVOT: [-3985.0, 872.0], // (x, z)
   DRS_CRANK_PIVOT: [-3894.0, 800.0], // (x, z)
@@ -166,17 +166,17 @@ const cross = (a, b) => [
 const len = (a) => Math.sqrt(dot(a, a));
 const scale = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
 const norm = (a) => scale(a, 1 / (len(a) || 1));
-export const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
-export const clamp01 = (v) => clamp(Number(v) || 0, 0, 1);
-export const smoothstep = (t) => {
+const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+const clamp01 = (v) => clamp(Number(v) || 0, 0, 1);
+const smoothstep = (t) => {
   const u = clamp01(t);
   return u * u * (3 - 2 * u);
 };
 /** Eased window: 0 before `a`, 1 after `b`, smooth between. */
-export const window01 = (a, b, u) => smoothstep((u - a) / Math.max(b - a, 1e-6));
+const window01 = (a, b, u) => smoothstep((u - a) / Math.max(b - a, 1e-6));
 
 /** Rodrigues rotation of `p` about the axis through `origin` along `axis`. */
-export function rotateAboutAxis(p, origin, axis, deg) {
+function rotateAboutAxis(p, origin, axis, deg) {
   const a = (deg * Math.PI) / 180;
   const k = norm(axis);
   const v = sub(p, origin);
@@ -194,8 +194,8 @@ const polar = (c, r, deg) => [
 
 const LUG_CLOSED = polar(HP.DRS_PIVOT, HP.DRS_LUG_R, HP.DRS_LUG_ANGLE_CLOSED_DEG);
 const CRANK_END_CLOSED = polar(HP.DRS_CRANK_PIVOT, HP.DRS_CRANK_R, HP.DRS_CRANK_ANGLE_CLOSED_DEG);
-export const DRS_LINK_L = dist2(CRANK_END_CLOSED, LUG_CLOSED);
-export const DRS_TRAVEL_DEG = HP.FLAP_INC_OPEN_DEG - HP.FLAP_INC_CLOSED_DEG; // -64
+const DRS_LINK_L = dist2(CRANK_END_CLOSED, LUG_CLOSED);
+const DRS_TRAVEL_DEG = HP.FLAP_INC_OPEN_DEG - HP.FLAP_INC_CLOSED_DEG; // -64
 
 /** Rotate a 2D (x, z) point about a pivot; +deg lifts a trailing edge. */
 function rotIncidence2(p, pivot, deg) {
@@ -212,7 +212,7 @@ function rotIncidence2(p, pivot, deg) {
  * The circle-circle solve has two roots; we lock to the branch that reproduces
  * the closed pose so the linkage never snaps through.
  */
-export function solveDrs(t) {
+function solveDrs(t) {
   const flapDeg = DRS_TRAVEL_DEG * clamp01(t);
   const lug = rotIncidence2(LUG_CLOSED, HP.DRS_PIVOT, flapDeg);
 
@@ -243,7 +243,7 @@ export function solveDrs(t) {
 const mirrorY = (p) => [p[0], -p[1], p[2]];
 
 /** Steer-axis origin and direction for one side. */
-export function steerAxis(side) {
+function steerAxis(side) {
   const lb = side > 0 ? HP.F_LOWER_BALL : mirrorY(HP.F_LOWER_BALL);
   const ub = side > 0 ? HP.F_UPPER_BALL : mirrorY(HP.F_UPPER_BALL);
   return { origin: lb, dir: norm(sub(ub, lb)) };
@@ -260,7 +260,7 @@ const TRACK_ROD_L = len(sub(HP.F_TRACKROD_OUT, HP.F_RACK_END));
  * on a bracket around zero — Newton is unnecessary and bisection cannot jump
  * branches, which matters because the far root folds the upright over.
  */
-export function solveSteerAngle(side, d) {
+function solveSteerAngle(side, d) {
   const { origin, dir } = steerAxis(side);
   const arm = side > 0 ? HP.F_TRACKROD_OUT : mirrorY(HP.F_TRACKROD_OUT);
   const rack0 = side > 0 ? HP.F_RACK_END : mirrorY(HP.F_RACK_END);
@@ -297,7 +297,7 @@ export function solveSteerAngle(side, d) {
  * against its OWN track rod — the two sides differ slightly, which is where the
  * anti-Ackermann comes from.
  */
-export function solveSteering(s) {
+function solveSteering(s) {
   const d = clamp(Number(s) || 0, -1, 1) * HP.MAX_RACK_TRAVEL;
   const left = solveSteerAngle(1, d);
   const right = solveSteerAngle(-1, d);
@@ -333,7 +333,7 @@ export function solveSteering(s) {
  * Exact whenever the two lengths match, which the four-bar and the rack solve
  * both guarantee.
  */
-export function reaim(handle, a0, b0, a1, b1) {
+function reaim(handle, a0, b0, a1, b1) {
   const n0 = norm(sub(b0, a0));
   const n1 = norm(sub(b1, a1));
   const axis = cross(n0, n1);
@@ -637,7 +637,7 @@ function frame(m, { drs = 0, steer = 0, explode = 0, engine = 0 } = {}) {
 const ramp = (a, b, t) => smoothstep((t - a) / Math.max(b - a, 1e-6));
 
 /** Resolve the showcase clock; at u=0 and u=1 both values are exactly 0. */
-export function showcaseAt(t) {
+function showcaseAt(t) {
   const u = clamp01(t);
   const explode = u < 0.7 ? ramp(0.067, 0.467, u) : 1 - ramp(0.836, 0.991, u);
   const engine = u < 0.69 ? ramp(0.498, 0.658, u) : 1 - ramp(0.724, 0.836, u);

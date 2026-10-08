@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
 import { referenceMeasurements } from "../../workbench/referenceMeasurements.js";
-import { stepSelectionMaterialInfo } from "../../workbench/stepSelectionMaterial.js";
 import { nodeVolume } from "../../workbench/partVolume.js";
-import { STEP_MODEL_ROOT_ID } from "@text-to-cad/core/lib/step/stepTree.js";
+import { STEP_MODEL_ROOT_ID, stepTreeNodeLeafPartIds } from "@text-to-cad/core/lib/step/stepTree.js";
 import { stepPartNameFromFile, stepProductName } from "@text-to-cad/core/lib/step/productName.js";
 
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { CoordValue, InfoRow, MonoValue, formatNumber } from "../../../kit/inspector/referenceRows.jsx";
+import { InfoRow, MonoValue, formatNumber } from "../../../kit/inspector/referenceRows.jsx";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@text-to-cad/ui/primitives/select";
 
 // A selected "element" is either a topology reference (face / edge / solid,
@@ -20,32 +19,8 @@ const SELECTOR_TYPE_LABELS = Object.freeze({
   occurrence: "Component"
 });
 
-const SURFACE_LABELS = Object.freeze({
-  plane: "Planar",
-  cylinder: "Cylindrical",
-  cone: "Conical",
-  sphere: "Spherical",
-  torus: "Toroidal",
-  spline: "Freeform",
-  bspline: "Freeform",
-  nurbs: "Freeform"
-});
-
-const CURVE_LABELS = Object.freeze({
-  line: "Line",
-  circle: "Circle",
-  arc: "Arc",
-  ellipse: "Ellipse",
-  spline: "Spline",
-  bspline: "Spline"
-});
-
-function titleCase(value) {
-  const text = String(value || "").trim();
-  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
-}
-
-function readBbox(source) {
+// A part's overall size, from its bounding box.
+function boxSize(source) {
   const bbox = source?.bbox || source?.boundingBox || null;
   const min = Array.isArray(bbox?.min) ? bbox.min : null;
   const max = Array.isArray(bbox?.max) ? bbox.max : null;
@@ -53,8 +28,7 @@ function readBbox(source) {
     return null;
   }
   const dims = [0, 1, 2].map((axis) => Math.abs((Number(max[axis]) || 0) - (Number(min[axis]) || 0)));
-  const center = [0, 1, 2].map((axis) => ((Number(min[axis]) || 0) + (Number(max[axis]) || 0)) / 2);
-  return dims.some((value) => value > 1e-9) ? { dims, center } : null;
+  return dims.some((value) => value > 1e-9) ? dims : null;
 }
 
 function isPartNode(item) {
@@ -66,108 +40,31 @@ function MeasurementRows({rows}) {
   return rows.map(([label,value,unit])=><InfoRow key={label} label={label}><MonoValue>{`${formatNumber(value)} ${unit}`}</MonoValue></InfoRow>);
 }
 
-function MaterialChannelValues({ channels }) {
-  return (
-    <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-      {channels.map((channel) => (
-        <span key={channel.key} className="inline-flex items-baseline gap-1">
-          <span className="text-muted-foreground">{channel.label}</span>
-          <MonoValue>{`${formatNumber(channel.value * 100, 0)}%`}</MonoValue>
-        </span>
-      ))}
-    </span>
-  );
+// A face's or an edge's own measurements: its area, its length, the radii of a round one, an
+// arc's sweep. Where it is (its centre, its normal), what kind it is and whose it is are the
+// heading's and the view's to say.
+function TopologyDetail({ reference }) {
+  return <MeasurementRows rows={referenceMeasurements(reference).rows} />;
 }
 
-function MaterialDetail({ info }) {
-  if (!info) return null;
-  const surface = info.channels.filter((channel) => ["roughness", "metalness"].includes(channel.key));
-  const coating = info.channels.filter((channel) => ["clearcoat", "clearcoatRoughness"].includes(channel.key));
-  const opacity = info.channels.filter((channel) => channel.key === "opacity");
-  return (
-    <div className="mt-1 border-t border-sidebar-border/60 pt-1" aria-label="Source material">
-      <InfoRow label="Material">{info.label}</InfoRow>
-      {info.color ? (
-        <InfoRow label="Color">
-          {info.color.mixed ? "Mixed" : (
-            <span className="inline-flex items-baseline gap-1.5">
-              <span
-                className="size-3 shrink-0 self-center rounded-[2px] border border-sidebar-border"
-                style={{ backgroundColor: info.color.value }}
-                aria-label={`${info.color.value} color swatch`}
-              />
-              <MonoValue>{info.color.value}</MonoValue>
-            </span>
-          )}
-        </InfoRow>
-      ) : null}
-      {surface.length ? <InfoRow label="Surface"><MaterialChannelValues channels={surface} /></InfoRow> : null}
-      {coating.length ? <InfoRow label="Coating"><MaterialChannelValues channels={coating} /></InfoRow> : null}
-      {opacity.length ? <InfoRow label="Opacity"><MaterialChannelValues channels={opacity} /></InfoRow> : null}
-    </div>
-  );
-}
-
-function TopologyDetail({ reference, fallbackSize }) {
-  const pick = reference.pickData || {};
-  const type = reference.selectorType;
-  const quantities = referenceMeasurements(reference);
-  let subtype = "";
-  if (type === "face") {
-    subtype = SURFACE_LABELS[pick.surfaceType] || titleCase(quantities.kind);
-  } else if (type === "edge") {
-    subtype = CURVE_LABELS[quantities.kind] || titleCase(quantities.kind);
-  } else {
-    subtype = titleCase(pick.kind || quantities.kind);
-  }
-  const box = readBbox(pick);
-  const center = quantities.circular && Array.isArray(pick.params?.center) ? pick.params.center : Array.isArray(pick.center) ? pick.center : box?.center;
-  const component = String(pick.sourceName || pick.name || reference.occurrenceId || "").trim();
-
-  // Its name is the panel's heading (`referenceName`); the id, what a copy carries, is a row.
-  return (
-    <div className="flex min-w-0 flex-col">
-      <InfoRow label="Type">{SELECTOR_TYPE_LABELS[type] || "Reference"}{subtype && ` · ${subtype}`}</InfoRow>
-      <InfoRow label="ID"><MonoValue>{reference.displaySelector || reference.normalizedSelector || reference.id}</MonoValue></InfoRow>
-      <div className="flex flex-col">
-        <MeasurementRows rows={quantities.rows} />
-        {(box?.dims || fallbackSize) && <SizeRow size={box?.dims || fallbackSize}/>}
-        {Array.isArray(center) && <InfoRow label="Center"><CoordValue vector={center}/></InfoRow>}
-        {Array.isArray(pick.normal) && <InfoRow label="Normal"><CoordValue vector={pick.normal} digits={3}/></InfoRow>}
-        {component && <InfoRow label="Component">{component}</InfoRow>}
-      </div>
-    </div>
-  );
-}
-
-function PartDetail({ node, fallbackSize, meshData }) {
+// A component's or a subassembly's: how many parts, its overall size and its volume.
+function PartDetail({ node, size, meshData }) {
   const isAssembly =
     String(node.nodeType || "").trim() === "assembly" ||
     (Array.isArray(node.children) && node.children.length > 0);
-  const selector = String(node.displaySelector || node.occurrenceId || node.id || "").trim();
   const partCount = Array.isArray(node.leafPartIds)
     ? node.leafPartIds.length
     : Array.isArray(node.children)
       ? node.children.length
       : 0;
-  const box = readBbox(node);
   const volume = useMemo(() => nodeVolume(node, meshData), [node, meshData]);
-
-  // Its name is the panel's heading (`referenceName`); the id, what a copy carries, is a row.
-  return (
-    <div className="flex min-w-0 flex-col">
-      <InfoRow label="Type">{isAssembly ? "Subassembly" : "Component"}</InfoRow>
-      <InfoRow label="ID"><MonoValue>{selector}</MonoValue></InfoRow>
-      <div className="flex flex-col">
-        {isAssembly && partCount > 0 ? (
-          <InfoRow label="Parts"><MonoValue>{formatNumber(partCount, 0)}</MonoValue></InfoRow>
-        ) : null}
-        {(box?.dims || fallbackSize) && <SizeRow size={box?.dims || fallbackSize}/>}
-        {volume !== null && <VolumeRow volume={volume}/>}
-        {box && <InfoRow label="Center"><CoordValue vector={box.center}/></InfoRow>}
-      </div>
-    </div>
-  );
+  return <>
+    {isAssembly && partCount > 0 ? (
+      <InfoRow label="Parts"><MonoValue>{formatNumber(partCount, 0)}</MonoValue></InfoRow>
+    ) : null}
+    {size && <SizeRow size={size}/>}
+    {volume !== null && <VolumeRow volume={volume}/>}
+  </>;
 }
 
 // From the displayed mesh: exact for flat faces, a close approximation where faces curve.
@@ -192,7 +89,7 @@ function itemKey(item) {
  * restates the selector ("Face o1.1.f3") is not a name, and neither is an XCAF label entry
  * (`=>[0:1:1:2]`, `stepProductName`). A single-part file's part with no name of its own is the
  * file's ("l_bracket · face 11"): the tree's root is that part, named after the file. Never the
- * raw id first: that is the ID row.
+ * raw id: that is what a copy carries, with the file it is in.
  */
 function referenceName(item, meshData, partName) {
   if (isPartNode(item)) return String(item.name || item.displayName || "").trim() || itemKey(item);
@@ -216,23 +113,27 @@ function referenceName(item, meshData, partName) {
 }
 
 /**
- * The Reference panel's heading and rows for what is selected: read-only facts. The heading is
- * the reference being read — its name (or kind) and id — and, with several selected, a picker
- * that browses them; it never changes the selection, and it is the only thing a multi-selection
- * adds: the rows are always the browsed reference's alone. `null` with nothing to say.
+ * The Reference panel's heading and rows for what is selected, compact: the heading names the
+ * reference (its name, or its part and kind) and the rows are its key measurements alone — a
+ * face's area and a round face's radii, an edge's length, radii and sweep, a part's or a
+ * subassembly's part count, size and volume. What a person copies for their agent (the reference,
+ * with its file) is the panel's Copy; its raw id, where it sits and points, and its material are
+ * not rows. With several selected, the heading is a picker that browses them; it never changes
+ * the selection, and it is the only thing a multi-selection adds: the rows are always the browsed
+ * reference's alone. `null` with nothing to say.
+ *
+ * `measurements.size`: the selection's overall size. `partsSize(ids)`: the overall size of these
+ * parts together, so a part or subassembly browsed among several has its own.
  *
  * @returns {{ title: import("react").ReactNode, content: import("react").ReactNode } | null}
  */
-export function useStepReference({ references = [], meshData = null, sourceAppearance = null, measurements = null, partName = null }) {
+export function useStepReference({ references = [], meshData = null, measurements = null, partsSize = null, partName = null }) {
   const items = useMemo(() => Array.isArray(references) ? references.filter(Boolean) : [], [references]);
   const idsKey = JSON.stringify(items.map(itemKey));
   const [browsed, setBrowsed] = useState(null);
   // A new selection shows its newest reference immediately, without an effect
-  // briefly rendering the previous reference and material first.
+  // briefly rendering the previous reference first.
   const activeItem = (browsed?.selection === idsKey && items.find(item=>itemKey(item) === browsed.id)) || items.at(-1);
-  const materialInfo = useMemo(() => stepSelectionMaterialInfo({
-    references: activeItem ? [activeItem] : [], meshData, appearance: sourceAppearance,
-  }), [activeItem, meshData, sourceAppearance]);
   // Parts measured without a reference of their own: their overall size is all there is to say.
   const partsOnlySize = !items.length && measurements?.size;
   if (!activeItem && !partsOnlySize) return null;
@@ -253,12 +154,12 @@ export function useStepReference({ references = [], meshData = null, sourceAppea
     </SelectTrigger>
     <SelectContent className="max-w-[max(var(--radix-select-trigger-width),12rem)]">{items.map(item=><SelectItem className="break-all" key={itemKey(item)} value={itemKey(item)}>{name(item)}</SelectItem>)}</SelectContent>
   </Select> : activeItem ? <TooltipHint content={name(activeItem)} overflowOnly><span className="block truncate" data-reference-label="">{name(activeItem)}</span></TooltipHint> : null;
-  const content = <div className="min-w-0 text-tiny font-normal">
+  const content = <div className="flex min-w-0 flex-col text-tiny font-normal">
     {partsOnlySize && <SizeRow size={partsOnlySize}/>}
     {activeItem && (isPartNode(activeItem)
-      ? <PartDetail node={activeItem} meshData={meshData} fallbackSize={items.length === 1 ? measurements?.size : null}/>
-      : <TopologyDetail reference={activeItem} fallbackSize={items.length === 1 ? measurements?.size : null}/>)}
-    <MaterialDetail info={materialInfo}/>
+      ? <PartDetail node={activeItem} meshData={meshData} size={boxSize(activeItem) || partsSize?.(stepTreeNodeLeafPartIds(activeItem))
+        || (items.length === 1 ? measurements?.size : null)}/>
+      : <TopologyDetail reference={activeItem}/>)}
   </div>;
   return { title, content };
 }

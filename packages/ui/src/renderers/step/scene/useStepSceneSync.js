@@ -259,6 +259,8 @@ export function useStepSceneSync(layers) {
         theme: sceneTheme,
         materialSettings,
         materialOverrides,
+        // The edge colour is not in the build key: the live build recolours its edges in place.
+        edgeSettings: visualEdgeSettings,
         ...sceneModelSettings
       });
     } else {

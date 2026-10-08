@@ -12,7 +12,9 @@ const DrawingEditor = lazy(() => import("../../../../drawing/index.js").then(mod
 /**
  * Draw mode's ink: the shared drawing editor, transparent and without its own
  * controls, over a viewport whose camera follows it (`drawingViewLock.js`).
- * Mounted only while Draw is active, so leaving the tool discards the sketch.
+ * Mounted only while Draw is active, so leaving the tool discards the sketch; one
+ * editor per sketch (`drawing.sketch`), so a discarded sketch takes its history
+ * with it and Undo has nothing of it to bring back.
  */
 export default function DrawingOverlay({ drawing, onReady, onContentChange, onViewportChange }) {
   const { platform } = useViewerHost().environment;
@@ -20,7 +22,7 @@ export default function DrawingOverlay({ drawing, onReady, onContentChange, onVi
     <Suspense fallback={null}>
       {/* The host draws the controls: Draw's panel in the tool stack. */}
       {/* It reopens on the tool, colour and weight the last session left (`drawing/session.js`). */}
-      <DrawingEditor mode="overlay" toolbar={false} initialTool={drawing?.tool || CAD_DRAWING_DEFAULTS.tool}
+      <DrawingEditor key={drawing?.sketch ?? 0} mode="overlay" toolbar={false} initialTool={drawing?.tool || CAD_DRAWING_DEFAULTS.tool}
         initialColor={drawing?.color || CAD_DRAWING_DEFAULTS.color} initialStrokeWidth={drawing?.strokeWidth} name="CAD drawing" platform={platform} onReady={onReady}
         onHistoryChange={drawing?.onHistoryChange} onToolChange={drawing?.onToolChange} onColorChange={drawing?.onColorChange}
         onContentChange={onContentChange} onViewportChange={onViewportChange} />

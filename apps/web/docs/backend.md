@@ -16,8 +16,8 @@ STEP through cadgen's build worker pool.
 
 ## Launching
 
-Run the installed CLI from the directory to serve. Its working directory is
-the root; there is no directory flag:
+A viewer serves every CAD file on the machine by absolute path, on port 3245 or
+the port `--port N` names. Run the installed CLI from anywhere:
 
 ```bash
 cadgen viewer --host 127.0.0.1 --json
@@ -31,7 +31,6 @@ select it explicitly:
 ```bash
 npm run build:web
 export CADGEN_VIEWER_DIST="$PWD/apps/web/dist"
-cd <the directory to serve>
 cadgen viewer --host 127.0.0.1 --json
 ```
 
@@ -39,128 +38,128 @@ cadgen viewer --host 127.0.0.1 --json
 Repository setup and editable-install instructions live in
 `CONTRIBUTING.md`.
 
-The launcher reuses a live instance for the same resolved root and code identity.
-That identity includes the cadgen version and the newest server/client file
-mtime, so rebuilding a checkout changes the reuse key. Otherwise it binds the
-first free port from 3245 upward. `--new` forces another instance of the same
-code; an explicit `--port` is strict and fails if occupied. Always use the
-printed URL, including its port. The JSON response reports `url`, `port`, and
-`action` only after the socket is bound and the app is attached.
+Before it binds, the launcher asks the port who holds it (`GET /__cad/server`).
+Nothing: it starts there (`action: "started"`). This user's viewer at the same
+identity — the cadgen version plus content digests of the Python runtime and
+the selected built client — is reused (`action: "reused"`). This user's viewer
+running other code is asked to exit (`POST /__cad/shutdown`) and the launch
+starts on the freed port: the newest code wins, on the same URL. Anything else
+— another program, another user's viewer — is a refusal naming `--port`.
+`--new` binds an OS-assigned free port, never asks and is never reused (dev
+servers and tests). Always use the printed URL. The JSON response reports
+`url`, `port`, and `action` only after the socket is bound and the app is
+attached.
 
-`cadgen viewer list` reports running instances, their roots and, for a
-`--detach` launch, the log its output goes to.
-`cadgen viewer stop --port <port>` stops an instance after verifying its identity.
-Do not stop an instance you did not start. A detached instance's log outlives
-it: a clean `stop` removes it, and one that crashed or was killed keeps it for
-a day (the newest ten), so the reason can still be read.
+`cadgen viewer stop [--port N]` asks this user's viewer on a port to exit and
+waits for the port to be free. A `--detach` launch writes the server's output
+to one log in the state directory, `viewer.log`, which outlives the server so a
+crash can be read afterwards, until the next detached start.
 
 ## Development
 
 After the root workspace dependencies and shared packages are built, invoke
-Vite from the directory to serve, outside `apps/web`:
+Vite from the folder a developer's relative links should resolve against,
+outside `apps/web`:
 
 ```bash
-cd <the directory to serve>
+cd <a folder of models>
 VIEWER_PYTHON=<checkout>/.venv/bin/python \
   npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 ```
 
-Dev root resolution first honors an explicit `directoryRoot` from its caller,
-then the first of `INIT_CWD` and the process working directory that is outside
-`apps/web`. Otherwise Vite defaults to `<checkout>/apps`. npm preserves its
-invocation directory in `INIT_CWD`, so the command above chooses the served
-root while `--prefix` locates the app. Open the bare origin with
-`?file=<path relative to the served root>`; the URL path does not choose a root.
+The spawned backend is started in the first of `INIT_CWD` and the process working
+directory that is outside `apps/web`; otherwise Vite starts it in `<checkout>/apps`. npm preserves its
+invocation directory in `INIT_CWD`, so the command above chooses that folder
+while `--prefix` locates the app. The folder is `serverInfo.start`: the page
+resolves a relative `?file=` against it, and it bounds nothing.
 
 Vite serves the client from source with HMR. It spawns
-`python -m cadgen.viewer --ephemeral --no-registry --api-only` and proxies
-`/__cad` and `/__tess_cache` to that process. `VIEWER_PYTHON` selects its
-interpreter; the default is `python3`. `VIEWER_BACKEND_URL` attaches to a backend
-you started separately, using that backend's existing root. The app needs no
-production build in this mode, but shared package imports still resolve to
-their compiled `dist/` exports.
+`python -m cadgen.viewer --new --api-only` and proxies `/__cad` and
+`/__tess_cache` to that process. `VIEWER_PYTHON` selects its interpreter; the
+default is `python3`. `VIEWER_BACKEND_URL` attaches to a backend you started
+separately. The app needs no production build in this mode, but shared package
+imports still resolve to their compiled `dist/` exports.
 
 Vite defaults to port 5173 and refuses to roll to another port; pass `--port`
-when needed. The development backend never enters the production instance
-registry, and its API-only mode does not serve a SPA. See the
-[app README](../README.md) for the complete development and launcher contract.
+when needed. The development backend's `--new` port is its own, and its
+API-only mode does not serve a SPA. See the [app README](../README.md) for the
+complete development and launcher contract.
 
-## Root and catalog
+## Files by absolute path
 
-Each instance serves one fixed filesystem root. `LocalAssetBackend` resolves
-and checks it at construction. Catalog entries include an absolute `file` and
-a `rootRelativeFile` for navigation. The scan skips dot-directories and
-`__cadgen__`, `__pycache__`, `build`, `coverage`, `dist`, `node_modules` and
-`viewer` (`VIEWER_SKIPPED_DIRECTORIES`), and writes no `catalog.json` or hidden
-catalog cache.
+There is no served directory. Every `?file=` — and every path in a request body
+— names a file by its absolute path (`/models/a.step`; on Windows `C:/models/a.step`
+or `C:\models\a.step`), anywhere on the machine; a relative one is a 400
+(`cadgen.viewer.backend`). Nothing is refused for where it is: no root, no
+containment, and no rule about hidden folders on the way to a named file. A
+UNC path (`\\host\share\a.step`) is refused, because any web page can make the
+browser send a GET, and a GET must never send the machine to the network.
 
-**The catalog is fresh on every request.** `GET /__cad/catalog` describes the
-served tree as it is when the request arrives: a model file created before the
-request is in it, one deleted before the request is not. The walk under that
-promise remembers each directory's relevant rows (subdirectories, links, CAD
-files) against the directory's own identity — device, inode, mtime, ctime —
-and re-lists a directory when that identity changes, which adding, removing or
-renaming an entry does. Link targets are re-stated on every request. Three
-rules cover the stamps that fail to move:
-
-- **Same tick.** A listing is served again only if the newer of its
-  directory's mtime and ctime was already 2 s old when it was read, so a change
-  landing in the same timestamp tick (1 s HFS+, 2 s FAT) cannot hide; a
-  directory being written right now is re-listed every time.
-- **Not a time.** A directory whose mtime or ctime is 0 or before 1980 — a
-  macOS exFAT volume root reports 0 and never moves it — is re-listed every
-  time.
-- **Put back.** No listing is served for more than 10 s. tar, unzip, `rsync -a`
-  and `cp -p` restore a directory's mtime after filling it; APFS, HFS+ and ext4
-  still move its ctime, but FAT and exFAT have no ctime of their own and Windows
-  reports creation time in its place, so there the identity can repeat exactly
-  and the change shows within 10 s. The client polls every 2 s, so four polls in
-  five stay warm.
-
-The memo holds at most 65,536 directories, least recently walked dropped first,
-and forgets a directory — with everything under it — once it is gone. A file's
-content is not a listing fact: catalog rows fingerprint their own files.
-Reading a file to hash it never holds up its deletion: the catalog opens models
-with delete sharing on Windows, and a model that vanishes mid-read gets an empty
-hash on that request and is gone on the next. A filesystem whose directory
-listings are themselves cached, such as an NFS mount with attribute caching, is
-only as fresh as that cache.
-
-Both `/__cad/server` and `/__cad/catalog` expose `rootId`, a stable identity for
-the normalized filesystem root. The host uses it for source and session-state
-identity; changing the server port does not name a different root.
-
-The catalog also carries `revision`, a digest of its entries that moves whenever
-anything a client would see in them does. A host that cannot afford to read the
-whole catalog on a timer (the CAD app relays every request through its host's
-few shared slots) compares the revision it is told with the client's
+A view shows one file and browses from that file's folder, one folder at a
+time, so nothing walks a tree to show it. `GET /__cad/catalog?file=<abs>` is
+that file's row (`scanner.catalog_entry`) — `file` is its absolute path with
+`/` separators, `url` where its bytes are served — or no row for a file that is
+not a CAD file, is gone, or has a hidden name; with no `file`, the catalog is
+empty. A row is computed from the file when it is asked for, so it is never
+stale. It also carries `revision`, a digest of its entries that moves whenever
+anything a client would see in them does: a host that cannot afford to read the
+catalog on a timer (the CAD app relays every request through its host's few
+shared slots) compares the revision it is told with the client's
 `catalogRevision`, and reads the catalog again only when they differ.
 
-`/__cad/asset` applies root containment, hidden-path rules and the served-asset
-extension filter. Model scripts are excluded. It and `/__cad/store` serve a
-project's files as data, never as pages: each response carries
-`x-content-type-options: nosniff` and `content-security-policy: default-src 'none';
-sandbox`, so a file opened straight in the browser (a robot description's XML can
-carry an XHTML `<script>`) runs no script and has an origin of its own. The
-renderers fetch the bytes, which neither header affects. Absolute references returned by
-the catalog are valid only when they resolve inside the root. Artifact status
-and compile routes apply the same containment rule, so compilation cannot be
-used to reach an outside file indirectly through the store.
+A row is computed once per version of its file, whoever asks first: a read that
+arrives while the same version's digest or row is being computed waits for that
+computation rather than repeating it, and a read of a file that has changed since
+asks about the new version. A version is the file's mtime and size and, for a save
+by rename inside one tick of a coarse clock (HFS+, FAT, some shares), its inode and
+ctime. A STEP whose tree the store cannot read whole (an object of it missing or
+damaged) is the one row computed again on every read: it lists the document as
+unbuilt, with no hash and a URL that names no tree, as the artifact status calls it
+not compiled, and the compile that repairs the store restores the same bytes at the
+same hashes, which moves nothing a version is made of. A build the client is
+watching (its build feed, `GET /__cad/preview`) that saves the file starts the
+file's row on a thread of the server's as soon as the daemon's ledger lists the
+save (`cadgen.viewer.warm`), so the catalog read that follows the build finds it
+computed or joins it; only the watched file is warmed, never the other files the
+build saved. The row is still the file's: its digest is read from the file's
+bytes, and the tree the ledger says the build saved only starts that tree's
+capture alongside. Warming is best effort: a row it cannot compute, or a thread
+it cannot start, is left to the read, and the feed answers regardless. Reading a
+file to hash it never holds up its deletion: the catalog opens models with delete
+sharing on Windows, and a model that vanishes mid-read gets an empty hash on that
+request and has no row on the next.
+
+The explorer's two reads are `GET /__cad/folder?path=<abs>` (one folder's
+subfolders and CAD files, natural order) and `GET /__cad/search?path=<abs>&q=`
+(the CAD files under a folder whose path below it holds `q`, bounded by matches,
+depth and time, and saying when it stopped early; `cadgen.viewer.folders`). A
+relative path is a 400, a path that is not a folder a 404, one that cannot be
+read a 403.
+
+`/__cad/asset` sends only CAD files and their `.step.json`/`.stp.json`
+sidecars, and never a file whose own name is hidden: a model script, a config
+or a key is a 404 whatever path names it. It and `/__cad/store` serve files as
+data, never as pages: each response carries `x-content-type-options: nosniff`
+and `content-security-policy: default-src 'none'; sandbox`, so a file opened
+straight in the browser (a robot description's XML can carry an XHTML
+`<script>`) runs no script and has an origin of its own. The renderers fetch the
+bytes, which neither header affects. No `Access-Control-*` header is ever
+served, so another site can make the browser send a request but never read the
+answer.
 
 ## Artifacts and the shared store
 
 `cadgen.viewer.artifact_status` reads artifact/store state and advisory build
 progress. Generated artifacts stay detached from their source: the viewer does
 not execute model scripts or rebuild generated outputs. When generation is
-needed, the alert names the CLI command. `/__cad/server` therefore reports
-`stepArtifactGenerationAvailable: false`.
+needed, the alert names the CLI command.
 
 A raw foreign `.step` or `.stp` without a current render artifact can be
 imported. `cadgen.viewer.cadgen_ops` delegates to cadgen's compile entry point in
 a worker process; the kernel runs there, and failures and progress return as
 structured results. Import availability is reported as `stepImportAvailable`.
 The service uses its own installed cadgen runtime, never an interpreter found
-inside the served directory.
+beside a model.
 
 Store layout and I/O have one implementation. `cadgen.viewer.store_paths` is a
 thin adapter over `cadgen.catalog`, `cadgen.store` and the source-sidecar helpers;
@@ -173,7 +172,7 @@ The tessellation routes likewise delegate reads, writes and TESB batch framing
 to `cadgen.store.tess_cache`. `index/mesh/<key>` points to the object containing
 the cached bytes. The shared JavaScript entry codec and key scheme live in
 `@text-to-cad/core/lib/surf/tessellationCache.js`. Cache names are validated before
-access because this shared store is outside the served root.
+access: a request names an entry of the store, never a path.
 
 The browser host constructs a `CadClient` from `@text-to-cad/core/client` and
 injects it into the viewer renderers. Catalog subscriptions share the client's
@@ -188,14 +187,27 @@ cache reads and writes.
 
 | Route | Purpose |
 |---|---|
-| `GET /__cad/server` | Server identity, root and capabilities. |
-| `GET /__cad/catalog` | Current catalog, root identity and `revision`. |
-| `GET /__cad/asset?file=...` | Allowed artifact bytes inside the served root. |
+| `GET /__cad/server` | Server identity: `identityToken`, `autoReload`, `platform` (which file manager Reveal opens), `user`, `start` (where relative links resolve), `pick` (a file chooser exists), `port`, `pid`. |
+| `GET /__cad/catalog?file=...` | One file's catalog row and its `revision`. |
+| `GET /__cad/folder?path=...` | One folder's subfolders and CAD files. |
+| `GET /__cad/search?path=...&q=...` | The CAD files under a folder whose path holds `q`, bounded. |
+| `GET /__cad/asset?file=...` | A CAD file's or sidecar's bytes. |
 | `GET /__cad/store?file=...` | Virtual render assets from the shared store. |
 | `GET /__cad/drawing?file=...` | A `.dxf` flattened to 2D render primitives; the DXF pane's only source. |
 | `GET /__cad/artifact?file=...` | Artifact status and advisory progress. |
 | `POST /__cad/artifact?file=...` | Start importing a foreign STEP and answer at once (`compiling`; `compiled` when there is nothing to build); `&force=1` requests a rebuild. The import is followed through `GET /__cad/artifact`, whose `failed` carries the job's reason until the file's bytes change. |
+| `GET /__cad/recents` | The model library every CAD view shares. |
+| `POST /__cad/recents` | `{action, path, png?}`: `open` (an existing CAD file on screen; counted for analytics), `pin`, `unpin`, `remove`, `thumbnail`; answers the library as it now is. |
+| `GET /__cad/thumbnail?name=...` | A library picture, by its content name. |
+| `POST /__cad/pick` | The desktop's own file chooser, held open while the person chooses: `{path}`, `{cancelled: true}`, a 400 naming the kinds CAD opens, a 500 with the chooser's own sentence (one already open among them). |
+| `POST /__cad/reveal` | `{path}`: show a file in the desktop's file manager. |
+| `POST /__cad/clipboard` | A PNG onto this machine's clipboard: the web page's picture copy, which asks the browser for no permission. |
+| `GET`/`POST /__cad/analytics` | Whether the person's usage stats are sent, and why; `{share}` is their answer (the app menu's toggle). Nothing asks. |
+| `POST /__cad/analytics/activity` | What the page did, for telemetry: `{touched: true}`, a person touched it; `{quickEdit: true}`, a Quick Edit went; `{crash}`, the page crashed (core's `crashOf`: its type and frames, checked again by the server, never a message). |
+| `GET`/`POST /__cad/features` | The features a person can turn off, and their change of some. |
+| `GET /__cad/version` | Whether a newer text-to-cad is out: the update button's `notice`, or null. |
 | `POST /__cad/sketches?name=...` | Save a PNG a copied prompt names by path (a Quick Edit's sketch) as scratch in the system's temporary directory; answers its absolute path. |
+| `POST /__cad/shutdown` | Exit: a newer launch replacing this viewer, or `cadgen viewer stop`. Answers 202, then stops and frees the port. |
 | `GET /__tess_cache/<key>.tess` | Read a tessellation-cache entry. |
 | `POST /__tess_cache/<key>.tess` | Best-effort tessellation-cache write-back. |
 | `POST /__tess_cache/batch` | Read a batch of entries in a TESB container. |
@@ -206,9 +218,9 @@ bound to loopback, Host validation also refuses non-local names as a
 DNS-rebinding defense. The trust model is documented in
 `cadgen.viewer.http_app`; keep these gates intact.
 
-The service serves local bytes and JSON. It has no download/export, native
-file-manager or HTTP shutdown route. CLI generation/export and host-native
-actions remain outside this HTTP interface.
+The service serves local bytes and JSON. It has no download/export route, and
+its host-native actions are the ones above (reveal, pick, clipboard). CLI
+generation/export remain outside this HTTP interface.
 
 Backend tests live in `tests/python/packages/cadgen/viewer` and are run by
 `scripts/test/test-python.sh`. The web app's `npm run test` covers its JavaScript
@@ -227,10 +239,8 @@ them, and the page paints them with `@text-to-cad/core/lib/drawing2d` — the mo
 the DXF pane paints with. One flattening, one renderer, so the CLI cannot
 produce a picture this route could not.
 
-`?file=` takes the same refs the asset route does (root-relative, or the
-absolute path the catalog hands out) and applies the same containment rule:
-outside the root is 403, a hidden path component or a missing file is 404, and
-anything that is not a `.dxf` is 400. An unreadable drawing is 400 with the
+`?file=` names the drawing by its absolute path, as every route does: a
+relative ref, or anything that is not a `.dxf`, is 400, and a missing file 404. An unreadable drawing is 400 with the
 reason and the repair; the server retries a damaged file through
 `ezdxf.recover` before giving up. The answer is `application/json;
 charset=utf-8`, uncompressed (the backend has no gzip helper and this route did

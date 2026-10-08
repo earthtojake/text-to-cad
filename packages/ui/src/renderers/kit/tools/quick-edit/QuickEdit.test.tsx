@@ -7,13 +7,13 @@ import { testHost } from '../../../../../dist/host/testing/host.js';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-const resource = { kind: 'workspace-file', workspaceId: 'w', path: 'parts/bracket.step', revision: 'r1' } as const;
+const resource = { kind: 'workspace-file', path: '/models/parts/bracket.step', revision: 'r1' } as const;
 const face = { resource, target: { kind: 'cad-selector', selectors: ['o1.f2'] } } as const;
 const composer = { kind: 'composer', available: true } as const;
 
 function mount(host = testHost(), props: Record<string, unknown> = {}) {
   const view = (next: Record<string, unknown>) => <ViewerHostContext.Provider value={host}><div data-slot="cad-file-view">
-    <QuickEdit resource={resource} referencePath={(path: string) => `models/${path}`} {...props} {...next} />
+    <QuickEdit resource={resource} {...props} {...next} />
   </div></ViewerHostContext.Provider>;
   const rendered = render(view({}));
   return { ...rendered, update: (next: Record<string, unknown>) => rendered.rerender(view(next)) };
@@ -103,7 +103,8 @@ it('offers the buttons the host can carry out, the rightmost primary and pressed
   const send = vi.fn(async () => ({ status: 'sent' as const, partIds: [] }));
   const deliver = vi.fn(async () => ({ status: 'added' as const, partIds: [] }));
   const clear = vi.fn();
-  mount(testHost({ promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver, send } }), { references: [face], onClear: clear });
+  const used = vi.fn();
+  mount(testHost({ promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver, send }, usage: { used } }), { references: [face], onClear: clear });
   expect(buttons()).toEqual(['Close Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
   expect(within(box()!).getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
   fireEvent.change(field(), { target: { value: 'Make it 2 mm thicker.' } });
@@ -113,13 +114,14 @@ it('offers the buttons the host can carry out, the rightmost primary and pressed
   expect(send).toHaveBeenCalledTimes(1);
   const context = (send.mock.calls[0] as unknown[])[0] as any;
   expect(context.parts.map((part: any) => [part.id, part.kind])).toEqual([['text', 'text'], ['file', 'reference'], ['reference-0', 'reference']]);
-  // Gone: the note cleared, and what it carried with it.
+  // Gone: the note cleared, and what it carried with it -- and the host told, once, for its count.
   await waitFor(() => expect(clear).toHaveBeenCalledTimes(1));
   expect(field().value).toBe('');
   expect(deliver).not.toHaveBeenCalled();
+  expect(used.mock.calls).toEqual([['quickEdit']]);
 });
 
-it('copies the note with its references as copied, and its sketch saved as a file it names, keeping it all in the box', async () => {
+it('copies the note with its references by their files\' absolute paths, and its sketch saved as a file it names, keeping it all in the box', async () => {
   let copied: Promise<string> | string = '';
   const saved: string[] = [];
   const host = testHost({
@@ -135,18 +137,24 @@ it('copies the note with its references as copied, and its sketch saved as a fil
   // Copied, nothing has gone yet: the note and what it carries stay, and the button says so.
   await waitFor(() => expect(within(box()!).getByRole('button', { name: 'Prompt copied' })).toBeTruthy());
   expect([field().value, clear.mock.calls.length]).toEqual(['Round this edge.', 0]);
-  expect(await copied).toBe('Round this edge.\n\nFile: models/parts/bracket.step\nReferences:\nmodels/parts/bracket.step#o1.f2\nSketch: /tmp/cadgen-sketches/bracket-sketch.png');
+  expect(await copied).toBe('Round this edge.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#o1.f2\nSketch: /tmp/cadgen-sketches/bracket-sketch.png');
   expect(saved).toEqual(['bracket-sketch.png']);
 });
 
-it('keeps the note and says why when it did not go', async () => {
+it('keeps the note and says why when it did not go, and counts no use', async () => {
   const deliver = vi.fn(async () => ({ status: 'failed' as const, message: 'The chat is busy.' }));
   const clear = vi.fn();
-  mount(testHost({ promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver } }), { references: [face], onClear: clear });
+  // A host whose count fails: the edit is unhurt either way.
+  const used = vi.fn(() => { throw new Error('the count'); });
+  mount(testHost({ promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver }, usage: { used } }), { references: [face], onClear: clear });
   fireEvent.change(field(), { target: { value: 'Shorter.' } });
   await act(async () => { fireEvent.click(within(box()!).getByRole('button', { name: 'Queue' })); });
   expect(within(box()!).getByRole('alert').textContent).toBe('The chat is busy.');
-  expect([field().value, clear.mock.calls.length]).toEqual(['Shorter.', 0]);
+  expect([field().value, clear.mock.calls.length, used.mock.calls.length]).toEqual(['Shorter.', 0, 0]);
+  deliver.mockResolvedValueOnce({ status: 'added', partIds: [] } as any);
+  await act(async () => { fireEvent.click(within(box()!).getByRole('button', { name: 'Queue' })); });
+  await waitFor(() => expect(clear).toHaveBeenCalledTimes(1));
+  expect([used.mock.calls.length, within(box() ?? document.body).queryByRole('alert')]).toEqual([1, null]);
 });
 
 it('is sized by its corner while it is open, rendering nothing for the drag, and opens at the default size again', async () => {

@@ -38,6 +38,7 @@ import json
 import os
 import secrets
 import threading
+import time
 from typing import Any, Callable, Iterator
 
 from cadgen.daemon import transport
@@ -138,6 +139,7 @@ class Broker:
                 "key": key,
                 "done": threading.Event(),
                 "exit": None,
+                "error": None,
                 "result": None,
                 "artifact": artifact,
                 "ownerActive": True,
@@ -212,12 +214,15 @@ class Broker:
     def orphaned(entry: dict[str, Any]) -> bool:
         return entry["orphaned"].is_set() and not entry["done"].is_set()
 
-    def finish_entry(self, entry: dict[str, Any], code: int) -> None:
+    def finish_entry(self, entry: dict[str, Any], code: int, *, error: str | None = None) -> None:
+        """Close the entry with the owner's exit code and, for a failure, its one-line
+        reason, which attached consumers record as their own."""
         with self._cv:
             key = entry["key"]
             if self._inflight.get(key) is entry:
                 self._inflight.pop(key, None)
             entry["exit"] = int(code)
+            entry["error"] = str(error) if code != 0 and error else None
             entry["ownerActive"] = False
             entry["done"].set()
             self._cv.notify_all()
@@ -338,6 +343,7 @@ def _send(conn: transport.Channel, frame: dict) -> None:
 BROKER_ADDRESS_VAR = "CADGEN_BROKER"
 BROKER_KEY_VAR = "CADGEN_BROKER_KEY"
 BROKER_STATS_VAR = "CADGEN_BROKER_STATS"  # a file the private broker writes its snapshot to
+CLOSE_JOIN_SECONDS = 2.0  # how long a private broker's close waits for its own threads
 
 
 class PrivateBroker:
@@ -356,6 +362,8 @@ class PrivateBroker:
             transport.identity_digest(f"build-{os.getpid()}-{secrets.token_hex(8)}")
         )
         self._server = transport.Server(self.address, self.key, backlog=64)
+        self._serving: set[threading.Thread] = set()
+        self._serving_lock = threading.Lock()
         self._thread = threading.Thread(target=self._accept_loop, name="cadgen-broker", daemon=True)
         self._thread.start()
 
@@ -364,7 +372,10 @@ class PrivateBroker:
             conn = self._server.accept()
             if conn is None:
                 return
-            threading.Thread(target=self._serve_one, args=(conn,), daemon=True).start()
+            thread = threading.Thread(target=self._serve_one, args=(conn,), daemon=True)
+            with self._serving_lock:
+                self._serving.add(thread)
+            thread.start()
 
     def _serve_one(self, conn: transport.Channel) -> None:
         try:
@@ -379,6 +390,8 @@ class PrivateBroker:
         finally:
             with contextlib.suppress(OSError):
                 conn.close()
+            with self._serving_lock:
+                self._serving.discard(threading.current_thread())
 
     def env(self) -> dict[str, str]:
         return {BROKER_ADDRESS_VAR: self.address, BROKER_KEY_VAR: self.key.decode("ascii")}
@@ -393,6 +406,19 @@ class PrivateBroker:
         # The accept thread may still be completing its shutdown wakeup; clearing
         # its unique address here races that owner and makes finalization fail.
         self._server.close()
+        # Then wait for this broker's threads. A daemon thread that returns from a
+        # socket call after the interpreter began finalizing takes the GIL from a
+        # dying runtime, which CPython before 3.14 can crash on: a no-op build exits
+        # within milliseconds of closing its broker, and one died with SIGSEGV in
+        # sock_accept -> take_gil. Each thread ends within milliseconds of the
+        # wakeup; the bound covers a peer stalled inside the authentication
+        # handshake, which the wakeup does not cancel.
+        deadline = time.monotonic() + CLOSE_JOIN_SECONDS
+        with self._serving_lock:
+            threads = [self._thread, *self._serving]
+        for thread in threads:
+            if thread is not threading.current_thread():
+                thread.join(max(0.0, deadline - time.monotonic()))
 
 
 # --- client side ---------------------------------------------------------------------------

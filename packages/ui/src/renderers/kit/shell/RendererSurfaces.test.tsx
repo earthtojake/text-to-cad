@@ -31,16 +31,16 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewport.props = null; });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewport.props = null; document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()); });
 
-// The navbar FileViewer hands a renderer: where the view's controls go.
+// The navbar FileViewer hands a renderer: the box at its right end Display and Preview go in.
 function navbarSlot() {
   const slot = document.createElement('div');
   slot.setAttribute('data-test-navbar', '');
   document.body.append(slot);
   return slot;
 }
-afterEach(() => document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()));
+
 function mount(host = testHost(), state?: unknown) {
   const save = vi.fn();
   const navigation = vi.fn();
@@ -48,8 +48,8 @@ function mount(host = testHost(), state?: unknown) {
   const listeners = new Set<() => void>();
   const preferences = { getSnapshot: () => settings, subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
     update: (patch: any) => { settings = { ...settings, ...patch }; listeners.forEach(listener => listener()); } };
-  const props = { source: { id: 'one', rootName: 'one' }, file: { path: 'one.harness', name: 'one.harness', kind: 'file' }, document: null,
-    openPanel: '', panelSlot: null, navbarSlot: navbarSlot(), onPanelOpen() {}, onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
+  const props = { source: { id: 'one' }, file: { path: '/models/one.harness', name: 'one.harness', kind: 'file' }, document: null,
+    navbarSlot: navbarSlot(), onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
     state, onStateChange: save, onNavigationActionsChange: navigation, reload() {}, data: { services: { preferences } } };
   const view = render(<ViewerHostContext.Provider value={host}><HarnessRenderer {...(props as any)} /></ViewerHostContext.Provider>);
   const canvas = view.container.querySelector('[data-stand-in-viewport] > canvas') as HTMLCanvasElement;
@@ -202,6 +202,26 @@ it('the renderer is told the camera settled, through what the viewport reports: 
   act(() => { viewport.props.onPerspectiveChange({ position: [4, 5, 6], target: [0, 0, 0], up: [0, 0, 1], zoom: 2, projection: 'orthographic' }); });
   act(() => { viewport.props.onCameraSettled(); });
   expect(overlay('camera-settles')).toBe('4');
+});
+
+it('a view that has gone writes nothing more: its last write is the one it makes as it unmounts, and a camera report after it writes no view again', () => {
+  vi.useFakeTimers();
+  try {
+    const { save, unmount } = mount();
+    const camera = (x: number) => ({ position: [x, 2, 3], target: [0, 0, 0], up: [0, 0, 1], zoom: 1, projection: 'orthographic' });
+    act(() => { viewport.props.onPerspectiveChange(camera(1)); });
+    const report = viewport.props.onPerspectiveChange;
+    unmount();
+    const last = save.mock.calls.at(-1)![0];
+    expect(last.camera.position).toEqual([1, 2, 3]);
+    // A report that lands after the file has gone (its runtime winding down) is not a write: a host
+    // that dropped the view of the file it left must not see it come back.
+    const writes = save.mock.calls.length;
+    act(() => { report(camera(9)); vi.advanceTimersByTime(1000); });
+    expect(save.mock.calls.length).toBe(writes);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 // The full reset crosses the renderer callback and the shell's tool/preview

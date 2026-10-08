@@ -45,6 +45,7 @@ import dataclasses
 import importlib
 import inspect
 import json
+import os
 import re
 import sys
 import types
@@ -416,7 +417,13 @@ def report_failure(
     Shared by the generated doors (:func:`emit`) and the model-script runner
     (``cadgen.cli._run_model``), which prints its own success lines and so cannot
     go through :func:`emit` itself.
+
+    A failure that is a mistake in cadgen's own code, not the person's or one cadgen
+    raised on purpose, is also a crash telemetry reports (``cadgen.analytics.report``):
+    a build worker's goes to the daemon with its exit frame, a command's is handed to a
+    running daemon. Reporting it changes nothing here.
     """
+    _report_crash(exc)
     if as_json:
         out = stdout if stdout is not None else sys.stdout
         print(json.dumps({"ok": False, "error": str(exc)}, separators=(",", ":")), file=out)
@@ -426,6 +433,17 @@ def report_failure(
     return report_cli_error(
         exc, tool=prog, verbose=verbose, verbose_hint=verbose_hint, stream=stderr
     )
+
+
+def _report_crash(exc: BaseException) -> None:
+    try:
+        from cadgen import analytics
+        from cadgen.daemon import telemetry
+
+        building = bool(os.environ.get("CADGEN_DAEMON_CHILD")) or telemetry.building()
+        analytics.report(exc, "build" if building else "command", bugs_only=True)
+    except Exception:  # noqa: BLE001 - a crash report never fails a command's own report
+        pass
 
 
 def emit(
@@ -453,6 +471,9 @@ def emit(
             exc, prog=prog, as_json=as_json, verbose=verbose, verbose_hint=verbose_hint,
             stdout=out, stderr=stderr,
         )
+    from cadgen.daemon import telemetry
+
+    telemetry.job_result(result)  # in a build worker: whether what it made was the store's already
     if as_json:
         print(json.dumps(result_payload(result), separators=(",", ":")), file=out)
     else:

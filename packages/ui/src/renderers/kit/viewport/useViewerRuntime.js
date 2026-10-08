@@ -22,6 +22,9 @@ import { viewerDepthSettings, viewerLogarithmicDepthBuffer } from "./renderDepth
 import { createZoomPivotReanchor } from "../camera/zoomPivotReanchor.js";
 import { createFramePresentation } from "./framePresentation.js";
 
+// A pan moves what it grabs 1.35x as far as the cursor, in either projection (`handlePanPress`).
+const PAN_SPEED = 1.35;
+
 function createWebGlRenderer(THREE) {
   return createCadWebGlRenderer(THREE, {
     allowFallback: true,
@@ -101,6 +104,27 @@ export function useViewerRuntime({
     viewerMountedRef.current = true;
     return () => { viewerMountedRef.current = false; };
   }, []);
+  // OrbitControls listens for the Control key on its canvas's ROOT NODE (`getRootNode()`: the
+  // document, while the canvas is on the page) and removes that listener from whatever the root is
+  // when it disconnects. The passive teardown below runs after React has taken the viewport off the
+  // page, when the root is the detached subtree: the document kept the listener, and through it the
+  // controls, the canvas and its WebGL context, one more on every file switch. So the controls let
+  // go here, in a layout cleanup, which runs before React detaches anything; a viewport a Suspense
+  // boundary only hid takes them back when it is shown again.
+  useLayoutEffect(() => {
+    const runtime = runtimeRef.current;
+    if (runtime?.resetToken === runtimeResetToken && runtime.controlsReleased) {
+      runtime.controlsReleased = false;
+      runtime.controls.connect(runtime.renderer.domElement);
+      runtime.renderer.domElement.style.cursor = "";
+    }
+    return () => {
+      const current = runtimeRef.current;
+      if (!current || current.controlsReleased) return;
+      current.controlsReleased = true;
+      current.controls.disconnect();
+    };
+  }, [runtimeResetToken, runtimeRef]);
 
   useEffect(() => {
     if (runtimeRef.current) {
@@ -214,7 +238,7 @@ export function useViewerRuntime({
       controls.enableDamping = true;
       controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
       controls.rotateSpeed = 1;
-      controls.panSpeed = 1.35;
+      controls.panSpeed = PAN_SPEED;
       controls.zoomSpeed = getDefaultZoomSpeed();
       if ("zoomToCursor" in controls) {
         controls.zoomToCursor = true;
@@ -410,11 +434,17 @@ export function useViewerRuntime({
         ) {
           return;
         }
-        fitCameraDepthToBounds(activeCamera, runtime?.modelBounds, viewerDepthSettings(runtime));
+        fitCameraDepthToBounds(activeCamera, runtime?.modelBounds, {
+          ...viewerDepthSettings(runtime), pivot: runtime?.controls?.target
+        });
       };
 
       let rafId = 0;
+      // Set at teardown. Its context is lost then, so a frame something still asks of this
+      // runtime (a timer, a holder of its `requestRender`) draws nothing.
+      let released = false;
       const requestRender = () => {
+        if (released) return;
         if (interactionState.renderQueued) {
           const now = typeof performance !== "undefined" && typeof performance.now === "function"
             ? performance.now()
@@ -454,6 +484,7 @@ export function useViewerRuntime({
       // queued. For a caller that runs after layout and before paint (a
       // ResizeObserver), whose picture a frame scheduled for later would leave stale.
       const renderNow = () => {
+        if (released) return;
         if (interactionState.renderQueued) {
           window.cancelAnimationFrame(rafId);
         }
@@ -465,6 +496,7 @@ export function useViewerRuntime({
       };
 
       function renderFrame(timestamp) {
+        if (released) return;
         const frameStartedAt = perfStart();
         interactionState.renderQueued = false;
         interactionState.renderQueuedAt = 0;
@@ -575,7 +607,7 @@ export function useViewerRuntime({
 
       // The canvas is sized 100% by CSS, so the moment its box changes the browser
       // stretches the last picture over the new box. Whatever resizes the box in one
-      // layout step (the file tree opening, the tool stack widened, a window snap) must
+      // layout step (the tool stack widened, a window snap) must
       // therefore be answered with a picture at the new size IN THE FRAME that layout
       // lands in, or the model is painted squashed or stretched until the next frame.
       //
@@ -629,20 +661,29 @@ export function useViewerRuntime({
         : null;
       resizeObserver?.observe(container);
 
-      // Zoom-to-cursor leaves the orbit pivot (controls.target) drifting along the view ray
-      // at the new camera distance. Perspective pan and dolly both scale by the
-      // camera->pivot distance, so a drifted pivot makes panning and zooming feel slow when
-      // zoomed in and fast when zoomed out. After each wheel zoom, re-anchor the pivot depth
-      // onto the cursor hit in Inspect or stable model depth in Render, keeping
-      // it on the forward axis so the camera never re-orients or jumps the view.
+      // Perspective pan and dolly both scale by the camera->pivot distance (controls.target),
+      // where an orthographic pan or zoom moves everything on screen alike; so in Render a
+      // gesture over a surface nearer than the pivot ran faster than the same gesture in Solid.
+      // Each wheel step first re-anchors the pivot's depth onto the surface under the cursor
+      // (the model's centre on a miss), keeping it on the forward axis so the camera never
+      // re-orients or jumps the view, and is then a fraction of the distance to what the cursor
+      // is on. A pan scales its speed by that surface's depth instead (`handlePanPress`).
       const zoomReanchor = createZoomPivotReanchor(THREE);
       const zoomReanchorPointer = zoomReanchor.pointer;
-      let zoomPivotReanchorPending = false;
+      const setReanchorPointer = (event) => {
+        const rect = renderer.domElement.getBoundingClientRect();
+        if (!(rect.width > 0 && rect.height > 0)) return false;
+        zoomReanchorPointer.set(
+          ((event.clientX - rect.left) / rect.width) * 2 - 1,
+          -((event.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        return true;
+      };
 
       const handleControlsStart = () => {
         // Any drag on the controls — orbit, pan or zoom — means the view is the
-        // user's now. A progressive load re-frames the camera when the model
-        // finishes arriving, and must not do that over someone's shoulder.
+        // user's now. A progressive load with no declared box re-frames the camera
+        // when the model finishes arriving, and must not do that over someone's shoulder.
         if (runtimeRef.current) {
           runtimeRef.current.userMovedCamera = true;
         }
@@ -650,10 +691,6 @@ export function useViewerRuntime({
         beginInteraction();
       };
       const handleControlsChange = () => {
-        if (zoomPivotReanchorPending) {
-          zoomPivotReanchorPending = false;
-          zoomReanchor.apply(runtimeRef.current);
-        }
         emitPerspectiveChange(runtimeRef.current);
         requestRender();
       };
@@ -675,23 +712,36 @@ export function useViewerRuntime({
         controls.zoomSpeed = isPinchWheelEvent(event)
           ? getPinchZoomSpeed() / WHEEL_PINCH_DELTA_BOOST
           : (isTrackpadLikeWheelEvent(event) ? getPinchZoomSpeed() : ACCELERATED_WHEEL_ZOOM_SPEED);
-        // Capture the cursor (NDC) so the post-zoom pivot re-anchor can raycast under it.
-        const rect = renderer.domElement.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          zoomReanchorPointer.set(
-            ((event.clientX - rect.left) / rect.width) * 2 - 1,
-            -((event.clientY - rect.top) / rect.height) * 2 + 1
-          );
-          zoomPivotReanchorPending = true;
+        // This listener captures, so it runs before OrbitControls takes the step.
+        if (controls.enabled && controls.enableZoom && setReanchorPointer(event)) {
+          zoomReanchor.apply(runtimeRef.current);
         }
         beginInteraction();
       };
       const wheelListenerOptions = { passive: true, capture: true };
+      // A press that starts a mouse pan sets its speed before OrbitControls reads it on the
+      // first move: the surface under the cursor then moves with it at PAN_SPEED, in either
+      // projection. A miss, a touch and every other press keep the one speed.
+      const panPress = (event) => {
+        if (event.pointerType === "touch" || !controls.enabled || !controls.enablePan) return false;
+        const { LEFT, MIDDLE, RIGHT } = controls.mouseButtons;
+        const action = [LEFT, MIDDLE, RIGHT][event.button];
+        const modified = event.ctrlKey || event.metaKey || event.shiftKey;
+        return action === THREE.MOUSE.PAN ? !modified : action === THREE.MOUSE.ROTATE && modified;
+      };
+      const handlePanPress = (event) => {
+        controls.panSpeed = PAN_SPEED;
+        if (panPress(event) && setReanchorPointer(event)) {
+          controls.panSpeed = PAN_SPEED * zoomReanchor.panScale(runtimeRef.current);
+        }
+      };
+      const panPressListenerOptions = { capture: true };
 
       controls.addEventListener("start", handleControlsStart);
       controls.addEventListener("change", handleControlsChange);
       controls.addEventListener("end", handleControlsEnd);
       renderer.domElement.addEventListener("wheel", handleWheel, wheelListenerOptions);
+      renderer.domElement.addEventListener("pointerdown", handlePanPress, panPressListenerOptions);
       renderer.domElement.addEventListener("webglcontextlost", handleContextLost, false);
       renderer.domElement.addEventListener("webglcontextrestored", handleContextRestored, false);
 
@@ -735,6 +785,10 @@ export function useViewerRuntime({
         keyboardOrbitState.pressedKeys.add(command.keyId);
         keyboardOrbitState.directionCounts[command.direction] += 1;
         keyboardOrbitState.lastFrameTime = 0;
+        // Orbiting by the keys makes the view the user's, as a drag does.
+        if (runtimeRef.current) {
+          runtimeRef.current.userMovedCamera = true;
+        }
         cancelCameraTransition(runtimeRef.current);
         beginInteraction();
         applyOrbitDelta(
@@ -794,6 +848,10 @@ export function useViewerRuntime({
         syncCameraViewport,
         renderer,
         softwareRendering,
+        // The epoch this runtime belongs to, and whether a layout cleanup took its controls off
+        // the page (the layout effect above).
+        resetToken: runtimeResetToken,
+        controlsReleased: false,
         Line2,
         LineGeometry,
         LineSegments2,
@@ -856,6 +914,12 @@ export function useViewerRuntime({
           interactionState.shadowsDirty = true;
           requestRender();
         },
+        // A frame for a change that moves, shows, hides and reshapes no shadow caster (a
+        // highlight's colour, an overlay, the floor shadow's deferred bake): the shadow maps
+        // it has are kept, as on a frame that only moved the camera.
+        requestFrame: () => {
+          requestRender();
+        },
         invalidateShadows: () => {
           interactionState.shadowsDirty = true;
         },
@@ -901,6 +965,7 @@ export function useViewerRuntime({
         if (!runtime) {
           return;
         }
+        released = true;
         if (runtime.activeModelKey && runtime.interactiveFraming) previousViewStateRef.current = {
           modelKey: runtime.activeModelKey,
           framing: Object.fromEntries([
@@ -921,6 +986,7 @@ export function useViewerRuntime({
         runtime.controls.removeEventListener("change", handleControlsChange);
         runtime.controls.removeEventListener("end", handleControlsEnd);
         runtime.renderer.domElement.removeEventListener("wheel", handleWheel, wheelListenerOptions);
+        runtime.renderer.domElement.removeEventListener("pointerdown", handlePanPress, panPressListenerOptions);
         runtime.renderer.domElement.removeEventListener("webglcontextlost", handleContextLost, false);
         runtime.renderer.domElement.removeEventListener("webglcontextrestored", handleContextRestored, false);
         window.removeEventListener("keydown", handleKeyDown);
@@ -929,6 +995,7 @@ export function useViewerRuntime({
         keyOwner.removeEventListener("pointerleave", handlePointerLeave);
         window.removeEventListener("blur", clearKeyboardOrbit);
         document.removeEventListener("visibilitychange", handleVisibilityChange);
+        // Usually released already, while the canvas was still on the page (the layout effect above).
         runtime.controls.dispose();
         // The scene in the viewport is its owner's: the owner releases it (and
         // whatever it hung on the runtime) and names what it released.
@@ -949,6 +1016,12 @@ export function useViewerRuntime({
         if (container.contains(runtime.renderer.domElement)) {
           container.removeChild(runtime.renderer.domElement);
         }
+        // dispose() frees what the renderer tracks, not the context: three's shared textures (its
+        // module-level empty and lookup textures) keep a dispose listener of every renderer that drew
+        // them, so the context stays reachable, and alive with its GPU memory, for as long as the
+        // page. Losing it now frees that memory whatever still holds it. A handoff loses nothing in
+        // use: the next runtime draws in a context of its own, and `onRelease` above ran first.
+        if (!runtime.renderer.getContext().isContextLost()) runtime.renderer.forceContextLoss();
         runtimeRef.current = null;
       };
     }

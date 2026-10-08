@@ -178,36 +178,69 @@ def scene_occurrence_prototype_shape(scene: LoadedStepScene, node: OccurrenceNod
     return scene.prototype_shapes[node.prototype_key]
 
 
-def _scene_mesh_resolution_hints(scene: LoadedStepScene) -> dict[str, Any]:
-    prototype_face_counts: dict[int, int] = {}
-    prototype_edge_counts: dict[int, int] = {}
-    prototype_curved_face_counts: dict[int, int] = {}
-    prototype_curved_edge_counts: dict[int, int] = {}
-    for key, shape in scene.prototype_shapes.items():
-        face_map = TopTools_IndexedMapOfShape()
-        edge_map = TopTools_IndexedMapOfShape()
-        TopExp.MapShapes_s(shape, TopAbs_FACE, face_map)
-        TopExp.MapShapes_s(shape, TopAbs_EDGE, edge_map)
-        prototype_face_counts[key] = int(face_map.Extent())
-        prototype_edge_counts[key] = int(edge_map.Extent())
-        curved_faces = 0
-        for face_index in range(1, face_map.Extent() + 1):
-            try:
-                surface = BRepAdaptor_Surface(TopoDS.Face_s(face_map.FindKey(face_index)))
-                if _enum_name(surface.GetType(), "GeomAbs_") != "plane":
-                    curved_faces += 1
-            except Exception:  # noqa: BLE001 - OCP surface reads can raise on odd faces; count them as curved
+def prototype_topology(shape: Any) -> dict[str, Any]:
+    """What the adaptive edge policy reads of one prototype: its face and edge
+    counts, how many of each are curved (not a plane, not a line), and its loose
+    box (``_bbox_from_shape(tight=False)``, as six numbers). A pure function of
+    the shape; ``store.bounds.cached_component_topology`` remembers it by the
+    component BREP a prototype was decoded from."""
+    face_map = TopTools_IndexedMapOfShape()
+    edge_map = TopTools_IndexedMapOfShape()
+    TopExp.MapShapes_s(shape, TopAbs_FACE, face_map)
+    TopExp.MapShapes_s(shape, TopAbs_EDGE, edge_map)
+    curved_faces = 0
+    for face_index in range(1, face_map.Extent() + 1):
+        try:
+            surface = BRepAdaptor_Surface(TopoDS.Face_s(face_map.FindKey(face_index)))
+            if _enum_name(surface.GetType(), "GeomAbs_") != "plane":
                 curved_faces += 1
-        curved_edges = 0
-        for edge_index in range(1, edge_map.Extent() + 1):
-            try:
-                curve = BRepAdaptor_Curve(TopoDS.Edge_s(edge_map.FindKey(edge_index)))
-                if _enum_name(curve.GetType(), "GeomAbs_") != "line":
-                    curved_edges += 1
-            except Exception:  # noqa: BLE001 - OCP curve reads can raise on odd edges; count them as curved
+        except Exception:  # noqa: BLE001 - OCP surface reads can raise on odd faces; count them as curved
+            curved_faces += 1
+    curved_edges = 0
+    for edge_index in range(1, edge_map.Extent() + 1):
+        try:
+            curve = BRepAdaptor_Curve(TopoDS.Edge_s(edge_map.FindKey(edge_index)))
+            if _enum_name(curve.GetType(), "GeomAbs_") != "line":
                 curved_edges += 1
-        prototype_curved_face_counts[key] = curved_faces
-        prototype_curved_edge_counts[key] = curved_edges
+        except Exception:  # noqa: BLE001 - OCP curve reads can raise on odd edges; count them as curved
+            curved_edges += 1
+    box = _bbox_from_shape(shape, tight=False)
+    return {
+        "faces": int(face_map.Extent()),
+        "edges": int(edge_map.Extent()),
+        "curvedFaces": curved_faces,
+        "curvedEdges": curved_edges,
+        "looseBox": [*box["min"], *box["max"]],
+    }
+
+
+def _prototype_topologies(scene: LoadedStepScene) -> dict[int, dict[str, Any]]:
+    """:func:`prototype_topology` of every prototype key. A prototype the scene
+    says was decoded from a stored component (``prototype_components``) is read
+    from the store by that component's BREP and measured, from the scene's own
+    shape, only when the entry is missing; so a scene that defers decoding its
+    prototypes decodes none whose facts are stored."""
+    from cadgen.store.bounds import cached_component_topology
+
+    components = getattr(scene, "prototype_components", None) or {}
+    facts: dict[int, dict[str, Any]] = {}
+    for key in scene.prototype_shapes:
+        component = components.get(key)
+        if component is None:
+            facts[key] = prototype_topology(scene.prototype_shapes[key])
+            continue
+        codec, brep = component
+        facts[key] = cached_component_topology(
+            codec, brep, lambda key=key: prototype_topology(scene.prototype_shapes[key]))
+    return facts
+
+
+def _scene_mesh_resolution_hints(scene: LoadedStepScene) -> dict[str, Any]:
+    topologies = _prototype_topologies(scene)
+    prototype_face_counts = {key: facts["faces"] for key, facts in topologies.items()}
+    prototype_edge_counts = {key: facts["edges"] for key, facts in topologies.items()}
+    prototype_curved_face_counts = {key: facts["curvedFaces"] for key, facts in topologies.items()}
+    prototype_curved_edge_counts = {key: facts["curvedEdges"] for key, facts in topologies.items()}
 
     leaves = scene_leaf_occurrences(scene)
     occurrence_face_count = sum(
@@ -253,8 +286,8 @@ def _scene_mesh_resolution_hints(scene: LoadedStepScene) -> dict[str, Any]:
     # _bbox_from_shape uses BRepBndLib without tessellation per unique
     # prototype, plus an 8-corner transform per leaf occurrence.
     prototype_boxes = {
-        key: _bbox_from_shape(shape, tight=False)
-        for key, shape in scene.prototype_shapes.items()
+        key: _bbox_from_points([facts["looseBox"][:3], facts["looseBox"][3:]])
+        for key, facts in topologies.items()
     }
     occurrence_boxes = [
         _transform_bbox(prototype_boxes[int(node.prototype_key)], node.transform)

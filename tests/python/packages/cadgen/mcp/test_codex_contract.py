@@ -29,28 +29,18 @@ CODEX_INITIALIZE = {"protocolVersion": "2025-06-18",
 STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid t\n"
 
 
-class _Connection:
-    closed = False
-
-    def is_cancelled(self, request_id) -> bool:
-        return False
-
-
 def converse(tmp: Path) -> dict:
     """Codex's side of a session: what it is told, listed, served and launched."""
-    workspace = tmp / "project"
-    (workspace / "parts").mkdir(parents=True)
-    (workspace / "parts" / "bracket.stl").write_bytes(STL)
-    (tmp / "downloads").mkdir()
-    (tmp / "downloads" / "loose.stl").write_bytes(STL)
+    bracket = tmp / "project" / "parts" / "bracket.stl"
+    bracket.parent.mkdir(parents=True)
+    bracket.write_bytes(STL)
     page = tmp / "app"
     page.mkdir()
     (page / "index.html").write_text("<!doctype html><head><title>CAD</title></head>", encoding="utf-8")
-    server = Server(launch_cwd=str(workspace), page=AppPage(page), recents=RecentStore(tmp / "state"))
-    connection = _Connection()
+    server = Server(page=AppPage(page), recents=RecentStore(tmp / "state"))
 
     def call(name: str, arguments: dict | None = None, meta: dict | None = None) -> dict:
-        context = RequestContext(1, {"threadId": "t", **(meta or {})}, connection)
+        context = RequestContext(1, {"threadId": "t", **(meta or {})})
         return server.handle("tools/call", {"name": name, "arguments": arguments or {}}, context)
 
     initialized = server.handle("initialize", CODEX_INITIALIZE, None)
@@ -63,14 +53,10 @@ def converse(tmp: Path) -> dict:
         "read": {key: value for key, value in server.handle("resources/read", {"uri": uri}, None)["contents"][0].items()},
         "launches": {
             "cad_home": call("cad_home"),
-            "cad_open": call("cad_open", {"path": "parts/bracket.stl"}),
+            "cad_open": call("cad_open", {"path": str(bracket)}),
             "cad_tab": call("cad_tab"),
-            "cad_file": call("cad_file", {"file": {"name": "bracket.stl", "resourceUri": "x"}},
-                             {"openai/resource": {"path": str(workspace / "parts" / "bracket.stl")}}),
-            "cad_launch": call("cad_launch", {"model": "parts/bracket.stl"}),
-            # A model with no project around it (the sidebar's Open): shown on its own, with no explorer.
-            "cad_launch_elsewhere": call("cad_launch", {"model": str(tmp / "downloads" / "loose.stl")}),
-            "cad_show": call("cad_show", {"path": "parts/bracket.stl"}),
+            "cad_file": call("cad_file", {"file": {"name": "bracket.stl", "resourceUri": "x"}}, {"openai/resource": {"path": str(bracket)}}),
+            "cad_show": call("cad_show", {"path": str(bracket)}),
             "cad_view": call("cad_view"),
             "cad_screenshot": call("cad_screenshot"),
         },
@@ -78,7 +64,7 @@ def converse(tmp: Path) -> dict:
     for result in record["launches"].values():
         launch = (result.get("structuredContent") or {}).get("launch")
         if isinstance(launch, dict):  # this run's install and machine, not the contract
-            launch.update({key: f"<{key}>" for key in ("version", "platform") if key in launch})
+            launch.update({key: f"<{key}>" for key in ("version", "platform", "pick", "notice") if key in launch})
     text = json.dumps(record, indent=1, sort_keys=True).replace(str(tmp), "<tmp>")
     return json.loads(re.sub(r"ui://cad/[0-9a-f]{16}/", "ui://cad/<build>/", text))
 
@@ -97,7 +83,7 @@ class CodexContractTest(unittest.TestCase):
         # They advertise no UI extension; being Codex, they still get Codex's catalog, not the text one.
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
-        server = Server(launch_cwd=str(tmp), page=AppPage(tmp), recents=RecentStore(tmp / "state"))
+        server = Server(page=AppPage(tmp), recents=RecentStore(tmp / "state"))
         server.handle("initialize", {**CODEX_INITIALIZE, "capabilities": {"elicitation": {"form": {}, "url": {}}}}, None)
         names = [tool["name"] for tool in json.loads(CONTRACT.read_text(encoding="utf-8"))["tools"]]
         self.assertEqual([tool["name"] for tool in server.handle("tools/list", {}, None)["tools"]], names)

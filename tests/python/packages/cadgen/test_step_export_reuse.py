@@ -86,10 +86,28 @@ class StepExportReuseTest(unittest.TestCase):
         self.assertIn("is current", repeat.stderr)
         self.assertEqual(hashlib.sha256(step.read_bytes()).hexdigest(), original)
 
+        # A label-only edit rebuilds the model, but its writer input is unchanged:
+        # the saved STEP is kept, not written again.
+        before = step.stat()
+        self.entry.write_text(self.entry.read_text().replace('block.label = "block"', 'block.label = "cube"'))
+        relabeled = _run(self.entry, ["--json"], self.store)
+        self.assertEqual(relabeled.returncode, 0, relabeled.stderr[-1500:])
+        self.assertIn('"outcome":"built"', relabeled.stdout)
+        self.assertIn("kept STEP: block.step", relabeled.stderr)
+        self.assertNotIn("wrote STEP", relabeled.stderr)
+        self.assertEqual((step.stat().st_ino, step.stat().st_mtime_ns), (before.st_ino, before.st_mtime_ns))
+
+        # The same writer input never keeps bytes that are not the recorded ones.
+        step.write_bytes(step.read_bytes() + b"\n")
+        repaired = _run(self.entry, [], self.store)
+        self.assertEqual(repaired.returncode, 0, repaired.stderr[-1500:])
+        self.assertEqual(hashlib.sha256(step.read_bytes()).hexdigest(), original)
+
         self.entry.write_text(self.entry.read_text().replace("SIZE = 6.0", "SIZE = 7.0"))
         edited = _run(self.entry, [], self.store)
         self.assertEqual(edited.returncode, 0, edited.stderr[-1500:])
         self.assertNotIn("step export is current", edited.stderr)
+        self.assertIn("wrote STEP: block.step", edited.stderr)
         self.assertNotEqual(hashlib.sha256(step.read_bytes()).hexdigest(), original)
 
 

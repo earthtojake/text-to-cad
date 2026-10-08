@@ -2,8 +2,8 @@ import type { TessellationCache } from '../lib/surf/cacheTypes.js';
 export type { TessellationCache, TessellationCacheEntry, TessellationCacheProvider, TessellatedComponent, TessellationOptions } from '../lib/surf/cacheTypes.js';
 export type CadJson = null | boolean | number | string | CadJson[] | { [key: string]: CadJson };
 export interface CadEntry {
+  /** The file's absolute path, `/`-separated. */
   file: string;
-  rootRelativeFile?: string;
   kind?: string;
   format?: string;
   sourceFormat?: string;
@@ -14,22 +14,40 @@ export interface CadEntry {
   [key: string]: unknown;
 }
 export interface CadServerInfo {
-  rootId: string;
   autoReload?: boolean;
   identityToken?: string;
-  rootPath?: string;
-  rootDir?: string;
-  backend?: string;
+  /** The folder the server was started in, where a developer's relative `?file=` resolves. */
+  start?: string;
+  /** Whether this computer has a file chooser for the home's Open. */
+  pick?: boolean;
+  /** `darwin`, `win32` or `linux`: which file manager Reveal opens. */
+  platform?: string;
   [key: string]: unknown;
 }
-export interface CadCatalog { entries: CadEntry[]; rootId?: string; [key: string]: unknown }
+/** A model in the library every CAD view shares (`GET /__cad/recents`): times in seconds. */
+export interface CadRecent {
+  path: string; name: string; folder: string; opened: number;
+  /** When the file last changed; null once it is gone. */
+  modified: number | null;
+  pinned: boolean; missing: boolean;
+  /** The picture's name, for `thumbnail()`, and when it was taken. */
+  thumbnail: string | null; pictured: number | null;
+}
+/** Whether the person's usage stats are sent (`/__cad/analytics`; nothing asks): `reason` says who decided. */
+export interface CadConsent { sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string }
+/** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`). */
+export interface CadUpdateNotice { latest: string; version: string; text: string; prompt: string; instructions: string }
+export interface CadCatalog { entries: CadEntry[]; [key: string]: unknown }
+/** One folder's subfolders and CAD files (`GET /__cad/folder`). */
+export interface CadFolder { path: string; entries: { name: string; kind: 'directory' | 'file' }[]; truncated: boolean }
+/** The CAD files nested under a folder whose path below it holds the query (`GET /__cad/search`). */
+export interface CadSearch { path: string; results: string[]; truncated: boolean }
 export interface CadCatalogSnapshot {
   entries: CadEntry[];
   revision: number;
   hydrated: boolean;
   refreshing: boolean;
   error: string;
-  rootId: string;
   /** The server's digest of the last catalog applied ('' before one is): what a change watcher compares. */
   catalogRevision: string;
 }
@@ -123,18 +141,44 @@ export interface CadRenderSession {
 }
 /** Domain service consumed by renderers; HTTP metadata stays on its adapter. */
 export interface CadWorkspaceService {
-  readonly workspaceId: string;
   getSnapshot(): CadCatalogSnapshot;
   subscribe(listener: () => void): () => void;
   refresh(options?: CadRequestOptions & {file?: string;markRefreshing?: boolean}): Promise<CadCatalog>;
   resolveEntry(path: string, options?: CadRequestOptions): Promise<CadEntry>;
   serverInfo(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
+  folder(path: string, options?: CadRequestOptions): Promise<CadFolder>;
+  search(path: string, query: string, options?: CadRequestOptions): Promise<CadSearch>;
+  /** The home's library, newest first. */
+  recents(options?: CadRequestOptions): Promise<CadRecent[]>;
+  /** A change to the library (`open`, `pin`, `unpin`, `remove`, `thumbnail`): the library as it now is. */
+  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
+  /** Keep a model's picture in the library. */
+  keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
+  /** A library picture, by the name the library gives it, as a data URL; null when there is none. */
+  thumbnail(name: string, options?: CadRequestOptions): Promise<string | null>;
+  /** Open: the model the person picks with the desktop's chooser, by its absolute path, or null. */
+  pick(): Promise<string | null>;
+  /** Show a file, by its absolute path, in the desktop's file manager. */
+  reveal(path: string): Promise<void>;
+  /** Whether the person's usage stats are sent; with `share`, their answer (the app menu's toggle). */
+  consent(share?: boolean): Promise<CadConsent>;
+  /** The features the person can turn off, as they left them; with `change`, their change of some. */
+  features(change?: Record<string, boolean>): Promise<Record<string, boolean>>;
+  /** Whether a newer text-to-cad is out: the update button's notice, or null. */
+  version(): Promise<{ notice: CadUpdateNotice | null }>;
+  /**
+   * What the page did -- a person touched it, sent a Quick Edit, or the page crashed (`crashOf`) --
+   * noted by the server and sent only with consent. Never fails.
+   */
+  reportActivity(activity: CadActivity): void;
   requestArtifactStatus(file: string, options?: CadRequestOptions): Promise<CadArtifactResult>;
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   readonly resources: CadResourceProvider;
-  resolveSurfaceComponents(view: CadRuntimeView, requested: CadSurfaceComponentRequest[], options?: CadRequestOptions): Promise<Map<string, CadSurfaceTicket>>;
+  /** `onReady` hears each component as soon as its row is ready, while the rest are still awaited. */
+  resolveSurfaceComponents(view: CadRuntimeView, requested: CadSurfaceComponentRequest[],
+    options?: CadRequestOptions & { onReady?: (cid: string, ticket: CadSurfaceTicket) => void }): Promise<Map<string, CadSurfaceTicket>>;
   observeEditingPreview(file: string, onUpdate: (preview: CadEditingPreview) => void, onError: (error: unknown) => void, options?: CadPreviewObserverOptions): () => void;
   createRenderSession(options?: { file?: string }): CadRenderSession;
   dispose(): void;
@@ -149,7 +193,6 @@ export interface CadClient extends CadWorkspaceService {
 export interface CadClientOptions {
   resources?: CadResourceProvider;
   origin?: string;
-  workspaceId?: string;
   fetch?: typeof globalThis.fetch;
   pollIntervalMs?: number;
   /** Host visibility policy, evaluated at each polling interval. */
@@ -159,4 +202,30 @@ export interface CadClientOptions {
    * client then asks the preview route nothing. Returns the unsubscribe.
    */
   editingPreviewFeed?: (file: string, onUpdate: (preview: CadEditingPreview) => void, onError: (error: unknown) => void) => () => void;
+  /**
+   * The most bytes one batched read asks for over this client's `fetch`: a host whose channel
+   * carries large replies slowly declares a ceiling, and reads that batch (a package's warm
+   * tessellation bodies) stay within the lesser of it and the server's own bound
+   * (`TESS_BATCH_MAX_BYTES`). Unset, the server's bound alone applies.
+   */
+  maxBatchBytes?: number;
+}
+
+/** A page's crash, as telemetry takes one (`crashOf`): never its message, a value or a URL. */
+export interface CadPageCrash {
+  where: 'page';
+  /** The error's name, such as `TypeError`; `<?>` for one that is no plain name. */
+  type: string;
+  /** Whether the page went on: an error a view's boundary caught, not one that stopped it. */
+  handled: boolean;
+  /** Its innermost frames, oldest first: a script file's own name (or `<?>`), a function, a place, and for
+   * one of the page's own chunks its debug id, by which PostHog finds the chunk's source map. */
+  frames: { file: string; function: string; line: number; column: number; chunk_id?: string }[];
+}
+
+/** What `reportActivity` tells the page's server. */
+export interface CadActivity {
+  touched?: boolean;
+  quickEdit?: boolean;
+  crash?: CadPageCrash;
 }

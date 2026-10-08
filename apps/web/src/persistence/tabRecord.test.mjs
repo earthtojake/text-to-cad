@@ -28,11 +28,11 @@ test('the web adapter keeps the whole tab record under one sessionStorage key, a
   assert.equal(storage.entries.size, 0, 'construction reads and writes nothing');
   assert.deepEqual(store.settings.getSnapshot().appearance, 'system');
   store.settings.update({ appearance: 'dark', toolStack: { panels: { tree: { width: 240 } }, collapsed: {}, closed: { tree: true } } });
-  store.files.write('root', 'a.step', 'step', { version: 2, camera: null, display: null, renderer: {} });
+  store.files.write('/m/a.step', 'step', { version: 2, camera: null, display: null, renderer: {} });
   const stored = JSON.parse(storage.getItem(TAB_RECORD_KEY));
   assert.equal(stored.version, TAB_RECORD_VERSION);
   assert.deepEqual([stored.settings.appearance, stored.settings.toolStack], ['dark', { panels: { tree: { width: 240 } }, collapsed: {}, closed: { tree: true } }]);
-  assert.deepEqual(Object.keys(stored.files), [JSON.stringify(['root', 'a.step', 'step'])]);
+  assert.deepEqual(Object.keys(stored.files), [JSON.stringify(['/m/a.step', 'step'])]);
   assert.deepEqual([...storage.entries.keys()], [TAB_RECORD_KEY], 'one key, nothing else');
   // The same storage again is the same tab reloaded; another storage is another tab.
   const reloaded = createTabStore(sessionTabRecord(storage));

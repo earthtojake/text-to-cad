@@ -189,6 +189,89 @@ class GateTruthTable(StoreCase):
         self.assertEqual(self.stale_clause(script), 5)
 
 
+class GateVerifiesOncePerProcess(StoreCase):
+    """Clauses 4 and 5 read each object and output once per process, and every
+    change a stat can see makes the next evaluation read it again (STORE.md §4)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from cadgen.store import trees
+
+        trees._reset_metadata_capture_cache()
+        self.addCleanup(trees._reset_metadata_capture_cache)
+        self.script = self.model("plate")
+        self.out = self.root / "plate.step"
+        self.out.write_bytes(b"ISO-10303-21;\n")
+        self.tree = self.tree_for("plate")
+        self.record(self.script, tree=self.tree, output=self.out)
+        self.settle()
+
+    def settle(self) -> None:
+        """Age the objects and the output four seconds, a whole multiple of every
+        write-clock tick the store knows. A read is remembered only once a later
+        write must stamp differently; these tests are about the fingerprint, not
+        about how long the fixture took on a coarse clock."""
+        from cadgen.store.objects import iter_objects
+
+        for path in [self.out, *(path for _digest, path in iter_objects())]:
+            stat = path.stat()
+            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns - 4_000_000_000))
+
+    def test_a_second_pass_reads_nothing_that_did_not_change(self) -> None:
+        from cadgen.store import gate, trees
+
+        with mock.patch.object(trees, "read_verified_object", wraps=trees.read_verified_object) as reads, \
+                mock.patch.object(gate, "_hash_file", wraps=gate._hash_file) as hashes:
+            self.assertIsNone(self.stale_clause(self.script))
+            self.assertTrue(reads.called)
+            self.assertEqual(hashes.call_count, 1)
+            reads.reset_mock()
+            hashes.reset_mock()
+            self.assertIsNone(self.stale_clause(self.script))
+            self.assertTrue(trees.tree_complete(self.tree))
+        self.assertFalse(reads.called)
+        self.assertFalse(hashes.called)
+
+    def test_an_object_replaced_truncated_or_deleted_after_verification(self) -> None:
+        from cadgen.store.objects import object_path
+        from cadgen.store.trees import get_tree
+
+        brep = object_path(next(iter(get_tree(self.tree)["components"].values()))["brep"])
+        original = brep.read_bytes()
+
+        def replace() -> None:
+            staged = brep.with_name(f".{brep.name}.staged")
+            staged.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+            os.replace(staged, brep)
+
+        for damage, apply in (("replaced", replace), ("truncated", lambda: os.truncate(brep, 16)),
+                              ("deleted", brep.unlink)):
+            with self.subTest(damage=damage):
+                brep.write_bytes(original)
+                self.settle()
+                self.assertIsNone(self.stale_clause(self.script))
+                apply()
+                self.assertEqual(self.stale_clause(self.script), 4)
+
+    def test_an_output_replaced_rewritten_truncated_or_deleted_after_verification(self) -> None:
+        original = self.out.read_bytes()
+        edited = original.replace(b";", b"!")
+
+        def replace() -> None:
+            staged = self.out.with_name("plate.step.staged")
+            staged.write_bytes(edited)
+            os.replace(staged, self.out)
+
+        for damage, apply in (("replaced", replace), ("rewritten", lambda: self.out.write_bytes(edited)),
+                              ("truncated", lambda: os.truncate(self.out, 4)), ("deleted", self.out.unlink)):
+            with self.subTest(damage=damage):
+                self.out.write_bytes(original)
+                self.settle()
+                self.assertIsNone(self.stale_clause(self.script))
+                apply()
+                self.assertEqual(self.stale_clause(self.script), 5)
+
+
 class ClosureBoundaryRule(StoreCase):
     def test_a_model_taken_through_its_function_is_a_child_anything_else_is_source(self) -> None:
         from cadgen.store.closure import static_closure

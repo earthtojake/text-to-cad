@@ -96,6 +96,37 @@ test("occurrence-id refs and comma lists resolve with subtree containment", () =
   assert.deepEqual([...frame.matrices.keys()].sort(), ["o1.3.1.5", "o1.3.2", "o1.3.2.4"]);
 });
 
+test("a routine's targets are resolved once per occurrence table, not on every frame", () => {
+  // Resolving a comma list of occurrence ids scans every part per id; a routine names
+  // the same targets every frame (on the hypercar's showcase that scan was 3 ms a frame).
+  const parts = [{ id: "o1.1", label: "base" }, { id: "o1.2.1", label: "" }, { id: "o1.2.2", label: "" }];
+  let scans = 0;
+  const iterate = Array.prototype[Symbol.iterator];
+  parts[Symbol.iterator] = function () { scans += 1; return iterate.call(this); };
+  const meshData = { parts };
+  const clip = {
+    duration: 1,
+    loop: true,
+    update(t, m) {
+      m.get("base").translate([t, 0, 0]);
+      m.get("#o1.2").translate([0, t, 0]);
+    }
+  };
+  evaluateAnimationClip(THREE, meshData, clip, 0);
+  const indexed = scans;
+  for (let frame = 1; frame <= 10; frame += 1) {
+    const { matrices } = evaluateAnimationClip(THREE, meshData, clip, frame / 20);
+    assert.deepEqual([...matrices.keys()].sort(), ["o1.1", "o1.2.1", "o1.2.2"]);
+    assert.deepEqual(through(matrices.get("o1.2.2"), [0, 0, 0]), [0, frame / 20, 0]);
+  }
+  assert.equal(scans, indexed, "no later frame scans the parts");
+  // An unknown target still throws on every frame, and a new table is indexed afresh.
+  assert.throws(() => createAnimationFrame(THREE, meshData).model.get("wrist"), /no occurrence labeled "wrist"/);
+  assert.throws(() => createAnimationFrame(THREE, meshData).model.get("wrist"), /no occurrence labeled "wrist"/);
+  const rebuilt = evaluateAnimationClip(THREE, { parts: [{ id: "o1.1", label: "base" }, { id: "o1.2.9", label: "" }] }, clip, 0.5);
+  assert.deepEqual([...rebuilt.matrices.keys()].sort(), ["o1.1", "o1.2.9"]);
+});
+
 test("frame effects premultiply onto an existing pose matrix", () => {
   // Pose put the part at x=10; the clip then orbits the origin by 90deg. The
   // animation must act on the ALREADY-POSED part (world space), not under it.

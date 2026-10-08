@@ -8,7 +8,10 @@ disposing the service aborts its resources and sessions.
 
 Surface resolution and editing-preview observation belong to the service.
 The HTTP implementation owns request encoding, bounded polling, subscriber
-cancellation, replacement views and immutable store URL validation. A surface
+cancellation, replacement views and immutable store URL validation. A pending
+derivation is asked after again at 80 ms, doubling to 640 ms, then at a tenth of
+the wait so far, at most every 5 s: a derivation stuck behind a daemon that cannot
+start a worker is not asked many times a second until it fails. A surface
 binding keeps its tree/view, surface input and concrete object identities;
 a mismatched view, input, object or URL fails before publication. UI consumes
 the resulting tickets and never supplies a same-origin transport fallback.
@@ -30,13 +33,15 @@ The worker never receives a service function or detaches an admitted cache
 buffer. SURF byte tickets are acquired only after reserving a worker slot, so
 queued components cannot accumulate eagerly transferred buffers. Recognition reads are limited to 16 MiB. SURF display-cache hits inspect
 the cached header before requesting a resource ticket, preserving zero-SURF-read
-warm rendering. Aborting a worker request retains the existing scheduler and
+warm rendering. A miss with no SURF URL yet (a part that opened warm, before its
+surface is resolved) fails as not ready and requests no ticket; the caller resolves
+the surface and asks again. Aborting a worker request retains the existing scheduler and
 owner rules in [resource ownership](resource-ownership.md).
 
 Each service wraps its provider in an opaque cache generation. URL-addressed
 JSON, text, mesh and descriptor caches include this scope; completed package and
 recognition caches do too. A fresh server-metadata read that observes a changed
-root or identity token retires the generation and aborts its pending reads.
+identity token retires the generation and aborts its pending reads.
 The provider exposes that generation signal on the main thread. Worker clients
 and recognition subscribe before acquiring tickets, so already-issued URL
 tickets cannot publish a late result after retirement. The signal itself never

@@ -40,7 +40,10 @@ class ViewRegistryTest(unittest.TestCase):
         self.assertEqual(registry.post(["v1"], {"type": "show", "model": "/a.step"}), 1)
         self.assertEqual([(event["type"], event["model"]) for event in registry.poll("v1")], [("show", "/a.step")])
         self.assertEqual(registry.poll("v1"), [])
-        self.assertEqual(registry.poll("gone"), [{"type": "unknown-view"}])
+        # A view forgotten while its sync was in flight (it closed) has nothing waiting, and no event
+        # says so: the page takes every event that is not a show for a capture.
+        registry.forget("v1")
+        self.assertEqual(registry.poll("v1"), [])
 
     def test_live_views_are_most_recently_focused_first_and_stale_ones_expire(self) -> None:
         clock = _Clock()
@@ -90,6 +93,32 @@ class ViewRegistryTest(unittest.TestCase):
         _answer_next(registry, "v1", lambda event: registry.forget("v1"))
         with self.assertRaisesRegex(NoAnswer, "closed before it answered"):
             registry.ask("v1", "capture", timeout=60)
+
+
+class SidebarViewsTest(unittest.TestCase):
+    def test_a_gone_views_inbox_an_orphan_inbox_and_a_late_reply_are_swept(self) -> None:
+        import os
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        from cadgen.mcp.sidebar_views import SidebarViews
+
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        serving, asking = SidebarViews(root), SidebarViews(root)
+        for view_id in ("gone", "here"):
+            serving.publish(view_id, model=None, state=None, touched=True)
+            asking.post(view_id, {"type": "show"})
+        (root / "orphan.inbox").mkdir()
+        (root / "replies").mkdir()
+        (root / "replies" / "late.json").write_text("{}", encoding="utf-8")
+        old = time.time() - views.LIVE_SECONDS - 60
+        for leftover in (root / "gone.json", root / "orphan.inbox", root / "replies" / "late.json"):
+            os.utime(leftover, (old, old))
+        self.assertEqual([view.id for view in asking.live()], ["here"])
+        self.assertEqual(sorted(path.name for path in root.iterdir()), ["here.inbox", "here.json", "replies"])
+        self.assertEqual(list((root / "replies").iterdir()), [])
 
 
 if __name__ == "__main__":

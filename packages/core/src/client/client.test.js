@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createCadClient } from './client.js';
+import { createCadClient, isMissingFileError } from './client.js';
 
 function json(value) { return { ok: true, json: async () => value }; }
 function deferred() { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; }
@@ -28,20 +28,18 @@ test('construction is inert; subscribers share one catalog request and explicit 
   stopTwo();
 });
 
-test('two clients keep root identity, catalog data, cancellation and absolute assets separate', async () => {
+test('two clients keep catalog data, cancellation and absolute assets separate', async () => {
   const calls = [];
   const fetch = async (url) => {
     calls.push(url);
-    const origin = new URL(url).origin;
-    return json({ rootId: `${origin}-root`, entries: [{ file: '/root/part.step', rootRelativeFile: 'part.step', url: '/__cad/asset?file=part.step' }] });
+    return json({ entries: [{ file: '/root/part.step', url: '/__cad/asset?file=/root/part.step' }] });
   };
   const a = createCadClient({ origin: 'http://one.test', fetch, pollIntervalMs: 0 });
   const b = createCadClient({ origin: 'http://two.test', fetch, pollIntervalMs: 0 });
-  const [first, second] = await Promise.all([a.resolveEntry('part.step'), b.resolveEntry('part.step')]);
-  assert.equal(first.url, 'http://one.test/__cad/asset?file=part.step');
-  assert.equal(second.url, 'http://two.test/__cad/asset?file=part.step');
-  assert.equal(a.workspaceId, 'http://one.test-root');
-  assert.equal(b.workspaceId, 'http://two.test-root');
+  const [first, second] = await Promise.all([a.resolveEntry('/root/part.step'), b.resolveEntry('/root/part.step')]);
+  assert.equal(first.url, 'http://one.test/__cad/asset?file=/root/part.step');
+  assert.equal(second.url, 'http://two.test/__cad/asset?file=/root/part.step');
+  assert.equal(new URL(calls[0]).searchParams.get('file'), '/root/part.step', 'a file is asked for by its absolute path');
   a.dispose();
   await b.refresh();
   assert.equal(calls.length, 3);
@@ -55,7 +53,7 @@ test('fresh server reads observe restarts and transport errors while cached cons
   const client = createCadClient({ origin: 'http://one.test', fetch: async () => {
     calls += 1;
     if (unavailable) throw new TypeError('Backend is restarting');
-    return json({ rootId: 'workspace', identityToken, autoReload: true });
+    return json({ identityToken, autoReload: true });
   } });
   try {
     assert.equal((await client.serverInfo()).identityToken, 'before-restart');
@@ -117,105 +115,60 @@ test('concurrent views resolving one file both receive the newest accepted catal
   }
 });
 
-test('resolving a deferred catalog entry hydrates that file instead of accepting its placeholder', async (t) => {
+test('a file the server does not have is a missing file, said so', async (t) => {
+  const client = createCadClient({ pollIntervalMs: 0, fetch: async () => json({ entries: [] }) });
+  t.after(() => client.dispose());
+  await assert.rejects(client.resolveEntry('/gone/part.step'), (error) => {
+    assert.equal(isMissingFileError(error), true);
+    assert.match(error.message, /File does not exist: \/gone\/part.step/);
+    return true;
+  });
+  assert.equal(isMissingFileError(new Error('offline')), false);
+});
+
+test('a folder is read one at a time, and a search under it asks the server with its query', async (t) => {
   const calls = [];
-  const pending = { file: '/models/nested/part.step', rootRelativeFile: 'nested/part.step', catalogPending: true };
-  const ready = { ...pending, catalogPending: false, hash: 'ready', tree: '/tree.json' };
-  const client = createCadClient({ pollIntervalMs: 0, fetch: async (url) => {
-    const file = new URL(url, 'http://test').searchParams.get('file');
-    calls.push(file);
-    return json({ entries: [file ? ready : pending] });
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => {
+    calls.push(new URL(url));
+    return json(url.includes('/__cad/folder') ? { path: '/m', entries: [{ name: 'arm', kind: 'directory' }], truncated: false }
+      : { path: '/m', results: ['/m/arm/link.step'], truncated: true });
   } });
   t.after(() => client.dispose());
-  await client.refresh();
-  assert.equal(client.getSnapshot().entries[0].catalogPending, true);
-  const entry = await client.resolveEntry('nested/part.step');
-  assert.equal(entry.hash, 'ready');
-  assert.deepEqual(calls, [null, 'nested/part.step']);
-  assert.equal(await client.resolveEntry('/models/nested/part.step'), entry, 'a warm lookup does not fetch again');
+  assert.deepEqual((await client.folder('/m')).entries, [{ name: 'arm', kind: 'directory' }]);
+  assert.deepEqual(await client.search('/m', 'link'), { path: '/m', results: ['/m/arm/link.step'], truncated: true });
+  assert.deepEqual(calls.map((url) => [url.origin, url.pathname, Object.fromEntries(url.searchParams)]), [
+    ['http://one.test', '/__cad/folder', { path: '/m' }],
+    ['http://one.test', '/__cad/search', { path: '/m', q: 'link' }],
+  ]);
 });
 
-test('partial catalogs retain resolved metadata, selected-file changes replace it, and removed files disappear', async (t) => {
-  let entries = [{ file: 'one.step', hash: 'one-v1' }, { file: 'two.step', catalogPending: true }];
-  const client = createCadClient({ pollIntervalMs: 0, fetch: async () => json({ entries }) });
-  t.after(() => client.dispose());
-  await client.refresh({ file: 'one.step' });
-  const original = client.getSnapshot().entries[0];
-  entries = [{ file: 'one.step', catalogPending: true }, { file: 'two.step', hash: 'two-v1' }];
-  await client.refresh({ file: 'two.step' });
-  assert.equal(client.getSnapshot().entries[0], original, 'an unrelated hydration does not invalidate the displayed file');
-  assert.equal(client.getSnapshot().entries[1].hash, 'two-v1');
-  entries = [{ file: 'one.step', hash: 'one-v2' }, { file: 'two.step', catalogPending: true }];
-  await client.refresh({ file: 'one.step' });
-  assert.deepEqual(client.getSnapshot().entries.map(({ hash }) => hash), ['one-v2', 'two-v1']);
-  entries = [{ file: 'two.step', catalogPending: true }];
-  await client.refresh({ file: 'two.step' });
-  assert.deepEqual(client.getSnapshot().entries.map(({ file }) => file), ['two.step']);
-});
-
-test('concurrent file hydrations merge without allowing stale metadata or listings to overwrite newer replies', async (t) => {
-  const pending = [];
-  const client = createCadClient({ pollIntervalMs: 0, fetch: () => {
-    const response = deferred(); pending.push(response); return response.promise;
-  } });
-  t.after(() => client.dispose());
-  const one = client.resolveEntry('one.step');
-  const two = client.resolveEntry('two.step');
-  pending[1].resolve(json({ entries: [{ file: 'one.step', catalogPending: true }, { file: 'two.step', hash: 'two-v1' }] }));
-  await two;
-  pending[0].resolve(json({ entries: [{ file: 'one.step', hash: 'one-v1' }, { file: 'two.step', catalogPending: true }, { file: 'removed.step' }] }));
-  await one;
-  assert.deepEqual(client.getSnapshot().entries.map(({ hash }) => hash), ['one-v1', 'two-v1']);
-  const old = client.refresh({ file: 'one.step', signal: new AbortController().signal });
-  const fresh = client.refresh({ file: 'one.step', signal: new AbortController().signal });
-  pending[3].resolve(json({ entries: [{ file: 'one.step', hash: 'one-v3' }, { file: 'two.step', catalogPending: true }] }));
-  await fresh;
-  pending[2].resolve(json({ entries: [{ file: 'one.step', hash: 'one-v2' }, { file: 'two.step', catalogPending: true }] }));
-  await old;
-  assert.equal(client.getSnapshot().entries[0].hash, 'one-v3');
-  const removed = client.refresh({ file: 'one.step', signal: new AbortController().signal });
-  const listing = client.refresh({ file: '' });
-  pending[5].resolve(json({ entries: [{ file: 'two.step', catalogPending: true }] }));
-  await listing;
-  pending[4].resolve(json({ entries: [{ file: 'one.step', hash: 'one-v4' }, { file: 'two.step', catalogPending: true }] }));
-  await removed;
-  assert.deepEqual(client.getSnapshot().entries.map(({ file }) => file), ['two.step']);
-});
-
-test('unresolved metadata fails explicitly instead of mounting an indefinitely pending viewer', async (t) => {
-  const client = createCadClient({ pollIntervalMs: 0, fetch: async () => json({ entries: [{ file: 'part.step', catalogPending: true }] }) });
-  t.after(() => client.dispose());
-  await assert.rejects(client.resolveEntry('part.step'), /CAD file metadata is unavailable: part.step/);
-});
-
-test('polling targets active render sessions and continues observing selected-file metadata changes', async (t) => {
+test('polling reads the files on screen again, and only those', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const calls = [];
   let version = 1;
   const client = createCadClient({ fetch: async (url) => {
     const selected = new URL(url, 'http://test').searchParams.get('file');
     calls.push(selected);
-    return json({ entries: ['one.step', 'two.step'].map((file) => file === selected
-      ? { file, hash: `${file}-${version}` } : { file, catalogPending: true }) });
+    return json({ entries: selected ? [{ file: selected, hash: `${selected}-${version}` }] : [] });
   } });
   t.after(() => client.dispose());
   const settle = () => new Promise((resolve) => setImmediate(resolve));
   const release = client.subscribe(() => {});
   await settle();
-  await client.resolveEntry('one.step');
-  const one = client.createRenderSession({ file: 'one.step' });
-  const two = client.createRenderSession({ file: 'two.step' });
+  await client.resolveEntry('/m/one.step');
+  const one = client.createRenderSession({ file: '/m/one.step' });
+  const two = client.createRenderSession({ file: '/m/two.step' });
   calls.length = 0;
   version = 2;
   t.mock.timers.tick(2000);
   await settle();
-  assert.deepEqual(calls, ['one.step', 'two.step']);
-  assert.deepEqual(client.getSnapshot().entries.map(({ hash }) => hash), ['one.step-2', 'two.step-2']);
+  assert.deepEqual(calls, ['/m/one.step', '/m/two.step']);
+  assert.deepEqual(client.getSnapshot().entries.map(({ hash }) => hash), ['/m/one.step-2', '/m/two.step-2']);
   two.dispose();
   calls.length = 0;
   t.mock.timers.tick(2000);
   await settle();
-  assert.deepEqual(calls, ['one.step']);
+  assert.deepEqual(calls, ['/m/one.step']);
   one.dispose();
   release();
 });
@@ -325,4 +278,48 @@ test('a drawing refused by the server raises the classified failure an alert is 
     return true;
   });
   client.dispose();
+});
+
+test('the library, Open, Reveal and the person\'s settings are guarded requests to the viewer\'s routes, as any host reaches them', async (t) => {
+  const calls = [];
+  const thumbnail = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    calls.push([path, options.method || 'GET', options.headers?.['x-cadgen-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
+    if (path === '/__cad/thumbnail') return new Response(new URL(url).searchParams.get('name') === 'a.png' ? thumbnail : null, { status: new URL(url).searchParams.get('name') === 'a.png' ? 200 : 404 });
+    if (path === '/__cad/reveal') return options.body.includes('gone') ? Response.json({ error: 'That file is no longer there.' }, { status: 404 }) : new Response(null, { status: 204 });
+    if (path === '/__cad/pick') return Response.json({ path: '/models/picked.step' });
+    if (path === '/__cad/recents') return Response.json({ recents: [{ path: '/models/a.step' }] });
+    return Response.json({ path });
+  } });
+  t.after(() => client.dispose());
+  assert.deepEqual(await client.recents(), [{ path: '/models/a.step' }]);
+  assert.deepEqual(await client.changeRecents({ action: 'open', path: '/models/a.step' }), [{ path: '/models/a.step' }]);
+  await client.keepThumbnail(new Blob([thumbnail], { type: 'image/png' }), '/models/a.step');
+  assert.equal(await client.thumbnail('a.png'), 'data:image/png;base64,iVBORw==');
+  assert.equal(await client.thumbnail('none.png'), null);
+  assert.equal(await client.pick(), '/models/picked.step');
+  await client.reveal('/models/a.step');
+  await assert.rejects(client.reveal('/models/gone.step'), /no longer there/);
+  await client.consent();
+  await client.consent(true);
+  await client.consent(false);
+  await client.features({ quickEdit: false });
+  await client.version();
+  client.reportActivity({ touched: true });
+  await new Promise((resolve) => setImmediate(resolve));
+  // Every change carries the header no page from another site can send; a read sends none.
+  assert.deepEqual(calls, [
+    ['/__cad/recents', 'GET', null, null],
+    ['/__cad/recents', 'POST', '1', { action: 'open', path: '/models/a.step' }],
+    ['/__cad/recents', 'POST', '1', { action: 'thumbnail', path: '/models/a.step', png: 'iVBORw==' }],
+    ['/__cad/thumbnail', 'GET', null, null], ['/__cad/thumbnail', 'GET', null, null],
+    ['/__cad/pick', 'POST', '1', null],
+    ['/__cad/reveal', 'POST', '1', { path: '/models/a.step' }], ['/__cad/reveal', 'POST', '1', { path: '/models/gone.step' }],
+    ['/__cad/analytics', 'GET', null, null],
+    ['/__cad/analytics', 'POST', '1', { share: true }], ['/__cad/analytics', 'POST', '1', { share: false }],
+    ['/__cad/features', 'POST', '1', { quickEdit: false }],
+    ['/__cad/version', 'GET', null, null],
+    ['/__cad/analytics/activity', 'POST', '1', { touched: true }],
+  ]);
 });

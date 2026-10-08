@@ -235,6 +235,11 @@ export function applyPartVisualState(THREE, records, {
       writeTransparentDepth: !isHidden && !isDimmed && !transparentDisplayMode
     });
     record.material.opacity = nextSurfaceOpacity;
+    // A highlight moves an opaque part into the transparent pass (for its render order) and
+    // leaves it fully opaque: as solid as before, so it keeps casting its shadow
+    // (`syncRecordShadowPolicy`, common/cadScene.js) and a hover never changes a shadow.
+    record.highlightOpaque = isHighlighted && !isDimmed && !transparentDisplayMode
+      && baseEffectSurfaceOpacity >= 0.999 && nextSurfaceOpacity >= 0.999;
 
     if (record.baseColor && record.material.color) {
       record.material.color.copy(highlightSurface || effectColor || record.baseColor);

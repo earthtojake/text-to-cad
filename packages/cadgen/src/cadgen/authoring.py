@@ -428,7 +428,10 @@ def _report_uncaught_declaration(exc_type, exc, tb) -> None:
     arguments) is reported like the runner reports a build failure, instead of
     a traceback. Anything else goes to the previous hook."""
     main = sys.modules.get("__main__")
-    file = getattr(main, "__file__", None) if main is not None else None
+    # CPython 3.13.15+ and 3.14.7+ (gh-152132) remove ``__main__.__file__`` before
+    # they call this hook; a ``python script.py`` run still names the script in
+    # ``sys.argv[0]``.
+    file = getattr(main, "__file__", None) or (sys.argv[0] if sys.argv else None)
     if getattr(exc, "__cadgen_declaration__", False) and file and "--verbose" not in sys.argv[1:]:
         from cadgen._internal.cli_from_function import report_failure
 
@@ -528,6 +531,15 @@ def _decorator(
             func = prior.func
         _validate_signature(func, fmt=fmt)
         script_path = _script_path_of(func)
+        if animation_def is not None:
+            # The renderer refuses a module exporting anything but `clips`, and
+            # every clip with it: say so here, in its words, not when it opens.
+            from cadgen._internal.animation_source import check_animation_exports
+            from cadgen.render import relative_to_cwd
+
+            check_animation_exports(
+                animation_def["source"], name=f"{relative_to_cwd(script_path)}::{func.__name__} animation"
+            )
         defn = ModelDef(
             func=func,
             fmt=fmt,
@@ -815,8 +827,10 @@ def _compose_child(defn: ModelDef) -> Any:
             f"{defn.script_path.name}::{defn.name} is called while it is itself being built: "
             "a model may not depend on itself"
         )
+    from cadgen.daemon import telemetry
     from cadgen.daemon.executors import emit_event, model_event, submit
 
+    telemetry.job_child()  # an assembly, for a build this process counts itself (``cold_build``)
     parent = frame.model if frame is not None else None
     job = None
     tree: str | None = frame.pins.get(child) if frame is not None else None
@@ -895,8 +909,14 @@ def _build(defn: ModelDef) -> int:
         # (cadgen._internal.dxf_emit), so a cold run needs no interpreter restart and
         # @dxf reaches the pipeline by exactly the route @step does.
         from cadgen.cli._run_model import run_model_argv
+        from cadgen.daemon import telemetry
 
-        return run_model_argv([*target, *argv], prog=f"python {defn.script_path.name}")
+        # Counted here as the daemon counts the builds it answers: no daemon answered this one.
+        return telemetry.cold_build(
+            "dxf" if defn.fmt == "dxf" else "step", "script",
+            lambda: run_model_argv([*target, *argv], prog=f"python {defn.script_path.name}"),
+            meshes=bool(defn.mesh_exports),
+        )
 
 
 def _built_geometry(defn: ModelDef, *, tree: str | None) -> Any:

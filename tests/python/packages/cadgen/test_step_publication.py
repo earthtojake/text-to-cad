@@ -78,6 +78,93 @@ class StepPublicationTests(unittest.TestCase):
         self.assertEqual(read_record(f"{self.model}::part"), record)
         self.assertEqual(list(self.root.glob(".part-*")), [], "private stages are cleaned")
 
+    def test_a_stale_build_skips_the_saved_tree_reuse_check(self) -> None:
+        # The gate already called this build stale. The reuse check hashes the
+        # saved STEP, and for a model with kinematics its sidecar's binding to
+        # it: work only a current model can use.
+        from cadgen._internal import generation
+
+        self.assertEqual(self.build(10, annotated=True), 0, self.output)
+        with mock.patch.object(generation, "_existing_topology_artifact_matches_spec_without_scene",
+                               side_effect=AssertionError("reuse check on a stale build")) as check:
+            self.assertEqual(self.build(12, annotated=True), 0, self.output)
+        check.assert_not_called()
+
+    def test_tree_metadata_does_not_hash_the_saved_step(self) -> None:
+        # The tree takes its edge capabilities and classes from the provenance
+        # manifest and nothing else; hashing the saved document for it read the
+        # whole file once per build.
+        from cadgen._internal import generation
+        from cadgen.store.records import read_record
+        from cadgen.store.trees import get_tree
+
+        self.assertEqual(self.build(10), 0, self.output)
+        with mock.patch.object(generation, "step_file_hash",
+                               side_effect=AssertionError("hashed the saved STEP for tree metadata")):
+            self.assertEqual(self.build(12), 0, self.output)
+        tree = get_tree(read_record(f"{self.model}::part")["tree"])
+        self.assertTrue(tree["edgeRendering"]["visibilityClasses"])
+        self.assertIn("edgeClassification", tree["capabilities"])
+        self.assertNotIn("stepHash", tree)
+
+    def test_a_job_reads_its_saved_step_at_most_once(self) -> None:
+        # Every digest a job takes of its saved document goes through the
+        # gate's settled-stamp memo, and a document the build renamed into
+        # place is known by the digest its writer took. A label edit keeps a
+        # STEP of hundreds of megabytes and used to read it once per check.
+        from cadgen._internal import generation
+        from cadgen.cli._run_model import run_model_argv
+        from cadgen.store import gate
+
+        self.assertEqual(self.build(10), 0, self.output)
+        reads: list[Path] = []
+        hash_file, sha256_of = gate._hash_file, generation._sha256_of
+
+        def counted(original):
+            def read(path):
+                reads.append(Path(path).resolve())
+                return original(path)
+            return read
+
+        def step_reads() -> int:
+            return sum(path == self.step.resolve() for path in reads)
+
+        with mock.patch.object(gate, "_stamp_is_settled", return_value=True), \
+                mock.patch.object(gate, "_hash_file", side_effect=counted(hash_file)), \
+                mock.patch.object(generation, "_sha256_of", side_effect=counted(sha256_of)):
+            # A new document: the previous one may be read once, the new one never.
+            self.assertEqual(self.build(12), 0, self.output)
+            self.assertLessEqual(step_reads(), 1, reads)
+            reads.clear()
+            # A label edit keeps the document, and nothing reads it.
+            self.model.write_text(self.model.read_text(encoding="utf-8").replace(
+                "    return bd.Box(SIZE, 8, 6)\n", "    box = bd.Box(SIZE, 8, 6)\n    box.label = 'renamed'\n    return box\n"),
+                encoding="utf-8")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+                self.assertEqual(run_model_argv([str(self.model)]), 0, output.getvalue())
+            self.assertIn("kept STEP", output.getvalue())
+            self.assertEqual(step_reads(), 0, reads)
+
+    def test_a_job_takes_one_gate_verdict_before_its_body(self) -> None:
+        # The fast path's verdict serves the peer check, the annotation refresh
+        # and the reuse check of the same job; only the already-stale notice
+        # after publishing asks the gate again.
+        from cadgen.store import gate
+
+        self.assertEqual(self.build(10, annotated=True), 0, self.output)
+        asked: list[str] = []
+        original = gate.stale
+
+        def counted(model, *, memo=None):
+            if memo is None:
+                asked.append(str(model))
+            return original(model, memo=memo)
+
+        with mock.patch.object(gate, "stale", side_effect=counted):
+            self.assertEqual(self.build(12, annotated=True), 0, self.output)
+        self.assertEqual(len(asked), 2, asked)
+
     def test_failed_readback_keeps_the_saved_pair(self) -> None:
         self.assertEqual(self.build(10), 0, self.output)
         before = self.step.read_bytes()
@@ -345,6 +432,186 @@ class StepPublicationTests(unittest.TestCase):
         self.assertEqual(read_record(f"{self.model}::part"), previous_record)
         with self.assertRaises(SidecarBindingError):
             read_source_sidecar(self.step)
+
+
+PIN_SOURCE = """\
+from cadgen import step
+from cadgen import build123d as bd
+
+
+@step(out="../STEP/pin.step")
+def pin():
+    return bd.Cylinder(radius=2.0, height=12.0)
+
+
+if __name__ == "__main__":
+    pin()
+"""
+
+ARM_SOURCE = """\
+from cadgen import step
+from cadgen import build123d as bd
+
+from pin import pin
+
+
+@step(out="../STEP/arm.step")
+def arm():
+    bar = bd.Box(40.0, 8.0, 4.0)
+    bar.label = "bar"
+    left = pin().moved(bd.Location((-15.0, 0.0, 2.0)))
+    left.label = "pin_left"
+    right = pin().moved(bd.Location((15.0, 0.0, 2.0)))
+    right.label = "pin_right"
+    return bd.Compound(children=[bar, left, right], label="arm")
+
+
+if __name__ == "__main__":
+    arm()
+"""
+
+
+class AssemblyJobReads(unittest.TestCase):
+    """A job verifies each object of a pinned closure once (STORE.md §4, §10):
+    the gate's clauses share one verification, a publish claims what the job
+    verified without reading it again, and a child another process rebuilt
+    costs the parent's next job that child's closure, not the whole closure."""
+
+    def setUp(self) -> None:
+        import sys
+
+        self.temp = generated_cad_directory(prefix="assembly-reads-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / "src").mkdir()
+        (self.root / "STEP").mkdir()
+        self.pin = self.root / "src/pin.py"
+        self.arm = self.root / "src/arm.py"
+        self.pin.write_text(PIN_SOURCE, encoding="utf-8")
+        self.arm.write_text(ARM_SOURCE, encoding="utf-8")
+        self.env = {"CADGEN_CACHE_DIR": str(self.root / "store"), "CADGEN_DAEMON": "0", "CADGEN_JOBS": "1"}
+        patch = mock.patch.dict(os.environ, self.env)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.python = sys.executable
+        from cadgen.store import trees
+
+        trees._reset_metadata_capture_cache()
+        self.addCleanup(trees._reset_metadata_capture_cache)
+
+    def run_here(self, script: Path, *flags: str) -> str:
+        """A job in this process (its children in subprocesses): the outcome word."""
+        from cadgen.cli._run_model import run_model_argv
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            code = run_model_argv([str(script), *flags])
+        self.assertEqual(code, 0, output.getvalue())
+        return output.getvalue().strip().splitlines()[-1].split(" ", 1)[0]
+
+    def run_elsewhere(self, script: Path, *flags: str) -> str:
+        """The same job in another process, as another worker would run it."""
+        import subprocess
+
+        from tests.python.support.paths import repo_path
+
+        env = {**os.environ, **self.env, "PYTHONPATH": str(repo_path("packages/cadgen/src"))}
+        done = subprocess.run([self.python, script.name, *flags], cwd=str(script.parent), env=env,
+                              capture_output=True, text=True, timeout=600)
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        return done.stdout.strip().splitlines()[-1].split(" ", 1)[0]
+
+    def closure(self, model: Path) -> dict[str, str]:
+        """Every object of the model's result closure, by digest."""
+        from cadgen.store.records import read_record
+        from cadgen.store.trees import tree_objects
+
+        tree = read_record(f"{model}::{model.stem}")["tree"]
+        return {digest: tree for digest in tree_objects(tree)}
+
+    def counted_reads(self):
+        from cadgen.store import trees
+
+        reads: list[str] = []
+        original = trees.read_verified_object
+
+        def read(digest):
+            reads.append(digest)
+            return original(digest)
+
+        return reads, mock.patch.object(trees, "read_verified_object", side_effect=read)
+
+    def test_a_cold_no_op_reads_each_object_of_the_closure_once(self) -> None:
+        from collections import Counter
+
+        self.assertEqual(self.run_elsewhere(self.arm), "built")
+        closure = self.closure(self.arm)
+        root = next(digest for digest, tree in closure.items() if digest == tree)
+        reads, counted = self.counted_reads()
+        with counted:
+            self.assertEqual(self.run_here(self.arm), "current")
+        counts = Counter(reads)
+        self.assertEqual(set(counts), set(closure))
+        # Clause 3 verifies each child's closure; clause 4 takes those verified
+        # subtrees as they are and reads only the parent's own objects. The
+        # parent's tree is read once more, to report its kind.
+        self.assertEqual({digest: n for digest, n in counts.items() if digest != root},
+                         {digest: 1 for digest in closure if digest != root})
+        self.assertLessEqual(counts[root], 2)
+
+    def test_a_parent_job_verifies_a_pinned_closure_once(self) -> None:
+        from cadgen.store import gate, trees
+
+        self.assertEqual(self.run_here(self.arm), "built")
+        pinned = self.closure(self.pin)
+        self.arm.write_text(self.arm.read_text(encoding="utf-8").replace("40.0, 8.0, 4.0", "40.0, 8.0, 4.5"), encoding="utf-8")
+        verifying = [0]
+        verified: list[str] = []
+        read = trees.read_verified_object
+
+        def counting(original):
+            def call(*args, **kwargs):
+                verifying[0] += 1
+                try:
+                    return original(*args, **kwargs)
+                finally:
+                    verifying[0] -= 1
+            return call
+
+        def counted_read(digest):
+            if verifying[0] and digest in pinned:
+                verified.append(digest)
+            return read(digest)
+
+        # The gate verified the child's closure before the body. The build's own
+        # checks of its result (tree_complete) and its publish (claim_tree) take
+        # that verification as it stands: nothing of the child is read again.
+        with mock.patch.object(trees, "tree_complete", side_effect=counting(trees.tree_complete)), \
+                mock.patch.object(gate, "tree_complete", side_effect=counting(trees.tree_complete)), \
+                mock.patch.object(trees, "claim_tree", side_effect=counting(trees.claim_tree)), \
+                mock.patch.object(trees, "read_verified_object", side_effect=counted_read):
+            self.assertEqual(self.run_here(self.arm), "built")
+        self.assertEqual(verified, [])
+
+    def test_a_childs_rebuild_elsewhere_costs_the_parent_that_childs_closure(self) -> None:
+        from collections import Counter
+
+        self.assertEqual(self.run_here(self.arm), "built")
+        self.assertEqual(self.run_here(self.arm), "current")
+        pinned = self.closure(self.pin)
+        whole = self.closure(self.arm)
+        self.assertLess(len(pinned), len(whole))
+        # Another worker's forced rebuild of the child publishes the same tree
+        # and claims its closure, which moves every stamp this process verified.
+        self.assertEqual(self.run_elsewhere(self.pin, "--force"), "built")
+        self.assertEqual(self.closure(self.pin), pinned)
+        reads, counted = self.counted_reads()
+        with counted:
+            self.assertEqual(self.run_here(self.arm), "current")
+        counts = Counter(reads)
+        self.assertEqual(max(counts.values()), 1, counts)
+        root = next(digest for digest, tree in whole.items() if digest == tree)
+        self.assertEqual(set(reads), {*pinned, root}, counts)
 
 
 if __name__ == "__main__":

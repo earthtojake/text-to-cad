@@ -6,6 +6,13 @@ every mate's parent/child occurrence ref must name a real occurrence, and every
 numbers via the same composed selector index inspect uses. The sidecar carries
 only numbers — the viewer does arithmetic, never topology.
 
+A mate's ends name occurrences, so they resolve in the tree's occurrence
+namespace alone: its leaves, its group nodes and their labels, read from the
+flattened tree. No component's topology is read for them. An axis ref names a
+face or edge of one occurrence, and only that occurrence's component is read:
+its selector rows come from its SURF, derived through the build pool when the
+store has none.
+
 Nothing here moves geometry. A kinematics declaration describes how the
 written tree articulates; the tree itself is the model's return value and is
 stored exactly as returned.
@@ -14,7 +21,6 @@ stored exactly as returned.
 from __future__ import annotations
 
 import copy
-from pathlib import Path
 from typing import Any, Mapping
 
 
@@ -22,30 +28,56 @@ def _fail(message: str) -> ValueError:
     return ValueError(f"kinematics: {message}")
 
 
-def _composed_index(package_dir: Path, *, step_path: Path, source_ref: str):
-    """The composed selector index for a view directory (staging or final):
-    descriptor as the (empty-tabled) bundle manifest, component GLBs supplying
-    every ref per occurrence — the same shape ``_assembly_topology_artifact``
-    returns for require_selector consumers."""
-    from cadgen._internal.component_package import read_package_descriptor
-    from cadgen.assembly_lookup import index_with_assembly_occurrences
+def _occurrence_index(descriptor: Mapping[str, Any]):
+    """The namespace a mate's parent and child resolve in: the tree's leaf
+    occurrences, its group nodes and the label aliases of both. It is the
+    composed selector index inspect uses
+    (``assembly_lookup.index_with_assembly_occurrences``) without any
+    component's topology, which a mate's end never names."""
+    from cadgen.assembly_lookup import merge_assembly_occurrences
+    from cadgen.label_refs import attach_label_aliases
     from cadgen.lookup import build_selector_index
-    from cadgen.selector_types import SelectorBundle
-    from cadgen.step_topology_artifact import StepTopologyArtifact
 
-    descriptor = read_package_descriptor(package_dir)
-    if not isinstance(descriptor, dict):
-        raise _fail(f"{source_ref}: materialized tree (assembly.json) missing under {package_dir}")
-    artifact = StepTopologyArtifact(
-        cad_path=source_ref,
-        source_path=step_path,
-        step_path=step_path,
-        artifact_path=package_dir,
-        manifest=descriptor,
-        selector_bundle=SelectorBundle(manifest=descriptor),
-    )
-    index = build_selector_index(descriptor)
-    return index_with_assembly_occurrences(index, artifact), descriptor
+    index = build_selector_index(dict(descriptor))
+    return attach_label_aliases(merge_assembly_occurrences(index, descriptor, None))
+
+
+_ENTITY_TYPES = frozenset({"shape", "face", "edge", "vertex"})
+
+
+def _with_named_entities(index, descriptor: Mapping[str, Any], refs: list[str], *, tree_hash: str,
+                         producer: dict | None):
+    """``index`` plus the shapes, faces, edges and vertices of every leaf an
+    axis ref in ``refs`` names, placed exactly as the composed index places
+    them (``assembly_lookup.merge_assembly_entities``). Each row is a function
+    of its occurrence's placement and its component's SURF alone, so an axis
+    resolves to the same numbers as it would against every occurrence's rows.
+    A ref that names no leaf's entity reads nothing, and fails as it would
+    have: the composed index holds entities for leaves only."""
+    import shutil
+
+    from cadgen import cad_ref_syntax as syntax
+    from cadgen.assembly_lookup import merge_assembly_entities
+    from cadgen.lookup import canonicalize_selector
+    from cadgen.store.view import export_view
+
+    named: set[str] = set()
+    for ref in refs:
+        canonical = canonicalize_selector(ref.lstrip("#"), index)
+        parsed = syntax.parse_selector(canonical) if canonical else None
+        if parsed is not None and parsed.occurrence_id and parsed.selector_type in _ENTITY_TYPES:
+            named.add(parsed.occurrence_id)
+    rows = [row for row in descriptor.get("occurrences") or []
+            if isinstance(row, Mapping) and str(row.get("id") or "").strip() in named
+            and str(row.get("component") or "").strip()]
+    if not rows:
+        return index
+    cids = list(dict.fromkeys(str(row["component"]).strip() for row in rows))
+    view = export_view(tree_hash, producer=producer, cids=cids)
+    try:
+        return merge_assembly_entities(index, {**descriptor, "occurrences": rows}, view)
+    finally:
+        shutil.rmtree(view, ignore_errors=True)
 
 
 def _lookup(index, selector_text: str):
@@ -186,14 +218,25 @@ def remap_document_kinematics(
 
 
 def resolve_kinematics_block(
-    block: Mapping[str, Any], *, package_dir: Path, step_path: Path, source_ref: str
+    block: Mapping[str, Any], *, tree_hash: str, source_ref: str, producer: dict | None = None,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """Validated declaration -> sidecar-ready block (axes as numbers), plus the
-    mate-ref -> occurrence-id map."""
-    index, descriptor = _composed_index(package_dir, step_path=step_path, source_ref=source_ref)
+    mate-ref -> occurrence-id map, against the stored tree ``tree_hash``.
+
+    ``producer`` is the display producer an axis ref's SURF is derived under;
+    None resolves it through the build pool, and only when an axis ref needs it."""
+    from cadgen.store.trees import flatten
+
+    descriptor = flatten(tree_hash)
+    if not isinstance(descriptor, dict):
+        raise _fail(f"{source_ref}: tree {tree_hash} is missing from the store")
+    index = _occurrence_index(descriptor)
     tree = _instance_tree_ids(descriptor)
     resolved = copy.deepcopy(dict(block))
     occurrence_ids: dict[str, str] = {}
+    axis_refs = [str((mate.get("axis") or {})["ref"]) for mate in resolved.get("mates", [])
+                 if mate.get("kind") != "fastened" and "ref" in (mate.get("axis") or {})]
+    entities = None
     for mate in resolved.get("mates", []):
         name = str(mate.get("name"))
         for what, key in (("parent", "parent"), ("child", "child")):
@@ -211,5 +254,7 @@ def resolve_kinematics_block(
         if mate.get("kind") == "fastened":
             continue
         if "ref" in axis:
-            mate["axis"] = _axis_from_ref(index, str(axis["ref"]), mate=name, source_ref=source_ref)
+            if entities is None:
+                entities = _with_named_entities(index, descriptor, axis_refs, tree_hash=tree_hash, producer=producer)
+            mate["axis"] = _axis_from_ref(entities, str(axis["ref"]), mate=name, source_ref=source_ref)
     return resolved, occurrence_ids

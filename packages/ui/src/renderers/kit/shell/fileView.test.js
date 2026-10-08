@@ -54,6 +54,14 @@ test("preview's playback settings are the view's: written whole, read back bound
   assert.deepEqual(readFileView(undefined).playback, { orbit: true, orbitSpeed: 1, autoplay: false });
 });
 
+test("a chosen floor finish is kept with the display, in the record either app writes", () => {
+  const display = readFileView({ version: FILE_VIEW_VERSION, display: { mode: "render", floor: { finish: "glossy" } } }).display;
+  assert.deepEqual(display.floor, { finish: "glossy" });
+  const copy = JSON.parse(JSON.stringify(writeFileView({ camera, display })));
+  assert.deepEqual(readFileView(copy).display.floor, { finish: "glossy" });
+  assert.equal(readFileView({ version: FILE_VIEW_VERSION, display: { mode: "render", floor: { finish: "chrome" } } }).display.mode, "solid");
+});
+
 test("display settings this build cannot read are the defaults, and the stored record is not rewritten", () => {
   const raw = { version: FILE_VIEW_VERSION, display: { mode: "no-such-mode", surfaces: 7 } };
   const before = JSON.stringify(raw);

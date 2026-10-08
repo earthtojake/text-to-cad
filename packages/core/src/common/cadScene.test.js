@@ -1046,6 +1046,45 @@ test("buildModel applies source part opacity from GLB material metadata", () => 
   scene.dispose();
 });
 
+test("a hover or a selection never changes which parts cast a Render shadow; hiding and isolating do", () => {
+  const meshData = sampleMeshData();
+  meshData.parts = meshData.parts.map((part, index) => index === 0
+    ? { ...part, color: "#ff0000", opacity: 0.2, hasSourceColors: true }
+    : part
+  );
+  const scene = buildModel(THREE, meshData, {
+    theme: cloneThemePresetSettings("workbench-light"),
+    renderPartsIndividually: true,
+    receiveShadows: true
+  });
+  const left = scene.displayRecords.find((record) => record.partId === "left");
+  const right = scene.displayRecords.find((record) => record.partId === "right");
+  const casting = () => [left.mesh.castShadow, right.mesh.castShadow];
+  const visual = (state) => {
+    applyViewerPartVisualState(THREE, scene.displayRecords, { showEdges: true, ...state });
+    scene.syncSurfaceInstances();
+  };
+  assert.deepEqual(casting(), [false, true]);
+
+  // The highlight draws the opaque part in the transparent pass, still fully opaque.
+  visual({ hoveredPartId: "right" });
+  assert.equal(right.material.transparent, true);
+  assert.equal(right.material.opacity, 1);
+  assert.deepEqual(casting(), [false, true], "the hovered part still casts");
+  assert.equal(right.mesh.receiveShadow, false, "a highlight still takes no received shadow");
+  visual({ selectedPartIds: ["left", "right"] });
+  assert.deepEqual(casting(), [false, true], "a selected glass part does not start casting");
+  visual({});
+  assert.deepEqual(casting(), [false, true]);
+  assert.equal(right.mesh.receiveShadow, true);
+
+  visual({ hiddenPartIds: ["right"] });
+  assert.equal(right.mesh.visible, false, "a hidden part leaves the shadow pass by visibility");
+  visual({ focusedPartId: ["left"], hoveredPartId: "right" });
+  assert.equal(right.mesh.castShadow, false, "an isolated-away ghost casts no shadow, hovered or not");
+  scene.dispose();
+});
+
 test("buildModel uses part records when only source opacity differs", () => {
   const meshData = sampleMeshData();
   meshData.sourceColor = "#ff0000";
@@ -1252,6 +1291,23 @@ test("buildModel keeps restBounds at the zero pose while bounds follow the param
   assert.deepEqual(scene.restBounds.max, [3, 1, 0], "and never moves restBounds");
   assert.equal(scene.runtime.activeClipPlane.constant, 1.5, "posing cannot move the clip plane");
   scene.dispose();
+});
+
+test("a package that declares its box rests in that box, which is what the viewer frames and grounds", () => {
+  // assembly.json's bbox is measured on the exact B-rep; the parts' boxes overstate it once a
+  // part is turned. The viewer's STEP scene frames it, sizes its ground from it and explodes
+  // from it, so a snapshot of the same model must take the same box.
+  const declaredBounds = { min: [0.25, 0, 0], max: [3, 0.5, 0] };
+  const declared = buildModel(THREE, { ...sampleMeshData(), declaredBounds }, { renderPartsIndividually: true });
+  const undeclared = buildModel(THREE, sampleMeshData(), { renderPartsIndividually: true });
+  try {
+    assert.deepEqual(declared.restBounds, declaredBounds);
+    assert.deepEqual(declared.bounds, { min: [0, 0, 0], max: [3, 1, 0] }, "what is placed is still the parts' box");
+    assert.deepEqual(undeclared.restBounds, { min: [0, 0, 0], max: [3, 1, 0] }, "without a box, rest is the parts at rest");
+  } finally {
+    declared.dispose();
+    undeclared.dispose();
+  }
 });
 
 // Two components, six occurrences alternating between them, each placed 10 mm apart.

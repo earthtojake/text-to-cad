@@ -99,6 +99,27 @@ function projector(camera, box) {
   };
 }
 const translations = page => page.evaluate(() => Object.fromEntries(window.__cadDisplayRecords().map(record => [record.partId, record.matrix.slice(12, 15)])));
+// Where the parts come to rest, no longer where they were (`from`): an explosion turned on has eased
+// all the way out. Read on the page's own frames, not on a timer: the ease moves the parts on every
+// frame it runs, so a layout unchanged for `still` frames in a row is one the ease has finished
+// with. (A timer's two reads can both land between two frames of an ease a slow software renderer
+// is still drawing.) It answers that layout.
+const restingLayout = (page, from, still = 5) => page.evaluate(({ from, still }) => new Promise((resolve, reject) => {
+  const layout = () => Object.fromEntries(window.__cadDisplayRecords().map(record => [record.partId, record.matrix.slice(12, 15)]));
+  const same = (a, b) => Object.keys(a).length === Object.keys(b).length
+    && Object.keys(a).every(id => b[id] && a[id].every((value, axis) => value === b[id][axis]));
+  const deadline = performance.now() + 30_000;
+  let last = null, unchanged = 0;
+  const frame = () => {
+    const now = layout();
+    unchanged = last && same(now, last) && !same(now, from) ? unchanged + 1 : 0;
+    last = now;
+    if (unchanged >= still) resolve(now);
+    else if (performance.now() > deadline) reject(new Error(`the parts never came to rest: ${JSON.stringify(now)}`));
+    else requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}), { from, still });
 /**
  * A label and its control on one line, measured where they are drawn: the label to the left of
  * its control, their centres level, and the control running to the panel's right edge.
@@ -157,11 +178,11 @@ async function measurePoints(page, at, ...points) {
 }
 
 // A page over the fixture. Unless a test seeds a record of its own, or keeps the tab in
-// sessionStorage, the file's view is seeded with Orbit off in its Playback settings — a still
+// sessionStorage, the file's view is seeded with preview's Orbit off — a still
 // preview camera, so what moves in a frame is the model — as a previous session would have left it.
 async function open(options = {}) {
   const seeded = options.record === undefined && options.store !== 'session'
-    ? { record: { version: 1, settings: {}, files: { [JSON.stringify(['one', harness.fixture.file, 'step'])]: { version: 2, playback: { orbit: false } } } } } : {};
+    ? { record: { version: 2, settings: {}, files: { [JSON.stringify([`/models/${harness.fixture.file}`, 'step'])]: { version: 2, playback: { orbit: false } } } } } : {};
   const view = await harness.open({ ...options, ...seeded });
   const { page, pane } = view;
   const ready = async () => {
@@ -186,8 +207,8 @@ async function open(options = {}) {
     reload: async () => { await page.reload(); Object.assign(opened, await ready()); },
     state: () => page.evaluate(() => window.cadHarness.a.controller.readState()),
     display: patch => page.evaluate(next => window.cadHarness.a.controller.setDisplaySettings(next), patch),
-    // Preview: its button, the fullscreen icon beside Settings; its X back. The file's view was
-    // seeded with Orbit off: a still camera, so what moves in a frame is the model.
+    // Preview: its button, last in the navbar; its X back. The file's view was seeded with Orbit
+    // off: a still camera, so what moves in a frame is the model.
     enterPreview: async () => {
       await pane.getByRole('button', { name: 'Preview', exact: true }).click();
       await pane.getByRole('button', { name: 'Exit preview', exact: true }).waitFor();
@@ -196,16 +217,11 @@ async function open(options = {}) {
       await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
       await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
     },
-    // Display is not a tool: its Settings button sits beside Preview at the navbar's right end.
-    tool: name => name === 'Display' ? pane.getByRole('button', { name: 'Settings', exact: true })
+    // Display is not a tool: its button sits before Preview at the navbar's right end.
+    tool: name => name === 'Display' ? pane.locator('[data-view-controls]').getByRole('button', { name, exact: true })
       : pane.locator(name === 'Reset' ? '[data-cad-camera-controls]' : '[data-cad-toolbar]').getByRole('button', { name, exact: true }),
     tools: () => pane.locator('[data-cad-toolbar]').getByRole('button')
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    // The nav row's panel toggles, in order, each with whether its panel is the open one. A STEP
-    // declares none of its own: the file tree's is the only one.
-    panels: () => pane.locator('[data-file-panel]')
-      .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    toggle: id => id === 'cad-display' ? pane.getByRole('button', { name: 'Settings', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
     // The tool stack's panels on screen, top to bottom, by their accessible names.
     stack: () => pane.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels
       .filter(panel => panel.getClientRects().length > 0).map(panel => panel.getAttribute('aria-label'))),
@@ -217,7 +233,7 @@ async function open(options = {}) {
       await page.locator('[role=menu][aria-label="Select mode"]').getByRole('menuitemradio', { name, exact: true }).click();
       await page.locator('[role=menu]').waitFor({ state: 'detached' });
     },
-    // Display's settings: a popover, portaled out of the viewer.
+    // Display's settings: a dropdown, portaled out of the viewer.
     displayPanel: () => page.locator('[data-display-popover]'),
     rows: () => pane.locator('[aria-label="Modeling tree"]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))
       .filter(label => label?.startsWith('Select ') || label?.startsWith('Expand ') || label?.startsWith('Collapse '))),
@@ -233,16 +249,16 @@ async function open(options = {}) {
 }
 
 
-test('a STEP opens in Select with the tools its sidecar earns and Display last, its Features in the tool stack, and paints both authored colours', async () => {
+test('a STEP opens in Select with the tools its sidecar earns, its Features in the tool stack and Display and Preview in the navbar, and paints both authored colours', async () => {
   const view = await open();
   const { page, pane, errors } = view;
   assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false'],
-    'Position because the sidecar bound; no Animate: its routine plays in preview. Display is a settings popover, not a tool');
-  // The nav row has no panel of the file's: its controls are the tool stack's. The file tree's
-  // toggle is the only one, and a file opened directly opens with nothing beside it.
-  assert.deepEqual(await view.panels(), ['Show files:false']);
-  assert.equal(await pane.locator('[data-file-panel-container]').count(), 0, 'no panel column beside the file');
+    'Position because the sidecar bound; no Animate: its routine plays in preview. Display is a dropdown from the navbar, not a tool');
+  assert.deepEqual(await pane.locator('[data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Display', 'Preview'], 'the view\'s controls at the navbar\'s right end: Display, then Preview');
   assert.equal(await view.displayPanel().count(), 0, 'Display is never where a file opens');
+  assert.equal(await pane.locator('[data-view-controls]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
+    'a STEP is 3D: Preview sits in its navbar');
   // Select is the tool, so the stack shows its Features — an assembly's tree starts open — with no
   // tabs, and nothing of Position's.
   assert.deepEqual(await view.stack(), ['Features']);
@@ -364,8 +380,11 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   await page.mouse.click(...at([6, 6, 5]));
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 1);
   assert.deepEqual((await view.state()).selectedPartIds, ['o1.1']);
-  // Headed by the part's name; the id is a row, what a copy carries.
-  assert.match((await reference.innerText()).replace(/\s+/g, ' '), /^base .*Type Component.*ID o1\.1.*Size 20 × 20 × 10 mm.*Color #3A6EA5/);
+  // Headed by the part's name, over its key measurements and its Copy: no id, type, position or
+  // material rows (what a copy carries is the Copy's).
+  const partText = (await reference.innerText()).replace(/\s+/g, ' ');
+  assert.match(partText, /^base Size 20 × 20 × 10 mm (?:Volume [\d,.]+ mm³ )?Copy/);
+  assert.doesNotMatch(partText, /\bType\b|\bID\b|o1\.1|Center|Material|Color/);
   assert.equal(await reference.locator('[data-reference-count]').count(), 0, 'one reference has no i/N');
   // Compact rows in the panel's one face: every value is the UI font at the panel's size, never
   // monospace. The Reference opens at every panel's width and its own default cap, shorter than the
@@ -382,7 +401,9 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   assert.doesNotMatch(faces[0], /mono/i);
   assert.match(faces[0], /\| 11px$/);
   const rowHeights = await reference.locator('[data-info-row]').evaluateAll(rows => rows.map(row => row.getBoundingClientRect().height));
-  assert.ok(rowHeights.length >= 4 && rowHeights.every(height => height <= 19 * 2), `compact rows, a line or two each: ${rowHeights}`);
+  assert.ok(rowHeights.length >= 1 && rowHeights.every(height => height <= 19 * 2), `compact rows, a line or two each: ${rowHeights}`);
+  assert.equal(await reference.locator('[data-tool-panel-body]').evaluate(node => node.scrollHeight <= node.clientHeight), true,
+    'the name, the key measurements and the Copy fit the cap it opens with: nothing to scroll to');
   // The Reference is the next panel of the stack, under Features, both at the one width until a person sizes either.
   assert.deepEqual(await view.stack(), ['Features', 'Reference details']);
   const [features, pinned] = await Promise.all([pane.getByRole('region', { name: 'Features', exact: true }).boundingBox(), reference.boundingBox()]);
@@ -407,7 +428,7 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   assert.match((await picker.innerText()).replace(/\s+/g, ' '), /^arm 2\/2$/);
   // Its text is flush with the rows' labels.
   const [nameBox, labelBox] = await Promise.all([picker.locator('[data-reference-label] > span').first().boundingBox(),
-    reference.getByText('Type', { exact: true }).boundingBox()]);
+    reference.getByText('Size', { exact: true }).boundingBox()]);
   assert.ok(Math.abs(nameBox.x - labelBox.x) <= 1, `the picker's text aligns with the row labels: ${nameBox.x} vs ${labelBox.x}`);
   // Hovering it is quiet in either theme — no fill — and moves nothing in the heading.
   for (const dark of [false, true]) {
@@ -472,7 +493,7 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   assert.deepEqual(errors, []);
 });
 
-test('under Faces or Edges, one press on a part whose faces are not loaded loads that part alone and picks what is under the pointer', async () => {
+test('under Faces or Edges, one press on a part whose faces are not loaded loads that part alone and picks what is under the pointer, and an update keeps the mode', async () => {
   const view = await open();
   const { page, pane, at, errors } = view;
   const reference = pane.getByRole('region', { name: 'Reference details', exact: true });
@@ -500,9 +521,10 @@ test('under Faces or Edges, one press on a part whose faces are not loaded loads
   assert.deepEqual(await page.evaluate(() => window.__sawLoading.slice(0, 1)), [0], 'the Features panel said it was loading, before anything was picked');
   assert.equal(await pane.getByRole('region', { name: 'Features', exact: true }).getByText('Loading…').count(), 0, 'and stops once the face is picked');
   assert.equal(await pane.locator('[data-cad-toolbar] [role=status]').count(), 0, 'nothing under the strip says so');
-  // Named by its part as the tree names it and its kind, never by its raw id; the id is a row.
-  assert.match((await reference.innerText()).replace(/\s+/g, ' '), new RegExp(`^base · face ${face.replace(/^.*\.f/, '')} Type Face · Planar ID ${face.replace(/\./g, '\\.')}`),
-    'the Reference names the face under the pointer');
+  // Named by its part as the tree names it and its kind, never by its raw id, which is no row either.
+  const faceText = (await reference.innerText()).replace(/\s+/g, ' ');
+  assert.match(faceText, new RegExp(`^base · face ${face.replace(/^.*\.f/, '')} Area [\\d,.]+ mm² Copy`), 'the Reference names the face under the pointer, over its area');
+  assert.doesNotMatch(faceText, new RegExp(`\\bType\\b|\\bID\\b|${face.replace(/\./g, '\\.')}|Center|Normal|Material`));
   assert.deepEqual((await view.state()).selectedPartIds, [], 'the mode never falls back to the part');
   // Edges likewise, on the arm, whose topology is still not loaded (the panel says so again):
   // its top edge over the +x face.
@@ -512,7 +534,13 @@ test('under Faces or Edges, one press on a part whose faces are not loaded loads
   await page.waitForFunction(() => /^topology\|o1\.2\|edge\|o1\.2\.e\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
   assert.ok(await page.evaluate(() => window.__sawLoading.length) > sawBefore, 'only the pressed part had loaded');
   const edge = (await selected())[0].split('|').at(-1);
-  assert.match((await reference.innerText()).replace(/\s+/g, ' '), new RegExp(`^arm · edge ${edge.replace(/^.*\.e/, '')} Type Edge.*ID ${edge.replace(/\./g, '\\.')}`));
+  const edgeText = (await reference.innerText()).replace(/\s+/g, ' ');
+  assert.match(edgeText, new RegExp(`^arm · edge ${edge.replace(/^.*\.e/, '')} Length [\\d,.]+ mm Copy`), 'its length, the one measurement a straight edge has');
+  assert.doesNotMatch(edgeText, new RegExp(`\\bType\\b|\\bID\\b|${edge.replace(/\./g, '\\.')}`));
+  // An update of the model keeps the mode, and drops what was picked in the revision before it.
+  await view.update();
+  assert.equal(await view.tool('Select').locator('[data-select-mode]').getAttribute('data-select-mode'), 'edges');
+  assert.deepEqual(await selected(), []);
   assert.deepEqual(errors, []);
 });
 
@@ -667,8 +695,8 @@ const MIN_REDRAWN = { render: 30_000, xray: 30_000, 'hidden-line': 30_000, wiref
 test('every Display preset reaches the drawn frame, on the live canvas', async () => {
   const view = await open();
   const { page, errors } = view;
-  // Display is a popover from its button among the view's actions, on top of the cube.
-  await view.toggle('cad-display').click();
+  // Display is a dropdown from its button in the navbar, over the viewport.
+  await view.tool('Display').click();
   const panel = view.displayPanel();
   await panel.waitFor();
   const solid = await restingFrame(view);
@@ -680,7 +708,7 @@ test('every Display preset reaches the drawn frame, on the live canvas', async (
     if (!await panel.isVisible()) await view.tool('Display').click();
     await panel.getByRole('combobox', { name: 'Mode', exact: true }).click();
     await page.getByRole('option', { name: label, exact: true }).click();
-    assert.equal(await panel.isVisible(), true, 'choosing a preset keeps the popover');
+    assert.equal(await panel.isVisible(), true, 'choosing a preset keeps the dropdown');
     await page.waitForFunction(wanted => {
       const state = window.cadHarness.a.controller.readState();
       return state.display.mode === wanted && !state.loading;
@@ -834,12 +862,14 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   assert.equal(await view.tool('Animate').count(), 0);
   assert.equal(await pane.locator('[data-animation-transport]').count(), 0);
   const boxes = names => Promise.all(names.map(name => pane.getByRole('button', { name, exact: true }).boundingBox()));
-  const navbarControls = await boxes(['Settings', 'Preview']);
+  const viewControls = await boxes(['Display', 'Preview']);
   await view.enterPreview();
-  // Preview has the page to itself: the navbar goes, and its corner holds Playback settings and the
-  // way out exactly where Settings and Preview sat in it.
-  await pane.locator('[data-viewer-navbar]').waitFor({ state: 'hidden' });
-  assert.deepEqual(await boxes(['Playback settings', 'Exit preview']), navbarControls);
+  // Preview has the page to itself: the navbar goes, and its corner holds Orbit, then Display and the
+  // way out exactly where Display and Preview sat in the navbar.
+  await pane.locator('[data-viewer-navbar]').waitFor({ state: 'detached' });
+  const [orbitBox, ...cornerBoxes] = await boxes(['Orbit', 'Display', 'Exit preview']);
+  assert.deepEqual(cornerBoxes, viewControls);
+  assert.ok(orbitBox.y === viewControls[0].y && orbitBox.x + orbitBox.width < viewControls[0].x, 'Orbit sits just before Display');
   // The tools are put away, and the playbar is under the model.
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).isVisible(), false);
   const bar = pane.getByRole('toolbar', { name: 'Animation playback' });
@@ -848,11 +878,24 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   await bar.getByRole('button', { name: 'Play animation', exact: true }).waitFor();
   await page.waitForTimeout(300);
   assert.deepEqual((await translations(page))['o1.2'], restArm, 'nothing plays until its play button is pressed');
-  const rest = await view.frame();
-  // Preview puts away prompt actions, leaving only playback controls; its settings are the corner's.
-  assert.deepEqual(await bar.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Play animation']);
+  // Display is preview's too: its dropdown opens from the corner over the file's own settings, an
+  // edit there draws in the preview, and Escape puts it away, preview kept.
+  const edged = await restingFrame(view);
+  await pane.locator('[data-preview-corner]').getByRole('button', { name: 'Display', exact: true }).click();
+  await view.displayPanel().getByRole('button', { name: 'Disable Edges', exact: true }).click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.edges?.enabled === false);
+  await frameWhen(view, shot => differing(edged, shot) > 100, 'drew the preview without its edges');
+  await page.keyboard.press('Escape');
+  await view.displayPanel().waitFor({ state: 'detached' });
+  assert.equal(await pane.getByRole('button', { name: 'Exit preview', exact: true }).isVisible(), true, 'Escape closes Display before preview');
+  await view.display({ edges: { enabled: true } });
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.edges?.enabled === true);
+  const rest = await restingFrame(view);
+  // Preview puts away prompt actions, leaving only playback controls: one routine has no list of
+  // routines, and the routine's settings end the playbar. The view's own are the corner's.
+  assert.deepEqual(await bar.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Play animation', 'Playback settings']);
   assert.deepEqual(await pane.locator('[data-preview-corner]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Playback settings', 'Exit preview']);
+    ['Orbit', 'Display', 'Exit preview']);
   assert.equal(await bar.getByRole('slider', { name: 'Animation time', exact: true }).count(), 1);
   assert.equal(await pane.getByRole('button', { name: 'Quick Edit' }).count(), 0);
 
@@ -971,8 +1014,12 @@ test('Measure reads a distance between two picks', async () => {
 
 // A STEP is published in PIECES, and each piece lands in a scene the viewport already
 // holds: same object, same identity, more in it. The only thing that tells the viewport
-// so is `viewport.commitScene()` from the scene sync, and everything the viewport sizes
-// from the model — the ground, the depth range and the framing — is re-read THEN.
+// so is `viewport.commitScene()` from the scene sync, and what the viewport sizes from what
+// is PLACED — the depth range and the floor's height — is re-read THEN. What it sizes from
+// the model's REST box — the framing, the zoom ruler and the grid — was final at the first
+// publish: the descriptor declares the whole model's box (`bbox`), so the camera does not
+// move while the rest of the model arrives (the owner's report: "the model position jumps
+// around a bit as it is rendering").
 //
 // The committed two-component fixture cannot show this, and neither can any package
 // whose second publish is its LAST: the end of a load changes what the viewport is
@@ -980,7 +1027,7 @@ test('Measure reads a distance between two picks', async () => {
 // costs nothing. `stageProgressiveFixture` serves the same two shapes as twenty-five
 // components, held one batch at a time, so the MIDDLE publish is an in-place change
 // with nothing else moving — and it is the one that brings the base.
-test('a package that arrives in pieces re-sizes its ground, its depth range and its framing on a publish in the middle of the load', async (t) => {
+test('a package that arrives in pieces is framed once, on the box it declares; a publish in the middle of the load re-fits only its depth range and floor', async (t) => {
   const staged = [];
   const staggered = await serveStepHarness({ after: cleanup => staged.push(cleanup) }, { progressive: true });
   t.after(async () => { for (const cleanup of staged.reverse()) await cleanup(); });
@@ -989,15 +1036,24 @@ test('a package that arrives in pieces re-sizes its ground, its depth range and 
   const read = async () => ({ stage: await page.evaluate(() => window.__cadStage()), camera: await page.evaluate(() => window.__cadCamera()) });
   const span = bounds => [0, 1, 2].map(axis => Math.round(bounds.max[axis] - bounds.min[axis]));
   const publishes = () => page.evaluate(() => [window.__cadMeshCost.publishCount, window.__cadMeshCost.loadedComponents, window.__cadMeshCost.final]);
+  // The view a publish must not move: where the camera stands and looks, its zoom and frustum, and the grid.
+  const sameView = (from, to, what) => {
+    for (const key of ['position', 'target', 'up']) from.camera[key].forEach((value, index) => assert.ok(Math.abs(value - to.camera[key][index]) < 1e-6,
+      `${what}: camera ${key}[${index}] held (${value} -> ${to.camera[key][index]})`));
+    assert.deepEqual([to.camera.zoom, to.camera.halfHeight, to.stage.gridRadius], [from.camera.zoom, from.camera.halfHeight, from.stage.gridRadius],
+      `${what}: the zoom, the frustum and the grid held`);
+  };
 
-  // BATCH ONE: eight arms, all at the origin, so this box is one arm's whichever eight
-  // of them got there first. The rest of the package is still downloading.
+  // BATCH ONE: eight arms, all at the origin, so what is placed is one arm's box whichever
+  // eight of them got there first. The rest of the package is still downloading.
   await page.waitForFunction(() => window.__cadMeshCost?.loadedComponents === 8, null, { timeout: 60000 });
   await page.waitForFunction(() => window.__cadStage?.()?.bounds);
+  await restingCamera(page);
   const first = await read();
   const firstFrame = await frame(pane);
   assert.deepEqual(await publishes(), [1, 8, false], 'one publish, and the load is not over');
-  assert.deepEqual(span(first.stage.bounds), [10, 8, 8], 'the arm, and nothing else');
+  assert.deepEqual(span(first.stage.bounds), [10, 8, 8], 'the arm, and nothing else, is placed');
+  assert.deepEqual(span(first.camera.originalBounds), [20, 20, 10], "but the camera is framed on the whole model's declared box");
 
   // BATCH TWO, in the MIDDLE of the load: sixteen more components, one of them the base.
   // Nothing else about the viewport changed — same scene, same loading state, same camera
@@ -1009,44 +1065,30 @@ test('a package that arrives in pieces re-sizes its ground, its depth range and 
   const middleFrame = await frame(pane);
   assert.deepEqual(await publishes(), [2, 24, false], 'a second publish, and STILL not the end of the load');
   assert.deepEqual(span(middle.stage.bounds), [20, 20, 10], 'the base is in the box the stage is fitted to');
-  assert.ok(middle.stage.gridRadius > first.stage.gridRadius * 1.3,
-    `the grid grew with the model (${first.stage.gridRadius} -> ${middle.stage.gridRadius})`);
   assert.ok(middle.stage.floorZ < first.stage.floorZ,
-    `and the floor dropped to the model's new underside (${first.stage.floorZ} -> ${middle.stage.floorZ})`);
+    `the floor dropped to the model's new underside (${first.stage.floorZ} -> ${middle.stage.floorZ})`);
   assert.ok(middle.camera.far > first.camera.far,
     `the depth range was fitted again (far ${first.camera.far} -> ${middle.camera.far})`);
-  // The FRAMING does not follow it, and must not: a model that jumped in the frame every
-  // time a batch landed would be unusable while a large assembly loads. It is framed on
-  // what arrived first, and once more when the scene is whole.
-  assert.equal(middle.camera.halfHeight, first.camera.halfHeight, 'the camera held its frame while the model grew');
-  // On the DRAWN frame: the base's own authored blue fills a frame it was barely in, and
-  // the arm is drawn SMALLER than it was, because the camera pulled back.
+  sameView(first, middle, 'the second publish');
+  // On the DRAWN frame: the base's own authored blue fills a frame it was not in.
   const before = partBoxes(firstFrame), after = partBoxes(middleFrame);
-  const width = box => (box ? box.x1 - box.x0 : 0);
   assert.ok(after.base.count > (before.base?.count || 0) * 5,
     `the base is drawn (${before.base?.count || 0} -> ${after.base.count} pixels of its colour)`);
-  assert.ok(width(after.arm) < width(before.arm) * 0.8,
-    `and the arm shrank as the camera pulled back (${width(before.arm)}px -> ${width(after.arm)}px)`);
   assert.ok(differing(firstFrame, middleFrame) > 10_000, 'the picture changed');
 
-  // THE LAST COMPONENT is one more arm on top of the others, so it places nothing new —
-  // but it makes the scene WHOLE, and that is when the camera frames it again, on the box
-  // the middle publish had already given the stage.
+  // THE LAST COMPONENT is one more arm on top of the others: the scene is whole, and the
+  // camera that framed it whole from the start has nothing to do.
   staggered.release('b');
   await page.waitForFunction(() => window.__cadMeshCost?.final === true, null, { timeout: 60000 });
-  await page.waitForFunction(height => window.__cadCamera().halfHeight > height, first.camera.halfHeight);
+  await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false, null, { timeout: 60000 });
+  await restingCamera(page);
   const whole = await read();
   assert.deepEqual(span(whole.stage.bounds), span(middle.stage.bounds), 'the box it was already fitted to');
-  assert.ok(whole.camera.halfHeight > middle.camera.halfHeight * 1.3,
-    `framed once more, now on the whole model (${middle.camera.halfHeight} -> ${whole.camera.halfHeight})`);
-  const framed = partBoxes(await frame(pane));
-  // (The middle frame's base already fills nearly all of the band this is counted in, so the
-  // shrink it can show here is less than the camera's 1.3× pull-back would suggest.)
-  assert.ok(framed.base && framed.base.count < after.base.count * 0.9,
-    `and it is drawn smaller for it: the base ran off the frame it now sits inside (${after.base.count} -> ${framed.base.count} pixels)`);
+  sameView(first, whole, 'the last publish');
 
-  // Reopening restores the camera the person set: the completion fit exists for a camera
-  // nobody set, and a stored one is the person's.
+  // A descriptor that declares no box is framed on its first batch and once more when it is
+  // whole, but that second framing is for a camera NOBODY set: the camera the person set, kept
+  // with the tab, is restored through every publish and the completion.
   await page.evaluate(() => window.cadHarness.a.controller.setCamera({
     ...window.cadHarness.a.controller.readState().camera, position: [90, -30, 38], target: [4, 1, 0], zoom: 1.6 }));
   await restingCamera(page);
@@ -1056,11 +1098,11 @@ test('a package that arrives in pieces re-sizes its ground, its depth range and 
     'the camera the person set is somewhere the fit never puts it');
   const stored = await page.evaluate(() => JSON.parse(JSON.stringify(window.cadHarness.tabStore.getSnapshot())));
 
-  // Reopened: a fresh page over the same package, held in pieces again, carrying what the last
-  // session left for this file. (A remount would not do: the client still holds every component
-  // it downloaded, so the package would arrive whole in ONE publish and never reach completion
-  // as a second framing at all.)
-  staggered.hold('a'); staggered.hold('b');
+  // Reopened: a fresh page over the same package with no declared box, held in pieces again,
+  // carrying what the last session left for this file. (A remount would not do: the client still
+  // holds every component it downloaded, so the package would arrive whole in ONE publish and
+  // never reach completion as a second framing at all.)
+  staggered.hold('a'); staggered.hold('b'); staggered.declare(false);
   const reopened = await staggered.open({ timeout: 60000, record: stored });
   await reopened.pane.locator('[aria-busy] > div > canvas').first().waitFor();
   await reopened.page.waitForFunction(() => window.__cadMeshCost?.loadedComponents === 8, null, { timeout: 60000 });
@@ -1086,6 +1128,25 @@ test('a package that arrives in pieces re-sizes its ground, its depth range and 
   }
   assert.ok(left < 250, `reopening shows what the person left on screen: ${left} pixels differ`);
   assert.deepEqual(reopened.errors, []);
+  assert.deepEqual(errors, []);
+});
+
+// A warm package's open, request by request: where each component probed the shared cache and
+// read its body alone (twenty-five of each here), a chunk of components shares a probe and a
+// batch of them one read, growing from the loader's first publish of eight.
+test('a warm package opens with a probe per chunk and its bodies in batches, and nothing read one component at a time', async (t) => {
+  const staged = [];
+  const warm = await serveStepHarness({ after: cleanup => staged.push(cleanup) }, { progressive: true, warmCache: true });
+  t.after(async () => { for (const cleanup of staged.reverse()) await cleanup(); });
+  warm.release('a'); warm.release('b');
+  const { page, errors } = await warm.open();
+  await page.waitForFunction(() => window.__cadMeshCost?.final === true && window.__cadMeshCost.loadedComponents === 25);
+  const sent = pattern => warm.requests.filter(request => pattern.test(request)).length;
+  assert.equal(sent(/^POST \/one\/__tess_cache\/probe$/), 3, 'a probe for each chunk: eight, sixteen and the last one');
+  assert.equal(sent(/^POST \/one\/__tess_cache\/batch$/), 3, 'a read for each batch: eight, sixteen and the last one');
+  assert.equal(sent(/^GET \/one\/__tess_cache\//), 0, 'no body read alone');
+  assert.equal(sent(/\/__cad\/surfaces/), 0, 'no surface resolved');
+  assert.equal(sent(/^GET \/one\/__cad\/store\?tree=/), 0, 'no surface read');
   assert.deepEqual(errors, []);
 });
 
@@ -1132,8 +1193,8 @@ test('mobile touch: a tap selects, and a two-finger pinch zooms without selectin
 });
 
 test('a click selects at once, and a double-click ends where it did when a click waited: the part isolated, isolation left, or the face copied and kept, on the selection its first click found', async () => {
-  // The host names its files absolutely, and every copy says so.
-  const view = await open({ init: () => { window.__cadPromptDestination = 'clipboard'; window.__cadReferenceRoot = '/work/models'; } });
+  // Files are named by their absolute paths, and every copy says so.
+  const view = await open({ init: () => { window.__cadPromptDestination = 'clipboard'; } });
   const { page, box, at, errors } = view;
   const selection = () => page.evaluate(() => { const state = window.cadHarness.a.controller.readState();
     return { parts: state.selectedPartIds, refs: state.selectedReferenceIds, isolated: state.isolatedPartIds }; });
@@ -1162,7 +1223,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   // The Reference panel's Copy, at its foot: the selection's reference.
   await view.pane.getByRole('region', { name: 'Reference details', exact: true }).getByRole('button', { name: 'Copy', exact: true }).click();
   await page.waitForFunction(() => window.__clipboardWrites.length === 1);
-  assert.equal(await page.evaluate(() => window.__clipboardWrites[0]), '/work/models/hinge_block.step#o1.2');
+  assert.equal(await page.evaluate(() => window.__clipboardWrites[0]), '/models/hinge_block.step#o1.2');
   await page.evaluate(() => { window.__clipboardWrites = []; });
 
   // A double-click on the base isolates it. Its first click picked the base; the double-click
@@ -1211,7 +1272,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   const armFace = (await selection()).refs;
   assert.equal(armFace.length, 1, `the double-clicked face is the selection: ${JSON.stringify(armFace)}`);
   assert.match(armFace[0], /\|o1\.2\.f\d+$/);
-  assert.match(await page.evaluate(() => window.__clipboardWrites[0]), /^\/work\/models\/hinge_block\.step#o1\.2\.f\d+$/);
+  assert.match(await page.evaluate(() => window.__clipboardWrites[0]), /^\/models\/hinge_block\.step#o1\.2\.f\d+$/);
   // ...also when it was selected already: the two clicks it is made of do not toggle it off.
   await page.mouse.dblclick(...at([15, 0, 4]));
   await page.waitForFunction(() => window.__clipboardWrites.length === 2);
@@ -1245,7 +1306,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   await view.pane.getByRole('region', { name: 'Reference details', exact: true }).getByRole('button', { name: 'Copy All', exact: true }).click();
   await page.waitForFunction(() => window.__clipboardWrites.length === 5);
   const copiedSelection = parseCadRefToken(await page.evaluate(() => window.__clipboardWrites[4]));
-  assert.equal(copiedSelection.cadPath, '/work/models/hinge_block.step');
+  assert.equal(copiedSelection.cadPath, '/models/hinge_block.step');
   assert.deepEqual([...copiedSelection.selectors].sort(), both.map(reference => reference.split('|').at(-1)).sort());
 
   // Hover is untouched: under Faces the face under the pointer lights, under Edges the edge does.
@@ -1342,8 +1403,8 @@ test('a reload of the tab brings back the view — camera, Display, Clip, Explod
   await page.evaluate(() => window.cadHarness.a.controller.setCamera({ ...window.cadHarness.a.controller.readState().camera, position: [60, -20, 25], target: [4, 1, 0], zoom: 1.3 }));
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {})[0]?.camera?.zoom === 1.3);
   const left = await view.state();
-  // Where the explosion put every part, to be found in the same place after the reload.
-  const explodedLeft = await translations(page);
+  // Where the explosion put every part once it has eased out, to be found in the same place after the reload.
+  const explodedLeft = await restingLayout(page, posed);
   // The tree as isolation shows it: the base's rows, opened.
   const rowsLeft = await view.rows();
   assert.ok(rowsLeft.length > 1, `the tree has the base's rows before the reload: ${rowsLeft.join(', ')}`);
@@ -1358,13 +1419,13 @@ test('a reload of the tab brings back the view — camera, Display, Clip, Explod
   assert.deepEqual([back.display.mode, back.display.clip.enabled, back.display.clip.axis, back.display.exploded.enabled, back.display.exploded.amount],
     ['wireframe', true, 'x', true, 0.3], 'the Display settings, Clip and Explode come back');
   // An explosion restored on load lays the parts out exactly as the live one did: it is centred on
-  // the rest placement, so the restored camera still frames the same picture.
-  const sameLayout = async () => {
-    const now = await translations(page);
-    return Object.keys(explodedLeft).every(id => now[id] && explodedLeft[id].every((value, axis) => Math.abs(value - now[id][axis]) < 1e-6));
-  };
-  for (let tries = 0; tries < 20 && !(await sameLayout()); tries += 1) await page.waitForTimeout(100);
-  assert.ok(await sameLayout(), `every exploded part comes back where it was: ${JSON.stringify({ before: explodedLeft, after: await translations(page) })}`);
+  // the rest placement, so the restored camera still frames the same picture. It is laid out once
+  // the model is drawn again, so it is awaited, on the page's frames.
+  const laidOut = await page.waitForFunction(left => {
+    const now = Object.fromEntries(window.__cadDisplayRecords().map(record => [record.partId, record.matrix.slice(12, 15)]));
+    return Object.keys(left).every(id => now[id] && left[id].every((value, axis) => Math.abs(value - now[id][axis]) < 1e-6));
+  }, explodedLeft, { polling: 'raf', timeout: 30_000 }).then(() => true, () => false);
+  assert.ok(laidOut, `every exploded part comes back where it was: ${JSON.stringify({ before: explodedLeft, after: await translations(page) })}`);
   assert.deepEqual([back.hiddenPartIds, back.isolatedPartIds.length], [['o1.2'], 1], 'the hidden and the isolated parts come back');
   assert.deepEqual(await view.rows(), rowsLeft, 'the tree comes back as it was, expanded');
   assert.deepEqual([back.selectedPartIds, back.selectedReferenceIds], [[], []], 'the selection does not');

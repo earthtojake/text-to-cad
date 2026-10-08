@@ -34,6 +34,11 @@ __all__ = ["JobLedger", "RETAIN_SECONDS", "declared_outputs", "failure_message"]
 
 RETAIN_SECONDS = 120.0
 _RUNNING = ("submitted", "queued", "building")
+# What a job keeps of a build's preview and saved results: the source result's
+# tree, and the saved document's tree and digest, which the viewer's status reads
+# to tell whether the file moved on (``viewer.preview``). A status carries no
+# geometry or annotations, so nothing else is kept.
+_KEPT_RESULT_FIELDS = {"preview": ("tree",), "saved": ("tree", "documentHash")}
 
 # The two shapes a failed job's stderr ends in: the CLI's own failure line
 # (``[cadgen step compile] FAILED: RuntimeError: ...``) or, under --verbose, a raw
@@ -108,6 +113,23 @@ class JobLedger:
         self._retain = float(retain_seconds)
         self._clock = clock
         self.epoch = uuid.uuid4().hex
+        # What each subject declared the last time its declarations could be read.
+        self._last_declared: dict[str, list[str]] = {}
+        self._last_declared_guard = threading.Lock()
+
+    def _declared_outputs(self, subject: str, tool: str) -> list[str]:
+        """:func:`declared_outputs`, or, when the script no longer imports (an edit broke a
+        helper), what it declared the last time it did: the job is still listed against the
+        documents its script writes, so its failure reaches whoever shows them. Never a
+        guess at the source: only what the script itself declared, in this process."""
+        outputs = declared_outputs(subject, tool)
+        if not subject:
+            return outputs
+        with self._last_declared_guard:
+            if outputs:
+                self._last_declared[subject] = list(outputs)
+                return outputs
+            return list(self._last_declared.get(subject, ()))
 
     # --- lifecycle -------------------------------------------------------------
 
@@ -126,7 +148,7 @@ class JobLedger:
             "tool": str(tool),
             "editingProducer": bool(editing_producer),
             "subject": subject,
-            "outputs": [] if tool == "artifact" else declared_outputs(subject, str(tool)),
+            "outputs": [] if tool == "artifact" else self._declared_outputs(subject, str(tool)),
             "argv": [str(a) for a in (argv or [])],
             "state": "submitted",
             "phase": None,
@@ -180,6 +202,26 @@ class JobLedger:
                 job["updatedAt"] = self._clock()
                 self._notify(job)
 
+    def waiting(self, job: dict[str, Any], detail: str | None) -> None:
+        """What a job waits on before it has a worker (``detail``), or None once it has one.
+
+        The daemon's own wait, which nothing the job runs can report: a worker being
+        started for it (``server._handle_request``). The job reads as queued, with the
+        wait as its detail -- the line the CAD Viewer's loading screen shows under its
+        label -- rather than as a bare submission.
+        """
+        with self._guard:
+            if job["state"] not in ("submitted", "queued"):
+                return
+            if detail:
+                job.update(state="queued", phase="queued", detail=str(detail))
+            elif job["phase"] == "queued":
+                job.update(phase=None, detail="")
+            else:
+                return
+            job["updatedAt"] = self._clock()
+            self._notify(job)
+
     def accept_editing_producer(self, job: dict[str, Any]) -> None:
         """Only a coalescing request that owns the work advances edit ordering."""
         with self._guard:
@@ -219,7 +261,7 @@ class JobLedger:
                     "id": f"{self.epoch}:job-{sequence}", "epoch": self.epoch,
                     "sequence": sequence, "storeRoot": "", "announced": True,
                     "tool": "run", "subject": model,
-                    "outputs": declared_outputs(model, "run"), "argv": [], "state": "submitted",
+                    "outputs": self._declared_outputs(model, "run"), "argv": [], "state": "submitted",
                     "phase": None, "detail": "", "done": None, "total": None, "startedAt": now,
                     "updatedAt": now, "finishedAt": None, "exit": None, "error": None,
                 }
@@ -249,7 +291,7 @@ class JobLedger:
             result = event.get("sourceResult")
             if isinstance(result, dict) and result.get("model") and result.get("tree"):
                 job.setdefault("sourceResults", {}).setdefault(str(result["model"]), copy.deepcopy(result))
-            for field in ("preview", "saved"):
+            for field, kept in _KEPT_RESULT_FIELDS.items():
                 payload = event.get(field)
                 if not isinstance(payload, dict) or not payload.get("output") or not payload.get("tree"):
                     continue
@@ -258,7 +300,8 @@ class JobLedger:
                 ordinal = int(event.get("sequence") or 0)
                 previous = updates.get(output)
                 if previous is None or ordinal > int(previous.get("sequence") or 0):
-                    updates[output] = {**copy.deepcopy(payload), "output": output, "sequence": ordinal}
+                    updates[output] = {**{key: str(payload[key]) for key in kept if payload.get(key)},
+                                       "output": output, "sequence": ordinal}
                 if output not in job["outputs"]:
                     job["outputs"].append(output)
             job["updatedAt"] = now

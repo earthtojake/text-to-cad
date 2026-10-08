@@ -2,7 +2,7 @@
   "name": "@text-to-cad/mcp",
   "private": true,
   "type": "module",
-  "version": "0.7.10",
+  "version": "0.7.17",
   "scripts": {
     "build": "vite build",
     "test": "node scripts/run-tests.mjs",
@@ -18,10 +18,12 @@
     "three": "0.186.1"
   },
   "devDependencies": {
+    "@jridgewell/remapping": "^2.3.5",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/react": "16.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "jsdom": "30.1.1",
+    "magic-string": "^0.30.21",
     "tailwindcss": "^4.2.2",
     "vite": "^8.3.0",
     "vitest": "5.0.1"

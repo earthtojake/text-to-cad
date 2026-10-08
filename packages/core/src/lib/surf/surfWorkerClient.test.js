@@ -652,6 +652,55 @@ test("aborting synchronous work replaces only its worker and preserves unrelated
   }
 });
 
+test("bytes a batched read already holds are posted without a read, and a tier already probed is not probed again", async (t) => {
+  const created = [];
+  class FakeWorker {
+    constructor() { this.listeners = {}; this.messages = []; created.push(this); }
+    addEventListener(type, handler) { this.listeners[type] = handler; }
+    postMessage(message, transfer) { this.messages.push({ message, transfer }); }
+    terminate() {}
+  }
+  const reads = [];
+  setTessellationCacheProvider({
+    async probeMany(keys) { reads.push("probe"); return keys.map(() => null); },
+    async getProbed() { reads.push("body"); return null; },
+    async put() {},
+  });
+  t.after(() => setTessellationCacheProvider(null));
+  const savedWorker = globalThis.Worker;
+  globalThis.Worker = FakeWorker;
+  const answer = (url) => {
+    const worker = created.find((candidate) => candidate.messages.some(({ message }) => message.url === url));
+    const { message, transfer } = worker.messages.find((posted) => posted.message.url === url);
+    worker.listeners.message({ data: { id: message.id, ok: true, meshData: { parts: [url] } } });
+    return { message, transfer };
+  };
+  try {
+    const entry = new Uint8Array([1, 2, 3, 4]);
+    const held = loadSurfComponentInWorker("http://x/held.surf", { identity: { ...CACHE_IDENTITY, tessellationEntry: entry } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const posted = answer("http://x/held.surf");
+    await held;
+    assert.equal(posted.message.cachedEntry, entry);
+    assert.deepEqual(posted.transfer, [entry.buffer], "its own buffer travels to the worker");
+    const probed = loadSurfComponentInWorker("http://x/probed.surf", { identity: { ...CACHE_IDENTITY, tessellationProbed: true } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const miss = answer("http://x/probed.surf");
+    await probed;
+    assert.equal(miss.message.cachedEntry, undefined);
+    assert.equal(miss.message.wantEntry, true, "the miss still comes back to be written");
+    assert.deepEqual(reads, [], "neither request read the cache");
+    const unprobed = loadSurfComponentInWorker("http://x/unprobed.surf", { identity: CACHE_IDENTITY });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    answer("http://x/unprobed.surf");
+    await unprobed;
+    assert.deepEqual(reads, ["probe"], "one with neither probes as before");
+  } finally {
+    reclaimIdleSurfWorkers();
+    globalThis.Worker = savedWorker;
+  }
+});
+
 test("a pending warm-cache lookup does not occupy a worker slot", async (t) => {
   const created = [];
   class FakeWorker {
@@ -865,4 +914,27 @@ test('custom resource transfers begin only when a worker slot is reserved', asyn
     await new Promise(resolve => setImmediate(resolve));
   }
   await Promise.all(pending);
+});
+
+// A part that opened from the tessellation cache has no SURF URL until its surface is resolved, and
+// the viewport's refinement asks for its next level with that empty URL first, the cache being the
+// cheap way there. A miss used to hand the worker a ticket for "", which read the page's own
+// address: in the CAD app, a cad_http GET of its sandbox page, answered 404 (43 per hypercar open).
+test("a miss with no SURF URL fails as not ready, reading nothing", async (t) => {
+  const created = [];
+  class FakeWorker {
+    constructor() { this.messages = []; created.push(this); }
+    addEventListener() {}
+    postMessage(message) { this.messages.push(message); }
+    terminate() {}
+  }
+  setTessellationCacheProvider({ async probeMany(keys) { return keys.map(() => null); }, async getProbed() { return null; }, async put() {} });
+  const savedWorker = globalThis.Worker;
+  globalThis.Worker = FakeWorker;
+  t.after(() => { reclaimIdleSurfWorkers(); globalThis.Worker = savedWorker; setTessellationCacheProvider(null); });
+  const tickets = [];
+  const resources = { workerTicket: (url) => { tickets.push(url); return Promise.resolve({ kind: "url", url }); } };
+  await assert.rejects(loadSurfComponentInWorker("", { resources, identity: CACHE_IDENTITY }), /not ready/);
+  assert.deepEqual(tickets, [], "no ticket for an empty URL");
+  assert.deepEqual(created.flatMap((worker) => worker.messages), [], "no worker was asked");
 });

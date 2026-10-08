@@ -9,6 +9,7 @@ import importlib.machinery
 import importlib.util
 from pathlib import Path
 import sys
+import threading
 from typing import Iterator
 from typing import Sequence
 
@@ -55,6 +56,25 @@ def package_context(script_path: Path) -> tuple[str | None, Path | None]:
     if not parts:
         return None, None
     return ".".join(reversed(parts)), folder
+
+
+_MODULE_LOAD_LOCK = threading.RLock()
+
+
+def _seat_import_roots(search_paths: Sequence[str]) -> None:
+    """Put a script's import roots at the front of sys.path, in order, even when an
+    earlier load already put them on it.
+
+    A warm process (the daemon reading declarations, the viewer) loads scripts from
+    many projects, and every project names its helpers `lib`. Evicting another
+    project's `lib` makes Python look `lib` up again, along sys.path: a root that an
+    earlier load left AHEAD of this script's own resolves it to that project's folder.
+    Nothing is taken away: a script loaded inside a build (cadgen.sources) must not
+    pull its caller's folder out from under the caller's own later imports."""
+    for candidate in reversed(search_paths):
+        with contextlib.suppress(ValueError):
+            sys.path.remove(candidate)
+        sys.path.insert(0, candidate)
 
 
 def _load_generator_module(script_path: Path) -> object:
@@ -107,32 +127,32 @@ def _load_generator_module(script_path: Path) -> object:
     search_paths = import_roots(resolved_script_path)
     if package_root is not None:
         search_paths = [*search_paths, str(package_root)]
-    for candidate in reversed(search_paths):
-        if candidate not in sys.path:
-            sys.path.insert(0, candidate)
 
-    # Another project's modules must not be importable-by-cache here: every
-    # cad-project shares the same top-level names (`lib`, sibling models), so a
-    # warm process that built project A would hand project B a stale `lib`
-    # bound to A's directory. Path-aware eviction at the ONE load choke point
-    # makes "which project's lib" unambiguous for every caller.
     from cadgen._internal.source_hash import evict_foreign_first_party_modules
-
-    evict_foreign_first_party_modules(search_paths)
-    if package is not None:
-        # The parent packages must exist for a relative import to resolve.
-        importlib.import_module(package)
-        module.__package__ = package
-    sys.modules[module_name] = module
-    # What the module top executes is what its declarations were evaluated from;
-    # the metadata reader reuses this load only while every one of those files
-    # still holds the bytes it had now (cadgen.authoring.import_closure_current).
     from cadgen._internal.source_hash import record_first_party_execution
     from cadgen.authoring import record_import_closure
 
-    with record_first_party_execution() as executed_files:
-        exec(source_code, module.__dict__)
-    record_import_closure(resolved_script_path, executed_files)
+    # One load at a time per process: the daemon's relay threads read several
+    # scripts' declarations at once, and sys.path and sys.modules are shared.
+    with _MODULE_LOAD_LOCK:
+        _seat_import_roots(search_paths)
+        # Another project's modules must not be importable-by-cache here: every
+        # cad-project shares the same top-level names (`lib`, sibling models), so a
+        # warm process that built project A would hand project B a stale `lib`
+        # bound to A's directory. Path-aware eviction at the ONE load choke point
+        # makes "which project's lib" unambiguous for every caller.
+        evict_foreign_first_party_modules(search_paths)
+        if package is not None:
+            # The parent packages must exist for a relative import to resolve.
+            importlib.import_module(package)
+            module.__package__ = package
+        sys.modules[module_name] = module
+        # What the module top executes is what its declarations were evaluated from;
+        # the metadata reader reuses this load only while every one of those files
+        # still holds the bytes it had now (cadgen.authoring.import_closure_current).
+        with record_first_party_execution() as executed_files:
+            exec(source_code, module.__dict__)
+        record_import_closure(resolved_script_path, executed_files)
 
     return module
 

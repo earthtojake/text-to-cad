@@ -124,6 +124,8 @@ class GeneratedStepResult:
     scene: LoadedStepScene | None
     selector_bundle: SelectorBundle | None = None
     tree: str | None = None
+    # The saved STEP was kept, not written: its writer input was unchanged.
+    step_kept: bool = False
 
 
 def _cli_progress_line(

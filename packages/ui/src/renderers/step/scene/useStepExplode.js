@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { createHeightSchedule } from "@text-to-cad/core/common/studioContactShadow.js";
 import {
   applyExplodedViewProgress, clearExplodedViewRecords, computeExplodedViewLayout, easeExplodedViewProgress
 } from "@text-to-cad/core/lib/viewer/explodedView.js";
@@ -8,6 +9,12 @@ import { clamp } from "../../kit/camera/viewportCameraKit.js";
 import { inactiveExplodedViewNeedsReset } from "../render/explodedViewLifecycle.js";
 
 const EXPLODED_VIEW_ANIMATION_DURATION_MS = 1000;
+/** While the explosion eases, the stage follows it at most this often (`createExplodedStage`). */
+const EXPLODED_STAGE_INTERVAL_MS = 100;
+
+const clockNow = () => (typeof performance !== "undefined" && typeof performance.now === "function"
+  ? performance.now()
+  : Date.now());
 
 function cancelExplodedViewAnimation(animationRef) {
   const animation = animationRef?.current;
@@ -28,6 +35,39 @@ export function displayRecordExplodedViewTranslation(THREE, record) {
     toNumber(elements[13]),
     toNumber(elements[14])
   );
+}
+
+/**
+ * The stage follows the parts to where they are drawn, as it follows a pose (`useStepPose`):
+ * the lights, the key's shadow and the depth range are fitted to the box the explosion fills
+ * (`refit`: the scene's bounds, then `syncSceneBounds`), while the floor keeps its rest
+ * footprint. The pose pass refits it too, but it runs before this layer in a commit, so on its
+ * own the stage stayed fitted to the model as it was before the explosion moved it.
+ *
+ * Where the explosion comes to rest (`settled`: a snap of the slider, the end of an ease, a
+ * collapse to rest) the stage is refitted at once, so at rest it always holds the box the parts
+ * fill. A refit is cheap, under a millisecond for the hypercar's 1,450 records; a frame is not,
+ * and a refit owed to a timer draws a frame of its own, in the middle of a slider drag. An ease
+ * steps every frame for a second or two, so it is followed at most every `interval` ms
+ * (`eased`), a step that comes sooner owed a refit when the interval is up, of wherever the
+ * parts are by then: the floor shadow's schedule (`createHeightSchedule`).
+ */
+function createExplodedStage(refit, interval = EXPLODED_STAGE_INTERVAL_MS) {
+  const follow = () => {
+    refit();
+    schedule.rendered();
+  };
+  const schedule = createHeightSchedule({ interval, requestFrame: follow });
+  return {
+    eased() {
+      if (schedule.due()) follow();
+    },
+    settled: follow,
+    /** No refit is owed any more: the scene it was owed to is going away. */
+    cancel() {
+      schedule.dispose();
+    }
+  };
 }
 
 function applyExplodedViewRuntimeProgress(runtime, layout, progress) {
@@ -64,11 +104,27 @@ export function useStepExplode(layers) {
   const meshGeometrySource = meshData?.geometrySource && typeof meshData.geometrySource === "object"
     ? meshData.geometrySource
     : meshData;
+  // A refit owed when the interval is up runs outside this render: it reads the viewport then.
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
+  const stageRef = useRef(null);
+  stageRef.current ||= createExplodedStage(() => {
+    const { runtimeRef: currentRuntimeRef, syncSceneBounds } = viewportRef.current;
+    const runtime = currentRuntimeRef.current;
+    if (!runtime?.cadScene) return;
+    runtime.cadScene.refreshBounds?.();
+    syncSceneBounds?.();
+    runtime.requestRender?.();
+  });
+  useEffect(() => () => stageRef.current.cancel(), []);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
     const animation = explodedViewAnimationRef.current;
+    const stage = stageRef.current;
     cancelExplodedViewAnimation(explodedViewAnimationRef);
+    const interruptedEase = animation.ease;
+    animation.ease = null;
 
     if (
       !runtime?.THREE ||
@@ -80,6 +136,7 @@ export function useStepExplode(layers) {
       animation.modelKey = "";
       animation.enabled = false;
       animation.layout = null;
+      stage.cancel();
       return undefined;
     }
 
@@ -94,10 +151,16 @@ export function useStepExplode(layers) {
     const wasEnabled = animation.enabled === true;
     animation.modelKey = animationModelKey;
     animation.enabled = explodedViewActive;
+    // An ease outlives a run that changes nothing it eases. The scene sync answers the commit that
+    // turns the view on or off with a new `displayRecordsToken`, which runs this effect again a
+    // frame or two into the ease; snapping to the target there ended every ease before it showed.
+    // It carries on toward the same target, over the records as they are now. A new target (an
+    // amount, the other direction) or another model still ends it.
+    const resumeEase = Boolean(interruptedEase && !modelChanged && Math.abs(interruptedEase.target - targetProgress) <= 1e-4);
 
     // Steady disabled state: nothing to evaluate. (When disabling from an
     // exploded state we still evaluate below so the collapse animates.)
-    if (!explodedViewActive && !wasEnabled) {
+    if (!explodedViewActive && !wasEnabled && !resumeEase) {
       if (!inactiveExplodedViewNeedsReset(animation, runtime.displayRecords)) {
         animation.layout = null;
         return undefined;
@@ -107,6 +170,7 @@ export function useStepExplode(layers) {
         applyDisplayRecordTransform(THREE, record);
       }
       syncRecordTopologyDisplayEdgeTransforms(runtime, runtime.displayRecords);
+      stage.settled();
       setExplodedViewPoseTick((tick) => tick + 1);
       runtime.requestRender?.();
       animation.progress = 0;
@@ -126,10 +190,43 @@ export function useStepExplode(layers) {
         applyDisplayRecordTransform(THREE, record);
       }
       syncRecordTopologyDisplayEdgeTransforms(runtime, runtime.displayRecords);
+      stage.settled();
       setExplodedViewPoseTick((tick) => tick + 1);
       runtime.requestRender?.();
       animation.progress = 0;
       return undefined;
+    }
+
+    // Ease `timeline` ({ start, target, startedAt, durationMs }) from where it is now: its first
+    // step is applied at once, so fresh records are never drawn at rest in between.
+    const ease = (timeline) => {
+      animation.ease = timeline;
+      const advance = (now) => {
+        const linearProgress = clamp((now - timeline.startedAt) / timeline.durationMs, 0, 1);
+        const eased = easeExplodedViewProgress(linearProgress);
+        const progress = timeline.start + (timeline.target - timeline.start) * eased;
+        animation.progress = progress;
+        applyExplodedViewRuntimeProgress(runtime, layout, progress);
+        if (linearProgress < 1) {
+          stage.eased();
+          animation.rafId = window.requestAnimationFrame((timestamp) => (
+            advance(Number.isFinite(Number(timestamp)) ? Number(timestamp) : clockNow())
+          ));
+          return;
+        }
+        stage.settled();
+        animation.rafId = 0;
+        animation.ease = null;
+        animation.progress = timeline.target;
+        setExplodedViewPoseTick((tick) => tick + 1);
+      };
+      advance(clockNow());
+      return () => {
+        cancelExplodedViewAnimation(explodedViewAnimationRef);
+      };
+    };
+    if (resumeEase) {
+      return ease(interruptedEase);
     }
 
     // Animate only the enable/disable transition (explode/collapse). Amount
@@ -141,6 +238,7 @@ export function useStepExplode(layers) {
     if (!shouldAnimate) {
       animation.progress = targetProgress;
       applyExplodedViewRuntimeProgress(runtime, layout, targetProgress);
+      stage.settled();
       setExplodedViewPoseTick((tick) => tick + 1);
       return undefined;
     }
@@ -149,31 +247,7 @@ export function useStepExplode(layers) {
     // still reads at a calm pace.
     const durationMs = EXPLODED_VIEW_ANIMATION_DURATION_MS
       * (1 + 0.35 * Math.max(layout.levelCount - 1, 0));
-    const startedAt = typeof performance !== "undefined" && typeof performance.now === "function"
-      ? performance.now()
-      : Date.now();
-    applyExplodedViewRuntimeProgress(runtime, layout, startProgress);
-
-    const step = (timestamp) => {
-      const now = Number.isFinite(Number(timestamp)) ? Number(timestamp) : Date.now();
-      const linearProgress = clamp((now - startedAt) / durationMs, 0, 1);
-      const eased = easeExplodedViewProgress(linearProgress);
-      const progress = startProgress + (targetProgress - startProgress) * eased;
-      animation.progress = progress;
-      applyExplodedViewRuntimeProgress(runtime, layout, progress);
-      if (linearProgress < 1) {
-        animation.rafId = window.requestAnimationFrame(step);
-      } else {
-        animation.rafId = 0;
-        animation.progress = targetProgress;
-        setExplodedViewPoseTick((tick) => tick + 1);
-      }
-    };
-
-    animation.rafId = window.requestAnimationFrame(step);
-    return () => {
-      cancelExplodedViewAnimation(explodedViewAnimationRef);
-    };
+    return ease({ start: startProgress, target: targetProgress, startedAt: clockNow(), durationMs });
   }, [
     explodedViewActive,
     explodeAmount,

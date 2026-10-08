@@ -29,6 +29,9 @@ function nextLinkNames(current, name, multiSelect) {
  * A link is named by the description, so its selection survives a rebuilt scene; an
  * object's id belongs to one built scene and does not.
  *
+ * `requestRender` asks the viewport for the frame that shows a changed highlight; a highlight
+ * moves and reshapes nothing, so the renderer hands one that keeps the shadow maps.
+ *
  * @param {{ scene: object | null, requestRender: () => void }} options
  */
 export function useLinkSelection({ scene, requestRender }) {

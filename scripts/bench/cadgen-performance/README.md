@@ -1,8 +1,8 @@
 # Performance benchmarks
 
-Manual commands for three distinct measurements: warm model execution, adaptive
-viewer loading, and viewer lifecycle costs. Each measures one phase; none of
-them is an end-to-end CLI or browser timing.
+Manual commands for four distinct measurements: the edits an agent makes,
+end to end; warm model execution in one interpreter; adaptive viewer loading;
+and viewer lifecycle costs.
 
 Run from the repository root after installing the development dependencies in
 `CONTRIBUTING.md`. Use a disposable model copy and a dedicated store. Run only
@@ -11,8 +11,46 @@ and quality settings when comparing results.
 
 Reports, logs, profiles and screenshots belong in ignored `tmp/` directories.
 CAD inputs and generated geometry for these manual benchmarks belong under
-`models/tmp/`. These commands are not automated tests and do not run in CI.
+`models/tmp/` or a scratch folder outside the checkout. These commands are not
+automated tests and do not run in CI.
 Automated tests generate their own fixtures independently of `models/`.
+
+## Agent edits, end to end
+
+`agent_edits.py` times what an agent waits for after each kind of edit: one
+`python <model>.py --json --verbose` client per run, against a private warm
+daemon and a dedicated store. An unmeasured forced rebuild of the top model
+starts the daemon. Then, from a current baseline, each iteration runs `noop`;
+`comment` (a comment appended to the leaf source); `leaf` (a dimension edit in
+a leaf part, so the leaf and its parents rebuild) and `revert-leaf`; `parent`
+(a parent-only edit, such as a placement literal) and `revert-parent`; and
+`label` (a label-only edit) and `revert-label`. Each `--*-to` value is used by
+one iteration, so every edit is new to the store and every revert returns to
+sources it has built. Point it at a disposable copy of a project: it edits the
+sources and restores them in `finally`.
+
+```sh
+./.venv/bin/python scripts/bench/cadgen-performance/agent_edits.py \
+  --configuration main --model /tmp/bench/moonwatch/src/moonwatch.py \
+  --store /tmp/bench/store --daemon-socket /tmp/bench.sock \
+  --cadgen-src packages/cadgen/src --node-bin ~/.nvm/versions/node/v22.22.0/bin \
+  --leaf-model /tmp/bench/moonwatch/src/lib/dial.py \
+  --leaf-from 'INDEX_RAISE = 0.18' --leaf-to 'INDEX_RAISE = 0.19' --leaf-to 'INDEX_RAISE = 0.2' \
+  --parent-from 'MOVT_Z_OFFSET), (1' --parent-to 'MOVT_Z_OFFSET + 0.01), (1' \
+  --parent-to 'MOVT_Z_OFFSET + 0.02), (1' \
+  --label-from 'label="moonwatch")' --label-to 'label="watch")' --label-to 'label="moonwatch_2")' \
+  --report tmp/cadgen-performance/moonwatch-main.json --iterations 2
+```
+
+`--parent-*` and `--label-*` are optional (a single part has no parent).
+Each run records its wall time; which models built, with each model's seconds
+between its build-tree phases; the root's `--verbose` stages; the one-minute
+load average around it; and the sha256 of every STEP under the project, so a
+configuration that skips work can be checked for identical bytes. On a shared
+machine, `--max-load 8` waits for other work to settle before each run.
+`--compare A.json B.json` prints the medians of several reports side by side.
+Compare checkouts with a store, socket and project copy each; `--cadgen-src`
+selects the cadgen that runs.
 
 ## Warm model execution
 

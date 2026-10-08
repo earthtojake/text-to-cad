@@ -41,7 +41,7 @@ import { cos, sin } from "./trig.js";
 // cadgen/store/meshes.py, which is the one that builds and validates the key —
 // bumping only the first leaves the store rejecting every entry the new
 // algorithm writes.
-export const TESSELLATION_VERSION = 5;
+export const TESSELLATION_VERSION = 9;
 
 export const DEFAULT_OPTIONS = {
   // Max 3D distance between the surface and a triangle edge midpoint,
@@ -118,6 +118,9 @@ function sampleLoopPolygon(face, loop, floats, tolerance, sharedEdges) {
         else if (Math.abs(uv[d] - hi) <= epsilon) uv[d] = hi;
       }
     }
+    // An edge that is one point in this face's parameters (one shorter than its
+    // Float32 pcurve can resolve) adds no segment: its neighbours meet there.
+    if (segment.every((uv) => uv[0] === segment[0][0] && uv[1] === segment[0][1])) continue;
     if (!forward) {
       segment.reverse();
       fractions?.reverse();
@@ -435,6 +438,36 @@ function polygonArea(points) {
   return area / 2;
 }
 
+// The shared-edge segments (their segmentMeta) of a set of closed loops that
+// properly cross another segment of any of the loops. Segments meeting at an
+// end do not count: consecutive segments share one, and so do two loops that
+// touch at a corner. A sweep over the segments' u extents keeps it near linear
+// for the long, mostly disjoint loops of real faces.
+function crossingSegments(loops) {
+  const segments = [];
+  for (const points of loops) {
+    for (let i = 0; i < points.length; i += 1) {
+      const p = points[i];
+      const q = points[(i + 1) % points.length];
+      segments.push({ p, q, lo: Math.min(p[0], q[0]), hi: Math.max(p[0], q[0]), meta: points.segmentMeta?.[i] ?? null });
+    }
+  }
+  segments.sort((x, y) => x.lo - y.lo);
+  const side = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const crossing = new Set();
+  for (let i = 0; i < segments.length; i += 1) {
+    const s = segments[i];
+    for (let j = i + 1; j < segments.length && segments[j].lo <= s.hi; j += 1) {
+      const t = segments[j];
+      if (side(s.p, s.q, t.p) * side(s.p, s.q, t.q) < 0 && side(t.p, t.q, s.p) * side(t.p, t.q, s.q) < 0) {
+        if (s.meta) crossing.add(s.meta);
+        if (t.meta) crossing.add(t.meta);
+      }
+    }
+  }
+  return crossing;
+}
+
 // --- Grid triangulation ------------------------------------------------------
 
 function gridStepsForDirection(face, floats, uvBox, chordLimit, direction) {
@@ -719,9 +752,11 @@ function gridTriangulate(face, floats, loops, chordLimit, angleLimit = Infinity,
 // cylinder, and 3D angles across a chord through the solid would pick
 // diagonals that have nothing to do with the surface. A fixed affine image of
 // uv is a plane, so this is ordinary Delaunay flipping, which terminates.
-// A flip happens only when the quad is strictly convex in uv, so both new
-// triangles keep the old orientation and stay inside the two they replace —
-// inside the face. Boundary edges (used once) are never touched.
+// A flip happens only when both new triangles are non-degenerate with the
+// face's winding — the quad is strictly convex in uv, or one of the two was a
+// collinear sliver whose middle corner lies on the shared edge — so they stay
+// inside the two they replace: inside the face. Boundary edges (used once) are
+// never touched.
 function flipSlivers(face, floats, uvVerts, triangles, degenerateLimit) {
   let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
   for (const [u, v] of uvVerts) {
@@ -812,7 +847,19 @@ function flipSlivers(face, floats, uvVerts, triangles, degenerateLimit) {
     // (a, b, c) and (b, a, d) keep their winding as (a, d, c) and (d, b, c):
     // the quad a-d-b-c is strictly convex iff both are non-degenerate with the
     // original sign.
-    const sign = Math.sign(orient(a, b, c));
+    //
+    // The face's winding is read from whichever of the two triangles has more
+    // area. A sliver of three consecutive trim points along a trim that lies ON
+    // a grid line (a fillet ring whose edge is the end of its uv box, issue
+    // #555) is snapped exactly collinear by vertexId: it has no sign of its own,
+    // c lies on (a, b), and flipping it to (a, d, c) and (d, b, c) is precisely
+    // what removes it. Read from the sliver, the sign was 0 and no such flip
+    // ever happened; the slivers stayed, refinement split them along the trim
+    // into stacks of overlapping zero-area triangles, and pinning those to the
+    // model edge folded the face over itself.
+    const first = orient(a, b, c);
+    const second = orient(b, a, d);
+    const sign = Math.sign(Math.abs(first) >= Math.abs(second) ? first : second);
     if (!sign || sign * orient(a, d, c) <= degenerateLimit || sign * orient(d, b, c) <= degenerateLimit) continue;
     disown(t1);
     disown(t2);
@@ -909,7 +956,9 @@ function attributeBoundaryEdges(triangles, uvVerts, segmentIndex, epsilon) {
 
 export function tessellateFace(face, floats, scale, options = {}) {
   const raw = tessellateFaceRaw(face, floats, scale, options, null);
-  return raw ? finalizeFaceMesh(face, raw) : null;
+  if (!raw) return null;
+  raw.triangles = dropFloat32Collapsed(raw.triangles, raw.xyz);
+  return finalizeFaceMesh(face, raw);
 }
 
 function tessellateFaceRaw(face, floats, scale, options = {}, sharedEdges = null) {
@@ -1408,6 +1457,32 @@ function compactCollapsedTriangles(triangles, xyz, remap) {
   return kept;
 }
 
+// The same rule at the precision the mesh is written in. Positions leave as
+// Float32, so two vertices of a face that round to one Float32 point are one
+// point of every exported mesh, and a triangle reaching both carries no surface
+// there. Fine tolerances put them there: on the teacup's rim fillet (issue
+// #555) a grid line runs 65 nm from a trim point, two ULPs of the trim's
+// parameter, too far apart to weld as one source point, and refinement halved
+// that gap row after row until midpoints of the two rows met in Float32 — four
+// triangles whose edges then counted on four faces. Dropping a collapsed
+// triangle keeps every edge's use count, as above.
+function dropFloat32Collapsed(triangles, xyz) {
+  const samePoint = (a, b) => {
+    if (a === b) return true;
+    const p = xyz[a];
+    const q = xyz[b];
+    return Math.fround(p[0]) === Math.fround(q[0]) && Math.fround(p[1]) === Math.fround(q[1]) &&
+      Math.fround(p[2]) === Math.fround(q[2]);
+  };
+  const kept = [];
+  for (let t = 0; t < triangles.length; t += 3) {
+    const [a, b, c] = [triangles[t], triangles[t + 1], triangles[t + 2]];
+    if (samePoint(a, b) || samePoint(b, c) || samePoint(c, a)) continue;
+    kept.push(a, b, c);
+  }
+  return kept;
+}
+
 // A welded vertex is the same model point as the one it folds into, so the
 // survivor inherits every model edge it lay on — in both welds. Dropping them
 // loses edges: a corner welded into a vertex pinned through only ONE of the
@@ -1505,6 +1580,85 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
     const candidates = [union[lo], union[lo - 1] ?? union[lo]];
     return Math.abs(candidates[0] - f) <= Math.abs(candidates[1] - f) ? candidates[0] : candidates[1];
   };
+  // A planar face's trim loops through every union point of its edges, in the
+  // plane's own coordinates, with the model point and labels at each vertex.
+  const planarLoops = (face, raw) => {
+    const { origin, xdir, ydir } = face.surface;
+    const vertices = new Map();
+    const loops = raw.loops.map((loop) => {
+      const points = [];
+      points.segmentOrds = [];
+      points.segmentMeta = [];
+      for (let i = 0; i < loop.length; i += 1) {
+        const meta = loop.segmentMeta[i];
+        const shared = meta && sharedEdges.get(meta.ord);
+        if (!shared) {
+          points.push(loop[i]);
+          points.segmentOrds.push(loop.segmentOrds[i]);
+          points.segmentMeta.push(null);
+          continue;
+        }
+        const canonical = (f) => representativeOf(meta.ord, canonicalFraction(meta.ord, f));
+        const unwrap = (f, original) => shared.closed && f === 0 && original > 0.5 ? 1 : f;
+        const start = unwrap(canonical(meta.f0), meta.f0);
+        const end = unwrap(canonical(meta.f1), meta.f1);
+        const eps = fractionEps(meta.ord);
+        const between = fractionsByOrd.get(meta.ord).filter((f) =>
+          f > Math.min(start, end) + eps && f < Math.max(start, end) - eps);
+        if (end < start) between.reverse();
+        const fractions = [start, ...between, end];
+        for (let j = 0; j < fractions.length; j += 1) {
+          if (j + 1 < fractions.length && Math.abs(fractions[j + 1] - fractions[j]) <= eps) continue;
+          const f = canonicalFraction(meta.ord, fractions[j]);
+          const xyz = edgePointAt(shared, f, floats);
+          const delta = sub(xyz, origin);
+          const uv = [delta[0] * xdir[0] + delta[1] * xdir[1] + delta[2] * xdir[2],
+            delta[0] * ydir[0] + delta[1] * ydir[1] + delta[2] * ydir[2]];
+          if (j + 1 < fractions.length) {
+            points.push(uv);
+            points.segmentOrds.push(meta.ord);
+            points.segmentMeta.push({ ord: meta.ord, f0: fractions[j], f1: fractions[j + 1] });
+          }
+          const key = `${uv[0]}:${uv[1]}`;
+          const vertex = vertices.get(key);
+          if (vertex) vertex.labels.push({ ord: meta.ord, f });
+          else vertices.set(key, { xyz, labels: [{ ord: meta.ord, f }] });
+        }
+      }
+      return points;
+    });
+    return { loops, vertices };
+  };
+  // A planar face's loops must not cross themselves, or the re-triangulation
+  // below cannot fill them: earcut drops what it cannot place, and the face
+  // opens. Its edges are sampled to the chord tolerance, and a face narrower
+  // than that tolerance gets loops whose chords cut across each other — the
+  // teacup of issue #555 sweeps a rounded rectangle whose flat sides are 60 um
+  // wide between two curved edges sampled to 0.25 mm, and both strips opened
+  // along the whole handle. Each crossing segment is split at its middle, on
+  // the exact curve (edgePointAt), until none crosses. The new points join the
+  // union BEFORE any face consumes it, so the neighbours on the other side of
+  // those edges take the same points through the fan split below.
+  for (const { face, raw } of rawFaces) {
+    if (face.surface.kind !== "plane") continue;
+    for (let round = 0; round < DEFAULT_OPTIONS.maxRefineDepth; round += 1) {
+      let split = false;
+      for (const meta of crossingSegments(planarLoops(face, raw).loops)) {
+        const union = fractionsByOrd.get(meta.ord);
+        const lo = Math.min(meta.f0, meta.f1);
+        const hi = Math.max(meta.f0, meta.f1);
+        // Far enough from both ends that no existing label's representative
+        // changes: every label lies within eps of the union point it snaps to.
+        if (hi - lo <= fractionEps(meta.ord) * 4) continue;
+        const mid = (lo + hi) / 2;
+        let at = 0;
+        while (at < union.length && union[at] < mid) at += 1;
+        union.splice(at, 0, mid);
+        split = true;
+      }
+      if (!split) break;
+    }
+  }
   for (const { face, raw } of rawFaces) {
     if (face.surface.kind === "plane") {
       // A new point on a curved trim can cross the old triangle's diagonal.
@@ -1513,50 +1667,7 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
       // Re-triangulate the complete planar region from its final exact trim
       // points instead. Planar UV is an exact inverse, unlike interpolating a
       // rational pcurve's parameters or its old polygon chords.
-      const { origin, xdir, ydir } = face.surface;
-      const vertices = new Map();
-      const loops = raw.loops.map((loop) => {
-        const points = [];
-        points.segmentOrds = [];
-        points.segmentMeta = [];
-        for (let i = 0; i < loop.length; i += 1) {
-          const meta = loop.segmentMeta[i];
-          const shared = meta && sharedEdges.get(meta.ord);
-          if (!shared) {
-            points.push(loop[i]);
-            points.segmentOrds.push(loop.segmentOrds[i]);
-            points.segmentMeta.push(null);
-            continue;
-          }
-          const canonical = (f) => representativeOf(meta.ord, canonicalFraction(meta.ord, f));
-          const unwrap = (f, original) => shared.closed && f === 0 && original > 0.5 ? 1 : f;
-          const start = unwrap(canonical(meta.f0), meta.f0);
-          const end = unwrap(canonical(meta.f1), meta.f1);
-          const eps = fractionEps(meta.ord);
-          const between = fractionsByOrd.get(meta.ord).filter((f) =>
-            f > Math.min(start, end) + eps && f < Math.max(start, end) - eps);
-          if (end < start) between.reverse();
-          const fractions = [start, ...between, end];
-          for (let j = 0; j < fractions.length; j += 1) {
-            if (j + 1 < fractions.length && Math.abs(fractions[j + 1] - fractions[j]) <= eps) continue;
-            const f = canonicalFraction(meta.ord, fractions[j]);
-            const xyz = edgePointAt(shared, f, floats);
-            const delta = sub(xyz, origin);
-            const uv = [delta[0] * xdir[0] + delta[1] * xdir[1] + delta[2] * xdir[2],
-              delta[0] * ydir[0] + delta[1] * ydir[1] + delta[2] * ydir[2]];
-            if (j + 1 < fractions.length) {
-              points.push(uv);
-              points.segmentOrds.push(meta.ord);
-              points.segmentMeta.push({ ord: meta.ord, f0: fractions[j], f1: fractions[j + 1] });
-            }
-            const key = `${uv[0]}:${uv[1]}`;
-            const vertex = vertices.get(key);
-            if (vertex) vertex.labels.push({ ord: meta.ord, f });
-            else vertices.set(key, { xyz, labels: [{ ord: meta.ord, f }] });
-          }
-        }
-        return points;
-      });
+      const { loops, vertices } = planarLoops(face, raw);
       const built = gridTriangulate(face, floats, loops, Infinity);
       if (built?.triangles.length) {
         Object.assign(raw, built, { boundary: new Map(), loops });
@@ -1654,22 +1765,49 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
       minted.set(key, id);
       return id;
     };
+    // This face's own boundary points on each model edge, for telling which of
+    // several edges a mesh edge runs along (below).
+    const ownFractions = new Map();
+    for (const labels of boundary.values()) {
+      for (const { ord, f } of labels) {
+        let list = ownFractions.get(ord);
+        if (!list) ownFractions.set(ord, (list = []));
+        list.push(f);
+      }
+    }
+    const holdsVertexBetween = (ord, fp, fq) => {
+      const own = ownFractions.get(ord) || [];
+      const eps = fractionEps(ord);
+      if (sharedEdges.get(ord)?.closed) {
+        const forward = (fq - fp + 1) % 1;
+        const start = forward <= 0.5 ? fp : fq;
+        const arc = forward <= 0.5 ? forward : (fp - fq + 1) % 1;
+        return own.some((f) => {
+          const d = (f - start + 1) % 1;
+          return d > eps && d < arc - eps;
+        });
+      }
+      return own.some((f) => f > Math.min(fp, fq) + eps && f < Math.max(fp, fq) - eps);
+    };
     const insertsFor = (p, q) => {
       const labelsP = boundary.get(p);
       const labelsQ = boundary.get(q);
       if (!labelsP || !labelsQ) return null;
       if (edgeUse.get(pairKey(p, q)) !== 1) return null;
-      let bp = null;
-      let bq = null;
+      const common = [];
       for (const lp of labelsP) {
         const lq = labelsQ.find((label) => label.ord === lp.ord);
-        if (lq) {
-          bp = lp;
-          bq = lq;
-          break;
-        }
+        if (lq) common.push([lp, lq]);
       }
-      if (!bp || !bq) return null;
+      if (!common.length) return null;
+      // A face bounded by just two model edges (an arc and its chord, say) has
+      // both corners on both, and the mesh edge between the corners runs along
+      // only one of them: the one on which this face has no point between them.
+      // Taking whichever came first split the chord with the ARC's points, and
+      // the weld below folded that fan into the arc's own vertices: the face
+      // rendered and exported half folded over itself.
+      const [bp, bq] = common.length === 1 ? common[0]
+        : common.find(([lp, lq]) => !holdsVertexBetween(lp.ord, lp.f, lq.f)) ?? common[0];
       const union = fractionsByOrd.get(bp.ord);
       if (!union) return null;
       const shared = sharedEdges.get(bp.ord);
@@ -1835,7 +1973,24 @@ export function tessellateComponent(index, floats, options = {}) {
       }
     }
   }
-  const scale = Math.max(length3(sub(max, min)), 1e-6);
+  // A component with no faces has no loops: an imported STEP product that holds
+  // only wires is measured by its edge curves instead.
+  if (!(min[0] <= max[0])) {
+    for (const edge of index.edges) {
+      if (!edge.curve) continue;
+      const [t0, t1] = edge.curve.range;
+      for (const t of [t0, (t0 + t1) / 2, t1]) {
+        const p = evaluateCurve3(edge.curve, floats, t);
+        for (let d = 0; d < 3; d += 1) {
+          if (p[d] < min[d]) min[d] = p[d];
+          if (p[d] > max[d]) max[d] = p[d];
+        }
+      }
+    }
+  }
+  // Nothing to measure (an empty product entry) leaves the box empty: the floor.
+  const extent = length3(sub(max, min));
+  const scale = Number.isFinite(extent) ? Math.max(extent, 1e-6) : 1e-6;
 
   // ONE polyline per model edge, sampled from its exact 3D curve. Every
   // adjacent face's boundary conforms to it (and the display overlay reuses
@@ -1880,6 +2035,17 @@ export function tessellateComponent(index, floats, options = {}) {
       }
       shared.points[0] = canonicalCorner(shared.points[0]);
       shared.points[shared.points.length - 1] = canonicalCorner(shared.points[shared.points.length - 1]);
+      // Ends that weld into ONE corner make the edge closed, though its curve's
+      // ends miss each other by more than sampleSharedEdge's relative test
+      // allows: an intake plenum's end face, bounded by one spline that closes
+      // to 0.18 um, kept its seam at fraction 1 alone, so conformity read the
+      // segment from the seam to the first point as the whole loop and folded
+      // the face over itself. A curve that only spans the weld distance stays
+      // open.
+      if (shared.curve.kind !== "line" && shared.points[0] === shared.points[shared.points.length - 1]
+        && shared.points.some((point) => length3(sub(point, shared.points[0])) > weldTolerance * 2 ** 10)) {
+        shared.closed = true;
+      }
     }
   }
 
@@ -1897,6 +2063,7 @@ export function tessellateComponent(index, floats, options = {}) {
   }
   const boundaryDebug = options.collectBoundaryDebug ? [] : null;
   for (const { face, raw } of rawFaces) {
+    raw.triangles = dropFloat32Collapsed(raw.triangles, raw.xyz);
     if (boundaryDebug) {
       boundaryDebug.push({
         faceOrd: face.ord,
@@ -1958,6 +2125,24 @@ export function tessellateComponent(index, floats, options = {}) {
       visibilityClass: edge.class,
       polyline,
     });
+  }
+  // No triangles (wires only, or no face that meshed): its edges are the bounds.
+  // With no edges either (an empty product entry), a point at its own origin
+  // keeps the box finite for the cache header and every reader.
+  if (!positions.length) {
+    for (const { polyline } of edges) {
+      for (let i = 0; i < polyline.length; i += 3) {
+        for (let d = 0; d < 3; d += 1) {
+          const value = polyline[i + d];
+          if (value < min[d]) min[d] = value;
+          if (value > max[d]) max[d] = value;
+        }
+      }
+    }
+    if (!(min[0] <= max[0])) {
+      min = [0, 0, 0];
+      max = [0, 0, 0];
+    }
   }
 
   return {

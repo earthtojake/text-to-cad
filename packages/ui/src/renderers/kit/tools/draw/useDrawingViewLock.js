@@ -10,12 +10,13 @@ import { applyDrawingViewLock, captureDrawingViewLock } from "./drawingViewLock.
  * never reaches the controls (the editor covers the viewport), and everything
  * else that could turn or reframe the camera is switched off for the duration.
  *
- * @param {{ active: boolean, drawing: import("../../../../drawing/session.js").DrawingSession | null | undefined,
+ * @param {{ active: boolean, sketch?: number, drawing: import("../../../../drawing/session.js").DrawingSession | null | undefined,
  *   runtimeRef: { current: any }, mountRef: { current: HTMLElement | null }, viewerReadyTick: number }} options
- *   `active` is the overlay being mounted over a viewport that has content.
+ *   `active` is the overlay being mounted over a viewport that has content; `sketch` is the session's
+ *   sketch (`drawing.sketch`), whose editor is a new one each time it changes.
  * @returns the editor's controller (for a composite capture) and the overlay's two callbacks.
  */
-export function useDrawingViewLock({ active: drawingOverlayActive, drawing, runtimeRef, mountRef, viewerReadyTick }) {
+export function useDrawingViewLock({ active: drawingOverlayActive, sketch = 0, drawing, runtimeRef, mountRef, viewerReadyTick }) {
   const drawingControllerRef = useRef(null);
   const drawingViewRef = useRef(null);
   const drawingViewportRef = useRef({ scrollX: 0, scrollY: 0, zoom: 1 });
@@ -35,6 +36,15 @@ export function useDrawingViewLock({ active: drawingOverlayActive, drawing, runt
     runtime.controls.dispatchEvent?.({ type: "change" });
     runtime.requestRender?.();
   }, []);
+  // A new sketch starts from the editor's own origin, with nothing on it to keep aligned: when
+  // Draw is taken up, and when a sketch is discarded under a Draw that stays (its new editor opens
+  // at the origin, and the camera stays where the last one left it). Only a runtime swap inherits a
+  // viewport. Declared before the lock below, which runs again for the same changes and must find
+  // these already reset.
+  useEffect(() => {
+    drawingViewportRef.current = { scrollX: 0, scrollY: 0, zoom: 1 };
+    drawingHasInkRef.current = false;
+  }, [drawingOverlayActive, sketch]);
   useEffect(() => {
     const runtime = runtimeRef.current, controls = runtime?.controls, host = mountRef.current;
     if (!drawingOverlayActive || !controls || !host) return undefined;
@@ -63,9 +73,7 @@ export function useDrawingViewLock({ active: drawingOverlayActive, drawing, runt
       if (active) { active.enabled = previous.enabled; active.enableDamping = previous.enableDamping; active.update?.(); }
       runtimeRef.current?.requestRender?.();
     };
-  }, [drawingOverlayActive, followDrawingViewport, viewerReadyTick]);
-  // A new sketch starts from the editor's own origin; only a runtime swap inherits a viewport.
-  useEffect(() => { if (!drawingOverlayActive) { drawingViewportRef.current = { scrollX: 0, scrollY: 0, zoom: 1 }; drawingHasInkRef.current = false; } }, [drawingOverlayActive]);
+  }, [drawingOverlayActive, sketch, followDrawingViewport, viewerReadyTick]);
   const handleDrawingContent = useCallback((hasContent) => {
     const hadInk = drawingHasInkRef.current;
     drawingHasInkRef.current = hasContent;

@@ -149,6 +149,25 @@ class ResidentProcessLifecycle(unittest.TestCase):
         self.assertEqual(popen.call_args.kwargs["cwd"], tempfile.gettempdir())
         ensure.assert_not_called()
 
+    def test_the_daemon_takes_no_telemetry_switch_from_the_client_that_started_it(self):
+        # It serves every client; each client's switch travels with its own builds instead.
+        spawned = mock.Mock(pid=1234)
+        started_from = {"PATH": "/bin", "DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "0"}
+        with tempfile.TemporaryDirectory(prefix="cadgen-daemon-launch-") as tmp, \
+                mock.patch.object(client.transport, "ensure_authkey"), \
+                mock.patch.object(client, "daemon_identity", return_value="test"), \
+                mock.patch.object(client, "log_path", return_value=pathlib.Path(tmp) / "daemon.log"), \
+                mock.patch.object(client.subprocess, "Popen", return_value=spawned) as popen:
+            from cadgen.daemon import executors
+
+            with mock.patch.object(executors, "worker_env", return_value=started_from):
+                self.assertIs(client._spawn_daemon("test-address"), spawned)
+
+        env = popen.call_args.kwargs["env"]
+        self.assertEqual(env["PATH"], "/bin")
+        for name in ("DO_NOT_TRACK", "CADGEN_TELEMETRY"):
+            self.assertNotIn(name, env)
+
     def test_replaced_key_is_retried_only_after_the_live_owner_republishes(self):
         channel = mock.Mock()
         with mock.patch.object(client.transport, "read_authkey", side_effect=[b"stale", b"owned"]), \
@@ -173,6 +192,40 @@ class ResidentProcessLifecycle(unittest.TestCase):
                 self.assertFalse(worker._reader.is_alive())
         self.assertEqual(worker.pid, 1234)
         self.assertEqual(popen.call_args.kwargs["cwd"], tempfile.gettempdir())
+
+    def test_prewarm_starts_nothing_when_the_daemon_is_off(self):
+        # The viewer warms the daemon at every launch. CADGEN_DAEMON=0 must mean none
+        # starts: the launcher tests rely on it to keep dozens of launches daemon-free.
+        with mock.patch.dict("os.environ", {"CADGEN_DAEMON": "0"}), \
+                mock.patch.object(client, "_connect_or_spawn", side_effect=AssertionError("a daemon was started")):
+            self.assertFalse(client.prewarm())
+
+    def test_prewarm_replaces_a_daemon_left_by_older_code(self):
+        stale, current = _ScriptedChannel([{"restart": True}]), _ScriptedChannel([{"status": {}}])
+        with mock.patch.dict("os.environ", {"CADGEN_DAEMON": "1"}), \
+                mock.patch.object(client, "daemon_supported", return_value=True), \
+                mock.patch.object(client, "daemon_address", return_value="test-address"), \
+                mock.patch.object(client, "_connect_or_spawn", side_effect=[stale, current]) as connect:
+            import os
+
+            os.environ.pop("CADGEN_DAEMON_CHILD", None)
+            self.assertTrue(client.prewarm())
+        self.assertEqual(connect.call_count, 2)
+        self.assertEqual([frame["kind"] for frame in stale.sent + current.sent], ["status", "status"])
+
+    def test_a_build_verifies_its_read_back_exactly_when_its_caller_asked(self):
+        # CADGEN_VERIFY_READBACK is one build's request (STORE.md §10). It travels with the
+        # job, and a job whose caller did not set it runs without it, in a daemon started with it.
+        import os
+
+        from cadgen.daemon import worker
+
+        with mock.patch.dict("os.environ", {"CADGEN_VERIFY_READBACK": "1"}):
+            self.assertEqual(client.forwarded_env().get("CADGEN_VERIFY_READBACK"), "1")
+            worker._apply_request_env({"env": {}})
+            self.assertNotIn("CADGEN_VERIFY_READBACK", os.environ)
+            worker._apply_request_env({"env": {"CADGEN_VERIFY_READBACK": "1"}})
+            self.assertEqual(os.environ.get("CADGEN_VERIFY_READBACK"), "1")
 
     def test_the_daemon_popen_is_retained_by_an_owned_reaper(self):
         process = mock.Mock(pid=4321)

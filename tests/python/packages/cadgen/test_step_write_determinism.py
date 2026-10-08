@@ -35,6 +35,8 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import os
+import random
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -466,6 +468,71 @@ class NegativeZeroNormalizationTest(unittest.TestCase):
             path.write_bytes(text)
             self.assertFalse(step_export._normalize_negative_zero_reals_in_file(path))
             self.assertEqual(text, path.read_bytes())
+
+
+# The pass that defined the canonical bytes, kept here as the oracle: one regex
+# that consumed every string literal whole, exact and slow (a few tens of MB/s).
+# The candidate-driven pass must write its bytes for ANY block -- the bytes are
+# the store key -- including one that ends inside a literal OCCT wrapped.
+_REGEX_PASS = re.compile(
+    rb"'(?:[^']|'')*'"
+    rb"|(?<![0-9.eE+-])-(?:0+\.0*|0*\.0+)(?:[eE][-+]?[0-9]+)?(?![0-9.eE])"
+)
+
+
+def _regex_pass(text: bytes) -> bytes:
+    return _REGEX_PASS.sub(lambda match: match[0] if match[0].startswith(b"'") else match[0][1:], text)
+
+
+# Building blocks for random STEP-like text: reals of every spelling, numbers
+# glued together, literals with escaped quotes and lone quotes that leave a
+# block unbalanced, and line breaks that wrap a record or a literal.
+_FUZZ_TOKENS = [
+    b"-0.", b"-0.0", b"-00.", b"-.0", b"-0.E+00", b"-0.0E+00", b"-0.e-3", b"-0.E", b"-0.0E+0.",
+    b"-0.5", b"-0.0001", b"-1.E-03", b"-0", b"-.", b"0.", b"1.-0.", b"E-0", b"5.E-05",
+    b"'", b"''", b"'''", b"'a'", b"'rev-0.0'", b"'x''-0.'",
+    b"(", b")", b",", b" ", b"\n", b"\n  ", b"=", b"#12", b"CARTESIAN_POINT",
+    b".", b"e", b"E", b"+", b"-", b"0", b"9",
+]
+
+
+class CandidatePassWritesTheRegexBytesTest(unittest.TestCase):
+    def test_spellings_literals_escapes_and_wrapped_records(self) -> None:
+        from cadgen.step_export import _normalize_negative_zero_reals
+
+        blocks = [
+            *(source for source, _expected in NEGATIVE_ZERO_CASES),
+            b"(-0.,-0.0,-00.,-.0,-0.E+00,-0.0E+00,-000.000E-000,-0.e7,-.0e+5)",
+            b"(-0.0E+0.5,-0.E,-0.E+,-0.Ex,1.E-0.,-0.-0.,-0.5,-.5,-1.)",
+            b"PRODUCT('-0.','a -0.0E+00 b',(#6),-0.);",
+            # Escaped quotes: a literal that is one quote, one that ends in one.
+            b"PRODUCT('it''s -0.','''-0.''','''',-0.,'x''','-0.',-0.E+00);",
+            # A record OCCT wrapped across lines.
+            b"#5 = B_SPLINE_CURVE_WITH_KNOTS('',3,(#6,#7,\n  #8),.UNSPECIFIED.,.F.,.F.,(4,4),(-0.,\n  -0.0E+00),.U.);\n",
+            # A literal OCCT wrapped, whole, then split across two blocks.
+            b"#9 = PRODUCT('a long name -0.\nstill the name -0.','',(#2));\n#10 = DIRECTION('',(-0.,1.,-0.));\n",
+            b"#9 = PRODUCT('a long name -0.\n",
+            b"still the name -0.','',(#2));\n#10 = DIRECTION('',(-0.,1.,-0.));\n",
+        ]
+        for block in blocks:
+            with self.subTest(block=block):
+                self.assertEqual(_regex_pass(block), _normalize_negative_zero_reals(block))
+
+    def test_random_blocks(self) -> None:
+        from cadgen.step_export import _normalize_negative_zero_reals
+
+        rng = random.Random(20261001)
+        rewritten = unbalanced = 0
+        for _ in range(30_000):
+            block = b"".join(rng.choice(_FUZZ_TOKENS) for _ in range(rng.randint(0, 60)))
+            expected = _regex_pass(block)
+            if expected != _normalize_negative_zero_reals(block):
+                self.fail(f"the passes disagree on {block!r}")
+            rewritten += expected != block
+            unbalanced += block.count(b"'") % 2
+        # Guards the generator as much as the pass.
+        self.assertGreater(rewritten, 1_000)
+        self.assertGreater(unbalanced, 1_000)
 
 
 class WrittenStepCarriesNoNegativeZeroTest(unittest.TestCase):
