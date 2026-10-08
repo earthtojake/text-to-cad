@@ -74,6 +74,15 @@ export function createSchematicIndex(schematic, layoutSheets = EMPTY) {
   };
   const pageList = (values, sheetIndex) => (Array.isArray(values) ? values.map((value) => page(value, sheetIndex)).filter(Boolean) : []);
 
+  // What KiCad's ERC reported (`schematic.findings`), as a board's are: each item where it is on the page.
+  const findings = Object.freeze((schematic?.findings || EMPTY).map((entry, index) => ({
+    kind: "finding", index, check: String(entry?.check ?? ""), severity: String(entry?.severity ?? ""), type: String(entry?.type ?? ""),
+    description: String(entry?.description ?? ""), summary: String(entry?.summary || entry?.description || ""),
+    items: (entry?.items || EMPTY).map((item) => ({
+      text: String(item?.text ?? ""), ref: item?.ref ? String(item.ref) : "", at: item?.at && item?.sheet != null ? page(item.at, item.sheet) : null,
+    })),
+  })));
+
   const nets = new Map();
   const netNamed = (name) => {
     const key = String(name ?? "");
@@ -275,7 +284,7 @@ export function createSchematicIndex(schematic, layoutSheets = EMPTY) {
   }
 
   return Object.freeze({
-    document: "schematic", sheets, parts, pads, pinShapes, nets, wires, labels, junctions, findings: EMPTY,
+    document: "schematic", sheets, parts, pads, pinShapes, nets, wires, labels, junctions, findings,
     pick, resolve, extent, shapesOf
   });
 }

@@ -71,3 +71,10 @@ test('a delivery ledger delivers each operation once, bounds work in flight, and
   await ledger.deliver('a', () => { restarted += 1; return { status: 'copied', partIds: [] }; });
   assert.equal(restarted, 1, 'the oldest completed operation was evicted');
 });
+
+test('a selection with a label reads its label, then its references', () => {
+  const labelled = { resource: { kind: 'workspace-file', path: '/work/board.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#U2.7', '#C4.1'] },
+    label: "U2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm)" };
+  assert.equal(formatPromptMessage(createPromptContext([textPart('fix this'), referencePart(labelled)])),
+    "fix this\n\nReferences:\nU2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm) · /work/board.kicad_pcb#U2.7,C4.1");
+});

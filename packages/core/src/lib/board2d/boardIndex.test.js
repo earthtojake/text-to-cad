@@ -256,3 +256,12 @@ test("past copper on no net, a pick takes what lies under it", () => {
   // Under Nets, a pad on no net inside the ground pour is the pour's net.
   assert.equal(index.pick([15, 21], { mode: "nets" }).selector, "#net:GND");
 });
+
+test("a finding reads its summary, and KiCad's words when a payload has none", () => {
+  const index = createBoardIndex({ ...BOARD, findings: [
+    { check: "drc", severity: "error", type: "clearance", description: "Clearance violation", summary: "The SDA track and the SCL track are 0.15 mm apart; the rules need 0.2 mm", items: [] },
+    { check: "drc", severity: "error", type: "clearance", description: "Clearance violation", items: [] },
+  ] });
+  assert.equal(index.findings[0].summary, "The SDA track and the SCL track are 0.15 mm apart; the rules need 0.2 mm");
+  assert.equal(index.findings[1].summary, "Clearance violation");
+});

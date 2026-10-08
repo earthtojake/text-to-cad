@@ -195,7 +195,7 @@ export function createBoardIndex(board, sheet = {}) {
   const outline = (board?.outline || EMPTY).map(pageList).filter((line) => line.length > 1);
   const findings = (board?.findings || EMPTY).map((entry, index) => ({
     kind: "finding", index, check: String(entry?.check ?? ""), severity: String(entry?.severity ?? ""), type: String(entry?.type ?? ""),
-    description: String(entry?.description ?? ""),
+    description: String(entry?.description ?? ""), summary: String(entry?.summary || entry?.description || ""),
     items: (entry?.items || EMPTY).map((item) => ({ text: String(item?.text ?? ""), ref: item?.ref ? String(item.ref) : "", at: page(item?.at) }))
   }));
 

@@ -128,7 +128,13 @@ export function formatPromptMessage(context, { attachmentPath } = {}) {
   const said = context.parts.filter(part => part.kind === 'text').map(part => part.text.trim()).filter(Boolean);
   const files = [], references = [], attachments = [];
   for (const part of context.parts) {
-    if (part.kind === 'reference') (part.reference.target.kind === 'whole-resource' ? files : references).push(formatPromptReference(part.reference));
+    if (part.kind === 'reference') {
+      const { reference } = part;
+      const token = formatPromptReference(reference);
+      if (reference.target.kind === 'whole-resource') files.push(token);
+      // A selection a person chose by what it says (a board's check) reads that, then what it names.
+      else references.push(reference.target.kind === 'cad-selector' && reference.label ? `${reference.label} · ${token}` : token);
+    }
     else if (part.kind === 'attachment') {
       const path = attachmentPath?.(part);
       if (path) attachments.push(`${part.label || 'Attachment'}: ${path}`);
