@@ -9,6 +9,7 @@ cache, and every refusal with the sentence it says.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import math
 import os
@@ -18,7 +19,7 @@ from pathlib import Path
 from unittest import mock
 
 from tests.python.support.cad_test_roots import IsolatedCadRoots
-from tests.python.support.paths import add_repo_path
+from tests.python.support.paths import REPO_ROOT, add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
@@ -95,6 +96,11 @@ SWING_SDF = """<?xml version="1.0"?>
 
 def transform(matrix: list[list[float]], point) -> list[float]:
     return [round(sum(matrix[i][j] * v for j, v in enumerate((*point, 1.0))), 6) + 0.0 for i in range(3)]
+
+
+def degrees(radians: float) -> float:
+    """A radian value as the payload writes it: in degrees, rounded as every emitted number is."""
+    return round(math.degrees(radians), 12)
 
 
 class _Workspace(unittest.TestCase):
@@ -202,10 +208,10 @@ class UrdfArticulation(_Workspace):
         articulation = read_robot_description(self.write("chain.urdf", urdf))["articulation"]
         joints = {joint["id"]: joint for joint in articulation["joints"]}
         # turn (rad) = 2 * lead (m) + 0.5; its row is degrees: 2 * 180/pi per metre, 0.5 rad of bias.
-        self.assertEqual(joints["turn"]["turn"]["terms"], [["lead", 2 * 180 / math.pi]])
+        self.assertEqual(joints["turn"]["turn"]["terms"], [["lead", degrees(2)]])
         self.assertAlmostEqual(joints["turn"]["turn"]["bias"], math.degrees(0.5))
         # again (rad) = -turn (rad) + 0.1 = -2 * lead - 0.4: the chain collapses onto the one control.
-        self.assertEqual(joints["again"]["turn"]["terms"], [["lead", -2 * 180 / math.pi]])
+        self.assertEqual(joints["again"]["turn"]["terms"], [["lead", degrees(-2)]])
         self.assertAlmostEqual(joints["again"]["turn"]["bias"], math.degrees(-0.4))
         self.assertEqual([control["id"] for control in articulation["controls"]], ["lead"])
 
@@ -268,9 +274,9 @@ class SrdfArticulation(_Workspace):
         payload = read_robot_description(self.write("arm.srdf", ARM_SRDF))
         articulation = payload["articulation"]
         self.assertEqual(payload["kind"], "srdf")
-        self.assertEqual(articulation["poses"], {"arm/home": {"shoulder": math.degrees(-0.5), "lift": 0.1},
-                                                 "arm/raised": {"shoulder": math.degrees(-1.0), "lift": 0.2}})
-        self.assertEqual(articulation["opening"], {"shoulder": math.degrees(-0.5), "lift": 0.1, "grip": 0.0, "spin": 0.0})
+        self.assertEqual(articulation["poses"], {"arm/home": {"shoulder": degrees(-0.5), "lift": 0.1},
+                                                 "arm/raised": {"shoulder": degrees(-1.0), "lift": 0.2}})
+        self.assertEqual(articulation["opening"], {"shoulder": degrees(-0.5), "lift": 0.1, "grip": 0.0, "spin": 0.0})
         self.assertEqual(payload["srdf"]["groupStates"], [{"id": "arm/home", "name": "home", "group": "arm"}, {"id": "arm/raised", "name": "raised", "group": "arm"}])
         self.assertEqual(payload["srdf"]["endEffectors"], [{"name": "tool", "parentLink": "carriage", "group": "gripper", "parentGroup": "arm", "link": "carriage"}])
         self.assertEqual(payload["srdf"]["groupsByLink"], {"upper_arm": ["arm"], "carriage": ["arm"], "finger_left": ["gripper"]})
@@ -396,6 +402,34 @@ class TheStoreCachesThePayload(_Workspace):
         self.assertEqual([visual["mesh"] for visual in located["visuals"]],
                          [{"format": "stl", "url": "file:a.stl"}, {"format": "glb", "url": f"object:{payload['visuals'][1]['mesh']['object'][:6]}"}])
         self.assertIn("path", payload["visuals"][0]["mesh"], "the source payload is untouched")
+
+
+class TheBrowserFixturesAreCurrent(unittest.TestCase):
+    """The robot renderer's browser suite serves the payloads cadgen resolved for its fixture
+    descriptions (``packages/ui/src/renderers/robot/__fixtures__``), committed so that suite needs
+    no Python. They are held to a fresh read here: a change to the payload shape, to a description
+    or to how a primitive is meshed regenerates them (``make_fixtures.py``)."""
+
+    FIXTURES = REPO_ROOT / "packages" / "ui" / "src" / "renderers" / "robot" / "__fixtures__"
+
+    def test_the_committed_payloads_refusals_and_meshes_are_what_cadgen_reads_now(self) -> None:
+        roots = IsolatedCadRoots(self, prefix="robot-fixtures-")
+        spec = importlib.util.spec_from_file_location("robot_fixtures", self.FIXTURES / "make_fixtures.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        payloads, refusals, meshes = module.fixture_payloads(roots.cache_dir)
+        self.assertEqual(set(payloads) | set(refusals), set(module.DESCRIPTIONS))
+        regenerate = "regenerate with packages/ui/src/renderers/robot/__fixtures__/make_fixtures.py"
+        for name, payload in payloads.items():
+            committed = self.FIXTURES / f"{Path(name).stem}.{Path(name).suffix[1:]}.robot.json"
+            self.assertEqual(json.loads(committed.read_text(encoding="utf-8")), payload, f"{committed.name} is stale: {regenerate}")
+        self.assertEqual(json.loads((self.FIXTURES / "refusals.json").read_text(encoding="utf-8")), refusals,
+                         f"refusals.json is stale: {regenerate}")
+        primitives = self.FIXTURES / "primitives"
+        self.assertEqual(sorted(path.name for path in primitives.iterdir()), sorted(f"{digest}.glb" for digest in meshes),
+                         f"primitives/ is stale: {regenerate}")
+        for digest, data in meshes.items():
+            self.assertEqual((primitives / f"{digest}.glb").read_bytes(), data, f"primitives/{digest}.glb is stale: {regenerate}")
 
 
 if __name__ == "__main__":

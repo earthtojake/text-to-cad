@@ -150,8 +150,18 @@ def _unit(v) -> list[float] | None:
     return [v[0] / length, v[1] / length, v[2] / length]
 
 
+# Emitted numbers are rounded past any display accuracy and short of a float's last bits, so
+# one description resolves to one payload on every platform's libm (the fixtures the browser
+# suite serves are compared byte for byte against a fresh read).
+_DECIMALS = 12
+
+
+def _number(value: float) -> float:
+    return round(float(value), _DECIMALS) + 0.0
+
+
 def _flat(m: list[list[float]]) -> list[float]:
-    return [float(value) + 0.0 for row in m for value in row]
+    return [_number(value) for row in m for value in row]
 
 
 # --- numbers from XML ----------------------------------------------------------------------
@@ -971,11 +981,14 @@ def _articulation(description: _Description) -> dict[str, Any]:
                     None if joint.upper is None else math.degrees(joint.upper))
         return joint.lower, joint.upper
 
+    def rounded(value: float | None) -> float | None:
+        return None if value is None else _number(value)
+
     controls = []
     for joint in joints:
         if joint.type in _MOVING and joint.mimic is None:
             lower, upper = limits_of(joint)
-            controls.append({"id": joint.name, "label": joint.name, "unit": unit_of(joint), "min": lower, "max": upper, "default": 0.0})
+            controls.append({"id": joint.name, "label": joint.name, "unit": unit_of(joint), "min": rounded(lower), "max": rounded(upper), "default": 0.0})
     control_ids = {control["id"] for control in controls}
 
     # A joint's value in its native unit (radians or metres) as an affine form over the
@@ -1017,27 +1030,28 @@ def _articulation(description: _Description) -> dict[str, Any]:
         entry: dict[str, Any] = {"id": joint.name, "parent": by_child[joint.parent].name if joint.parent in by_child else None,
                                  "kind": "fixed" if joint.type == "fixed" else ("slider" if joint.type == "prismatic" else "revolute")}
         if joint.type != "fixed":
-            entry["origin"] = [float(joint.frame[i][3]) + 0.0 for i in range(3)]
-            entry["axis"] = [float(value) + 0.0 for value in (joint.axis or [0.0, 0.0, 1.0])]
+            entry["origin"] = [_number(joint.frame[i][3]) for i in range(3)]
+            entry["axis"] = [_number(value) for value in (joint.axis or [0.0, 0.0, 1.0])]
             dof = "turn" if joint.type in _ANGULAR else "travel"
             row = row_of(joint)
+            row = {"bias": _number(row["bias"]), "terms": [[control, _number(weight)] for control, weight in row["terms"]]}
             entry[dof] = row
             lower, upper = limits_of(joint)
             # The one term's control is what a drag writes: a follower drives its leader.
             control, weight = row["terms"][0][0], row["terms"][0][1]
             handles.append({"id": joint.name, "joint": joint.name, "dof": dof, "control": control, "weight": weight,
-                            "label": joint.name, "unit": unit_of(joint), "min": lower, "max": upper})
+                            "label": joint.name, "unit": unit_of(joint), "min": rounded(lower), "max": rounded(upper)})
         out_joints.append(entry)
 
     opening = {control["id"]: 0.0 for control in controls}
-    opening.update({name: float(value) for name, value in description.home.items() if name in control_ids})
+    opening.update({name: _number(value) for name, value in description.home.items() if name in control_ids})
     return {
         "schemaVersion": ARTICULATION_SCHEMA_VERSION,
         "controls": controls,
         "joints": out_joints,
         "carries": {joint.name: [joint.child] for joint in joints},
         "handles": handles,
-        "poses": {name: {control: float(value) for control, value in values.items() if control in control_ids}
+        "poses": {name: {control: _number(value) for control, value in values.items() if control in control_ids}
                   for name, values in description.poses.items()},
         "opening": opening,
     }

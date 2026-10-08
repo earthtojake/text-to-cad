@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<robot name="arm">
+  <link name="base_footprint"/>
+  <link name="base"><visual><origin xyz="0 0 0.05"/><geometry><box size="0.4 0.4 0.1"/></geometry><material name="m0.30.30.351"><color rgba="0.3 0.3 0.35 1"/></material></visual></link>
+  <link name="upper_arm"><visual><origin xyz="0.25 0 0"/><geometry><box size="0.5 0.08 0.08"/></geometry><material name="m0.90.50.11"><color rgba="0.9 0.5 0.1 1"/></material></visual></link>
+  <link name="carriage"><visual><origin xyz="0 0 0"/><geometry><box size="0.1 0.1 0.1"/></geometry><material name="m0.10.40.91"><color rgba="0.1 0.4 0.9 1"/></material></visual></link>
+  <link name="camera"><visual><origin xyz="0 0 0"/><geometry><box size="0.06 0.06 0.06"/></geometry><material name="m0.10.70.31"><color rgba="0.1 0.7 0.3 1"/></material></visual></link>
+  <link name="finger_left"><visual><origin xyz="0 0 0.09"/><geometry><box size="0.02 0.02 0.08"/></geometry><material name="m0.80.80.21"><color rgba="0.8 0.8 0.2 1"/></material></visual></link>
+  <link name="finger_right"><visual><origin xyz="0 0 0.09"/><geometry><box size="0.02 0.02 0.08"/></geometry><material name="m0.80.80.21"><color rgba="0.8 0.8 0.2 1"/></material></visual></link>
+  <link name="head"><visual><geometry><mesh filename="meshes/head.glb" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <joint name="footprint" type="fixed"><parent link="base_footprint"/><child link="base"/></joint>
+  <joint name="shoulder" type="revolute"><parent link="base"/><child link="upper_arm"/><origin xyz="0 0 0.2"/><axis xyz="0 1 0"/><limit lower="-1.5708" upper="1.5708" effort="1" velocity="1"/></joint>
+  <joint name="lift" type="prismatic"><parent link="base"/><child link="carriage"/><origin xyz="-0.15 0.15 0.15"/><axis xyz="0 0 1"/><limit lower="0" upper="0.3" effort="1" velocity="1"/></joint>
+  <joint name="camera_mount" type="fixed"><parent link="base"/><child link="camera"/><origin xyz="0.15 -0.15 0.13"/></joint>
+  <joint name="grip" type="prismatic"><parent link="carriage"/><child link="finger_left"/><origin xyz="0 0.01 0"/><axis xyz="0 1 0"/><limit lower="0" upper="0.04" effort="1" velocity="1"/></joint>
+  <joint name="grip_mirror" type="prismatic"><parent link="carriage"/><child link="finger_right"/><origin xyz="0 -0.01 0"/><axis xyz="0 1 0"/><limit lower="-0.04" upper="0" effort="1" velocity="1"/><mimic joint="grip" multiplier="-1"/></joint>
+  <joint name="nod" type="revolute"><parent link="base"/><child link="head"/><origin xyz="-0.15 -0.15 0.14"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+</robot>

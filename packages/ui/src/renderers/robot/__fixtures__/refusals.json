@@ -1,0 +1,4 @@
+{
+ "gone.urdf": "error: missing_mesh_file at /robot/link[@name='base']/visual/geometry/mesh: gone.urdf references missing mesh file: 'meshes/absent.stl'",
+ "lonely.srdf": "lonely.srdf has no paired URDF: no .urdf in /models declares <robot name='nobody'>; it holds arm.urdf (robot 'arm'), chain.urdf (robot 'chain'), gone.urdf (robot 'gone'). An SRDF renders the geometry of the same-folder .urdf whose <robot name> matches its own, and exactly one may match (check with `cadgen srdf validate`)."
+}
