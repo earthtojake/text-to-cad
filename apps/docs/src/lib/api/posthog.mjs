@@ -21,7 +21,7 @@ import { FIELDS } from './events.mjs';
 // PostHog's name for each kind of row, as a product reads them.
 export const EVENTS = {
   tool: 'tool_used', view: 'view_used', files: 'files_shown', build: 'models_built', snapshot: 'snapshots_rendered',
-  feature: 'feature_used', health: 'daemon_health', exception: '$exception',
+  feature: 'feature_used', health: 'daemon_health', exception: '$exception', tool_failure: 'tool_failed',
 };
 // Frames that name no file of ours: never in the app, whatever the code around them.
 const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);

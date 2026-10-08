@@ -45,7 +45,12 @@ class View:
 
 
 class NoAnswer(Exception):
-    """A view did not answer, or answered with an error."""
+    """A view did not answer, or answered with an error: ``reason`` says which, as a failed tool call is
+    counted (``cadgen.analytics.FAILURES``) -- ``no_view``, ``timeout`` or ``view_error``."""
+
+    def __init__(self, message: str, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 class ViewRegistry:
@@ -146,22 +151,22 @@ class ViewRegistry:
             self._replies[request_id] = None
         try:
             if not self.post([view_id], {"type": kind, "requestId": request_id}):
-                raise NoAnswer("that view is not open")
+                raise NoAnswer("that view is not open", "no_view")
             deadline = self._clock() + timeout
             with self._cond:
                 while self._replies.get(request_id) is None:
                     if view_id not in self._views:
-                        raise NoAnswer("that view closed before it answered")
+                        raise NoAnswer("that view closed before it answered", "no_view")
                     remaining = deadline - self._clock()
                     if remaining <= 0:
-                        raise NoAnswer("the view did not answer in time; is its tab still open?")
+                        raise NoAnswer("the view did not answer in time; is its tab still open?", "timeout")
                     self._cond.wait(min(remaining, 1.0))
                 reply = self._replies[request_id] or {}
         finally:
             with self._cond:
                 self._replies.pop(request_id, None)
         if reply.get("error"):
-            raise NoAnswer(str(reply["error"]))
+            raise NoAnswer(str(reply["error"]), "view_error")
         return reply
 
     def reply(self, request_id: str, reply: dict[str, Any]) -> bool:

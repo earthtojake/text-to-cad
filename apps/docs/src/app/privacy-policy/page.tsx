@@ -48,7 +48,10 @@ export default function PrivacyPolicyPage() {
               </li>
               <li>
                 counts, added up over those five minutes: how many times each CAD tool was called and
-                failed; how many times you touched a CAD view; how many different files of each format
+                failed, and why each failure happened, as one of a fixed set of words cadgen chooses
+                (such as no file at the path the agent gave, no view open, a view that did not answer
+                in time, or a bug in cadgen) -- never the error’s message or the path; how many times
+                you touched a CAD view; how many different files of each format
                 (such as STEP or STL) a CAD view showed for the first time that day, told apart on your
                 computer and sent only as a number; how many models were built, of which format,
                 whether a model script or a <code>cadgen</code> command asked, how they ended

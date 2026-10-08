@@ -101,6 +101,25 @@ test('a crash is one row, its frames checked one by one, and nothing it said', a
   }
 });
 
+test("schema 4 says why a tool's calls failed, one row per tool and reason, by a word cadgen chose", async () => {
+  const store = memory();
+  const failures = [{ name: 'tool_failure', tool: 'cad_show', reason: 'no_file', count: 1 }];
+  assert.equal((await send(store, 'POST', '/v1/events', { ...BATCH, schema: 4, events: [...BATCH.events, ...failures] })).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).at(-1), { event: 'tool_failure', tool: 'cad_show', reason: 'no_file', count: 1 });
+  // The schema 3 batch a client sends again when a receiver that predates schema 4 refused it is read as ever.
+  assert.equal((await send(store, 'POST', '/v1/events', BATCH)).status, 204);
+  for (const bad of [
+    { ...BATCH, events: failures }, // schema 3 never sent one
+    { ...BATCH, schema: 4, events: [{ ...failures[0], reason: 'No file at /Users/someone/secret.step.' }] }, // never a message
+    { ...BATCH, schema: 4, events: [{ ...failures[0], reason: 'disk_full' }] }, // a word outside the vocabulary
+    { ...BATCH, schema: 4, events: [{ ...failures[0], tool: '/Users/someone/secret.step' }] },
+    { ...BATCH, schema: 4, events: [{ ...failures[0], count: 0 }] },
+    { ...BATCH, schema: 4, events: [{ ...failures[0], count: undefined }] },
+    { ...BATCH, schema: 4, events: [{ ...failures[0], path: 'secret.step' }] },
+    { ...BATCH, schema: 4, events: [failures[0], failures[0]] }, // one tool and reason, counted once
+  ]) assert.equal((await send(memory(), 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
+});
+
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', SCHEMA_1)).status, 204);
@@ -196,7 +215,7 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...SCHEMA_2, events: [CRASH] }, // crashes are schema 3's
     { ...BATCH, channel: 'store' },
     { ...BATCH, channel: 'github' }, // a channel no plugin names any more
-    { ...BATCH, schema: 4 }, // a schema no release sends
+    { ...BATCH, schema: 5 }, // a schema no release sends
     { ...BATCH, schema: '3' },
     { ...SCHEMA_2, process: 'app' }, // each schema's own fields, and only those
     { ...SCHEMA_1, channel: 'claude-github' },

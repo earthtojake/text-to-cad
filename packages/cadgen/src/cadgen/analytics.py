@@ -16,6 +16,9 @@ exits, each batch stamped with the time it arrives:
   and from the apps the agent app's name and version and how that app shows CAD (tabs, inline or
   text) -- or, from the browser viewer, ``cadgen-viewer`` and ``browser``;
 - ``tool`` (the CAD app): how many times each CAD tool was called, and how many of those failed;
+- ``tool_failure`` (the CAD app): how many of a tool's calls failed for each reason (``FAILURES``): one
+  word cadgen chose where the call failed -- the caller named no file, or no view; a view that did not
+  answer; the CAD Viewer that did not start; cadgen's own bug -- never the failure's message;
 - ``view`` (the apps): how many times a CAD view was touched by a person or switched models --
   time spent looking at a model calls no tool, and is use all the same;
 - ``files`` (the apps): how many distinct files of each format (``step``, ``stl``, ...) a CAD view
@@ -95,7 +98,10 @@ Telemetry never gets in the way of CAD:
   sends sends it, in the background, soon after it starts.
 - A batch the receiver did not take (offline, a slow or broken receiver, or none answering
   there yet) is kept for the next one; it is never an error. One the receiver read and refused
-  (``REFUSED``) is dropped: it would be refused again, and take everything after it down with it.
+  (``REFUSED``) is sent once more in the schema before this one (``EARLIER``), without what that schema
+  never had: a release reaches PyPI before the receiver that reads its schema is deployed, and the
+  receiver deployed until then reads only the schemas released before. Refused again, it is dropped:
+  it would be refused every time, and take everything after it down with it.
 
 The answer is changed only under the settings lock (``settings.update_section``), so the processes
 answering, opting out or making the install's id at once never undo one another. A settings file
@@ -131,7 +137,11 @@ from cadgen.settings import LOCK, read_section, settings_path, update_section
 LOG = logging.getLogger("cadgen.analytics")
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
-SCHEMA = 3  # 3: the build daemon's counts, and files as numbers; 2: the install's channel replaced `source`
+# 4: why tool calls failed; 3: the build daemon's counts, and files as numbers; 2: the install's channel replaced `source`
+SCHEMA = 4
+# The schema before ``SCHEMA``, and the events it never had: what a batch the receiver refused is sent again as
+# (``Recorder._deliver``), for a receiver not yet deployed with this release -- it reaches PyPI first.
+EARLIER = (3, frozenset({"tool_failure"}))
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the person's state directory, not the install.
@@ -174,6 +184,16 @@ VIAS = frozenset({"script", "command"})
 # How a build ended: built; failed (the model raised, or its command refused what it was given); crashed (its
 # worker died under it); or cancelled (whoever asked left before it ended, and it was stopped).
 OUTCOMES = frozenset({"ok", "failed", "crashed", "cancelled"})
+# Why a CAD tool's call failed, named where it failed (``cadgen.mcp.server.ToolFailed``), never read from its
+# message. The caller's: it named no file (``no_path``), one by a relative path (``relative_path``), a path with
+# no file (``no_file``) or a file CAD does not open (``not_cad``); no view, or one that is gone or shows no model
+# (``no_view``); a view that shows its host's file alone (``wrong_view``); arguments the tool could not read
+# (``bad_request``). The view's: it did not answer in time (``timeout``), answered with an error or without
+# an image (``view_error``), or with one too large for the host (``too_large``). The machine's: the CAD Viewer
+# did not start (``no_viewer``). cadgen's: anything else it raised (``bug``, reported as an ``exception`` too).
+# ``other``: a failure that named none of these.
+FAILURES = frozenset({"no_path", "relative_path", "no_file", "not_cad", "no_view", "wrong_view", "bad_request",
+                      "timeout", "view_error", "too_large", "no_viewer", "bug", "other"})
 # What a person used: a model with children, a model declaring mesh exports (``@stl``, ``@glb``, ``@threemf``),
 # a snapshot that posed joints or played an animation, an engineering drawing (``@eng_drawing``), and a CAD
 # view's Quick Edit sending its prompt.
@@ -185,6 +205,7 @@ HEALTH = ("workers", "crashes", "recycles", "refusals")
 # names, its counts added up over the window -- ``longest`` is the longest.
 EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "tool": (("tool",), ("calls", "errors")),
+    "tool_failure": (("tool", "reason"), ("count",)),
     "view": ((), ("calls",)),
     "files": (("kind",), ("count",)),
     "build": (("kind", "via"), ("count", "failed", "crashed", "cancelled", "cached", "seconds", "longest")),
@@ -974,10 +995,12 @@ class Recorder:
             self._context["presentation"] = presentation
 
     @_guarded(lambda: None)
-    def called(self, tool: str, ok: bool) -> None:
-        """The CAD app ran one of its tools: ``ok`` false when it failed."""
+    def called(self, tool: str, ok: bool, reason: str | None = None) -> None:
+        """The CAD app ran one of its tools: ``ok`` false when it failed, for ``reason`` (one of ``FAILURES``)."""
         if isinstance(tool, str) and tool not in UNCOUNTED:
             self._note("tool", (tool,), {"calls": 1, "errors": 0 if ok else 1})
+            if not ok:
+                self._note("tool_failure", (tool, reason if reason in FAILURES else "other"), {"count": 1})
 
     @_guarded(lambda: None)
     def viewed(self) -> None:
@@ -1098,7 +1121,7 @@ class Recorder:
         if taken is None:
             return False
         payload, sending, choices = taken
-        outcome = _outcome(self._send(payload))
+        outcome = self._deliver(payload)
         if outcome == "failed":  # kept for the next batch, added to whatever came since -- unless a choice
             with self._lock:     # made here while it was on its way cleared it (two answers can share a tick)
                 if self._choices == choices:
@@ -1150,7 +1173,7 @@ class Recorder:
         for index, entry in enumerate(kept):
             if entry.get("answer") != answer:
                 continue
-            outcome = _outcome(self._send(entry["batch"]))
+            outcome = self._deliver(entry["batch"])
             if outcome == "failed":  # offline, or the receiver is down: this one and the rest wait for later
                 for rest in kept[index:]:
                     if rest.get("answer") == answer:
@@ -1158,6 +1181,19 @@ class Recorder:
                 return
             if outcome == "ok" and isinstance(entry["batch"].get("install"), str):
                 self._owe_deletion_if_gone(settings, entry["batch"]["install"])
+
+    def _deliver(self, payload: dict[str, Any]) -> str:
+        """Send a batch: ``ok``, ``refused`` or ``failed`` (``_post``). One this schema's receiver refused is
+        sent once more as the schema before (``EARLIER``) -- a receiver not yet deployed with this release
+        refuses a schema it does not know, and stores nothing of it -- without the events that one never had."""
+        outcome = _outcome(self._send(payload))
+        schema, unknown = EARLIER
+        if outcome != "refused" or payload.get("schema") != SCHEMA:
+            return outcome
+        events = [event for event in payload.get("events") or () if event.get("name") not in unknown]
+        if not events:
+            return outcome
+        return _outcome(self._send({**payload, "schema": schema, "events": events}))
 
     def _owe_deletion_if_gone(self, path: Path, install_id: str) -> None:
         """A batch can land after the deletion an opt-out asked for (said here or in another process
