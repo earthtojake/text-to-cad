@@ -45,7 +45,7 @@ cover what the checks cannot see. Look at every board you place (snapshot it, or
 
 - Every DRC/ERC finding gives the items and their positions in the script's coordinates:
   go to that point in the script.
-- Every build also lists review warnings: an IC power input with no capacitor to ground
+- Every build also lists review warnings: an IC power input (not a connector's, jumper's, test point's or hole's, nor an unfitted part's) with no capacitor to ground
   (decoupling missing), or whose nearest one is more than 3 mm away, pad centre to pad centre
   (decoupling far), and a net whose narrowest track is thinner than its `current=` needs
   (IPC-2221, 1 oz outer copper, 10 °C rise). They never block a build, strict validate or a

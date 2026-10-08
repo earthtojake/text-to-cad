@@ -67,6 +67,12 @@ class ReviewTest(unittest.TestCase):
         (found,) = review(board(ic(), cap("C4", (2.0, 0.0), dnp=True)))
         self.assertEqual(found.type, "decoupling_missing")
 
+    def test_a_connector_or_an_unfitted_part_is_not_reviewed(self):
+        connector = part("J1", [pad("J1", "1", "+5V", (0.0, 0.0), "power_in"), pad("J1", "2", "3V3", (2.5, 0.0), "power_in")])
+        self.assertEqual(review(board(connector)), ())
+        unfitted = part("U2", [pad("U2", "7", "VDD", (0.0, 0.0), "power_in")], dnp=True)
+        self.assertEqual(review(board(unfitted)), ())
+
     def test_a_board_without_power_inputs_has_nothing_to_say(self):
         connector = part("J1", [pad("J1", "1", "VBUS", (0.0, 0.0)), pad("J1", "2", "GND", (2.5, 0.0))])
         self.assertEqual(review(board(connector)), ())
@@ -76,10 +82,15 @@ class ReviewTest(unittest.TestCase):
         wide = Track(net="VBUS", layer="F.Cu", width=1.0, points=((10.0, 0.0), (20.0, 0.0)))
         (found,) = review(board(tracks=(thin, wide)), {"VBUS": 2.0})
         self.assertEqual(found.type, "track_current")
-        self.assertEqual(found.summary, "VBUS carries 2 A; its narrowest track is 0.25 mm, it needs about 0.8 mm")
+        self.assertEqual(found.summary, "VBUS carries 2 A; its narrowest track is 0.25 mm, it needs about 0.78 mm")
         self.assertEqual(found.items[0].ref, "#net:VBUS")
         self.assertEqual(review(board(tracks=(wide,)), {"VBUS": 2.0}), ())
         self.assertEqual(review(board(tracks=(thin,))), ())
+
+    def test_the_needed_width_never_reads_as_the_narrowest(self):
+        thin = Track(net="VBUS", layer="F.Cu", width=0.1, points=((0.0, 0.0), (10.0, 0.0)))
+        (found,) = review(board(tracks=(thin,)), {"VBUS": 0.5})
+        self.assertEqual(found.summary, "VBUS carries 0.5 A; its narrowest track is 0.1 mm, it needs about 0.12 mm")
 
     def test_ipc_2221_width(self):
         self.assertAlmostEqual(required_width(2.0), 0.78, delta=0.02)
@@ -90,6 +101,9 @@ class ReviewTest(unittest.TestCase):
             project = Path(folder) / "t.kicad_pro"
             project.write_text(json.dumps({"cadgen": {"net_currents": {"VBUS": 2.0, "BAD": -1}}}))
             self.assertEqual(net_currents(project), {"VBUS": 2.0})
+            for text in ('{"cadgen": []}', '{"cadgen": {"net_currents": [1]}}', '{"cadgen": {"net_currents": {"V": Infinity}}}'):
+                project.write_text(text)
+                self.assertEqual(net_currents(project), {}, text)
             project.write_text("{not json")
             self.assertEqual(net_currents(project), {})
             self.assertEqual(net_currents(Path(folder) / "missing.kicad_pro"), {})

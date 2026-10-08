@@ -1,7 +1,7 @@
 """The review: what a person reviewing a board checks that KiCad's ERC and DRC do not.
 
-Three checks, each a warning (advice, never a gate): an IC's power input with no decoupling
-capacitor to ground, the nearest one too far from it, and a net's tracks too thin for the
+Three checks, each a warning (advice, never a gate): an IC's power input (not a connector's,
+jumper's, test point's or hole's, nor an unfitted part's) with no decoupling capacitor to ground, the nearest one too far from it, and a net's tracks too thin for the
 current its script gives it (``board.net("VBUS", current=2.0)``, kept in the ``.kicad_pro``
 because KiCad keeps no current per net). Each finding names what it is about in board
 references, so the viewer selects it and an agent resolves it.
@@ -24,6 +24,7 @@ TEMPERATURE_RISE = 10.0  # °C, IPC-2221's outer-layer chart
 _COPPER_MILS = 1.378  # 1 oz copper
 _GROUND = re.compile(r"(?:.*/)?(?:[ADP]?GND\w*|VSS\w*|0V)", re.IGNORECASE)
 _CAPACITOR = re.compile(r"C\d+")
+_NOT_AN_IC = re.compile(r"(?:J|P|CN|CON|JP|TP|H|MH)\d+")  # KiCad's library marks a connector's supply pins power_in
 
 
 def is_ground(net: str | None) -> bool:
@@ -44,9 +45,12 @@ def net_currents(project: Path | None) -> dict[str, float]:
         data = json.loads(Path(project).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    currents = (data.get("cadgen") or {}).get("net_currents") or {} if isinstance(data, dict) else {}
+    section = data.get("cadgen") if isinstance(data, dict) else None
+    currents = section.get("net_currents") if isinstance(section, dict) else None
+    if not isinstance(currents, dict):
+        return {}
     return {str(name): float(value) for name, value in currents.items()
-            if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0}
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0}
 
 
 def _finding(type: str, summary: str, description: str, items: list[FindingItem]) -> Finding:
@@ -58,6 +62,8 @@ def review(index: BoardIndex, currents: Mapping[str, float] | None = None) -> tu
     found: list[Finding] = []
     capacitors = [part for part in index.parts if _CAPACITOR.fullmatch(part.ref) and not part.dnp]
     for part in index.parts:
+        if part.dnp or _NOT_AN_IC.fullmatch(part.ref):
+            continue
         inputs: dict[str, list] = {}
         for pad in part.pads:
             if pad.type == "power_in" and pad.net and not is_ground(pad.net) and not pad.net.startswith("unconnected-("):
@@ -99,7 +105,7 @@ def review(index: BoardIndex, currents: Mapping[str, float] | None = None) -> tu
         if thinnest.width + 1e-6 < need:
             found.append(_finding(
                 "track_current",
-                f"{net} carries {current:g} A; its narrowest track is {thinnest.width:g} mm, it needs about {need:.1f} mm",
+                f"{net} carries {current:g} A; its narrowest track is {thinnest.width:g} mm, it needs about {need:.2g} mm",
                 f"IPC-2221, 1 oz outer copper, {TEMPERATURE_RISE:g} °C rise: {need:.2f} mm for {current:g} A; "
                 f"narrowest {thinnest.width:g} mm on {thinnest.layer}.",
                 [FindingItem(text=f"the {net} track", ref=Net(name=net, netclass="").selector, at=thinnest.points[0])],
