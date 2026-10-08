@@ -1198,15 +1198,16 @@ One handle system serves both formats. Two adapters turn a description and its
 CURRENT pose into one plain list, in model space: `{ id, label, kind, pivot,
 axis, toward, value, min, max, unit, onChange }` (`robot/jointHandles.js`, and
 the STEP renderer's `workbench/jointHandles.js`). A robot's joint
-frame is READ, not solved: it is the world matrix of the joint's motion group in
-the scene graph, which already sits before an SDF joint's static child offset; a
+frame is READ, not solved: it is the world matrix of the joint's node in the scene
+graph, the joint's delta as `jointDeltas` composes it; a
 STEP mate's world-at-rest axis is carried by the
 accumulated delta of its child, the composition `kinematicsDeltas` uses, so a
-handle rides a mate chain of any depth. A fixed joint, a fastened mate and a
-mimic follower have no handle. A STEP DOF that a coupling drives KEEPS its
-handle and writes through the coupling (`poseControlWrite`), as its slider does:
-a coupling has no axis to hang a handle on, and a gear train whose every member
-is geared would otherwise have none. The list is rebuilt from the pose on screen,
+handle rides a mate chain of any depth. A fixed joint and a fastened mate have no
+handle. A row a coupling drives KEEPS its handle and writes through the coupling,
+as its slider does (a STEP DOF through `poseControlWrite`, a robot's mimic follower
+through its leader's control, `controlWriteForHandle`): a coupling has no axis to
+hang a handle on, and a gear train whose every member is geared would otherwise
+have none. The list is rebuilt from the pose on screen,
 so sliders, presets, Reset and a handle further up the chain all carry the
 knobs along.
 

@@ -101,6 +101,7 @@ def _cmd_info(as_json: bool) -> int:
         "drawing": "drawing render payloads",
         "skin": "tube skins (a document's bending tubes, bound)",
         "section": "component sections (a BREP cut by a plane)",
+        "robot": "robot entries (a description -> its payload and primitive meshes)",
     }
     for kind, count in payload["index"].items():
         print(f"index/{kind:<10} {count} {labels[kind]}")
