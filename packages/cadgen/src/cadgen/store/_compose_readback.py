@@ -21,7 +21,7 @@ Eligibility is exact and every other case takes the ordinary read-back:
   ``_normalize_label_name``;
 - every child's document tree is pinned by its record for the tree the parent
   used, is complete, has an assembly root, holds only native components, and
-  names every node;
+  names every node by a name that survives ``_normalize_label_name``;
 - every leaf box the canonical bounds path would take is already in
   ``index/bounds`` under the child's publication, with a leaf layout whose
   leaves all sit at the prototype's placement;
@@ -91,9 +91,15 @@ def pure_translation(transform: Any) -> bool:
 
 
 def _named(node: Mapping[str, Any]) -> str:
+    from cadgen._internal.step_scene_loader import _normalize_label_name
+
     name = node.get("name")
     if type(name) is not str or not name or name == node.get("id"):
         raise Ineligible(f"child document node {node.get('id')!r} has no name of its own")
+    # A child's document tree compiled under an older name rule (one that kept an
+    # XCAF label entry as a name) is not what the parent's bytes read back as now.
+    if _normalize_label_name(name) != name:
+        raise Ineligible(f"child document node {node.get('id')!r} has a name the read-back does not keep")
     return name
 
 
