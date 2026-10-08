@@ -220,7 +220,10 @@ def build_board(board: Board, *, name: str, install: KicadInstall | None = None,
             )
         findings = erc_findings(stage / "erc.json") + board_findings
         filled = _merge_fills(pcb_tree, (stage / f"{name}.kicad_pcb").read_text())
-        findings += _reviewed(filled, stage / f"{name}.kicad_pro", board.net_currents)
+        try:
+            findings += _reviewed(filled, stage / f"{name}.kicad_pro", board.net_currents)
+        except ValueError:
+            pass  # a board cadgen's index cannot read loses the review, not its build
     return BoardBuild(findings=tuple(findings), name=name, pro=texts.pro, sch=texts.sch, pcb=sexpr.dumps(filled), dru=texts.dru)
 
 

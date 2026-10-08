@@ -63,6 +63,9 @@ class PcbDesignTest(unittest.TestCase):
             board.net("VBUS", current=3.0)
         with self.assertRaisesRegex(DesignError, "positive"):
             board.net("V3V3", current=0)
+        for bad in ("2A", float("inf")):
+            with self.assertRaisesRegex(DesignError, "positive|amperes"):
+                board.net("V5", current=bad)
         self.assertIsNone(board.net("SDA").current)
 
     def test_a_pin_joins_one_net(self) -> None:

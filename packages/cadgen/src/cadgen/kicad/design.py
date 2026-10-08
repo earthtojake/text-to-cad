@@ -559,8 +559,11 @@ class Circuit:
         ``current`` is what the net carries, in amperes: the review checks its tracks are wide enough.
         """
         if current is not None:
-            current = float(current)
-            if not current > 0:
+            try:
+                current = float(current)
+            except (TypeError, ValueError):
+                raise DesignError(f"a net's current is in amperes and positive, not {current!r}") from None
+            if not math.isfinite(current) or current <= 0:
                 raise DesignError(f"a net's current is in amperes and positive, not {current:g}")
         if name is not None:
             name = str(name).strip()
