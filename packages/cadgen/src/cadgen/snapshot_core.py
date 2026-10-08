@@ -2103,11 +2103,18 @@ def _python_outputs(job: Mapping[str, object]) -> tuple[list[dict[str, object]],
 async def _render_job(renderer: "BatchSnapshotRenderer", job: Mapping[str, object]) -> dict[str, object]:
     """One still job's result: what Python answered, merged with what the page drew.
 
+    A STEP list and a section's SVG are cadgen's alone; a job that needs nothing
+    drawn never reaches the renderer, so no browser starts for it.
+
     Warnings cadgen raised while resolving the job (``resolved.warnings``) come
     first; the outputs keep the order the job declared them in.
     """
-    written, page_job = _python_outputs(job)
     resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}
+    if isinstance(resolved.get("parts"), list):
+        # A STEP list is answered whole by cadgen (cadgen.snapshot_parts).
+        return {"ok": True, "mode": "list", "parts": list(resolved["parts"]),
+                "warnings": [str(warning) for warning in resolved.get("warnings") or []]}
+    written, page_job = _python_outputs(job)
     if page_job is None:
         result: dict[str, object] = {"ok": True, "mode": job.get("mode"), "outputs": [], "warnings": []}
     else:

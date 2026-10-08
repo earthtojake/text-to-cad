@@ -567,8 +567,7 @@ import {
   renderJobContext,
   modelOptionsForRenderJob,
   renderModel,
-  captureModel,
-  renderMeshJob
+  captureModel
 } from "@text-to-cad/core/common/renderMeshScene.js";
 ```
 
@@ -618,18 +617,19 @@ that rest box.
 `captureModel(viewport, { job })` returns data only:
 
 - `mode: "view"`: PNG data URLs in `outputs`.
-- `mode: "section"`: PNG data URLs or SVG text in `outputs`.
-- `mode: "list"`: part list and bounds. A CAD model lists its composed part
-  occurrences; a family scene lists what it drew, one row per mesh, in its scene
-  graph's order (a robot's scene attaches a link's meshes before the joints it
-  carries, so its rows run down the tree from the root).
+- `mode: "list"`: a family scene's part list and bounds: what it drew, one row
+  per mesh, in its scene graph's order (a robot's scene attaches a link's meshes
+  before the joints it carries, so its rows run down the tree from the root).
+
+A STEP model's list and section are cadgen's facts and never reach this module:
+cadgen answers `--mode list` from the tree and the store
+(`cadgen.snapshot_parts`), and cuts a section from the exact BREP
+(`cadgen.section_drawing`), whose PNG the page paints as a 2D drawing
+(`common/headlessDrawingRender.js`, the code that paints a DXF).
 
 It does not write files. The CAD skill snapshot CLI writes the returned data to
 disk. Consumers use compiled `@text-to-cad/core` exports; generated snapshot browser assets
 bundle this entrypoint into cadgen's packaged runtime (`cadgen/_runtime/browser`).
-
-`renderMeshJob(meshData, job)` is a compatibility wrapper that builds a context,
-builds a model, renders/captures it, and disposes owned resources.
 
 ### `common/headlessScene.js`
 

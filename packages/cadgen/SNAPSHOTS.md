@@ -137,6 +137,18 @@ with a cut locator in the corner and, with `--view-labels`, the plane's label; a
 all `.svg` starts no browser. Section mode is for STEP/STP inputs; a mesh or a
 robot description has no solids to section.
 
+## Listing a STEP model's parts
+
+`--mode list` on a STEP/STP input is answered by cadgen from the tree and the
+store (`cadgen.snapshot_parts`) and starts no browser. Each row is one placed
+occurrence, in the tree's order: `ref` and `name` are the occurrence's id and
+name exactly as every selector resolves them
+(`cadgen.assembly_lookup.assembly_occurrence_rows`), `bounds` is the component's
+exact box placed by the occurrence's transform (rounded to 1e-3), and
+`triangleCount`/`vertexCount` are the stored display mesh's at the tessellation a
+view would draw (meshed in the build pool when the store has none). `--focus` and
+`--hide` narrow the rows the way they narrow a section.
+
 ## Sizes
 
 An output is sized by `--size-profile` (`output.sizeProfile`) — `simple`

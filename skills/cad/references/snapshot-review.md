@@ -214,6 +214,12 @@ appearance's foreground (or `display.edges.color`), with dash-dot centre lines
 and a cut locator; `--view-labels` adds the plane's label. A `.svg` is the same
 drawing, y up, and a job whose outputs are all `.svg` needs no browser.
 
+`--mode list` writes no image: it prints one row per placed part — its `ref`
+(what `--focus`, `--hide` and `scene.resolve(ref)` accept), its `name`, its exact
+`bounds` in model units, and the `triangleCount`/`vertexCount` of the display
+mesh a view would draw. `--focus`/`--hide` narrow the rows. A STEP list starts no
+browser, so it is the cheap way to learn what an assembly contains.
+
 OUT's extension picks the format and nothing else does: section mode writes
 `.png` or `.svg`, view mode writes `.png`, and a video writes `.mp4` or `.gif`.
 Any other extension — a view named `.svg` or `.jpg` — is refused instead of

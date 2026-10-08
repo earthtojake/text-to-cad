@@ -348,7 +348,9 @@ function roundedBounds(bounds) {
   return min && max ? { min, max } : null;
 }
 
-// The parts inventory: what is in this model and what can be selected.
+// The parts inventory of a family scene (a GLB, an STL, a 3MF, a robot): what it drew.
+// A STEP model's parts are cadgen's facts and never reach the page (cadgen.snapshot_parts
+// lists them, with the same fields, from the tree and the store).
 //
 // This is the ONLY output whose size grows with the model -- everything else in the CLI
 // surface is constant (a 600-part assembly logs the same ~100 bytes a single part does).
@@ -365,8 +367,8 @@ function roundedBounds(bounds) {
 // size work above for a string the row already contains. `inspect refs` reports the exact
 // paste spelling, including the numbered form for duplicated labels, where the output is
 // small enough for it to be free.
-export function listRenderableParts(meshData) {
-  return toArray(meshData.parts).map((part, index) => {
+export function listRenderableParts(parts) {
+  return toArray(parts).map((part, index) => {
     const occurrenceId = String(part?.occurrenceId || part?.id || "");
     return {
       ref: occurrenceId ? `#${occurrenceId}` : "",
@@ -819,11 +821,13 @@ export async function captureModel(viewport, captureOptions = {}) {
   const modelBounds = viewport.model?.bounds || meshData?.bounds || bounds;
 
   if (mode === "list") {
+    if (typeof viewport.model.listParts !== "function") {
+      throw new Error("--mode list lists a GLB, mesh or robot scene here; cadgen lists a STEP model's parts itself");
+    }
     return {
       ok: true,
       mode,
-      // A family's scene lists what it drew; a CAD model its composed part occurrences.
-      parts: listRenderableParts(viewport.model.listParts ? { parts: viewport.model.listParts() } : meshData),
+      parts: listRenderableParts(viewport.model.listParts()),
       bounds: roundedBounds(modelBounds) || modelBounds,
       warnings
     };
@@ -972,26 +976,8 @@ export async function captureModel(viewport, captureOptions = {}) {
     timings: {
       sceneBuildMs,
       renderMs,
-      meshCount: viewport.model.displayRecords.length || (meshData ? listRenderableParts(meshData).length : 0) || 1
+      meshCount: viewport.model.displayRecords.length || toArray(meshData?.parts).length || 1
     },
     warnings
   };
-}
-
-export async function renderMeshJob(meshData, job = {}) {
-  const context = renderJobContext(meshData, job);
-  const model = buildModel(THREE, meshData, modelOptionsForRenderJob(context, job));
-  if (context.mode === "list") {
-    try {
-      return await captureModel({ model, context }, { job });
-    } finally {
-      model.dispose();
-    }
-  }
-  const viewport = renderModel(THREE, model, { job, context });
-  try {
-    return await captureModel(viewport, { job });
-  } finally {
-    viewport.dispose();
-  }
 }

@@ -1242,6 +1242,24 @@ def resolve_step_render_job(
         raise SnapshotError(
             "STEP/STP render input changed while its topology was being resolved; retry the snapshot"
         )
+    if job["mode"] == "list":
+        # The parts are cadgen's facts: the rows every ref resolves against, the
+        # store's exact boxes and its stored meshes' counts (cadgen.snapshot_parts).
+        # Nothing is drawn, so no browser starts.
+        from cadgen.snapshot_parts import list_rows
+
+        quality = job.get("quality") if is_plain_object(job.get("quality")) else {}
+        try:
+            parts = list_rows(descriptor, package_dir, selection=normalized_selection,
+                              tessellation=quality.get("tessellation") or {})
+        except ValueError as error:
+            raise SnapshotError(str(error)) from None
+        if debug_enabled:
+            resolved["debug"] = {"stepArtifact": step_artifact_debug}
+        resolved_job = {**job, "resolved": {**resolved, "parts": parts}}
+        if normalized_selection is not None:
+            resolved_job["selection"] = normalized_selection
+        return resolved_job
     if job["mode"] == "section":
         # The cut is cadgen's: exact, from each component's BREP, and drawn by the
         # page as the 2D payload a DXF is (cadgen.section_drawing).

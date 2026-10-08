@@ -1,18 +1,35 @@
-"""A STEP snapshot's parts, as Python knows them: what ``focus``/``hide`` keep.
+"""A STEP snapshot's parts, as Python knows them: ``--mode list``, and what focus/hide keep.
+
+``cadgen step snapshot --mode list`` answers here, from the tree and the store,
+and never starts a browser. One row per placed occurrence (``#o1.2``), in the
+descriptor's order:
+
+- ``ref`` and ``name`` are the occurrence's id and name exactly as
+  :func:`cadgen.assembly_lookup.assembly_occurrence_rows` gives them -- the rows
+  every selector, ``--focus`` and ``--hide`` resolve against, so a listed ref
+  is one those accept;
+- ``bounds`` is that row's box: the component's exact box (from its SURF),
+  placed by the occurrence's transform, rounded to a nanometre;
+- ``triangleCount`` and ``vertexCount`` are the stored display mesh's
+  (``cadgen.store.meshes``) at the tessellation the snapshot would draw, meshed
+  in the build pool when the store has none.
 
 ``focus``/``hide`` select the same way the page's scene does for a view: an
 occurrence matches a ref that IS its id, an ancestor group's id (``o1.2``
-covers ``o1.2.3``), or its name. The rows are
-:func:`cadgen.assembly_lookup.assembly_occurrence_rows`, the ones every
-selector resolves against.
+covers ``o1.2.3``), or its name.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
-__all__ = ["filter_occurrences"]
+__all__ = ["LIST_BOUNDS_DECIMALS", "filter_occurrences", "list_rows"]
+
+# Three decimals of a millimetre is a nanometre: far below any tolerance a model
+# is built to, and a fifth of the payload full float64 noise would be.
+LIST_BOUNDS_DECIMALS = 3
 
 
 def _selector_values(value: object) -> list[str]:
@@ -51,3 +68,59 @@ def filter_occurrences(rows: Sequence[Mapping[str, Any]], selection: Mapping[str
     if not kept:
         raise ValueError("No renderable parts remain after applying focus/hide filters")
     return kept
+
+
+def _rounded(values: Sequence[float]) -> list:
+    out = []
+    for value in values:
+        number = round(float(value), LIST_BOUNDS_DECIMALS)
+        out.append(0 if number == 0 else (int(number) if number == int(number) else number))
+    return out
+
+
+def _mesh_counts(descriptor: Mapping[str, Any], cids: set[str], tessellation: Mapping[str, float]) -> dict:
+    """``{cid: (triangles, vertices)}`` from the stored meshes at ``tessellation``."""
+    from cadgen.store.meshes import DEFAULT_ANGLE, DEFAULT_CHORD, tessellation_key
+    from cadgen.store.tess_cache import produce_meshes
+
+    chord = float(tessellation.get("chordTolerance", DEFAULT_CHORD))
+    angle = float(tessellation.get("angleTolerance", DEFAULT_ANGLE))
+    components = descriptor.get("components") if isinstance(descriptor.get("components"), Mapping) else {}
+    keys = {}
+    for cid in sorted(cids):
+        surface_input = str((components.get(cid) or {}).get("surfaceInput") or "")
+        if surface_input:
+            keys[cid] = tessellation_key(surface_input, chord, angle)
+    records = produce_meshes(list(keys.values())) if keys else {}
+    counts = {}
+    for cid, key in keys.items():
+        record = records.get(key)
+        if isinstance(record, Mapping):
+            counts[cid] = (int(record["indexCount"]) // 3, int(record["vertexCount"]))
+    return counts
+
+
+def list_rows(
+    descriptor: Mapping[str, Any],
+    package_dir: Path,
+    *,
+    selection: Mapping[str, Any] | None,
+    tessellation: Mapping[str, float],
+) -> list[dict[str, Any]]:
+    """The ``--mode list`` rows for a STEP tree (see the module docstring)."""
+    from cadgen.assembly_lookup import assembly_occurrence_rows
+
+    rows = filter_occurrences(assembly_occurrence_rows(descriptor, package_dir), selection)
+    counts = _mesh_counts(descriptor, {str(row["component"]) for row in rows if row.get("component")}, tessellation)
+    listed = []
+    for row in rows:
+        triangles, vertices = counts.get(str(row.get("component")), (0, 0))
+        box = row.get("bbox") if isinstance(row.get("bbox"), Mapping) else None
+        listed.append({
+            "ref": f"#{row['id']}",
+            "name": str(row.get("name") or row["id"]),
+            "triangleCount": triangles,
+            "vertexCount": vertices,
+            "bounds": {"min": _rounded(box["min"]), "max": _rounded(box["max"])} if box else None,
+        })
+    return listed

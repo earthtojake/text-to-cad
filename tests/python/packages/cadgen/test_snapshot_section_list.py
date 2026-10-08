@@ -1,4 +1,4 @@
-"""`cadgen step snapshot --mode section`, through the real door, the real store and the real page.
+"""`cadgen step snapshot --mode section` and `--mode list`: cadgen's facts, through the real door.
 
 The cut is cadgen's: an OCCT section of each part's exact BREP (a build-pool job), drawn as a
 2D payload the snapshot page paints and written as SVG by cadgen itself. These run the verb on
@@ -7,7 +7,9 @@ x = 30 -- and read back what was written:
 
 * the PNG is the cut, framed as a section always was, with the pin a true circle;
 * an SVG output is cadgen's, so a job with only SVG outputs never starts a browser;
-* focus/hide pick what is cut, and a plane that misses says so.
+* focus/hide pick what is cut, and a plane that misses says so;
+* `--mode list` is answered from the tree and the store, with no browser: the refs every
+  selector resolves, the parts' exact boxes, and the stored meshes' counts.
 """
 
 from __future__ import annotations
@@ -120,6 +122,73 @@ class SnapshotSectionTests(unittest.TestCase):
         self.assertIn("M 0 0 L 20 0 L 20 10 L 0 10 L 0 0 Z", svg.replace("M 0 10 L 0 0 L 20 0 L 20 10 L 0 10 Z",
                                                                          "M 0 0 L 20 0 L 20 10 L 0 10 L 0 0 Z"))
         self.assertNotIn(" C ", svg, "the focused plate has no curve; the pin was cut too")
+
+
+class SnapshotListTests(unittest.TestCase):
+    """`--mode list` on a STEP model is cadgen's answer from the tree and the store: no browser."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._roots = ClassCadRoots(prefix="snapshot-list-")
+        cls.workspace = cls._roots.cad_root
+        write_assembly(cls.workspace / "asm.step")
+        import cadgen.step as step_door
+        from cadgen import snapshot_core
+
+        cls.step = step_door
+        with mock.patch.object(snapshot_core.BatchSnapshotRenderer, "start", browser_refused):
+            cls.listing = step_door.snapshot(cls.workspace / "asm.step", mode="list")
+            cls.focused = step_door.snapshot(cls.workspace / "asm.step", mode="list", focus=("#o1.2",))
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._roots.cleanup()
+
+    def test_each_part_is_listed_with_its_exact_box_and_its_mesh_counts(self) -> None:
+        self.assertTrue(self.listing.ok)
+        self.assertEqual((), self.listing.files)
+        rows = {row["ref"]: row for row in self.listing.parts}
+        self.assertEqual(["#o1.1", "#o1.2"], list(rows))
+        self.assertEqual({"ref", "name", "triangleCount", "vertexCount", "bounds"}, set(rows["#o1.1"]))
+        self.assertEqual(("plate", "pin"), (rows["#o1.1"]["name"], rows["#o1.2"]["name"]))
+        self.assertEqual({"min": [0, 0, 0], "max": [20, 10, 5]}, rows["#o1.1"]["bounds"])
+        # The pin's exact box, from its BREP, placed at x = 30: not a tessellation's.
+        self.assertEqual({"min": [25, -5, 0], "max": [35, 5, 20]}, rows["#o1.2"]["bounds"])
+        # A box is two triangles a face, each face its own four vertices.
+        self.assertEqual((12, 24), (rows["#o1.1"]["triangleCount"], rows["#o1.1"]["vertexCount"]))
+        self.assertGreater(rows["#o1.2"]["triangleCount"], 12)
+
+    def test_a_listed_ref_is_one_every_selector_resolves(self) -> None:
+        from cadgen._internal.doors import document_snapshot
+        from cadgen.assembly_lookup import assembly_occurrence_rows
+        from cadgen.store.view import view_dir_for
+
+        document, tree = document_snapshot(self.workspace / "asm.step")
+        package = view_dir_for(tree, document_hash=document)
+        descriptor = json.loads((package / "assembly.json").read_text(encoding="utf-8"))
+        rows = assembly_occurrence_rows(descriptor, package)
+        self.assertEqual([(f"#{row['id']}", row["name"]) for row in rows],
+                         [(row["ref"], row["name"]) for row in self.listing.parts])
+
+    def test_focus_lists_only_what_it_keeps(self) -> None:
+        self.assertEqual(["#o1.2"], [row["ref"] for row in self.focused.parts])
+
+
+class FilterOccurrencesTests(unittest.TestCase):
+    ROWS = [{"id": "o1.1", "name": "plate"}, {"id": "o1.2.1", "name": "pin"}, {"id": "o1.2.2", "name": "nut"}]
+
+    def keep(self, **selection):
+        from cadgen.snapshot_parts import filter_occurrences
+
+        return [row["id"] for row in filter_occurrences(self.ROWS, selection)]
+
+    def test_a_ref_matches_its_id_its_group_or_its_name(self) -> None:
+        self.assertEqual(["o1.1", "o1.2.1", "o1.2.2"], self.keep())
+        self.assertEqual(["o1.2.1", "o1.2.2"], self.keep(focus=["#o1.2"]))
+        self.assertEqual(["o1.2.2"], self.keep(focus=["nut"]))
+        self.assertEqual(["o1.1", "o1.2.2"], self.keep(hide="#o1.2.1"))
+        with self.assertRaisesRegex(ValueError, "No renderable parts remain"):
+            self.keep(focus=["#o9"])
 
 
 if __name__ == "__main__":
