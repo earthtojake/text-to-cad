@@ -1,0 +1,72 @@
+"""Where this install of text-to-cad came from: its channel, and whether something keeps it up to date.
+
+Each plugin says both in its CAD server's startup config, as the server's environment:
+``CADGEN_INSTALL_CHANNEL=<id>``, plus ``CADGEN_AUTO_UPDATED=1`` when something other than the person
+keeps that copy up to date (the store that reviewed it, or the app that installed it). The build
+that makes the plugin writes them; nothing works them out from folders, ids or a host's
+internals. The processes the server starts (the CAD Viewer, the build daemon and its workers)
+inherit them. They are environment, not flags, because a plugin's config pins a release of
+cadgen that may predate a setting: a cadgen ignores an environment variable it does not know,
+where a flag it does not know would stop the server.
+
+cadgen reads a channel as a token and nothing more: telemetry reports it, and nothing decides by
+its name but ``dev``, a development install (and a source tree, installed editable or imported from
+a checkout by path), which hears of no release and sends no telemetry by default. A process
+no plugin's server started -- a skill's ``cadgen`` command, the CAD Viewer a skill opens -- is
+``unknown``: a skills-only install, or cadgen run by hand. Which app runs a server is not a
+channel either: the MCP handshake says that (``clientInfo``), so a plugin several apps read names
+one channel.
+
+Whether a copy hears of a new release (``cadgen/updates.py``) is ``told``: not when something
+keeps it up to date, nor for a development install. So a plugin that ships somewhere new needs no
+release of cadgen: its startup config says it all.
+"""
+
+from __future__ import annotations
+
+import functools
+import os
+import re
+from pathlib import Path
+
+ENV = "CADGEN_INSTALL_CHANNEL"
+AUTO_UPDATED_ENV = "CADGEN_AUTO_UPDATED"
+DEV = "dev"
+UNKNOWN = "unknown"
+_TOKEN = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
+
+
+def is_channel(value: object) -> bool:
+    """Whether ``value`` is a channel a plugin can name: a short lowercase token."""
+    return isinstance(value, str) and bool(_TOKEN.fullmatch(value)) and value != UNKNOWN
+
+
+@functools.cache
+def _source_tree() -> bool:
+    """An editable install, or cadgen imported from a checkout by path -- as the build daemon and its
+    workers are (``PYTHONPATH`` names the checkout's ``src`` first), where the first metadata found
+    can be a build's leftover rather than the editable install's record."""
+    from cadgen._internal.editable import editable_source
+
+    if editable_source() is not None:
+        return True
+    package = Path(__file__).resolve().parents[1]  # cadgen/
+    return package.parent.name == "src" and (package.parents[1] / "pyproject.toml").is_file()
+
+
+def channel() -> str:
+    """This install's channel: what its plugin named, else ``dev`` for a source tree, else ``unknown``."""
+    named = str(os.environ.get(ENV) or "").strip()
+    if is_channel(named):
+        return named
+    return DEV if _source_tree() else UNKNOWN
+
+
+def auto_updated() -> bool:
+    """Whether this install's plugin said something other than the person keeps it up to date."""
+    return str(os.environ.get(AUTO_UPDATED_ENV) or "").strip() == "1"
+
+
+def told() -> bool:
+    """Whether this install hears of a new release: a copy nothing else updates, and not a development install."""
+    return not auto_updated() and channel() != DEV

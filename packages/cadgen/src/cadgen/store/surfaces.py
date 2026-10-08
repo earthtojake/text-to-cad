@@ -5,7 +5,7 @@ import hashlib
 import json
 import struct
 from functools import lru_cache
-from typing import Any
+from typing import Any, Callable
 
 from cadgen.store.index import read_entry, write_entry
 from cadgen.store.objects import put_object, read_verified_object
@@ -180,7 +180,14 @@ def lookup(entry: dict, producer: dict) -> dict | None:
 
 
 def derive(tree_hash: str, cids: list[str] | None = None, *, force: bool = False,
-           expected_objects: dict[str, str] | None = None, producer: dict | None = None) -> dict:
+           expected_objects: dict[str, str] | None = None, producer: dict | None = None,
+           keep_going: Callable[[], bool] | None = None) -> dict:
+    """Derive the surfaces of ``cids`` (every component when None) and return their records.
+
+    ``keep_going``, when given, is asked before each extraction: False stops there, and the
+    result holds the components done so far (a daemon worker asks whether anyone still
+    wants its job, ``daemon/worker.py``).
+    """
     from cadgen.store.trees import capture_tree as capture
     from cadgen._internal.component_package import decode_geometry_component
     from cadgen._internal.surface_extract import extract_surface_component
@@ -213,6 +220,8 @@ def derive(tree_hash: str, cids: list[str] | None = None, *, force: bool = False
         else:
             actual = None if force else prior
             if actual is None:
+                if keep_going is not None and not keep_going():
+                    break
                 shape = decode_geometry_component(entry, read_verified_object(entry["brep"]))
                 payload = extract_surface_component(shape.wrapped, face_colors=shape.cad_face_ordinal_colors)
                 validate_surface_bytes(payload)

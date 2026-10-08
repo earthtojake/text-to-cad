@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@text-to-cad/ui/utils";
 import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { FLOATING_CHROME_SURFACE_CLASS } from "./floatingSurface.js";
+import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import ResizeGrip from "./ResizeGrip.jsx";
 import { ToolStackContext } from "./ToolStack.jsx";
 import { TOOL_PANEL_WIDTH, clampToolPanelHeight, clampToolPanelWidth } from "./toolStackLayout.js";
@@ -26,7 +26,7 @@ const FIT = Object.freeze({
 const FLOOR = Object.freeze({ tree: 128, details: 96 });
 const KEY_NUDGE_PX = 16;
 /**
- * Every panel's heading text: the size and weight of the Display panel's section headings
+ * Every panel's heading text: the size and weight of Display's section headings
  * (`FILE_SHEET_SECTION_HEADING_CLASSES`, 11px), so every heading in the stack reads alike.
  */
 export const TOOL_PANEL_HEADING_TEXT_CLASS = "text-tiny font-normal leading-4 text-foreground";
@@ -34,8 +34,7 @@ export const TOOL_PANEL_HEADING_TEXT_CLASS = "text-tiny font-normal leading-4 te
 /** A panel header's small icon button: the chevron, the X, and a tool's mode menu (`ToolModeMenu.jsx`). */
 export const TOOL_PANEL_BUTTON_CLASS = "flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 
-// What the panel's content reads of it: how to fold it (a collapsible panel), how to close it (a
-// closable one), its name, and how to say it draws the chevron in its own first row.
+// What the panel's content reads of it: how to close it from its own first row (`ToolPanelClose`), and its name.
 const ToolPanelContext = createContext(null);
 
 /**
@@ -67,18 +66,6 @@ function CollapseButton({ panel, className }) {
     {/* Down to open a folded panel, up to fold an open one. */}
     {panel.collapsed ? <ChevronDown className="size-3" aria-hidden="true" data-chevron="down" /> : <ChevronUp className="size-3" aria-hidden="true" data-chevron="up" />}
   </button>;
-}
-
-/**
- * The chevron that folds the panel it is drawn in to its first row, for a panel whose first row
- * is its content's own: Display's first heading, a set of joints' Pose row. Drawn anywhere inside
- * a collapsible `ToolPanel`, at that row's trailing end; nothing outside one.
- */
-export function ToolPanelCollapse({ className }) {
-  const panel = useContext(ToolPanelContext);
-  const place = panel?.place;
-  useLayoutEffect(() => place?.(), [place]);
-  return panel?.toggle ? <CollapseButton panel={panel} className={className} /> : null;
 }
 
 /**
@@ -114,9 +101,9 @@ export function ToolPanelClose({ className }) {
  * for a panel with nothing to fold away (a row of buttons, or one with an X instead). A panel's
  * first row is, in order: its heading (`title`, with a `summary`, the chevron and an X when it has
  * something to remove); its `header` (a tree's filter, which carries a `ToolPanelClose`); or its
- * content's own first row. Folded, a panel without a heading or a header shows its `name` beside
- * the chevron, and has no grip: there is no height to set. Which panels are folded is the person's
- * (`ToolStack.jsx`), by `id`, across files.
+ * content's own first row. A folding panel without a heading or a header shows its `name`
+ * beside the chevron, and has no grip while folded: there is no height to set. Which panels are
+ * folded is the person's (`ToolStack.jsx`), by `id`, across files.
  *
  * `closable`: the tree's. Its X (`ToolPanelClose`) puts the panel away — `hidden`, kept mounted —
  * and the tool it belongs to brings it back; whether it is closed is the person's too, by `id`,
@@ -149,12 +136,9 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const [ownClosed, setOwnClosed] = useState(false);
   const closed = closable && (kept ? stack.closed(id) : ownClosed);
   const close = useCallback(() => { if (kept) stack.settle(id, { closed: true }); else setOwnClosed(true); }, [kept, stack, id]);
-  // Whether the content carries the chevron in its own first row (`ToolPanelCollapse`).
-  const [placed, setPlaced] = useState(0);
-  const place = useCallback(() => { setPlaced(count => count + 1); return () => setPlaced(count => count - 1); }, []);
   const panel = useMemo(() => collapsible || closable ? {
-    label, ...(collapsible ? { collapsed, toggle, place } : {}), ...(closable ? { close } : {})
-  } : null, [collapsible, closable, collapsed, toggle, label, place, close]);
+    label, ...(collapsible ? { collapsed, toggle } : {}), ...(closable ? { close } : {})
+  } : null, [collapsible, closable, collapsed, toggle, label, close]);
   const folding = collapsible ? panel : null;
 
   // The size: dragged (`draft`), then as the person left it, then the defaults — every panel's
@@ -241,9 +225,8 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
     {onClose ? <button type="button" aria-label={closeLabel || `Close ${label.toLowerCase()}`}
       className={TOOL_PANEL_BUTTON_CLASS} onClick={onClose}><X className="size-3" aria-hidden="true" /></button> : null}
   </div>
-    // No heading of its own: while its content's first row is out of sight (folded) or carries no
-    // chevron, the panel's name stands in for it.
-    : folding && (!placed || (collapsed && !header)) ? <div className="flex min-h-7 shrink-0 items-center gap-0.5 pl-2 pr-1" data-tool-panel-heading="">
+    // No heading of its own: a folding panel's name stands in for one, beside its chevron.
+    : folding ? <div className="flex min-h-7 shrink-0 items-center gap-0.5 pl-2 pr-1" data-tool-panel-heading="">
       <h3 className={cn("min-w-0 flex-1 truncate", TOOL_PANEL_HEADING_TEXT_CLASS)}>{name || label}</h3>
       <CollapseButton panel={folding} />
     </div> : null;

@@ -1,100 +1,114 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Box, FolderX } from 'lucide-react';
+import { FileWarning, FileX } from 'lucide-react';
 import type { CadWorkspaceService } from '@text-to-cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
-import { EmptyCadBackdrop } from '../file-viewer/empty.js';
-import { MissingFileAlert, ViewerLoadingOverlay } from '../file-viewer/presentation.js';
+import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState } from '../file-viewer/navigation/index.js';
-import type { AppSetting } from '../file-viewer/types.js';
+import { Button } from '../primitives/button.jsx';
+import type { AppSetting, ViewerFeatures, ViewerHistory } from '../file-viewer/types.js';
 import type { ViewerHost } from '../host/types.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
-import { ModelLibrary, type LibraryModel, type ModelLibrarySource, type ModelPictureSource } from '../library/ModelLibrary.js';
+import { ModelLibrary, type LibraryModel, type ModelLibrarySource } from '../library/ModelLibrary.js';
 import { useModelThumbnail } from '../library/thumbnails.js';
-import { OffscreenPicture, cadRenderers } from './OffscreenPicture.js';
+import { OffscreenPicture, cadRenderers, type ModelPictureSource } from './OffscreenPicture.js';
 import type { LibraryLayout } from '../tab-store/tabRecord.js';
 import type { TabStore } from '../tab-store/tabStore.js';
 import { useTabViewerState } from '../tab-store/useTabViewerState.js';
-import { catalogPath, findCatalogEntry, normalizeCatalogPath } from './catalog.js';
+import { normalizePath } from './catalog.js';
 
 export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
-  /** The root's CAD client: its catalog, and every document's resources. */
+  /** The CAD client: the catalog of the files on screen, and every document's resources. */
   client: CadWorkspaceService;
   /**
-   * The host's ports: the root's files (`createCatalogFileSource`, or a host's own), clipboard,
-   * prompt destination, file actions, links and environment. Navigation is this component's: it
-   * shows a file through `onShow`.
+   * The host's ports: its files (`createCadFileSource`), clipboard, prompt destination, file
+   * actions, links and environment. Navigation is this component's: it shows a file through `onShow`.
    */
   host: Omit<ViewerHost, 'navigation'>;
-  /** The tab's one store: the renderers' preferences, this root's viewer state, the home's layout. */
+  /**
+   * The tab's one store: the renderers' preferences, the viewer's state, the home's layout, and the
+   * view of the file on screen, the only file view it keeps: leaving a file drops its view.
+   */
   tabStore: TabStore;
   /** The host's handle on the mounted view: its agent reads it, and the library's pictures come through it. */
   live: LiveRegistry;
-  /** The file on screen, root-relative; `''` is none (the home, where the host has one). */
+  /** The file on screen, by its absolute path; `''` is none: the home. */
   file: string;
-  /** Show another file (root-relative, as `accept` named it), or the home (`''`). */
+  /** Show another file (absolute), or the home (`''`). */
   onShow(file: string): void;
-  /**
-   * The file a request to show `path` shows, or null when there is none to show. By default, the
-   * entry the catalog lists for it: a root whose catalog holds only the file on screen (a whole
-   * filesystem, read a folder at a time) accepts what its explorer lists.
-   */
-  accept?(path: string): string | null;
-  /** The file on screen once the catalog has it, or null (the home, or a file still resolving). */
+  /** The file on screen once the catalog has it, or null (the home, or a file still resolving or missing). */
   onShown?(file: string | null): void;
-  /** The root's absolute path, named by a missing file's alert. */
-  rootPath: string;
   /**
-   * The home's library: the models opened before, to open again. A host with one has a home, where
-   * no file is open, and a way back to it from a file; without one, a view with no file asks the
-   * agent for a model.
+   * The home's library: the models opened before, to open again, and Open. A host with one shows it
+   * wherever no file is open, and the navbar's logo leads to it from a file. Without one (a host
+   * whose own navigation shows one file, as a file handler does) a view has a file and nothing else:
+   * no home, no explorer, and no link to another file.
    */
   library?: ModelLibrarySource<Model>;
-  /** Keep the library's picture of the file on screen, once it has settled. */
+  /** Keep the library's picture of a model: the file on screen once it has settled, and on the home a card's. */
   onThumbnail?(png: Blob, file: string): Promise<unknown>;
-  /** The host's controls in the Display settings (the web's appearance). */
+  /** The host's controls in the Display panel (the web's appearance). */
   displayActions?: ReactNode;
-  /** The host's on/off settings: Settings' last sections, in the viewer and on the home (the CAD app's Analytics). */
+  /** The host's on/off settings, in the app menu the navbar's logo opens over every file (analytics, Quick edit). */
   appSettings?: readonly AppSetting[];
-  /** The host's notice (the analytics question): a file's viewport, top-right, once the file is on screen; never the home. */
+  /** The features the person has left on (in the app menu): Quick edit is offered only while it is on. */
+  features?: ViewerFeatures;
+  /** The host's notice: a file's viewport, top-right, once the file is on screen; never the home. */
   notice?: ReactNode;
+  /**
+   * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), while its install is behind:
+   * first among the navbar's controls over every file, and first in the home's row.
+   */
+  update?: ReactNode;
+  /**
+   * The host's Full size button, where it shows the view small (inline in a conversation) and can
+   * show it full size: in the navbar over every file, before the view's own controls, and last in the home's row.
+   */
+  fullSize?: ReactNode;
+  /**
+   * The view's own history, where the host keeps one rather than a browser (the CAD app's views):
+   * Back and Forward in the navbar over every file, between its logo and the file's name.
+   */
+  history?: ViewerHistory;
   onError?(error: Error): void;
 }
 
 const reportError = (error: Error) => console.error(error);
 
 /**
- * The CAD viewer every app shows: the shared FileViewer over one root's CAD catalog, with its five
- * renderers (STEP, DXF, GLB, STL/3MF, URDF/SRDF/SDF), the host's home (the model library, where the
- * host has one) where no file is open, and the standard loading and missing-file pages. It follows the catalog — the file
- * on screen is named once the catalog has it, a missing one once the catalog has answered — and
- * refreshes it when the page is focused or shown again. It keeps a picture of each model it shows
- * for the library, and on the home draws one for a card that has none or an old one, where the
- * host says how (`library.pictureFrom`): out of sight, one model at a time, and only a model whose
- * display is already built — the home never starts a build. It never navigates: showing a file,
- * or the home, is the host's `onShow`.
- *
- * A host supplies what is its own: where the root is and how its catalog is reached (`client`),
- * its ports (`host`), where the tab's state lives (`tabStore`), what shows a file (`onShow`), and
- * its library.
+ * The CAD viewer every app shows: the shared FileViewer over one file at a time, by absolute path,
+ * with its five renderers (STEP, DXF, GLB, STL/3MF, URDF/SRDF/SDF), the host's home (the model
+ * library) wherever no file is open, and the standard loading and "File does not exist" pages. It
+ * follows the catalog of the file on screen and refreshes it when the page is focused or shown
+ * again. It keeps a picture of each model it shows for the library (`onThumbnail`), and on the home
+ * draws one for a card that has none or an old one: out of sight, with its own client, one model at a
+ * time, and only a model whose display is already built — the home never starts a build. It never
+ * navigates: showing a file, or the home, is the host's `onShow`.
  */
-export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, accept, onShown, rootPath,
-  library, onThumbnail, displayActions, appSettings, notice, onError = reportError }: CadViewerProps<Model>) {
+export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, onShown,
+  library, onThumbnail, displayActions, appSettings, features, notice, update, fullSize, history, onError = reportError }: CadViewerProps<Model>) {
   const preferences = tabStore.settings;
   // One viewer renderer per file family, sharing one client and the tab's preferences; each
   // lazy-loads only its own code.
   const renderers = useMemo(() => cadRenderers(client, preferences, live.binding), [client, preferences, live]);
   const catalog = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const settings = useSyncExternalStore(preferences.subscribe, preferences.getSnapshot, preferences.getSnapshot);
-  const { state, onStateChange, setPanel } = useTabViewerState(tabStore, host.files.id);
-  const latest = useRef({ onShow, accept, onShown, onThumbnail, file, library });
-  latest.current = { onShow, accept, onShown, onThumbnail, file, library };
+  const { state, onStateChange } = useTabViewerState(tabStore);
+  const path = normalizePath(file);
+  const latest = useRef({ onShow, onShown, onThumbnail, path });
+  latest.current = { onShow, onShown, onThumbnail, path };
 
-  // The file on screen once the catalog has it. While the catalog resolves a requested file the
-  // navbar names nothing; once it has answered, a missing file is named by its own path.
-  const entry = file ? findCatalogEntry(catalog.entries, file) : null;
-  const shown = entry ? catalogPath(entry) : null;
-  const navigationPath = shown ?? (catalog.hydrated ? normalizeCatalogPath(file) || null : null);
+  // The file on screen once the catalog has it.
+  const entry = path ? catalog.entries.find(item => normalizePath(item.file) === path) ?? null : null;
+  const shown = entry ? path : null;
   useEffect(() => { latest.current.onShown?.(shown); }, [shown]);
+
+  // Only the file on screen keeps its view in the tab (`tab-store`): leaving a model — for another
+  // file, or for the home — drops its camera, Display settings, pose and the rest, while a reload of
+  // the tab (which shows the same file) brings them back, and an update of the model keeps them. The
+  // departing renderer writes its view once more as it unmounts; that write is a cleanup of the
+  // commit that changed `file`, and every cleanup of a commit runs before its effects, this one
+  // included, so it cannot bring the view back. The tab's settings are not a file's, and stay.
+  useEffect(() => { tabStore.files.retain(path || null); }, [tabStore, path]);
 
   // Refresh the catalog when the person comes back to the page: a model may have been rebuilt meanwhile.
   useEffect(() => {
@@ -114,33 +128,29 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   useModelThumbnail(live, shown, String(entry?.documentHash || entry?.hash || ''),
     (png, pictured) => latest.current.onThumbnail?.(png, pictured) ?? Promise.resolve());
 
-  // A file the viewer asks for — a pick in the explorer, a renderer's link — is shown by the host,
-  // and opens with the panel it was asked for (the explorer, for a pick there) or its own default;
-  // the file already on screen keeps what it has open unless a panel is asked for.
-  const openFile = useCallback((path: string, options?: { target: 'current' | 'new'; panel?: string }) => {
-    const { accept: accepts, onShow: show, file: onScreen } = latest.current;
-    const listed = findCatalogEntry(client.getSnapshot().entries, path);
-    const next = accepts ? accepts(path) : listed ? catalogPath(listed) : null;
-    if (next === null) return;
-    if (next !== onScreen) show(next);
-    else if (options?.panel === undefined) return;
-    setPanel(options?.panel ?? null);
-  }, [client, setPanel]);
+  // A file the viewer asks for — a pick in the explorer, a renderer's link — is shown by the host.
+  // A view with no library shows its file and nothing else: it opens no other, and has no home.
+  const openFile = useCallback((next: string) => {
+    const wanted = normalizePath(next);
+    if (wanted && wanted !== latest.current.path) latest.current.onShow(wanted);
+  }, []);
   const homed = Boolean(library);
   const home = useCallback(() => latest.current.onShow(''), []);
-  const viewerHost = useMemo<ViewerHost>(() => ({ ...host, navigation: homed ? { openFile, home } : { openFile } }), [host, openFile, home, homed]);
+  const viewerHost = useMemo<ViewerHost>(() => ({ ...host, navigation: homed ? { openFile, home } : {} }), [host, openFile, home, homed]);
 
-  // The home's pictures for cards without a current one, drawn out of sight one at a time. A model
-  // whose display is not built yet is left to its placeholder: the status is read, never built.
+  // The home's pictures for cards without a current one, drawn out of sight one at a time and kept as
+  // the file on screen's are. A model whose display is not built yet is left to its placeholder: the
+  // status is read, never built.
   const [drawing, setDrawing] = useState<{ source: ModelPictureSource; done(kept: boolean): void } | null>(null);
-  const drawable = Boolean(library?.pictureFrom);
+  const drawable = Boolean(library && onThumbnail);
   const picture = useMemo(() => (drawable ? async (model: Model) => {
-    const source = latest.current.library?.pictureFrom?.(model);
-    if (!source || latest.current.file) return false;
-    const status = await source.client.requestArtifactStatus(source.file).catch(() => null);
-    if (status?.state !== 'compiled' || latest.current.file) return false;
-    return new Promise<boolean>(done => setDrawing({ source, done }));
-  } : undefined), [drawable]);
+    const file = normalizePath(model.path);
+    if (latest.current.path) return false;
+    const status = await client.requestArtifactStatus(file).catch(() => null);
+    if (status?.state !== 'compiled' || latest.current.path) return false;
+    const keep = (png: Blob) => latest.current.onThumbnail?.(png, model.path) ?? Promise.resolve();
+    return new Promise<boolean>(done => setDrawing({ source: { client, file, keep }, done }));
+  } : undefined), [drawable, client]);
   const inFlight = useRef(drawing);
   inFlight.current = drawing;
   const drawn = useCallback((kept: boolean) => {
@@ -151,23 +161,23 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     picturing.done(kept);
   }, []);
   // A file opened meanwhile has the screen, and the GPU, to itself.
-  useEffect(() => { if (file) drawn(false); }, [file, drawn]);
+  useEffect(() => { if (path) drawn(false); }, [path, drawn]);
 
-  const { colorScheme, platform } = host.environment;
   const layout = settings.library.layout;
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
+  // A file that will not open says why, with the way home where the host has one.
+  const goHome = useMemo(() => homed ? <Button size="sm" variant="outline" onClick={home}>Go home</Button> : null, [homed, home]);
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture}
-      links={host.links} platform={platform} clipboard={host.clipboard} appSettings={appSettings} onError={onError} /> : undefined,
-    empty: <EmptyState icon={Box} title="Ask the agent to show a model" />,
+      links={host.links} update={update} fullSize={fullSize} onError={onError} /> : undefined,
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
-    error: () => <div className="relative h-full">{catalog.error
-      ? <EmptyState icon={FolderX} title="Could not read this folder" description={catalog.error} tone="warn" />
-      : <EmptyCadBackdrop colorScheme={colorScheme}><MissingFileAlert missingFileRef={file} rootPath={rootPath} /></EmptyCadBackdrop>}</div>,
-  }), [library, colorScheme, layout, changeLayout, catalog.error, file, rootPath, picture, host.links, platform, host.clipboard, appSettings, onError]);
+    error: ({ message, missing }: { message: string; missing: boolean }) => missing
+      ? <EmptyState icon={FileX} title="File does not exist" description={path} tone="warn" action={goHome} />
+      : <EmptyState icon={FileWarning} title="Could not open that file" description={message} tone="warn" action={goHome} />,
+  }), [library, layout, changeLayout, path, picture, host.links, update, fullSize, onError, goHome]);
   return <>
-    <FileViewer file={file || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      displayActions={displayActions} appSettings={appSettings} notice={notice} navigationPath={navigationPath} onError={onError} presentation={presentation} />
-    {drawing && !file ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}
+    <FileViewer file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
+      displayActions={displayActions} appSettings={appSettings} update={update} fullSize={fullSize} history={history} features={features} notice={notice} onError={onError} presentation={presentation} />
+    {drawing && !path ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}
   </>;
 }

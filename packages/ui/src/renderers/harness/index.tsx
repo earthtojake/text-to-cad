@@ -4,7 +4,7 @@ import { FileViewer } from '@text-to-cad/ui/file-viewer';
 import type { FileSource } from '@text-to-cad/ui/file-viewer';
 import { createCadClient } from '@text-to-cad/core/client';
 import { createTabStore, memoryTabRecord, useTabViewerState } from '@text-to-cad/ui/tab-store';
-import type { TabRecordStorage } from '@text-to-cad/ui/tab-store';
+import type { TabRecordStorage, TabStore } from '@text-to-cad/ui/tab-store';
 import { createStepRenderer } from '@text-to-cad/ui/renderers/step';
 import { createDxfRenderer } from '@text-to-cad/ui/renderers/dxf';
 import { createGlbRenderer } from '@text-to-cad/ui/renderers/glb';
@@ -15,8 +15,11 @@ import type { ViewerHost } from '@text-to-cad/ui/host';
 import type { CadLiveController } from '@text-to-cad/ui/renderers/step';
 import type { ViewerCommands as CadCommands } from '@text-to-cad/ui/renderers/workspace';
 
-// The one file both panes open: `?file=arm.urdf` for a test whose fixture is not the default mesh.
-const file = new URLSearchParams(location.search).get('file') || 'part.stl';
+// The one file both panes open, by its absolute path, as a CAD Viewer names files: a fixture server
+// lists each of its files under `/models`, so `?file=arm.urdf` (for a test whose fixture is not the
+// default mesh) is `/models/arm.urdf`.
+const requested = new URLSearchParams(location.search).get('file') || 'part.stl';
+const file = requested.startsWith('/') ? requested : `/models/${requested}`;
 const captures: { file: string; size: number; type: string; references: unknown }[] = [];
 // What a renderer asked the host to open (a mesh a robot description names, say).
 const opened: string[] = [];
@@ -32,10 +35,13 @@ const sessionRecord = (): TabRecordStorage => ({
 const tabStore = createTabStore(new URLSearchParams(location.search).get('store') === 'session'
   ? sessionRecord() : memoryTabRecord((window as unknown as { __cadTabRecord?: unknown }).__cadTabRecord));
 const preferences = tabStore.settings;
+// The second pane is another viewer, and so another tab: a tab keeps the view of the one file it
+// shows (`TAB_FILE_LIMIT`), so two viewers sharing one record would drop each other's.
+const otherTabStore = createTabStore(memoryTabRecord());
 // The keyboard the browser under test types on, as a web host reports it: the drawing
 // editor's history keys must be the ones its SDK listens for on this machine.
 const keyboardPlatform = /Mac|iPhone|iPad/.test(navigator.platform) ? 'darwin' : /Win/.test(navigator.platform) ? 'win32' : 'linux';
-function workspace(id: string) {
+function workspace(id: string, store: TabStore) {
   let snapshot: CadCommands = {};
   const listeners = new Set<() => void>();
   const commands = {
@@ -50,15 +56,14 @@ function workspace(id: string) {
   const request = (next: CadCommands) => { snapshot = next; for (const listener of listeners) listener(); };
   const capture = () => request({ captureRequest: { key: Date.now() } });
   const selectReference = (selector: string) => request({ selectReference: { selector, key: Date.now() } });
-  const client = createCadClient({ origin: `${location.origin}/${id}`, workspaceId: id, pollIntervalMs: 0 });
-  // A test that gives the root an absolute home (`window.__cadReferenceRoot`) gets a host that names
-  // files by it in copied references, as one whose root is a whole filesystem does.
-  const referenceRoot = (window as unknown as { __cadReferenceRoot?: string }).__cadReferenceRoot;
+  const client = createCadClient({ origin: `${location.origin}/${id}`, pollIntervalMs: 0 });
+  // The pane's files: the one it shows, which is also all its explorer lists and finds.
+  const name = file.split('/').pop() || file;
   const source: FileSource = {
-    id, rootName: id,
-    ...(referenceRoot ? { referencePath: (path: string) => `${referenceRoot}/${path}` } : {}),
-    stat: async (path) => ({ path, name: path, kind: 'file', size: 400, extension: path.split('.').pop() || '' }),
-    list: async () => [{ path: file, name: file, kind: 'file' }]
+    id,
+    stat: async (path) => ({ path, name: path.split('/').pop() || path, kind: 'file', size: 400, extension: path.split('.').pop() || '' }),
+    list: async () => [{ path: file, name, kind: 'file' }],
+    search: async () => ({ paths: [file], truncated: false })
   };
   const destination = { kind: (window as unknown as { __cadPromptDestination?: 'clipboard' }).__cadPromptDestination || 'composer' as const, available: true };
   const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme: 'dark', platform: keyboardPlatform },
@@ -72,19 +77,18 @@ function workspace(id: string) {
   let controller: CadLiveController | null = null;
   const live = { bind(next: CadLiveController) { controller = next; return () => { controller = null; }; } };
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
-  const services = { client, preferences, commands, live };
+  const services = { client, preferences: store.settings, commands, live };
   // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
   const renderers = [createStepRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createHarnessRenderer(services)];
   return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
 }
-const a = workspace('one'), b = workspace('two');
-// Directory navigation hydrates before a renderer mounts. Large workspaces
-// return path-only placeholders until the selected file is requested.
+const a = workspace('one', tabStore), b = workspace('two', otherTabStore);
+// Each client's catalog is read before a renderer mounts, as a host's first read of it is.
 await Promise.all([a.client.refresh(), b.client.refresh()]);
 function App() {
-  // Two panes, two roots, one tab: the settings are the tab's, each root's file views its own.
-  const { state, onStateChange } = useTabViewerState(tabStore, a.source.id);
-  const { state: otherState, onStateChange: onOtherStateChange } = useTabViewerState(tabStore, b.source.id);
+  // Two panes, two viewers, two tabs: each viewer keeps its own record, settings and file view.
+  const { state, onStateChange } = useTabViewerState(tabStore);
+  const { state: otherState, onStateChange: onOtherStateChange } = useTabViewerState(otherTabStore);
   const [second, setSecond] = useState(false);
   const [mounted, setMounted] = useState(true);
   Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, tabStore, record: tabStore.getSnapshot(), captures, opened, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });

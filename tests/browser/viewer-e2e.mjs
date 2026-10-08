@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Real-browser coverage for the bundled Viewer: every load path opens through the
-// real backend and bundle, and the camera holds across modes and re-fits a saved
+// real backend and bundle, and the camera holds across modes and across a saved
 // revision. CI runs all of it; there is no local-only set. Fixture and process
 // lifecycle belong to scripts/test/test-viewer-browser.sh.
 
@@ -34,7 +34,7 @@ const root = path.resolve(args.dir || ".");
 // a robot description.
 const fixtures = [
   // `tools` is the file's own tool strip (a mesh and a drawing have none: a tool that does not
-  // apply is hidden, not disabled); `threeD` has the view's Settings and Preview in the navbar.
+  // apply is hidden, not disabled); `threeD` has Display and Preview at the navbar's right end.
   { format: "stl", file: "smoke.stl", parts: false, tools: [], threeD: true },
   { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Draw", "Measure"], threeD: true },
   // A drawing is line work, not shaded surfaces: its outline covers a fraction of what a solid does.
@@ -91,12 +91,12 @@ async function newPage() {
       return;
     }
     const parsed = new URL(url);
-    // Catalog identities are absolute so two hosted projects can keep separate
-    // file state. Artifact/editing endpoints accept the served-root reference.
-    if (["/__cad/artifact", "/__cad/preview"].includes(parsed.pathname)) {
+    // A file is named by its absolute path in every request: the page resolves a relative
+    // `?file=` (as this suite opens them) against where the viewer started before it asks.
+    if (["/__cad/catalog", "/__cad/artifact", "/__cad/preview"].includes(parsed.pathname)) {
       const file = parsed.searchParams.get("file") || "";
-      if (/^(?:[/\\]|[a-z]:[/\\])/i.test(file)) {
-        errors.push(`absolute file identity leaked to ${parsed.pathname}: ${file}`);
+      if (file && !/^(?:\/|[a-z]:\/)/i.test(file)) {
+        errors.push(`a relative file reached ${parsed.pathname}: ${file}`);
       }
     }
     if (["http:", "https:"].includes(parsed.protocol) && parsed.origin !== viewerOrigin) {
@@ -284,14 +284,19 @@ async function formatGate() {
         buttons.map((button) => button.getAttribute("aria-label")));
       for (const label of fixture.tools) if (!strip.includes(label)) failures.push(`${fixture.format}: missing ${label} (strip: ${strip.join(", ")})`);
       if (!fixture.tools.length && strip.length) failures.push(`${fixture.format}: a tool strip on a file with no tools (${strip.join(", ")})`);
+      if (strip.includes("Display")) failures.push(`${fixture.format}: Display is on the strip (strip: ${strip.join(", ")}); it sits in the navbar`);
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
-      // A 3D view's controls, at the navbar's right end: Settings, then Preview. A drawing has none.
-      const controls = await page.locator("[data-navbar-controls] button").evaluateAll((buttons) =>
+      // The view's own controls, last in the navbar: Display then Preview on a 3D view, none on a
+      // drawing. The navbar's left is the logo (the app menu, the person's settings in it), the
+      // file's name and its ⋯, on every file, drawing included.
+      const controls = await page.locator("[data-viewer-navbar] [data-view-controls] button").evaluateAll((buttons) =>
         buttons.map((button) => button.getAttribute("aria-label")));
-      const expected = fixture.threeD ? ["Settings", "Preview"] : [];
-      if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: navbar controls are ${JSON.stringify(controls)}`);
+      const expected = fixture.threeD ? ["Display", "Preview"] : [];
+      if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: the view's controls are ${JSON.stringify(controls)}`);
+      const menus = await page.getByRole("button", { name: "Menu", exact: true }).count();
+      if (menus !== 1) failures.push(`${fixture.format}: ${menus} app menus (one on every file)`);
       const menu = await canvasMenuItems(page, canvas);
       if (fixture.parts) {
         for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
@@ -312,11 +317,12 @@ async function formatGate() {
 }
 
 // Inspect and Render are the Display settings' Solid and Render presets, chosen from the Mode
-// dropdown of the popover the navbar's Settings opens.
+// dropdown of the popover the Display button in the navbar opens (a second press closes it).
 const VIEWING_PRESET = { Inspect: "Solid", Render: "Render" };
 async function selectViewingMode(page, current, next) {
+  const display = page.locator("[data-view-controls]").getByRole("button", { name: "Display", exact: true });
   const popover = page.locator("[data-display-popover]");
-  if (!(await popover.count())) await page.locator("[data-navbar-controls]").getByRole("button", { name: "Settings", exact: true }).click();
+  if (!(await popover.count())) await display.click();
   const mode = popover.getByRole("combobox", { name: "Mode", exact: true });
   await mode.waitFor();
   if ((await mode.innerText()).trim() !== VIEWING_PRESET[current]) fail(`viewing mode: expected ${current} before switching to ${next}`);
@@ -324,14 +330,14 @@ async function selectViewingMode(page, current, next) {
   await page.getByRole("option", { name: VIEWING_PRESET[next], exact: true }).click();
   await page.waitForFunction((label) => document.querySelector('[data-display-popover] [role="combobox"][aria-label="Mode"]')?.textContent.trim() === label,
     VIEWING_PRESET[next]);
-  await page.keyboard.press("Escape");
+  await display.click();
   await popover.waitFor({ state: "detached" });
 }
 
 // --- camera grounding -----------------------------------------------------
 // The camera is fitted ONCE per model, to its zero pose: a mode round trip does
-// not move it, the explicit Reset view re-fits to that same zero pose, and only a
-// saved REVISION (a new zero pose) re-fits it. The tolerance is only there for
+// not move it, a saved REVISION (a new zero pose) does not move it either, and the
+// explicit Reset view re-fits to the zero pose there is now. The tolerance is only there for
 // the last-bit drift OrbitControls' own update leaves behind (observed at ~1e-15
 // relative); the regression this catches moved the framing by 2.4% and the pivot
 // by a quarter of the model.
@@ -558,15 +564,16 @@ async function modeCameraGate() {
     await context.close();
   }
 
-  // A mode switch or a pose must not re-frame; a REVISION must. Saving a rebuilt
-  // model over the open one gives it a new zero pose, and a camera still fitted to
-  // the old one leaves the new geometry clipped outside the frame. The grown arm
-  // reaches x = 158 where the first revision stopped at 58, so the old frame cannot
-  // contain it. A fresh tab, because the re-fit is for a camera nobody chose: one
-  // the tab kept for this file (Zoom to fit saves one) is restored instead.
+  // A mode switch, a pose or a REVISION must not re-frame. Saving a rebuilt model over
+  // the open one keeps the camera exactly, its pose and its zoom, even though the grown
+  // arm now reaches x = 158 where the first revision stopped at 58: the owner's call is
+  // that keeping the perspective and zoom level makes sense in every case. Only Zoom to
+  // fit frames the new zero pose, at 100% of its ruler. A fresh tab, so the camera held
+  // is the open-time fit and not one the tab kept for this file.
   const revision = await newPage();
   try {
     await openFile(revision.page, "hinge.step");
+    await settledCameraFrame(revision.page, { stage: "hinge before its revision" });
     const firstFit = await cameraState(revision.page);
     fs.copyFileSync(path.join(root, ".revision", "hinge.step"), path.join(root, "hinge.step"));
     const grown = await revision.page.waitForFunction(() => {
@@ -576,20 +583,27 @@ async function modeCameraGate() {
     if (!grown) {
       failures.push("step revision: the viewer never picked up the rebuilt model");
     } else {
-      // Settle: the fit lands in the same effect that adopts the new geometry.
-      await revision.page.waitForTimeout(1_500);
+      // The revision is adopted in the commit that published its bounds; the view then settles.
+      await settledCameraFrame(revision.page, { stage: "hinge revision" });
+      // The zoom ruler is measured against the zero pose, which the revision changed: the pose
+      // is compared without it.
       const revised = await cameraState(revision.page);
-      if (cameraDrift(revised, firstFit) <= CAMERA_EPSILON) {
-        failures.push(`step revision: the camera kept the previous revision's frame — ${describeCamera(revised)}`);
-      } else if (!(Number(revised?.halfHeight) > Number(firstFit?.halfHeight))) {
-        failures.push(`step revision: the model grew but the frame did not — ${describeCamera(revised)}, `
+      const drift = cameraDrift(revised && { ...revised, zoomPercent: firstFit?.zoomPercent }, firstFit);
+      if (!(drift <= CAMERA_EPSILON)) {
+        failures.push(`step revision: the camera moved (${drift.toExponential(2)} relative) — ${describeCamera(revised)}, `
           + `was ${describeCamera(firstFit)}`);
-      } else if (Math.abs(Number(revised?.zoomPercent) - 100) > 0.5) {
-        failures.push(`step revision: the new fit does not read as 100% (${revised?.zoomPercent})`);
+      }
+      await resetView(revision.page);
+      const refit = await cameraState(revision.page);
+      if (!(Number(refit?.halfHeight) > Number(firstFit?.halfHeight))) {
+        failures.push(`step revision: Zoom to fit did not frame the grown model — ${describeCamera(refit)}, `
+          + `was ${describeCamera(firstFit)}`);
+      } else if (Math.abs(Number(refit?.zoomPercent) - 100) > 0.5) {
+        failures.push(`step revision: Zoom to fit does not read as 100% (${refit?.zoomPercent})`);
       }
     }
     if (revision.errors.length) failures.push(`step revision: ${revision.errors.join(" | ")}`);
-    console.log("  step revision: a saved revision re-fits a camera nobody moved to its own zero pose");
+    console.log("  step revision: a saved revision keeps the camera, and Zoom to fit frames its own zero pose");
   } finally {
     await revision.context.close();
   }

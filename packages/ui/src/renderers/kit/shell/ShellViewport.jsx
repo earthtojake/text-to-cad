@@ -37,6 +37,7 @@ import {
 } from "../camera/zoomSpeeds.js";
 import { loadStudioScene, studioScene } from "../look/renderStudioChunk.js";
 import { DEFAULT_LIGHTING, syncRuntimeScaledLightingAndShadow, updateGridHelper, updateStageEffects } from "../look/stageEffects.js";
+import { CONTACT_SHADOW_HEIGHT_INTERVAL_MS, stageFitCurrent, stageFitInputs } from "../look/stageFollow.js";
 import { createStudioEnvironmentCache } from "../look/studioEnvironmentCache.js";
 import { isKitScene } from "../scene.js";
 import LoadingIndicator from "../status/LoadingIndicator.js";
@@ -48,6 +49,7 @@ import { createViewUpdateGate } from "../view-settings/viewUpdateGate.js";
 import { viewerTransitionBackdrop } from "../viewport/framePresentation.js";
 import { IDLE_PIXEL_RATIO_CAP, INTERACTION_IDLE_DELAY_MS, INTERACTION_PIXEL_RATIO_CAP, getPixelRatioCap } from "../viewport/pixelRatio.js";
 import { disposeSceneObject } from "../viewport/sceneObjects.js";
+import { requestSceneFrame } from "../viewport/sceneFrames.js";
 import { renderThumbnail } from "../viewport/thumbnail.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
@@ -148,7 +150,6 @@ const ShellViewport = forwardRef(function ShellViewport({
     }
   }, [viewUpdate?.revision]);
   const framedModelKeyRef = useRef("");
-  const framedBoundsRef = useRef(null);
   // Inspect's orthographic frustum and Render's photographic lens are two cameras:
   // each fits the rest placement itself rather than inheriting the other's pose.
   const framedViewingModeRef = useRef("");
@@ -193,8 +194,9 @@ const ShellViewport = forwardRef(function ShellViewport({
   cameraMovedRef.current = onCameraSettled;
   const runtimeLifecycleRef = useRef(runtimeLifecycle);
   runtimeLifecycleRef.current = runtimeLifecycle;
-  // Which model was framed once it was WHOLE. A scene that arrives in pieces is framed on its
-  // first piece, so something is on screen at once, and again when the last piece lands.
+  // Which model was framed once its rest box was FINAL. A scene whose box still grows while it
+  // arrives in pieces is framed on its first piece, so something is on screen at once, and again
+  // when the last piece lands; one that declares its box is final, and framed once, from the first.
   const framedCompleteModelKeyRef = useRef("");
   // Which model is wearing a camera RESTORED from what was stored for it, rather than one this
   // viewport fitted. Only the fit is the viewport's to take back.
@@ -261,7 +263,11 @@ const ShellViewport = forwardRef(function ShellViewport({
     // routine never rescales the ground under the model. Its lights and its height follow the model.
     const studioState = studio.applyPhotographicStudio(runtime.THREE, runtime, configuration, {
       bounds, groundBounds: runtime.zeroPoseBounds || null,
-      sceneScale: normalizedSceneScaleMode, shadowMapSize: renderShadowMapSizeRef.current
+      sceneScale: normalizedSceneScaleMode, shadowMapSize: renderShadowMapSizeRef.current,
+      // While a routine plays or a pose is dragged, the floor shadow's heights are measured at
+      // most this often (its cast shadow still follows every frame), and once more at rest, in
+      // a frame of their own that keeps the shadow maps.
+      contactShadow: { heightInterval: CONTACT_SHADOW_HEIGHT_INTERVAL_MS, requestFrame: () => runtime.requestFrame?.() }
     });
     runtime.photographicGroundZ = Number.isFinite(Number(studioState?.ground?.position?.z))
       ? Number(studioState.ground.position.z) : null;
@@ -298,7 +304,8 @@ const ShellViewport = forwardRef(function ShellViewport({
   // projection arrives a moment later. CONVERTING that fit to the other projection is not the
   // same as fitting under it: a wide, flat model came up at ~89% of its own ruler. So while
   // the camera is still the one the viewer itself fitted, a projection change re-FITS along
-  // the direction it looks now (a view-cube face is still the viewer's framing).
+  // the direction it looks now. A camera the person turned, by any means (`userMovedCamera`),
+  // is theirs and is not re-fitted.
   //
   // Only while opening settles (`armOpenFit`). Afterwards a viewport RESIZE keeps its
   // long-standing answer (`syncRuntimeViewportFraming`: the model holds its apparent size),
@@ -307,10 +314,10 @@ const ShellViewport = forwardRef(function ShellViewport({
   // A camera TRANSITION in flight is a deliberate move being made right now (a view-cube
   // face, entering a plan view): re-fitting mid-flight would read the half-turned direction
   // as "the direction it looks now" and cancel the move. So the open fit waits.
-  // Opening SETTLES: after the fit, the panel column takes its width and the file's
-  // projection arrives, each a beat later. That stretch is the viewer's to re-fit in; once it
-  // has been quiet for OPEN_FIT_SETTLE_MS, opening is over, and a resize rescales and a
-  // projection change converts, as they always have for a view a person is looking at.
+  // Opening SETTLES: after the fit, the file's projection arrives a beat later. That stretch
+  // is the viewer's to re-fit in; once it has been quiet for OPEN_FIT_SETTLE_MS, opening is
+  // over, and a resize rescales and a projection change converts, as they always have for a
+  // view a person is looking at.
   const armOpenFit = useCallback((runtime) => {
     runtime.openFitPending = true;
     clearTimeout(runtime.openFitTimer);
@@ -344,7 +351,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   const hasViewportContent = Boolean(scene);
   const drawingOverlayActive = drawingEnabled && !previewMode && hasViewportContent;
   const { drawingControllerRef, handleDrawingContent, handleDrawingReady, followDrawingViewport } = useDrawingViewLock({
-    active: drawingOverlayActive, drawing, runtimeRef, mountRef, viewerReadyTick
+    active: drawingOverlayActive, sketch: drawing?.sketch ?? 0, drawing, runtimeRef, mountRef, viewerReadyTick
   });
 
   useImperativeHandle(ref, () => ({
@@ -383,18 +390,24 @@ const ShellViewport = forwardRef(function ShellViewport({
     },
     activateViewPlaneFace,
     requestRender() { runtimeRef.current?.requestRender?.(); },
+    // A frame that keeps the shadow maps: for a highlight, which moves and reshapes no caster.
+    requestFrame() { requestSceneFrame(runtimeRef.current, false); },
     getPerspective() {
       return readScopedPerspectiveSnapshot(runtimeRef.current, {
         modelKey, sceneScaleMode: normalizedSceneScaleMode, coordinateSystem: STORED_CAMERA_COORDINATES
       });
     },
     setPerspective(nextPerspective, options = {}) {
-      // A camera somebody hands the viewport — a host command, a session being restored —
-      // replaces the open-time fit, so re-fitting it on the next resize would throw it away.
-      if (runtimeRef.current) runtimeRef.current.openFitPending = false;
-      if (options?.animate) return transitionCameraToPerspectiveSnapshot(runtimeRef.current, nextPerspective, options);
-      const applied = applyPerspectiveSnapshot(runtimeRef.current, nextPerspective);
-      if (applied && options?.resetZoomBaseline) resetRuntimeZoomBaseline(runtimeRef.current);
+      // A camera somebody hands the viewport (the live `setCamera`) replaces the open-time fit,
+      // so re-fitting it on the next resize would throw it away. And it is theirs, as a camera
+      // they dragged is: the completion fit of a model still arriving must not take it back.
+      const runtime = runtimeRef.current;
+      if (runtime) runtime.openFitPending = false;
+      const applied = options?.animate
+        ? transitionCameraToPerspectiveSnapshot(runtime, nextPerspective, options)
+        : applyPerspectiveSnapshot(runtime, nextPerspective);
+      if (applied) runtime.userMovedCamera = true;
+      if (applied && !options?.animate && options?.resetZoomBaseline) resetRuntimeZoomBaseline(runtime);
       return applied;
     },
     // Frame the model again, from where the camera looks now. A renderer's "Zoom to
@@ -409,11 +422,14 @@ const ShellViewport = forwardRef(function ShellViewport({
       runtime.requestRender?.();
       return true;
     },
-    // Frame part of the scene: what a renderer's "Zoom to selection" moves the camera to.
+    // Frame part of the scene: what a renderer's "Zoom to selection" moves the camera to. The
+    // camera is then the person's choice, as one they dragged is.
     zoomToBounds(bounds, { animate = true } = {}) {
       const runtime = runtimeRef.current;
       if (!bounds || !runtime) return false;
-      return zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate, modelOffset: modelTransformRef.current.offset });
+      const zoomed = zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate, modelOffset: modelTransformRef.current.offset });
+      if (zoomed) runtime.userMovedCamera = true;
+      return zoomed;
     }
   }), [activateViewPlaneFace, modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene]);
 
@@ -457,7 +473,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   const handleRuntimeContextRestored = useCallback(() => {
     framedModelKeyRef.current = "";
     framedCompleteModelKeyRef.current = "";
-    framedBoundsRef.current = null;
     framedViewingModeRef.current = "";
     lastEmittedPerspectiveRef.current = null;
     viewerAlertChangeRef.current?.(null);
@@ -519,7 +534,7 @@ const ShellViewport = forwardRef(function ShellViewport({
         camera.lookAt(runtime.controls.target);
         runtime.controls.update?.();
         emitPerspectiveChange(runtime);
-        runtime.requestRender?.();
+        requestSceneFrame(runtime, false);
       }
       return;
     }
@@ -542,7 +557,8 @@ const ShellViewport = forwardRef(function ShellViewport({
     runtime.controls.update?.();
     emitPerspectiveChange(runtime);
     runtime.scheduleIdleQuality?.();
-    runtime.requestRender?.();
+    // A lens is a camera change: the shadow maps are kept.
+    requestSceneFrame(runtime, false);
   }, [focalLength, renderMode, viewerReadyTick]);
 
   useEffect(() => {
@@ -821,25 +837,30 @@ const ShellViewport = forwardRef(function ShellViewport({
     runtime.zeroPoseBounds = framingBounds;
     const framingRadius = boundsModelRadius(THREE, framingBounds, normalizedSceneScaleMode);
     const modelOffset = modelTransformRef.current.offset;
-    const radius = fitStageToSceneRef.current(runtime, scene);
+    const stageFit = stageFitInputs(fitStageToSceneRef.current, scene, modelOffset?.toArray?.());
+    const radius = stageFit.fit(runtime, scene);
+    runtime.stageFit = stageFit;
     modelGroup.position.copy(modelOffset);
     modelGroup.updateMatrixWorld(true);
     syncRuntimeCameraClipPlanes(runtime, Math.max(radius / 1200, 0.01), Math.max(radius * 600, 2000));
     controls.minDistance = Math.max(radius / 2200, 0.02);
-    controls.maxDistance = Math.max(radius * 140, 50);
+    // The camera's reach covers the box it frames as well as what is placed: a package framed on
+    // its declared box from its first publish may have only a corner of itself on screen yet.
+    controls.maxDistance = Math.max(Math.max(radius, framingRadius) * 140, 50);
     controls.zoomSpeed = DEFAULT_ZOOM_SPEED;
 
     // The camera is framed by the pass that runs AFTER this render's lens and projection have
     // been applied; a commit from a child's effect that lands ahead of them leaves it to that pass.
     if (!frame) { setError(""); runtime.requestRender(); return; }
     const viewingMode = renderMode ? VIEWING_MODE.RENDER : VIEWING_MODE.INSPECT;
-    // A scene still arriving (`complete: false`) is framed on what has arrived and once more
-    // when it is whole; every other scene is whole from the start.
+    // A scene whose rest box may still grow (`complete: false`) is framed on the box as it stands
+    // and once more when it can grow no more; every other scene is framed once. Nothing else
+    // re-frames: a rebuild of the same file keeps the camera exactly.
     const sceneComplete = scene.complete !== false;
     const reframe = reframeReason({
       modelKey, framedModelKey: framedModelKeyRef.current, framedCompleteModelKey: framedCompleteModelKeyRef.current,
       mode: viewingMode, framedMode: framedViewingModeRef.current, modelComplete: sceneComplete,
-      zeroPoseBounds: framingBounds, framedZeroPoseBounds: framedBoundsRef.current, userMovedCamera: runtime.userMovedCamera
+      userMovedCamera: runtime.userMovedCamera
     });
     if (sceneComplete) framedCompleteModelKeyRef.current = modelKey || "";
     if (reframe) {
@@ -850,14 +871,14 @@ const ShellViewport = forwardRef(function ShellViewport({
         requireModelKey: true, requireSceneScaleMode: true, requireCoordinateSystem: true
       });
       // WHOSE CAMERA IS ON SCREEN. The completion fit exists for a camera NOBODY set: a
-      // progressive model is framed on the handful of components that arrived first, and that
-      // frame belongs to no one, so the whole model gets framed again. A camera the person set
-      // is a different thing, and `reframeReason` already stands "complete" down for the one it
-      // can see (`userMovedCamera`). It cannot see the OTHER way this file's camera becomes the
-      // person's: the stored one, restored when the model was first framed. So a completion that
-      // follows a restore restores again rather than fitting -- re-applying the same snapshot is
-      // a no-op for the camera, and it keeps the framing bookkeeping below (interactiveFraming,
-      // framedBounds) moving to the WHOLE model's box rather than the first batch's.
+      // progressive model with no declared box is framed on the handful of components that
+      // arrived first, and that frame belongs to no one, so the whole model gets framed again. A
+      // camera the person set is a different thing, and `reframeReason` already stands "complete"
+      // down for the one it can see (`userMovedCamera`). It cannot see the OTHER way this file's
+      // camera becomes the person's: the stored one, restored when the model was first framed. So
+      // a completion that follows a restore restores again rather than fitting -- re-applying the
+      // same snapshot is a no-op for the camera, and it keeps the framing bookkeeping below
+      // (interactiveFraming) moving to the WHOLE model's box rather than the first batch's.
       const restorable = reframe === "model" || reframe === "mode"
         || (reframe === "complete" && restoredCameraModelKeyRef.current === (modelKey || ""));
       runWithoutPerspectiveEvents(() => {
@@ -889,7 +910,6 @@ const ShellViewport = forwardRef(function ShellViewport({
       resetRuntimeZoomBaseline(runtime);
       framedModelKeyRef.current = modelKey || "";
       framedViewingModeRef.current = viewingMode;
-      framedBoundsRef.current = framingBounds;
       lastEmittedPerspectiveRef.current = readScopedPerspectiveSnapshot(runtime, { modelKey, sceneScaleMode: normalizedSceneScaleMode });
     }
     // A replaced runtime (context recovery) restores framing independently of what drew last.
@@ -957,10 +977,16 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (!cameraCurrent) queueMicrotask(() => { if (runtimeRef.current === runtime) adoptSceneRef.current(runtime); });
     return true;
   }, []);
+  // A scene pass says where the scene is now. The stage follows only a scene that moved: a pass
+  // that moved nothing (a pose pass a hover re-ran, a routine's frame that holds still) refits
+  // nothing and leaves the shadow maps as they are.
   const syncSceneBounds = useCallback(() => {
     const runtime = runtimeRef.current;
     if (!runtime?.kitScene) return;
-    fitStageToSceneRef.current(runtime, runtime.kitScene);
+    const stageFit = stageFitInputs(fitStageToSceneRef.current, runtime.kitScene, modelTransformRef.current.offset?.toArray?.());
+    if (stageFitCurrent(runtime.stageFit, stageFit)) return;
+    stageFit.fit(runtime, runtime.kitScene);
+    runtime.stageFit = stageFit;
     runtime.invalidateShadows?.();
   }, []);
   const viewportContext = useMemo(() => ({ runtimeRef, hostRef: interactionHostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }),

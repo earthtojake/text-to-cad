@@ -6,8 +6,10 @@
 2. ``sha256(closure.files as they are now) != closure.hash`` — a file the
    record sliced (``closure.names``) keeps its recorded slice while its
    whole-file hash is the recorded one (``closure.wholes``) and is re-sliced
-   by those names when it moved, every other file hashed whole — or a constant
-   the model imported by value (``record.constants``) no longer hashes the same;
+   by those names when it moved, every other file hashed whole, a listed
+   folder by its entry names less the model's own outputs (``closure.own``)
+   — or a constant the model imported by value (``record.constants``) no
+   longer hashes the same;
 3. for any recorded child: ``stale(child)`` **or** its current tree hash != the
    pinned hash;
 4. the tree object or any object it (transitively) references is missing;
@@ -15,12 +17,16 @@
 
 Evaluated once in the requesting process (fast, no kernel import) and again on
 the worker immediately before building. Recursion in (3) is memoized per request.
+Clauses 4 and 5 verify an object or an output once per process, while its file
+keeps the settled identity that verification observed (STORE.md §4).
 Mesh tolerances and argv flags are not inputs.
 """
 
 from __future__ import annotations
 
 import hashlib
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
@@ -29,7 +35,7 @@ from cadgen._internal import filetrace
 from cadgen.store.closure import changed_constant, current_closure_hash
 from cadgen.store.index import resolve_model_ref, split_model_ref
 from cadgen.store.records import read_record
-from cadgen.store.trees import tree_complete
+from cadgen.store.trees import _stamp, _stamp_is_settled, tree_complete
 
 
 @dataclass
@@ -67,10 +73,80 @@ class Verdict:
         return "current"
 
 
+# One rebuild evaluates the gate many times over the same files, and a large
+# assembly's STEP is hundreds of megabytes. A digest is reused while its file
+# keeps the identity -- device, inode, size, mtime and ctime -- observed on both
+# sides of the read that produced it, once that read is settled: the rule the
+# metadata capture applies to store objects (STORE.md §10). Deletion,
+# replacement, truncation and any rewrite a later stat can see hash it again.
+_DIGESTS_CAPACITY = 4096
+_DIGESTS: OrderedDict[str, tuple[tuple, str]] = OrderedDict()
+_DIGESTS_LOCK = threading.Lock()
+
+
+def _file_stamp(path: Path) -> tuple | None:
+    """The fingerprint ``trees._object_stamp`` takes, of a file outside the store."""
+    try:
+        return _stamp(str(path), Path(path))
+    except OSError:
+        return None
+
+
 def _sha256_file(path: Path) -> str | None:
+    key = str(path)
+    before = _file_stamp(path)
+    with _DIGESTS_LOCK:
+        cached = _DIGESTS.get(key)
+        if cached is not None:
+            if cached[0] == before:
+                _DIGESTS.move_to_end(key)
+                return cached[1]
+            del _DIGESTS[key]
+    digest = _hash_file(path)
+    after = _file_stamp(path)
+    if digest is not None and before is not None and before == after and _stamp_is_settled(after):
+        with _DIGESTS_LOCK:
+            _DIGESTS[key] = (after, digest)
+            if len(_DIGESTS) > _DIGESTS_CAPACITY:
+                _DIGESTS.popitem(last=False)
+    return digest
+
+
+def remember_renamed_digest(path: Path, digest: str, staged: tuple | None) -> None:
+    """Seed the memo for ``path``, which this process wrote under another name,
+    hashed as ``digest``, and renamed into place.
+
+    ``staged`` is the written file's stamp (:func:`file_stamp`) taken just
+    before the rename. A rename keeps a file's device, inode, size and mtime and
+    moves only its ctime, so a ``path`` that still shows the staged identity is
+    those bytes, and nothing reads them again. The staged stamp must already be
+    settled, so any write after it would have shown; otherwise this does
+    nothing and the next lookup reads the file."""
+    if staged is None or not _stamp_is_settled(staged):
+        return
+    after = _file_stamp(path)
+    if after is None or after[1:5] != staged[1:5]:
+        return
+    with _DIGESTS_LOCK:
+        _DIGESTS[str(path)] = (after, digest)
+        _DIGESTS.move_to_end(str(path))
+        if len(_DIGESTS) > _DIGESTS_CAPACITY:
+            _DIGESTS.popitem(last=False)
+
+
+def file_stamp(path: Path) -> tuple | None:
+    """The identity :func:`remember_renamed_digest` compares, or None when absent."""
+    return _file_stamp(path)
+
+
+def _hash_file(path: Path) -> str | None:
+    from cadgen._internal.atomic_replace import open_with_ladder
+
     digest = hashlib.sha256()
     try:
-        with open(path, "rb") as handle:
+        # Through the ladder: a peer build publishing the same model may be
+        # renaming over this file, which Windows refuses an open for (STORE.md §7).
+        with open_with_ladder(path, "rb") as handle:
             for chunk in iter(lambda: handle.read(1 << 20), b""):
                 digest.update(chunk)
     except OSError:
@@ -119,7 +195,8 @@ def _stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verd
         # unchanged, and are re-sliced by their recorded names when it moved; the
         # rest are hashed whole.
         now = current_closure_hash(script, files, dict(closure.get("names") or {}),
-                                   shas=closure.get("shas") or {}, wholes=closure.get("wholes") or {})
+                                   shas=closure.get("shas") or {}, wholes=closure.get("wholes") or {},
+                                   own=closure.get("own") or {})
     else:
         now = None
     verdict.closure = now or _sha256_file(script)
@@ -197,7 +274,7 @@ def _closure_why(script: Path, closure: Mapping[str, Any], now: str | None) -> s
     from cadgen.store.closure import changed_closure_files, source_files
 
     changed = changed_closure_files(script, closure.get("shas") or {}, closure.get("names") or {},
-                                    closure.get("wholes") or {})
+                                    closure.get("wholes") or {}, closure.get("own") or {})
     if now is None:
         # Only a file can be missing: an absent, roots or listing entry changed.
         missing = [rel for rel in source_files(changed) if not (Path(script).resolve().parent / rel).exists()]

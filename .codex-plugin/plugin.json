@@ -1,7 +1,7 @@
 {
   "name": "text-to-cad",
-  "version": "0.7.9",
-  "description": "Give your agent CAD superpowers. The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.",
+  "version": "0.7.17",
+  "description": "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.",
   "author": {
     "name": "earthtojake",
     "url": "https://github.com/earthtojake"
@@ -24,7 +24,7 @@
   "interface": {
     "displayName": "text-to-cad",
     "shortDescription": "Design 3D models",
-    "longDescription": "Give your agent CAD superpowers. The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.",
+    "longDescription": "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.",
     "developerName": "earthtojake",
     "composerIcon": "./.codex-plugin/logo.png",
     "logo": "./.codex-plugin/logo.png",
@@ -43,10 +43,5 @@
       "Check my bracket for CNC machining and tell me what to change."
     ],
     "brandColor": "#249DDD"
-  },
-  "extensions": {
-    "com.openai": {
-      "onboardingSkill": "./skills/cad-mcp-setup/SKILL.md"
-    }
   }
 }

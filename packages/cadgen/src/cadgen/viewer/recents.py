@@ -1,23 +1,26 @@
 """Recently opened models: one library for everywhere a person opens models.
 
-Every CAD view writes here -- the MCP app's views and every CAD Viewer -- and
-each shows what it can open: the MCP app all of it, a Viewer the models under
-the folder it serves.
+Every CAD view writes here -- the MCP app's views and the CAD Viewer -- and every
+home shows all of it (``GET /__cad/recents``, which the MCP app's views reach
+through its tunnel).
 
 The store is an append-only log of events -- ``open``, ``pin``, ``unpin``,
 ``remove``, ``picture`` -- folded into a list on read. It is user state, not a
 derived artifact, so it lives in the state directory and never in the cadgen
 cache (the cache holds only what file bytes imply).
 
-Several processes append at once: an MCP server per thread, a Viewer per folder,
-and after an update, old and new versions side by side. So each write appends
+Several processes append at once: an MCP server per thread, the Viewer, and
+after an update, old and new versions side by side. So each write appends
 one line under an exclusive lock, readers skip lines they cannot parse and events
 they do not know, and compaction writes a new file and renames it into place
 under the same lock. Nothing is ever migrated in place.
 
 A model's picture is a ``picture`` event: the model framed whole from the default
 direction at a card's size, on transparency, taken once its view has settled; its
-time is when it was taken (``pictured``), so a file changed since has an old one. The
+time is when it was taken (``pictured``), so a file changed since has an old one.
+Every rebuilt revision a view pictures adds a PNG, so a picture no listed model
+shows is deleted once it is old enough that no writer can still be about to name
+it (a writer saves the PNG, then appends its event). The
 screenshots of whatever the view showed that came before it were ``thumb`` events,
 which this reader does not know, so a model shows no picture until a view shows it
 again -- then its canonical one.
@@ -42,6 +45,7 @@ SCHEMA = 1
 LIMIT = 200
 COMPACT_AFTER = 2000
 MAX_THUMBNAIL_BYTES = 512 * 1024
+THUMBNAIL_GRACE_SECONDS = 600
 
 
 def thumbnail_png(encoded) -> bytes:
@@ -122,7 +126,7 @@ class RecentStore:
         target = self.thumbnails / name
         if not target.exists():
             write_bytes_atomic(target, png)
-        self._append({"op": "picture", "path": path, "thumbnail": name})
+        self._append({"op": "picture", "path": path, "thumbnail": name}, sweep=True)
         return name
 
     def read_thumbnail(self, name: str) -> bytes | None:
@@ -173,13 +177,34 @@ class RecentStore:
 
     # -- the log ---------------------------------------------------------------
 
-    def _append(self, event: dict[str, Any]) -> None:
+    def _append(self, event: dict[str, Any], *, sweep: bool = False) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         line = json.dumps({"v": SCHEMA, "t": time.time(), **event}, separators=(",", ":")) + "\n"
         with self._locked():
-            with open(self.log, "a", encoding="utf-8") as handle:
-                handle.write(line)
+            with open(self.log, "a+b") as handle:
+                handle.seek(0, os.SEEK_END)
+                if handle.tell():
+                    handle.seek(-1, os.SEEK_END)
+                    if handle.read(1) != b"\n":
+                        handle.write(b"\n")
+                handle.write(line.encode("utf-8"))
             self._compact_if_long()
+            if sweep:
+                self._sweep_thumbnails()
+
+    def _sweep_thumbnails(self) -> None:
+        shown = {entry.thumbnail for entry in self.list() if entry.thumbnail}
+        cutoff = time.time() - THUMBNAIL_GRACE_SECONDS
+        try:
+            pictures = list(self.thumbnails.glob("*.png"))
+        except OSError:
+            return
+        for picture in pictures:
+            try:
+                if picture.name not in shown and picture.stat().st_mtime < cutoff:
+                    picture.unlink()
+            except OSError:
+                continue
 
     def _compact_if_long(self) -> None:
         try:

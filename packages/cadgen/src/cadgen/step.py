@@ -3,7 +3,7 @@
 ``@step`` DECLARES a model; the verbs OPERATE on documents. They are the same
 object — this module is callable (see
 :mod:`cadgen._internal.format_namespace`) — so a format is one table row:
-decorator, verbs, and generated CLI together (design/format-doors.md).
+decorator, verbs, and generated CLI together (README law 6).
 
 Two verbs make documents, and the difference is what lands on disk:
 
@@ -17,8 +17,8 @@ Two verbs make documents, and the difference is what lands on disk:
   which is what tells the two verbs apart at the command line.
 
 Model scripts are RUN, never passed here: ``python model.py`` is the one source
-door (design/pose-animation-split.md, CLI/doors follow-on). Every verb takes a
-DOCUMENT and refuses a ``.py`` by naming the run.
+door (README law 7). Every verb takes a DOCUMENT and refuses a ``.py`` by
+naming the run.
 
 Import discipline: nothing here may pull in OCP/build123d at module scope. A
 model script pays this import before its freshness gate runs, and the whole
@@ -135,7 +135,7 @@ def build(
         destination,
         kinematics_def=kinematics_def,
         materials=load_materials_config(materials, where=where),
-        animation=load_animation_source(animation, where=where),
+        animation=load_animation_source(animation, where=where, document=destination),
         force=force,
         logger=CliLogger(where, verbose=verbose),
     )

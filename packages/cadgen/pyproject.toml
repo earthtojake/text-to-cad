@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cadgen"
-version = "0.7.9"
+version = "0.7.17"
 description = "STEP-first CAD artifact generation runtime: build123d STEP/GLB/topology generation, validation, and inspection for CAD agent skills."
 readme = "README.md"
 license = "MIT"
@@ -27,7 +27,7 @@ classifiers = [
 # dependency regardless of who else happens to pull it in.
 #
 # ezdxf stopped being a WRITING dependency when @dxf moved to build123d geometry
-# (design/dxf-build123d.md) -- the engine writes through build123d's ExportDXF
+# (cadgen._internal.dxf_emit) -- the engine writes through build123d's ExportDXF
 # and no author-facing contract mentions ezdxf. It remains a READING one, which
 # is not going away: cadgen.drawing_payload flattens a .dxf to draw it (for the
 # Viewer's pane and for `cadgen dxf snapshot` alike), and cadgen.drawing_checks
@@ -60,15 +60,16 @@ dependencies = [
   # neither is optional.
   "matplotlib",
   "pillow",
+  # Snapshots render in a headless browser that Playwright drives. A dependency of every
+  # install, not an extra: the CAD plugin's server and every skill run one requirement,
+  # `cadgen==<version>`, so they share one installation and one warm daemon, and a second
+  # requirement (`cadgen[snapshot]`) would be a second installation. Pinned exactly: each
+  # Playwright release fetches its own browser build, so a range would download a new
+  # browser whenever it moved. The browser itself is fetched on the first snapshot
+  # (snapshot_core.install_browser), not by the install.
+  "playwright==1.63.0",
   "shapely",
 ]
-
-# Extras gate DEPENDENCIES, not files: the JavaScript runtime ships to everyone because it
-# is small and because a skill cannot know in advance which command a user will reach for.
-# Playwright is different -- it is a large install plus a browser download -- so rendering
-# is opt-in.
-[project.optional-dependencies]
-snapshot = ["playwright"]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

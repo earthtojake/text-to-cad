@@ -184,8 +184,8 @@ def _parse_srdf_root(
         planning_groups.append(
             SrdfPlanningGroup(
                 name=name,
-                joint_names=_child_names(group_element, "joint"),
-                link_names=_child_names(group_element, "link"),
+                joint_names=_child_names(group_element, "joint", result=result, group_path=group_path, display=display),
+                link_names=_child_names(group_element, "link", result=result, group_path=group_path, display=display),
                 chains=tuple(
                     SrdfChain(
                         base_link=str(chain.attrib.get("base_link") or "").strip(),
@@ -193,7 +193,7 @@ def _parse_srdf_root(
                     )
                     for chain in group_element.findall("chain")
                 ),
-                subgroups=_child_names(group_element, "group"),
+                subgroups=_child_names(group_element, "group", result=result, group_path=group_path, display=display),
             )
         )
     _report_duplicates(group_names, result, display, label="group")
@@ -406,12 +406,21 @@ def _local_name(tag: str) -> str:
     return str(tag or "").rsplit("}", 1)[-1].split(":", 1)[-1]
 
 
-def _child_names(element: ET.Element, tag: str) -> tuple[str, ...]:
+def _child_names(
+    element: ET.Element, tag: str, *, result: FindingsReport, group_path: str, display: str,
+) -> tuple[str, ...]:
     names: list[str] = []
     for child in element.findall(tag):
         name = str(child.attrib.get("name") or "").strip()
         if name:
             names.append(name)
+        else:
+            result.add(
+                "error", "missing_group_member_name",
+                f"{display} planning group {element.attrib.get('name')!r} {tag} member requires a non-empty name",
+                path=f"{group_path}/{tag}",
+                hint="Copy the joint/link name from the paired URDF, or the subgroup name from this SRDF.",
+            )
     return tuple(names)
 
 

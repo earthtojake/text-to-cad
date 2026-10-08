@@ -1,9 +1,9 @@
-"""``cadgen viewer`` — serve the current directory in the CAD Viewer.
+"""``cadgen viewer`` — this machine's CAD Viewer: reused when it runs, started when it does not.
 
 A thin shell over :func:`cadgen.viewer.main.serve`, which owns the parser and the
-launcher contract (reuse-or-start, port roll, the ``--json`` announce line). The
-instance manager verbs are :mod:`cadgen.cli.viewer_list` and
-:mod:`cadgen.cli.viewer_stop`; ``python -m cadgen.viewer`` reaches all three.
+launcher contract (reuse, replace or start on its port, the ``--json`` announce
+line). ``cadgen viewer stop`` is :mod:`cadgen.cli.viewer_stop`; ``python -m
+cadgen.viewer`` reaches both.
 """
 
 from __future__ import annotations

@@ -69,7 +69,9 @@ const LOAD_STAGES = Object.freeze({
   broken: {
     load: { alert: { severity: "error", summary: "Load failed", title: "Couldn’t load the harness model",
       message: "The harness file could not be loaded.", reload: true } }
-  }
+  },
+  // Not loading, and no scene to work on yet: the chrome is up, and idle.
+  unready: { load: {}, scene: false }
 });
 
 /** One triangle, as the kit's scene contract (`kit/scene.js`) sees it. */
@@ -85,6 +87,9 @@ function createTriangleScene() {
   const bounds = { min: [0, 0, 0], max: [20, 20, 0] };
   return {
     object3D: root, bounds, restBounds: bounds,
+    // It opens ARRIVING, with no box declared for the whole of it: the viewport frames what is
+    // there, and frames it once more when `arrive(true)` says the box can grow no more.
+    complete: false,
     // This scene's one surface never takes a shadow, whatever the view says: it is TOLD the
     // setting and keeps its own rule, so the viewport must not set its meshes itself.
     setShadowReception(receives) { this.onShadowReception?.(`${receives}:${root.children[0].receiveShadow}`); },
@@ -107,8 +112,7 @@ function HarnessSurface({ view, data }) {
   const preferences = useSyncExternalStore(services.preferences.subscribe, services.preferences.getSnapshot, services.preferences.getSnapshot);
   const [scene] = useState(createTriangleScene);
   useEffect(() => () => scene.dispose(), [scene]);
-  const resource = useMemo(() => ({ kind: "workspace-file", workspaceId: view.source.id, path: view.file.path, revision: "harness" }),
-    [view.source.id, view.file.path]);
+  const resource = useMemo(() => ({ kind: "workspace-file", path: view.file.path, revision: "harness" }), [view.file.path]);
   // The host's capture request, as every renderer takes it (`useWorkspaceDocument`).
   const commands = useSyncExternalStore(services.commands?.subscribe || NO_SUBSCRIPTION,
     services.commands?.getSnapshot || NO_COMMANDS, NO_COMMANDS);
@@ -143,16 +147,18 @@ function HarnessSurface({ view, data }) {
   const [shownRevision, setShownRevision] = useState("");
   // What the frame put down when the person reached for the model.
   const [putDown, setPutDown] = useState("");
-  const { load: stageLoad } = LOAD_STAGES[stage] || LOAD_STAGES.idle;
+  const { load: stageLoad, scene: stageScene = true } = LOAD_STAGES[stage] || LOAD_STAGES.idle;
   const live = useMemo(() => (shownRevision
     ? { ...LIVE, resource: () => ({ ...resource, revision: shownRevision }) }
     : LIVE), [resource, shownRevision]);
 
   // `panel*.harness` stands in for a file whose tool stack is full (below); it opens in Select.
-  const withPanel = view.file.path.startsWith("panel");
+  const withPanel = view.file.name.startsWith("panel");
+  // `flat*.harness` stands in for a view that is not 3D, a drawing's: its renderer does not declare Preview.
+  const previewable = !view.file.name.startsWith("flat");
   const shell = useRendererShell({
     view, services: shellServices, resource, modelKey: view.file.path, revisionKey: "harness",
-    features: EDGELESS_VIEW_FEATURES, toolModes: withPanel ? PANEL_TOOL_MODES : HARNESS_TOOL_MODES, scene,
+    features: EDGELESS_VIEW_FEATURES, toolModes: withPanel ? PANEL_TOOL_MODES : HARNESS_TOOL_MODES, previewable, scene: stageScene ? scene : null,
     load: { busy: false, ...stageLoad },
     live, onCameraSettled, runtimeLifecycle,
     // A renderer whose references are its own vocabulary assembles its own snapshot.
@@ -163,7 +169,7 @@ function HarnessSurface({ view, data }) {
     ]),
     promptReferences: () => [{ note: `${stage}@${shownRevision || resource.revision}` }],
     // A file named for it stands in for a scene drawn with hairlines.
-    preserveInteractionPixelRatio: view.file.path.startsWith("hairline")
+    preserveInteractionPixelRatio: view.file.name.startsWith("hairline")
   });
 
   // Shift means "nothing to offer here", which must open no menu at all.
@@ -180,10 +186,10 @@ function HarnessSurface({ view, data }) {
   const [kept, setKept] = useState(false);
   const [posing, setPosing] = useState(false);
   // `panel-short.harness` turns the heights round: a tree of two rows and a Reference of many.
-  const short = view.file.path.startsWith("panel-short");
+  const short = view.file.name.startsWith("panel-short");
   const [treeRows, referenceRows] = short ? [2, 40] : [120, 8];
   // `panel-part.harness` stands in for a single part, whose tree starts closed.
-  const part = view.file.path.startsWith("panel-part");
+  const part = view.file.name.startsWith("panel-part");
   const selectTool = shell.tools.own({ id: SELECT_TOOL, label: "Select", icon: <span aria-hidden="true">S</span>,
     panel: { id: "tree", label: "Harness tree", startsClosed: part } });
   const keepTool = { id: "keep", label: "Keep", icon: <span aria-hidden="true">K</span>, active: kept, disabled: shell.idle,
@@ -225,6 +231,9 @@ function HarnessSurface({ view, data }) {
       ))}
       <button type="button" className="pointer-events-auto" data-harness-shown-revision
         onClick={() => setShownRevision(current => (current ? "" : "shown-revision"))}>shown</button>
+      {/* Preview asked for from outside the navbar, as a link or a host request would. */}
+      <button type="button" className="pointer-events-auto" data-harness-ask-preview
+        onClick={() => shell.setPreviewing(true)}>preview</button>
     </div>}/>;
 }
 

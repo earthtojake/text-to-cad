@@ -80,7 +80,7 @@ class NoKernelInTheServer(unittest.TestCase):
             "import sys\n"
             "import cadgen.viewer.main, cadgen.viewer.compiles\n"
             "import cadgen.viewer.http_app, cadgen.viewer.cadgen_ops, cadgen.viewer.scanner\n"
-            "import cadgen.viewer.artifact_status, cadgen.viewer.tess_cache, cadgen.viewer.registry\n"
+            "import cadgen.viewer.artifact_status, cadgen.viewer.tess_cache, cadgen.viewer.folders\n"
             "loaded = sorted(m for m in sys.modules if m.split('.')[0] in "
             f"{sorted(KERNEL_ROOTS)!r})\n"
             "print(loaded)\n"
@@ -123,7 +123,7 @@ class NoLookupPathManipulation(unittest.TestCase):
 class ShippedRuntimeData(unittest.TestCase):
     def test_collation_table_ships_beside_the_code(self) -> None:
         # collation.json is RUNTIME data, not a fixture: it is package data in
-        # pyproject.toml, or the catalog sorts differently installed than in tests.
+        # pyproject.toml, or the explorer sorts differently installed than in tests.
         table = PACKAGE_DIR / "collation.json"
         self.assertTrue(table.is_file())
         self.assertGreater(table.stat().st_size, 100_000)

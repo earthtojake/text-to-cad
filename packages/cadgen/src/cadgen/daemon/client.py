@@ -66,7 +66,12 @@ _TIMED_OUT = object()
 # CADGEN_FFMPEG is the same kind of per-client choice: `snapshot --video` encodes
 # with the ffmpeg the CALLER has, and a warm worker's ambient PATH is whatever
 # shell happened to start the daemon. CADGEN_STORE_MAX is the cap the daemon's
-# idle housekeeping holds the client's store to (STORE.md §8).
+# idle housekeeping holds the client's store to (STORE.md §8). CADGEN_VERIFY_READBACK
+# is one build's request (STORE.md §10): a daemon started with it verified every
+# later build, and one started without it skipped the check a maintainer asked for.
+# The telemetry switches (``cadgen.analytics.ENVIRONMENT``) are the client's too: a
+# client whose environment turns telemetry off has none of its builds counted, whatever
+# the environment of the build that started the daemon said (``cadgen.daemon.telemetry``).
 FORWARDED_ENV_VARS = (
     "CADGEN_CACHE_DIR",
     "XDG_CACHE_HOME",
@@ -74,6 +79,9 @@ FORWARDED_ENV_VARS = (
     "PYTHONPATH",
     "CADGEN_FFMPEG",
     "CADGEN_STORE_MAX",
+    "CADGEN_VERIFY_READBACK",
+    "DO_NOT_TRACK",
+    "CADGEN_TELEMETRY",
 )
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than
@@ -367,7 +375,7 @@ def _connect(address: str) -> transport.Channel:
         return transport.connect(address, key)
     except transport.AuthenticationError:
         # A live lock owner repairs a replaced key after rejecting this handshake.
-        # Its accept thread and this client observe the rejection concurrently, so
+        # Its handshake thread and this client observe the rejection concurrently, so
         # give the owner a bounded window to finish the atomic publication. An empty
         # key is a recovery probe when external cleanup removed the file entirely.
         # Windows replacement can spend two 750 ms sharing-violation ladders,
@@ -469,11 +477,14 @@ def _reap_detached(process: subprocess.Popen) -> None:
 
 
 def _spawn_daemon(address: str) -> subprocess.Popen | None:
+    from cadgen.analytics import for_others
     from cadgen.daemon.executors import worker_env
 
     # The daemon and its workers must import THIS cadgen from whatever directory they
-    # run in; a relative PYTHONPATH entry would otherwise pick the installed one.
-    env = worker_env()
+    # run in; a relative PYTHONPATH entry would otherwise pick the installed one. The
+    # daemon serves every client, so it takes no telemetry switch from the one that
+    # started it: each client's travels with its own builds (FORWARDED_ENV_VARS).
+    env = for_others(worker_env())
     env["CADGEN_DAEMON_CHILD"] = "1"
     env.setdefault("CADGEN_DAEMON_SOCKET", str(address))
     try:
@@ -481,7 +492,8 @@ def _spawn_daemon(address: str) -> subprocess.Popen | None:
         log_file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_file_path, "ab") as log_file:
             return subprocess.Popen(
-                [sys.executable, "-m", "cadgen.daemon"],
+                # -P: cadgen's own modules, never the working folder's (STORE.md §9).
+                [sys.executable, "-P", "-m", "cadgen.daemon"],
                 stdin=subprocess.DEVNULL,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
@@ -756,6 +768,72 @@ def watch_jobs(after: str | None = None, *, output: str | None = None, store_roo
             channel.close()
 
 
+def prewarm() -> bool:
+    """Start this installation's daemon, and with it its warm workers, if none answers.
+
+    The first build of a session otherwise pays for both: spawning the daemon and
+    importing build123d in a worker, seconds before any model code runs. Submits
+    nothing. A daemon that answers is only asked its status, which also replaces one
+    left running by older cadgen code. True once a current daemon answers.
+    """
+    if os.environ.get("CADGEN_DAEMON") == "0" or os.environ.get("CADGEN_DAEMON_CHILD"):
+        return False
+    if not daemon_supported():
+        return False
+    for _attempt in range(2):  # a stale daemon answers "restart" and gives up its address
+        try:
+            channel = _connect_or_spawn(daemon_address())
+        except OSError:
+            return False
+        if channel is None:
+            return False
+        answer = _ask_status(channel)
+        if answer is not _RESTART:
+            return answer is not None
+    return False
+
+
+# The most a command waits to hand its counts over (``hand_over``): past it, they are not counted.
+HAND_OVER_SECONDS = 0.5
+
+
+def hand_over(counts: dict) -> None:
+    """Hand a command's counts to the running daemon, which sends them with its own telemetry
+    (``cadgen.daemon.telemetry.counted``): a command sends nothing itself. Like ``status`` it
+    never starts a daemon: with none to take them -- ``CADGEN_DAEMON=0``, a platform without one,
+    or none running -- they are kept for the next process that sends (``analytics.spool``). One
+    that does not answer within ``HAND_OVER_SECONDS``, or is gone mid-send, may have taken them,
+    so they are not kept twice. The command goes on either way. Never raises."""
+    try:
+        from cadgen.analytics import refused, spool
+
+        if refused():
+            return
+    except Exception:  # noqa: BLE001 - telemetry never fails the command it counts
+        return
+    if os.environ.get("CADGEN_DAEMON") == "0" or not daemon_supported():
+        spool(counts)
+        return
+
+    def send() -> None:
+        try:
+            channel = _connect(daemon_address())
+        except Exception:  # noqa: BLE001 - none running, or one that takes no key: kept for the next sender
+            spool(counts)
+            return
+        try:
+            _send_json(channel, {"kind": "count", **counts})
+        except Exception:  # noqa: BLE001 - one gone mid-send may have read them: not kept again
+            pass
+        finally:
+            with contextlib.suppress(Exception):
+                channel.close()
+
+    thread = threading.Thread(target=send, name="cadgen-hand-over", daemon=True)
+    thread.start()
+    thread.join(HAND_OVER_SECONDS)
+
+
 def status() -> dict | None:
     """The running daemon's state, or None if there is none.
 
@@ -768,6 +846,14 @@ def status() -> dict | None:
         channel = _connect(daemon_address())
     except OSError:
         return None
+    answer = _ask_status(channel)
+    # A stale daemon is on its way out: nothing is warm.
+    return None if answer is _RESTART else answer
+
+
+def _ask_status(channel) -> object:
+    """Ask a connected daemon its state, then close the channel: its status, ``_RESTART``
+    from a daemon left by older code, or None when it does not answer."""
     try:
         if not _send_json(channel, {"kind": "status", "token": compute_version_token()}):
             return None
@@ -776,7 +862,7 @@ def status() -> dict | None:
             if message is _TIMED_OUT or message is None:
                 return None
             if message.get("restart"):
-                return None  # a stale daemon is on its way out; report nothing warm
+                return _RESTART
             if "status" in message:
                 return message["status"]
     finally:

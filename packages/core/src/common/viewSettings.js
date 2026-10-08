@@ -7,7 +7,7 @@ import { DEFAULT_STEP_CLIP_SETTINGS, normalizeStepClipSettings } from "../lib/vi
 /** @typedef {{enabled: boolean, visibility: "visible" | "all", color: string}} ViewEdges */
 /** @typedef {{enabled: boolean, quality: "preview" | "final", exposure: number, rotation: number, size: number, fill: number}} ViewLighting */
 /** @typedef {{enabled: boolean, color: string, opacity: number}} ViewPaint */
-/** @typedef {ViewPaint & {placement: "origin" | "lowest"}} ViewFloor */
+/** @typedef {ViewPaint & {placement: "origin" | "lowest", finish: "matte" | "glossy"}} ViewFloor */
 /** @typedef {{enabled?: boolean, axis?: "x" | "y" | "z", offset?: number, offsets?: {x?: number, y?: number, z?: number}, invert?: boolean}} ViewClip */
 /** @typedef {{enabled?: boolean, amount?: number}} ViewExploded */
 /**
@@ -59,12 +59,14 @@ export const VIEW_SURFACES_KEYS = Object.freeze(["enabled", "style", "colorMode"
 export const VIEW_EDGES_KEYS = Object.freeze(["enabled", "visibility", "color"]);
 export const VIEW_LIGHTING_KEYS = Object.freeze(["enabled", "quality", "exposure", "rotation", "size", "fill"]);
 export const VIEW_BACKGROUND_KEYS = Object.freeze(["enabled", "color", "opacity"]);
-export const VIEW_FLOOR_KEYS = Object.freeze(["enabled", "placement", "color", "opacity"]);
+export const VIEW_FLOOR_KEYS = Object.freeze(["enabled", "placement", "color", "opacity", "finish"]);
 export const VIEW_GRID_KEYS = Object.freeze(["enabled", "color", "opacity", "density"]);
 export const VIEW_AXES_KEYS = Object.freeze(["enabled", "color", "opacity"]);
 export const VIEW_SURFACE_STYLE_VALUES = Object.freeze(["shaded", "flat", "hidden", "off"]);
 export const VIEW_COLOR_MODE_VALUES = Object.freeze(["original", "single", "by-part"]);
 export const VIEW_EDGE_VISIBILITY_VALUES = Object.freeze(["visible", "all"]);
+// Matte is the studio floor; glossy also reflects the model (photographicStudio.js).
+export const VIEW_FLOOR_FINISH_VALUES = Object.freeze(["matte", "glossy"]);
 export const VIEW_GROUP_KEYS = Object.freeze(["camera", "surfaces", "edges", "lighting", "background", "floor", "grid", "axes"]);
 
 const GROUP_KEYS = {
@@ -116,7 +118,7 @@ function normalizeGroup(value, name) {
     else result[key] = choice(entry, {
       projection: ["orthographic", "perspective"], style: VIEW_SURFACE_STYLE_VALUES,
       colorMode: VIEW_COLOR_MODE_VALUES, visibility: VIEW_EDGE_VISIBILITY_VALUES,
-      quality: ["preview", "final"], placement: ["origin", "lowest"]
+      quality: ["preview", "final"], placement: ["origin", "lowest"], finish: VIEW_FLOOR_FINISH_VALUES
     }[key], field);
   }
   return result;
@@ -145,6 +147,12 @@ export function normalizeViewSettings(input = {}) {
   return result;
 }
 
+// Where Render's floor stands: at the model's lowest point, under it, rather than the document's
+// Z=0 plane ("origin", Model origin), which a person may still choose and which then reads as
+// Custom. A floor turned on in another preset starts at the origin. The Render recipe's own
+// backdrop default (`sceneSettings.js`) is this too: one value for the Viewer and the snapshot.
+export const RENDER_FLOOR_PLACEMENT = "lowest";
+
 function defaults(appearance, lightingQuality) {
   const dark = appearance === "dark";
   return {
@@ -153,7 +161,7 @@ function defaults(appearance, lightingQuality) {
     edges: { enabled: true, visibility: "visible", color: "#253443" },
     lighting: { enabled: false, quality: lightingQuality, exposure: 0, rotation: 0, size: 1, fill: 0.25 },
     background: { enabled: false, color: dark ? "#121315" : "#ffffff", opacity: 1 },
-    floor: { enabled: false, placement: "origin", color: dark ? "#121315" : "#e7e7e5", opacity: 0.6 },
+    floor: { enabled: false, placement: "origin", color: dark ? "#121315" : "#e7e7e5", opacity: 0.6, finish: "matte" },
     // No preset but Grid draws the grid or the axes; turned on by hand they are the quiet ones.
     grid: { enabled: false, color: dark ? "#495665" : "#cbd5e1", opacity: 0.16, density: 1 },
     axes: { enabled: false, color: dark ? "#495665" : "#cbd5e1", opacity: 0.28 }
@@ -219,6 +227,7 @@ export function resolveViewSettings(input = {}, { appearance = "light", lighting
   if (source.mode === "render") {
     result.camera.projection = "perspective";
     for (const name of ["lighting", "background", "floor"]) result[name].enabled = true;
+    result.floor.placement = RENDER_FLOOR_PLACEMENT;
     for (const name of ["edges", "grid", "axes"]) result[name].enabled = false;
   } else if (source.mode === "xray") {
     result.surfaces.opacity = 0.22;

@@ -34,6 +34,7 @@ import functools
 import json
 import math
 import sys
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -767,7 +768,10 @@ def paired_urdf_for_srdf(srdf_path: Path) -> Path:
             f"{srdf_path.name} is ambiguous: {len(matches)} .urdf files in {folder} declare "
             f"<robot name={robot_name!r}> ({', '.join(match.name for match in matches)}). {rule}"
         )
-    candidates = sorted(folder.glob("*.urdf"))
+    try:
+        candidates = sorted(path for path in folder.iterdir() if path.suffix.lower() == ".urdf" and path.is_file())
+    except OSError:
+        candidates = []
     found = (
         "; it holds " + ", ".join(
             f"{candidate.name} (robot {(_robot_name(candidate) or 'unreadable')!r})"
@@ -895,9 +899,8 @@ def resolve_robot_render_job(
     The browser assembles the robot: the parser resolves each link mesh against the
     description's own URL, so this hands over one asset URL and the pose, and the shared
     mesh backend renders the result."""
-    # Link meshes are referenced relative to the description, so the served root has to
-    # contain both. The description's own directory is the natural root and matches how the
-    # viewer serves a robot from its model folder.
+    # Link meshes are referenced relative to the description, so the folder this serves has
+    # to contain both: the description's own directory.
     asset_url = asset_url_for_path(input_path, root_path)
     resolved: dict[str, object] = {
         "rootPath": str(root_path),
@@ -1694,4 +1697,33 @@ def run_snapshot(
     cwd: Path | None = None,
 ) -> SnapshotResult:
     """:func:`run_snapshot_async` for a synchronous caller (the CLI, the verbs)."""
-    return asyncio.run(run_snapshot_async(options, kinds=kinds, runtime_dir=runtime_dir, cwd=cwd))
+    started, result = time.perf_counter(), None
+    try:
+        result = asyncio.run(run_snapshot_async(options, kinds=kinds, runtime_dir=runtime_dir, cwd=cwd))
+        return result
+    finally:
+        _count_snapshot(options, result, time.perf_counter() - started)
+
+
+def _count_snapshot(options: SnapshotOptions, result: SnapshotResult | None, seconds: float) -> None:
+    """Count this run for telemetry (``cadgen/analytics.py``): each document's format, whether it rendered and
+    how long that took, and the features it used -- handed to a running build daemon to send with its own, and
+    never waited on past a moment (``cadgen.daemon.client.hand_over``). Never raises."""
+    try:
+        from cadgen.analytics import FILE_KINDS
+        from cadgen.daemon.client import hand_over
+
+        inputs = {file.input for file in result.files if file.input} if result is not None else set()
+        formats = [FILE_KINDS[Path(name).suffix.lower()] for name in inputs or {options.input}
+                   if Path(name or "").suffix.lower() in FILE_KINDS]
+        if not formats:
+            return
+        ok = result is not None and result.ok
+        features = [feature for feature, used in (
+            ("kinematics", options.kinematics_specified or options.joint_values_specified),
+            ("animation", options.animation_specified or options.video_specified),
+        ) if used]
+        hand_over({"snapshots": [{"format": kind, "ok": ok, "seconds": round(seconds / len(formats), 3)}
+                                 for kind in formats], "features": features})
+    except Exception:  # noqa: BLE001 - a count never fails the snapshot it counts
+        pass

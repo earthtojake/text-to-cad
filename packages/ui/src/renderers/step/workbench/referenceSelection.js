@@ -65,7 +65,7 @@ export function buildNormalizedReferenceState(entry, referencePayload = null, {
   // A component-GLB package has no whole-assembly selector bundle; the caller composes the
   // per-component runtimes and passes the result here instead of a single bundle to parse.
   const selectorRuntime = prebuiltSelectorRuntime || buildSelectorRuntime(referencePayload, {
-    // fileRefPrefix is the name the host gives this file (`fileReferencePath`), extension
+    // fileRefPrefix is the file's absolute path (the view's), extension
     // included -- which is why cadPathForEntry (which strips it) is NOT used here. An entry
     // without the field emits bare "#...", so the prefix is opt-in per call site.
     copyCadPath: copyCadPath || fileRefPrefixForEntry(entry),
@@ -325,14 +325,6 @@ export function copyTextLines(lines, fileRefPrefix = "") {
     .filter(Boolean);
 }
 
-/**
- * The name copied refs give the file at `path` (one of `source`'s paths): the host's, where its
- * source spells references (`FileSource.referencePath`), else `path` itself, relative to the
- * host's root.
- */
-export function fileReferencePath(source, path) {
-  return source?.referencePath ? source.referencePath(path) : path;
-}
 
 /** The file prefix a copied ref should carry, or "" when the entry has none. */
 export function fileRefPrefixForEntry(entry) {

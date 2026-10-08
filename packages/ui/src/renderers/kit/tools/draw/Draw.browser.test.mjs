@@ -6,7 +6,7 @@ import { serveStepHarness } from '../../../harness/stepScenario.mjs';
 // two-part fixture. It is a kit tool, so the scenario itself
 // (`harness/drawScenario.mjs`) knows nothing about STEP.
 
-test('Draw locks the view, pans model and ink together, keeps tools, colors and fills, and discards the sketch but not its tool and colour when left', async (t) => {
+test('Draw locks the view, pans model and ink together, keeps tools, colors and fills, and discards the sketch but not its tool and colour when left, or when the model updates under it', async (t) => {
   const harness = await serveStepHarness(t);
   await runDrawScenario(await harness.open());
 });

@@ -135,6 +135,9 @@ class PythonSourceClosure:
     # relative path -> a sliced helper's whole-file hash, of the bytes its slice
     # was taken from (the gate's no-re-analysis fast path).
     wholes: dict[str, str] = field(default_factory=dict)
+    # listed folder (``<folder>/``) -> the entries its digest leaves out: the
+    # model's own outputs there (``cadgen.store.closure``).
+    own: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _is_within(path: Path, root: Path) -> bool:

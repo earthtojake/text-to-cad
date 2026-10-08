@@ -163,9 +163,9 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       contextRef.current = canvas.getContext("2d");
       refit(false);
       // A view the person framed is not taken back by a resize — but it must not keep an
-      // absolute pixel scale either, or a pane that narrows (the file tree opening, the
-      // window resizing) simply crops the drawing where it stands. So it keeps what it
-      // MEANT: the same zoom relative to the fit, still centred on what it was centred on.
+      // absolute pixel scale either, or a pane that narrows (the window resizing) simply
+      // crops the drawing where it stands. So it keeps what it MEANT: the same zoom
+      // relative to the fit, still centred on what it was centred on.
       // That is how the 3D viewports behave when their pane changes size.
       if (heldCentre && heldZoom > 0 && movedRef.current && fitScaleRef.current > 0) {
         const scale = clampScale(heldZoom * fitScaleRef.current, zoomLimits(fitScaleRef.current));

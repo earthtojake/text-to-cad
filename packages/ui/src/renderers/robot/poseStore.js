@@ -34,11 +34,27 @@ export function movableJoints(description) {
 }
 
 /**
+ * What a robot's pose is made of, as one comparable string: each joint a person drives — its name,
+ * type, range and default — and the named poses (an SRDF's group states, `home` included). A new
+ * revision of the file with the same keeps the pose it was left in; one with anything else opens at
+ * its own opening pose, since a pose is never fitted onto joints that changed.
+ */
+export function poseLogic(description) {
+  return JSON.stringify([
+    movableJoints(description).map(joint => [joint.name, String(joint.type || ""), joint.minValueDeg ?? null, joint.maxValueDeg ?? null, joint.defaultValueDeg ?? null]),
+    groupStatesOf(description).map(state => [state.id, Object.entries(state.jointValuesByName || {}).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))]),
+  ]);
+}
+
+/**
  * @param {object} description  A parsed URDF or SDF (an SRDF's is its URDF's, with `srdf` on it).
  * @param {Record<string, number> | null} [initial]  Values to open at (a restored record, or the pose a
- *   previous revision of the file was left in): known joints are kept, clamped to THIS description's limits.
+ *   previous revision with the same pose logic was left in): known joints are kept, clamped to THIS
+ *   description's limits.
+ * @param {string} [trackedId]  The named pose those values were chosen as, which the store shows until
+ *   a joint is moved (a revision with the same pose logic carries it over).
  */
-export function createPoseStore(description, initial = null) {
+export function createPoseStore(description, initial = null, trackedId = "") {
   const joints = movableJoints(description);
   const jointByName = new Map(joints.map(joint => [joint.name, joint]));
   // The opening pose (core's, so a snapshot renders the robot where this opens it): every
@@ -50,7 +66,7 @@ export function createPoseStore(description, initial = null) {
     .filter(([name]) => jointByName.has(name)).map(([name, value]) => [name, clampJointValueDeg(jointByName.get(name), value)]));
 
   let values = Object.freeze({ ...defaults, ...clampKnown(initial) });
-  let trackedGroupStateId = "";
+  let trackedGroupStateId = String(trackedId || "");
   let snapshot = null;
   // A named pose is shown while it was the last thing chosen; otherwise the one the
   // joints happen to match, with every other joint at its default.
@@ -68,6 +84,8 @@ export function createPoseStore(description, initial = null) {
 
   return {
     joints, defaults, groupStates,
+    /** `poseLogic(description)`: what decides whether a new revision keeps this pose. */
+    logic: poseLogic(description),
     getSnapshot: read,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     /** One joint moved by hand: clamped, ignored under the epsilon, and the tracked named pose released. */

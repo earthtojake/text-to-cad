@@ -1,5 +1,5 @@
 // Preview's playback settings, the file's own (`playback` of the file's view, `kit/shell/fileView.js`):
-// everything the Playback settings menu holds, remembered between leaving and re-entering preview
+// everything preview's Orbit and the playbar's Playback settings hold, remembered between leaving and re-entering preview
 // and across a reload of the tab. Orbit on or off and its speed; Autoplay; and — once chosen —
 // the speed and the loop the routine plays with, while unset the routine's own authored values.
 // Importing this module has no environmental effects.

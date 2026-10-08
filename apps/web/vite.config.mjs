@@ -4,21 +4,21 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { stampDebugId } from "@text-to-cad/core/chunk-ids";
+import { packageSourceMaps } from "@text-to-cad/core/source-maps";
 import { drawingAssetsPlugin } from "@text-to-cad/ui/drawing-assets";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
 import { resolveServerFsAllow } from "./scripts/serverFsAllow.mjs";
-import { assertNoDeprecatedLocalRootEnv } from "./scripts/viewerEnv.mjs";
 import {
   normalizeServerLifetimeMs,
   scheduleProcessShutdown,
 } from "./scripts/serverLifetime.mjs";
 
-// Dev deliberately lives on Vite's own canonical port, NOT the bundled
-// launcher's 3245: dev is a hand-managed foreground process that never enters
-// the instance registry and never participates in launch reuse, so it must not
-// look like (or collide with) a launched Viewer. Taken port → pick another
-// with --port; nothing rolls or reuses here.
+// Dev deliberately lives on Vite's own canonical port, NOT the launcher's 3245:
+// dev is a hand-managed foreground process that no launch reuses or replaces,
+// so it must not look like (or collide with) a launched Viewer. Taken port →
+// pick another with --port; nothing reuses here.
 const DEFAULT_DEV_PORT = 5173;
 function devPort() { const port=Number(process.env.PORT); return Number.isInteger(port) && port>0 ? port : DEFAULT_DEV_PORT; }
 
@@ -29,7 +29,6 @@ const defaultDirectoryRoot = path.resolve(viewerAppRoot, "..");
 const directoryRoot = resolveDirectoryRoot();
 const viewerAllowedHosts = normalizeViewerAllowedHosts(process.env.VIEWER_ALLOWED_HOSTS ?? "");
 const viewerServerLifetimeMs = normalizeServerLifetimeMs(process.env.VIEWER_SERVER_LIFETIME_MS);
-assertNoDeprecatedLocalRootEnv(process.env);
 
 function normalizeViewerAllowedHosts(value) {
   return String(value || "")
@@ -54,11 +53,11 @@ function resolveDirectoryRoot() {
 // the port off its {url,port,action} line, and hands it to the proxy in the
 // server block.
 //
-// The backend runs --ephemeral --no-registry --api-only. --no-registry is a
-// CORRECTNESS requirement, not tidiness: a registered dev backend would be
-// found by a later `cadgen viewer` launch from the same directory (reuse keys
-// on the served realpath at the same version), handing an agent a URL served by
-// Vite's proxy target instead of a real Viewer. --api-only is what makes dev
+// The backend runs --new --api-only. --new is a CORRECTNESS requirement, not
+// tidiness: on the launcher's port, a later `cadgen viewer` launch would find
+// this backend and reuse it (or replace it), handing an agent a URL served by
+// Vite's proxy target instead of a real Viewer; --new binds a port of its own
+// that no launch asks about. --api-only is what makes dev
 // work on a checkout that has never been built: Vite serves the client here, so
 // this backend needs no dist/ — and dist/ is gitignored, so without it
 // `npm run dev` failed on every fresh clone with a complaint about a missing
@@ -85,10 +84,10 @@ async function startDevBackend() {
   }
 
   const python = process.env.VIEWER_PYTHON || "python3";
-  // The backend has no directory flag: its cwd IS the directory it serves. Dev
-  // still decides which directory that is (scripts/directoryRoot.mjs reads
-  // INIT_CWD, which npm sets for `npm run dev`); the hand-off is the child's
-  // cwd rather than an argument.
+  // The backend serves every file by absolute path. Where it starts is only where
+  // a developer's relative ?file= resolves (`serverInfo.start`): where
+  // `npm run dev` was run (scripts/directoryRoot.mjs reads INIT_CWD, which npm
+  // sets), handed over as the child's cwd.
   const child = spawn(
     python,
     [
@@ -96,8 +95,7 @@ async function startDevBackend() {
       "cadgen.viewer",
       "--host",
       "127.0.0.1",
-      "--ephemeral",
-      "--no-registry",
+      "--new",
       "--api-only",
       "--json",
     ],
@@ -125,7 +123,7 @@ async function startDevBackend() {
 
   const announced = await readFirstJsonLine(child.stdout);
   const target = String(announced.url || "").replace(/\/+$/u, "");
-  console.info(`CAD Viewer backend: ${target} (${python}, serving ${directoryRoot})`);
+  console.info(`CAD Viewer backend: ${target} (${python}, started in ${directoryRoot})`);
   return target;
 }
 
@@ -185,6 +183,39 @@ function serverLifetimePlugin() {
   };
 }
 
+// Each chunk's debug id, by file name, in the page before anything runs (`__cadChunkIds`): a crash
+// report names the chunk each of its frames ran in by it (@text-to-cad/core's crash reporter), and
+// the release uploads every chunk with its source map (scripts/release/sourcemaps.py) for PostHog to
+// show the source -- the shared packages' own source, whose maps the build chains
+// (@text-to-cad/core/source-maps), not their compiled dist. Each chunk goes by an id its text and its
+// map decide (@text-to-cad/core/chunk-ids), never rolldown's, which names the code alone. The maps stay
+// in dist, which the wheel leaves out (scripts/bundle).
+function chunkIdsPlugin() {
+  return {
+    name: "cad-viewer-chunk-ids",
+    apply: "build",
+    enforce: "post",
+    generateBundle: { order: "post", handler(_, bundle) {
+      const ids = {};
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== "chunk" || !chunk.sourcemapFileName) continue;
+        const map = bundle[chunk.sourcemapFileName];
+        if (map?.type !== "asset") throw new Error(`The CAD Viewer chunk ${chunk.fileName} has no source map.`);
+        const stamped = stampDebugId(chunk.code, String(map.source), chunk.fileName);
+        chunk.code = stamped.code;
+        map.source = stamped.map;
+        ids[chunk.fileName.split("/").pop()] = stamped.debugId;
+      }
+      const html = bundle["index.html"];
+      if (!html || html.type !== "asset") throw new Error("The CAD Viewer build needs index.html.");
+      const script = `<script>globalThis.__cadChunkIds=${JSON.stringify(ids)}</script>`;
+      const document = String(html.source);
+      if (!document.includes("<head>")) throw new Error("The CAD Viewer's index.html has no <head>.");
+      html.source = document.replace("<head>", () => `<head>${script}`);
+    } },
+  };
+}
+
 export default defineConfig(async ({ command }) => ({
   root: viewerAppRoot,
   envPrefix: "VIEWER_",
@@ -197,11 +228,15 @@ export default defineConfig(async ({ command }) => ({
     drawingAssetsPlugin({ exclude: [/\/fonts\/Xiaolai\//] }),
     react(),
     serverLifetimePlugin(),
+    packageSourceMaps(["@text-to-cad/core", "@text-to-cad/ui"]),
+    chunkIdsPlugin(),
   ],
   resolve: { alias: { "@": viewerClientRoot }, dedupe: ["react", "react-dom", "three", "lucide-react"] },
   build: {
     chunkSizeWarningLimit: 800,
-    rolldownOptions: { output: { codeSplitting: { groups: [
+    // Maps beside the chunks, named by no chunk (`hidden`), each chunk's debug id in it and in its map.
+    sourcemap: "hidden",
+    rolldownOptions: { output: { sourcemapDebugIds: true, codeSplitting: { groups: [
       { name: "vendor-three", test: /[\\/]node_modules[\\/]three[\\/]/ },
       { name: "vendor-react", test: /[\\/]node_modules[\\/]react(?:-dom)?[\\/]/ },
       { name: "vendor-ui", test: /[\\/]node_modules[\\/]@?radix-ui[\\/]/ },
@@ -215,8 +250,8 @@ export default defineConfig(async ({ command }) => ({
     host: "127.0.0.1",
     port: devPort(),
     // Fail on a taken port instead of silently rolling: dev is hand-managed,
-    // so the agent picks another port explicitly. (The bundled launcher is the
-    // one that rolls/reuses; dev stays out of that machinery entirely.)
+    // so the agent picks another port explicitly. (The launcher is the one that
+    // reuses or replaces; dev stays out of that.)
     strictPort: true,
     allowedHosts: viewerAllowedHosts,
     // The two API prefixes go to the Python backend; everything else is the

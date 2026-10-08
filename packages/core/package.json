@@ -1,6 +1,6 @@
 {
   "name": "@text-to-cad/core",
-  "version": "0.7.9",
+  "version": "0.7.17",
   "private": true,
   "type": "module",
   "description": "Reusable CAD render/viewer runtime for docs, CAD Viewer, and generated snapshot browser assets.",
@@ -24,7 +24,9 @@
     "./drawing": {
       "types": "./dist/drawing/index.d.ts",
       "import": "./dist/drawing/index.js"
-    }
+    },
+    "./chunk-ids": "./scripts/chunk-ids.mjs",
+    "./source-maps": "./scripts/source-maps.mjs"
   },
   "scripts": {
     "test": "node scripts/run-tests.mjs",
@@ -35,7 +37,7 @@
     "./dist/common/headlessRenderEntry.js"
   ],
   "dependencies": {
-    "meshoptimizer": "^1.2.0",
+    "meshoptimizer": "^1.3.0",
     "three": "0.186.1",
     "three-mesh-bvh": "0.9.15"
   },
@@ -49,6 +51,8 @@
   "files": [
     "dist",
     "bin",
+    "scripts/chunk-ids.mjs",
+    "scripts/source-maps.mjs",
     "docs",
     "README.md"
   ]

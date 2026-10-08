@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import Counter
 from concurrent.futures import Future, ThreadPoolExecutor
+import functools
 import json
 import os
 from pathlib import Path
@@ -294,6 +295,52 @@ class MetadataCapture(unittest.TestCase):
                     target.write_bytes(original)
         self.assertEqual(trees.capture_tree(self.tree), (self.geometry, self.payloads))
 
+    def test_the_viewer_verifies_a_tree_once_and_stats_what_each_request_names(self):
+        from cadgen.viewer import surfaces as viewer_surfaces
+
+        record = surfaces.derive(self.tree, [self.cid], producer=self.producer)[self.cid]
+        surf = object_path(record["object"])
+        resolve = lambda: self.manager.resolve(json.dumps(self.request).encode())["components"][self.cid]["state"]
+        serve = lambda: pinned_surface_object(self.tree, record["surfaceInput"], record["object"])
+        self.assertEqual((resolve(), serve()), ("ready", surf))
+        with mock.patch.object(viewer_surfaces, "capture_tree", side_effect=AssertionError("verified again")):
+            for _ in range(3):
+                self.assertEqual((resolve(), serve()), ("ready", surf))
+
+        # GC or eviction deleting what a request names sends the tree back through the
+        # complete verification, which fails as it did before the tree was pinned.
+        for digest in (self.geometry["components"][self.cid]["brep"], self.tree):
+            target = object_path(digest)
+            original = target.read_bytes()
+            target.unlink()
+            try:
+                with mock.patch("cadgen.daemon.artifacts.submit_artifact", side_effect=AssertionError("missing object admitted")):
+                    for call in (resolve, serve):
+                        with self.assertRaises(FileNotFoundError):
+                            call()
+            finally:
+                target.write_bytes(original)
+            self.assertEqual((resolve(), serve()), ("ready", surf))
+        surf_bytes = surf.read_bytes()
+        surf.unlink()
+        try:
+            self.assertIsNone(serve())
+        finally:
+            surf.write_bytes(surf_bytes)
+
+        # A component no request names is not looked at; a derivation still verifies
+        # the whole closure before it writes anything.
+        other = next(entry for cid, entry in self.geometry["components"].items() if cid != self.cid)
+        target = object_path(other["brep"])
+        original = target.read_bytes()
+        target.unlink()
+        try:
+            self.assertEqual(serve(), surf)
+            with self.assertRaises(FileNotFoundError):
+                surfaces.derive(self.tree, [self.cid], producer=self.producer)
+        finally:
+            target.write_bytes(original)
+
     def test_damage_inside_one_write_clock_tick_is_never_certified(self):
         """A stamp a later write could reproduce must not certify a cache entry.
 
@@ -302,26 +349,32 @@ class MetadataCapture(unittest.TestCase):
         timer. A same-size rewrite landing in the tick the verified read observed
         leaves dev, inode, size, mtime and ctime identical, so the cached
         metadata would answer for bytes that no longer hash to their address.
+        Linux before 6.13 stamps from its timer interrupt too (10 ms at 100 Hz)
+        and keeps every nanosecond digit, so no digit pattern gives the tick away.
         """
         entry = next(value for cid, value in self.geometry["components"].items() if cid != self.cid)
         target = object_path(entry["brep"])
         original = target.read_bytes()
-        tick_ns = time.time_ns() // WINDOWS_TICK_NS * WINDOWS_TICK_NS
+        now = time.time_ns()
 
-        def windows_stamp(digest):
+        def coarse_stamp(digest, mtime_ns):
             stat = object_path(digest).stat()
-            return (digest, stat.st_dev, stat.st_ino, stat.st_size, tick_ns, 0)
+            return (digest, stat.st_dev, stat.st_ino, stat.st_size, mtime_ns, 0)
 
-        trees._reset_metadata_capture_cache()
-        try:
-            with mock.patch.object(trees, "_object_stamp", side_effect=windows_stamp), \
-                 mock.patch("time.time_ns", return_value=tick_ns + WINDOWS_TICK_NS // 2):
-                trees.capture_tree(self.tree, retain_payloads=False)
-                target.write_bytes(bytes([original[0] ^ 1]) + original[1:])
-                with self.assertRaises((OSError, ValueError)):
-                    trees.capture_tree(self.tree, retain_payloads=False)
-        finally:
-            target.write_bytes(original)
+        for clock, mtime_ns in (("windows", now // WINDOWS_TICK_NS * WINDOWS_TICK_NS),
+                                ("linux jiffy", now // 1_000_000_000 * 1_000_000_000 + 123_456_789)):
+            with self.subTest(clock=clock):
+                trees._reset_metadata_capture_cache()
+                try:
+                    with mock.patch.object(trees, "_object_stamp",
+                                           side_effect=functools.partial(coarse_stamp, mtime_ns=mtime_ns)), \
+                         mock.patch("time.time_ns", return_value=mtime_ns + 5_000_000):
+                        trees.capture_tree(self.tree, retain_payloads=False)
+                        target.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+                        with self.assertRaises((OSError, ValueError)):
+                            trees.capture_tree(self.tree, retain_payloads=False)
+                finally:
+                    target.write_bytes(original)
         trees._reset_metadata_capture_cache()
         self.settle_store_objects()
         self.assertEqual(trees.capture_tree(self.tree), (self.geometry, self.payloads))
@@ -345,6 +398,143 @@ class MetadataCapture(unittest.TestCase):
         read_digests = [call.args[0] for call in selected_reads.call_args_list]
         self.assertIn(selected["brep"], read_digests)
         self.assertNotIn(other["brep"], read_digests)
+
+
+class VerifiedIdentityAcrossClaims(unittest.TestCase):
+    """A publish's claims carry the identities this process verified forward, and a
+    capture reads again only what moved (STORE.md §8, §10)."""
+
+    def setUp(self):
+        temp = generated_cad_directory(prefix="verified-claims-")
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.enterContext(mock.patch.dict(os.environ, {
+            "CADGEN_CACHE_DIR": str(self.root / "store"),
+            "CADGEN_DAEMON": "0", "CADGEN_COMPONENT_WORKERS": "1",
+        }))
+        from build123d import Solid
+
+        self.children = [build_tree_from_compound(Solid.make_box(x, 2, 3), root_name=f"box {x}")[0]
+                         for x in (1, 2)]
+        links = [{"id": f"o{i}", "tree": tree, "name": f"part {i}",
+                  "transform": list(trees.IDENTITY_16)} for i, tree in enumerate(self.children, 1)]
+        self.tree = trees.put_tree({
+            "units": "mm", "entryKind": "assembly", "components": {}, "occurrences": [],
+            "links": links, "assembly": {"root": {
+                "id": "root", "nodeType": "assembly", "children": [
+                    {"id": link["id"], "nodeType": "link", "children": []} for link in links],
+            }},
+        })
+        self.closure = {self.tree: self.tree}
+        for child in self.children:
+            self.closure.update({child: child, **{entry["brep"]: child for entry in trees.get_tree(child)["components"].values()}})
+        trees._reset_metadata_capture_cache()
+        self.addCleanup(trees._reset_metadata_capture_cache)
+        MetadataCapture.settle_store_objects()
+
+    def reads(self):
+        return mock.patch.object(trees, "read_verified_object", wraps=trees.read_verified_object)
+
+    def test_a_publish_claims_what_it_verified_without_reading_it_again(self):
+        self.assertTrue(trees.tree_complete(self.tree))
+        with self.reads() as reads, mock.patch.object(trees, "claim_object", wraps=trees.claim_object) as claims:
+            self.assertTrue(trees.claim_tree(self.tree))
+        self.assertFalse(reads.call_args_list, "the closure was verified moments ago")
+        self.assertEqual(Counter(call.args[0] for call in claims.call_args_list), Counter(self.closure.keys()))
+        # The claims moved every mtime, and the identities moved with them.
+        with self.reads() as reads:
+            self.assertTrue(trees.tree_complete(self.tree))
+            self.assertEqual(trees.capture_tree(self.tree, retain_payloads=False)[0]["tree"], self.tree)
+        self.assertFalse(reads.call_args_list)
+
+    def test_a_claims_stamp_is_settled_as_it_is_set_and_recent(self):
+        from cadgen.store.objects import claim_object, delete_unclaimed, object_path
+
+        digest = next(iter(trees.get_tree(self.children[0])["components"].values()))["brep"]
+        before = time.time_ns()
+        self.assertTrue(claim_object(digest))
+        stamp = trees._object_stamp(digest)
+        self.assertTrue(trees._stamp_is_settled(stamp), "a stamp two ticks back is past the tick it sits in")
+        self.assertLess(before - stamp[trees._STAMP_MTIME_NS], 5_000_000_000, "and recent enough for any sweep's window")
+        self.assertEqual(delete_unclaimed(object_path(digest), time.time() - 3600), 0)
+
+    @unittest.skipIf(os.name == "nt", "POSIX lets only a file's owner set an explicit time")
+    def test_a_claim_on_an_object_another_user_owns_still_claims_it(self):
+        # A store several users share: a claim may set this object's time to now, but
+        # not to the explicit time it tries first.
+        import errno
+
+        from cadgen.store.objects import claim_object, delete_unclaimed, object_path, verified_stamp
+
+        digest = next(iter(trees.get_tree(self.children[0])["components"].values()))["brep"]
+        path = object_path(digest)
+        stat = path.stat()
+        aged_ns = stat.st_mtime_ns - 7200 * 1_000_000_000  # written before any sweep's grace window
+        os.utime(path, ns=(stat.st_atime_ns, aged_ns))
+        self.assertTrue(trees.tree_complete(self.tree))
+        self.assertIsNotNone(verified_stamp(str(path)))
+        utime = os.utime
+
+        def owner_only_explicit_times(target, times=None, *, ns=None):
+            if times is not None or ns is not None:
+                raise PermissionError(errno.EPERM, os.strerror(errno.EPERM), os.fspath(target))
+            utime(target)
+
+        with mock.patch("os.utime", side_effect=owner_only_explicit_times):
+            self.assertTrue(claim_object(digest))
+        self.assertGreater(path.stat().st_mtime_ns, aged_ns, "the claim did not stamp the object")
+        self.assertEqual(delete_unclaimed(path, time.time() - 3600), 0, "claimed within the grace window")
+        self.assertIsNone(verified_stamp(str(path)), "a stamp of now is not settled as it is set")
+
+    def test_damage_after_or_before_a_claim_is_caught(self):
+        from cadgen.store.objects import object_path
+
+        entry = next(iter(trees.get_tree(self.children[1])["components"].values()))
+        target = object_path(entry["brep"])
+        original = target.read_bytes()
+        same_size = bytes([original[0] ^ 1]) + original[1:]
+
+        def rewrite():
+            target.write_bytes(same_size)
+
+        def truncate():
+            os.truncate(target, 16)
+
+        for when in ("after", "before"):
+            for damage in (rewrite, truncate, target.unlink):
+                with self.subTest(when=when, damage=damage.__name__):
+                    target.write_bytes(original)
+                    MetadataCapture.settle_store_objects()
+                    trees._reset_metadata_capture_cache()
+                    self.assertTrue(trees.tree_complete(self.tree))
+                    if when == "before":
+                        damage()  # between the verified read and the claim
+                        self.assertFalse(trees.claim_tree(self.tree), "the claim's own capture finds it")
+                    else:
+                        self.assertTrue(trees.claim_tree(self.tree))
+                        damage()
+                    with self.assertRaises((OSError, ValueError)):
+                        trees.capture_tree(self.tree, retain_payloads=False)
+                    self.assertFalse(trees.tree_complete(self.tree))
+        target.write_bytes(original)
+
+    def test_a_capture_reads_again_only_the_subtree_that_moved(self):
+        from cadgen.store.objects import object_path
+
+        self.assertTrue(trees.tree_complete(self.tree))
+        # Another process published the first child: its claims moved every
+        # stamp of that child's closure and nothing else.
+        moved = [digest for digest, child in self.closure.items() if child == self.children[0]]
+        for digest in moved:
+            path = object_path(digest)
+            stat = path.stat()
+            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns - 8_000_000_000))
+        with self.reads() as reads:
+            self.assertTrue(trees.tree_complete(self.tree))
+        self.assertEqual(sorted(call.args[0] for call in reads.call_args_list), sorted([*moved, self.tree]))
+        with self.reads() as reads:
+            self.assertTrue(trees.tree_complete(self.tree))
+        self.assertFalse(reads.call_args_list)
 
 
 if __name__ == "__main__":

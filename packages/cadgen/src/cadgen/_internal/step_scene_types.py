@@ -37,6 +37,10 @@ class LoadedStepScene:
     prototype_names: dict[int, str | None] = field(default_factory=dict)
     prototype_colors: dict[int, ColorRGBA] = field(default_factory=dict)
     prototype_face_colors: dict[int, dict[int, ColorRGBA]] = field(default_factory=dict)
+    # Prototype key -> (codec, BREP object hash) of the stored component it was
+    # decoded from, where the scene knows it: the facts a scene's edge policy
+    # reads are then remembered by that BREP (store.bounds.cached_component_topology).
+    prototype_components: dict[int, tuple[str, str]] = field(default_factory=dict)
     load_elapsed: float = 0.0
     step_hash: str | None = None
     source_kind: str = "step"
@@ -55,6 +59,9 @@ class LoadedStepScene:
     # and their whole-file hashes (record.closure.wholes).
     source_closure_names: dict[str, tuple[str, ...]] = field(default_factory=dict)
     source_closure_wholes: dict[str, str] = field(default_factory=dict)
+    # Listed folders -> the entries their digests leave out, the model's own
+    # outputs (record.closure.own).
+    source_closure_own: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # Literals imported from model files, tracked by value (record.constants).
     source_closure_constants: dict[str, dict[str, str]] = field(default_factory=dict)
     # `cadgen step build IN OUT` only: the INPUT document's content hash (the

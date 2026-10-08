@@ -1,14 +1,12 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { Files } from 'lucide-react';
 import { ToolbarButton } from '../../dist/primitives/toolbar-button.js';
-import { PanelToggle } from '../../dist/file-viewer/navigation/ViewerNavbar.js';
 import FloatingToolBar from '../../dist/renderers/kit/tools/FloatingToolBar.js';
 import PreviewChrome from '../../dist/renderers/kit/tools/PreviewChrome.js';
 
-// The viewer's hints: the strip's tools, the nav row's panel toggles and the view's actions all
-// hint through one primitive (`tooltip.jsx`), after a deliberate hover, never sticking after a press.
+// The viewer's hints: the strip's tools and the view's actions hint through one primitive
+// (`tooltip.jsx`), after a deliberate hover, never sticking after a press.
 beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 const tip = () => screen.queryByRole('tooltip');
@@ -48,15 +46,14 @@ it('a tool is hinted only after a deliberate hover, with the same delay from one
   expect(tip()).toBeNull();
 });
 
-it('the nav row, the strip and the view\'s actions share one hint with no native title; a click that focuses a trigger pins nothing, a Tab onto it names it', () => {
+it('the strip and the view\'s actions share one hint with no native title; a click that focuses a trigger pins nothing, a Tab onto it names it', () => {
   render(<>
-    <PanelToggle icon={Files} label="Show files" active={false} onClick={() => {}} id="tree" />
     {strip()}
-    <ToolbarButton label="Display settings">D</ToolbarButton>
+    <ToolbarButton label="Display">D</ToolbarButton>
     <ToolbarButton label="Preview">P</ToolbarButton>
   </>);
   const classes: string[] = [];
-  for (const [name, hint] of [['Show files', 'Files'], ['Draw', 'Draw'], ['Display settings', 'Display settings'], ['Preview', 'Preview']]) {
+  for (const [name, hint] of [['Draw', 'Draw'], ['Display', 'Display'], ['Preview', 'Preview']]) {
     const button = screen.getByRole('button', { name });
     expect(button.hasAttribute('title')).toBe(false);
     enter(button);
@@ -70,7 +67,7 @@ it('the nav row, the strip and the view\'s actions share one hint with no native
   expect(new Set(classes).size).toBe(1);
   expect(document.querySelectorAll('[title]').length).toBe(0);
   // A press focuses the trigger: no hint comes with that focus.
-  const display = screen.getByRole('button', { name: 'Display settings' });
+  const display = screen.getByRole('button', { name: 'Display' });
   fireEvent.pointerDown(display);
   act(() => display.focus());
   wait(500);

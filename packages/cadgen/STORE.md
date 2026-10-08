@@ -44,7 +44,7 @@ One word per concept; the code uses these words and no others.
 | **index** | the input-addressed side of the store: records, bounds, mesh entries |
 | **closure** | what a model's build depended on: the source it reaches, the files it read, the folders it listed, and the files its imports rely on not existing |
 | **stale / current**, **gate** | the freshness state and the check that decides it |
-| **claim** | what a write does to an object it finds already present: its mtime becomes now, so the sweeper's grace window covers it (§8) |
+| **claim** | what a write does to an object it finds already present: its mtime becomes now, less two ticks of its clock, so the sweeper's grace window covers it and the claiming process keeps what it verified of it (§8) |
 | **evict** | drop a derived entry to keep the store under its cap; only the derived kinds are ever evicted (§8) |
 | **worker / spare / extra**, **job** | daemon vocabulary (the daemon's own documentation) |
 
@@ -90,7 +90,22 @@ leaf's BinTools digest, the placement it is measured in, the measuring
 algorithm, and the loaded kernel's versions (build123d, OCP and its
 distribution); the value is six numbers, inline. A box is a pure function of
 that key, so a hit can never differ from a measurement, and an unknown kernel
-build just measures. Nothing in the index holds a value
+build just measures. Beside the boxes, keyed the same way by a component's
+codec and BREP object, it holds that component's **leaf layout** — how many
+leaves the encoded shape has and whether every one sits at the prototype's
+own placement — which canonical publication records as it measures those
+leaves, and which tree composition (§3) reads to name the exact per-leaf box
+keys without decoding the shape. For an all-link result past the bounded
+capture it holds each link's bounds (§6): the merge of the leaf boxes the link
+places, keyed by the child tree it links and its exact placement. Keyed like
+the leaf layout, it holds each component's **topology** — its face and edge
+counts, how many of each are curved, and its loose box — the facts the
+adaptive edge policy classifies a scene's prototypes by
+(`step_scene_mesh.prototype_topology`). An all-link parent's build reads them
+by the BREP each pin names and decodes a pinned component only when its entry
+is missing or invalid, so its edge classes are the ones the decoded prototypes
+give; a scene of an authored compound (a parent with geometry of its own)
+still measures its prototypes. Nothing in the index holds a value
 computed while a model runs (README law 18): a model's own checks and
 operations always execute.
 
@@ -279,7 +294,12 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   no source, model record, latest child or live authored shape is consulted.
   Geometry reads, STEP re-emits and parent materialization do not derive SURF.
   First display or selector demand pays that work when its disposable result
-  is absent; faster native reads do not imply faster first display.
+  is absent; faster native reads do not imply faster first display. A build's
+  kinematics are selector demand only where a selector is named: a mate's
+  parent and child resolve in the result tree's occurrences, group nodes and
+  their labels, with no component read, and an `axis={"ref": ...}` reads the
+  SURF of the one component its occurrence places
+  (`_internal/kinematics_resolve.py`).
 
 - `assembly.root` is the grouping the author's compound expressed; a link
   appears in it as a node of type `link`.
@@ -320,6 +340,107 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   components. Current authored PBR is rebound after readback, without consulting
   source records, output indexes or staged sidecars.
 
+  **Tree composition.** A child's read-back is context-free. The parent's
+  STEP places each child's prototypes from the same bytes the child's own save
+  emitted, every group at the identity and every leaf at its flattened world
+  transform, so the components, hierarchy, names, colours and the linear part
+  of every leaf placement the parent's STEP reads back are exactly those in
+  the child's own document tree; only each leaf's translation is new, and it
+  is the number the parent's descriptor handed the writer, as its STEP text
+  round trip (`store/_compose_readback.py`, `written_real`). A saved build of
+  a parent whose fresh bytes have no indexed tree therefore composes its
+  document tree from its children's document trees instead of parsing the
+  STEP it just wrote, when all of this holds, checked exactly: the result is
+  links only (no geometry of its own); every link is a pure translation (its
+  linear part exactly the identity) with no link colour, and every link and
+  group name survives the label round trip; every link's child record still
+  pins the tree the parent used, with a complete `documentTree` whose root is
+  an assembly, whose components are all native and whose every node is named;
+  every leaf box the canonical bounds path would take is already in
+  `index/bounds` from the child's publication, under a leaf layout (§2)
+  whose leaves all sit at the prototype's placement; and the writer emulation
+  reproduces every translation in each child's own document from that
+  child's descriptor. Anything else — a rotated or coloured link, a part
+  child, a parent with geometry of its own, a child rebuilt since the parent
+  called it, a missing object or box — takes the ordinary read-back of the
+  written bytes, as does a composed tree that fails the authored-to-written
+  correspondence. The composed tree is published and captured exactly as an
+  indexed read-back of already-seen bytes is, so the correspondence check,
+  the canonical maps and the restore are the same code, and `index/document`
+  receives a tree equal to the cold compile of the bytes. Under `--verbose` a
+  composed tree shows as the stage `tree: compose document from children`;
+  `CADGEN_VERIFY_READBACK=1` (§10) proves a corpus by parsing as well and
+  failing the build on any difference. This adds no staleness class: the gate
+  decides whether the parent runs by its sources, and what it publishes for
+  its bytes is the same tree either way.
+
+  **Spliced documents.** The same parent's STEP is almost entirely its
+  children's: OCCT writes the root's product tree, then every child's products
+  and geometry exactly as the child's own save emitted them. A saved build
+  therefore writes it from those files instead of exporting its whole document
+  (`store/_splice_step.py`). It generates the parent's own records, OCCT's
+  layout record for record: the header the children share, renamed for the
+  file; the root and group products; one instance block per link. It then
+  copies each child's DATA section verbatim, with its entity ids under a
+  fixed-width prefix and its literals untouched. NAUO instance ids run 1..N in
+  file order. A translated link rewrites its leaf placements' points to the
+  text the writer prints for the parent's leaf translations, once the emulation
+  reproduces each child's own text.
+
+  It splices only when all of this holds, and exports otherwise:
+  - no geometry of its own;
+  - uncoloured pure-translation links;
+  - each child linked once (OCCT shares a repeated child, a splice would copy
+    it);
+  - every child's file still has the bytes its record pins;
+  - one writer and kernel wrote every child, in the same units;
+  - names without a backslash or a control character, which take the
+    writer's own escapes;
+  - ids below 10^9;
+  - OCCT's layout is recognised at every record the splice reads.
+
+  A forced build exports. Under `--verbose` the stage names which ran:
+  `tree: splice STEP <file>` or `tree: assemble STEP <file>`. A parent that
+  will splice assembles no private document before its callback: its bounds
+  merge from its links' (§6), and it assembles a document only for a link
+  whose bounds miss (that link's part alone) or once the splice proves
+  ineligible, after the callback; a pin deleted meanwhile then fails the build
+  before anything is saved.
+
+  The spliced file's cold compile is the exported file's, and the composed
+  tree binds to it as to any other bytes; `CADGEN_VERIFY_READBACK=1` proves
+  that on a corpus. Its bytes differ from OCCT's:
+  - ids are numbered differently;
+  - geometry that two children share is written once per child;
+  - the root context's uncertainty is the first child's.
+
+  Hence `STEP_WRITER_SCHEME` 2. Those bytes are a function of the children's
+  saved bytes. The parent's writer input fixes those, except for the writer
+  that saved a child: a child kept from an earlier writer is spliced as saved,
+  which is a valid document of the same tree.
+
+  **Kept documents.** A rebuild may keep its saved document instead of writing
+  the same bytes again. The record's `writerInput` is the sha256 of everything
+  the saved STEP's bytes are a function of
+  (`cadgen.store.build.writer_input_digest`): the flattened descriptor the
+  writer is given — geometry by BREP object hash with intrinsic face colours,
+  placements, names, colours and grouping — the file name,
+  `STEP_WRITER_SCHEME`, the cadgen release and the loaded kernel. It leaves
+  out only the root's authored name (the root product is named after the file)
+  and finishes (README law 16). When a rebuild's writer input equals its
+  record's, the STEP on disk when the build started still has the recorded
+  `stepHash`, and that document's tree is complete, the build publishes its
+  result and writes only the record, and the sidecar if its bytes changed: no
+  export, no read-back, no correspondence. An unchanged sidecar keeps its file
+  as the document does, because viewers version it by its stamp and a new one
+  reloads the model. The recorded `documentTree` and maps carry over, the
+  result takes the recorded result's bounds, which the input pins, and the run
+  says `kept STEP`. The writer is pure (README law 5), so those bytes are what
+  a write would produce. A forced build always
+  writes; so does any rebuild whose record lacks `writerInput`. Bump
+  `STEP_WRITER_SCHEME` with any change to the bytes cadgen writes for the same
+  descriptor.
+
   Finishes that STEP does not carry persist in the schema-9 sidecar's named
   `appearance.materials` library and `appearance.assignments` map, keyed by
   verified canonical leaf IDs. Resolved
@@ -335,6 +456,8 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   rebuilds outputs whose input hashes may have been captured after a mid-build
   edit, as well as outputs predating distinct occurrence colours.
   This is one source rebuild; existing geometry and surface objects remain reusable.
+  A record with no `closure.own` leaves nothing out of its listings, which is
+  how it hashed them, so it needs no new schema.
   Document mappings remain payload schema4: saved bytes stay
   authoritative and are reparsed without guessing colours that the document
   does not contain. There are no directory or document-byte-key salts. Trees
@@ -375,13 +498,14 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   "sourceKind": "python",
   "tree": "64429167…",
   "documentTree": "b291420a…",
-  "closure": {"hash": "e341ac84…", "files": ["link_robot.py", "lib/frame.py"], "shas": {"link_robot.py": "ast1:…", "lib/frame.py": "slice4:…"}, "names": {"lib/frame.py": ["WIDTH", "bar"]}, "wholes": {"lib/frame.py": "ast1:…"}, "static": false},
+  "closure": {"hash": "e341ac84…", "files": ["link_robot.py", "lib/frame.py"], "shas": {"link_robot.py": "ast1:…", "lib/frame.py": "slice4:…"}, "names": {"lib/frame.py": ["WIDTH", "bar"]}, "wholes": {"lib/frame.py": "ast1:…"}, "own": {}, "static": false},
   "children": [
     {"model": "/abs/models/assemblies/src/link_robot/link_arm.py::link_arm", "tree": "c161092b…"},
     {"model": "/abs/models/assemblies/src/link_robot/link_pin.py::link_pin", "tree": "265aee57…"}
   ],
   "outputs": {"/abs/models/assemblies/STEP/link_robot/link_robot.step": {"sha256": "823699b0…"}},
-  "stepHash": "823699b0…"
+  "stepHash": "823699b0…",
+  "writerInput": "5f0c27d1…"
 }
 ```
 
@@ -397,12 +521,16 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   data file the build read, whoever opened it -- Python's `open`, numpy, an
   OCCT reader in C++ (§5, every read is seen). Nothing is declared. A file
   read is not an input when the build wrote it, when it is one of the model's
-  own outputs, when it is code (Python source is the reach above; a compiled
+  own outputs (the documents and meshes its decorators declare, and the
+  sidecar beside its STEP), when it is code (Python source is the reach above; a compiled
   library is the environment's), or when it lies in the environment: the
   interpreter and its packages, cadgen, the store, and the folders the
   operating system owns (fonts, time zones). Three kinds of entry are not files: `<folder>/`, a folder
   the model's code listed (a glob of profiles), hashed by its sorted entry
-  names; `!<path>`, a file that
+  names, less the ones cadgen keeps only while it writes beside an output
+  (a temp file, a STEP stage folder; `is_transient_name` in
+  `cadgen._internal.atomic_replace`), so a sibling's build in that folder
+  does not stale it; `!<path>`, a file that
   must stay absent — one the imports were resolved past (a package beside a
   module, an `__init__.py` a namespace package lacks, a module an earlier
   search root lacks) and would resolve to if it appeared — hashed `absent`;
@@ -423,6 +551,16 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   closures by construction. `closure.static: true` marks a record whose
   inputs are not files (a document re-emitted by `cadgen step build`); the
   gate's clause 2 does not re-hash files for it.
+- **A listing leaves out the model's own outputs** (`closure.own`): each one
+  written in the listed folder, and each folder there one was written into,
+  recorded per listing, so every re-hash -- gate clause 2, `cadgen store why`,
+  the publish rule, the annotation refresh -- leaves out the same names. They
+  are never its inputs, as a file it reads back is not: the listing is taken
+  when the body returns, before a first build publishes them, and a rebuild
+  lists the previous run's. So a model that lists its own folder is current
+  after its first build. A sibling model's outputs stay in, since a body may
+  list the folder to find them: a model that lists a folder its siblings build
+  into reads stale once after their outputs first appear there.
 - **Functions by reach** (`cadgen.store.reach`, the walk in
   `cadgen.store.closure`): a non-model file in the closure is hashed by the
   part of it the model can execute, not by its whole text, so editing a helper
@@ -614,6 +752,8 @@ of:
    A literal imported from a model file is compared as a value: a comment,
    a body edit or a new helper in that file leaves the importer current; a
    changed value (or the name no longer bound to a literal) makes it stale.
+   A listed folder is re-hashed less the model's own outputs its
+   `closure.own` records (§3).
 3. **Any recorded child is stale, or its current tree hash differs from the
    pinned hash.** Protects against a child whose RESULT changed — and lets a
    child edit that yields identical geometry leave the parent current.
@@ -622,6 +762,34 @@ of:
    missing.** Protects against a collected or half-copied store.
 5. **A declared output does not match `outputs`.** Protects against a deleted,
    hand-edited or foreign `.step`/sidecar/mesh file beside the model.
+
+Clauses 4 and 5 verify each object and each output once per process. One
+build evaluates the gate many times over the same closures, and a large
+assembly's STEP is hundreds of megabytes. A later evaluation stats each file and
+reuses the verdict while the file keeps the identity (device, inode, size, mtime,
+ctime) observed around its verified read, under §10's settled-stamp rule.
+Deleting, replacing, truncating or rewriting a file verifies that file again,
+and for an object every tree above it in the closure, each read again to walk
+its links: a component still at its verified identity is taken on that
+identity, and a linked tree whose whole closure holds is taken as verified, so
+a child another process rebuilt costs the parent's next evaluation that
+child's closure and every tree above it, the parent's own among them, and
+clause 4 reads nothing clause 3
+just verified (§10). A build's own checks of its saved document and sidecar — before the body
+runs, before it publishes, after its rename — read through the same memo, and
+a document the build renames into place is remembered by the digest its writer
+took: a rename keeps the written file's device, inode, size and mtime, so a
+path that still shows that identity, settled before the rename, holds those
+bytes. Its checks of its result — after it publishes the tree, when it
+announces it, when it claims its record's closure, in the already-stale notice
+— take the verification the job already holds; the claims keep it (§8). A
+publish reads nothing of a closure its job verified.
+
+A job asks the gate once before its body. That verdict answers the no-op check,
+the check for a peer that published meanwhile, the annotation refresh and the
+reuse check; it is taken again only after the job waited for a slot, or after
+another model of the same run was built, either of which can change it. The
+already-stale notice after publishing asks anew (§9a).
 
 Mesh tolerances and argv flags are not inputs. A model run's
 `--mesh-tolerance` / `--mesh-angular-tolerance` override every declared mesh's
@@ -661,7 +829,8 @@ Each with the failure it prevents.
   file, its size and its mtime while the capture is open. Every reader ends
   there: Python's `open`, numpy, build123d's importers, OCCT, FreeType.
   Folders come from Python's `os.listdir` / `os.scandir` audit events, by
-  frame: the import system's listings and cadgen's own are not the model's.
+  frame: the import system's listings and cadgen's own are not the model's,
+  and a listing leaves out the model's own outputs (§3).
   The gate's own reading inside a build (a child's files and outputs, hashed
   to decide whether it is current) is paused on its thread: a child is an
   input by its result. Prevents: a model whose data changed reading as
@@ -682,8 +851,27 @@ Each with the failure it prevents.
   canonicalizes what OCCT emitted: NAUO instance ids, presentation-style
   order, and the sign of zero — `-0.` is rewritten `0.`, because which IEEE
   zero a coordinate lands on follows the operation path that produced it, not
-  the geometry. Prevents: one model writing two documents, so the packages and
-  index entries keyed by the other spelling's bytes are orphaned.
+  the geometry. A spliced STEP (§3) is canonical by construction: its children
+  are, it numbers NAUO instances 1..N, adds no styles and prints no `-0.`.
+  Prevents: one model writing two documents, so the packages and index
+  entries keyed by the other spelling's bytes are orphaned.
+- **Names read back.** OCCT's STEP reader ends a string at an escaped quote
+  (`''`) followed by spaces and `,` or `)`. A part named `post (6')` or
+  `x('',y)` then lost its product or came back renamed, in every OCCT-based
+  reader, and failed the build's read-back. The writer spells every quote in
+  such a literal as Part 21's `\X\27` instead, which readers decode to the
+  same name (`step_export.respell_misread_quotes`, which the splice applies
+  to the names it writes). OCCT also writes a non-ASCII name as its UTF-8 read
+  as Latin-1 and encoded again, trimming any byte its C library takes for a
+  space from either end, so `Bügel_ä` came back `BÃ¼gel_Ã¤` and `à` lost a
+  byte, and both failed every build. A non-ASCII name therefore reaches OCCT in
+  ASCII, each run of non-ASCII characters as a Part 21 `\X2\` (basic plane)
+  or `\X4\` directive (`step_export.ascii_name`); the name pass restores the
+  single backslashes OCCT doubles, the splice spells names the same way
+  (`step_export.spell_name`), and every reader decodes the directives to the
+  same name. A written document is ASCII. Every other literal keeps OCCT's
+  spelling, and a file without such a name is never read again
+  (`STEP_WRITER_SCHEME` 3).
 - **Publish rule.** `cadgen.store.publish.decide`: a build rejects replacing a
   current record with a stale one — if the record on disk already reflects the
   closure as it is NOW and the build that finished ran against older sources,
@@ -757,11 +945,12 @@ Each with the failure it prevents.
   every build that only hits it, which the last-use stamps an earlier
   eviction wrote on each hit did.
 - **A write claims what it reuses.** Bytes a write finds already present are
-  claimed (their mtime becomes now) instead of skipped, and a publish claims
-  its record's whole closure before it writes the record; the sweeper deletes
-  only by rename, then recheck (§8). Prevents: a sweep that began before a
-  publish deleting an object the new record reuses, out of a grace window
-  that never saw the reuse.
+  claimed (their mtime becomes now, less two ticks of the clock that stamps
+  them, §8) instead of skipped, and a publish claims its record's whole
+  closure before it writes the record; the sweeper deletes only by rename,
+  then recheck (§8). Prevents: a sweep that began before a publish deleting an
+  object the new record reuses, out of a grace window that never saw the
+  reuse.
 - **No locks are needed for correctness.** Objects are idempotent, entries
   are temp+rename, the publish rule decides concurrent same-model outcomes,
   pins isolate parents. There is no lock layer (§7); two builders of one
@@ -848,6 +1037,15 @@ Decided mechanically from the returned geometry and occurrence metadata.
   rotated local AABBs and raw native-box merges are not substitutes. Missing,
   corrupt, unsupported or invalid inputs use the ordinary whole-document path;
   forced builds bypass this reuse.
+- An all-link result past that bound takes its bounds from its links. The
+  whole document's bounds are its links' leaf boxes merged, and one link's
+  merge is a function of the child tree it links and its exact placement
+  alone, so it is remembered in `index/bounds` under those two, the algorithm
+  and the kernel's versions (`store.build._bbox_from_links`). Links merge in
+  the order the document's leaf traversal visits them, keeping the first of
+  equal values as it does, so the six numbers, signed zeros included, are the
+  whole document's. A link that misses measures its own part of the document;
+  any failure measures the whole document; forced builds bypass this.
 - The internal source publisher may capture that complete descriptor and its
   verified tree/BREP bytes plus normalized intrinsic face-color recipes before its
   callback. Every unique BREP and exact native placement is validated privately
@@ -915,10 +1113,11 @@ are not cancelled merely because a newer editing request exists.
   moved into place, the record cross-validates the outputs by sha (gate
   clause 5), and the publish rule decides same-model outcomes. Progress is
   not on disk at all: the daemon keeps a ledger of every job it runs (state,
-  phase n/total, the job's declared output paths) and serves it with `daemon
-  status`; the CAD Viewer matches jobs to the documents it shows by output
-  path — a CLI build, a parent's child build and its own compile read alike —
-  and nothing reads any of it to decide freshness. With `CADGEN_DAEMON=0`
+  phase n/total, the job's declared output paths — for a script that no longer
+  imports, what it declared the last time this daemon could read it) and
+  serves it with `daemon status`; the CAD Viewer matches jobs to the
+  documents it shows by output path — a CLI build, a parent's child build and
+  its own compile read alike — and nothing reads any of it to decide freshness. With `CADGEN_DAEMON=0`
   there is no ledger, and concurrent builds are unbrokered
   — safe by the two invariants above, wasteful, and a debugging mode.
 
@@ -991,8 +1190,30 @@ before the rename shows there, and the object goes back; a claim made after it
 finds the object gone and writes the bytes again, or fails the publish when it
 holds none -- never writing a record that names a missing object. So a pass may
 run beside builds without a lock. The grace window is the whole protection for
-a pin a build holds before its publish, so do not sweep with `--grace-hours 0`
-while anything is building.
+a pin a build holds before its publish, so do not sweep with `--grace-hours 0`,
+or a window of a few seconds, while anything is building.
+
+**A claim stamps the recent past, and keeps what was verified.** A claim sets
+the object's mtime to now less two ticks of the clock its previous stamp shows
+(`objects._claim`: 62.5 ms where stamps carry nanoseconds, 2 s on a
+whole-second clock, 4 s on FAT) -- within any grace window a sweep may use,
+and settled as it is set, since a later write must land in a newer tick. The
+publishing process verified most of what it claims moments before (§4), and a
+claim is the one write it makes to an object it has verified, so a claim
+carries the verified identity (§10) forward instead of losing it: the stamp
+before the claim must be the verified one (nothing wrote the file since the
+read) and the stamp after it the claim's own, on the same device, inode and
+size; otherwise the identity is forgotten and the next reader hashes the
+bytes. What a foreign writer could do to the file in the microseconds between
+that stat and the claim's own timestamp write is beyond any stamp; cadgen's
+own writers never rewrite an object in place (temp + rename, §11), and a
+reader that uses an object's bytes hashes them. A publish therefore claims on
+identity what its job verified, reading nothing, and holds the bytes only of
+what its own capture had to read -- which is what a claim that finds its object
+gone writes back. In a store several users share, POSIX lets only an object's
+owner set an explicit time, so a claim on another user's object stamps it now,
+which needs only write access: the object is claimed all the same, and its
+identity is forgotten, since a stamp of now is not settled as it is set.
 
 **A store two cadgens share.** Every cadgen on a machine uses the same store
 by default, and a pass can only judge what it can read. A newer cadgen's
@@ -1060,6 +1281,14 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
   binds a spare and a replacement starts in the background; no spare means a
   spawn. Spares load build123d/OCP as well as the lazy tool parsers before
   announcing readiness; importing the supervisor never loads the kernel.
+  A worker starts in the system temp folder but keeps it off its import path
+  (`python -P`, as every process cadgen starts does: the daemon, the store's
+  gc, a transient build, the Viewer), so a build imports exactly what
+  `python script.py` would (law 7), nothing another program or user left in
+  that folder stands in for cadgen, and no import lists it. Other programs fill it and keep
+  changing it; on the path, it was listed again by every import that missed it
+  once it had changed, tens of thousands of entries a time, by every worker of
+  a burst at once.
   Spares: `CADGEN_DAEMON_SPARES` (default 2). Requests that name no
   model (a document compile or artifact derivation) borrow a spare without binding
   it. Borrowed workers count toward spare capacity while busy, so a stream of
@@ -1073,13 +1302,28 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
   resident memory and pending reservations,
   and may reclaim idle workers or refuse work (§9 below). A worker is recycled after
   `CADGEN_DAEMON_RECYCLE` jobs (default 1000) as a leak hedge, and the daemon
-  exits after `CADGEN_DAEMON_IDLE_TIMEOUT` seconds idle (default 3600).
+  exits after `CADGEN_DAEMON_IDLE_TIMEOUT` seconds idle (default 3600). The
+  first client that needs the daemon starts it, and `cadgen viewer` starts it as
+  soon as its URL is announced, so a session's first build finds warm spares.
   Inside a worker, `submit` is the same client call back to the daemon, so a
   parent's children land on their own workers while the parent's body runs.
 - **Transient executor (`CADGEN_DAEMON=0`).** A subprocess per job, alive for
   this build only. Each imports build123d once, concurrently with its
   siblings. It inherits the environment, so a test's `CADGEN_CACHE_DIR`
   isolates its store; tests and CI run this way.
+
+**Scratch outlives a killed process.** A process keeps its served views
+(`cadgen-views/<pid>/`), an exported view (`cadgen-view-<pid>-*`) and a build's
+file-trace log (`cadgen-trace-<pid>-*.log`) in the system temp folder and
+removes them as it ends; a killed one cannot, and a view copies every component
+it shows. A worker sweeps them as it starts, on a thread of its own: the
+scratch of every pid no process holds, and scratch an older cadgen named
+without a pid once it is a day old. A live process's is never touched, a pid it
+cannot judge counts as live, and nothing in the store is involved
+(`_internal/temp_leftovers.py`). A folder is renamed `cadgen-swept-<pid>-…`
+before it is deleted, so a sweep killed midway leaves it condemned rather than
+half there with a fresh mtime, and the next sweep finishes it once that
+sweeper is gone.
 
 **Silence means hung, not busy.** While a job runs, its worker emits a
 heartbeat frame every 10 s (carrying the job's last announced phase and its
@@ -1092,7 +1336,12 @@ process, or a deadlock that holds the GIL, sends nothing and accrues no CPU. A
 hang that releases the GIL (a network read with no timeout, a Python-level
 deadlock) keeps beating and is not killed. A body's length is therefore
 unbounded; the heartbeat stops before the job's exit frame, so none
-reaches the next job.
+reaches the next job. A starting worker is judged the same way: it is silent
+until it has imported the kernel, a few CPU seconds that a busy machine, or a
+burst of starts, spreads over minutes, so it is waited for while its CPU clock
+moves and killed only after 120 s with neither its announcement nor CPU
+progress. Meanwhile the job it is for is listed `queued`, detail `Starting a
+geometry kernel`: nothing the job runs can say so before its worker exists.
 
 **One daemon per address, by lock.** The daemon takes an exclusive lock keyed
 by its socket address (`cadgen.daemon.transport.SingletonLock`: `flock` on
@@ -1110,6 +1359,20 @@ linked temp file and republishes its in-memory key if an external cleanup
 replaces the file. This is the one lock cadgen keeps — a singleton for
 the daemon, never a build lock (§7): twenty clients starting at once used to
 start twenty daemons that unlinked each other's live sockets.
+
+**A client that never answers holds up no one.** Each connection proves the
+authkey, and the daemon proves it back, on a thread of its own
+(`cadgen.daemon.transport.Server`). Accepting waits a tenth of a second for that
+before it takes the next connection; one that finishes later is handed over
+then, and one that has not finished in ten seconds is dropped — its client
+reads a daemon closing while it connects, and connects again. While one is
+pending past its tenth of a second, accepting waits for no new connection, so a
+burst of silent ones delays no one. A daemon (or a build's private broker) that
+stops drops the connections still proving the key, and waits for their threads
+before it exits. The handshake used to run on the accept thread with no
+deadline, so one connection whose challenge never reached its reader (another
+viewer thread had read it off a reused file descriptor) held every later request
+until the viewer exited.
 
 The **store root is a field on every request** (`store_root`), applied per
 job in the worker, never inherited from whichever build spawned the daemon:
@@ -1218,7 +1481,16 @@ Geometry publication no longer starts extraction subprocesses for native
 components. Surface requests use the shared artifact-job admission and one
 private derivation per requested component; they have no model binding,
 declared output or editing-producer order. Their time and memory remain real
-work, charged when a display or selector first requires them.
+work, charged when a display or selector first requires them. On the daemon,
+an artifact job is never killed when its caller leaves, as the CAD Viewer's do
+routinely: the worker stays warm rather than being replaced by a fresh kernel
+import. Before each derivation the worker asks its supervisor whether anyone
+still wants the job: its caller, or an identical request that attached to it
+since. When no one does, the job ends with what it has derived, all of it in
+the store, and a later identical request starts its own job, which finds those
+there. One that ran to its end instead kept its worker busy for the rest of a
+64-component request while the next model's request waited for a kernel
+import. A build or a door whose caller leaves is stopped.
 
 **Browser resources.** Disposable decoded meshes, selectors, BVHs, GPU buffers,
 textures and worker work may have byte budgets and be reclaimed when unused.
@@ -1352,7 +1624,11 @@ events. An editing session selects the newest request for its output and store;
 late older events cannot replace it. It may retain the previous visible model
 while the newer request builds. A daemon restart expires request ordering; a
 disconnected preview is labelled as such. The ledger is short-lived and
-deletable, never the only durable copy of an authored change.
+deletable, never the only durable copy of an authored change. A build's events
+carry what that status reads and no more: the "Saving STEP" preview names the
+output and the source result's tree, a saved result the document's tree and
+digest, and the ledger keeps nothing else of either. Kinematics, appearance
+and animation travel in the sidecar alone.
 
 Only model-run producers advance editing order. Compiling saved bytes and
 attaching a coalesced subscriber to an existing producer do not create a new
@@ -1378,6 +1654,15 @@ The viewer reads the catalog again when a build finishes or is superseded, rathe
 than at its next poll. It never announces a background file write it did not
 perform. A saved-tree identity change clears incompatible selection and
 measurement state.
+
+The server reads one more thing off the channel, to save that catalog read its
+time: when a build of the watched file has saved its outputs, it starts their
+catalog rows on a thread of its own, the watched file first
+(`cadgen.viewer.warm`). Law 1 holds for those rows as for every other: a row is
+computed from its file's bytes, and its digest from those bytes. The tree the
+ledger says the build saved is used only to start that tree's capture while the
+bytes are read; a row shows it only if the bytes name it. Warming is best effort:
+what it fails at is left to the read, and the channel answers regardless.
 
 An open editing tab holds one request against an opaque ledger cursor scoped
 to its output and store. A matching change wakes it immediately; unrelated jobs
@@ -1429,16 +1714,40 @@ supersession does not cancel their exports.
   perform the same complete verification while releasing each raw object after
   reading it. Compact process-local metadata may be reused while every required
   immutable object retains the file identity observed around its verified read;
-  deletion, damage or atomic replacement invalidates that snapshot and makes the
-  next request verify the complete byte closure again. A read is only remembered
-  once it is far enough past the write it observed that a further write must
+  deletion, damage or atomic replacement invalidates that snapshot, and the
+  next request verifies again, by hash, what moved and takes on its identity
+  what still holds: each object this process hashed to its address is
+  remembered under the settled identity it had (`objects.verified_stamp`),
+  each tree it verified under its whole closure, and a component entry
+  already validated against its object's bytes needs no bytes while the
+  object holds. A native capture (`retain_payloads=True`) reads every object,
+  since it owns the bytes, and remembers what it verified all the same. A
+  claim by this process keeps an identity (§8); any other write moves it. A
+  read is only remembered once it is far enough past the write it observed
+  that a further write must
   stamp a different mtime — a filesystem times writes by a clock of its own
   resolution (~15.6 ms on Windows, whose `st_ctime` is the creation time and
-  never moves for a rewrite), and a same-size rewrite inside that tick is
-  invisible to every stat field. The metadata cache is byte-bounded, store-root
-  isolated and returns a newly parsed flattened view to every caller.
+  never moves for a rewrite; a 100 Hz timer interrupt on Linux before 6.13,
+  even where the stamp shows nanoseconds), and a same-size rewrite inside that
+  tick is invisible to every stat field. No read settles in less than two
+  Windows ticks. The metadata cache is byte-bounded, store-root
+  isolated and returns a newly parsed flattened view to every caller. The gate's
+  completeness check (`tree_complete`) is such a consumer, and its output
+  digests follow the same rule (§4). The CAD Viewer's surface routes are not:
+  they verify a tree's component map once and keep it, for the eight trees
+  they served last, and per request stat the tree and the objects of the
+  components it names, so a deleted one sends the tree back through the
+  complete verification.
   Components carry `brep`, `codec` and `faceColors`; display SURF resolves
   separately through `store.surfaces` and `index/surface`.
+- `CADGEN_VERIFY_READBACK=1` makes every saved build that reuses a document
+  tree — composed from its children's (§3) or taken from the document index
+  for already-seen bytes — parse the written STEP as well, and fail with the
+  first difference: the tree hashes, the top-level keys that differ, the
+  first differing occurrence, the canonical maps. It is for a maintainer's
+  manual check over a corpus; it doubles the read-back's cost and nothing in
+  cadgen sets it. Like the store root, it travels with each build to the warm
+  daemon, so it applies to exactly the builds started with it.
 - `cadgen store info` sizes the store against its cap, names any retired
   kind still present and any `index/` folder it does not know, and says when
   a newer cadgen's writes keep passes off the store. `cadgen store gc

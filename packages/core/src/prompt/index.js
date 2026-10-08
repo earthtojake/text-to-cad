@@ -10,8 +10,9 @@ export function validatePromptReference(reference) {
   requireValue(object(reference) && object(reference.resource) && object(reference.target), 'reference requires a resource and target');
   const { resource, target } = reference;
   if (resource.kind === 'workspace-file') {
-    requireValue(typeof resource.workspaceId === 'string' && resource.workspaceId.length > 0, 'workspace identity is required');
-    requireValue(typeof resource.path === 'string' && resource.path.length > 0 && !resource.path.startsWith('/') && !/^[A-Za-z]:/.test(resource.path) && !/[\\\0]/.test(resource.path) && resource.path.split('/').every(part => part && part !== '.' && part !== '..'), 'file paths must be normalized and root-relative');
+    // A file is named by its absolute path, `/`-separated (`/a/b.step`, `C:/a/b.step`).
+    requireValue(typeof resource.path === 'string' && /^(?:[A-Za-z]:)?\//.test(resource.path) && !/[\\\0]/.test(resource.path)
+      && resource.path.replace(/^(?:[A-Za-z]:)?\//, '').split('/').every(part => part && part !== '.' && part !== '..'), 'file paths must be normalized and absolute');
   } else {
     requireValue(resource.kind === 'url' && typeof resource.url === 'string', 'unknown resource kind');
     let url; try { url = new URL(resource.url); } catch { /* Report the contract error below. */ }
@@ -90,10 +91,11 @@ export function promptReferenceIds(reference) {
 }
 
 /** Keep machine identity structured; these strings are the portable human/prompt representation. */
-export function formatPromptReference(reference, { resolvePath } = {}) {
+export function formatPromptReference(reference) {
   validatePromptReference(reference);
-  const path = resolvePath ? resolvePath(reference.resource) : reference.resource.kind === 'url' ? reference.resource.url : reference.resource.path;
-  requireValue(typeof path === 'string' && path.length > 0, 'reference could not be mapped to a destination');
+  // A file by its absolute path, a URL as it is.
+  const path = reference.resource.kind === 'url' ? reference.resource.url : reference.resource.path;
+  requireValue(path.length > 0, 'a reference names its file or URL');
   if (reference.target.kind === 'cad-selector') return buildCadRefToken({ cadPath: path, selectors: [...reference.target.selectors] });
   const quoted = /[\s#"\\]/.test(path) ? JSON.stringify(path) : path;
   if (reference.target.kind === 'text-range') {
@@ -102,9 +104,9 @@ export function formatPromptReference(reference, { resolvePath } = {}) {
   }
   return quoted;
 }
-export function formatPromptContextText(context, options = {}) {
+export function formatPromptContextText(context) {
   validatePromptContext(context);
-  return context.parts.flatMap(part => part.kind === 'text' ? [part.text] : part.kind === 'reference' ? [formatPromptReference(part.reference, options)] : []).join('\n');
+  return context.parts.flatMap(part => part.kind === 'text' ? [part.text] : part.kind === 'reference' ? [formatPromptReference(part.reference)] : []).join('\n');
 }
 
 /**
@@ -113,12 +115,12 @@ export function formatPromptContextText(context, options = {}) {
  * line — then each attachment that travels as a file, by its label and path (`attachmentPath`;
  * one sent beside the text is left out). One spelling, whether the message is sent, queued or copied.
  */
-export function formatPromptMessage(context, { attachmentPath, ...options } = {}) {
+export function formatPromptMessage(context, { attachmentPath } = {}) {
   validatePromptContext(context);
   const said = context.parts.filter(part => part.kind === 'text').map(part => part.text.trim()).filter(Boolean);
   const files = [], references = [], attachments = [];
   for (const part of context.parts) {
-    if (part.kind === 'reference') (part.reference.target.kind === 'whole-resource' ? files : references).push(formatPromptReference(part.reference, options));
+    if (part.kind === 'reference') (part.reference.target.kind === 'whole-resource' ? files : references).push(formatPromptReference(part.reference));
     else if (part.kind === 'attachment') {
       const path = attachmentPath?.(part);
       if (path) attachments.push(`${part.label || 'Attachment'}: ${path}`);

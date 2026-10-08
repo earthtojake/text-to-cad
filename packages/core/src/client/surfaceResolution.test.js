@@ -82,6 +82,27 @@ test("pending resolution polls the same request and subscriber token", async (t)
   assert.deepEqual(bodies[1].components, bodies[0].components);
 });
 
+test("a row ready before the rest of its request is announced at once, and once", async (t) => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const D2 = "f".repeat(64), O2 = "9".repeat(64);
+  const row = (surfaceInput, object) => ({ surfaceInput, state: "ready", surfaceObject: object,
+    url: `/__cad/store?tree=${TREE}&surfaceInput=${surfaceInput}&object=${object}`, byteLength: 10 });
+  let polls = 0;
+  globalThis.fetch = async () => {
+    polls += 1;
+    return json({ viewId: VIEW, job: "job-2", components: {
+      part: row(D, O),
+      other: polls === 1 ? { surfaceInput: D2, state: "pending", job: "job-2" } : row(D2, O2),
+    } });
+  };
+  const announced = [];
+  const result = await resolveSurfaceComponents(descriptor, [{ cid: "part", surfaceInput: D }, { cid: "other", surfaceInput: D2 }],
+    { onReady: (cid, ticket) => announced.push([cid, polls, ticket.surfaceObject]) });
+  assert.deepEqual(announced, [["part", 1, O], ["other", 2, O2]]);
+  assert.equal(result.size, 2);
+});
+
 // Settle on the events the resolver actually produces, never on a stopwatch. The
 // abort used to be timed with `setTimeout(10)` and the cancel POST read after
 // `setTimeout(0)`, which makes the assertion depend on how fast the runner drains
@@ -111,8 +132,8 @@ test("abort detaches only the known surface subscriber", async (t) => {
   const pending = resolveSurfaceComponents(descriptor, [{ cid: "part", surfaceInput: D }], {
     signal: controller.signal,
   });
-  // The job id only exists once the first poll has answered; abort before that and
-  // there is nothing to detach.
+  // The job id only exists once the first poll has answered (an abort before that waits
+  // for the answer: the next test); abort while a later poll waits.
   await firstPoll;
   controller.abort();
   await assert.rejects(pending, (error) => error.name === "AbortError");
@@ -120,6 +141,30 @@ test("abort detaches only the known surface subscriber", async (t) => {
   assert.deepEqual(calls.at(-1), {
     url: "/__cad/surfaces/cancel", body: { job: "job-cancel" },
   });
+});
+
+test("an abort while the first post is in flight cancels the job its answer opens", async () => {
+  // A first post aborted in flight would never learn its token, and the server would go on
+  // deriving for nobody until the subscriber expired. So it is let finish, and cancelled then.
+  const controller = new AbortController();
+  const cancels = [];
+  let posted, answer;
+  const firstPost = new Promise((resolve) => { posted = resolve; });
+  const client = {
+    // As fetch does: an abort rejects a request in flight.
+    requestSurfaces: (_body, { signal } = {}) => new Promise((resolve, reject) => {
+      signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+      answer = () => resolve({ viewId: VIEW, components: { part: { surfaceInput: D, state: "pending", job: "job-early" } } });
+      posted();
+    }),
+    cancelSurfaceRequest: async (body) => { cancels.push(body); },
+  };
+  const pending = resolveSurfaceComponents(descriptor, [{ cid: "part", surfaceInput: D }], { client, signal: controller.signal });
+  await firstPost;
+  controller.abort();
+  answer();
+  await assert.rejects(pending, (error) => error.name === "AbortError");
+  assert.deepEqual(cancels, [{ job: "job-early" }]);
 });
 
 test("failed, replacement and mismatched ready responses never produce tickets", async (t) => {
@@ -165,7 +210,8 @@ test("independent renderer clients bind surface tickets to their own backend ori
   assert.equal(calls.length, 2);
   for (let i=0; i<2; i++) {
     assert.equal(new URL(results[i].get("part").surfUrl).origin, clients[i].origin);
-    assert.equal(calls[i].signal, controller.signal);
+    // A first post is never aborted in flight (its answer carries the token a cancel needs).
+    assert.equal(calls[i].signal, undefined);
     assert.equal(calls[i].body.viewId, VIEW);
   }
 });
@@ -203,4 +249,34 @@ test("a failing chunk fails the whole request with its own error", async (t) => 
   };
   const requests = Array.from({ length: 100 }, (_, index) => ({ cid: `part${index}`, surfaceInput: D, surfaceObject: O }));
   await assert.rejects(resolveSurfaceComponents(descriptor, requests), (error) => error instanceof SurfaceResolutionError && error.cid === "part70");
+});
+
+// A daemon whose worker never announces itself keeps a derivation pending for two minutes before it
+// fails. Asked every 640 ms throughout, the first eight parts of a cold w16 open made 1,500 requests
+// in that time (each a host call in the CAD app). The first asks stay as quick as they were.
+test("a derivation pending for two minutes is asked at a tenth of its wait, at most every 5 s", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const asks = [];
+  const client = {
+    origin: "",
+    async requestSurfaces() {
+      asks.push(Date.now());
+      return { viewId: VIEW, job: "job-1", components: { part: { surfaceInput: D, state: "pending", job: "job-1" } } };
+    },
+    async cancelSurfaceRequest() { return {}; },
+  };
+  const controller = new AbortController();
+  const settled = resolveWithClient(descriptor, [{ cid: "part", surfaceInput: D }], { client, signal: controller.signal })
+    .catch((error) => error);
+  while (Date.now() < 120_000) {
+    await new Promise((resolve) => setImmediate(resolve)); // the answer lands and the next wait starts
+    t.mock.timers.tick(10);
+  }
+  controller.abort();
+  assert.equal((await settled).name, "AbortError");
+  const gaps = asks.slice(1).map((at, index) => at - asks[index]);
+  assert.deepEqual(gaps.slice(0, 4), [80, 160, 320, 640], "the first asks are as quick as ever");
+  assert.ok(asks.length < 60, `asked ${asks.length} times in two minutes`);
+  assert.ok(Math.max(...gaps) <= 5000, `the longest wait was ${Math.max(...gaps)} ms`);
+  assert.ok(gaps.at(-1) >= 4990, `the waits grew to 5 s, the last ${gaps.at(-1)} ms`);
 });

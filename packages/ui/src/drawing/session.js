@@ -25,6 +25,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  * @property {() => void} undo
  * @property {() => void} redo
  * @property {() => void} clear
+ * @property {number} sketch  Which sketch this is: a host mounts one editor per value (its React `key`).
+ * @property {() => void} discard  Ends the sketch in hand, its ink and its history, and keeps the session:
+ *   the host mounts a new, empty editor, on the tool, colour and weight in hand. Unlike `clear`, which
+ *   is a step the editor can undo, nothing of a discarded sketch can be brought back.
  * @property {(target: DrawingToolbarTarget | null) => void} onReady
  * @property {(tool: string) => void} onToolChange
  * @property {(color: string) => void} onColorChange
@@ -37,7 +41,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  * to drive it. The sketch itself lives in the editor; an inactive session (the
  * CAD Draw tool deselected) forgets the sketch, its history and the editor, as the
  * unmounted editor did — but not the tool, colour and weight in hand, which the
- * next session opens with.
+ * next session opens with. `discard` forgets them the same way while the session
+ * stays up (the CAD model updated under the ink): the host's next editor is empty.
  *
  * @param {boolean} [active]
  * @param {{ tool?: string, color?: string, strokeWidth?: number }} [initial]
@@ -48,6 +53,9 @@ export function useDrawingSession(active = true, initial = {}) {
     hasContent: false, canUndo: false, canRedo: false }), [initial.tool, initial.color, initial.strokeWidth]);
   const target = useRef(/** @type {DrawingToolbarTarget | null} */ (null));
   const [state, setState] = useState(idle);
+  // A sketch is one mounted editor, and its history is that editor's: a new sketch is a new editor.
+  const [sketch, setSketch] = useState(0);
+  const discard = useCallback(() => setSketch(current => current + 1), []);
   useEffect(() => {
     if (active) return;
     target.current = null;
@@ -74,5 +82,5 @@ export function useDrawingSession(active = true, initial = {}) {
     redo: () => target.current?.redo(),
     clear: () => target.current?.clear(),
   }), []);
-  return { ...state, ...actions, onReady, onToolChange, onColorChange, onContentChange, onHistoryChange };
+  return { ...state, ...actions, sketch, discard, onReady, onToolChange, onColorChange, onContentChange, onHistoryChange };
 }

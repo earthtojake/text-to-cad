@@ -52,8 +52,15 @@ export interface TessellationCacheProvider {
   getProbed(probe: TessellationProbe, options?: { signal?: AbortSignal; maxBytes?: number }): Promise<Uint8Array | null>;
   getManyProbed?(probes: TessellationProbe[], options?: { signal?: AbortSignal; maxBytes?: number }): Promise<(Uint8Array | null)[] | null>;
   put?(key: string, bytes: Uint8Array, options?: { signal?: AbortSignal }): Promise<unknown>;
+  /** The most framed bytes its transport carries in one batched read (`tessBatchMaxBytes`). */
+  readonly maxBatchBytes?: number;
 }
 export interface TessellationCache {
+  /**
+   * The most framed bytes one `getCachedEntryBytesMany` may ask for: the server's bound, or the
+   * lower ceiling its provider's transport declares (`tessBatchMaxBytes`).
+   */
+  readonly batchMaxBytes?: number;
   /** Borrow a cancellable view; admitted write-backs remain owned by the parent cache. */
   createSession(options?: { signal?: AbortSignal }): TessellationCache;
   tessellationCacheProviderRegistered(): boolean;
@@ -61,7 +68,11 @@ export interface TessellationCache {
   getCachedComponentEntry(surfaceInput: string, options?: TessellationOptions, request?: TessellationReadOptions): Promise<TessellationCacheEntry | null>;
   getCachedEntryBytes(surfaceInput: string, options?: TessellationOptions, request?: TessellationReadOptions): Promise<Uint8Array | null>;
   getCachedEntryBytesMany(probes: TessellationProbe[], request?: { signal?: AbortSignal; maxBytes?: number }): Promise<(Uint8Array | null)[] | null>;
-  configureTessellationCacheWriteBack(options?: { deferMs?: number; concurrency?: number; maxPendingBytes?: number }): void;
+  /**
+   * Deferred write-backs: a batch is written once the load is quiet for `deferMs`, no later than
+   * `maxWaitMs` after its first entry, and at once when it reaches `maxPendingBytes`.
+   */
+  configureTessellationCacheWriteBack(options?: { deferMs?: number; maxWaitMs?: number; concurrency?: number; maxPendingBytes?: number }): void;
   flushTessellationCacheWriteBacks(): Promise<void>;
   writeBackEntryBytes(surfaceInput: string, options: TessellationOptions, bytes: Uint8Array): Promise<unknown>;
   writeBackComponentEntry(surfaceInput: string, surfaceObject: string, options: TessellationOptions, component: TessellatedComponent, index: unknown): Promise<unknown>;

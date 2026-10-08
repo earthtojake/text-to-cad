@@ -51,6 +51,26 @@ test("progressive publishes and detail swaps land in ONE scene identity: the roo
   scene.dispose();
 });
 
+// The jump the owner saw ("as though we aren't considering the full bounding box of the model
+// until the final render"): a package framed on its first eight components, then again whole. One
+// that declares its box (assembly.json's `bbox`) is framed on it once, from the first publish.
+test("a package that declares its box rests on it from the first publish, and is complete while components are still to come", () => {
+  const scene = createStepScene(THREE);
+  const declared = { min: [-10, -10, -5], max: [10, 10, 5] };
+  const first = source([mesh(1)], { missingComponentIds: ["cid1"], declaredBounds: declared });
+  scene.build(first, identity, settings);
+  assert.deepEqual(scene.restBounds, declared, "the camera, the ruler and the ground take the whole model's box");
+  assert.equal(scene.complete, true, "the box cannot grow, so nothing waits to frame it again");
+  assert.deepEqual(scene.bounds, bounds, "lighting and the floor still follow what is placed");
+  scene.update(source([first.parts[0].sourceMesh, mesh(1.5)], { declaredBounds: declared }), settings);
+  assert.deepEqual([scene.restBounds, scene.complete], [declared, true], "the last publish changes neither");
+
+  // Without one, the box is what has arrived, and grows until the last component is in.
+  scene.update(source([first.parts[0].sourceMesh], { missingComponentIds: ["cid1"], declaredBounds: null }), settings);
+  assert.deepEqual([scene.restBounds, scene.complete], [bounds, false]);
+  scene.dispose();
+});
+
 test("a build setting that changes how records are made rebuilds under the same identity and says why; another model says so too", () => {
   const scene = createStepScene(THREE);
   scene.build(source([mesh(1)]), identity, settings);

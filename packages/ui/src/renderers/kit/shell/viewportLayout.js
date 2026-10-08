@@ -5,8 +5,7 @@ import { CHROME_INSET_PX } from "../../../lib/chromeInset.js";
 export const VIEWPORT_BOTTOM_CENTER = "var(--cad-viewport-bottom-center, 1.75rem)";
 
 // The chrome's inset from the viewer's edges: the gap between the tool strip and the stack under
-// it, so the strip sits as far from the corner as the panels sit from the strip — and where the
-// file explorer floats over the view.
+// it, so the strip sits as far from the corner as the panels sit from the strip.
 export const VIEWPORT_INSET_PX = CHROME_INSET_PX;
 // One tool strip's height, shared by the toolbar and status row.
 export const VIEWPORT_TOP_BAR_PX = 34;

@@ -1,9 +1,9 @@
 import { createPromptDeliveryLedger, formatPromptMessage, validatePromptContext } from '@text-to-cad/core/prompt';
-import type { PromptContext, PromptContextPort, PromptDeliveryResult, PromptDestinationState, PromptPart, ResourceRef } from '@text-to-cad/core/prompt';
+import type { PromptContext, PromptContextPort, PromptDeliveryResult, PromptDestinationState, PromptPart } from '@text-to-cad/core/prompt';
+import { encodeBase64 } from '@text-to-cad/core/client';
 import type { AttachmentStore } from '@text-to-cad/ui/host';
 import { HostError, type Bridge } from './bridge';
 import type { Presentation } from './presentation';
-import { encodeBase64 } from './tunnel';
 
 const MAX_ITEMS = 24;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -51,8 +51,8 @@ async function png(part: Attachment): Promise<Blob> {
  * host takes messages, posts the context as the person's message now. A picture is an image block
  * where the host takes one; where it does not, it is saved (`attachments`) and the text names it.
  */
-export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHostContext' | 'hostContext'>, { resolvePath, reach, attachments }: {
-  resolvePath(resource: ResourceRef): string; reach: ChatReach; attachments?: AttachmentStore;
+export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHostContext' | 'hostContext'>, { reach, attachments }: {
+  reach: ChatReach; attachments?: AttachmentStore;
 }): PromptContextPort & { dispose(): void } {
   const state: PromptDestinationState = Object.freeze(reach.queue ? {
     kind: 'composer', available: true,
@@ -98,7 +98,7 @@ export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHost
       if (invalid) return invalid;
       return ledger.deliver(context.operationId, async (): Promise<PromptDeliveryResult> => {
         const file = fileOf(context);
-        const blocks: Block[] = [{ type: 'text', text: formatPromptMessage(context, { resolvePath }), _meta: { 'openai/title': textTitle(context) } }];
+        const blocks: Block[] = [{ type: 'text', text: formatPromptMessage(context), _meta: { 'openai/title': textTitle(context) } }];
         for (const part of attachmentsOf(context)) blocks.push(await imageBlock(part, titled(part.label || 'CAD view', file)));
         // Updates replace each other, so they go out one at a time, in order.
         const update = queueing.then(async () => {
@@ -130,7 +130,7 @@ export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHost
       if (images) blocks.push(await imageBlock(part));
       else if (attachments) saved.set(part.id, await attachments.save(await png(part), part.name));
     }
-    const text = formatPromptMessage(context, { resolvePath, attachmentPath: part => saved.get(part.id) });
+    const text = formatPromptMessage(context, { attachmentPath: part => saved.get(part.id) });
     await bridge.request('ui/message', { role: 'user', content: [{ type: 'text', text }, ...blocks] }, { timeoutMs: 30_000 });
   }
   port.send = context => {

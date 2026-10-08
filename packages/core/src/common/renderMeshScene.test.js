@@ -4,7 +4,8 @@ import test from "node:test";
 import * as THREE from "three";
 
 import {
-  buildModel
+  buildModel,
+  buildStepClipPlane
 } from "./cadScene.js";
 import {
   captureModel,
@@ -25,6 +26,9 @@ import { normalizeStepModuleDefinition } from "./stepModule.js";
 import { normalizeStepParameterRenderValues } from "./stepParameters.js";
 import { stepParameterRuntime } from "./source.js";
 import { buildComposedPackageMeshData } from "../lib/assembly/meshData.js";
+import { applyExplodedViewProgress, computeExplodedViewLayout } from "../lib/viewer/explodedView.js";
+import { fitCameraDepthToBounds } from "./renderOptions.js";
+import { applyPhotographicStudio, disposePhotographicStudio } from "./photographicStudio.js";
 
 function twoPartMeshData() {
   return {
@@ -598,6 +602,179 @@ test("a locked frame fits the same camera on every frame of a clip", async () =>
     assert.deepEqual(frames[1], frames[0], "frame 2 of the clip is framed like frame 1");
     assert.deepEqual(frames[2], frames[0], "and so is the last one");
     assert.notDeepEqual(posed[1], posed[3], "without the lock the same three poses do NOT share a camera");
+  } finally {
+    model.dispose();
+  }
+});
+
+// The renderer a photographic studio configures, with only what captureModel and the studio touch.
+function studioRendererStub() {
+  const clearColor = new THREE.Color();
+  let clearAlpha = 1;
+  return {
+    toneMapping: THREE.NoToneMapping, toneMappingExposure: 1, outputColorSpace: THREE.LinearSRGBColorSpace,
+    shadowMap: { enabled: false, type: null },
+    getClearColor(target) { target.copy(clearColor); }, getClearAlpha() { return clearAlpha; },
+    setClearColor(color, alpha) { clearColor.copy(color); clearAlpha = alpha; },
+    setSize() {}, getPixelRatio() { return 1; }, render() {},
+    domElement: { width: 64, height: 64, toDataURL() { return "data:image/png;base64,AAAA"; } }
+  };
+}
+
+// The two parts at 100x: large enough that the floor is sized by them, not by its minimum.
+function wideTwoPartMeshData() {
+  const mesh = twoPartMeshData();
+  const scaled = (bounds) => ({ min: bounds.min.map((value) => value * 100), max: bounds.max.map((value) => value * 100) });
+  return {
+    ...mesh, vertices: mesh.vertices.map((value) => value * 100), bounds: scaled(mesh.bounds),
+    parts: mesh.parts.map((part) => ({ ...part, bounds: scaled(part.bounds) }))
+  };
+}
+
+test("a snapshot fits its camera's depth range in every preset, as the viewer fits its own", async () => {
+  // The viewer draws every preset with ordinary depth fitted to the frame (useViewerRuntime). A
+  // snapshot without the studio drew with a logarithmic buffer and a fixed range instead, which
+  // the instanced CAD edges cannot test against: under a perspective camera they all vanished.
+  for (const projection of ["perspective", "orthographic"]) {
+    const job = { mode: "view", kind: "step", display: { mode: "solid", camera: { projection } },
+      output: { tightFrame: false }, outputs: [{ path: "solid.png", width: 64, height: 64, camera: "iso" }] };
+    const meshData = twoPartMeshData();
+    const context = renderJobContext(meshData, job);
+    const model = buildModel(THREE, { kind: "step", meshData }, modelOptionsForRenderJob(context, job));
+    const scene = new THREE.Scene();
+    scene.add(model.root);
+    const viewport = { ...stubViewport(model, scene), context };
+    try {
+      const result = await captureModel(viewport, { job });
+      assert.equal(result.outputs[0].projection, projection);
+      const camera = projection === "perspective" ? viewport.perspectiveCamera : viewport.orthographicCamera;
+      const viewer = camera.clone();
+      viewer.near = 0.1;
+      viewer.far = 50000;
+      viewer.updateProjectionMatrix();
+      const center = model.bounds.min.map((value, axis) => (value + model.bounds.max[axis]) / 2);
+      fitCameraDepthToBounds(viewer, model.bounds, {
+        placedObjects: model.displayRecords, modelGroup: model.runtime.modelGroup, groundZ: null, pivot: center
+      });
+      assert.deepEqual([camera.near, camera.far], [viewer.near, viewer.far], projection);
+    } finally {
+      model.dispose();
+    }
+  }
+});
+
+test("an exploded Render snapshot keeps its floor and floor shadow on the rest placement, as the viewer does", async () => {
+  const job = { mode: "view", kind: "step",
+    display: { mode: "render", lighting: { quality: "preview" }, exploded: { enabled: true, amount: 1 } },
+    outputs: [{ path: "exploded.png", width: 64, height: 64, camera: "iso" }] };
+  const meshData = wideTwoPartMeshData();
+  const context = renderJobContext(meshData, job);
+  const model = buildModel(THREE, { kind: "step", meshData }, modelOptionsForRenderJob(context, job));
+  const scene = new THREE.Scene();
+  scene.add(model.root);
+  const configuration = context.sceneSettings.render.configuration;
+  const studioOptions = { sceneScale: context.sceneScale, shadowMapSize: context.quality.shadowMapSize };
+  const studioRuntime = { scene, renderer: studioRendererStub(), modelBounds: model.bounds };
+  // renderModel's studio: the floor sized from the rest placement.
+  applyPhotographicStudio(THREE, studioRuntime, configuration, { ...studioOptions, bounds: model.bounds, groundBounds: model.restBounds });
+  const viewport = { ...stubViewport(model, scene), renderer: studioRuntime.renderer, context, studioRuntime,
+    studioConfiguration: configuration };
+  const viewer = { scene: new THREE.Scene(), renderer: studioRendererStub() };
+  try {
+    await captureModel(viewport, { job });
+    assert.ok(model.displayRecords.some((record) => record.explodedViewMatrix), "the parts were exploded");
+    // The viewer's studio for the model exploded the same way: lit where the parts are, floored
+    // where the model rests (ShellViewport: `groundBounds: runtime.zeroPoseBounds`).
+    model.refreshBounds();
+    applyPhotographicStudio(THREE, viewer, configuration, { ...studioOptions, bounds: model.bounds, groundBounds: model.restBounds });
+    const placement = (object) => [...object.position.toArray(), ...object.scale.toArray()];
+    const snapshotStudio = studioRuntime.photographicStudio;
+    assert.deepEqual(placement(snapshotStudio.ground), placement(viewer.photographicStudio.ground), "the floor");
+    assert.deepEqual(placement(snapshotStudio.contactShadow.layer), placement(viewer.photographicStudio.contactShadow.layer),
+      "and the shadow baked on it");
+  } finally {
+    disposePhotographicStudio(studioRuntime);
+    disposePhotographicStudio(viewer);
+    model.dispose();
+  }
+});
+
+test("a snapshot drawn at a render scale above 1 spreads its floor's dither by it", async () => {
+  // Final draws twice the pixels it keeps: each kept pixel averages four, and the dither
+  // must be drawn twice as wide to survive that, or the dark floor's bands come back.
+  const job = { mode: "view", kind: "step", display: { mode: "render", lighting: { quality: "final" } },
+    outputs: [{ path: "final.png", width: 64, height: 64, camera: "iso" }] };
+  const meshData = wideTwoPartMeshData();
+  const context = renderJobContext(meshData, job);
+  const model = buildModel(THREE, { kind: "step", meshData }, modelOptionsForRenderJob(context, job));
+  const scene = new THREE.Scene();
+  scene.add(model.root);
+  const configuration = context.sceneSettings.render.configuration;
+  const renderer = { ...studioRendererStub(), getPixelRatio() { return context.sharedRenderOptions.renderScale; } };
+  const studioRuntime = { scene, renderer, modelBounds: model.bounds };
+  applyPhotographicStudio(THREE, studioRuntime, configuration, {
+    sceneScale: context.sceneScale, shadowMapSize: context.quality.shadowMapSize, bounds: model.bounds, groundBounds: model.restBounds
+  });
+  const viewport = { ...stubViewport(model, scene), renderer, context, studioRuntime, studioConfiguration: configuration };
+  try {
+    assert.equal(context.sharedRenderOptions.renderScale, 2, "Final draws at twice the size it keeps");
+    await captureModel(viewport, { job });
+    const studio = studioRuntime.photographicStudio;
+    assert.equal(studio.ground.material.defines?.STUDIO_DITHER_SCALE, "2.0000");
+    assert.equal(studio.contactShadow.layer.material.defines?.STUDIO_DITHER_SCALE, "2.0000");
+  } finally {
+    disposePhotographicStudio(studioRuntime);
+    model.dispose();
+  }
+});
+
+test("an exploded snapshot radiates from the rest box the viewer explodes from, a declared box included", async () => {
+  // A package's declared box (assembly.json's bbox) is tighter than its parts' boxes once a part
+  // is turned; the viewer centres its layout on it (useStepExplode, `runtime.zeroPoseBounds`).
+  const declaredBounds = { min: [0.5, 0, 0], max: [3, 0.5, 0] };
+  const job = { mode: "view", kind: "step", display: { mode: "solid", exploded: { enabled: true, amount: 1 } },
+    outputs: [{ path: "exploded.png", width: 64, height: 64, camera: "iso" }] };
+  const meshData = { ...twoPartMeshData(), declaredBounds };
+  const context = renderJobContext(meshData, job);
+  const model = buildModel(THREE, { kind: "step", meshData }, modelOptionsForRenderJob(context, job));
+  const scene = new THREE.Scene();
+  scene.add(model.root);
+  const viewport = { ...stubViewport(model, scene), context };
+  const offsets = () => model.displayRecords.map((record) => record.explodedViewMatrix?.elements.slice(12, 15) ?? null);
+  try {
+    await captureModel(viewport, { job });
+    const snapshot = offsets();
+    assert.ok(snapshot.some(Boolean), "the parts were exploded");
+    applyExplodedViewProgress(THREE, computeExplodedViewLayout(model.displayRecords, declaredBounds), 1);
+    assert.deepEqual(snapshot, offsets());
+  } finally {
+    model.dispose();
+  }
+});
+
+test("a snapshot's Clip cuts and caps the model where the viewer's does, measured against the rest box", async () => {
+  // The snapshot's renderer ignored every material's plane (three honours them only with local
+  // clipping on), so `display.clip` drew the whole model, uncapped. The viewer measures the
+  // plane against the model at rest (`syncRuntimeStepClipPlane`), a declared box included.
+  const declaredBounds = { min: [0.5, 0, 0], max: [3, 0.5, 0] };
+  const clip = { enabled: true, axis: "x", offset: 0.1 };
+  const job = { mode: "view", kind: "step", display: { mode: "solid", clip },
+    outputs: [{ path: "clipped.png", width: 64, height: 64, camera: "iso" }] };
+  const meshData = { ...twoPartMeshData(), declaredBounds };
+  const context = renderJobContext(meshData, job);
+  const model = buildModel(THREE, { kind: "step", meshData }, modelOptionsForRenderJob(context, job));
+  const scene = new THREE.Scene();
+  scene.add(model.root);
+  const viewport = { ...stubViewport(model, scene), context };
+  try {
+    await captureModel(viewport, { job });
+    assert.equal(viewport.renderer.localClippingEnabled, true, "the renderer honours a material's planes");
+    const viewerPlane = buildStepClipPlane(THREE, clip, declaredBounds);
+    const planes = (material) => (material.clippingPlanes || []).map((plane) => [...plane.normal.toArray(), plane.constant]);
+    for (const record of model.displayRecords) {
+      assert.deepEqual(planes(record.material), [[...viewerPlane.normal.toArray(), viewerPlane.constant]], record.partId);
+    }
+    assert.ok(scene.getObjectByName("Section fill"), "and the cut is capped");
   } finally {
     model.dispose();
   }

@@ -34,6 +34,41 @@ export function artifactActionFor(status) {
 }
 
 /**
+ * What in the catalog makes a file's artifact status worth asking again (`useArtifact`'s
+ * `freshnessKey`): the tree its entry names (`hash`, "" while it is unbuilt), the document saved
+ * under it (`documentHash`), and the catalog becoming readable again after it failed, since the
+ * server may have restarted and a status read that failed meanwhile has given up.
+ *
+ * Nothing else in the catalog. Its revision moves with every file in it, so a sibling written
+ * while this file's build ran used to ask again, find the build running and poll it every
+ * 400 ms until it ended; the build feed already reads the catalog again when the build settles.
+ */
+export function artifactFreshnessKey(entry, catalog = null) {
+  return [
+    String(entry?.hash || ""),
+    String(entry?.documentHash || ""),
+    catalog?.error ? "unreachable" : "",
+  ].join(":");
+}
+
+/**
+ * Whether the render-artifact status ends the wait for geometry: nothing it promises will put a
+ * tree in the entry, so the loading state gives way to the alert (`StepSurface`).
+ *
+ * A fatal error does. So does a status that has SETTLED as `compiled` — the server's answer for this
+ * exact entry, read after the catalog was read again (`useArtifact`), not the optimistic one a fresh
+ * selection starts with — while the entry still names no tree: the client compiles only what the
+ * server calls not compiled, so no later read of the catalog or the status will bring one. The view
+ * read "Reading model" forever over such a row, with no alert; now it reads the no-geometry alert.
+ * An entry whose model is on screen has its geometry, and the status says nothing about it here.
+ */
+export function artifactEndsLoad(artifact, entryHasView) {
+  if (entryHasView) return false;
+  const status = String(artifact?.status || "");
+  return status === ARTIFACT_ACTION_ERROR || (status === ARTIFACT_ACTION_READY && artifact?.settled === true);
+}
+
+/**
  * The advisory flag a `compiled` status may carry: `busy`, when another process
  * currently holds the model's generator. It changes nothing about what the
  * client does with the complete geometry — it is an honest badge for the file sheet.

@@ -1,13 +1,10 @@
 """``GET /__cad/drawing`` against a real launched server.
 
-The fixture writes its own drawings with ezdxf into a fresh temporary root and
+The fixture writes its own drawings with ezdxf into a fresh temporary folder and
 points the store at a temporary directory; nothing here reads the sample
-corpus and nothing shares a store with another test file.
-
-The denial cases matter most. ``/__cad/drawing`` is a route that turns a
-``?file=`` ref into a path the server OPENS, and the store has a read-outside-
-root hole in its history of exactly that shape, so every refusal asserts both
-the status and that the secret bytes never appear in the body.
+corpus and nothing shares a store with another test file. A drawing is named by
+its absolute path, as every file is; every refusal asserts both the status and
+that the secret bytes never appear in the body.
 """
 
 from __future__ import annotations
@@ -22,9 +19,13 @@ import unittest
 from pathlib import Path
 from urllib.parse import quote
 
+from unittest import mock
+
 import ezdxf
 
+from cadgen.drawing_payload import DRAWING_PAYLOAD_SCHEMA_VERSION
 from cadgen.viewer import handler as handler_module
+from cadgen.viewer.drawings import DrawingRenders
 from cadgen.viewer.http_app import create_cad_app
 
 SECRET = "TOP-SECRET-BYTES"
@@ -49,40 +50,33 @@ def plate(document, modelspace) -> None:
 
 
 class DrawingRouteFixture:
-    """``base/{root, root-evil, outside}`` behind a live server, plus a store."""
+    """``base/project`` behind a live server, plus a store."""
 
     def __init__(self) -> None:
         self.base = tempfile.mkdtemp()
-        self.root = os.path.join(self.base, "root")
-        self.evil = os.path.join(self.base, "root-evil")
-        self.outside = os.path.join(self.base, "outside")
-        for directory in (self.root, self.evil, self.outside):
-            os.makedirs(directory)
+        self.root = os.path.join(self.base, "project")
+        os.makedirs(self.root)
         self._previous_cache = os.environ.get("CADGEN_CACHE_DIR")
         os.environ["CADGEN_CACHE_DIR"] = os.path.join(self.base, "cache")
 
         write_drawing(Path(self.root, "plate.dxf"), plate)
         write_drawing(Path(self.root, "nested", "bracket.dxf"), plate)
-        write_drawing(Path(self.root, ".hidden", "private.dxf"), plate)
-        # A name-prefix sibling of the root: the jupyter_server
-        # GHSA-5789-5fc7-67v3 shape, which a naive startswith() lets through.
-        write_drawing(Path(self.evil, "stolen.dxf"), plate)
-        write_drawing(Path(self.outside, "secret.dxf"), plate)
+        write_drawing(Path(self.root, ".worktree", "private.dxf"), plate)
         # Deliberately secret-free: ezdxf names the offending LINE in its
-        # parse error, and that line rides out in the 400's message. That is
-        # the teaching part of the error, and the file is one the asset route
-        # would have served whole anyway — but a probe file with a secret in
-        # it would make this test pass or fail for the wrong reason.
+        # parse error, and that line rides out in the 400's message.
         Path(self.root, "notes.dxf").write_text("this is not a drawing\n", encoding="utf-8")
         Path(self.root, "part.step").write_text(f"ISO-10303-21; {SECRET}\n", encoding="utf-8")
-        Path(self.outside, "passwd").write_text(SECRET, encoding="utf-8")
+        Path(self.root, "passwd").write_text(SECRET, encoding="utf-8")
 
-        self.app = create_cad_app(root=self.root, host="127.0.0.1", port=0, dist_dir="")
+        self.app = create_cad_app(host="127.0.0.1", port=0, dist_dir="")
         self.server = handler_module.serve(self.app, "127.0.0.1", 0)
         self.port = self.server.server_address[1]
         self.app.port = self.port
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
+
+    def path(self, rel: str) -> str:
+        return os.path.join(self.root, rel)
 
     def close(self) -> None:
         self.server.shutdown()
@@ -104,7 +98,11 @@ class DrawingRouteFixture:
             conn.close()
 
     def drawing(self, file_param):
-        return self.request(f"/__cad/drawing?file={quote(str(file_param), safe='')}")
+        """The answer, asked again while the drawing renders (202), as the client asks."""
+        while True:
+            status, headers, body = self.request(f"/__cad/drawing?file={quote(str(file_param), safe='')}")
+            if status != 202:
+                return status, headers, body
 
 
 class DrawingRouteTestCase(unittest.TestCase):
@@ -122,78 +120,46 @@ class DrawingRouteTestCase(unittest.TestCase):
 
 
 class ItServesTheDrawing(DrawingRouteTestCase):
-    def test_an_absolute_ref_inside_the_root_serves_the_payload(self) -> None:
-        status, headers, body = self.fixture.drawing(os.path.join(self.fixture.root, "plate.dxf"))
+    def test_a_drawing_named_by_its_absolute_path_serves_the_payload(self) -> None:
+        status, headers, body = self.fixture.drawing(self.fixture.path("plate.dxf"))
         self.assertEqual(status, 200, body[:400])
         self.assertEqual(headers["content-type"], "application/json; charset=utf-8")
         self.assertEqual(headers["cache-control"], "no-store")
         # The viewer serves bytes to render, never a save-as.
         self.assertNotIn("content-disposition", {name.lower() for name in headers})
         payload = json.loads(body)
-        self.assertEqual(payload["schemaVersion"], 1)
+        self.assertEqual(payload["schemaVersion"], DRAWING_PAYLOAD_SCHEMA_VERSION)
         self.assertEqual(payload["units"]["insunits"], 4)
         self.assertEqual(len(payload["bounds"]), 4)
         self.assertTrue(payload["primitives"])
         self.assertIn("CUT", {layer["name"] for layer in payload["layers"]})
-
-    def test_a_root_relative_ref_serves_the_same_payload(self) -> None:
-        absolute = self.fixture.drawing(os.path.join(self.fixture.root, "plate.dxf"))
-        relative = self.fixture.drawing("plate.dxf")
-        self.assertEqual(relative[0], 200, relative[2][:400])
-        self.assertEqual(relative[2], absolute[2])
-
-    def test_a_nested_drawing_serves(self) -> None:
-        status, _, body = self.fixture.drawing("nested/bracket.dxf")
-        self.assertEqual(status, 200, body[:400])
-        self.assertTrue(json.loads(body)["primitives"])
-
-    def test_the_body_is_the_compact_encoding_and_the_content_length_matches(self) -> None:
-        status, headers, body = self.fixture.drawing("plate.dxf")
-        self.assertEqual(status, 200)
+        # The body is the compact encoding, and the same bytes every time.
         self.assertEqual(int(headers["content-length"]), len(body))
         self.assertNotIn(b", ", body)
-        # No gzip: the backend has no compression helper and this route did not
-        # invent one. If a helper ever arrives, this is the line to revisit.
         self.assertNotIn("content-encoding", {name.lower() for name in headers})
+        self.assertEqual(self.fixture.drawing(self.fixture.path("plate.dxf"))[2], body)
 
-    def test_two_requests_return_identical_bytes(self) -> None:
-        first = self.fixture.drawing("plate.dxf")[2]
-        second = self.fixture.drawing("plate.dxf")[2]
-        self.assertEqual(first, second)
+    def test_a_drawing_anywhere_serves(self) -> None:
+        # Nested, or under a hidden folder: a file that is named is never refused for where it is.
+        for rel in ("nested/bracket.dxf", ".worktree/private.dxf"):
+            with self.subTest(rel=rel):
+                status, _, body = self.fixture.drawing(self.fixture.path(rel))
+                self.assertEqual(status, 200, body[:400])
+                self.assertTrue(json.loads(body)["primitives"])
 
 
 class ItRefusesWhatItShould(DrawingRouteTestCase):
-    def test_a_dot_dot_walk_out_of_the_root_is_forbidden(self) -> None:
-        for ref in (
-            "../outside/secret.dxf",
-            "nested/../../outside/secret.dxf",
-            "..%2Foutside%2Fsecret.dxf",
-            "....//outside/secret.dxf",
-        ):
+    def test_a_ref_that_is_not_an_absolute_path_is_a_400(self) -> None:
+        for ref in ("plate.dxf", "../project/plate.dxf"):
             with self.subTest(ref=ref):
                 status, _, body = self.fixture.drawing(ref)
-                self.assertDenied(status, body, {403, 404})
-                self.assertNotIn(b'"primitives"', body)
-
-    def test_an_absolute_path_outside_the_root_is_forbidden(self) -> None:
-        for path in (
-            os.path.join(self.fixture.outside, "secret.dxf"),
-            os.path.join(self.fixture.evil, "stolen.dxf"),
-        ):
-            with self.subTest(path=path):
-                status, _, body = self.fixture.drawing(path)
-                self.assertEqual(status, 403, body[:400])
-                self.assertNotIn(b'"primitives"', body)
-
-    def test_a_hidden_component_is_a_miss_not_a_drawing(self) -> None:
-        status, _, body = self.fixture.drawing(".hidden/private.dxf")
-        self.assertEqual(status, 404, body[:400])
-        self.assertNotIn(b'"primitives"', body)
+                self.assertEqual(status, 400, body[:400])
+                self.assertIn(b"absolute path", body)
 
     def test_another_extension_is_a_400_that_says_what_the_route_takes(self) -> None:
-        for ref in ("part.step", os.path.join(self.fixture.outside, "passwd")):
-            with self.subTest(ref=ref):
-                status, _, body = self.fixture.drawing(ref)
+        for rel in ("part.step", "passwd"):
+            with self.subTest(rel=rel):
+                status, _, body = self.fixture.drawing(self.fixture.path(rel))
                 self.assertDenied(status, body, {400})
                 self.assertIn(b".dxf", body)
 
@@ -203,31 +169,83 @@ class ItRefusesWhatItShould(DrawingRouteTestCase):
         self.assertIn(b"?file=", body)
 
     def test_a_missing_drawing_is_a_404(self) -> None:
-        status, _, body = self.fixture.drawing("absent.dxf")
+        status, _, body = self.fixture.drawing(self.fixture.path("absent.dxf"))
         self.assertEqual(status, 404)
         self.assertEqual(json.loads(body), {"error": "Not found"})
 
     def test_a_dxf_that_is_not_a_dxf_is_a_400_carrying_the_reason(self) -> None:
-        status, _, body = self.fixture.drawing("notes.dxf")
+        status, _, body = self.fixture.drawing(self.fixture.path("notes.dxf"))
         self.assertDenied(status, body, {400})
         message = json.loads(body)["error"]
         self.assertIn("notes.dxf", message)
         self.assertIn("audit", message, "the error must say what to do about it")
 
     def test_a_null_byte_in_the_ref_is_refused(self) -> None:
-        status, _, body = self.fixture.drawing("plate\x00.dxf")
+        status, _, body = self.fixture.drawing(self.fixture.path("plate\x00.dxf"))
         self.assertDenied(status, body, {400})
 
     def test_the_route_is_get_only(self) -> None:
         conn = http.client.HTTPConnection("127.0.0.1", self.fixture.port, timeout=10)
         try:
-            conn.request("POST", "/__cad/drawing?file=plate.dxf", headers={"x-cadgen-viewer": "1"})
+            conn.request("POST", f"/__cad/drawing?file={quote(self.fixture.path('plate.dxf'), safe='')}",
+                         headers={"x-cadgen-viewer": "1"})
             response = conn.getresponse()
             body = response.read()
         finally:
             conn.close()
         self.assertEqual(response.status, 405)
         self.assertNotIn(b'"primitives"', body)
+
+
+class OneRenderPerDrawing(unittest.TestCase):
+    """A render runs off the request, once per drawing's bytes, and every request joins it.
+
+    The render is held on an event, so "still rendering" is a state the test sets rather than a
+    race it hopes to win, and it writes no store: the answer must come from the render itself, as
+    it does where the store cannot keep it.
+    """
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        patcher = mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.base / "cache")})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.drawing = write_drawing(self.base / "plate.dxf", plate)
+        self.release = threading.Event()
+        self.calls = []
+
+    def render(self, outcome):
+        def rendered(path, key):
+            self.calls.append(path)
+            self.release.wait(30)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        return mock.patch("cadgen.drawing_payload.render_drawing_payload", side_effect=rendered)
+
+    def test_requests_while_it_renders_join_it_and_the_next_has_its_payload(self) -> None:
+        renders = DrawingRenders(hold_seconds=0, retry_ms=750)
+        with self.render(b'{"payload":1}'):
+            self.assertEqual(renders.response(str(self.drawing)), (202, {"state": "drawing", "retryMs": 750}))
+            self.assertEqual(renders.response(str(self.drawing))[0], 202)
+            self.assertTrue(renders.any_in_flight())
+            self.release.set()
+            renders.hold_seconds = 30
+            self.assertEqual(renders.response(str(self.drawing)), (200, b'{"payload":1}'))
+        self.assertEqual(len(self.calls), 1)
+        self.assertFalse(renders.any_in_flight())
+
+    def test_a_drawing_that_will_not_render_is_reported_to_the_request_that_follows(self) -> None:
+        crashes = []
+        renders = DrawingRenders(hold_seconds=0, on_crash=crashes.append)
+        with self.render(RuntimeError("ezdxf tripped")):
+            self.assertEqual(renders.response(str(self.drawing))[0], 202)
+            self.release.set()
+            renders.hold_seconds = 30
+            self.assertEqual(renders.response(str(self.drawing)), (400, {"error": "ezdxf tripped"}))
+        self.assertEqual([str(error) for error in crashes], ["ezdxf tripped"], "a bug is counted once, by the render")
 
 
 class ItStaysOffTheKernelAndTheReloadCounter(DrawingRouteTestCase):
@@ -245,7 +263,7 @@ class ItStaysOffTheKernelAndTheReloadCounter(DrawingRouteTestCase):
     def test_serving_a_drawing_does_not_load_the_cad_kernel(self) -> None:
         import sys
 
-        self.fixture.drawing("plate.dxf")
+        self.fixture.drawing(self.fixture.path("plate.dxf"))
         self.assertEqual(
             [name for name in ("OCP", "build123d", "cadquery") if name in sys.modules],
             [],

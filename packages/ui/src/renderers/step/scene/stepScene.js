@@ -102,11 +102,20 @@ export function createStepScene(THREE) {
     get displayRecords() { return cadScene?.displayRecords || EMPTY_RECORDS; },
     /** As posed now: what lighting, shadows and the floor's height follow. */
     get bounds() { return cadScene?.bounds || cadScene?.source?.bounds || EMPTY_BOUNDS; },
-    /** The authored placement: what the camera frames and the ground is sized from. */
-    get restBounds() { return cadScene?.restBounds || cadScene?.source?.bounds || EMPTY_BOUNDS; },
-    /** `false` while components of a progressive package are still to come. */
+    /**
+     * The authored placement: what the camera frames and the ground is sized from. A package
+     * that declares its whole box (`declaredBounds`, assembly.json's `bbox`) is that box from
+     * its first publish, however few of its components have arrived; one that does not is the
+     * box of what has.
+     */
+    get restBounds() {
+      return cadScene?.source?.declaredBounds || cadScene?.restBounds || cadScene?.source?.bounds || EMPTY_BOUNDS;
+    },
+    /** `false` while `restBounds` may still grow: components are still to come and no box was declared. */
     get complete() {
-      const missing = cadScene?.source?.missingComponentIds;
+      const source = cadScene?.source;
+      if (source?.declaredBounds) return true;
+      const missing = source?.missingComponentIds;
       return !(Array.isArray(missing) && missing.length > 0);
     },
     placedObjects() { return cadScene?.displayRecords || EMPTY_RECORDS; },

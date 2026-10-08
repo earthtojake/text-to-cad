@@ -66,3 +66,16 @@ it('a preview camera that moves is a settle, and records no perspective', () => 
   expect(onPerspectiveChange).toHaveBeenCalledTimes(1);
   expect(onCameraSettled).toHaveBeenCalledTimes(1);
 });
+
+// On the same mounted viewport: a camera handed to the viewport (the agent's `setCamera`) or a
+// Zoom to selection is the person's choice, as a drag is, so the completion fit of a model still
+// arriving stands down for it (`reframeReason`'s `userMovedCamera`).
+it('a camera handed to the viewport, or a zoom to a selection, is the user\'s camera', () => {
+  const viewport = React.createRef<any>();
+  const { runtime } = mount({ ref: viewport });
+  act(() => { expect(viewport.current.setPerspective({ position: [40, -60, 30], target: [1, 2, 3], up: [0, 0, 1], zoom: 2 })).toBe(true); });
+  expect(runtime.userMovedCamera).toBe(true);
+  runtime.userMovedCamera = false;
+  act(() => { expect(viewport.current.zoomToBounds({ min: [0, 0, 0], max: [4, 2, 1] }, { animate: false })).toBe(true); });
+  expect(runtime.userMovedCamera).toBe(true);
+});

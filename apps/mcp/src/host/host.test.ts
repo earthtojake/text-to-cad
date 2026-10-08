@@ -1,14 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
+import { encodeBase64 } from '@text-to-cad/core/client';
 import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
 import { createBridge, HostError, type ToolResult } from './bridge';
-import { createCatalogFileSource } from '@text-to-cad/ui/catalog';
 import { frameClipboard } from './clipboard';
-import { createFilesystemSource } from './files';
 import { chatReach, createChatPromptContext } from './prompt';
-import { relaunch } from './relaunch';
 import { createServer, type SyncReply, type SyncRequest, type ViewEvent } from './server';
 import { createViewSync, LOST_AFTER, NEWS_MS, SYNC_MS } from './sync';
-import { createTunnelFetch, decodeBase64, encodeBase64, TUNNEL_ORIGIN } from './tunnel';
+import {
+  createHttpTessellationCacheProvider, encodeComponentTessellation, tessellationPayloadFacts,
+} from '@text-to-cad/core/lib/surf/tessellationCache.js';
+import { createTunnelClient, createTunnelFetch, decodeBase64, TUNNEL_ORIGIN, TUNNEL_REPLY_MAX_BYTES } from './tunnel';
 
 /** A host frame: records what the page posts and answers with `respond`. */
 function fakeHost(respond: (message: any) => unknown) {
@@ -84,7 +85,7 @@ describe('a view\'s one call each second', () => {
   it('answers the agent, asks again at once after news, and otherwise once a second; nothing is held', async () => {
     vi.useFakeTimers();
     try {
-      const launch = { protocol: 4, page: 'viewer' as const, model: '/p/b.step', root: { kind: 'global' as const, path: '/', name: '/' }, explore: false };
+      const launch = { protocol: 5, page: 'viewer' as const, model: '/p/b.step' };
       const { server, requests, replied } = syncing([
         { events: [{ seq: 1, type: 'show', launch }, { seq: 2, type: 'capture', requestId: 'c1' }] as ViewEvent[] },
         { events: [{ seq: 3, type: 'capture', requestId: 'c2' }] as ViewEvent[] },
@@ -171,16 +172,16 @@ describe('a view\'s one call each second', () => {
       const stop = new AbortController();
       const sync = createViewSync(server, { id: 'v1', surface: 'tab', model: () => '/p/a.step' },
         { show() {}, capture: async () => new Blob(), state: () => ({}) });
-      sync.watch({ root: { kind: 'workspace', path: '/p' }, file: () => 'a.step', revision: () => applied,
+      sync.watch({ file: () => '/p/a.step', revision: () => applied,
         refresh: async file => { refreshes.push(file); applied = 'r2'; } });
       const feed: string[] = [];
       sync.observePreview('a.step', preview => feed.push(String(preview.state)), () => {});
       sync.run(stop.signal);
       await vi.advanceTimersByTimeAsync(0);
-      expect(requests[0].watch).toEqual({ root: { kind: 'workspace', path: '/p' }, file: 'a.step', previews: ['a.step'] });
+      expect(requests[0].watch).toEqual({ file: '/p/a.step', previews: ['a.step'] });
       expect(refreshes).toEqual([]);
       await vi.advanceTimersByTimeAsync(SYNC_MS);
-      expect(refreshes).toEqual(['a.step']);
+      expect(refreshes).toEqual(['/p/a.step']);
       // A moving build is asked after sooner; a still one waits the second.
       expect(feed).toEqual(['building']);
       await vi.advanceTimersByTimeAsync(NEWS_MS);
@@ -189,7 +190,33 @@ describe('a view\'s one call each second', () => {
       expect(feed).toEqual(['building', 'done', 'done']);
       await vi.advanceTimersByTimeAsync(NEWS_MS);
       expect(requests).toHaveLength(4);
-      expect(refreshes).toEqual(['a.step']);
+      expect(refreshes).toEqual(['/p/a.step']);
+      stop.abort();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('hands the view a failed build as news, and only a bare error as the feed failing', async () => {
+    vi.useFakeTimers();
+    try {
+      const { server } = syncing([
+        { previews: [{ file: 'a.step', epoch: 'e', revision: 3, state: 'failed', error: 'the model raised', feedCursor: 'k1' }] as SyncReply['previews'] },
+        { previews: [{ file: 'a.step', error: 'the daemon did not answer' }] as SyncReply['previews'] },
+      ]);
+      const stop = new AbortController();
+      const sync = createViewSync(server, { id: 'v1', surface: 'inline', model: () => '/p/a.step' },
+        { show() {}, capture: async () => new Blob(), state: () => ({}) });
+      sync.watch({ file: () => '/p/a.step', revision: () => 'r1', refresh: async () => {} });
+      const updates: string[] = [];
+      const lost: string[] = [];
+      sync.observePreview('a.step', preview => updates.push(`${preview.state}: ${preview.error}`),
+        error => lost.push(error instanceof Error ? error.message : String(error)));
+      sync.run(stop.signal);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(updates).toEqual(['failed: the model raised']);
+      expect(lost).toEqual([]);
+      await vi.advanceTimersByTimeAsync(NEWS_MS);
+      expect(lost).toEqual(['the daemon did not answer']);
+      expect(updates).toEqual(['failed: the model raised']);
       stop.abort();
     } finally { vi.useRealTimers(); }
   });
@@ -204,9 +231,9 @@ describe('the fetch tunnel', () => {
         return { structuredContent: { status: args.method === 'HEAD' ? 200 : 201, headers: { 'content-type': 'application/json', 'content-length': '11' }, body: encodeBase64(new TextEncoder().encode('{"ok":true}')) } };
       },
     });
-    const tunnel = createTunnelFetch(server, { kind: 'workspace', path: '/project' });
+    const tunnel = createTunnelFetch(server);
     const posted = await tunnel(`${TUNNEL_ORIGIN}/__cad/surfaces?x=1`, { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, body: '{"a":1}' });
-    expect(calls[0]).toMatchObject({ name: 'cad_http', args: { root: { kind: 'workspace', path: '/project' }, method: 'POST', url: `${TUNNEL_ORIGIN}/__cad/surfaces?x=1` } });
+    expect(calls[0]).toMatchObject({ name: 'cad_http', args: { method: 'POST', url: `${TUNNEL_ORIGIN}/__cad/surfaces?x=1` } });
     expect(calls[0].args.headers['x-cadgen-viewer']).toBe('1');
     expect(new TextDecoder().decode(decodeBase64(calls[0].args.body))).toBe('{"a":1}');
     expect(posted.status).toBe(201);
@@ -215,69 +242,133 @@ describe('the fetch tunnel', () => {
     expect([head.status, head.headers.get('content-length'), await head.text()]).toEqual([200, '11', '']);
   });
 
-  it('turns a failed call into the TypeError fetch throws', async () => {
-    const tunnel = createTunnelFetch(createServer({ callTool: async () => ({ isError: true, content: [{ type: 'text', text: 'not this thread' }] }) }), { kind: 'workspace', path: '/p' });
+  it('inflates a body the server gzipped for the trip, and refuses an encoding it cannot read', async () => {
+    const json = JSON.stringify({ entries: Array.from({ length: 200 }, (_, index) => ({ file: `parts/part-${index}.step` })) });
+    const gzipped = new Uint8Array(await new Response(new Response(json).body!.pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+    let encoding = 'gzip';
+    const server = createServer({
+      callTool: async () => ({ structuredContent: { status: 200, encoding, body: encodeBase64(gzipped),
+        headers: { 'content-type': 'application/json', 'content-length': String(json.length) } } }),
+    });
+    const tunnel = createTunnelFetch(server);
+    const reply = await tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`);
+    expect([reply.headers.get('content-length'), await reply.text()]).toEqual([String(json.length), json]);
+    encoding = 'br';
     await expect(tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`)).rejects.toThrow(TypeError);
   });
-});
 
-describe('a tab restored from an older build', () => {
-  it('is launched again as it was: the home, a thread\'s tab, a file\'s tab or an agent\'s model', async () => {
-    const root = { kind: 'workspace' as const, path: '/work', name: 'work' };
-    const calls: [string, Record<string, unknown>][] = [];
-    const bridge = { callTool: vi.fn(async (name: string, args: Record<string, unknown>) => {
-      calls.push([name, args]);
-      return { structuredContent: { launch: { protocol: 3, page: name === 'cad_home' ? 'home' : 'viewer', model: (args.model as string) || null, root, explore: true } } } as ToolResult;
-    }) };
-    const stale = (patch: object) => ({ protocol: 2, page: 'viewer' as const, model: null, root, explore: true, ...patch });
-    expect((await relaunch(bridge, stale({ page: 'home', surface: 'sidebar' }))).page).toBe('home');
-    await relaunch(bridge, stale({ surface: 'tab' }));
-    await relaunch(bridge, stale({ surface: 'file', model: '/work/parts/a b.step' }));
-    await relaunch(bridge, stale({ surface: 'file', model: '/work/parts/link #2?.step' }));
-    await relaunch(bridge, stale({ surface: 'file', model: 'C:\\work\\b.step' }));
-    const agent = await relaunch(bridge, stale({ surface: 'agent', model: '/work/parts/a.step' }));
-    expect(calls).toEqual([
-      ['cad_home', {}], ['cad_tab', {}],
-      ['cad_file', { file: { name: 'a b.step', resourceUri: 'file:///work/parts/a%20b.step' } }],
-      ['cad_file', { file: { name: 'link #2?.step', resourceUri: 'file:///work/parts/link%20%232%3F.step' } }],
-      ['cad_file', { file: { name: 'b.step', resourceUri: 'file:///C:/work/b.step' } }],
-      ['cad_launch', { model: '/work/parts/a.step' }],
-    ]);
-    expect([agent.protocol, agent.surface]).toEqual([3, 'agent']);
+  it('turns a failed call into the TypeError fetch throws', async () => {
+    const tunnel = createTunnelFetch(createServer({ callTool: async () => ({ isError: true, content: [{ type: 'text', text: 'not this thread' }] }) }));
+    await expect(tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`)).rejects.toThrow(TypeError);
+  });
+
+  it('gives the app a CAD client whose batched reads ask for no more than one reply carries', () => {
+    const client = createTunnelClient(createTunnelFetch(createServer({ callTool: async () => ({}) })));
+    const session = client.createRenderSession();
+    try {
+      expect(TUNNEL_REPLY_MAX_BYTES).toBe(4 * 1024 * 1024);
+      expect(session.tessellationCache.batchMaxBytes).toBe(TUNNEL_REPLY_MAX_BYTES);
+      expect(client.origin).toBe(TUNNEL_ORIGIN);
+    } finally {
+      session.dispose();
+      client.dispose();
+    }
+  });
+
+  it('reads a body longer than one reply a part at a time, each within the bound and naming the body it continues, and hands over the whole', async () => {
+    const bytes = pattern(3 * TUNNEL_REPLY_MAX_BYTES + 1000);
+    const parted = servingInParts(bytes);
+    const reply = await createTunnelFetch(parted.server)(`${TUNNEL_ORIGIN}/__cad/asset?file=big.stl`);
+    expect([reply.status, reply.headers.get('content-length'), reply.headers.get('content-range')]).toEqual([200, String(bytes.length), null]);
+    expect(same(new Uint8Array(await reply.arrayBuffer()), bytes)).toBe(true);
+    expect(parted.ranges).toEqual([0, 1, 2, 3].map(part => `bytes=${part * TUNNEL_REPLY_MAX_BYTES}-${Math.min(bytes.length, (part + 1) * TUNNEL_REPLY_MAX_BYTES) - 1}`));
+    expect(Math.max(...parted.sizes)).toBe(TUNNEL_REPLY_MAX_BYTES);
+    // Every part after the first names the body, which the server kept and cuts the part from.
+    expect(parted.continues).toEqual([null, '"v1"', '"v1"', '"v1"']);
+  });
+
+  it('fails the read of a body that changed between its parts, or whose parts are out of place', async () => {
+    const bytes = pattern(TUNNEL_REPLY_MAX_BYTES + 10);
+    for (const parted of [
+      servingInParts(bytes, { etag: first => (first ? '"rewritten"' : '"v1"') }),
+      servingInParts(bytes, { offset: first => (first ? first + 1 : 0) }),
+    ]) {
+      const reply = await createTunnelFetch(parted.server)(`${TUNNEL_ORIGIN}/__cad/asset?file=big.stl`);
+      await expect(reply.arrayBuffer()).rejects.toThrow(TypeError);
+    }
+  });
+
+  it('verifies a tessellation read in parts as a whole one: put together it is the body, and a damaged part makes it a miss', async () => {
+    const vertices = 200_000;
+    const triangles = 50_000;
+    const bytes = encodeComponentTessellation({
+      positions: new Float32Array(3 * vertices).map((_, index) => index % 97),
+      normals: new Float32Array(3 * vertices).fill(1),
+      faceOrds: new Float32Array(vertices).fill(1),
+      indices: new Uint32Array(3 * triangles).map((_, index) => index % vertices),
+      sideOrds: new Uint32Array(3 * triangles).fill(1),
+      faceRanges: [{ ord: 1, indexStart: 0, indexCount: 3 * triangles }],
+      edges: [],
+      bounds: { min: [0, 0, 0], max: [96, 96, 96] },
+      scale: 166,
+    }, { surfaceInput: '1'.repeat(64), surfaceObject: 'a'.repeat(64), edgeClasses: [] });
+    expect(bytes.length).toBeGreaterThan(TUNNEL_REPLY_MAX_BYTES);
+    const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    const row = { schemaVersion: 1, object: digest, ...tessellationPayloadFacts(bytes) };
+    const read = (parted: ReturnType<typeof servingInParts>) => createHttpTessellationCacheProvider({
+      origin: TUNNEL_ORIGIN, fetch: createTunnelFetch(parted.server), maxBatchBytes: TUNNEL_REPLY_MAX_BYTES,
+    }).getProbed(row, { maxBytes: row.byteLength });
+    const whole = await read(servingInParts(bytes, { etag: () => `"${digest}"` }));
+    expect(whole && same(whole, bytes)).toBe(true);
+    const damaged = servingInParts(bytes, { etag: () => `"${digest}"`, alter: (part, first) => (first === TUNNEL_REPLY_MAX_BYTES ? part.map(value => value ^ 1) : part) });
+    expect(await read(damaged)).toBeNull();
+    expect(damaged.ranges.length).toBe(2);
   });
 });
 
-describe('a filesystem, the file on screen alone', () => {
-  it('lists nothing, and hears only the file that stayed change, not another file shown', async () => {
-    let entries: any[] = [{ file: '/Users/me/.work/a.step', rootRelativeFile: 'Users/me/.work/a.step', hash: '1' }];
-    const listeners = new Set<() => void>();
-    const changed = () => { for (const listener of [...listeners]) listener(); };
-    const client = { getSnapshot: () => ({ entries, hydrated: true }), subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); } } as any;
-    const source = createFilesystemSource(client, { kind: 'global', path: '/', name: '/' }, { id: 'fs' });
-    expect([source.list, source.paths]).toEqual([undefined, undefined]);
-    const seen: unknown[] = [];
-    source.subscribe!(change => seen.push(change.changes));
-    entries = [{ ...entries[0], hash: '2' }];
-    changed();
-    entries = [{ file: '/Users/me/b.stl', rootRelativeFile: 'Users/me/b.stl', hash: '1' }];
-    changed();
-    expect(seen).toEqual([[{ kind: 'content', path: 'Users/me/.work/a.step', revision: expect.any(String) }]]);
-  });
+/** `length` bytes that differ from part to part. */
+function pattern(length: number) {
+  return new Uint8Array(length).map((_, index) => (index * 7 + (index >> 12)) & 255);
+}
 
-  it('names its files absolutely in copied references, where a project names them by its own paths', () => {
-    const client = { getSnapshot: () => ({ entries: [], hydrated: true }), subscribe: () => () => {} } as any;
-    const filesystem = (path: string) => createFilesystemSource(client, { kind: 'global', path, name: path }, { id: path });
-    expect(filesystem('/').referencePath?.('Users/me/a.step')).toBe('/Users/me/a.step');
-    expect(filesystem('C:\\').referencePath?.('work/a.step')).toBe('C:\\work\\a.step');
-    // A project's catalog keeps the default: the path under its root.
-    expect(createCatalogFileSource(client, { id: 'w', rootName: 'project' }).referencePath).toBeUndefined();
+function same(a: Uint8Array, b: Uint8Array) {
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) if (a[index] !== b[index]) return false;
+  return true;
+}
+
+/**
+ * A server that answers a ranged GET as `cadgen mcp` does (`cadgen/mcp/tunnel.py`) for a body
+ * longer than the range: its part (206). `etag` names the body a part is of, `offset` moves where
+ * a part starts, and `alter` changes a part's bytes.
+ */
+function servingInParts(bytes: Uint8Array, {
+  etag = (_first: number) => '"v1"', offset = (first: number) => first, alter = (part: Uint8Array, _first: number) => part,
+} = {}) {
+  const ranges: string[] = [];
+  const continues: (string | null)[] = [];
+  const sizes: number[] = [];
+  const server = createServer({
+    callTool: async (_name, args: any) => {
+      ranges.push(args.headers.range);
+      continues.push(args.headers['if-range'] ?? null);
+      const asked = /^bytes=(\d+)-(\d+)$/.exec(args.headers.range)!;
+      const first = offset(Number(asked[1]));
+      const last = Math.min(bytes.length - 1, Number(asked[2]));
+      const part = alter(bytes.slice(first, last + 1), first);
+      sizes.push(part.length);
+      return { structuredContent: { status: 206, body: encodeBase64(part), headers: {
+        'content-type': 'application/octet-stream', 'content-length': String(part.length),
+        'content-range': `bytes ${first}-${last}/${bytes.length}`, etag: etag(first),
+      } } };
+    },
   });
-});
+  return { server, ranges, continues, sizes };
+}
 
 describe('a Quick Edit in the chat', () => {
-  const resolvePath = (resource: any) => `/project/${resource.kind === 'workspace-file' ? resource.path : ''}`;
-  const file = referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: 'parts/a.step' }, target: { kind: 'whole-resource' } }, 'file');
-  const face = referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: 'parts/a.step' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } }, 'face');
+  const file = referencePart({ resource: { kind: 'workspace-file', path: '/project/parts/a.step' }, target: { kind: 'whole-resource' } }, 'file');
+  const face = referencePart({ resource: { kind: 'workspace-file', path: '/project/parts/a.step' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } }, 'face');
   const sketch = () => ({ id: 'sketch', kind: 'attachment' as const, name: 'a-sketch.png', label: 'Sketch', mimeType: 'image/png', about: ['file'],
     content: new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }) });
   const edit = (...parts: any[]) => createPromptContext([{ id: 'text', kind: 'text', text: 'Round it.' }, file, ...parts]);
@@ -295,7 +386,7 @@ describe('a Quick Edit in the chat', () => {
       hostContext: {},
       onHostContext: listener => { context = listener; return () => {}; },
       request: async (method: string, params: any) => { updates.push({ method, params }); return {}; },
-    } as any, { resolvePath, reach: { queue: true, send: false, sendImages: false } });
+    } as any, { reach: { queue: true, send: false, sendImages: false } });
     expect([port.getSnapshot().kind, port.send]).toEqual(['composer', undefined]);
     expect((await port.deliver(edit(face, sketch()))).status).toBe('added');
     const [text, image] = updates[0].params.content;
@@ -333,7 +424,7 @@ describe('a Quick Edit in the chat', () => {
     } as any;
     const saved: string[] = [];
     const attachments = { save: async (_png: Blob, name: string) => { saved.push(name); return `/tmp/cadgen-sketches/${name}`; } };
-    const port = createChatPromptContext(bridge, { resolvePath, reach: { queue: false, send: true, sendImages: true }, attachments });
+    const port = createChatPromptContext(bridge, { reach: { queue: false, send: true, sendImages: true }, attachments });
     expect(port.getSnapshot().kind).toBe('unavailable');
     expect((await port.send!(edit(sketch()))).status).toBe('sent');
     expect(sent[0].method).toBe('ui/message');

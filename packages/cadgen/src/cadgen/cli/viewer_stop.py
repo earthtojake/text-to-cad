@@ -1,4 +1,4 @@
-"""``cadgen viewer stop`` — terminate a running CAD Viewer by port or pid."""
+"""``cadgen viewer stop`` — ask the CAD Viewer on a port (3245 unless ``--port``) to exit."""
 
 from __future__ import annotations
 

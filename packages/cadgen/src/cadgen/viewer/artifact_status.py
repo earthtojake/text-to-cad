@@ -6,8 +6,8 @@ matched to the document by declared output path) and this module reads it.
 
 The server answers status without loading the CAD kernel. Missing or damaged
 required geometry means not compiled. Complete native geometry means compiled;
-SURF derivation and browser pixels have separate lifecycles. Containment errors
-still raise before any store read.
+SURF derivation and browser pixels have separate lifecycles. A ref that is not an
+absolute path raises before any store read.
 
 The document's byte digest resolves through index/document to one immutable
 geometry tree. Its complete required closure must verify. Saved documents never
@@ -20,7 +20,7 @@ import json
 import os
 import re
 
-from .backend import require_contained
+from .backend import absolute_path
 from .store_paths import result_descriptor, result_tree
 
 __all__ = [
@@ -34,7 +34,6 @@ __all__ = [
 ]
 
 STEP_PACKAGE_KIND = "assembly-package"
-STEP_DESCRIPTOR_NAME = "assembly.json"
 
 # Artifacts only: model scripts are not status subjects.
 #
@@ -120,36 +119,16 @@ def owns_artifact_path(file_path) -> bool:
     return owns_step_path(file_path) or owns_dxf_path(file_path)
 
 
-def resolve_candidate(file_ref, root_dir) -> str | None:
-    """An absolute path INSIDE ``root_dir`` that EXISTS, or ``None``.
+def resolve_candidate(file_ref) -> str | None:
+    """The absolute path ``file_ref`` names when that file exists, else ``None``.
 
-    Backslashes become slashes before the absoluteness test, so on POSIX a
-    Windows-shaped ``C:\\x`` becomes ``C:/x`` and is treated as relative.
-
-    Containment is checked here and RAISES rather than answering ``None``,
-    which is the one place this module departs from "every read degrades to no".
-    It is not a read: an out-of-root ref is a refusal the route funnel turns
-    into 403, exactly as the asset route already did, and answering ``None``
-    would launder it into the far softer "Artifact source not found".
+    A ref that is not an absolute path RAISES (``ValueError``, a 400) rather than
+    answering ``None``, which is the one place this module departs from "every
+    read degrades to no": it is not a read but a request this server never takes,
+    and answering ``None`` would launder it into "Artifact source not found".
     """
-    normalized = str(file_ref or "").strip().replace("\\", "/")
-    if not normalized:
-        return None
-    if os.path.isabs(normalized):
-        candidate = os.path.abspath(normalized)
-    else:
-        # ``lstrip("/")`` alone does not make a relative ref safe: "../.." still
-        # walks out of the root once joined, which is why containment is
-        # enforced on the RESULT rather than on the spelling.
-        candidate = os.path.abspath(os.path.join(root_dir, normalized.lstrip("/")))
-    require_contained(os.path.abspath(str(root_dir)), candidate)
-    try:
-        exists = os.path.exists(candidate)
-    except ValueError:
-        # A NUL byte in the path. Node's existsSync answers false rather than
-        # throwing, and the caller turns that into "source not found".
-        return None
-    return candidate if exists else None
+    candidate = absolute_path(file_ref)
+    return candidate if os.path.exists(candidate) else None
 
 
 def _component_values(descriptor):
@@ -201,8 +180,8 @@ def _validate_step(step_path: str) -> dict:
     return {"ok": True, "tree": tree, "descriptor": descriptor}
 
 
-def resolve_artifact_verdict(file_ref, root_dir) -> dict:
-    candidate = resolve_candidate(file_ref, root_dir)
+def resolve_artifact_verdict(file_ref) -> dict:
+    candidate = resolve_candidate(file_ref)
     if candidate is None:
         return {"error": f"Artifact source not found: {file_ref}"}
     if owns_step_path(candidate):
@@ -212,7 +191,7 @@ def resolve_artifact_verdict(file_ref, root_dir) -> dict:
     return {"error": f"No render-artifact format owns this entry: {file_ref}"}
 
 
-def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
+def artifact_status(file_ref, *, snapshot=None, verdict=None) -> dict:
     """The ``GET /__cad/artifact`` state machine.
 
     ``snapshot`` is the build view from the daemon's job ledger
@@ -225,7 +204,7 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
     needs it again to decide whether to offer a compile.
     """
     if verdict is None:
-        verdict = resolve_artifact_verdict(file_ref, root_dir)
+        verdict = resolve_artifact_verdict(file_ref)
     if verdict.get("error"):
         return {"state": ARTIFACT_STATE.FAILED, "error": verdict["error"]}
 

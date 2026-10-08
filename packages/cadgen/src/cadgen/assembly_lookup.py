@@ -198,9 +198,9 @@ def _place_entity_row(matrix: list[float], row: Mapping[str, Any]) -> dict[str, 
 
 
 def _read_component_bundle(package_dir: Path, component: str):
-    """A component's topology bundle, from its exact-surface artifact
-    (design/surface-rendering.md R5). Pre-surf packages fail the schema
-    gate and rebuild before ever reaching here, so .surf is the only form."""
+    """A component's topology bundle, from its exact-surface artifact.
+    Pre-surf packages fail the schema gate and rebuild before ever reaching
+    here, so .surf is the only form."""
     surf_path = package_dir / COMPONENTS_DIRNAME / f"{component}.surf"
     if not surf_path.is_file():
         return None
@@ -228,12 +228,14 @@ def _component_occurrence_bbox(bundle: object) -> object:
 
 def assembly_occurrence_rows(
     descriptor: Mapping[str, Any],
-    package_dir: Path,
+    package_dir: Path | None,
 ) -> list[dict[str, Any]]:
     """Instance-tree occurrences as selector-index rows, in world coordinates at rest.
 
     Column names mirror the topology sidecar's ``occurrenceColumns`` so that consumers written
     against that table (``entry_summary``, ``reporting``) need no special case for assemblies.
+    With ``package_dir`` None no component's ``.surf`` is read and no row has a ``bbox``: the
+    rows are the occurrence namespace alone, what a kinematics mate's ends resolve in.
     """
     rows = descriptor.get("occurrences")
     if not isinstance(rows, list):
@@ -253,7 +255,7 @@ def assembly_occurrence_rows(
             if component not in bbox_by_component:
                 # Deduped by content hash: tom_v2 has 160 occurrences over 65 components, and
                 # the whole set reads in well under a second.
-                bundle = _read_component_bundle(package_dir, component)
+                bundle = _read_component_bundle(package_dir, component) if package_dir is not None else None
                 bbox_by_component[component] = _component_occurrence_bbox(bundle)
             local_bbox = bbox_by_component[component]
         materialized.append(
@@ -556,7 +558,7 @@ def assembly_group_nodes(descriptor: Mapping[str, Any]) -> dict[str, dict[str, A
 def merge_assembly_occurrences(
     index: SelectorIndex,
     descriptor: Mapping[str, Any],
-    package_dir: Path,
+    package_dir: Path | None,
 ) -> SelectorIndex:
     """Add the instance-tree occurrences to a flat whole-assembly index.
 

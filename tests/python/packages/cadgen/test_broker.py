@@ -38,7 +38,9 @@ class PrivateBrokerCleanup(unittest.TestCase):
                 if not release.wait(5):
                     raise TimeoutError("test did not release the accept owner")
 
-        with mock.patch.object(broker.transport.mpc.Listener, "accept", new=delayed_accept):
+        # close() waits a bounded time for its threads; this owner is held past it.
+        with mock.patch.object(broker.transport.mpc.Listener, "accept", new=delayed_accept), \
+                mock.patch.object(broker, "CLOSE_JOIN_SECONDS", 0.05):
             private = broker.PrivateBroker(limit=1)
             # Capture the stdlib unlink receipt to check both its active lifetime
             # and its idempotence after the accept owner disposes the listener.
@@ -79,6 +81,7 @@ class PrivateBrokerCleanup(unittest.TestCase):
                     parked.wait(30)
 
             transport.mpc.Listener.accept = delayed_accept
+            broker.CLOSE_JOIN_SECONDS = 0.05  # this owner is held past close's bounded wait
             private = broker.PrivateBroker(limit=1)
             assert entered.wait(2), 'accept did not begin'
             private.close()
@@ -97,6 +100,57 @@ class PrivateBrokerCleanup(unittest.TestCase):
         self.addCleanup(broker.transport.clear_address, address)
         self.assertEqual(completed.stderr, "", "process-exit finalizer wrote a traceback")
         self.assertFalse(Path(address).exists())
+
+
+class PrivateBrokerCloseWaits(unittest.TestCase):
+    """close() returns only once the broker's own threads have ended. A daemon thread
+    still returning from a socket call when the interpreter finalizes takes the GIL
+    from a dying runtime, which crashed a no-op build (SIGSEGV, sock_accept -> take_gil)."""
+
+    def test_close_returns_after_its_accept_thread_ends(self):
+        entered = threading.Event()
+        original_accept = broker.transport.mpc.Listener.accept
+
+        def slow_wakeup(listener):
+            entered.set()
+            try:
+                return original_accept(listener)
+            finally:
+                time.sleep(0.2)  # still busy when an unwaited close would have returned
+
+        with mock.patch.object(broker.transport.mpc.Listener, "accept", new=slow_wakeup):
+            private = broker.PrivateBroker(limit=1)
+            self.assertTrue(entered.wait(2), "accept did not begin")
+            private.close()
+        self.assertFalse(private._thread.is_alive(), "close returned while its accept thread ran")
+
+    def test_close_waits_for_a_request_in_flight(self):
+        private = broker.PrivateBroker(limit=1)
+        with mock.patch.dict(os.environ, private.env()):
+            before = set(threading.enumerate())
+            lease = broker.acquire_slot("held")
+            serving = set(threading.enumerate()) - before
+            release = threading.Timer(0.2, lease.release)
+            release.start()
+            private.close()
+            alive = [t for t in serving if t.is_alive()]  # read before the lease is surely gone
+            release.join()
+        self.assertTrue(serving, "no thread served the lease")
+        self.assertEqual(alive, [], "close returned while a request was served")
+
+    def test_close_returns_after_a_silent_peers_handshake_ends(self):
+        private = broker.PrivateBroker(limit=1)
+        before = set(threading.enumerate())
+        # Connected, challenged, and never answering: its handshake runs until close.
+        silent = broker.transport.mpc.Client(private.address, family=broker.transport._family())
+        self.addCleanup(silent.close)
+        self.assertTrue(silent.poll(10), "the broker sent no challenge")
+        self.assertTrue(silent.recv_bytes().startswith(b"#CHALLENGE#"))
+        handshakes = [t for t in set(threading.enumerate()) - before if t.name == "cadgen-handshake"]
+        self.assertTrue(handshakes, "no thread ran the handshake")
+        private.close()
+        alive = [t for t in handshakes if t.is_alive()]
+        self.assertEqual(alive, [], "close returned while a silent peer's handshake ran")
 
 
 class PrivateBrokerFixture(unittest.TestCase):

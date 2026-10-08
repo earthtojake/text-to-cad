@@ -5,9 +5,11 @@ import { syncRuntimeStepClipPlane } from "@text-to-cad/core/lib/viewer/modelRunt
 import { applyPartVisualState, FOCUSED_DIMMED_SURFACE_OPACITY, normalizePartIdList } from "@text-to-cad/core/lib/viewer/partVisualState.js";
 import { REFERENCE_HIGHLIGHT_WIDTH_MULTIPLIER, REFERENCE_SELECTED_COLOR } from "@text-to-cad/core/lib/viewer/referenceGeometry.js";
 import { syncDisplayMeshFaceIds, syncSelectorPickGroups } from "@text-to-cad/core/lib/viewer/selectorPickGroups.js";
+import { captureShadowCasters, shadowCastersChanged } from "@text-to-cad/core/lib/viewer/shadowCasters.js";
 import { BASE_VIEWER_THEME } from "@text-to-cad/core/lib/viewer/stageTheme.js";
 import { syncTopologyDisplayEdgeLine } from "@text-to-cad/core/lib/viewer/topologyDisplayEdgeLine.js";
 import { clamp } from "../../kit/camera/viewportCameraKit.js";
+import { requestSceneFrame } from "../../kit/viewport/sceneFrames.js";
 import { clearSceneGroup } from "./useStepSceneSync.js";
 import { explodedPickSelectorRuntime } from "@text-to-cad/core/common/topologyDisplayEdgeRuntime.js";
 
@@ -81,7 +83,8 @@ export function clearOverlayGroup(runtime, group) {
 /**
  * Hidden, isolated, hovered and selected parts, put ON the records the scene sync made
  * (`applyPartVisualState`). It runs when the part state or the display changes -- never for a
- * pose, which owns its own frame (`useStepPose.js`).
+ * pose, which owns its own frame (`useStepPose.js`). Hiding or isolating a part changes what
+ * casts a shadow; a hover or a selection does not, so its frame keeps the shadow maps.
  */
 export function useStepPartVisualState(layers) {
   const { viewport, props, policy, refs } = layers;
@@ -99,9 +102,10 @@ export function useStepPartVisualState(layers) {
       return;
     }
 
+    const casters = captureShadowCasters(runtime.displayRecords);
     applyPartVisualState(runtime.THREE, runtime.displayRecords, partVisualStateRef.current);
     runtime.cadScene?.syncSurfaceInstances();
-    runtime.requestRender();
+    requestSceneFrame(runtime, shadowCastersChanged(casters, runtime.displayRecords));
   }, [viewerReadyTick, partVisualStateEnabled, recordEdgesVisible, focusedPartIds, hiddenPartIds, hoveredPartId, pickMode, pickableParts, selectedPartIds, viewerTheme, visualEdgeSettings, normalizedDisplayMode]);
 
   useEffect(() => {
@@ -223,9 +227,9 @@ export function useStepLinework(layers) {
     highlightGroup.visible = highlightGroup.children.length > 0;
     // A frame for what THIS layer changed, and only that: a pass that had nothing drawn and
     // draws nothing (every pose with no part highlighted) leaves the frame to whoever moved
-    // the model (`useStepPose.js`).
+    // the model (`useStepPose.js`). Highlight lines cast nothing: the shadow maps are kept.
     const drawn = highlightGroup.children.length > 0;
-    if (drawn || runtime.partHighlightDrawn === true) runtime.requestRender();
+    if (drawn || runtime.partHighlightDrawn === true) requestSceneFrame(runtime, false);
     runtime.partHighlightDrawn = drawn;
 
     return () => {

@@ -2,10 +2,10 @@
 
 The one validator that is not a generated mirror: ``--package NAME=PATH`` is
 repeatable, and a repeatable key/value map is outside the annotation set a
-parser can be derived from (design/format-doors.md). So the parser is written
-here, its extra option is declared in the signature-sync policy test, and the
-body stays a shell: parse, call the verb, print the Result the same way every
-generated CLI does.
+parser can be derived from (:mod:`cadgen._internal.cli_from_function`). So the
+parser is written here, its extra option is declared in the signature-sync
+policy test, and the body stays a shell: parse, call the verb, print the
+Result the same way every generated CLI does.
 """
 
 from __future__ import annotations

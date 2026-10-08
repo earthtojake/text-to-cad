@@ -21,50 +21,48 @@ function browserTab(): { storage: Storage; record: () => TabRecordStorage } {
 test('a new tab starts at the defaults and two tabs never meet: each reload brings back its own tab\'s settings and file views alone', () => {
   const one = browserTab(), two = browserTab();
   const first = createTabStore(one.record());
-  // Tab one: the tree panel widened, the tree column widened, the appearance chosen, and the file in wireframe.
-  first.settings.update({ appearance: 'dark', toolStack: { panels: { tree: { width: 240 } }, collapsed: {}, closed: {} }, fileTree: { width: 300, expanded: {} } });
-  first.files.write('one', 'part.step', 'step', writeFileView({ display: { mode: 'wireframe' }, playback: { orbitSpeed: 3, autoplay: true } }) as never);
+  // Tab one: the tree panel widened, the appearance chosen, and the file in wireframe.
+  first.settings.update({ appearance: 'dark', toolStack: { panels: { tree: { width: 240 } }, collapsed: {}, closed: {} } });
+  first.files.write('/models/part.step', 'step', writeFileView({ display: { mode: 'wireframe' }, playback: { orbitSpeed: 3, autoplay: true } }) as never);
 
   // Tab two, in the same browser: none of it.
   const second = createTabStore(two.record());
   expect(second.getSnapshot()).toEqual(defaultTabRecord());
-  expect(second.settings.getSnapshot()).toEqual({ fileTree: { width: 220, expanded: {} }, toolStack: { panels: {}, collapsed: {}, closed: {} }, appearance: 'system', library: { layout: 'grid' } });
-  const fresh = readFileView(second.files.read('one', 'part.step', 'step'));
+  expect(second.settings.getSnapshot()).toEqual({ toolStack: { panels: {}, collapsed: {}, closed: {} }, appearance: 'system', library: { layout: 'grid' } });
+  const fresh = readFileView(second.files.read('/models/part.step', 'step'));
   expect([fresh.display.mode, fresh.playback]).toEqual(['solid', DEFAULT_PLAYBACK]);
   second.settings.update({ appearance: 'light' });
 
   // Tab one reloaded: its own settings and view, untouched by tab two.
   const reloaded = createTabStore(one.record());
   const settings = reloaded.settings.getSnapshot();
-  expect([settings.appearance, settings.toolStack.panels, settings.fileTree.width]).toEqual(['dark', { tree: { width: 240 } }, 300]);
-  const view = readFileView(reloaded.files.read('one', 'part.step', 'step'));
+  expect([settings.appearance, settings.toolStack.panels]).toEqual(['dark', { tree: { width: 240 } }]);
+  const view = readFileView(reloaded.files.read('/models/part.step', 'step'));
   expect([view.display.mode, view.playback.orbitSpeed, view.playback.autoplay]).toEqual(['wireframe', 3, true]);
 
   // Tab two reloaded: its own.
   const secondReloaded = createTabStore(two.record());
   expect(secondReloaded.settings.getSnapshot().appearance).toBe('light');
   expect(secondReloaded.settings.getSnapshot().toolStack).toEqual({ panels: {}, collapsed: {}, closed: {} });
-  expect(secondReloaded.files.read('one', 'part.step', 'step')).toBeUndefined();
+  expect(secondReloaded.files.read('/models/part.step', 'step')).toBeUndefined();
 });
 
-test("preview's Playback settings are the file's: kept across a reload of the tab, and another file (or the same path under another root) has its own defaults", () => {
+test("preview's settings are the file's: kept across a reload of the tab, and another file has its own defaults", () => {
   const tab = browserTab();
   const store = createTabStore(tab.record());
   // A fresh file: orbit on at 1×, the routine's own loop, Autoplay off.
-  expect(readFileView(store.files.read('one', 'part.step', 'step')).playback).toEqual({ orbit: true, orbitSpeed: 1, autoplay: false });
+  expect(readFileView(store.files.read('/models/part.step', 'step')).playback).toEqual({ orbit: true, orbitSpeed: 1, autoplay: false });
   // Orbit off, its speed 2×, Loop off, Autoplay on — the file's view as the shell writes it.
   const chosen = { orbit: false, orbitSpeed: 2, autoplay: true, loop: false };
-  store.files.write('one', 'part.step', 'step', writeFileView({ playback: chosen }) as never);
-  expect(readFileView(store.files.read('one', 'part.step', 'step')).playback).toEqual(chosen);
+  store.files.write('/models/part.step', 'step', writeFileView({ playback: chosen }) as never);
+  expect(readFileView(store.files.read('/models/part.step', 'step')).playback).toEqual(chosen);
 
   // A reload of the tab keeps every choice; the routine's speed stays its own until chosen.
   const reloaded = createTabStore(tab.record());
-  const kept = readFileView(reloaded.files.read('one', 'part.step', 'step')).playback;
+  const kept = readFileView(reloaded.files.read('/models/part.step', 'step')).playback;
   expect(kept).toEqual(chosen);
   expect('speed' in kept).toBe(false);
 
-  // Another file, and the same file under another root, start at the defaults.
-  for (const [root, path] of [['one', 'other.step'], ['two', 'part.step']]) {
-    expect(readFileView(reloaded.files.read(root, path, 'step')).playback, `${root}:${path}`).toEqual(DEFAULT_PLAYBACK);
-  }
+  // Another file starts at the defaults.
+  expect(readFileView(reloaded.files.read('/models/other.step', 'step')).playback).toEqual(DEFAULT_PLAYBACK);
 });

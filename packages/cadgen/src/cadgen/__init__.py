@@ -1,5 +1,6 @@
 """Shared CAD artifact generation runtime."""
 
+from functools import cache as _cache
 from typing import TYPE_CHECKING
 
 # Before anything imports build123d, which every cadgen entry point eventually does:
@@ -57,15 +58,15 @@ __all__ = [
 def __getattr__(name: str):
     if name in {"step", "dxf", "stl", "glb", "threemf"}:
         # A FORMAT NAMESPACE: the declaration decorator and the format's verbs in
-        # one callable module (design/format-doors.md). Returning the module
-        # rather than cadgen.authoring.<name> keeps a single identity —
+        # one callable module (cadgen._internal.format_namespace). Returning the
+        # module rather than cadgen.authoring.<name> keeps a single identity —
         # `import cadgen.stl` would otherwise shadow the decorator.
         import importlib
 
         return importlib.import_module(f"cadgen.{name}")
     if name in {"revolute", "slider", "cylindrical", "fastened", "couple"}:
         # Typed-mates kinematics vocabulary for the kinematics= dict on
-        # @step/@stl/@glb/@threemf (design/pose-animation-split.md).
+        # @step/@stl/@glb/@threemf.
         from cadgen import kinematics
 
         return getattr(kinematics, name)
@@ -139,6 +140,7 @@ if TYPE_CHECKING:
     from cadgen.step_topology_artifact import ensure_step_topology_artifact
 
 
+@_cache
 def _resolve_version() -> str:
     """The installed distribution version, falling back to pyproject in a source tree.
 
@@ -146,6 +148,10 @@ def _resolve_version() -> str:
     what `cadgen doctor` compares a skill's pinned requirement against. A bare source checkout
     has no metadata, so fall back to the pyproject this file ships beside — release
     tooling stamps it from the canonical VERSION, so the two never disagree.
+
+    Resolved once per process. The lookup lists every folder on ``sys.path``, and a
+    build puts the model's own folder there, which every save changes; the code that
+    answers cannot change under a running process anyway.
     """
     from importlib.metadata import PackageNotFoundError, version
 

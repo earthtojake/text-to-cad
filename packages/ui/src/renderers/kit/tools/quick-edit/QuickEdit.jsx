@@ -5,7 +5,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 import { promptReferenceIds } from "@text-to-cad/core/prompt";
 import { usePromptDestination, useViewerHost } from "../../../../host/context.js";
-import { FLOATING_SURFACE_CLASS } from "../floatingSurface.js";
+import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import ResizeGrip from "../ResizeGrip.jsx";
 import { TOOL_PANEL_BUTTON_CLASS } from "../ToolPanel.jsx";
 import { copiedQuickEdit, createQuickEditContext, quickEditSelection, sketchName } from "./quickEditPrompt.js";
@@ -40,8 +40,8 @@ export function quickEditReferenceIds(selection) {
  * in the prompt grammar; their ids on hover) and the view with its sketch while Draw has ink
  * (`sketch`). The file always goes and is not named. The buttons, bottom-right, are the ones this
  * host can carry out, the rightmost primary and pressed by Enter (Shift+Enter is a new line): Copy
- * Prompt always — the note as text to paste into an agent's prompt box, its references as copied
- * references are spelled (`referencePath`) and its sketch saved as a file it names
+ * Prompt always — the note as text to paste into an agent's prompt box, its references by their
+ * files' absolute paths and its sketch saved as a file it names
  * (`host.attachments`); Queue where the destination is a composer (the host's context for the next
  * message); Send where the host can post a message now (`promptContext.send`). Queue and Send
  * clear and close the box once the note has gone; Copy Prompt keeps it all (nothing has gone yet),
@@ -52,7 +52,7 @@ export function quickEditReferenceIds(selection) {
  * @param {{ resource: import("@text-to-cad/core/prompt").ResourceRef,
  *   references?: readonly import("@text-to-cad/core/prompt").PromptReference[],
  *   sketch?: { ink: boolean, capture(): Promise<Blob> } | null,
- *   referencePath?: (path: string) => string, onCopy?: () => boolean, onEscape?: () => unknown, onClear?: () => void, disabled?: boolean,
+ *   onCopy?: () => boolean, onEscape?: () => unknown, onClear?: () => void, disabled?: boolean,
  *   hidden?: boolean, className?: string, style?: import("react").CSSProperties }} props
  *   `onCopy`: the viewer's own copy (⌘C / Ctrl+C: the selection's references, or the drawing),
  *   which the key still reaches from the box while none of the note is selected. `onEscape`: the
@@ -60,7 +60,7 @@ export function quickEditReferenceIds(selection) {
  *   with a note keeps it, and Escape only hands the keyboard back to the view. `hidden`: out of
  *   sight with all it holds (the view is loading).
  */
-export default function QuickEdit({ resource, references = EMPTY, sketch = null, referencePath, onCopy, onEscape, onClear, disabled = false,
+export default function QuickEdit({ resource, references = EMPTY, sketch = null, onCopy, onEscape, onClear, disabled = false,
   hidden = false, className, style }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
@@ -134,7 +134,6 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
 
   const canQueue = destination.kind === "composer" && destination.available;
   const canSend = typeof host.promptContext.send === "function";
-  const spell = referencePath || (path => path);
   const ready = written && !pending && !disabled;
 
   // The note, and everything it would carry: the box goes with them.
@@ -162,7 +161,7 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
       else if (action === "queue") outcome = host.promptContext.deliver(context);
       else {
         const saved = picture && host.attachments ? picture.then(png => host.attachments.save(png, sketchName(resource))) : Promise.resolve(null);
-        outcome = host.clipboard.writeText(saved.then(sketchPath => copiedQuickEdit(context, { referencePath: spell, sketchPath })))
+        outcome = host.clipboard.writeText(saved.then(sketchPath => copiedQuickEdit(context, { sketchPath })))
           .then(() => ({ status: "copied" }));
       }
     } catch (caught) { outcome = Promise.reject(caught); }
@@ -170,6 +169,7 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
     Promise.resolve(outcome).then(result => {
       const message = failure(result);
       if (message) throw new Error(message);
+      try { host.usage?.used("quickEdit"); } catch { /* counting a use never fails it */ }
       if (action === "copy") showCopied();
       else clearAll();
     }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)))

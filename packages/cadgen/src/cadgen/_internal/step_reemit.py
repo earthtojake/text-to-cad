@@ -9,10 +9,10 @@ that land in ``OUT``'s sidecar.
 This is deliberately the SAME pipeline a model script runs. The scene is loaded
 from ``IN``, re-pathed to ``OUT``, and handed to ``_generate_part_outputs`` as a
 preloaded scene; everything downstream — package build, axis-ref resolution,
-bake, canonical emit, store publish, sidecar write — is the one implementation
-(design/pose-animation-split.md, CLI/doors follow-on). Two scene fields mark the
-re-emit so the sidecar writer records ``sourceKind: "step"`` with the INPUT's
-content hash as its closure instead of a Python provenance block.
+bake, canonical emit, store publish, sidecar write — is the one implementation.
+Two scene fields mark the re-emit so the sidecar writer records
+``sourceKind: "step"`` with the INPUT's content hash as its closure instead of
+a Python provenance block.
 
 Freshness has two independent halves, which is what makes a kinematics-only
 edit cheap:
@@ -97,9 +97,12 @@ def load_materials_config(raw: object, *, where: str) -> dict | None:
     return normalize_materials(raw, where=f"{where} --materials")
 
 
-def load_animation_source(raw: object, *, where: str) -> dict | None:
-    """Embed a JS input file or inline module source, never its source path."""
+def load_animation_source(raw: object, *, where: str, document: Path) -> dict | None:
+    """Embed a JS input file or inline module source, never its source path,
+    refusing what the renderer would refuse for ``document``'s animation."""
+    from cadgen._internal.animation_source import check_animation_exports
     from cadgen._internal.source_sidecar import normalize_animation
+    from cadgen.render import relative_to_cwd
 
     if raw is None:
         return None
@@ -108,7 +111,9 @@ def load_animation_source(raw: object, *, where: str) -> dict | None:
     text = raw.strip()
     if "\n" not in text and not text.startswith(("export ", "//", "/*", "const ", "let ", "var ", "class ", "async ", "function ")):
         text = Path(text).expanduser().read_text(encoding="utf-8")
-    return normalize_animation(text, where=f"{where} --animation")
+    animation = normalize_animation(text, where=f"{where} --animation")
+    check_animation_exports(animation["source"], name=f"{relative_to_cwd(Path(document))} animation")
+    return animation
 
 
 def annotation_digest(kinematics_def: Any | None, appearance: object = None, materials: object = None, animation: object = None) -> str:
@@ -251,21 +256,11 @@ def reemit_step_document(
         payload["annotationHash"] = digest
         payload.pop("kinematics", None)
         if kinematics_def is not None:
-            import shutil
-
             from cadgen._internal.kinematics_resolve import resolve_kinematics_block
-            from cadgen.store.view import export_view
 
-            view_dir = export_view(tree)
-            try:
-                resolved, _ids = resolve_kinematics_block(
-                    kinematics_def.block,
-                    package_dir=view_dir,
-                    step_path=out,
-                    source_ref=_display(out),
-                )
-            finally:
-                shutil.rmtree(view_dir, ignore_errors=True)
+            resolved, _ids = resolve_kinematics_block(
+                kinematics_def.block, tree_hash=tree, source_ref=_display(out),
+            )
             payload["kinematics"] = resolved
         if read_record(out) != record or not _recorded_outputs_current(record, out):
             raise RuntimeError(f"{_display(out)} changed while its annotations were being resolved")

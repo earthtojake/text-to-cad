@@ -179,19 +179,22 @@ test("macro tessellation changes the rendered surface and uses its own cache ent
   assert.equal(warm.meshData.indices.length, fine.meshData.indices.length);
 });
 
-test("warm packages split probes and small bodies at the host's 256-entry bound", async (t) => {
-  const component = {
-    positions: new Float32Array([0, 0, 0, 2, 0, 0, 0, 3, 0]),
-    normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
-    faceOrds: new Float32Array([1, 1, 1]),
-    indices: new Uint32Array([0, 1, 2]), sideOrds: new Uint32Array([1, 2, 3]),
-    faceRanges: [{ ord: 1, indexStart: 0, indexCount: 3 }], edges: [],
-    bounds: { min: [0, 0, 0], max: [2, 3, 0] }, scale: Math.sqrt(13),
-  };
+const WARM_COMPONENT = {
+  positions: new Float32Array([0, 0, 0, 2, 0, 0, 0, 3, 0]),
+  normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+  faceOrds: new Float32Array([1, 1, 1]),
+  indices: new Uint32Array([0, 1, 2]), sideOrds: new Uint32Array([1, 2, 3]),
+  faceRanges: [{ ord: 1, indexStart: 0, indexCount: 3 }], edges: [],
+  bounds: { min: [0, 0, 0], max: [2, 3, 0] }, scale: Math.sqrt(13),
+};
+
+/** A warm package of `count` cached components, loaded through an HTTP cache provider. */
+async function loadWarmPackage(t, count, providerOptions = {}) {
+  const component = WARM_COMPONENT;
   const surfaceObject = "a".repeat(64);
   const components = {}, componentUrls = {}, rows = {}, bodies = {};
   const occurrences = [];
-  for (let n = 0; n < 513; n += 1) {
+  for (let n = 0; n < count; n += 1) {
     const cid = `c${n}`, surfaceInput = createHash("sha256").update(cid).digest("hex");
     const key = tessellationCacheKey(surfaceInput);
     const body = encodeComponentTessellation(component, {
@@ -218,31 +221,47 @@ test("warm packages split probes and small bodies at the host's 256-entry bound"
       ) }));
     }
     assert.ok(String(url).endsWith("/batch"), "a warm package never fetches SURF");
-    batches.push(body.entries.length);
     assert.ok(body.entries.length <= 256);
     const payload = encodeTessellationCacheBatch(body.entries.map((entry) => bodies[entry.tessellationInput]));
+    batches.push({ count: body.entries.length, bytes: payload.byteLength });
     return new Response(payload, { headers: { "content-length": String(payload.byteLength) } });
   };
-  setTessellationCacheProvider(createHttpTessellationCacheProvider({ origin: "http://cache.test" }));
+  // Every body frames the same size here; options may be worked out from it.
+  const entryBytes = 4 + ((Object.values(bodies)[0].byteLength + 3) & ~3);
+  const options = typeof providerOptions === "function" ? providerOptions(entryBytes) : providerOptions;
+  setTessellationCacheProvider(createHttpTessellationCacheProvider({ origin: "http://cache.test", ...options }));
   const stageTimings = {};
   const source = await loadSource({ kind: "step", package: {
     descriptor: { components, occurrences, assembly: { root: { id: "root", nodeType: "assembly",
       children: occurrences.map(({ id }) => ({ id, nodeType: "part", children: [] })) } } }, componentUrls,
   } }, { stageTimings });
-  assert.deepEqual(probes, [256, 256, 1]);
-  assert.deepEqual(batches, [256, 256, 1]);
-  assert.equal(source.meshData.parts.length, 513);
+  assert.equal(source.meshData.parts.length, count);
   for (const part of source.meshData.parts) {
     assert.deepEqual(part.sourceMesh.vertices, component.positions);
     assert.deepEqual(part.sourceMesh.normals, component.normals);
     assert.deepEqual(part.sourceMesh.indices, component.indices);
   }
-  assert.equal(stageTimings.sourceLoad.cacheHitCount, 513);
+  assert.equal(stageTimings.sourceLoad.cacheHitCount, count);
   assert.equal(stageTimings.sourceLoad.cacheMissCount, 0);
   assert.equal(stageTimings.sourceLoad.cacheBatchCount, batches.length);
   assert.equal(stageTimings.sourceLoad.tessellateMs, undefined);
   assert.equal(stageTimings.sourceLoad.surfaceReadMs, undefined);
   assert.ok(stageTimings.sourceLoad.cacheReadMs >= 0);
+  return { probes, batches, options };
+}
+
+test("warm packages split probes and small bodies at the host's 256-entry bound", async (t) => {
+  const { probes, batches } = await loadWarmPackage(t, 513);
+  assert.deepEqual(probes, [256, 256, 1]);
+  assert.deepEqual(batches.map((batch) => batch.count), [256, 256, 1]);
+});
+
+test("a warm package's batches stay within the ceiling its cache's transport declares", async (t) => {
+  // A ceiling of 100 bodies, header included, groups by bytes long before the 256-entry bound,
+  // and every component is still read from the cache.
+  const { batches, options } = await loadWarmPackage(t, 250, (entryBytes) => ({ maxBatchBytes: 12 + 100 * entryBytes }));
+  assert.deepEqual(batches.map((batch) => batch.count), [100, 100, 50]);
+  assert.ok(batches.every((batch) => batch.bytes <= options.maxBatchBytes));
 });
 
 test("snapshot package appearance composes through the shared source resolver", async (t) => {

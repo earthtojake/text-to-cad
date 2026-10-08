@@ -1,6 +1,6 @@
 """STEP assembly from a tree's exact-shape component objects.
 
-The tree is the document of record (design/step-document-architecture.md):
+The tree is the document of record:
 ``components/<cid>.brep`` holds each part's exact geometry and the
 assembly.json holds the tree, placements, labels, colors, and mates. Writing
 the STEP file is therefore a pure ASSEMBLY step — read blobs once, place

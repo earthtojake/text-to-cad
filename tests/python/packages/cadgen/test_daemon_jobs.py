@@ -8,10 +8,12 @@ stays listed for a while after it finishes so a failure is still visible.
 
 from __future__ import annotations
 
+import json
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
@@ -75,6 +77,80 @@ class DeclaredOutputs(unittest.TestCase):
             script.write_text("def (\n", encoding="utf-8")
             self.assertEqual([], declared_outputs(str(script), "run"))
 
+    def test_a_project_read_again_after_another_reads_its_own_lib(self):
+        # The daemon reads every project's declarations in one process, and each
+        # project keeps its helpers in a package named `lib`: a, then b, then a again
+        # once its helper changed must evaluate a's `out=` from a's lib, not b's.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self.addCleanup(_forget_project_modules, root)
+            for name in ("a", "b"):
+                src = root / name / "src"
+                (src / "lib").mkdir(parents=True)
+                (src / "lib" / "__init__.py").write_text("", encoding="utf-8")
+                (src / "lib" / "dims.py").write_text(f"SIZE = '{name}1'\n", encoding="utf-8")
+                (src / f"{name}.py").write_text(
+                    "from cadgen import step\nfrom cadgen import build123d as bd\nfrom lib.dims import SIZE\n\n"
+                    f"@step(out='{name}_' + SIZE + '.step')\ndef {name}():\n    return bd.Box(1, 1, 1)\n",
+                    encoding="utf-8",
+                )
+
+            def declared(name):
+                return [Path(path).name for path in declared_outputs(str(root / name / "src" / f"{name}.py"), "run")]
+
+            self.assertEqual(["a_a1.step"], declared("a"))
+            self.assertEqual(["b_b1.step"], declared("b"))
+            (root / "a" / "src" / "lib" / "dims.py").write_text("SIZE = 'a2'\n", encoding="utf-8")
+            self.assertEqual(["a_a2.step"], declared("a"))
+
+    def test_a_script_that_stops_importing_is_listed_against_what_it_declared_last(self):
+        # An edit that breaks a helper fails the build at import, which is also where its
+        # declarations are read: the job is still listed against the document the script
+        # writes, so the viewer showing that document gets the failure, not silence.
+        from cadgen.viewer.build_progress import build_progress_snapshot
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self.addCleanup(_forget_project_modules, root)
+            (root / "lib").mkdir()
+            (root / "lib" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "lib" / "dims.py").write_text("SIZE = 2\n", encoding="utf-8")
+            script = root / "part.py"
+            script.write_text(
+                "from cadgen import step\nfrom cadgen import build123d as bd\nfrom lib.dims import SIZE\n\n"
+                "@step\ndef part():\n    return bd.Box(SIZE, SIZE, SIZE)\n",
+                encoding="utf-8",
+            )
+            output = str(script.with_suffix(".step").resolve())
+            clock = Clock()
+            ledger = JobLedger(clock=clock)
+            built = ledger.start(tool="run", subject=str(script))
+            self.assertEqual([output], built["outputs"])
+            ledger.finish(built, 0)
+
+            (root / "lib" / "dims.py").write_text("SIZE = undefined_name\n", encoding="utf-8")
+            clock.now += 1
+            broken = ledger.start(tool="run", subject=str(script))
+            self.assertEqual([output], broken["outputs"])
+            ledger.finish(broken, 1, error="NameError: name 'undefined_name' is not defined")
+            status = build_progress_snapshot(output, jobs=ledger.snapshot())
+            self.assertEqual("NameError: name 'undefined_name' is not defined", status["failed"]["error"])
+
+            # A daemon that never read the script has nothing to list it against.
+            self.assertEqual([], JobLedger(clock=Clock()).start(tool="run", subject=str(script))["outputs"])
+
+
+def _forget_project_modules(root: Path) -> None:
+    """Drop what a test's projects left in this process: their modules, sys.path roots."""
+    import sys
+
+    prefix = str(root)
+    for name, module in list(sys.modules.items()):
+        paths = [getattr(module, "__file__", None), *[str(entry) for entry in getattr(module, "__path__", None) or ()]]
+        if any(path and str(path).startswith(prefix) for path in paths):
+            sys.modules.pop(name, None)
+    sys.path[:] = [entry for entry in sys.path if not entry.startswith(prefix)]
+
 
 class Lifecycle(unittest.TestCase):
     def setUp(self) -> None:
@@ -108,14 +184,29 @@ class Lifecycle(unittest.TestCase):
                                            preview={"output": output, "tree": tree, "kinematics": {"mates": []}}))
         snapshot = self.ledger.snapshot()[0]
         self.assertEqual(snapshot["previews"][output]["tree"], "latest")
-        snapshot["previews"][output]["kinematics"]["mates"].append("mutation")
-        self.assertEqual(self.ledger.snapshot()[0]["previews"][output]["kinematics"]["mates"], [])
+        snapshot["previews"][output]["tree"] = "mutation"
+        self.assertEqual(self.ledger.snapshot()[0]["previews"][output]["tree"], "latest")
         self.ledger.observe(self._event(self.model, "done", job=job["id"]))
         self.assertEqual(job["state"], "building", "one model completing does not finish a multi-model request")
         self.ledger.finish(job, 0)
         self.assertEqual(job["state"], "done")
         self.ledger.observe(self._event(self.model, "building", job=job["id"], sequence=100))
         self.assertEqual(job["state"], "done", "late forwarded events cannot reopen completed requests")
+
+    def test_a_job_keeps_only_what_its_readers_read_of_a_result(self):
+        # The viewer's status reads a saved result's tree and digest; nothing reads
+        # a preview's annotations, so a payload carrying them keeps none.
+        job = self.ledger.start(tool="run", subject=self.model)
+        output = str(Path(self.model).with_suffix(".step"))
+        self.ledger.observe(self._event(self.model, "building", job=job["id"], sequence=1, preview={
+            "output": output, "tree": "source", "kinematics": {"mates": [1] * 1000}, "appearance": {},
+            "animation": "export const clips = {};", "surfaceProducer": {"scheme": 19}}))
+        self.ledger.observe(self._event(self.model, "building", job=job["id"], sequence=2, saved={
+            "output": output, "tree": "document", "documentHash": "abc", "appearance": {"materials": {}}}))
+        snapshot = self.ledger.snapshot()[0]
+        self.assertEqual(snapshot["previews"][output], {"output": output, "tree": "source", "sequence": 1})
+        self.assertEqual(snapshot["savedResults"][output],
+                         {"output": output, "tree": "document", "documentHash": "abc", "sequence": 2})
 
     def test_parent_announcements_cannot_claim_child_preview_and_epochs_are_unique(self):
         parent = self.ledger.start(tool="run", subject=self.model)
@@ -139,6 +230,18 @@ class Lifecycle(unittest.TestCase):
         self.ledger.finish(job, 0)
         listed = self.ledger.snapshot()[0]
         self.assertEqual(("done", 0), (listed["state"], listed["exit"]))
+
+    def test_a_job_waiting_for_a_worker_says_so_until_it_has_one(self):
+        # Nothing the job runs can say this: its worker does not exist yet.
+        job = self.ledger.start(tool="run", subject=self.model)
+        self.ledger.waiting(job, "Starting a geometry kernel")
+        listed = self.ledger.snapshot()[0]
+        self.assertEqual(("queued", "queued", "Starting a geometry kernel"),
+                         (listed["state"], listed["phase"], listed["detail"]))
+        self.ledger.waiting(job, None)
+        self.ledger.observe(self._event(self.model, "building", job=job["id"], phase="generate"))
+        listed = self.ledger.snapshot()[0]
+        self.assertEqual(("building", "generate", ""), (listed["state"], listed["phase"], listed["detail"]))
 
     def test_a_non_zero_exit_is_a_failed_job(self):
         job = self.ledger.start(tool="run", subject=self.model)
@@ -201,6 +304,44 @@ class Lifecycle(unittest.TestCase):
     def test_a_transition_for_an_unknown_finished_job_is_ignored(self):
         self.ledger.observe(self._event(self.model, "done"))
         self.assertEqual([], self.ledger.snapshot())
+
+
+class WaitingForAWorker(unittest.TestCase):
+    def test_a_request_is_listed_as_starting_a_worker_until_it_has_one(self):
+        from cadgen.daemon import server
+
+        ledger, seen, sent = JobLedger(), {}, []
+
+        class Worker:  # runs the job at once
+            pid, extra = 7, False
+
+            def send(self, request):
+                seen["sent"] = ledger.snapshot()[0]
+
+            def frames(self, **_kwargs):
+                yield {"exit": 0, "pid": self.pid}
+
+            def alive(self):
+                return True
+
+        def acquire(model, *, dependency, on_start):
+            on_start()  # no warm worker: the pool starts one for this request
+            seen["starting"] = ledger.snapshot()[0]
+            return Worker()
+
+        worker_pool = mock.Mock()
+        worker_pool.acquire.side_effect = acquire
+        conn = mock.Mock()
+        conn.send.side_effect = lambda raw: sent.append(json.loads(raw))
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(server, "_POOL", worker_pool), \
+                mock.patch.object(server, "_JOBS", ledger), mock.patch.object(server, "_watch_client"), \
+                mock.patch.object(server, "_log"):
+            server._handle_request(conn, {"tool": "run", "argv": ["widget.py"], "cwd": tmp})
+        self.assertEqual(("queued", "Starting a geometry kernel"),
+                         (seen["starting"]["state"], seen["starting"]["detail"]))
+        self.assertEqual("", seen["sent"]["detail"], "the wait was over before the job reached its worker")
+        self.assertEqual({"exit": 0}, sent[-1])
+        self.assertEqual("done", ledger.snapshot()[0]["state"])
 
 
 class FailureMessageTest(unittest.TestCase):

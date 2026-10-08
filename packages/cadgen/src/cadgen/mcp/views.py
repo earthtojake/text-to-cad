@@ -127,11 +127,12 @@ class ViewRegistry:
         return delivered
 
     def poll(self, view_id: str) -> list[dict[str, Any]]:
-        """Hand over the events waiting for ``view_id``, at once: a poll never waits (see above)."""
+        """Hand over the events waiting for ``view_id``, at once: a poll never waits (see above). A
+        view forgotten while its sync was in flight (it closed) has none."""
         with self._cond:
             view = self._views.get(view_id)
             if view is None:
-                return [{"type": "unknown-view"}]
+                return []
             view.seen = self._clock()
             events, view.events = view.events, []
             return events

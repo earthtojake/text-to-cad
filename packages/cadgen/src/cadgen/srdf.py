@@ -1,7 +1,7 @@
 """The public ``srdf`` namespace: the verbs that operate on MoveIt2 SRDFs.
 
 No decorator, for the reason :mod:`cadgen.urdf` gives. ``cadgen srdf validate``
-is a generated MIRROR of :func:`validate` (design/format-doors.md).
+is a generated MIRROR of :func:`validate` (README law 6).
 
 An SRDF is only meaningful against its URDF, and that context is resolved rather
 than passed: the paired URDF is found from the SRDF's robot name and directory,

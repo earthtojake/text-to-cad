@@ -15,7 +15,7 @@ import { PNG } from 'pngjs';
 // `__fixtures__/README.md` says how to regenerate the pair.
 const SAMPLE = JSON.parse(await readFile(new URL('./__fixtures__/sample.drawing.json', import.meta.url), 'utf8'));
 // A drawing whose modelspace is empty: `bounds: null`, and nothing to frame.
-const EMPTY = { schemaVersion: 1, units: SAMPLE.units, bounds: null, layers: [], primitives: [] };
+const EMPTY = { schemaVersion: SAMPLE.schemaVersion, units: SAMPLE.units, bounds: null, layers: [], fonts: [], primitives: [] };
 const BAD_DXF_MESSAGE = 'plate.dxf is not a readable DXF document: run `ezdxf audit` on it, or export it again.';
 
 // The fixture's own measurements, so an assertion can say WHICH edge it is reading.
@@ -40,16 +40,17 @@ before(async () => {
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
     else if (url.pathname.endsWith('/__cad/drawing')) {
-      const drawing = DRAWINGS[url.searchParams.get('file')];
+      // Asked for by the file's absolute path, which names the fixture last.
+      const drawing = DRAWINGS[String(url.searchParams.get('file')).split('/').pop()];
       response.setHeader('Content-Type', 'application/json');
       if (!drawing) { response.statusCode = 400; response.end(JSON.stringify({ error: BAD_DXF_MESSAGE })); return; }
       response.end(JSON.stringify(drawing));
     } else if (url.pathname.endsWith('/__cad/catalog')) {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: files.map(file => (
-        { kind: 'dxf', file, rootRelativeFile: file, url: `/${file}`, hash: `${root}-${file}`, bytes: 4096 })) }));
+      response.end(JSON.stringify({ entries: files.map(file => (
+        { kind: 'dxf', file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: 4096 })) }));
     } else if (url.pathname.endsWith('/__cad/server')) {
-      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
+      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
     } else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -355,7 +356,7 @@ test('the view a person chose comes back when the tab is reopened', async (t) =>
   await wheelAt(page, canvas, { x: canvas.width * 0.35, y: canvas.height * 0.6 }, deltaForFactor(3));
   const chosen = inkBox(await frame(pane, fittedShot));
 
-  const key = JSON.stringify(['sample.dxf', 'dxf']);
+  const key = JSON.stringify(['/models/sample.dxf', 'dxf']);
   await page.waitForFunction(stateKey => window.cadHarness.state.renderers?.[stateKey]?.camera?.scale > 0, key);
   const record = await page.evaluate(stateKey => window.cadHarness.state.renderers[stateKey], key);
   assert.equal(record.version, 2);

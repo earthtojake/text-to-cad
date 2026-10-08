@@ -2,7 +2,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Boxes, Circle, CornerUpRight, Focus, Layers, RotateCw, Shapes, Spline, SquareDashed } from 'lucide-react';
 import { Button } from '@text-to-cad/ui/primitives/button';
-import { TREE_ROW_DENSE_HEIGHT, TREE_ROW_DENSE_ICON_CLASS, TreeRowSurface, TreeRowChevron, TreeRowLabel } from '@text-to-cad/ui/primitives/tree-row';
+import { TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_DENSE_HEIGHT, TREE_ROW_DENSE_ICON_CLASS, TreeRowSurface, TreeRowChevron, TreeRowGuides, TreeRowLabel } from '@text-to-cad/ui/primitives/tree-row';
 import { TreeFilterHighlight, TreeFilterInput } from '@text-to-cad/ui/primitives/tree-filter';
 import { cn } from '@text-to-cad/ui/utils';
 import ModelPartMenu, { FeatureReferencesContext } from './ModelPartMenu.jsx';
@@ -82,10 +82,10 @@ function findNodeLabel(nodes, selectionId) {
 // The disclosure a row shows: a button, or — while the Select mode decides the tree's shape
 // (`TREE_SHAPES`) — the same chevron as a mark nobody can press.
 function Disclosure({ node, open, locked, toggle }) {
-  if (locked) return <span aria-hidden="true" data-disclosure-locked={open ? "open" : "shut"} className="grid h-6 w-4 shrink-0 place-items-center opacity-50"><TreeRowChevron expanded={open} dense/></span>;
+  if (locked) return <span aria-hidden="true" data-disclosure-locked={open ? "open" : "shut"} className="grid h-6 w-4 shrink-0 place-items-center opacity-50"><TreeRowChevron expanded={open}/></span>;
   return <button type="button" aria-label={`${open ? 'Collapse' : 'Expand'} ${node.label}`} aria-expanded={open}
     className="grid h-6 w-4 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring"
-    onClick={()=>toggle(node)}><TreeRowChevron expanded={open} dense/></button>;
+    onClick={()=>toggle(node)}><TreeRowChevron expanded={open}/></button>;
 }
 
 // One row of the tree, the rows under it drawn after it by the list (`visibleRows`). Its props
@@ -101,13 +101,15 @@ function ModelingRow({ node, depth, open, branch, locked, disabled, selected, jo
   return <ModelPartMenu node={node} controls={partControls} feature={feature} disabled={disabled}>
     <TreeRowSurface dense active={selected} className={cn('group/row relative gap-0 pr-0', hiddenByOwner && 'opacity-50')}
       onMouseEnter={() => partControls.onHoverTreeNode?.(node.selectionId || node.occurrenceId || '')}
-      onMouseLeave={() => partControls.onHoverTreeNode?.('')} style={{paddingLeft:depth*12, ...joinedCorners(joinAbove, joinBelow), ...(actionsWidth && {'--row-actions':actionsWidth})}}>
+      onMouseLeave={() => partControls.onHoverTreeNode?.('')} style={{paddingLeft:depth*TREE_INDENT_PX, ...joinedCorners(joinAbove, joinBelow), ...(actionsWidth && {'--row-actions':actionsWidth})}}>
+      {/* Its owners' faint lines, each under its 16px disclosure column. */}
+      <TreeRowGuides depth={depth} column={16}/>
       {branch ? <Disclosure node={node} open={open} locked={locked} toggle={toggle}/> : <span className="w-4 shrink-0"/>}
       <TooltipHint content={node.label} overflowOnly><button type="button" aria-label={`Select ${node.label}`} aria-pressed={selected}
         disabled={disabled || unavailable || !(node.selectionId || node.memberSelectionIds?.length || node.faces?.length || node.edges?.length)}
         onClick={event=>{if(event.detail < 2)choose(node,event);}} onDoubleClick={event=>choose(node,event)}
         className={cn('flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40', underActions)}>
-        <Icon className={TREE_ROW_DENSE_ICON_CLASS}/><TreeRowLabel className="flex-1">{node.label}</TreeRowLabel>
+        <Icon className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE}/><TreeRowLabel className="flex-1">{node.label}</TreeRowLabel>
       </button></TooltipHint>
       {node.selectionId && <ModelPartActions node={node} controls={partControls} disabled={disabled}/>}
     </TreeRowSurface>
@@ -133,7 +135,7 @@ function ModelingSearchRow({ match, index, availability, selected, joinAbove, jo
         disabled={disabled || unavailable || !(node.selectionId || node.faces?.length || node.edges?.length)}
         onClick={event=>{if(event.detail < 2)choose(node,event);}} onDoubleClick={event=>choose(node,event)}
         className={cn('flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pl-2 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40', underActions)}>
-        <Icon className={TREE_ROW_DENSE_ICON_CLASS}/>
+        <Icon className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE}/>
         {/* Name first: in a narrow panel a deep owner path takes the truncation, never the name. */}
         <TreeRowLabel className="max-w-full shrink-0"><TreeFilterHighlight indices={indices} text={entry.label}/></TreeRowLabel>
         {entry.prefix && <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{entry.prefix.slice(0,-1)}</TreeRowLabel>}

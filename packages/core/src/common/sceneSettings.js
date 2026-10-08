@@ -15,7 +15,7 @@ import {
   cloneThemePresetSettings,
   normalizeThemeSettings
 } from "./themeSettings.js";
-import { resolveViewSettings } from "./viewSettings.js";
+import { RENDER_FLOOR_PLACEMENT, resolveViewSettings } from "./viewSettings.js";
 
 const SCENE_APPEARANCE = Object.freeze({
   SYSTEM: "system",
@@ -112,7 +112,8 @@ export const RENDER_BACKDROP_KEYS = Object.freeze([
   "ground",
   "groundPlacement",
   "groundColor",
-  "groundOpacity"
+  "groundOpacity",
+  "groundFinish"
 ]);
 
 const RENDER_STUDIO_IDS = new Set(RENDER_STUDIO_PRESETS.map((preset) => preset.id));
@@ -125,13 +126,15 @@ export const DEFAULT_RENDER_LIGHTING = Object.freeze({
   fill: 0.25
 });
 
-// Keep the authored origin as the default reference; opacity lets geometry
-// below that plane remain visible. "lowest" follows the current model bounds.
+// Render's floor stands at the model's lowest point, following the current model bounds, as the
+// Display preset's does (`RENDER_FLOOR_PLACEMENT`); "origin" keeps it at the authored Z=0 plane,
+// where its opacity lets geometry below that plane remain visible.
 export const DEFAULT_RENDER_BACKDROP = Object.freeze({
   transparent: false,
   ground: true,
-  groundPlacement: "origin",
-  groundOpacity: 0.6
+  groundPlacement: RENDER_FLOOR_PLACEMENT,
+  groundOpacity: 0.6,
+  groundFinish: "matte"
 });
 
 const STUDIO_BACKDROP_COLORS = Object.freeze({
@@ -212,6 +215,9 @@ function validateRenderBackdrop(value) {
   if (Object.hasOwn(value, "ground")) validateBoolean(value.ground, "render.backdrop.ground");
   if (Object.hasOwn(value, "groundPlacement") && !["origin", "lowest"].includes(value.groundPlacement)) {
     throw new Error("render.backdrop.groundPlacement must be origin or lowest");
+  }
+  if (Object.hasOwn(value, "groundFinish") && !["matte", "glossy"].includes(value.groundFinish)) {
+    throw new Error("render.backdrop.groundFinish must be matte or glossy");
   }
 }
 
@@ -311,7 +317,8 @@ function resolveRenderConfiguration(render = {}, appearance = SCENE_APPEARANCE.L
       ground: payload.backdrop?.ground ?? DEFAULT_RENDER_BACKDROP.ground,
       groundPlacement: payload.backdrop?.groundPlacement ?? DEFAULT_RENDER_BACKDROP.groundPlacement,
       groundColor: payload.backdrop?.groundColor || payload.backdrop?.color || STUDIO_GROUND_COLORS[studio],
-      groundOpacity: payload.backdrop?.groundOpacity ?? DEFAULT_RENDER_BACKDROP.groundOpacity
+      groundOpacity: payload.backdrop?.groundOpacity ?? DEFAULT_RENDER_BACKDROP.groundOpacity,
+      groundFinish: payload.backdrop?.groundFinish ?? DEFAULT_RENDER_BACKDROP.groundFinish
     }
   };
 }
@@ -570,7 +577,8 @@ export function resolveViewSceneSettings({
       ground: view.floor.enabled,
       groundPlacement: view.floor.placement,
       groundColor: view.floor.color,
-      groundOpacity: view.floor.opacity
+      groundOpacity: view.floor.opacity,
+      groundFinish: view.floor.finish
     },
     camera: cameraSettings
   } : null;

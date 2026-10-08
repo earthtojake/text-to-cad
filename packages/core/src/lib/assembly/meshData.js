@@ -393,6 +393,25 @@ function equalBounds(left, right) {
     && equalVector(left.min, right.min) && equalVector(left.max, right.max));
 }
 
+const isFinitePoint = (point) => Array.isArray(point) && point.length === 3
+  && point.every((value) => typeof value === "number" && Number.isFinite(value));
+
+// The box the package DECLARES for its whole model: assembly.json's `bbox`, which cadgen
+// measures on the exact B-rep with every occurrence (linked children too) at its placement,
+// in world millimetres, the frame the parts below are placed in. It is there before any
+// component has loaded, so a model that arrives in pieces can be framed once, whole, on its
+// first publish. No box, a malformed one or another unit is null, and a reader falls back to
+// `bounds` (what has loaded). Nothing that reads `bounds` sees it.
+function declaredPackageBounds(descriptor, previous = null) {
+  const units = descriptor?.units;
+  if (units !== undefined && units !== null && units !== "mm") return null;
+  const box = descriptor?.bbox;
+  if (!isFinitePoint(box?.min) || !isFinitePoint(box?.max)
+    || box.min.some((value, axis) => value > box.max[axis])) return null;
+  const declared = { min: Object.freeze([...box.min]), max: Object.freeze([...box.max]) };
+  return equalBounds(previous, declared) ? previous : Object.freeze(declared);
+}
+
 function equalJsonValue(left, right) {
   if (left === right && (!left || typeof left !== "object")) return true;
   if (Array.isArray(left) || Array.isArray(right)) {
@@ -556,7 +575,11 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
       triangleCount: meshPartNumericValue(sourcePart, "triangleCount")
     }));
 
-    const bounds = boundsForTransformedBox(componentMeshData?.bounds, matrix);
+    // Only triangles are drawn (resolvePartsToRender skips a part without them,
+    // edges and all), so a component with none, an empty product entry or wires
+    // only, keeps its occurrence but extends no camera bounds.
+    const drawn = sourceVertices.length >= 3 && (componentMeshData?.indices?.length || 0) >= 3;
+    const bounds = drawn ? boundsForTransformedBox(componentMeshData?.bounds, matrix) : null;
     // An XCAF label entry (`=>[0:1:1:2]`) is no name: the occurrence then goes by its id.
     const displayName = String(stepProductName(occurrence?.name) || occurrenceId || cid || meshPartId(sourceParts[0])).trim();
     const part = {
@@ -620,6 +643,7 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
     bounds: assemblyRoot && assemblyRoot === previous?.assemblyRoot
       ? previous.bounds
       : mergeBounds(parts.map((part) => part.bounds)),
+    declaredBounds: declaredPackageBounds(descriptor, previous?.declaredBounds),
     missingComponentIds,
     // Each occurrence is placed by its transform at render time over shared component
     // geometry (each part carries its own sourceMesh above); nothing here is baked into

@@ -2,7 +2,7 @@
   "name": "@text-to-cad/mcp",
   "private": true,
   "type": "module",
-  "version": "0.7.9",
+  "version": "0.7.17",
   "scripts": {
     "build": "vite build",
     "test": "node scripts/run-tests.mjs",
@@ -11,19 +11,21 @@
   "dependencies": {
     "@text-to-cad/core": "*",
     "@text-to-cad/ui": "*",
-    "lucide-react": "^1.48.0",
-    "meshoptimizer": "^1.2.0",
+    "lucide-react": "^1.52.0",
+    "meshoptimizer": "^1.3.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "three": "0.186.1"
   },
   "devDependencies": {
+    "@jridgewell/remapping": "^2.3.5",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/react": "16.3.3",
     "@vitejs/plugin-react": "^6.1.1",
-    "jsdom": "30.1.1",
+    "jsdom": "30.1.2",
+    "magic-string": "^0.30.21",
     "tailwindcss": "^4.2.2",
-    "vite": "^8.3.0",
-    "vitest": "5.0.1"
+    "vite": "^8.3.2",
+    "vitest": "5.0.3"
   }
 }

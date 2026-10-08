@@ -89,18 +89,41 @@ function partIdsForOccurrenceRefs(meshData, target) {
   return ids.length ? ids : null;
 }
 
+// What each target names, per occurrence table. A routine asks for the same
+// targets on every frame, and a comma list of occurrence ids is a scan of every
+// part per id: on the hypercar's showcase that was about 4 ms of each frame's
+// 7 ms pose pass. The table is read-only here, so its parts array keys the index,
+// and a new table (a rebuild, a progressive publish) is a new array and a new index.
+const targetIndexes = new WeakMap();
+
+function targetIndex(meshData) {
+  const parts = Array.isArray(meshData?.parts) ? meshData.parts : null;
+  let index = parts ? targetIndexes.get(parts) : null;
+  if (!index) {
+    index = { byLabel: partIdsByLabel(meshData), resolved: new Map() };
+    if (parts) targetIndexes.set(parts, index);
+  }
+  return index;
+}
+
 // One frame's evaluation surface. Collects per-part effects; the caller
 // applies them to display records exactly like pose/step-module effects.
 export function createAnimationFrame(THREE, meshData) {
-  const byLabel = partIdsByLabel(meshData);
+  const { byLabel, resolved } = targetIndex(meshData);
   const matrices = new Map(); // partId -> THREE.Matrix4
   const styles = new Map(); // partId -> {opacity?, visible?}
   const deformations = new Map(); // partId -> analytic rest/posed tube paths
 
   const handleFor = (label) => {
-    const partIds = byLabel.get(String(label).replace(/^#/, ""))
-      || byLabel.get(String(label))
-      || partIdsForOccurrenceRefs(meshData, label);
+    const target = String(label);
+    let partIds = resolved.get(target);
+    if (partIds === undefined) {
+      partIds = byLabel.get(target.replace(/^#/, ""))
+        || byLabel.get(target)
+        || partIdsForOccurrenceRefs(meshData, label)
+        || null;
+      resolved.set(target, partIds);
+    }
     if (!partIds || !partIds.length) {
       const known = [...byLabel.keys()].sort().join(", ") || "(none)";
       throw new Error(`animation: no occurrence labeled ${JSON.stringify(label)}; labels: ${known}`);

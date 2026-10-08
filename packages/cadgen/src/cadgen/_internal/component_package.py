@@ -175,6 +175,20 @@ def _world_leaves(wrapped: Any) -> list[Any]:
     return leaves
 
 
+def component_leaf_layout(wrapped: Any) -> dict[str, Any]:
+    """How a prototype's leaves sit: ``{"leaves": n, "placed": bool}``.
+
+    ``placed`` is True when every leaf of the UNLOCATED prototype carries the
+    identity location, so placing the prototype places each leaf at exactly the
+    prototype's own placement and the leaf's measured box key is the
+    prototype's rotation. A pure function of the encoded bytes.
+    """
+    from OCP.TopLoc import TopLoc_Location
+
+    leaves = _world_leaves(wrapped.Located(TopLoc_Location()))
+    return {"leaves": len(leaves), "placed": all(leaf.Location().IsIdentity() for leaf in leaves)}
+
+
 def _bbox_from_shape(shape: Any) -> dict[str, list[float]] | None:
     """The world-frame axis-aligned bounding box of a composed shape, as the
     ``{"min": [...], "max": [...]}`` the assembly.json records so a cheap whole-entry
@@ -196,46 +210,53 @@ def _bbox_from_shape(shape: Any) -> dict[str, list[float]] | None:
     assembly of 470 prototypes serializes 470 shapes, not 2400.
     """
     try:
-        from OCP.TopLoc import TopLoc_Location
-        from OCP.gp import gp_Vec
-
-        from cadgen.store.bounds import cached_box
-
-        boxes = []
-        digests: dict[Any, str] = {}
-        for leaf in _world_leaves(shape.wrapped):
-            transform = leaf.Location().Transformation()
-            translation = tuple(transform.TranslationPart().Coord())
-            transform.SetTranslationPart(gp_Vec(0.0, 0.0, 0.0))
-            untranslated = leaf.Located(TopLoc_Location(transform))
-            try:
-                tshape = leaf.TShape()
-                digest = digests.get(tshape)
-            except TypeError:  # an unhashable native handle: digest this leaf alone
-                tshape, digest = None, None
-            if digest is None:
-                digest = hashlib.sha256(_shape_brep_bytes(untranslated)).hexdigest()
-                if tshape is not None:
-                    digests[tshape] = digest
-            rotation = struct.pack("<12d", *(transform.Value(row, column)
-                                             for row in range(1, 4) for column in range(1, 5)))
-            box = cached_box(
-                # The name names the FUNCTION: change what this computes and
-                # change the name with it.
-                "occurrence_bbox.optimal.untranslated.v2",
-                (digest, rotation),
-                lambda untranslated=untranslated: optimal_box(untranslated),
-            )
-            if box is not None:
-                boxes.append([value + translation[index % 3] for index, value in enumerate(box)])
-        if not boxes:
-            return None
-        return {
-            "min": [min(box[axis] for box in boxes) for axis in (0, 1, 2)],
-            "max": [max(box[axis] for box in boxes) for axis in (3, 4, 5)],
-        }
+        return _leaf_bounds(shape)
     except Exception:  # noqa: BLE001 - OCP bounds reads can raise on odd shapes; a component without bounds is None
         return None
+
+
+def _leaf_bounds(shape: Any) -> dict[str, list[float]] | None:
+    """:func:`_bbox_from_shape`, raising where it answers None for a failure:
+    None here means only that no leaf has bounds. Leaves are merged in the
+    order :func:`_world_leaves` yields them, the first of equal values kept."""
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.gp import gp_Vec
+
+    from cadgen.store.bounds import cached_box
+
+    boxes = []
+    digests: dict[Any, str] = {}
+    for leaf in _world_leaves(shape.wrapped):
+        transform = leaf.Location().Transformation()
+        translation = tuple(transform.TranslationPart().Coord())
+        transform.SetTranslationPart(gp_Vec(0.0, 0.0, 0.0))
+        untranslated = leaf.Located(TopLoc_Location(transform))
+        try:
+            tshape = leaf.TShape()
+            digest = digests.get(tshape)
+        except TypeError:  # an unhashable native handle: digest this leaf alone
+            tshape, digest = None, None
+        if digest is None:
+            digest = hashlib.sha256(_shape_brep_bytes(untranslated)).hexdigest()
+            if tshape is not None:
+                digests[tshape] = digest
+        rotation = struct.pack("<12d", *(transform.Value(row, column)
+                                         for row in range(1, 4) for column in range(1, 5)))
+        box = cached_box(
+            # The name names the FUNCTION: change what this computes and
+            # change the name with it.
+            "occurrence_bbox.optimal.untranslated.v2",
+            (digest, rotation),
+            lambda untranslated=untranslated: optimal_box(untranslated),
+        )
+        if box is not None:
+            boxes.append([value + translation[index % 3] for index, value in enumerate(box)])
+    if not boxes:
+        return None
+    return {
+        "min": [min(box[axis] for box in boxes) for axis in (0, 1, 2)],
+        "max": [max(box[axis] for box in boxes) for axis in (3, 4, 5)],
+    }
 
 
 def _occurrence_color(child: Any) -> list[float] | None:
@@ -541,9 +562,8 @@ def _write_component_artifacts_atomic(
     cad_ref: str,
     brep_bytes: bytes | None = None,
 ) -> Path:
-    """Persist one component's DOCUMENT pair (design/
-    step-document-architecture.md): ``<cid>.brep`` — the exact shape, the
-    same location-stripped BinTools bytes that computed the cid — and
+    """Persist one component's DOCUMENT pair: ``<cid>.brep`` — the exact shape,
+    the same location-stripped BinTools bytes that computed the cid — and
     ``<cid>.surf`` — the render view. Surface extraction is READING; the
     component object is a plain write when the hashing payload is already in hand.
     The surf goes in place LAST so its existence signals a complete set.

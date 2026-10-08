@@ -9,6 +9,7 @@ import {
   animationFrameBudgetMs,
   animationRenderFrame,
   buildDefaultAnimationState,
+  createAnimationFramePacer,
   findAnimationClip,
   firstAnimationClipId,
   hasAnimationClips,
@@ -257,6 +258,49 @@ test("a catastrophic frame still leaves the clip advancing", () => {
     shouldPublishAnimationFrame({ timeMs: 260, publishedAtMs: 0, publishCostMs: 2000 }),
     true
   );
+});
+
+// The playback loop asks the pacer on every animation-frame callback and publishes
+// when it says so. Callbacks at the given times; which of them published.
+function pace(times) {
+  const pacer = createAnimationFramePacer();
+  return times.filter((timeMs) => {
+    if (!pacer.shouldPublish(timeMs)) return false;
+    pacer.published(timeMs);
+    return true;
+  });
+}
+
+test("a frame that misses a vsync is not saturation: the routine publishes on", () => {
+  // 60 Hz with one missed vsync (66.8 -> 100.2). Paced on that one 33.4 ms gap, the
+  // routine held still for the next two callbacks and then jumped four frames.
+  const times = [0, 16.7, 33.4, 50.1, 66.8, 100.2, 116.9, 133.6, 150.3, 167, 183.7];
+  assert.deepEqual(pace(times), times);
+  // So is one long stall (a collection, a slow task): the clip catches up at once.
+  const stalled = [0, 16.7, 33.4, 50.1, 250.1, 266.8, 283.5, 300.2];
+  assert.deepEqual(pace(stalled), stalled);
+});
+
+test("a routine whose frames all overrun is paced at twice their cost", () => {
+  // Every published frame costs 73 ms (the F-14D teardown): the callback after a publish
+  // comes 73 ms later, one after an idle callback a display frame later.
+  const pacer = createAnimationFramePacer();
+  const published = [];
+  let timeMs = 0;
+  while (timeMs < 1500) {
+    if (pacer.shouldPublish(timeMs)) {
+      pacer.published(timeMs);
+      published.push(timeMs);
+      timeMs += 73;
+    } else {
+      timeMs += 16.7;
+    }
+  }
+  // Until three frames are measured nothing is paced; three overrunning frames in a row
+  // are saturation, and from then on every publish waits at least twice the cost.
+  assert.deepEqual(published.slice(0, 3), [0, 73, 146]);
+  const gaps = published.slice(3).map((t, i) => t - published[i + 2]);
+  assert.ok(gaps.length > 3 && gaps.every((gap) => gap >= 146), `gaps ${gaps}`);
 });
 
 test("an unmeasured frame cost falls back to the floor", () => {

@@ -4,12 +4,18 @@
       "command": "uvx",
       "args": [
         "--no-config",
+        "--managed-python",
+        "--python",
+        "3.13",
         "--from",
-        "cadgen==0.7.9",
+        "cadgen==0.7.17",
         "cadgen",
         "mcp"
       ],
-      "startup_timeout_sec": 300
+      "startup_timeout_sec": 300,
+      "env": {
+        "CADGEN_INSTALL_CHANNEL": "codex-github"
+      }
     }
   }
 }

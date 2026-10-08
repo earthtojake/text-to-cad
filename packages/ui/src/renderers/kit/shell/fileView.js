@@ -2,16 +2,17 @@ import { normalizeViewSettings } from "@text-to-cad/core/common/viewSettings.js"
 import { annotatePerspectiveSnapshot, clonePerspectiveSnapshot } from "@text-to-cad/core/lib/perspective.js";
 import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
 
-// A file's view: the one record the host keeps for a file in its tab, under
-// `[root, file path, renderer id]` (`@text-to-cad/ui/tab-store`). One flat, versioned object:
+// A file's view: the one record the host keeps for the file on screen in its tab, under
+// `[root, file path, renderer id]` (`@text-to-cad/ui/tab-store`), until the tab leaves the file.
+// One flat, versioned object:
 //
 //   { version: 2, camera, display, playback, renderer }
 //
 //   camera    the renderer's own camera value, opaque here: a perspective snapshot for a scene
 //             (`readShellCamera`), a plane transform for a drawing. Null is "fit the model".
 //   display   the Display settings, every section of them.
-//   playback  preview's Playback settings (`tools/playbar/playbackPreferences.js`): orbit on or
-//             off and its speed, Autoplay, and the speed and loop chosen for the routine.
+//   playback  preview's settings, its Orbit's and its playbar's (`tools/playbar/playbackPreferences.js`):
+//             orbit on or off and its speed, Autoplay, and the speed and loop chosen for the routine.
 //   renderer  the renderer's own slices of view state, each `{ signature, value }`: what the
 //             slice was written against. A slice comes back only while its signature still
 //             matches the one the renderer declares for the file on screen — a rebuilt model

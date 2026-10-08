@@ -1,10 +1,10 @@
 """What every CLI door does before it touches a document.
 
-DOCUMENTS-ONLY CLI INPUTS (design/pose-animation-split.md, CLI/doors
-follow-on). A model script is a PROGRAM: ``python model.py`` is the one source
-door, and running it writes the document, its sidecar and its declared exports.
-Every command therefore takes the DOCUMENT — a ``.step``/``.stp``/``.stl``/
-``.dxf`` file — and refuses a ``.py`` by naming the run.
+DOCUMENTS-ONLY CLI INPUTS (README law 7). A model script is a PROGRAM:
+``python model.py`` is the one source door, and running it writes the document,
+its sidecar and its declared exports. Every command therefore takes the
+DOCUMENT — a ``.step``/``.stp``/``.stl``/``.dxf`` file — and refuses a ``.py``
+by naming the run.
 
 A door asks ONE question of a document (:func:`document_tree`, STORE.md §9):
 does the store have a tree for this file's bytes? Yes → use it. No → a compile

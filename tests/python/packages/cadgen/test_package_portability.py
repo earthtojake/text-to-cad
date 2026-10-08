@@ -227,7 +227,7 @@ class PackagePortabilityTest(unittest.TestCase):
         # A plain .dxf renders directly and is not artifact-managed, so it has
         # no status to assert here (its no-op behavior is the pass above).
         checks = ["widget.step", "rig.step", "imported.step"]
-        return [(name, str(root), str(root / name)) for name in checks]
+        return [(name, str(root / name)) for name in checks]
 
     def test_every_package_kind_was_actually_built(self) -> None:
         # Guards the tests below from passing vacuously on an empty tree: every
@@ -319,9 +319,9 @@ class PackagePortabilityTest(unittest.TestCase):
 
         from tests.python.support.viewer_status import viewer_artifact_status
 
-        for name, root_arg, source_arg in self._validators(moved):
+        for name, source in self._validators(moved):
             with self.subTest(entry=name):
-                self.assertEqual("compiled", viewer_artifact_status(source_arg, root_arg)["state"])
+                self.assertEqual("compiled", viewer_artifact_status(source)["state"])
 
 
 class RecordedPathHelpersTest(unittest.TestCase):

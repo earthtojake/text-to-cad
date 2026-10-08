@@ -37,6 +37,13 @@ AXIS = "<axis><xyz>0 0 1</xyz></axis>"
 
 # (case name, sdf text, expected code, expected severity)
 CASES = [
+    ("world_model_frame_collision", '<sdf version="1.12"><world name="w"><model name="arm"><link name="base"/></model><frame name="arm" attached_to="world"/></world></sdf>', "cross_type_name_collision", "error"),
+    # Below SDFormat 1.7 libsdformat renames the frame (`arm_frame`) and warns (World.cc, Model.cc).
+    ("world_model_frame_collision_1_6", '<sdf version="1.6"><world name="w"><model name="arm"><link name="base"/></model><frame name="arm" attached_to="world"/></world></sdf>', "cross_type_name_collision", "warning"),
+    ("model_link_frame_collision_1_6", '<sdf version="1.6"><model name="m"><link name="base"/><link name="tool"/><frame name="base" attached_to="tool"/></model></sdf>', "cross_type_name_collision", "warning"),
+    ("world_missing_model_reference", '<sdf version="1.12"><world name="w"><model name="arm"><link name="base"/></model><frame name="tool" attached_to="missing"/></world></sdf>', "unresolved_reference", "error"),
+    ("world_names_do_not_leak_into_model", '<sdf version="1.12"><world name="w"><model name="arm"><link name="base"/></model><model name="table"><link name="surface"><pose relative_to="arm">0 0 0 0 0 0</pose></link></model></world></sdf>', "unresolved_reference", "error"),
+    ("world_frame_model_cycle", '<sdf version="1.12"><world name="w"><frame name="f" attached_to="m"/><model name="m"><pose relative_to="f">0 0 0 0 0 0</pose><link name="base"/></model></world></sdf>', "frame_cycle", "error"),
     # --- document shape ---
     ("invalid_xml", "<sdf version='1.12'><model></sdf>", "invalid_xml", "error"),
     ("invalid_root", "<xml version='1.12'/>", "invalid_root", "error"),
@@ -208,6 +215,10 @@ CASES = [
         "missing_inertial",
         "warning",
     ),
+    # Standalone lights use the same validator as world/link lights.
+    ("root_light_type", '<sdf version="1.12"><light name="sun" type="laser"/></sdf>', "unknown_light_type", "error"),
+    ("root_light_name", '<sdf version="1.12"><light type="point"/></sdf>', "missing_name", "error"),
+    ("root_light_pose", '<sdf version="1.12"><light name="sun" type="point"><pose>1 2</pose></light></sdf>', "invalid_numeric_vector", "error"),
     # --- sensors, plugins, lights ---
     ("missing_sensor_type", _model('<link name="base"><sensor name="s"/></link>'), "missing_sensor_type", "error"),
     ("typo_sensor_type", _model('<link name="base"><sensor name="s" type="gpu-lidar"/></link>'), "unknown_sensor_type", "warning"),
@@ -318,6 +329,24 @@ class SdfFindingsTests(unittest.TestCase):
         error_codes, warning_codes = self._codes(sdf_text)
         self.assertFalse(error_codes)
         self.assertFalse(warning_codes)
+
+    def test_world_reference_scope_includes_named_models(self) -> None:
+        sdf_text = (
+            '<sdf version="1.12"><world name="w">'
+            '<include><uri>model://arm</uri><name>arm</name></include>'
+            '<frame name="tool" attached_to="arm"><pose relative_to="arm">0 0 0 0 0 0</pose></frame>'
+            '<light name="lamp" type="point"><pose relative_to="arm">0 0 0 0 0 0</pose></light>'
+            '<model name="table"><pose relative_to="arm">0 0 0 0 0 0</pose><link name="surface"/></model>'
+            '</world></sdf>'
+        )
+        error_codes, _ = self._codes(sdf_text)
+        self.assertFalse(error_codes)
+        # Inline models and named includes expose the same world scope.
+        error_codes, _ = self._codes(sdf_text.replace(
+            '<include><uri>model://arm</uri><name>arm</name></include>',
+            '<model name="arm"><link name="base"/></model>',
+        ))
+        self.assertFalse(error_codes)
 
     def test_multiple_errors_collected_in_one_pass(self) -> None:
         sdf_text = _model(
