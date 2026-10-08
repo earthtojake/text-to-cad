@@ -1,7 +1,8 @@
 // The CI gate for the hero showcase assets: the committed render package under
 // public/hero/planetary/ must still satisfy the contracts the hero page consumes
 // through @text-to-cad/core — each component's mesh, as cadgen made it, readable
-// as that component's mesh at the tolerances the hero draws; an articulation the
+// as that component's mesh the way the hero reads it (at the tessellation cadgen
+// exported it at: a static package names none); an articulation the
 // player poses (controls and joints over the tree's occurrences); and the baked
 // animation with the clip the hero plays. A cadgen format bump that regenerates
 // these fails here instead of silently breaking the production render. Refresh
@@ -33,9 +34,9 @@ for (const [cid, entry] of components) {
   const meshPath = path.join(docsRoot, "public", heroPackage.meshUrls[cid]);
   assert.ok(fs.existsSync(meshPath), `Hero component ${cid} is missing its mesh (${meshPath})`);
   const decoded = decodeComponentTessellation(new Uint8Array(fs.readFileSync(meshPath)), {
-    surfaceInput: entry.surfaceInput, surfaceObject: entry.surfaceObject, tessellation: {},
+    surfaceInput: entry.surfaceInput, surfaceObject: entry.surfaceObject,
   });
-  assert.ok(decoded, `${meshPath} is not component ${cid}'s mesh at the default tolerances in the current mesh format`);
+  assert.ok(decoded, `${meshPath} is not component ${cid}'s mesh in the current mesh format`);
   assert.ok(decoded.component.indices.length > 0, `${meshPath} draws no triangles`);
 }
 
