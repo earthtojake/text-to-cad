@@ -26,8 +26,9 @@ add_repo_path("packages/cadgen/src")
 
 import numpy as np  # noqa: E402
 
-from cadgen._internal import tube_skin  # noqa: E402
+from cadgen._internal import tube_skin, tube_skin_payload  # noqa: E402
 from cadgen._internal.glb_animation import (  # noqa: E402
+    _transform_mix,
     Window,
     clip_to_gltf,
     find_clip,
@@ -36,21 +37,24 @@ from cadgen._internal.glb_animation import (  # noqa: E402
     windowed,
 )
 from cadgen._internal.mesh_animation import MAX_LOOP_REPEATS  # noqa: E402
+from tests.python.support.tube_skins import view_skin  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[4]
 SQRT_HALF = math.sqrt(0.5)
 
 
-def turn_key(degrees: float) -> list[float]:
-    """A transform key turned ``degrees`` about +Z, its pivot unmoved."""
-    half = math.radians(degrees) / 2
-    return [0.0, 0.0, 0.0, 0.0, 0.0, math.sin(half), math.cos(half)]
+def turn_key(degrees: float, rate: float = 0.0) -> list[float]:
+    """A transform key turned ``degrees`` about +Z, its pivot unmoved, turning on at
+    ``rate`` degrees a second: [d, q, d', q']."""
+    half, turning = math.radians(degrees) / 2, math.radians(rate) / 2
+    return [0.0, 0.0, 0.0, 0.0, 0.0, math.sin(half), math.cos(half),
+            0.0, 0.0, 0.0, 0.0, 0.0, math.cos(half) * turning, -math.sin(half) * turning]
 
 
 def spin_clip(*, duration: int = 4, loop: bool = True, pivot=(0.0, 0.0, 0.0), targets=("o1.2",), extra=()) -> dict:
     """``targets`` spin about +Z at 90 degrees a second, keyed every second."""
     track = {"targets": list(targets), "times": list(range(duration + 1)), "pivot": list(pivot),
-             "transform": [turn_key(90 * second) for second in range(duration + 1)]}
+             "transform": [turn_key(90 * second, 90) for second in range(duration + 1)]}
     return {"id": "spin", "label": "Spin", "duration": duration, "loop": loop, "tracks": [track, *extra]}
 
 
@@ -88,11 +92,25 @@ class TheWindow(unittest.TestCase):
     def test_the_window_cuts_each_track_at_its_edges(self):
         clip = {"duration": 2, "loop": False}
         times, values = windowed([0, 1, 2], [0.0, 10.0, 20.0], resolve_window({"start": 0.5, "seconds": 1}, clip),
-                                 lambda a, b, u: a + (b - a) * u)
+                                 lambda a, b, u, span: a + (b - a) * u)
         self.assertEqual(([0.0, 0.5, 1.0], [5.0, 10.0, 15.0]), (times, values))
 
+    def test_a_transform_cut_between_keys_is_the_curve_there_with_its_rate(self):
+        # A slide at a constant 10 mm/s while turning at 90 degrees a second: glTF's
+        # cubic curve through these keys is the motion, and so is a key cut from it.
+        keys = [[10.0 * t, 0.0, 0.0, *turn_key(90 * t, 90)[3:7], 10.0, 0.0, 0.0, *turn_key(90 * t, 90)[10:]]
+                for t in (0, 1)]
+        clip = {"duration": 1, "loop": False}
+        _, (start, end) = windowed([0, 1], keys, resolve_window({"start": 0.5, "seconds": 0.5}, clip), _transform_mix)
+        np.testing.assert_allclose(5.0, start[0], atol=1e-12)
+        np.testing.assert_allclose(10.0, start[7], atol=1e-12)
+        np.testing.assert_allclose(1.0, np.linalg.norm(start[3:7]), atol=1e-12)
+        # Its rate is the curve's, perpendicular to the unit quaternion it moves.
+        self.assertAlmostEqual(0.0, float(np.dot(start[3:7], start[10:14])), places=12)
+        np.testing.assert_allclose(keys[1], end, atol=1e-12)
+
     def test_a_loop_repeats_its_keys_and_a_short_track_holds_to_the_seam(self):
-        lerp = lambda a, b, u: a + (b - a) * u  # noqa: E731
+        lerp = lambda a, b, u, span: a + (b - a) * u  # noqa: E731
         clip = {"duration": 2, "loop": True}
         window = resolve_window({"seconds": 4}, clip)
         # Keyed to its end: one cycle's last key IS the next one's first.
@@ -113,15 +131,24 @@ class Pivots(unittest.TestCase):
         # The node sits on the pivot, 10 mm along CAD +X: glTF +X, in metres; its child undoes it.
         self.assertEqual([0.01, 0.0, -0.0], pivot.rest_translation)
         self.assertEqual([-0.01, 0.0, -0.0], pivot.child_translation)
-        # A quarter turn about CAD +Z is a quarter turn about glTF +Y.
+        # A quarter turn about CAD +Z is a quarter turn about glTF +Y, and its rate maps alike;
+        # the rates go in to and out of every key alike, there being no hold.
         np.testing.assert_allclose([0.0, SQRT_HALF, 0.0, SQRT_HALF], pivot.rotations[4:8], atol=1e-12)
+        rate = math.pi / 4
+        np.testing.assert_allclose([0.0, SQRT_HALF * rate, 0.0, -SQRT_HALF * rate], pivot.rotations_out[4:8], atol=1e-12)
+        self.assertEqual(pivot.rotations_in, pivot.rotations_out)
+        self.assertEqual([0.0] * 15, pivot.translations_in)
 
     def test_every_key_stays_in_the_hemisphere_of_the_one_before(self):
         clip = spin_clip(duration=1, loop=False)
-        clip["tracks"][0]["transform"][1] = [-c for c in turn_key(90)]  # the same turn, the far sign
+        flipped = turn_key(90, 90)
+        clip["tracks"][0]["transform"][1] = flipped[:3] + [-c for c in flipped[3:7]] + flipped[7:10] + [
+            -c for c in flipped[10:]]  # the same turn and rate, the far sign
         (pivot,) = clip_to_gltf(clip, whole(clip)).pivots
         first, second = pivot.rotations[0:4], pivot.rotations[4:8]
         self.assertGreater(sum(a * b for a, b in zip(first, second)), 0.0)
+        # The rate flips with it: still turning on about glTF +Y.
+        self.assertGreater(pivot.rotations_out[5], 0.0)
 
     def test_an_effect_gltf_cannot_animate_is_refused_unless_dropped_then_baked_at_start(self):
         fade = {"targets": ["o1.4"], "times": [0, 4], "opacity": [0.25, 1.0]}
@@ -281,10 +308,11 @@ class ARealDocumentPlaysItsClip(unittest.TestCase):
             (rotation,) = [channel for channel in clip["channels"] if channel["target"]["path"] == "rotation"]
             self.assertEqual(names["pivot 0"], rotation["target"]["node"])
             sampler = clip["samplers"][rotation["sampler"]]
-            self.assertEqual("LINEAR", sampler["interpolation"])
-            # The last key is 1 s in: 90 degrees about CAD +Z, which is glTF +Y.
+            self.assertEqual("CUBICSPLINE", sampler["interpolation"])
+            # The last key is 1 s in: 90 degrees about CAD +Z, which is glTF +Y -- the middle of
+            # its in-tangent, value and out-tangent.
             np.testing.assert_allclose([0.0, SQRT_HALF, 0.0, SQRT_HALF],
-                                       np.abs(_array(gltf, binary, sampler["output"])[-1]), atol=1e-4)
+                                       np.abs(_array(gltf, binary, sampler["output"])[-2]), atol=1e-4)
 
             # The cord bends as a skin: its node names the skin, its primitives are bound
             # to the joints, and the joints' keys drive it.
@@ -326,6 +354,41 @@ class ARealDocumentPlaysItsClip(unittest.TestCase):
                 from_axis = np.hypot(np.hypot(cad[:, 0], cad[:, 1] - (10.0 + radius)) - radius, cad[:, 2] - 2.0)
                 self.assertGreater(int(wall.sum()), 0)
                 self.assertLessEqual(float(np.max(np.abs(from_axis[wall] - 0.8))), 0.02)
+
+            # A CAD view reads the same tubes from the viewer's route, bound in the cord
+            # component's own frame; a second read is the store's, binding nothing again.
+            probe = run("-c", textwrap.dedent("""\
+                import json, sys
+                from pathlib import Path
+                from cadgen._internal import tube_skin_payload
+                from cadgen.store.view import descriptor_for_view
+                from cadgen.viewer.store_paths import result_snapshot
+                from cadgen.viewer.tube_skins import tube_skins_response
+
+                status, body = tube_skins_response(sys.argv[1])
+                Path(sys.argv[2]).write_bytes(body)
+                tube_skin_payload.build_tube_skins = None
+                again, cached = tube_skins_response(sys.argv[1])
+                document, tree = result_snapshot(sys.argv[1])
+                stale, _ = tube_skins_response(sys.argv[1], "0" * 64)
+                placed = {o["id"]: o["transform"] for o in descriptor_for_view(tree, document_hash=document)["occurrences"]}
+                print(json.dumps({"status": [status, again, stale], "same": cached == body, "placed": placed}))
+                """), str(root / "arm.step"), str(root / "skins.glb"))
+            answer = json.loads(probe.stdout.strip().splitlines()[-1])
+            self.assertEqual(([200, 200, 409], True), (answer["status"], answer["same"]))
+            skins = tube_skin_payload.decode_tube_skins((root / "skins.glb").read_bytes())
+            (track,) = [entry for entry in skins["tracks"] if entry["clip"] == "bend"]
+            binding = skins["bindings"][track["bindings"][0]]
+            self.assertEqual(11, binding["joints"])
+            placement = np.asarray(answer["placed"][binding["occurrence"]], dtype=np.float64).reshape(4, 4)
+            keys = track["keys"].reshape(-1, 11, 7)
+            local = binding["positions"].reshape(-1, 3).astype(np.float64)
+            p = view_skin(local, binding["along"], binding["rest"].reshape(-1, 7), keys[-1], placement)
+            from_axis = np.hypot(np.hypot(p[:, 0], p[:, 1] - (10.0 + radius)) - radius, p[:, 2] - 2.0)
+            near = np.hypot(local @ placement[:3, :3].T[:, 1] + placement[1, 3] - 10.0,
+                            local @ placement[:3, :3].T[:, 2] + placement[2, 3] - 2.0) > 0.79
+            self.assertGreater(int(near.sum()), 0)
+            self.assertLessEqual(float(np.max(np.abs(from_axis[near] - 0.8))), 0.02)
 
 
 if __name__ == "__main__":

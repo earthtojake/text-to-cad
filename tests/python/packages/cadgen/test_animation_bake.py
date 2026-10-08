@@ -80,7 +80,7 @@ def _placed(track: dict, t: float, point) -> list[float]:
     times, keys, pivot = track["times"], track["transform"], track["pivot"]
     k = min(max(bisect.bisect_right(times, t) - 1, 0), len(times) - 2)
     span = times[k + 1] - times[k]
-    d, r = _pose_at(keys[k], keys[k + 1], (t - times[k]) / span)
+    d, r = _pose_at(keys[k], keys[k + 1], span, (t - times[k]) / span)
     arm = [c - p for c, p in zip(point, pivot)]
     return [r[3 * i] * arm[0] + r[3 * i + 1] * arm[1] + r[3 * i + 2] * arm[2] + pivot[i] + d[i] for i in range(3)]
 
@@ -216,9 +216,10 @@ class BakingTransforms(unittest.TestCase):
         # The point whose path accelerates least is on the axis.
         self.assertAlmostEqual(10.0, track["pivot"][0], places=3)
         self.assertAlmostEqual(0.0, track["pivot"][1], places=3)
-        # A constant spin is exact between keys, so only the cap on how far two
-        # kept keys may turn apart splits it: a few keys for a whole revolution.
-        self.assertLessEqual(len(track["times"]), 5)
+        # Between keys a quaternion follows glTF's cubic curve, close to a spin but not
+        # one: a whole revolution takes a few keys more than the cap on how far two
+        # kept keys may turn apart, and nowhere near one per sample.
+        self.assertLessEqual(len(track["times"]), 9)
         for a, b in zip(track["transform"], track["transform"][1:]):
             dot = abs(sum(x * y for x, y in zip(a[3:7], b[3:7])))
             self.assertLessEqual(math.degrees(2 * math.acos(min(1.0, dot))), MAX_KEY_TURN_DEG + 1e-3)
@@ -251,7 +252,7 @@ class BakingTransforms(unittest.TestCase):
         # A constant offset is one key: d = (0, 0, 3), no turn, nothing moving.
         held = tracks[("o1.1",)]
         self.assertEqual([0.0], held["times"])
-        self.assertEqual([[0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.0]], held["transform"])
+        self.assertEqual([[0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.0, *[0.0] * 7]], held["transform"])
 
     def test_parts_that_move_alike_but_for_rounding_share_a_track(self) -> None:
         # One turn reached two ways -- through 30 degrees, and through two turns of 15 --
@@ -288,7 +289,7 @@ class BakingTransforms(unittest.TestCase):
         (track,) = _bake("run", run, duration=4)["tracks"]
         self.assertAlmostEqual(10.0, track["pivot"][0], places=3)
         self.assertAlmostEqual(0.0, track["pivot"][1], places=3)
-        self.assertLessEqual(len(track["times"]), 5)
+        self.assertLessEqual(len(track["times"]), 9)
 
     def test_a_track_is_measured_at_its_own_parts_box(self) -> None:
         # A millimetre part easing through a turn about its own center: what a renderer

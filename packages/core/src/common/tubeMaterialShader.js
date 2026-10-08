@@ -1,13 +1,13 @@
 // One onBeforeCompile per material for every tube shader stage. Stages run in
-// a fixed order — the GPU transport (which produces the vertex and the tube
-// material coordinates) before the braid finish (which consumes them) — so the
-// result is the same whichever frame first enables each stage. The braid never
-// has to know how the GPU stage stores its data; it reads the shared varying.
+// a fixed order -- the skin (which moves the vertex) before the braid finish
+// (which shades by the tube's rest material coordinates, an attribute cadgen
+// binds with the skin) -- so the result is the same whichever frame first enables
+// each stage.
 export const TUBE_MATERIAL_VARYING = "vCadTubeMaterial";
 export const TUBE_MATERIAL_ATTRIBUTE = "cadTubeMaterial";
-export const TUBE_GPU_STAGE = "gpu";
+export const TUBE_SKIN_STAGE = "skin";
 export const TUBE_BRAID_STAGE = "braid";
-const STAGE_ORDER = [TUBE_GPU_STAGE, TUBE_BRAID_STAGE];
+const STAGE_ORDER = [TUBE_SKIN_STAGE, TUBE_BRAID_STAGE];
 
 export function tubeMaterialStage(material, name) {
   return material?.userData?.cadTubeShader?.stages[name] || null;

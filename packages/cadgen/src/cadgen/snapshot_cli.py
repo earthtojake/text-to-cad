@@ -1271,6 +1271,22 @@ def resolve_step_render_job(
         # composes appearance into its private descriptor. Inline data avoids a
         # second browser fetch and leaves the store descriptor untouched.
         resolved["sourceSidecar"] = sidecar
+    animation_request = job.get("animation")
+    if is_plain_object(animation_request):
+        from cadgen._internal.source_sidecar import bends_a_tube
+        from cadgen.snapshot_core import tube_skins_asset_url
+
+        animation = sidecar.get("animation") or {}
+        clip = [entry for entry in animation.get("clips") or [] if entry.get("id") == animation_request["clip"]]
+        if bends_a_tube({"clips": clip}):
+            # The clip bends a tube: cadgen binds it, and the page only skins it.
+            resolved["tubeSkinsUrl"] = tube_skins_asset_url(
+                tree=selected_tree, document_hash=document_hash, animation=animation)
+        if job.get("video") is not None and clip:
+            from cadgen.snapshot_video import resolve_frame_plan
+
+            # Which moments of the clip the frames show: the page renders these.
+            resolved["framePlan"] = resolve_frame_plan(job["video"], clip[0])
     if isinstance(sidecar.get("kinematics"), dict) and sidecar["kinematics"]:
         # Typed mates are the articulation mechanism: --kinematics DOF values
         # fold through the shared FK evaluator (@text-to-cad/core kinematicsModule),

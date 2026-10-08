@@ -1,8 +1,9 @@
-# Tube deformation and morph export
+# Tube deformation
 
-Read this reference for flexible swept bodies in an animation clip, or for
-exporting that deformation into GLB. The [motion reference](kinematics.md)
-covers ordinary joints, poses, clip declarations and video rendering.
+Read this reference for flexible swept bodies in an animation clip, and for how
+that motion reaches the CAD Viewer, snapshots and an animated GLB. The
+[motion reference](kinematics.md) covers ordinary joints, poses, clip
+declarations and video rendering.
 
 ## Deforming an existing tube
 
@@ -37,8 +38,14 @@ Only `path` and `twist_deg` move during a clip: `rest`, `max_segment_length`
 and `braid` stay the same in every sample that deforms the tube, and the build
 refuses a clip that changes them. Use `.rotate()` or `.translate()` for rigid
 motion. A sample that does not call `.deform_tube()` shows the tube at rest.
-Between keyframes the path's numbers blend while its segments keep their kinds;
-a change of segment kinds (a line becoming an arc) switches between two samples.
+
+Every view draws the tube as a glTF skin. Joints stand along the rest centerline
+at most `max_segment_length` apart; each keyframe places them on that keyframe's
+path, turned by its twist, and the tube's mesh is bound to the two joints either
+side of each vertex. Between keyframes the joints blend, so the build keeps
+keyframes until that blend follows the clip to well under a tenth of a degree. A
+path no tube could follow — a kink, a cusp — fails the build with the clip, the
+part and the time it happens.
 
 A path that is its rest under one affine map is stored as that map, twelve
 numbers a keyframe, rather than as a copy of the whole centerline. A coil spring
@@ -46,9 +53,11 @@ built from lines and Beziers whose turns all close up alike as it compresses
 gets this automatically. Arcs never map, and a spring whose end turns hold still
 while its middle closes stores whole paths, many times larger.
 
-`max_segment_length` controls one-time longitudinal mesh refinement in
-millimetres (default `1`, minimum `0.05`). The rest mesh, normals and topology
-remain continuous, and shared source buffers remain immutable.
+`max_segment_length` controls the joint spacing and the longitudinal mesh
+refinement, in millimetres (default `1`, minimum `0.05`): a straight STEP surface
+may have rings only at its ends, so cadgen splits it into bands this long before
+binding it, and a bend draws an arc rather than a chord. Its edges are split and
+bound the same way, so they bend with the surface.
 
 Optional `braid={"pitch": 0.8, "depth": 0.02, "strands": 8}` adds procedural
 fiber color and normal relief over the swept core. Pitch and depth are
@@ -57,36 +66,22 @@ additional CAD or collision geometry.
 
 ## Exporting deformation to GLB
 
-Animated GLB refuses tube deformation by default. Request morph targets explicitly:
+An animated GLB carries a bending tube as a glTF skin — the same joints and
+keyframes every CAD view plays — with no option to set:
 
 ```bash
-cadgen glb build STEP/hand.step GLB/animated/hand.glb \
-  --animation '{"clip": "fist", "fps": 24, "seconds": 6,
-                "deform": "morph", "deformTolerance": 1.0}'
+cadgen glb build STEP/hand.step GLB/animated/hand.glb --animation fist
 ```
 
-Each deforming node gets per-vertex position and normal deltas against one base
-mesh, plus a weights channel. Morph weights blend whole poses, so between baked
-poses the file can differ from the clip's own deformation. The exporter fits
-targets per occurrence against `deformTolerance` (millimetres, default `1.0`,
-range `0.01`..`10`), checking a grid four times finer than `fps`, at least
-96 Hz. This sampled check is not a continuous-time error guarantee. The export
-summary reports `targets`, `bytes`, `runtimeBytes`, `deviationMm` and
-`fitGridHz`.
-
-The exporter refuses a bake exceeding 512 MiB of estimated morph playback
-memory: 32 bytes per vertex per target, or 16 without normals. To reduce it,
-relax `deformTolerance`, shorten `seconds`, increase `--mesh-tolerance`, or
-increase the clip's `max_segment_length`, as the required fidelity permits.
+Each tube's node names its skin; its mesh carries `JOINTS_0` and `WEIGHTS_0`;
+its joints are nodes keyed `LINEAR`, under the pivot that also moves the tube's
+parts when a rigid track carries them. Tubes one track bends must move together:
+a track that bends parts a rigid track moves apart is refused, because a skin's
+joints move as one.
 
 Limitations:
 
 - Procedural braid shading is not exported. The GLB retains the tube's geometry
-  and motion with a smooth surface.
-- A tube held in a constant deformed pose exports in that pose without morph
-  targets. `"deform": "rest"` instead explicitly freezes tubes at rest and warns;
-  use it only when that is the intended output.
-
-The CAD Viewer plays a GLB's morph animation; the braid finish stays with the
-STEP and its sidecar. Render a video when the output needs effects GLB cannot
-carry; see [motion review](kinematics.md#reviewing-motion).
+  and motion with a smooth surface, and the export warns.
+- Render a video when the output needs effects GLB cannot carry; see
+  [motion review](kinematics.md#reviewing-motion).

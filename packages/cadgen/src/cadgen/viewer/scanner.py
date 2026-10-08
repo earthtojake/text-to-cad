@@ -561,9 +561,14 @@ def _build_step_entry(source_path, extension, *, document_hash, tree) -> dict:
         )
     animation = (metadata.get("sourceSidecar") or {}).get("animation")
     if animation is not None:
-        entry["animationHash"] = hashlib.sha256(
-            json.dumps(animation, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
+        from cadgen._internal.source_sidecar import animation_digest, bends_a_tube
+
+        entry["animationHash"] = animation_digest(animation)
+        if tree and document_hash and bends_a_tube(animation):
+            # Where a view reads the bound skins its clips bend tubes with.
+            from .tube_skins import tube_skins_url
+
+            entry["tubeSkinsUrl"] = tube_skins_url(source_path, document_hash)
     return entry
 
 

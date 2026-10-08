@@ -26,6 +26,13 @@ surface may have rings only at its ends, and a bend would otherwise draw a chord
 Each vertex also carries its rest material coordinates -- arc length in mm and the
 two transverse offsets -- for a braided finish, which follows the twist because the
 coordinates ride with the vertex.
+
+Two bindings come out of one rule. The animated GLB export's (:func:`bind`) is in
+the document's space with glTF's JOINTS_0/WEIGHTS_0. A CAD view's
+(:func:`bind_occurrence`) is in the component's own frame, the frame its stored
+mesh is drawn in, and carries each vertex's joint coordinate -- the joint below it
+plus its weight toward the next -- and the component's edge polylines, split into
+the same bands and bound the same way, so a view's edges bend with the surface.
 """
 
 from __future__ import annotations
@@ -63,6 +70,23 @@ class SkinnedTube:
     joints: np.ndarray  # (v, 4) uint16, JOINTS_0
     weights: np.ndarray  # (v, 4) float32, WEIGHTS_0
     material: np.ndarray  # (v, 3) float32: rest arc length (mm), transverse u, v
+    along: np.ndarray  # (v,) float32: the joint coordinate, the joint below plus its weight
+
+
+@dataclass(frozen=True)
+class BoundOccurrence:
+    """One occurrence of a bending tube, refined and bound, in its component's frame."""
+
+    positions: np.ndarray  # (v, 3) float32, component-local mm
+    normals: np.ndarray  # (v, 3) float32, unit
+    indices: np.ndarray  # (t * 3,) uint32, the component's own winding
+    source_triangles: np.ndarray  # (t,) uint32: the component triangle each one refines
+    along: np.ndarray  # (v,) float32: joint coordinate
+    material: np.ndarray  # (v, 3) float32: rest arc length (mm), transverse u, v
+    edge_positions: np.ndarray  # (2s, 3) float32: each edge segment's two ends, component-local
+    edge_along: np.ndarray  # (2s,) float32: their joint coordinates
+    edge_ordinals: np.ndarray  # (s,) uint32: the edge (its table ordinal) each segment draws
+    edge_classes: np.ndarray  # (s,) uint8: that edge's class code
 
 
 def joint_fractions(rest: td.Path, spacing: float) -> np.ndarray:
@@ -197,13 +221,18 @@ def inverse_binds(rest: Joints) -> np.ndarray:
     return np.transpose(inverse, (0, 2, 1))  # column-major
 
 
+def _along(fraction: np.ndarray, count: int) -> np.ndarray:
+    """The joint coordinate of a rest arc-length fraction among ``count`` joints."""
+    return np.clip(fraction, 0.0, 1.0) * (count - 1)
+
+
 def bind(mesh: td.RestMesh, rest: td.Path, spacing: float, fractions: np.ndarray) -> SkinnedTube:
     """``mesh`` (in the space the paths are authored in), refined into bands of at
     most ``spacing`` mm and bound to the joints at ``fractions``."""
     refined = td.refine_rest_mesh(mesh, rest, spacing)
     mapping = td.mapping_for(refined, rest)
     values = mapping.values[mapping.slots]
-    along = np.clip(values[:, 0], 0.0, 1.0) * (len(fractions) - 1)
+    along = _along(values[:, 0], len(fractions))
     lower = np.minimum(np.floor(along).astype(np.int64), len(fractions) - 2)
     upper_weight = (along - lower).astype(np.float32)
     count = len(refined.positions)
@@ -217,7 +246,80 @@ def bind(mesh: td.RestMesh, rest: td.Path, spacing: float, fractions: np.ndarray
     return SkinnedTube(
         positions=refined.positions.astype(np.float32), normals=refined.normals.astype(np.float32),
         indices=refined.indices.astype(np.uint32), source_triangles=refined.source_triangles,
-        joints=joints, weights=weights, material=material,
+        joints=joints, weights=weights, material=material, along=along.astype(np.float32),
+    )
+
+
+def _placement(transform) -> tuple[np.ndarray, np.ndarray]:
+    """A stored row-major 4x4 placement as (its 3x3, its translation), float64."""
+    m = np.asarray(transform if transform is not None else np.eye(4).reshape(-1), dtype=np.float64)
+    m = m.reshape(4, 4) if m.size == 16 else np.vstack([m.reshape(3, 4), [0.0, 0.0, 0.0, 1.0]])
+    return m[:3, :3], m[:3, 3]
+
+
+def _unit(rows: np.ndarray) -> np.ndarray:
+    size = np.linalg.norm(rows, axis=1)
+    return rows / np.where(size > 0, size, 1.0)[:, None]
+
+
+def bind_occurrence(component, transform, rest: td.Path, spacing: float, fractions: np.ndarray) -> BoundOccurrence:
+    """One occurrence of a tube bound for a CAD view: ``component`` is its stored
+    mesh (``store.meshes.decode_payload``: positions, normals, indices, the edge
+    table and its points, all component-local), ``transform`` the occurrence's
+    placement into the space the paths are authored in.
+
+    The mesh is placed, refined and bound there (as :func:`bind`), and brought back
+    to the component's frame unwound: a reflected placement keeps the component's
+    own winding, which a view draws under that same placement. Each edge polyline
+    is split where it crosses a band, so a bend draws arcs, not chords."""
+    turn, offset = _placement(transform)
+    inverse = np.linalg.inv(turn)
+    placed = np.asarray(component.positions, dtype=np.float64) @ turn.T + offset
+    # Normals by the inverse-transpose; refinement only interpolates them.
+    normals = np.asarray(component.normals, dtype=np.float64) @ inverse
+    indices = np.asarray(component.indices, dtype=np.uint32).reshape(-1)
+    skinned = bind(td.RestMesh(placed.astype(np.float32), normals.astype(np.float32), indices),
+                   rest, spacing, fractions)
+    local = (skinned.positions.astype(np.float64) - offset) @ inverse.T
+    local_normals = _unit(skinned.normals.astype(np.float64) @ turn)
+    triangles = len(skinned.indices) // 3
+    source = (skinned.source_triangles.astype(np.uint32) if skinned.source_triangles is not None
+              else np.arange(triangles, dtype=np.uint32))
+
+    rows = np.asarray(component.edges, dtype=np.int64).reshape(-1, 4)
+    points = np.asarray(component.edge_points, dtype=np.float64).reshape(-1, 3)
+    starts, ends, owners = [], [], []
+    for row, (ordinal, first, count, _code) in enumerate(rows):
+        if count >= 2:
+            span = np.arange(first, first + count - 1)
+            starts.append(span)
+            ends.append(span + 1)
+            owners.append(np.full(len(span), row, dtype=np.int64))
+    if starts:
+        a, b, owner = np.concatenate(starts), np.concatenate(ends), np.concatenate(owners)
+        distance = td.project_distances(rest, points @ turn.T + offset)
+        divisions = np.maximum(1, np.ceil(np.abs(distance[b] - distance[a]) / spacing)).astype(np.int64)
+        piece = np.repeat(np.arange(len(a)), divisions)
+        step = np.arange(len(piece)) - np.repeat(np.cumsum(divisions) - divisions, divisions)
+        t0 = (step / divisions[piece])[:, None]
+        t1 = ((step + 1) / divisions[piece])[:, None]
+        p, q = points[a[piece]], points[b[piece]]
+        ends_local = np.stack([p + (q - p) * t0, p + (q - p) * t1], axis=1).reshape(-1, 3)
+        fraction = td.project_distances(rest, ends_local @ turn.T + offset) / rest.length
+        edge_positions = ends_local.astype(np.float32)
+        edge_along = _along(fraction, len(fractions)).astype(np.float32)
+        edge_ordinals = rows[owner[piece], 0].astype(np.uint32)
+        edge_classes = rows[owner[piece], 3].astype(np.uint8)
+    else:
+        edge_positions = np.zeros((0, 3), dtype=np.float32)
+        edge_along = np.zeros(0, dtype=np.float32)
+        edge_ordinals = np.zeros(0, dtype=np.uint32)
+        edge_classes = np.zeros(0, dtype=np.uint8)
+    return BoundOccurrence(
+        positions=local.astype(np.float32), normals=local_normals.astype(np.float32),
+        indices=skinned.indices.astype(np.uint32), source_triangles=source, along=skinned.along,
+        material=skinned.material, edge_positions=edge_positions, edge_along=edge_along,
+        edge_ordinals=edge_ordinals, edge_classes=edge_classes,
     )
 
 

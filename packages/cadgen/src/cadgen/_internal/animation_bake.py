@@ -3,8 +3,8 @@
 A clip runs ONCE, here, when its model builds: ``update(t, m)`` at every sample
 time, against the built tree's occurrence table. What ships is data — the
 ``animation`` section of the model's sidecar. Its keys are glTF's: every renderer
-and the animated GLB export play them with glTF's LINEAR interpolation, so nothing
-downstream works out a motion of its own::
+and the animated GLB export play them as glTF's samplers do, so nothing downstream
+works out a motion of its own::
 
     {"clips": [{"id", "label", "duration", "loop", "tracks": [<track>, ...]}, ...]}
 
@@ -16,17 +16,19 @@ moves alike, to far finer than a key is written at. ``times`` start at 0, rise
 strictly, and end at or before ``duration``; each channel carries one value per
 time:
 
-    transform  [dx, dy, dz, qx, qy, qz, qw]   the track's "pivot" moves by d while
+    transform  [d, q, d', q']: 14 numbers      the track's "pivot" moves by d while
                                               the part turns by q about it: the
                                               matrix is T(pivot + d) R(q) T(-pivot),
                                               a glTF node at pivot + d turned by q
                                               over a child at -pivot. Between keys
-                                              d lerps and q slerps, so a constant
-                                              spin about the pivot is exact. The
-                                              pivot is the point whose path
-                                              accelerates least: on a spinning
-                                              part's axis. The rest pose is the
-                                              identity, and a rigid move
+                                              they follow glTF's CUBICSPLINE
+                                              sampler: each component a cubic
+                                              Hermite curve through the keys' values
+                                              and their rates d' (mm/s) and q' (per
+                                              s), q normalized. The pivot is the
+                                              point whose path accelerates least:
+                                              on a spinning part's axis. The rest
+                                              pose is the identity, and a rigid move
                                               premultiplies whatever the kinematics
                                               put there
     opacity    0..1 | null                     lerp between numbers; null is the
@@ -48,16 +50,18 @@ time:
                                               constant through a clip
 
 A key interpolation rebuilds within tolerance is dropped (Ramer-Douglas-Peucker
-over each track, under the LINEAR interpolation a player does), and a track whose
-keys are all one value keeps one key. A
+over each track, under the interpolation a player does), and a track whose keys
+are all one value keeps one key. A
 transform's tolerance is a fraction of the model's diagonal, measured at the
 corners of the box of the parts the track moves (the model's box where the
 store remembers none for one of them): two rigid transforms differ by an affine
 map, whose largest displacement over a box is at a corner, so the corners bound
-the error over every point of those parts. A part turns at most 120 degrees between two kept keys, well short of the half
-turn past which a slerp would take the other way round. A hold -- one value at two
+the error over every point of those parts. A part turns at most 120 degrees between
+two kept keys, and each key's quaternion is on the side of the one before, so the
+curve between them never takes the long way round. A hold -- one value at two
 samples running, on any channel -- keeps its first and last samples as keys and
-nothing between them, so a renderer has nothing to redraw through it. A tube's
+nothing between them, its keys' rates zero, so a renderer has nothing to redraw
+through it. A tube's
 tolerance is measured on points along its centerline and on how far its
 cross-sections turn, and then on its skin's joints: an interval whose middle sample
 the joints' interpolation misses gets a key there (:func:`_refine_tube_keys`).
@@ -180,26 +184,16 @@ def _rotation_of(q: Sequence[float]) -> tuple:
     )
 
 
-def _slerp(a: Sequence[float], b: Sequence[float], u: float) -> tuple[float, float, float, float]:
-    """glTF's LINEAR rotation: the near way from ``a`` to ``b``."""
-    dot = sum(x * y for x, y in zip(a, b))
-    if dot < 0.0:
-        b, dot = [-c for c in b], -dot
-    if dot > 0.9995:
-        q = [x + (y - x) * u for x, y in zip(a, b)]
-    else:
-        theta = math.acos(min(1.0, dot))
-        sa, sb = math.sin((1.0 - u) * theta), math.sin(u * theta)
-        q = [(sa * x + sb * y) / math.sin(theta) for x, y in zip(a, b)]
-    n = math.sqrt(sum(c * c for c in q))
-    return tuple(c / n for c in q)  # type: ignore[return-value]
-
-
-def _pose_at(a: Sequence[float], b: Sequence[float], u: float) -> tuple[list[float], tuple]:
-    """(d, rotation) a fraction ``u`` of the way between two transform keys, as a glTF
-    player draws it: d lerps, q slerps."""
-    d = [a[n] + (b[n] - a[n]) * u for n in range(3)]
-    return d, _rotation_of(_slerp(a[3:7], b[3:7], u))
+def _pose_at(a: Sequence[float], b: Sequence[float], span: float, u: float) -> tuple[list[float], tuple]:
+    """(d, rotation) a fraction ``u`` of the way between two transform keys ``span``
+    seconds apart, as glTF's CUBICSPLINE sampler draws it: each component a cubic
+    Hermite curve through the keys' values and tangents, the quaternion normalized."""
+    u2 = u * u
+    u3 = u2 * u
+    h00, h10, h01, h11 = 2 * u3 - 3 * u2 + 1, u3 - 2 * u2 + u, 3 * u2 - 2 * u3, u3 - u2
+    c = [h00 * a[n] + h10 * span * a[7 + n] + h01 * b[n] + h11 * span * b[7 + n] for n in range(7)]
+    size = math.sqrt(c[3] * c[3] + c[4] * c[4] + c[5] * c[5] + c[6] * c[6])
+    return c[:3], _rotation_of([c[3] / size, c[4] / size, c[5] / size, c[6] / size])
 
 
 def _turn_deg(a: Sequence[float], b: Sequence[float]) -> float:
@@ -556,13 +550,30 @@ def _transform_keys(
         quats.append(q)
     pivot = tuple(_length(c) for c in _pivot(values, center, reach))
     # Each sample's key: d (where the pivot goes: M(pivot) - pivot) and q.
+    # Each sample's key: d (where the pivot goes: M(pivot) - pivot), q, and their
+    # rates -- central differences, one-sided at the ends, and none beside a HOLD
+    # (the same pose two samples running): a part enters and leaves a hold at rest,
+    # and a central difference straddling one would carry half the move's speed into
+    # it.
     moves = [[m - p for m, p in zip(_apply_point(v, v[9:], pivot), pivot)] for v in values]
-    keys = [[*moves[k], *quats[k]] for k in range(len(values))]
+    last = len(values) - 1
+    still = [k > 0 and values[k - 1] == values[k] for k in range(len(values))] + [False]
+    keys = []
+    for k in range(len(values)):
+        if still[k] or still[k + 1]:
+            tangent = [0.0] * 7
+        else:
+            i, j = max(0, k - 1), min(last, k + 1)
+            span = times[j] - times[i]
+            ends = (moves[i] + list(quats[i]), moves[j] + list(quats[j]))
+            tangent = [(ends[1][n] - ends[0][n]) / span for n in range(7)]
+        keys.append([*moves[k], *quats[k], *tangent])
     truth = [[_apply_point(value, value[9:], corner) for corner in corners] for value in values]
     arms = [tuple(c - p for c, p in zip(corner, pivot)) for corner in corners]
 
     def error(i: int, j: int, k: int) -> float:
-        d, r = _pose_at(keys[i], keys[j], (times[k] - times[i]) / (times[j] - times[i]))
+        span = times[j] - times[i]
+        d, r = _pose_at(keys[i], keys[j], span, (times[k] - times[i]) / span)
         at = (pivot[0] + d[0], pivot[1] + d[1], pivot[2] + d[2])
         return max(math.dist(_apply_point(r, at, arm), true) for arm, true in zip(arms, truth[k]))
 
@@ -574,7 +585,7 @@ def _transform_keys(
         return bisect.bisect_right(swept, swept[i] + MAX_KEY_TURN_DEG, i + 1, j) - 1
 
     keep = _keep(len(values), error, tolerance, forced=_holds(values), reach=reach)
-    digits = (_LENGTH_DIGITS,) * 3 + (_QUATERNION_DIGITS,) * 4
+    digits = ((_LENGTH_DIGITS,) * 3 + (_QUATERNION_DIGITS,) * 4) * 2
     return keep, pivot, [[_round(c, digits[n]) for n, c in enumerate(keys[k])] for k in keep]
 
 
@@ -1079,7 +1090,7 @@ def _check_track(track: object, where: str, duration: float) -> None:
     channel = channels[0]
     for value in values:
         if channel == "transform":
-            ok = isinstance(value, list) and len(value) == 7 and all(_finite(c) for c in value)
+            ok = isinstance(value, list) and len(value) == 14 and all(_finite(c) for c in value)
         elif channel == "opacity":
             ok = value is None or (_finite(value) and 0 <= value <= 1)
         elif channel == "visible":

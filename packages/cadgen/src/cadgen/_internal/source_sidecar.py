@@ -213,6 +213,18 @@ def appearance_digest(block: object) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def animation_digest(block: object) -> str:
+    """The identity of an animation section: its canonical JSON's sha256."""
+    return hashlib.sha256(json.dumps(block, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def bends_a_tube(block: object) -> bool:
+    """Whether an animation section has a tube track."""
+    clips = block.get("clips") if isinstance(block, Mapping) else None
+    return any(isinstance(track, Mapping) and track.get("tube") is not None
+               for clip in clips or [] if isinstance(clip, Mapping) for track in clip.get("tracks") or [])
+
+
 def _descriptor_nodes(descriptor: Mapping[str, Any]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
     leaves = {str(item.get("id") or "") for item in descriptor.get("occurrences") or []}
     by_id: dict[str, list[str]] = {}

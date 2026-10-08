@@ -174,15 +174,16 @@ export function syncDisplayMeshFaceIds(runtime, meshData, selectorRuntime) {
     }
     mesh.userData.faceIdsSource = selectorRuntime;
     mesh.userData.faceIdsKey = faceIdsKey;
-    // A deformed tube shows a refined copy of its rest surface: its triangles
-    // map back to the rest triangles the face ids are indexed by.
-    const deformation = record.tubeDeformationState;
-    if (deformation) {
-      deformation.originalFaceIds = faceIds || undefined;
+    // A tube a clip has bent shows its skin's refined surface from then on, bent
+    // or straight: each of its triangles names the component triangle the face ids
+    // are indexed by.
+    const skin = record.tubeSkinState;
+    if (skin) {
+      skin.originalFaceIds = faceIds || undefined;
     }
-    const sourceTriangles = deformation?.prepared?.sourceTriangles;
+    const sourceTriangles = skin ? skin.sourceTriangles : null;
     if (faceIds && sourceTriangles) {
-      mesh.userData.faceIds = new Uint32Array(sourceTriangles.map((index) => faceIds[index]));
+      mesh.userData.faceIds = Uint32Array.from(sourceTriangles, (index) => faceIds[index]);
     } else if (faceIds) {
       mesh.userData.faceIds = faceIds;
     } else {

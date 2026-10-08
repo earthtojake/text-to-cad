@@ -12,11 +12,12 @@ import unittest
 import numpy as np
 
 from tests.python.support.paths import add_repo_path
+from tests.python.support.tube_skins import view_skin
 
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal import tube_deformation as td  # noqa: E402
-from cadgen._internal import tube_skin  # noqa: E402
+from cadgen._internal import tube_skin, tube_skin_payload  # noqa: E402
 
 NORMAL = [0.0, 0.0, 1.0]
 
@@ -161,6 +162,87 @@ class ThePose(unittest.TestCase):
         np.testing.assert_allclose(posed.tube.positions[:, 0], along, atol=0.02)
         far = p[np.isclose(posed.tube.positions[:, 0], length)]
         np.testing.assert_allclose([bend, bend], far[:, :2].mean(axis=0), atol=1e-5)
+
+
+class Component:
+    """A stored mesh's arrays (``store.meshes.decode_payload``): a tube along +X with
+    one straight edge polyline down its side, as one edge table row."""
+
+    def __init__(self, length: float, radius: float):
+        mesh = _tube(length, radius)
+        self.positions, self.normals, self.indices = mesh.positions, mesh.normals, mesh.indices
+        self.edge_points = np.array([[0.0, 0.0, radius], [length, 0.0, radius]], dtype=np.float32)
+        self.edges = np.array([[7, 0, 2, 1]], dtype=np.uint32)  # ordinal 7, two points, class "feature"
+
+
+class TheViewBinding(unittest.TestCase):
+    def test_a_reflected_occurrence_binds_in_its_components_frame_and_winding(self):
+        length = 10.0
+        rest = tube_skin.compile_rest(_line(length))
+        fractions = tube_skin.joint_fractions(rest, 1.0)
+        # Mirrored in x and moved 10 mm: the rest centerline runs over the placed tube.
+        placement = [-1.0, 0, 0, 10.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0]
+        component = Component(length, 1.0)
+        bound = tube_skin.bind_occurrence(component, placement, rest, 1.0, fractions)
+        # Every refined vertex is a point of the component's own tube, in its frame.
+        np.testing.assert_allclose(1.0, np.hypot(bound.positions[:, 1], bound.positions[:, 2]), atol=1e-5)
+        # The rest arc length is measured in the document: the component's x = 0 is 10 mm along.
+        np.testing.assert_allclose(10.0 - bound.positions[:, 0], bound.along, atol=1e-5)
+        # Each refined triangle keeps the winding of the component triangle it refines.
+        source = component.indices.reshape(-1, 3)[bound.source_triangles]
+        a, b, c = (component.positions[source[:, k]].astype(np.float64) for k in range(3))
+        p, q, r = (bound.positions[bound.indices.reshape(-1, 3)[:, k]].astype(np.float64) for k in range(3))
+        self.assertTrue(np.all(np.einsum("ij,ij->i", np.cross(b - a, c - a), np.cross(q - p, r - p)) > 0))
+
+    def test_an_edge_is_split_where_it_crosses_a_band(self):
+        rest = tube_skin.compile_rest(_line(10.0))
+        bound = tube_skin.bind_occurrence(Component(10.0, 1.0), None, rest, 2.5, tube_skin.joint_fractions(rest, 2.5))
+        self.assertEqual(4, len(bound.edge_ordinals))
+        self.assertEqual({7}, set(bound.edge_ordinals.tolist()))
+        self.assertEqual({1}, set(bound.edge_classes.tolist()))
+        np.testing.assert_allclose([0, 2.5, 2.5, 5, 5, 7.5, 7.5, 10], bound.edge_positions[:, 0], atol=1e-6)
+        np.testing.assert_allclose(bound.edge_positions[:, 0] / 2.5, bound.edge_along, atol=1e-6)
+
+
+class ThePayload(unittest.TestCase):
+    def test_a_view_skinning_the_payload_curls_the_tube_where_the_clip_does(self):
+        length, radius = 20.0, 0.8
+        bend = length / (math.pi / 2)
+        moved = [1.0, 0, 0, 5.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 1.0]  # the component starts at x = -5
+        component = Component(length, radius)
+        component.positions = component.positions - np.float32([5.0, 0.0, 0.0])
+        component.edge_points = component.edge_points - np.float32([5.0, 0.0, 0.0])
+        descriptor = {"occurrences": [{"id": "o1.2", "component": "c1", "transform": moved}]}
+        track = {"targets": ["o1.2"], "times": [0.0, 1.0], "rest": _line(length), "maxSegmentLength": 1.0,
+                 "tube": [None, {"path": _quarter_circle(bend), "twistDeg": 0.0}]}
+        animation = {"clips": [{"id": "curl", "label": "Curl", "duration": 1.0, "loop": False, "tracks": [
+            {"targets": ["o1.1"], "times": [0.0], "opacity": [0.5]}, track]}]}
+        skins = tube_skin_payload.decode_tube_skins(
+            tube_skin_payload.build_tube_skins(descriptor, {"c1": component}, animation))
+        self.assertEqual(1, skins["schemaVersion"])
+        (binding,) = skins["bindings"]
+        (entry,) = skins["tracks"]
+        self.assertEqual(("curl", 1, [0], "o1.2", 21), (entry["clip"], entry["track"], entry["bindings"],
+                                                         binding["occurrence"], binding["joints"]))
+        rest = binding["rest"].reshape(-1, 7)
+        keys = entry["keys"].reshape(2, -1, 7)
+        placement = np.asarray(moved, dtype=np.float64).reshape(4, 4)
+        local = binding["positions"].reshape(-1, 3).astype(np.float64)
+        # The first key is the rest: the view draws the component where it always does.
+        np.testing.assert_allclose(local @ placement[:3, :3].T + placement[:3, 3],
+                                   view_skin(local, binding["along"], rest, keys[0], placement), atol=1e-4)
+        # The last curls it: every wall vertex and every edge point stays on the tube.
+        for points, along in ((local, binding["along"]),
+                              (binding["edgePositions"].reshape(-1, 3).astype(np.float64), binding["edgeAlong"])):
+            p = view_skin(points, along, rest, keys[1], placement)
+            from_axis = np.hypot(np.hypot(p[:, 0], p[:, 1] - bend) - bend, p[:, 2])
+            self.assertLessEqual(float(np.max(np.abs(from_axis - radius))), 0.02)
+        self.assertEqual(len(binding["sourceTriangles"]), len(binding["indices"]) // 3)
+        self.assertEqual(len(binding["edgeOrdinals"]) * 2, len(binding["edgeAlong"]))
+
+    def test_an_animation_that_bends_no_tube_has_no_payload(self):
+        self.assertIsNone(tube_skin_payload.tube_skins_bytes(tree="0" * 64, document_hash="0" * 64, animation={
+            "clips": [{"id": "fade", "tracks": [{"targets": ["o1.1"], "times": [0.0], "opacity": [0.5]}]}]}))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,5 @@
 import { resolveCadEdgeSettings } from "./cadInk.js";
-// Lazy: see tubeDeformationChunk.js. Both calls below are resets or replays of
-// a deformation that already exists, so a null runtime is exactly a no-op.
-import { tubeDeformation } from "./tubeDeformationChunk.js";
+import { applyRecordTubeSkin, poseRecordTubeEdges } from "./tubeSkin.js";
 import { syncRecordBaseEmissiveColor } from "./surfaceMaterialState.js";
 import { applyColorGrading } from "./colorGrading.js";
 import {
@@ -1019,9 +1017,9 @@ export function applyPartVisualState(THREE, records, {
     if (record.edges) {
       const wasVisible = record.edges.visible;
       record.edges.visible = showEdges && !effectHidden;
-      // Hidden edges skip deformation; catch up to the current pose when shown.
-      if (!wasVisible && record.edges.visible && record.effectDeformation) {
-        tubeDeformation()?.applyRecordTubeDeformation(THREE, record, record.effectDeformation);
+      // Hidden edges skip a bending tube's poses; catch up to the current one when shown.
+      if (!wasVisible && record.edges.visible) {
+        poseRecordTubeEdges(record);
       }
     }
     if (record.edgeInstance) {
@@ -1117,7 +1115,7 @@ export function applyPartVisualState(THREE, records, {
 
 function resetParameterEffects(THREE, records) {
   for (const record of Array.isArray(records) ? records : []) {
-    tubeDeformation()?.applyRecordTubeDeformation(THREE, record, null);
+    applyRecordTubeSkin(THREE, record, null);
     record.effectMatrix = null;
     record.effectStyle = null;
     record.effectVisible = null;
@@ -1637,14 +1635,15 @@ function cadEdgeClassPositions(cadEdges, range) {
   return positions;
 }
 
-// A private edge object for one record (a deformed tube): its points move per
-// pose, so it cannot ride the component's instanced draw. One screen-space fat
-// line PER DRAWN CLASS, because a class's width is a material property and the
-// instanced path uses the same fixed per-class ink. Deformation recurses into the group
-// and moves LineSegments2 instanceStart/instanceEnd exactly as it moves plain
-// positions. Without the Line2 constructors (a host that renders basic lines
-// only), each class uses its own basic material so palette changes never
-// rewrite component geometry shared with another scene.
+// A private edge object for one record (a bending tube, drawn from its skin's
+// segments): its points move per pose, so it cannot ride the component's
+// instanced draw. One screen-space fat line PER DRAWN CLASS, because a class's
+// width is a material property and the instanced path uses the same fixed
+// per-class ink; each line keeps its class range, which the skin poses
+// LineSegments2 instanceStart/instanceEnd or plain positions from. Without the
+// Line2 constructors (a host that renders basic lines only), each class uses its
+// own basic material so palette changes never rewrite component geometry shared
+// with another scene.
 function addCadEdgeObject(THREE, runtime, record, cadEdges) {
   const depthTest = runtime.edgeSettings?.depthTest !== false;
   // One bias for every class: the coplanar (seam/tangent) value, the larger.
@@ -1669,6 +1668,7 @@ function addCadEdgeObject(THREE, runtime, record, cadEdges) {
       || createBasicLineSegments(runtime, positions, options);
     if (!line) continue;
     line.userData.partId = record.partId;
+    line.userData.cadEdgeRange = range;
     line.material.userData.cadEdgeClassId = range.classId;
     line.material.userData.cadEdgeBaseColor = style.color;
     line.material.userData.cadEdgeBaseOpacity = style.opacity;
@@ -1744,22 +1744,23 @@ function cadEdgeInstanceSet(THREE, runtime, cadEdges) {
 }
 
 // A surf component's edges for one record: a slot in the component's instance
-// set. The record keeps a hook to leave the set for a private line object when
-// a tube deformation needs its points to move (tubeDeformation.js calls it).
+// set. The record keeps a hook to leave the set for a private line object drawn
+// from a bending tube's own edge segments (`lines`, its skin's), which move with
+// every pose (tubeSkin.js calls it once a clip bends the record).
 function attachCadEdgeInstance(THREE, runtime, record, cadEdges) {
   const set = cadEdgeInstanceSet(THREE, runtime, cadEdges);
   if (!set) {
     return;
   }
-  const detach = () => {
+  const bind = (lines) => {
     if (!record.edgeInstance) {
       return;
     }
     record.edgeInstance.set.release(record.edgeInstance.slot);
     record.edgeInstance = null;
-    record.detachEdgeInstance = null;
+    record.bindTubeEdges = null;
     if (!record.edges) {
-      addCadEdgeObject(THREE, runtime, record, cadEdges);
+      addCadEdgeObject(THREE, runtime, record, lines);
       applyDisplayRecordTransform(THREE, record);
     }
   };
@@ -1771,7 +1772,7 @@ function attachCadEdgeInstance(THREE, runtime, record, cadEdges) {
   // staying out is one draw call per tube that has ever bent (48 on the tendon
   // hand against 866 component draws), which is the cheaper side of the trade.
   record.edgeInstance = { set, slot: set.allocate() };
-  record.detachEdgeInstance = detach;
+  record.bindTubeEdges = bind;
 }
 
 function disposeCadEdgeInstanceSet(runtime, set) {
@@ -1813,10 +1814,10 @@ function disposeEmptyCadEdgeInstanceSets(runtime) {
   }
 }
 
-// The component geometry a record renders at rest (a deformed record shows a
-// private copy and keeps the original in its deformation state).
+// The component geometry a record renders at rest (a bent tube shows its skin's
+// geometry and keeps the component's in its skin state).
 function recordRestGeometry(record) {
-  return record?.tubeDeformationState?.original || record?.geometry || null;
+  return record?.tubeSkinState?.original || record?.geometry || null;
 }
 
 // Free the GPU buffers and raycast BVH only after the last scene releases a
@@ -1938,14 +1939,14 @@ function createDisplayRecord(THREE, runtime, meshData, settings, {
   runtime.modelGroup.add(mesh);
 
   const record = {
-    gpuTubeDeformationAllowed: true,
+    gpuTubeSkinAllowed: true,
     partId,
     sourcePart: part || null,
     mesh,
     // CAD edges of a surf component: a slot in the component's instanced edge
-    // draw (cadEdgeInstances.js) until a deformation detaches it into `edges`.
+    // draw (cadEdgeInstances.js) until a bending tube binds its own into `edges`.
     edgeInstance: null,
-    detachEdgeInstance: null,
+    bindTubeEdges: null,
     // Occlusion ghost: a dithered copy of this part that renders ONLY where
     // the part is hidden behind other geometry, so a selected feature can be
     // seen through whatever blocks it. Attached lazily on first selection by
@@ -2020,7 +2021,7 @@ function disposeDisplayRecord(record) {
     record.edgeInstance.set.release(record.edgeInstance.slot);
   }
   record.edgeInstance = null;
-  record.detachEdgeInstance = null;
+  record.bindTubeEdges = null;
   disposeSceneObject(record.silhouette);
   disposeSceneObject(record.edges);
   disposeSceneObject(record.mesh);
@@ -2063,10 +2064,10 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
 
 // A record built for an earlier composition of the same occurrence stays valid
 // while it still renders the same component geometry with the same source
-// colour and opacity. A deformed tube's record keeps the component geometry in
-// its deformation state and shows a private copy.
+// colour and opacity. A bent tube's record keeps the component geometry in its
+// skin state and shows its skin's.
 function recordAdoptsPart(THREE, record, part, geometryEntry, meshData) {
-  const restGeometry = record.tubeDeformationState?.original || record.geometry;
+  const restGeometry = record.tubeSkinState?.original || record.geometry;
   if (restGeometry !== geometryEntry.geometry) {
     return false;
   }
@@ -2083,12 +2084,12 @@ function adoptDisplayRecordPart(THREE, record, part, { fillIndex, baseTransform,
   record.baseTransform = baseTransform;
   record.partCenter = readBoundsCenter(THREE, part?.bounds || bounds, record.partCenter);
   const partBounds = part?.bounds || part?.sourceBounds || bounds;
-  const deformation = record.tubeDeformationState;
-  if (deformation) {
-    // The rest bounds the deformation restores on reset; a posed record keeps
-    // the bounds of its pose.
-    deformation.partBounds = partBounds;
-    if (!deformation.active) {
+  const skin = record.tubeSkinState;
+  if (skin) {
+    // The rest bounds a straightened tube returns to; a bent one keeps the bounds
+    // of its pose.
+    skin.partBounds = partBounds;
+    if (!skin.active) {
       record.partBounds = partBounds;
     }
   } else {
@@ -2178,7 +2179,7 @@ function reconcileDisplayRecords(THREE, runtime, meshData, settings) {
 function recordsHaveStaticSourceState(records) {
   return !records.some((record) => record?.effectMatrix || record?.effectStyle
     || record?.effectVisible != null || record?.effectHighlighted || record?.explodedViewMatrix
-    || record?.effectDeformation || record?.tubeDeformationState?.active || record?.tubeGpuState?.active);
+    || record?.effectDeformation || record?.tubeSkinState?.active);
 }
 
 function staticMutableStateKey(settings) {

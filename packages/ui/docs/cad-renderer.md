@@ -1283,7 +1283,8 @@ Loop, kept by a Position edit too (`activatePositionControls` in
 routine from the start. An update of the model that leaves its routines as they were (the
 same `animationHash`) neither stops nor rewinds one that is playing: `useStepMotion` loads
 the routines' keyframes per `animationKey`, never per catalog entry, and only a changed routine
-is loaded again, at rest — released, behind the routines in hand, which stay listed until the
+is loaded again, at rest (a routine that bends a tube is keyed by its `tubeSkinsUrl` too,
+which names the document's bytes: the skins are bound to its meshes) — released, behind the routines in hand, which stay listed until the
 new ones land, so Animation stays up and the Routine chosen is kept while the model still has it. The routine and its time are not saved: a reloaded file starts
 at rest, with the Speed and Loop its Playback settings chose, if any, and a file opened
 again after the tab left it starts at the defaults. A routine that failed to

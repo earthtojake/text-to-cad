@@ -18,19 +18,18 @@ import { buildModel } from "./cadScene.js";
 import { modelOptionsForRenderJob, renderJobContext } from "./renderMeshScene.js";
 import { normalizeAnimationClips } from "./animationRuntime.js";
 import { resolveAnimationFrame } from "./animationClock.js";
-import { resolveFramePlan } from "./framePlan.js";
 import {
   poseSequenceFrame,
   sequenceFrameBounds
 } from "./headlessRenderEntry.js";
 
-// Left slides +X at 1 mm/s: keys that carry the rate make every moment between
-// them exact.
+// Left slides +X at 1 mm/s: two keys carrying that rate make every moment
+// between them exact.
 const SLIDE_CLIPS = normalizeAnimationClips({ clips: [{
   id: "slide", label: "Slide", duration: 4, loop: true,
   tracks: [{ targets: ["left"], times: [0, 4], pivot: [0, 0, 0], transform: [
-    [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0],
-    [4, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0]
+    [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+    [4, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]
   ] }]
 }] });
 
@@ -125,8 +124,9 @@ test("the camera frames the whole clip, not one pose of it", () => {
   const stepAnimation = resolveAnimationFrame(SLIDE_CLIPS, { clip: "slide", time: 0 });
   const model = buildSequenceModel(stepAnimation);
   try {
-    const plan = resolveFramePlan({ fps: 4, seconds: 4 }, SLIDE_CLIPS.slide);
-    const bounds = sequenceFrameBounds(model, stepAnimation, plan);
+    // The frames cadgen schedules for 4 s at 4 fps (snapshot_video.resolve_frame_plan).
+    const times = (count, fps) => Array.from({ length: count }, (_, index) => index / fps);
+    const bounds = sequenceFrameBounds(model, stepAnimation, { times: times(16, 4) });
     // Left starts at x 0..1 and the last frame (t = 3.75) slides it to 3.75..4.75,
     // so the union reaches past the resting model's own 0..3. It is padded by a
     // hair (sequenceFrameBounds samples rather than walking every frame), so the
@@ -149,7 +149,7 @@ test("the camera frames the whole clip, not one pose of it", () => {
     // clip whose extent moved smoothly the whole time.
     let posed = 0;
     const counting = { ...model, update: (settings) => { posed += 1; return model.update(settings); } };
-    sequenceFrameBounds(counting, stepAnimation, resolveFramePlan({ fps: 60, seconds: 30 }, SLIDE_CLIPS.slide));
+    sequenceFrameBounds(counting, stepAnimation, { times: times(1800, 60) });
     assert.ok(posed <= 192, `sampled ${posed} poses for an 1800-frame plan`);
   } finally {
     model.dispose();

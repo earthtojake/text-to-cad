@@ -22,7 +22,6 @@ import {
   stepParameterRuntime
 } from "./source.js";
 import { resolveAnimationFrame } from "./animationClock.js";
-import { framePlanElapsedSec, resolveFramePlan } from "./framePlan.js";
 import { runHeadlessDrawingJob } from "./headlessDrawingRender.js";
 import { loadSourceAnimation } from "./animationRuntime.js";
 import {
@@ -97,7 +96,7 @@ async function captureFamilyScene(family, job) {
 // tab hands its own pass. Choreography is the sidecar's baked keyframes; the
 // sidecar was already document-bound by loadSource, so animation and
 // kinematics compose against the same tree.
-async function loadStepAnimation(job, source) {
+async function loadStepAnimation(job, source, resources) {
   const request = job.animation;
   if (request === undefined || request === null) {
     return null;
@@ -108,7 +107,9 @@ async function loadStepAnimation(job, source) {
   if (String(job.mode || "view").toLowerCase() !== "view") {
     throw new Error("an animation frame supports only view mode");
   }
-  const animation = await loadSourceAnimation(source.sourceSidecar);
+  const animation = await loadSourceAnimation(source.sourceSidecar, {
+    tubeSkinsUrl: job.resolved?.tubeSkinsUrl || "", resources
+  });
   if (!animation) {
     throw new Error("the document sidecar declares no animation, so there is no clip frame to render");
   }
@@ -127,15 +128,16 @@ async function prepareRenderJob(job) {
   const tessellationCache = createTessellationCache({ provider: createHttpTessellationCacheProvider({
     origin: assetOrigin, produceUrl: `${assetOrigin}/__tess_cache/produce`,
   }) });
+  const resources = createHttpCadResourceProvider({ origin: assetOrigin, cache: "no-store" });
   let source;
   try {
-    source = await loadSource(job, { stageTimings, tessellationCache, resources: createHttpCadResourceProvider({ origin: assetOrigin, cache: "no-store" }) });
+    source = await loadSource(job, { stageTimings, tessellationCache, resources });
   } finally {
     tessellationCache.dispose();
   }
   stageTimings.loadSourceMs = Math.round(performance.now() - loadStarted);
   const prepareStarted = performance.now();
-  const stepAnimation = await loadStepAnimation(job, source);
+  const stepAnimation = await loadStepAnimation(job, source, resources);
   const stepParameterSource = source.stepParameterSource;
   // `job.kinematics` is the JOB PACKET's pose input (a preset name or {dof: value}); the
   // `stepParameters` set below is the shared buildModel/renderMeshScene SETTINGS key,
@@ -199,11 +201,9 @@ export async function runHeadlessRenderJob(job) {
 // rather than collecting an array: a 30 s 60 fps render is 1800 PNGs, and the
 // driver pipe cannot carry that in one protocol message.
 
-// The schedule itself lives in ./framePlan.js: a GLB export samples the same
-// span of the same clip into baked keyframes, and two derivations of "which
-// moments" is the pair that drifts by a frame and loops with a stutter. Video
-// is the LABEL passed through it, so the errors name the flag the caller used.
-const VIDEO_PLAN_LABEL = "video";
+// Which moments of the clip the frames show is cadgen's to say: the job carries
+// them (`resolved.framePlan.times`, snapshot_video.resolve_frame_plan), and the
+// page renders each.
 
 /** The `update` patch that poses a prepared model at one moment of its clip.
  *
@@ -243,11 +243,11 @@ const SEQUENCE_BOUNDS_MARGIN = 0.01;
 export function sequenceFrameBounds(model, stepAnimation, plan) {
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
-  const samples = Math.min(plan.frameCount, SEQUENCE_BOUNDS_SAMPLES);
-  const last = plan.frameCount - 1;
+  const samples = Math.min(plan.times.length, SEQUENCE_BOUNDS_SAMPLES);
+  const last = plan.times.length - 1;
   for (let sample = 0; sample < samples; sample += 1) {
     const index = samples === 1 ? 0 : Math.round((sample * last) / (samples - 1));
-    const bounds = poseSequenceFrame(model, stepAnimation, framePlanElapsedSec(plan, index)).bounds;
+    const bounds = poseSequenceFrame(model, stepAnimation, plan.times[index]).bounds;
     for (let axis = 0; axis < 3; axis += 1) {
       min[axis] = Math.min(min[axis], Number(bounds?.min?.[axis] ?? 0));
       max[axis] = Math.max(max[axis], Number(bounds?.max?.[axis] ?? 0));
@@ -281,7 +281,11 @@ export async function prepareHeadlessRenderSequence(job) {
   const model = buildModel(THREE, source, modelOptionsForRenderJob(context, renderJob));
   let viewport = null;
   try {
-    const plan = resolveFramePlan(renderJob.video, stepAnimation.clip, { label: VIDEO_PLAN_LABEL });
+    // cadgen resolved which moments of the clip the frames show (snapshot_video.resolve_frame_plan).
+    const plan = job.resolved?.framePlan;
+    if (!Array.isArray(plan?.times) || !plan.times.length) {
+      throw new Error("a video job carries its frame plan: cadgen resolves it against the clip");
+    }
     // The union is measured BEFORE the scene is built, because the stage floor
     // and grid are sized to the bounds `renderModel` is handed while the camera
     // is locked to this union: built from the t = 0 pose they end up inside the
@@ -298,7 +302,7 @@ export async function prepareHeadlessRenderSequence(job) {
   }
   return {
     ok: true,
-    frames: activeRenderSequence.plan.frameCount,
+    frames: activeRenderSequence.plan.times.length,
     fps: activeRenderSequence.plan.fps,
     seconds: activeRenderSequence.plan.seconds,
     start: activeRenderSequence.plan.start
@@ -310,8 +314,8 @@ export async function captureHeadlessRenderSequenceFrame(index) {
   if (!session) {
     throw new Error("no prepared render sequence: call __snapshotRenderSequence(job) first");
   }
-  if (!Number.isInteger(index) || index < 0 || index >= session.plan.frameCount) {
-    throw new Error(`render sequence frame ${JSON.stringify(index)} is outside 0..${session.plan.frameCount - 1}`);
+  if (!Number.isInteger(index) || index < 0 || index >= session.plan.times.length) {
+    throw new Error(`render sequence frame ${JSON.stringify(index)} is outside 0..${session.plan.times.length - 1}`);
   }
   const captured = await captureModel(session.viewport, {
     job: session.job,
@@ -320,7 +324,7 @@ export async function captureHeadlessRenderSequenceFrame(index) {
     // just before it: captureModel updates the model itself, so posing
     // separately ran the clip evaluator and the whole effects pass twice on
     // every frame — the largest per-frame cost a video pays, doubled.
-    modelState: sequencePoseState(session.stepAnimation, framePlanElapsedSec(session.plan, index))
+    modelState: sequencePoseState(session.stepAnimation, session.plan.times[index])
   });
   const output = captured?.outputs?.[0];
   if (!output?.dataUrl) {

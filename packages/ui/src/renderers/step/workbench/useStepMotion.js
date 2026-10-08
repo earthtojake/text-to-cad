@@ -21,8 +21,12 @@ import { stepModuleRequiresTopology } from "./topologyCapabilities.js";
 import { useStepMotionControls } from "./useStepMotionControls.js";
 
 function sourceAnimationForEntry(entry) { return entry?.sourceSidecar?.animation || null; }
+// A routine that bends a tube plays cadgen's skins for the document's current bytes, which
+// its URL names: a rebuild that moves the tube loads them again, from rest.
 function sourceAnimationKeyForEntry(entry) {
-  return sourceAnimationForEntry(entry) ? `${fileKeyOf(entry)}:${entry?.animationHash || entry?.documentHash || entry?.hash || "animation"}` : "";
+  return sourceAnimationForEntry(entry)
+    ? `${fileKeyOf(entry)}:${entry?.animationHash || entry?.documentHash || entry?.hash || "animation"}${entry?.tubeSkinsUrl ? `:${entry.tubeSkinsUrl}` : ""}`
+    : "";
 }
 
 /**
@@ -216,13 +220,13 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
   // routines' keyframes), never on the entry: an update of the model that leaves its routines as
   // they were neither stops nor rewinds one that is playing, and only a changed routine is
   // loaded again, from rest. The keyframes are read when the key changes.
-  const animationSourceRef = useRef({ sourceAnimation, entry });
-  animationSourceRef.current = { sourceAnimation, entry };
+  const animationSourceRef = useRef({ sourceAnimation, entry, resources });
+  animationSourceRef.current = { sourceAnimation, entry, resources };
   // Putting the routine down (`useStepMotionControls`), which a reload below does: bound once the
   // commands are made.
   const releaseAnimationRef = useRef(null);
   useEffect(() => {
-    const { sourceAnimation, entry } = animationSourceRef.current;
+    const { sourceAnimation, entry, resources } = animationSourceRef.current;
     let cancelled = false;
     const controller = new AbortController();
     const resetAnimation = () => {
@@ -258,7 +262,9 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
     }
 
     const loadMotionRevision = motionRevisionRef.current;
-    loadSourceAnimation({ animation: sourceAnimation }, { signal: controller.signal })
+    loadSourceAnimation({ animation: sourceAnimation }, {
+      signal: controller.signal, tubeSkinsUrl: entry?.tubeSkinsUrl || "", resources
+    })
       .then((animationModule) => {
         if (cancelled) {
           return;

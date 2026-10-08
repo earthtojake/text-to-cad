@@ -1,7 +1,5 @@
-// Lazy: see tubeDeformationChunk.js. An effect only ever carries a deformation
-// an animation frame put there, and that animation loaded the runtime.
-import { tubeDeformation } from "./tubeDeformationChunk.js";
 import { stepModuleTargetPartIds } from "./stepModule.js";
+import { applyRecordTubeSkin } from "./tubeSkin.js";
 
 function toNumber(value, fallback = 0) {
   const numericValue = Number(value);
@@ -149,7 +147,7 @@ function matrixHasTransform(matrix, epsilon = 1e-6) {
 
 export function resetStepModuleRecordEffects(records, THREE = null) {
   for (const record of Array.isArray(records) ? records : []) {
-    if (THREE) tubeDeformation()?.applyRecordTubeDeformation(THREE, record, null);
+    if (THREE) applyRecordTubeSkin(THREE, record, null);
     record.effectMatrix = null;
     record.effectStyle = null;
     record.effectVisible = null;
@@ -326,7 +324,7 @@ export function applyStepModuleEffectsToRecords(THREE, records, effectsByPartId)
   let appearanceChanged = false;
   for (const record of Array.isArray(records) ? records : []) {
     const effect = effectsByPartId.get(String(record?.partId || "").trim());
-    tubeDeformation()?.applyRecordTubeDeformation(THREE, record, effect?.deformation || null);
+    applyRecordTubeSkin(THREE, record, effect?.deformation || null);
     const style = effect?.style && typeof effect.style === "object" ? { ...effect.style } : null;
     const visible = effect ? effect.visible : null;
     const highlighted = effect?.highlighted === true;

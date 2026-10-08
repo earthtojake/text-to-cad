@@ -50,7 +50,7 @@ from lib import clips, kin
 ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_STEP = ROOT / "STEP" / "radial.step"
 TOL = 1e-6
-# The viewer's tube runtime (packages/core tubeDeformation.js compileTubePath)
+# cadgen's tube engine (cadgen._internal.tube_deformation compile_tube_path)
 # refuses a path whose segments are further apart than this (mm) or whose
 # tangents meet at a dot product below 1 - TUBE_TANGENT.
 TUBE_GAP = 1e-5

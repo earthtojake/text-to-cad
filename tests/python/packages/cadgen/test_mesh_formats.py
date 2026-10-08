@@ -225,9 +225,11 @@ class Glb(unittest.TestCase):
         descriptor = {"components": {"c1": {}}, "occurrences": [occurrence("o1.1"), occurrence("o1.2")]}
         primitives = build_primitives(descriptor, {"c1": cube()}, per_occurrence=True)
         half = [0.0, 0.3826834, 0.0, 0.9238795]
+        rate = [0.0, 0.25, 0.0, -0.5]
         pivot = Pivot(members=("o1.2",), times=[0.0, 0.5, 1.0], translations=[0.01, 0.0, 0.0] * 3,
                       rotations=[0.0, 0.0, 0.0, 1.0, *half, 0.0, 0.7071068, 0.0, 0.7071068],
-                      child_translation=[-0.01, 0.0, 0.0])
+                      child_translation=[-0.01, 0.0, 0.0], translations_in=[0.0] * 9, translations_out=[0.0] * 9,
+                      rotations_in=rate * 3, rotations_out=[0.0] * 12)
         gltf, binary = read_glb(glb_bytes(primitives, name="part", animation=GltfClip("turn", 1.0, pivots=[pivot])))
         nodes = gltf["nodes"]
         self.assertEqual(["o1_1", "o1_2", "pivot 0 offset", "pivot 0"], [node["name"] for node in nodes])
@@ -242,18 +244,23 @@ class Glb(unittest.TestCase):
         self.assertEqual([{"node": 3, "path": "translation"}, {"node": 3, "path": "rotation"}],
                          [channel["target"] for channel in clip["channels"]])
         rotation = clip["samplers"][clip["channels"][1]["sampler"]]
-        self.assertEqual("LINEAR", rotation["interpolation"])
+        self.assertEqual("CUBICSPLINE", rotation["interpolation"])
         times = gltf["accessors"][rotation["input"]]
         self.assertEqual(([0.0], [1.0], 3), (times["min"], times["max"], times["count"]))
-        self.assertEqual(("VEC4", 3), (gltf["accessors"][rotation["output"]]["type"],
+        # Each key's in-tangent, value and out-tangent in turn.
+        self.assertEqual(("VEC4", 9), (gltf["accessors"][rotation["output"]]["type"],
                                        gltf["accessors"][rotation["output"]]["count"]))
-        self.assertAlmostEqual(0.3826834, float(accessor(gltf, binary, rotation["output"])[5]), places=6)
+        output = accessor(gltf, binary, rotation["output"]).reshape(3, 3, 4)
+        np.testing.assert_allclose(half, output[1, 1], atol=1e-6)
+        np.testing.assert_allclose(rate, output[1, 0], atol=1e-6)
+        np.testing.assert_allclose([0.0] * 4, output[1, 2])
 
     def test_a_pivot_carrying_a_part_the_file_does_not_hold_is_refused(self):
         primitives = build_primitives({"components": {"c1": {}}, "occurrences": [occurrence("o1")]},
                                       {"c1": cube()}, per_occurrence=True)
         pivot = Pivot(members=("o9",), times=[0.0, 1.0], translations=[0.0] * 6, rotations=[0.0, 0.0, 0.0, 1.0] * 2,
-                      child_translation=[0.0, 0.0, 0.0])
+                      child_translation=[0.0, 0.0, 0.0], translations_in=[0.0] * 6, translations_out=[0.0] * 6,
+                      rotations_in=[0.0] * 8, rotations_out=[0.0] * 8)
         with self.assertRaisesRegex(ValueError, "carries 'o9', which no primitive declared"):
             glb_bytes(primitives, animation=GltfClip("x", 1.0, pivots=[pivot]))
 

@@ -508,6 +508,8 @@ class CadApp:
                     response.send_json(200, self.build_status(query.get("file") or "", after=query.get("after")))
                 elif pathname == "/__cad/drawing":
                     self._handle_drawing(request, response, query)
+                elif pathname == "/__cad/tube-skins":
+                    self._handle_tube_skins(request, response, query)
                 elif pathname == "/__cad/store":
                     self._handle_store_asset(request, response, query)
                 elif pathname == "/__cad/asset":
@@ -835,6 +837,19 @@ class CadApp:
         status, body = drawing_payload_response(query.get("file") or "")
         if isinstance(body, bytes):
             response.send_bytes(status, body, "application/json; charset=utf-8")
+            return
+        response.send_json(status, body)
+
+    def _handle_tube_skins(self, request, response, query):
+        """A document's bending tubes, bound as a view plays them (``tube_skins.py`` owns the
+        rules). Real work on a miss -- binding every tube a clip bends -- so it is counted, as
+        the drawing route is."""
+        from .tube_skins import tube_skins_response
+
+        status, body = tube_skins_response(query.get("file") or "", query.get("documentHash"),
+                                           query.get("chord"), query.get("angle"))
+        if isinstance(body, bytes):
+            response.send_bytes(status, body, "model/gltf-binary")
             return
         response.send_json(status, body)
 

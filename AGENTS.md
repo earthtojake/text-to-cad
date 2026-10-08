@@ -116,7 +116,7 @@ path, the rehearsal, and local/manual fallbacks.
   - `packages/cadgen/`: `STORE.md` (the store contract — sectioned, with a
     table of contents), `SNAPSHOTS.md` (snapshot `--debug` timings).
   - `packages/core/docs/`: `render-pipeline.md`, `resource-ownership.md`,
-    `tube-deformation.md`.
+    `tube-skins.md`.
   - `packages/ui/docs/`: `settings-ui.md` (BINDING for any settings control),
     `render-types.md`, `render-mode.md`, `lod.md`, `storage.md`, `backend.md`.
 - Ships-alone law: `packages/cadgen` (the built PyPI wheel) works in isolation

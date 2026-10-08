@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import functools
 import json
 import mimetypes
 import os
@@ -1441,6 +1442,37 @@ def read_tessellation_cache_batch(body: bytes | None) -> bytes | None:
 
 RENDER_ASSET_ROUTE_PREFIX = "/__render_asset/"
 STORE_ASSET_ROUTE_PREFIX = "/__store_asset/"
+# A job's tube skins (``cadgen._internal.tube_skin_payload``), by content hash.
+TUBE_SKINS_ROUTE_PREFIX = "/__tube_skins/"
+_TUBE_SKINS_NAME = re.compile(r"^[0-9a-f]{64}\.glb$")
+
+
+@functools.lru_cache(maxsize=1)
+def _tube_skins_dir() -> Path:
+    """One directory per process for the tube skins its jobs resolved, removed at exit:
+    the page fetches them over the loopback asset server, which serves files."""
+    import atexit
+    import shutil
+    import tempfile
+
+    directory = Path(tempfile.mkdtemp(prefix="cadgen-tube-skins-"))
+    atexit.register(shutil.rmtree, directory, True)
+    return directory
+
+
+def tube_skins_asset_url(*, tree: str, document_hash: str, animation: object) -> str | None:
+    """Where a snapshot page reads a document's tube skins, written for it; None when
+    its animation bends no tube. Named by content, so jobs over one document share it."""
+    from cadgen._internal.tube_skin_payload import tube_skins_bytes
+
+    data = tube_skins_bytes(tree=tree, document_hash=document_hash, animation=animation)
+    if data is None:
+        return None
+    name = f"{sha256(data).hexdigest()}.glb"
+    path = _tube_skins_dir() / name
+    if not path.is_file():
+        write_bytes_atomic(path, data)
+    return f"{TUBE_SKINS_ROUTE_PREFIX}{name}"
 
 
 def _store_packages_root() -> Path:
@@ -1524,6 +1556,14 @@ class SnapshotAssetServer:
                         self._send(404, b"miss", "text/plain; charset=utf-8")
                         return
                     self._send(200, body, "model/gltf-binary")
+                    return
+                if pathname.startswith(TUBE_SKINS_ROUTE_PREFIX):
+                    name = pathname[len(TUBE_SKINS_ROUTE_PREFIX):]
+                    file_path = _tube_skins_dir() / name
+                    if not _TUBE_SKINS_NAME.match(name) or not file_path.is_file():
+                        self._send(404, b"not found", "text/plain; charset=utf-8")
+                        return
+                    self._send(200, file_path.read_bytes(), "model/gltf-binary")
                     return
                 if pathname.startswith(STORE_ASSET_ROUTE_PREFIX):
                     try:

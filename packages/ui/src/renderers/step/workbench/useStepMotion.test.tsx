@@ -23,7 +23,8 @@ const swing = { name: 'swing', kind: 'revolute', parent: '#base', child: '#flap'
 const OPEN = { open: { swing: 90 } };
 // The flap turning a quarter turn about +Z over the routine's 4 s, as the build bakes it.
 const SWING_CLIP = { id: 'swing', label: 'Swing', duration: 4, loop: true, tracks: [{ targets: ['o1.2'], times: [0, 4], pivot: [0, 0, 0],
-  transform: [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, Math.PI / 8], [0, 0, 0, 0, 0, Math.SQRT1_2, Math.SQRT1_2, 0, 0, 0, 0, 0, Math.PI / 8]] }] };
+  transform: [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, Math.PI / 16, 0],
+    [0, 0, 0, 0, 0, Math.SQRT1_2, Math.SQRT1_2, 0, 0, 0, 0, 0, Math.SQRT1_2 * Math.PI / 16, -Math.SQRT1_2 * Math.PI / 16]] }] };
 // One save of hinge.step as the catalog lists it: new STEP bytes, and the sidecar written again
 // beside them (a new version on its URL, bound to those bytes), with its mates, named poses and
 // routines (`routine` is their keyframes' hash, which the catalog lists as `animationHash`). No mates

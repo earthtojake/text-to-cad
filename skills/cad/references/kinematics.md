@@ -208,7 +208,7 @@ carries data, never code, and nothing runs a clip after the build.
   `.transform(matrix)` (a rigid 4x4, row-major, translation in the last
   column), `.opacity(value)` (0..1, clamped), `.visible(flag)`, and
   `.deform_tube(...)` for flexible swept bodies; see
-  [tube deformation and morph export](animation-deformation.md).
+  [tube deformation](animation-deformation.md).
 - Transform calls PREMULTIPLY: a later call acts in world space on the part as
   already moved. Above, the spinner turns about its own axis first and the
   platter's turn then carries it, so the spin rides the orbit; in the other
@@ -324,54 +324,45 @@ motion a still cannot show.
 ### Exporting the clip INSIDE a GLB
 
 A video is pixels. `cadgen glb build --animation` writes the motion itself: the
-clip's keyframes are resampled into glTF node animation, so whatever opens the
-`.glb` — Blender, a three.js viewer, a browser's model preview — plays it. There
-is no camera, no quality and no encoder here, and `fps` means something
-different: the rate at which the export samples the clip into the file's own
-keyframes, not a playback rate.
+clip's own keyframes go into the file as glTF animation, so whatever opens the
+`.glb` — Blender, a three.js viewer, a browser's model preview — plays exactly
+what the CAD Viewer plays. Nothing is resampled, so there is no frame rate here,
+and no camera, quality or encoder.
 
 ```bash
 cadgen glb build STEP/turntable.step GLB/animated/turntable.glb --animation demo
 cadgen glb build STEP/turntable.step GLB/animated/turntable.glb \
-  --animation '{"clip": "demo", "fps": 30, "seconds": 8, "start": 0}'
+  --animation '{"clip": "demo", "seconds": 8, "start": 0}'
 ```
 
 The request is a clip name, or an object whose keys are all optional but `clip`:
 
 | key | default | meaning |
 | --- | --- | --- |
-| `clip` | — | the clip to bake; required |
-| `fps` | `30` | keyframe samples per second, a whole number 1..120 |
-| `seconds` | what is left of the clip from `start` | how much of the clip to bake |
+| `clip` | — | the clip to export; required |
+| `seconds` | what is left of the clip from `start` | how much of the clip to export |
 | `start` | `0` | seconds into the clip where the span begins; must be inside it |
 | `drop` | `[]` | effects to bake STATIC instead of refusing: `opacity`, `visible` |
-| `deform` | `refuse` | what to do with `.deform_tube()`: `refuse`, `morph`, `rest` |
-| `deformTolerance` | `1.0` | `morph` only — millimetres the baked tubes may sit from the clip's own deformation, `0.01`..`10` |
 
-The span is resolved exactly as `--video`'s is — a looping clip defaults to one
-whole cycle, a clip that stops gets what is left of it, and `fps * seconds` is
-capped at 7200 samples. The exported animation is re-based to zero, so `start`
-picks where in the CLIP the span begins and the file still opens at t = 0.
+A looping clip defaults to one whole cycle and repeats its keys to fill a longer
+span (at most 240 times); a clip that stops gets what is left of it. The exported
+animation is re-based to zero, so `start` picks where in the CLIP the span begins
+and the file still opens at t = 0.
 
 **What glTF carries, and what it will not:**
 
 | clip effect | in the GLB |
 | --- | --- |
-| `.rotate()` | sampled rotation channel on that occurrence's node |
-| `.translate()` | sampled translation channel on the same node |
-| `.rotate()` about a pivot, `.transform()` | sampled rotation and translation channels |
+| `.rotate()`, `.translate()`, `.transform()` | the parts hang under a pivot node whose translation and rotation channels carry the clip's keys (glTF `CUBICSPLINE`) |
+| `.deform_tube()` | a glTF skin: joints along the tube's centerline, keyed `LINEAR`, and the tube's mesh bound to them; see [tube deformation](animation-deformation.md) |
 | `.opacity()` | **refused.** glTF has no animated opacity. `"drop": ["opacity"]` bakes the value at `start` as a material alpha, and warns |
 | `.visible()` | **refused.** Same reason. `"drop": ["visible"]` omits whatever is hidden at `start`, and warns — an occurrence dropped this way loses its motion too, because a node that is not in the file cannot be animated |
-| `.deform_tube()` | **refused by default.** Per-vertex motion, not a node transform. `"deform": "morph"` bakes it as glTF morph targets; see [deformation](animation-deformation.md); `"deform": "rest"` ships those tubes at rest shape and warns |
 
 Nothing is dropped quietly: an effect the file cannot carry stops the export and
-names the occurrences, so a hand whose tendons froze on the way out is a refusal
-rather than a finished-looking file. Render the clip with
+names the occurrences. Render the clip with
 `cadgen step snapshot --animation <clip> --video` when the motion is one of
-those — `--video` needs the clip named too, so both flags go together.
-
-For `.deform_tube()` authoring, morph fitting, memory limits and braid export
-limitations, read [tube deformation and morph export](animation-deformation.md).
+those — `--video` needs the clip named too, so both flags go together. The
+export's summary says what moves: `(demo, 8s, 3 moving, 1 tube on 11 joints)`.
 
 The CAD Viewer plays a GLB's own rigid, skinned and morph animation in preview,
 from the playbar under the model.

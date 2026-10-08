@@ -80,8 +80,8 @@ test("eligibility excludes merged, non-STEP, active and residual dynamic states"
     { renderFormat: "urdf" }, { renderFormat: "dxf" }, { renderFormat: "glb" },
     { parameters: {} }, { animation: {} }, { exploded: true }, { loading: true },
     ...[{ effectMatrix: {} }, { explodedViewMatrix: {} }, { effectStyle: {} }, { effectVisible: false },
-      { effectHighlighted: true }, { effectDeformation: {} }, { tubeDeformationState: { active: true } },
-      { tubeGpuState: { active: true } }].map(record => ({ records: [record] })),
+      { effectHighlighted: true }, { effectDeformation: {} }, { tubeSkinState: { active: true } }
+    ].map(record => ({ records: [record] })),
   ]) assert.equal(staticSceneResetEligible({ ...base, ...patch }), false, JSON.stringify(patch));
 });
 
@@ -216,7 +216,7 @@ test("actual module and animation removal restores rest records even beside a ne
       ctx.effects.style("a1", { color: "#ff0000", opacity: .4 });
     } } } } : null;
     const animation = kind === "animation" ? { elapsedSec: 0, clip: { id: "lift", label: "Lift", duration: 1, loop: true, tracks: [
-      { targets: ["a1"], times: [0], pivot: [0, 0, 0], transform: [[3, 2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]] },
+      { targets: ["a1"], times: [0], pivot: [0, 0, 0], transform: [[3, 2, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]] },
       { targets: ["a1"], times: [0], opacity: [.4] }
     ] } } : null;
     try {

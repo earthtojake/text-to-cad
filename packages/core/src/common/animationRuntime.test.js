@@ -10,24 +10,31 @@ import {
   normalizeAnimationClips
 } from "./animationRuntime.js";
 import { animationClipList } from "./animationClock.js";
-import { loadTubeDeformation } from "./tubeDeformationChunk.js";
-
-// A tube track needs the lazy tube runtime, which production loads through
-// loadSourceAnimation. These clips are built by hand, so load it here.
-const { normalizeTubeDeformation } = await loadTubeDeformation();
+import { tubeSkinsFixture } from "./__tests__/tubeSkinsFixture.js";
 
 // Keyframes written by hand, the way cadgen bakes them: a transform key is
-// [d, q, d', w], the track's pivot moved by d while the part turns by q about it.
-// An oblique axis, so every term of the quaternion's matrix is exercised.
+// [d, q, d', q'], the track's pivot moved by d while the part turns by q about it,
+// with their rates, which glTF's CUBICSPLINE sampler curves between. An oblique
+// axis, so every term of the quaternion's matrix is exercised.
 const AXIS = new THREE.Vector3(1, 2, 2).normalize();
 const PIVOT = [10, 0, 0];
 const radians = THREE.MathUtils.degToRad;
 
-/** A transform key: the pivot moved by `d` at `rate`, turned `deg` about AXIS at `degPerSec`. */
+/** A transform key: the pivot moved by `d` at `rate` (mm/s), turned `deg` about AXIS and
+ * turning on at `degPerSec`. */
 function key(d, deg, rate = [0, 0, 0], degPerSec = 0) {
   const q = new THREE.Quaternion().setFromAxisAngle(AXIS, radians(deg));
-  const w = AXIS.clone().multiplyScalar(radians(degPerSec));
-  return [...d, q.x, q.y, q.z, q.w, ...rate, w.x, w.y, w.z];
+  // d/dt of (axis sin(theta/2), cos(theta/2)).
+  const half = radians(deg) / 2;
+  const turning = radians(degPerSec) / 2;
+  const spin = AXIS.clone().multiplyScalar(Math.cos(half) * turning);
+  return [...d, q.x, q.y, q.z, q.w, ...rate, spin.x, spin.y, spin.z, -Math.sin(half) * turning];
+}
+
+/** glTF's CUBICSPLINE step written out, as the spec gives it. */
+function cubic(a, b, span, u) {
+  const h = [2 * u ** 3 - 3 * u ** 2 + 1, (u ** 3 - 2 * u ** 2 + u) * span, 3 * u ** 2 - 2 * u ** 3, (u ** 3 - u ** 2) * span];
+  return Array.from({ length: 7 }, (_, n) => h[0] * a[n] + h[1] * a[7 + n] + h[2] * b[n] + h[3] * b[7 + n]);
 }
 
 /** The placement a key names, T(pivot + d) R T(-pivot), composed by three. */
@@ -70,34 +77,54 @@ test("the clip list keeps the declared order, even for ids an object would reord
   assert.deepEqual(animationClipList(clips).map((clip) => clip.id), ["2", "1"]);
 });
 
-test("a sidecar's animation loads validated, and a sidecar with none loads as null", async () => {
+test("a sidecar's clips load as they are, and a sidecar with none loads as null", async () => {
   for (const sidecar of [{}, { animation: null }, { animation: { clips: [] } }]) {
     assert.equal(await loadSourceAnimation(sidecar), null);
   }
   const swing = { id: "swing", label: "Swing", duration: 4, loop: true, tracks: [transformTrack([0], [key([0, 0, 0], 0)])] };
   const { clips } = await loadSourceAnimation({ animation: { clips: [swing] } });
   assert.deepEqual(clips, { swing: { ...swing, order: 0 } });
-  await assert.rejects(loadSourceAnimation({ animation: { clips: { swing } } }), /animation: the section must be/);
+  assert.notEqual(clips.swing.tracks[0], swing.tracks[0], "what a load attaches never reaches the sidecar");
   await assert.rejects(loadSourceAnimation({ animation: { clips: [swing] } }, { signal: AbortSignal.abort() }), { name: "AbortError" });
 });
 
-test("a constant spin about an off-origin pivot is exact between keys", () => {
-  // 120 deg/s about AXIS through PIVOT while the pivot rises 5 mm/s, keyed one second
-  // apart: every moment between the keys is the motion itself, not an approximation.
-  const screw = clip([transformTrack([0, 1], [
-    key([0, 0, 0], 0, [0, 0, 5], 120),
-    key([0, 0, 5], 120, [0, 0, 5], 120)
-  ])]);
-  for (const t of [0.25, 0.5, 0.8]) {
+test("a clip that bends a tube plays cadgen's skins for it, read once at load", async () => {
+  const { animation, buffer } = tubeSkinsFixture();
+  const reads = [];
+  const resources = { readBytes: async (url) => { reads.push(url); return buffer; } };
+  const { clips } = await loadSourceAnimation({ animation }, { tubeSkinsUrl: "/__cad/tube-skins?file=cord.step", resources });
+  assert.deepEqual(reads, ["/__cad/tube-skins?file=cord.step"]);
+  const [track] = clips.curl.tracks;
+  assert.equal(track.skin.joints, 11);
+  // Each target is posed between the two keys either side of the time.
+  const tube = at(clips.curl, 0.55).deformations.get("o1.1");
+  assert.equal(tube.binding, track.skin.byOccurrence.get("o1.1"));
+  assert.equal(tube.index, 5);
+  assert.ok(Math.abs(tube.u - 0.5) < 1e-9, String(tube.u));
+  await assert.rejects(loadSourceAnimation({ animation }), /bends a tube, and no tube skins were named for it/);
+});
+
+test("between keys every component follows glTF's cubic curve through the keys and their rates", () => {
+  // 90 deg about AXIS through PIVOT while the pivot rises 5 mm, keyed two seconds apart.
+  const keys = [key([0, 0, 0], 0, [0, 0, 2.5], 45), key([0, 0, 5], 90, [0, 0, 2.5], 45)];
+  const screw = clip([transformTrack([0, 2], keys)]);
+  for (const t of [0.5, 1, 1.6]) {
+    const c = cubic(keys[0], keys[1], 2, t / 2);
+    const q = new THREE.Quaternion(c[3], c[4], c[5], c[6]).normalize();
+    const expected = new THREE.Matrix4().makeTranslation(PIVOT[0] + c[0], PIVOT[1] + c[1], PIVOT[2] + c[2])
+      .multiply(new THREE.Matrix4().makeRotationFromQuaternion(q))
+      .multiply(new THREE.Matrix4().makeTranslation(-PIVOT[0], -PIVOT[1], -PIVOT[2]));
     const { matrices } = at(screw, t);
-    assertPose(matrices.get("o1.2"), pose([0, 0, 5 * t], 120 * t), `t=${t}`);
+    assertPose(matrices.get("o1.2"), expected, `t=${t}`);
     assert.deepEqual(matrices.get("o1.3").elements, matrices.get("o1.2").elements, "a track moves its targets alike");
+    // A steady rise is exactly a steady rise, and the turn lands close to a steady one.
+    assert.ok(Math.abs(c[2] - 2.5 * t) < 1e-12);
+    assert.ok(q.angleTo(new THREE.Quaternion().setFromAxisAngle(AXIS, radians(45 * t))) < 1e-3);
   }
 });
 
 test("a key at its own time is exact, and a track holds its end keys outside its times", () => {
-  // The interior key's rates disagree with its neighbours: at its own time it is still itself.
-  const track = transformTrack([0, 1, 2], [key([0, 0, 0], 0), key([1, 2, 3], 45, [9, 9, 9], 300), key([4, 0, 0], 90)]);
+  const track = transformTrack([0, 1, 2], [key([0, 0, 0], 0), key([1, 2, 3], 45), key([4, 0, 0], 90)]);
   const swing = clip([track]);
   assertPose(at(swing, 0).matrices.get("o1.2"), pose([0, 0, 0], 0), "first key");
   assertPose(at(swing, 1).matrices.get("o1.2"), pose([1, 2, 3], 45), "interior key");
@@ -127,56 +154,6 @@ test("opacity lerps between numbers and holds against null; visibility holds", (
   // A number before a null holds rather than fading toward the material's own.
   assert.deepEqual(styles(2.5), { "o1.2": { opacity: 0.75 } });
   assert.deepEqual(styles(3.5), {});
-});
-
-test("a tube lerps its path between keys of one shape, and holds across a change of shape", () => {
-  const line = (end) => ({ kind: "line", start: [0, 0, 0], end });
-  const rest = { normal: [0, 0, 1], segments: [line([10, 0, 0])] };
-  const raised = { normal: [0, 0, 1], segments: [line([10, 10, 0])] };
-  const elbow = { normal: [0, 0, 1], segments: [
-    line([5, 0, 0]),
-    { kind: "arc", center: [5, 5, 0], axis: [0, 0, 1], start: [5, 0, 0], sweepDeg: 90 }
-  ] };
-  const flex = clip([{ targets: ["o1.2"], times: [0, 1, 2, 3], rest, maxSegmentLength: 2, tube: [
-    { path: rest, twistDeg: 0 }, { path: raised, twistDeg: 90 }, { path: elbow, twistDeg: 0 }, null
-  ] }]);
-  const tube = (t) => at(flex, t).deformations.get("o1.2");
-  const deformed = (path, twistDeg = 0) => normalizeTubeDeformation({ rest, maxSegmentLength: 2, path, twistDeg });
-  assert.deepEqual(tube(0.5), deformed({ normal: [0, 0, 1], segments: [line([10, 5, 0])] }, 45));
-  // One segment, then two: there is no path between them to lerp, so the first holds.
-  assert.deepEqual(tube(1.5), deformed(raised, 90));
-  assert.deepEqual(tube(2), deformed(elbow));
-  // null is the rest shape: the key before it holds, and past it nothing deforms.
-  assert.deepEqual(tube(2.5), deformed(elbow));
-  assert.equal(tube(3.5), undefined);
-});
-
-test("a key that maps the rest deforms as the path it maps the rest onto, and lerps as one", () => {
-  // Half a turn of coil in two Beziers; the second key halves its height and lifts it 2 mm.
-  const bezier = (points) => ({ kind: "bezier", points });
-  const rest = { normal: [0, 0, 1], segments: [
-    bezier([[2, 0, 0], [2, 1, 0.5], [1, 2, 1], [0, 2, 1.5]]),
-    bezier([[0, 2, 1.5], [-1, 2, 2], [-2, 1, 2.5], [-2, 0, 3]])
-  ] };
-  const squash = (s, lift) => ({ normal: [0, 0, 1], map: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, s, lift] });
-  const squashed = (s, lift) => ({ normal: [0, 0, 1], segments: rest.segments.map((segment) => (
-    bezier(segment.points.map(([x, y, z]) => [x, y, s * z + lift])))) });
-  const press = clip([{ targets: ["o1.2"], times: [0, 1], rest, maxSegmentLength: 2, tube: [
-    { path: squash(1, 0), twistDeg: 0 }, { path: squash(0.5, 2), twistDeg: 30 }
-  ] }]);
-  const tube = (t) => at(press, t).deformations.get("o1.2");
-  const deformed = (path, twistDeg = 0, more = {}) => normalizeTubeDeformation({ rest, maxSegmentLength: 2, path, twistDeg, ...more });
-  const start = tube(0);
-  const end = tube(1);
-  assert.deepEqual(start, deformed(squashed(1, 0), 0, { mapsRest: true }));
-  assert.deepEqual(end, deformed(squashed(0.5, 2), 30, { mapsRest: true }));
-  // Between them the path is their lerp, and it names the two keys (one object each,
-  // frame after frame) so that a renderer can blend what it built for them.
-  const { between, ...middle } = tube(0.5);
-  assert.deepEqual(middle, deformed(squashed(0.75, 1), 15));
-  assert.equal(between.from, start);
-  assert.equal(between.to, end);
-  assert.equal(between.u, 0.5);
 });
 
 function through(matrix, point) {

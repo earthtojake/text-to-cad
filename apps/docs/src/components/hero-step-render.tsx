@@ -30,7 +30,7 @@ import { cloneThemePresetSettings } from "@text-to-cad/core/common/themeSettings
 // same clip the viewer's Animation tool plays drives this scene.
 const HERO_PACKAGE_BASE_URL = "/hero/planetary";
 const HERO_SIDECAR_URL = "/hero/planetary_gear_assembly.step.json";
-const HERO_DOCUMENT_HASH = "c5391553b09ef122082880d177ca8087ccaced9dcc6a009e4bf0b54691265003";
+const HERO_DOCUMENT_HASH = "a2212b537af600209112a09673c3691fd36fab531c0df90ff86e6dedd8f813de";
 const HERO_STEP_CAD_PATH = "models/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.step";
 const HERO_STEP_LABEL = "PLANETARY_GEAR_ASSEMBLY.STEP";
 const HERO_CLIP_ID = "meshCycle";

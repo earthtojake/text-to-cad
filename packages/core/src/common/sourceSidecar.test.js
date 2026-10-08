@@ -7,7 +7,6 @@ import {
   applySourceAppearance,
   applySourceAppearanceToMeshData,
   loadSourceSidecar,
-  normalizeSourceAnimation,
   normalizeSourceAppearance,
   sourceAppearanceGeometry,
   sourceMaterialForOccurrence,
@@ -153,16 +152,10 @@ test("appearance composition owns changes and carries material identity plus eff
 });
 
 // One clip of baked keyframes: o1.2 rises 1 mm over a second, about a pivot at the origin.
-const TRACK = {
-  targets: ["o1.2"],
-  times: [0, 1],
-  pivot: [0, 0, 0],
-  transform: [[0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0], [0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0]]
-};
+const TRACK = { targets: ["o1.2"], times: [0, 1], pivot: [0, 0, 0], transform: [[0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0]] };
 const CLIP = { id: "lift", label: "Lift", duration: 2, loop: true, tracks: [TRACK] };
-const REST_PATH = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [10, 0, 0] }] };
 
-test("sidecars are closed, schema-bound, document-bound, and validate their animation", () => {
+test("sidecars are closed, schema-bound and document-bound, and carry cadgen's animation as it is", () => {
   const valid = {
     schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION,
     documentHash: DOCUMENT_HASH,
@@ -172,9 +165,6 @@ test("sidecars are closed, schema-bound, document-bound, and validate their anim
   const normalized = validateSourceSidecar(valid, { url: "/part.step.json", documentHash: DOCUMENT_HASH });
   assert.deepEqual(normalized.animation, valid.animation);
   assert.equal(normalized.appearance.materials.aluminum.baseColor, "#AABBCC");
-  assert.throws(() => validateSourceSidecar({ ...valid, animation: { clips: [{ ...CLIP, duration: -1 }] } }, {
-    url: "/part.step.json", documentHash: DOCUMENT_HASH
-  }), /animation: clip "lift" needs a label, a positive duration and a boolean loop/);
   assert.throws(() => validateSourceSidecar({ ...valid, extra: true }, {
     url: "/part.step.json", documentHash: DOCUMENT_HASH
   }), /unknown sidecar field extra/);
@@ -189,59 +179,6 @@ test("sidecars are closed, schema-bound, document-bound, and validate their anim
       assert.match(error.message, /Migrate it now: rebuild the model \(python part\.py\) or re-annotate the document \(cadgen step build\)/);
       return true;
     });
-  }
-});
-
-test("an animation section is an ordered list of keyframed clips, and each malformed part is named", () => {
-  const section = { clips: [CLIP, { ...CLIP, id: "drop", label: "Drop" }] };
-  assert.equal(normalizeSourceAnimation(section), section);
-  assert.equal(normalizeSourceAnimation({ clips: [] }), null, "no clips is no animation");
-  const clip = (change) => ({ clips: [{ ...CLIP, ...change }] });
-  const track = (change) => clip({ tracks: [{ ...TRACK, ...change }] });
-  const only = (channel) => clip({ tracks: [{ targets: ["o1.2"], times: [0], ...channel }] });
-  for (const [block, message] of [
-    // The retired dict of clips, keyed by id, lost the order a model declares them in.
-    [{ clips: { lift: CLIP } }, /the section must be \{clips: \[\.\.\.\]\}/],
-    [{ clips: [CLIP], source: "" }, /the section must be/],
-    [clip({ update: "fn" }), /clip 0 must have exactly id, label, duration, loop and tracks/],
-    [{ clips: [CLIP, CLIP] }, /clip 1 needs an id of its own, got "lift"/],
-    [clip({ id: "" }), /clip 0 needs an id of its own, got ""/],
-    [clip({ loop: "yes" }), /clip "lift" needs a label, a positive duration and a boolean loop/],
-    [clip({ tracks: {} }), /clip "lift" tracks must be a list/],
-    [clip({ tracks: [null] }), /clip "lift" track 0 must be an object/],
-    [track({ opacity: [1, 1] }), /track 0 must carry targets, times and exactly one of transform, opacity, visible, tube/],
-    [track({ rest: REST_PATH }), /exactly one of/],
-    [track({ targets: [] }), /targets must be a nonempty list of occurrence ids/],
-    [track({ times: [0, 0] }), /times must rise strictly from 0 to at most the duration/],
-    [track({ times: [0.5, 1] }), /times must rise strictly/],
-    [track({ times: [0, 3] }), /times must rise strictly/],
-    [track({ transform: [TRACK.transform[0]] }), /needs one transform value per time/],
-    [track({ transform: [TRACK.transform[0], [0, 0, 1]] }), /has a malformed transform value: \[0,0,1\]/],
-    [track({ pivot: [0, 0] }), /needs its pivot, three numbers/],
-    [only({ opacity: [1.5] }), /has a malformed opacity value: 1\.5/],
-    [only({ visible: ["yes"] }), /has a malformed visible value: "yes"/],
-    [only({ rest: REST_PATH, maxSegmentLength: 1, tube: [{ path: REST_PATH }] }), /has a malformed tube value/],
-    [only({ tube: [null] }), /needs its rest path and maxSegmentLength/]
-  ]) {
-    assert.throws(() => normalizeSourceAnimation(block), message, JSON.stringify(block));
-  }
-});
-
-test("a tube key may name its centerline as twelve numbers that map a rest without arcs", () => {
-  const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0];
-  const ARC_REST = { normal: [0, 0, 1], segments: [{ kind: "arc", center: [0, 5, 0], axis: [0, 0, 1], start: [0, 0, 0], sweepDeg: 90 }] };
-  const keyed = (path, rest = REST_PATH) => ({ clips: [{ ...CLIP, tracks: [
-    { targets: ["o1.2"], times: [0], rest, maxSegmentLength: 1, tube: [{ path, twistDeg: 0 }] }
-  ] }] });
-  const mapped = keyed({ normal: [0, 0, 1], map: IDENTITY });
-  assert.equal(normalizeSourceAnimation(mapped), mapped);
-  for (const block of [
-    keyed({ normal: [0, 0, 1], map: IDENTITY.slice(1) }),
-    keyed({ normal: [0, 0, 1], map: [...IDENTITY.slice(1), "0"] }),
-    keyed({ normal: [0, 0, 1], map: IDENTITY, segments: [] }),
-    keyed({ normal: [0, 0, 1], map: IDENTITY }, ARC_REST)
-  ]) {
-    assert.throws(() => normalizeSourceAnimation(block), /has a malformed tube value/, JSON.stringify(block));
   }
 });
 

@@ -198,6 +198,7 @@ asked for through the surface request, never tessellated in the page.
 | `GET /__cad/asset?file=...` | A CAD file's or sidecar's bytes. |
 | `GET /__cad/store?file=...` | Virtual render assets from the shared store. |
 | `GET /__cad/drawing?file=...` | A `.dxf` flattened to 2D render primitives; the DXF pane's only source. |
+| `GET /__cad/tube-skins?file=...&documentHash=...` | A STEP's bending tubes, bound as its clips play them (the catalog's `tubeSkinsUrl`). |
 | `GET /__cad/artifact?file=...` | Artifact status and advisory progress. |
 | `POST /__cad/artifact?file=...` | Start importing a foreign STEP and answer at once (`compiling`; `compiled` when there is nothing to build); `&force=1` requests a rebuild. The import is followed through `GET /__cad/artifact`, whose `failed` carries the job's reason until the file's bytes change. |
 | `GET /__cad/recents` | The model library every CAD view shares. |
@@ -230,6 +231,25 @@ generation/export remain outside this HTTP interface.
 Backend tests live in `tests/python/packages/cadgen/viewer` and are run by
 `scripts/test/test-python.sh`. The web app's `npm run test` covers its JavaScript
 host only.
+
+## `GET /__cad/tube-skins`
+
+A clip that bends a tube (`.deform_tube()`) plays cadgen's skin for it:
+`cadgen._internal.tube_skin_payload` binds each tube occurrence's stored mesh and
+edges to joints along its centerline, in its component's frame, and poses the
+joints at every key; the store's `skin` index caches the payload by the
+document's bytes, its animation and the meshes it binds. The catalog names the
+URL as `tubeSkinsUrl` for a built document whose animation bends a tube, and the
+STEP renderer reads it once, with the clips (`@text-to-cad/core/common/tubeSkin.js`
+plays it; `packages/core/docs/tube-skins.md`).
+
+`?file=` names the STEP by its absolute path; anything else is 400, as is a
+tessellation (`&chord=`, `&angle=`) that is not one. A missing file, a document
+not built, a sidecar the server cannot read or an animation that bends no tube
+is 404. `&documentHash=` that names other bytes than the file holds now is 409:
+the page is behind the file, and its next catalog read names the current skins.
+The answer is GLB-framed (`model/gltf-binary`): a glTF JSON chunk whose
+`extras.cadgenTubeSkins` says what each buffer view holds.
 
 ## `GET /__cad/drawing`
 

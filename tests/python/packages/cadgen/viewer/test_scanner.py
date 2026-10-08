@@ -368,6 +368,17 @@ class SidecarTruthiness(ScannerTestCase):
     def test_no_animation_no_hash(self):
         self.assertNotIn("animationHash", self._entry(None))
 
+    def test_an_animation_that_bends_a_tube_names_where_its_skins_are(self):
+        line = {"normal": [0, 0, 1], "segments": [{"kind": "line", "start": [0, 0, 0], "end": [10, 0, 0]}]}
+        bend = {"clips": [{"id": "bend", "label": "Bend", "duration": 1, "loop": False, "tracks": [
+            {"targets": ["o1"], "times": [0], "rest": line, "maxSegmentLength": 1.0, "tube": [None]}]}]}
+        entry = self._entry(json.dumps({"animation": bend}))
+        self.assertTrue(entry["tubeSkinsUrl"].startswith("/__cad/tube-skins?file="))
+        self.assertTrue(entry["tubeSkinsUrl"].endswith(f"&documentHash={entry['documentHash']}"))
+        fade = {"clips": [{"id": "fade", "label": "Fade", "duration": 1, "loop": False, "tracks": [
+            {"targets": ["o1"], "times": [0], "opacity": [0.5]}]}]}
+        self.assertNotIn("tubeSkinsUrl", self._entry(json.dumps({"animation": fade})))
+
     def test_an_unreadable_animation_section_is_no_sidecar_not_a_failed_entry(self):
         entry = self._entry(json.dumps({"animation": {"clips": "not clips"}}))
         self.assertNotIn("sourceSidecar", entry)

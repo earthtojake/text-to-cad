@@ -185,92 +185,6 @@ export function sourceAppearanceGeometry(meshData) {
   return appearanceGeometrySources.get(meshData) || meshData;
 }
 
-// The animation section is keyframes cadgen baked from the model's clips
-// (cadgen/_internal/animation_bake.py writes it and checks it the same way):
-// {clips: [{id, label, duration, loop, tracks}, ...]}, in the order the model
-// declares them. animationRuntime.js says what each channel means.
-const ANIMATION_CHANNELS = ["transform", "opacity", "visible", "tube"];
-const TRACK_EXTRAS = { transform: ["pivot"], tube: ["rest", "maxSegmentLength", "braid"] };
-const finite = (value) => typeof value === "number" && Number.isFinite(value);
-
-function animationError(message) {
-  return new Error(`animation: ${message}`);
-}
-
-// A tube key's centerline as written: {normal, segments}, or {normal, map}, twelve
-// numbers, over a rest without arcs (animationRuntime.js expands a map).
-function writtenTubePath(path, rest) {
-  if (!isObject(path)) return false;
-  const keys = Object.keys(path).sort().join();
-  if (keys === "normal,segments") return true;
-  return keys === "map,normal" && Array.isArray(path.map) && path.map.length === 12 && path.map.every(finite)
-    && !(Array.isArray(rest?.segments) && rest.segments.some((segment) => segment?.kind === "arc"));
-}
-
-function checkTrack(track, where, duration) {
-  if (!isObject(track)) throw animationError(`${where} must be an object`);
-  const channels = ANIMATION_CHANNELS.filter((name) => Object.hasOwn(track, name));
-  const allowed = new Set(["targets", "times", ...channels, ...(channels.length === 1 ? TRACK_EXTRAS[channels[0]] || [] : [])]);
-  if (channels.length !== 1 || Object.keys(track).some((key) => !allowed.has(key))) {
-    throw animationError(`${where} must carry targets, times and exactly one of ${ANIMATION_CHANNELS.join(", ")}`);
-  }
-  const [channel] = channels;
-  const { targets, times } = track;
-  const values = track[channel];
-  if (!Array.isArray(targets) || !targets.length || !targets.every((id) => typeof id === "string" && id)) {
-    throw animationError(`${where} targets must be a nonempty list of occurrence ids`);
-  }
-  if (!Array.isArray(times) || !times.length || !times.every(finite) || times[0] !== 0
-    || times.some((time, index) => index > 0 && time <= times[index - 1]) || times[times.length - 1] > duration + 1e-9) {
-    throw animationError(`${where} times must rise strictly from 0 to at most the duration`);
-  }
-  if (!Array.isArray(values) || values.length !== times.length) {
-    throw animationError(`${where} needs one ${channel} value per time`);
-  }
-  const valid = {
-    transform: (value) => Array.isArray(value) && value.length === 13 && value.every(finite),
-    opacity: (value) => value === null || (finite(value) && value >= 0 && value <= 1),
-    visible: (value) => value === null || typeof value === "boolean",
-    tube: (value) => value === null || (isObject(value) && Object.keys(value).length === 2
-      && finite(value.twistDeg) && writtenTubePath(value.path, track.rest))
-  }[channel];
-  const bad = values.find((value) => !valid(value));
-  if (bad !== undefined) throw animationError(`${where} has a malformed ${channel} value: ${JSON.stringify(bad)}`);
-  if (channel === "transform" && !(Array.isArray(track.pivot) && track.pivot.length === 3 && track.pivot.every(finite))) {
-    throw animationError(`${where} needs its pivot, three numbers`);
-  }
-  if (channel === "tube" && !(isObject(track.rest) && finite(track.maxSegmentLength))) {
-    throw animationError(`${where} needs its rest path and maxSegmentLength`);
-  }
-}
-
-export function normalizeSourceAnimation(block) {
-  if (block === undefined || block === null) return null;
-  if (!isObject(block) || Object.keys(block).length !== 1 || !Array.isArray(block.clips)) {
-    throw animationError("the section must be {clips: [...]}");
-  }
-  if (!block.clips.length) return null;
-  const seen = new Set();
-  for (const [index, clip] of block.clips.entries()) {
-    const keys = isObject(clip) ? Object.keys(clip).sort().join() : "";
-    if (keys !== "duration,id,label,loop,tracks") {
-      throw animationError(`clip ${index} must have exactly id, label, duration, loop and tracks`);
-    }
-    if (typeof clip.id !== "string" || !clip.id || seen.has(clip.id)) {
-      throw animationError(`clip ${index} needs an id of its own, got ${JSON.stringify(clip.id)}`);
-    }
-    seen.add(clip.id);
-    const where = `clip ${JSON.stringify(clip.id)}`;
-    if (typeof clip.label !== "string" || !clip.label || !finite(clip.duration) || clip.duration <= 0
-      || typeof clip.loop !== "boolean") {
-      throw animationError(`${where} needs a label, a positive duration and a boolean loop`);
-    }
-    if (!Array.isArray(clip.tracks)) throw animationError(`${where} tracks must be a list`);
-    clip.tracks.forEach((track, trackIndex) => checkTrack(track, `${where} track ${trackIndex}`, clip.duration));
-  }
-  return block;
-}
-
 // Word for word what the Python reader says (`cadgen/_internal/source_sidecar.py`):
 // what is lost, and that it is a migration to DO. Read as a passing remark, a
 // model keeps shipping with no kinematics, no materials and no routines at all.
@@ -311,11 +225,10 @@ export function validateSourceSidecar(sidecar, { url = "", documentHash = "" } =
   }
   return {
     ...sidecar,
+    // The animation section is cadgen's to check: it validated the keyframes when it
+    // baked them and again when it read this sidecar (animationRuntime.js plays them).
     ...(Object.hasOwn(sidecar, "appearance")
       ? { appearance: normalizeSourceAppearance(sidecar.appearance) }
-      : {}),
-    ...(Object.hasOwn(sidecar, "animation")
-      ? { animation: normalizeSourceAnimation(sidecar.animation) }
       : {})
   };
 }

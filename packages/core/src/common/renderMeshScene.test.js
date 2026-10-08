@@ -385,8 +385,8 @@ function roundedPoint(matrix, point) {
 const SLIDE_CLIPS = normalizeAnimationClips({ clips: [{
   id: "slide", label: "Slide", duration: 4, loop: true,
   tracks: [{ targets: ["left"], times: [0, 4], pivot: [0, 0, 0], transform: [
-    [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0],
-    [4, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0]
+    [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+    [4, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]
   ] }]
 }] });
 

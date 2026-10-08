@@ -24,9 +24,9 @@ one revolute mate. Every property is there for a test:
 | `components/552fc5fd1b854ab4.surf` | 13,966 | `GET /__cad/store?tree=…&surfaceInput=…&object=…` for the base. Exact surfaces and topology: what picking and measuring read. |
 | `components/df492f79c6123df5.surf` | 10,478 | the same, for the arm. |
 | `components/<cid>.l<level>.glb` | 3,044–15,064 | the store's meshes (GLB bodies), one per component and LOD level 0–3: what the harness's mesh store serves (`/__tess_cache/` probe, batch and single reads), and what a `POST /__cad/surfaces` naming a tessellation answers with. |
-| `hinge_block.step.json` | 1,922 | **no request at all.** The harness puts it inline on the catalog entry as `sourceSidecar`, which is what the real scanner does, and the renderer reads the kinematics and the routine's keyframes straight from there. |
+| `hinge_block.step.json` | 2,217 | **no request at all.** The harness puts it inline on the catalog entry as `sourceSidecar`, which is what the real scanner does, and the renderer reads the kinematics and the routine's keyframes straight from there. |
 
-Total 81,348 bytes with the meshes. No Git attribute applies here (`git check-attr -a` on these
+Total 81,643 bytes with the meshes. No Git attribute applies here (`git check-attr -a` on these
 paths prints nothing), and the repository carries no LFS. Keep it that way — an
 LFS pointer would be rejected by name at `renderAssetClient.js`'s SURF reader.
 

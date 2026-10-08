@@ -250,7 +250,7 @@ def occurrence_colors(
     """Every face range of one occurrence resolved to its export colour: its own,
     else the occurrence's (a named material's ``baseColor``, then its STEP colour),
     the component's, the part's, the export default. The one chain, for the soup
-    and for a morph bake that replaces an occurrence's primitives alike."""
+    and for a bent tube's skin that replaces an occurrence's primitives alike."""
     cid = str(occurrence.get("component") or "")
     base_color = str(occurrence.get("baseColor") or "")
     occurrence_color = base_color.lower() if _HEX.fullmatch(base_color) else linear_rgb_to_hex(occurrence.get("color"))
@@ -311,7 +311,8 @@ def build_primitives(
     occurrences are left out and ``opacity`` overrides an occurrence's alpha --
     the effects a clip's ``drop`` bakes at its start. ``overrides`` (per
     occurrence only) are primitives somebody else built for an occurrence -- a
-    morph bake's refined, posed tube -- spliced in where its own would sort.
+    bending tube's refined mesh bound to its skin -- spliced in where its own
+    would sort.
     """
     if default_color is not None and not _HEX.fullmatch(default_color):
         raise ValueError(f"the default export colour must be #rrggbb, got {default_color!r}")
@@ -593,10 +594,11 @@ def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: An
 
     ``animation`` is a clip in glTF's terms (``glb_animation.GltfClip``), whose pivots
     and skins name the primitives' ``node`` keys. A pivot is two nodes -- one at
-    ``pivot + d`` turned by ``q``, over one at ``-pivot`` that carries the pivot's
-    occurrence nodes -- and a skin is a joint node per joint, under the pivot that
-    also moves its tube or at the scene's root. Every node's own transform is its pose
-    at the clip's first moment: what the file shows when nothing plays it.
+    ``pivot + d`` turned by ``q``, keyed CUBICSPLINE, over one at ``-pivot`` that
+    carries the pivot's occurrence nodes -- and a skin is a joint node per joint,
+    keyed LINEAR, under the pivot that also moves its tube or at the scene's root.
+    Every node's own transform is its pose at the clip's first moment: what the file
+    shows when nothing plays it.
     """
     binary: list[bytes] = []
     size = 0
@@ -712,8 +714,8 @@ def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: An
                 })
             return found
 
-        def animate(target: int, times_accessor: int, path: str, output: int) -> None:
-            samplers.append({"input": times_accessor, "output": output, "interpolation": "LINEAR"})
+        def animate(target: int, times_accessor: int, path: str, output: int, interpolation: str = "LINEAR") -> None:
+            samplers.append({"input": times_accessor, "output": output, "interpolation": interpolation})
             channels.append({"sampler": len(samplers) - 1, "target": {"node": target, "path": path}})
 
         offsets: list[int] = []  # each pivot's -pivot node, which carries its parts
@@ -733,12 +735,17 @@ def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: An
             roots.add(len(nodes) - 1)
             offsets.append(offset)
             times = time_accessor(pivot.times)
-            for path, values, kind in (("translation", pivot.translations, "VEC3"), ("rotation", pivot.rotations, "VEC4")):
-                data = np.asarray(values, dtype="<f4")
+            keys = len(pivot.times)
+            for path, width, kind, rates_in, values, rates_out in (
+                    ("translation", 3, "VEC3", pivot.translations_in, pivot.translations, pivot.translations_out),
+                    ("rotation", 4, "VEC4", pivot.rotations_in, pivot.rotations, pivot.rotations_out)):
+                # CUBICSPLINE: each key's in-tangent, value and out-tangent, in turn.
+                data = np.stack([np.asarray(part, dtype="<f4").reshape(keys, width)
+                                 for part in (rates_in, values, rates_out)], axis=1)
                 animate(len(nodes) - 1, times, path, accessor({
                     "bufferView": view(data.tobytes()), "byteOffset": 0, "componentType": _FLOAT,
-                    "count": len(pivot.times), "type": kind,
-                }))
+                    "count": 3 * keys, "type": kind,
+                }), "CUBICSPLINE")
         for ordinal, skin in enumerate(animation.skins):
             count, keys = skin.translations.shape[1], len(skin.times)
             first_joint = len(nodes)

@@ -158,7 +158,7 @@ def _export(source: MeshSource, jobs: "list[MeshExportJob]", pairs: list, *, nam
         total_triangles,
     )
 
-    descriptor, bodies = _stored_meshes(source, sorted(set(pairs)), appearance)
+    descriptor, bodies = stored_meshes(source, sorted(set(pairs)), appearance)
     used = _used_components(descriptor)
     # Parsed only when a job asks for a clip; the captured text, never the sidecar.
     animation = json.loads(animation_source.data) if any(job.animation for job in jobs) and animation_source else None
@@ -298,9 +298,10 @@ def _export_view(source: MeshSource, producer: dict | None, appearance: object) 
     return descriptor
 
 
-def _stored_meshes(source: MeshSource, pairs: list, appearance: object) -> "tuple[dict, dict]":
+def stored_meshes(source: MeshSource, pairs: list, appearance: object,
+                  components: "list[str] | None" = None) -> "tuple[dict, dict]":
     """The export's descriptor, and the stored GLB body of every placed component
-    at every pair, ``{(cid, pair): bytes}``.
+    (or only ``components``) at every pair, ``{(cid, pair): bytes}``.
 
     What the store lacks is derived by build-pool jobs (``surfaces.derive`` with
     every pair: SURF where missing, then OCCT's mesh at each tolerance), the
@@ -316,10 +317,10 @@ def _stored_meshes(source: MeshSource, pairs: list, appearance: object) -> "tupl
     tessellations = [{"chordTolerance": chord, "angleTolerance": angle} for chord, angle in pairs]
     replaced = False
     while True:
-        components = descriptor["components"]
+        placed = descriptor["components"]
         keys = {
-            (cid, pair): meshes.tessellation_key(components[cid]["surfaceInput"], *pair)
-            for cid in _used_components(descriptor) for pair in pairs
+            (cid, pair): meshes.tessellation_key(placed[cid]["surfaceInput"], *pair)
+            for cid in (components if components is not None else _used_components(descriptor)) for pair in pairs
         }
         missing = sorted({cid for (cid, _pair), key in keys.items() if meshes.probe(key) is None})
         if missing:

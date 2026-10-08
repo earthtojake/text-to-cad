@@ -97,10 +97,10 @@ test("any joint/module capability, including paused or disabled state, fails ope
   }
 });
 
-test("animated, collapsing, CPU and GPU deformed records fail open even without capability metadata", () => {
+test("animated, collapsing and bent records fail open even without capability metadata", () => {
   for (const effect of [{ effectMatrix: new THREE.Matrix4().makeTranslation(30, 0, 0) },
     { explodedViewMatrix: new THREE.Matrix4().makeTranslation(30, 0, 0) },
-    { effectDeformation: {} }, { tubeDeformationState: { active: true } }, { tubeGpuState: { active: true } }]) {
+    { effectDeformation: {} }, { tubeSkinState: { active: true } }]) {
     const f = fixture([["posed", cube(20)], ["other", cube(-20)]]);
     Object.assign(f.runtime.displayRecords[0], effect);
     const s = sample(f);
