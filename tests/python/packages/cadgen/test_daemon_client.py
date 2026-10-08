@@ -288,7 +288,7 @@ class ServerRelaysTheDeath(unittest.TestCase):
         self.assertEqual(jobs.snapshot()[0]["error"], died["detail"])
         self.assertEqual(died["pid"], 777)
         self.assertEqual(died["exitStatus"], -9)
-        self.assertIn("SIGKILL", died["detail"])
+        self.assertIn(pool_mod.describe_exit(-9), died["detail"])  # the worker's own words, as this platform names the signal
         self.assertEqual(conn.frames[-1], {"exit": 1})
         pool.release.assert_called_once_with(worker, healthy=False)
         self.assertTrue(any("died mid-job" in line for line in logged), logged)
