@@ -276,17 +276,20 @@ preview. The
 questions the old Material/Bends/Layers tabs answered were about a sheet-metal part
 the viewer was inventing from the file; a drawing is not that.
 
-- **The picture comes from the BACKEND.** `client.drawing(file)` is one
-  `GET /__cad/drawing` (`apps/web/docs/backend.md`): ezdxf flattens the modelspace on
-  the server — text outlined, dimensions exploded, hatches filled, blocks placed — and
-  the client receives five primitive shapes in DXF coordinates, y up. **This renderer
-  never parses DXF.** The payload is cached server-side by the document's content
-  hash, so reopening a file costs a round trip and nothing else.
+- **The picture comes from the BACKEND.** `client.drawing(file)` is
+  `GET /__cad/drawing` (`apps/web/docs/backend.md`), asked again while the server
+  renders a drawing it has not drawn before: ezdxf flattens the modelspace on the
+  server — text placed, dimensions exploded, hatches filled, blocks placed — and the
+  client receives five primitive shapes and `text` in DXF coordinates, y up. **This
+  renderer never parses DXF.** The payload is cached server-side by the document's
+  content hash, so reopening a file costs a round trip and nothing else.
 - **Drawing is core's** (`@text-to-cad/core/lib/drawing2d`), so the headless snapshot
   bundle paints the same picture from the same payload: `fitTransform` / `zoomTransform`
   / `panTransform` (one uniform scale and a translation; the y flip lives in the
   transform, not in the geometry), `prepareDrawing(payload)` (paths built ONCE, per
-  colour for strokes and per primitive for fills) and `drawDrawing(ctx, drawable, …)`.
+  colour for strokes and per primitive for fills; text kept as strings) and
+  `drawDrawing(ctx, drawable, …)` (text set with `fillText`, stretched to the width the
+  server measured, so the page's face keeps the drawing's layout).
   That bundle IS `cadgen dxf snapshot`: cadgen resolves a `.dxf` to the same
   `cadgen.drawing_payload` this route answers with and the page fits and paints it
   (`common/headlessDrawingRender.js`), so a CLI render cannot show what this pane

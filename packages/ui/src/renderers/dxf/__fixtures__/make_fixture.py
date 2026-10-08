@@ -7,7 +7,7 @@ The drawing is deliberately one of each thing the renderer has to get right:
   foreground, so a theme flip is visible in a screenshot),
 * a RED circle, so a pen that is not the default survives the round trip,
 * a solid hatch with an island, so the even-odd fill leaves a real hole,
-* TEXT, which ezdxf outlines into filled paths on the server,
+* TEXT, which arrives as a `text` primitive the client sets with `fillText`,
 * an LWPOLYLINE with a bulge, so a curve reaches the client as a path.
 
 Regenerate with (from the repository root):
@@ -58,7 +58,7 @@ def build_document() -> ezdxf.document.Drawing:
         [(68, 34), (82, 34), (82, 46), (68, 46)], is_closed=True, flags=0
     )
 
-    # Text: outlined on the server into filled paths.
+    # Text: a `text` primitive, set by the client where ezdxf placed it.
     modelspace.add_text("PART A", height=6, dxfattribs={"color": 3}).set_placement((8, 8))
 
     # A bulged LWPOLYLINE: one true arc, so a `path` primitive with curves arrives.

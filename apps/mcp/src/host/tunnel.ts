@@ -62,17 +62,19 @@ function partOf(reply: TunnelReply) {
 
 /**
  * The whole of a body answered a part at a time: the first part, then a range of at most
- * `TUNNEL_REPLY_MAX_BYTES` at a time as the reader reads on. A part that is not the next part of
- * the same body (its `etag`: the body changed meanwhile) fails the read, as a broken connection
- * would; what the reader verifies of a body (a tessellation's digest) it verifies of the whole.
+ * `TUNNEL_REPLY_MAX_BYTES` at a time as the reader reads on, each naming the body it continues
+ * (`if-range: <etag>`), which the server kept and cuts the part from rather than producing the body
+ * again. A part that is not the next part of the same body (its `etag`: the body changed meanwhile)
+ * fails the read, as a broken connection would; what the reader verifies of a body (a
+ * tessellation's digest) it verifies of the whole.
  */
-function wholeOfParts(first: TunnelReply, ask: (range: string) => Promise<TunnelReply>): Response {
+function wholeOfParts(first: TunnelReply, ask: (range: string, etag: string) => Promise<TunnelReply>): Response {
   const { length } = partOf(first)!;
   let reply = first;
   let offset = 0;
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
-      if (offset) reply = await ask(`bytes=${offset}-${Math.min(length, offset + TUNNEL_REPLY_MAX_BYTES) - 1}`);
+      if (offset) reply = await ask(`bytes=${offset}-${Math.min(length, offset + TUNNEL_REPLY_MAX_BYTES) - 1}`, first.headers.etag || '');
       const part = partOf(reply);
       const bytes = part && part.first === offset && part.length === length && reply.headers.etag === first.headers.etag
         ? await replyBody(reply) : null;
@@ -99,9 +101,10 @@ export function createTunnelFetch(server: Pick<Server, 'http'>): typeof fetch {
     const body = method === 'GET' || method === 'HEAD' ? '' : encodeBase64(new Uint8Array(await request.arrayBuffer()));
     const headers: Record<string, string> = {};
     request.headers.forEach((value, name) => { headers[name] = value; });
-    const send = async (range?: string): Promise<TunnelReply> => {
+    const send = async (range?: string, etag?: string): Promise<TunnelReply> => {
+      const asked = range ? { ...headers, range, ...(etag ? { 'if-range': etag } : {}) } : headers;
       try {
-        return await server.http({ method, url: request.url, headers: range ? { ...headers, range } : headers, body }, { signal: request.signal });
+        return await server.http({ method, url: request.url, headers: asked, body }, { signal: request.signal });
       } catch (error) {
         if (request.signal.aborted) throw request.signal.reason ?? error;
         // What fetch itself throws for a request that never got a response.
