@@ -368,7 +368,7 @@ class TwoSidesLaw(unittest.TestCase):
         self.assertEqual(0, snapshot.returncode, snapshot.stderr)
         glb = _cli(
             "glb", "build", document, str(out_dir / "clip.glb"),
-            "--animation", '{"clip": "lift", "fps": 10, "seconds": 1}',
+            "--animation", '{"clip": "lift", "seconds": 1}',
             cwd=cwd, cache=cache,
         )
         self.assertEqual(0, glb.returncode, glb.stderr)
