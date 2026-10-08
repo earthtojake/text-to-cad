@@ -51,7 +51,8 @@ export function drawingAssetFiles({ exclude = [] } = {}) {
   addTree(path.join(packageRoot, "dist/prod/fonts"), `${DRAWING_ASSET_DIRECTORY}/fonts`);
   const replacementRoot = path.dirname(require.resolve("@betteroffice/fonts/package.json"));
   const replacementPackage = JSON.parse(fs.readFileSync(path.join(replacementRoot, "package.json"), "utf8"));
-  if (replacementPackage.version !== "0.2.0") throw new Error("Review the pinned Liberation Sans replacement before changing font assets");
+  // 0.4.0 reviewed: the TTF and OFL text read below are byte-identical to 0.2.0's.
+  if (replacementPackage.version !== "0.4.0") throw new Error("Review the pinned Liberation Sans replacement before changing font assets");
   files.push({
     fileName: "excalidraw/fonts/Liberation/LiberationSans-Regular.ttf",
     source: fs.readFileSync(path.join(replacementRoot, "assets/LiberationSans-Regular.ttf")),
