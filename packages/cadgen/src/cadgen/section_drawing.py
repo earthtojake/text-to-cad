@@ -65,7 +65,6 @@ class SectionDrawing:
     svg: str
     label: str
     warnings: list[str] = field(default_factory=list)
-    segment_count: int = 0
 
 
 # --- geometry ------------------------------------------------------------------
@@ -372,7 +371,6 @@ def section_drawing(
 
     label = _plane_label(plane, offset)
     warnings: list[str] = []
-    segment_count = sum(sum(1 for command in loop.commands if command[0] in "LC") for loops in shapes for loop in loops)
     points = [point for loops in shapes for loop in loops for point in _command_points(loop.commands)]
     payload: dict[str, Any] = {
         "schemaVersion": DRAWING_PAYLOAD_SCHEMA_VERSION,
@@ -383,10 +381,10 @@ def section_drawing(
     }
     if not points:
         warnings.append(f"SECTION {label} does not intersect the model; the section is empty")
-        return SectionDrawing(payload, _svg(payload, size), label, warnings, 0)
+        return SectionDrawing(payload, _svg(payload, size), label, warnings)
 
-    min_x = min(x for x, _ in points); max_x = max(x for x, _ in points)
-    min_y = min(y for _, y in points); max_y = max(y for _, y in points)
+    xs, ys = [x for x, _ in points], [y for _, y in points]
+    min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
     scale = _frame_scale(max_x - min_x, max_y - min_y, size)
     # The page fits the payload's bounds inside its own gutter. Bounds padded out
     # to exactly the area that gutter leaves land the cut at the scale above,
@@ -427,7 +425,7 @@ def section_drawing(
                          _number(centre[0] + half_w), _number(centre[1] + half_h)]
     payload["layers"] = [{"name": name, "color": None, "count": count} for name, count in layer_counts.items()]
     payload["primitives"] = primitives
-    return SectionDrawing(payload, _svg(payload, size), label, warnings, segment_count)
+    return SectionDrawing(payload, _svg(payload, size), label, warnings)
 
 
 def locator_fraction(rows: Sequence[Mapping[str, Any]], plane: str, offset: float) -> float:

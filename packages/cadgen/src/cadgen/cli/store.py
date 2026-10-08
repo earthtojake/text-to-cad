@@ -98,6 +98,7 @@ def _cmd_info(as_json: bool) -> int:
         "bounds": "bounding boxes and leaf layouts",
         "mesh": "mesh entries",
         "drawing": "drawing render payloads",
+        "section": "component sections (a BREP cut by a plane)",
     }
     for kind, count in payload["index"].items():
         print(f"index/{kind:<10} {count} {labels[kind]}")
