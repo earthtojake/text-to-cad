@@ -19,11 +19,14 @@ from cadgen.viewer.tube_skins import tube_skins_response  # noqa: E402
 
 class TheRouteRefuses(unittest.TestCase):
     def test_a_ref_that_is_not_an_absolute_step_or_a_tessellation_that_is_not_one(self):
-        for ref, message in (("", r"needs \?file="), ("/models/plate.dxf", "plate.dxf is not one")):
+        # Absolute on every platform: a POSIX root has no drive on Windows.
+        root = Path(tempfile.gettempdir())
+        for ref, message in (("", r"needs \?file="), ("models/arm.step", "not an absolute path"),
+                             (str(root / "plate.dxf"), "plate.dxf is not one")):
             with self.assertRaisesRegex(ValueError, message):
                 tube_skins_response(ref)
         with self.assertRaisesRegex(ValueError, "chord must be a number"):
-            tube_skins_response("/models/arm.step", chord="fine")
+            tube_skins_response(str(root / "arm.step"), chord="fine")
 
     def test_a_missing_or_unbuilt_document_has_no_skins(self):
         with tempfile.TemporaryDirectory(prefix="tube-skins-route-") as folder:
