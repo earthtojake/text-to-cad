@@ -18,8 +18,7 @@ import {
 import { validateSnapshotRenderJob } from "./snapshotJobValidation.js";
 import {
   loadSource,
-  sourceIsStep,
-  stepParameterRuntime
+  sourceIsStep
 } from "./source.js";
 import { resolveAnimationFrame } from "./animationClock.js";
 import { runHeadlessDrawingJob } from "./headlessDrawingRender.js";
@@ -93,9 +92,8 @@ async function captureFamilyScene(family, job) {
 // `job.animation` is the JOB PACKET's frame request ({clip, time}); the
 // `stepAnimation` it becomes is the SETTINGS key renderMeshScene routes to the
 // shared effects pass — the same `{clip, elapsedSec}` the viewer's Animation
-// tab hands its own pass. Choreography is the sidecar's baked keyframes; the
-// sidecar was already document-bound by loadSource, so animation and
-// kinematics compose against the same tree.
+// tab hands its own pass. Choreography is the baked keyframes cadgen resolved
+// into the job (`resolved.animation`), bound to the same tree as the pose.
 async function loadStepAnimation(job, source, resources) {
   const request = job.animation;
   if (request === undefined || request === null) {
@@ -107,7 +105,7 @@ async function loadStepAnimation(job, source, resources) {
   if (String(job.mode || "view").toLowerCase() !== "view") {
     throw new Error("an animation frame supports only view mode");
   }
-  const animation = await loadSourceAnimation(source.sourceSidecar, {
+  const animation = await loadSourceAnimation({ animation: source.animation }, {
     tubeSkinsUrl: job.resolved?.tubeSkinsUrl || "", resources
   });
   if (!animation) {
@@ -138,11 +136,9 @@ async function prepareRenderJob(job) {
   stageTimings.loadSourceMs = Math.round(performance.now() - loadStarted);
   const prepareStarted = performance.now();
   const stepAnimation = await loadStepAnimation(job, source, resources);
-  const stepParameterSource = source.stepParameterSource;
-  // `job.kinematics` is the JOB PACKET's pose input (a preset name or {dof: value}); the
-  // `stepParameters` set below is the shared buildModel/renderMeshScene SETTINGS key,
-  // carrying the compiled runtime object. They used to be the same key, so a packet field
-  // and a runtime object took turns living on it.
+  // `job.kinematics` is the JOB PACKET's pose input (a preset name or {dof: value}), which
+  // cadgen resolved into `resolved.controls`; the `stepParameters` set below is the shared
+  // buildModel/renderMeshScene SETTINGS key, carrying the articulation at those values.
   const renderJob = {
     ...job,
     selectorRuntime: source.selectorRuntime,
@@ -153,12 +149,7 @@ async function prepareRenderJob(job) {
     source,
     stepAnimation,
     stageTimings,
-    renderJob: stepParameterSource
-      ? {
-          ...renderJob,
-          stepParameters: stepParameterRuntime(stepParameterSource)
-        }
-      : renderJob
+    renderJob: source.pose ? { ...renderJob, stepParameters: source.pose } : renderJob
   };
   stageTimings.preparePoseMs = Math.round(performance.now() - prepareStarted);
   return prepared;

@@ -29,7 +29,6 @@ import {
 import { viewportMenuEntries } from "./components/workbench/AssemblyContextMenuItems.js";
 import { useViewportLod } from "./render/useViewportLod.js";
 import { lodSceneMayMove, sampleLodCamera } from "./render/lodCameraSample.js";
-import { registerLodDisplaySource } from "./render/lodSceneAdoption.js";
 import { ALL_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
 import { useModelTools } from "./components/workbench/ModelTools.jsx";
 import { useStepPanels } from "./components/workbench/StepPanels.js";
@@ -83,10 +82,7 @@ import { createAnimationClock, AnimationClockProvider } from "./workbench/animat
 import { measureFilterSnaps } from "./workbench/measureRulerState.js";
 import { useStepMeasure } from "./workbench/useStepMeasure.js";
 import { fileKey } from "./workbench/entryPaths.js";
-import {
-  stepModuleTopologyOccurrenceIds
-} from "./workbench/topologyCapabilities.js";
-import { stepJointHandles, stepPosableDofs } from "./workbench/jointHandles.js";
+import { stepJointHandles, stepPosableHandles } from "./workbench/jointHandles.js";
 import { useArtifact } from "./components/workbench/hooks/useArtifact.js";
 import { artifactEndsLoad, artifactFreshnessKey } from "./workbench/artifactResolution.js";
 import {
@@ -112,10 +108,7 @@ import {
   STEP_MODEL_ROOT_ID,
   STEP_MODEL_RENDER_PART_ID
 } from "@text-to-cad/core/lib/step/stepTree.js";
-import {
-  normalizeStepModuleParameterValues,
-  resolveStepModuleFeatures
-} from "@text-to-cad/core/common/stepModule.js";
+import { normalizeControlValues, openingControlValues } from "@text-to-cad/core/common/articulation.js";
 import {
   meshStateIsComplete,
   meshStateSettledShort,
@@ -128,7 +121,6 @@ import { createCadPromptContext } from "./file-view/promptContext.js";
 import { modelMenuDescriptor, partMenuDescriptor, topologyMenuDescriptor } from "./file-view/stepMenus.js";
 import { nodeCopyText, selectionCopyPayload } from "./file-view/stepCopy.js";
 import { referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./file-view/hostReference.js";
-import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@text-to-cad/core/common/sourceSidecar.js";
 // The selection filters that pick faces or edges, never the part.
 const TOPOLOGY_FILTERS = new Set(["faces", "edges"]);
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
@@ -426,18 +418,11 @@ function StepSurfaceBody({ view, data }) {
     selectedEntry?.kind === "assembly" &&
     !!meshState?.assemblyBackgroundError &&
     (selectedMeshMatches || !!retainedPreviousStepMeshError);
+  // The mesh is composed over the tree cadgen serves for display (an assigned occurrence
+  // already carries its finish, colour and opacity), so what is drawn is what was published.
   const selectedMeshData = (selectedMeshMatches || retainingPreviousStepMesh) ? meshState.meshData : null;
-  const selectedSourceAppearance = selectedEntry?.sourceSidecar
-    ? selectedEntry.sourceSidecar.appearance || null
-    : selectedMeshData?.appearance || null;
-  const selectedDisplayMeshData = useMemo(() => {
-    return registerLodDisplaySource(
-      applySourceAppearanceToMeshData(selectedMeshData, selectedSourceAppearance),
-      selectedMeshData
-    );
-  }, [selectedMeshData, selectedSourceAppearance]);
-  const handleDisplayMeshAdoption = useCallback((source, ok, detail) =>
-    onMeshSourceAdoption(sourceAppearanceGeometry(source), ok, detail), [onMeshSourceAdoption]);
+  const selectedDisplayMeshData = selectedMeshData;
+  const handleDisplayMeshAdoption = onMeshSourceAdoption;
   const selectedMeshPartial = selectedMeshMatches && !meshStateIsComplete(meshState);
   // Short of the parts cadgen could not mesh for good, not still updating: the viewport warns instead.
   const selectedMeshSettledShort = selectedMeshMatches && meshStateSettledShort(meshState);
@@ -450,7 +435,7 @@ function StepSurfaceBody({ view, data }) {
   });
   const {
     definition: selectedStepModuleDefinition, loading: selectedStepModuleLoading,
-    topologyRequired: selectedStepModuleTopologyRequired, parameterValues: stepModuleParameterValues,
+    parameterValues: stepModuleParameterValues,
     animationState, animationRuntime: selectedAnimationRuntime, animationError: selectedAnimationError
   } = motion;
 
@@ -531,10 +516,7 @@ function StepSurfaceBody({ view, data }) {
       return [];
     }
     return uniqueStringList(
-      [
-        ...expandedStepTreeTopologyNodeIds,
-        ...stepModuleTopologyOccurrenceIds(selectedStepModuleDefinition)
-      ]
+      expandedStepTreeTopologyNodeIds
         .map((id) => String(id || "").trim())
         .filter((id) => id && loadableStepTreeTopologyNodeIdSet.has(id))
     );
@@ -542,7 +524,6 @@ function StepSurfaceBody({ view, data }) {
     expandedStepTreeTopologyNodeIds,
     isAssemblyView,
     loadableStepTreeTopologyNodeIdSet,
-    selectedStepModuleDefinition,
     selectedEntryHasReferences,
   ]);
   const viewerSelectableAssemblyNodeIds = useMemo(
@@ -992,11 +973,6 @@ function StepSurfaceBody({ view, data }) {
       ? new Set(referenceState.loadedTopologyIds)
       : selectedReferencesMatch ? requestedTopologyIdSet : EMPTY_ID_SET
   ), [selectedReferencesMatch, referenceState, requestedTopologyIdSet]);
-  // A step module resolves its selectors only once all of its own parts are in.
-  const selectedStepModuleSelectorRuntime = selectedReferencesComplete || (
-    isAssemblyView && stepModuleTopologyOccurrenceIds(selectedStepModuleDefinition)
-      .every((id) => !requestedTopologyIdSet.has(id) || selectedTopologyLoadedIdSet.has(id))
-  ) ? selectedSelectorRuntime : null;
   const artifactRevision = buildReferenceCacheKey(selectedEntry);
 
   // The Select mode is the person's for as long as the file is open: another file starts in All,
@@ -1011,33 +987,16 @@ function StepSurfaceBody({ view, data }) {
   useEffect(() => {
     if (selectedKindKnown && !isAssemblyView) setSelectionFilter(current => (current === "parts" ? "all" : current));
   }, [selectedKindKnown, isAssemblyView]);
+  // The POSE the viewport plays: cadgen's articulation at the Position values.
   const selectedStepParameterRuntime = useMemo(() => {
-    if (
-      !selectedStepModuleDefinition ||
-      (selectedStepModuleTopologyRequired && !selectedStepModuleSelectorRuntime)
-    ) {
-      return null;
-    }
-    return {
-      definition: selectedStepModuleDefinition,
-      parameterValues: normalizeStepModuleParameterValues(selectedStepModuleDefinition, stepModuleParameterValues),
-      selectorRuntime: selectedStepModuleSelectorRuntime,
-      cadPath: selectedStepModuleDefinition.cadPath || stepMotionSources(selectedEntry).cadPath,
-      sourceUrl: selectedStepModuleUrl
-    };
-  }, [
-    selectedEntry,
-    selectedStepModuleSelectorRuntime,
-    selectedStepModuleDefinition,
-    selectedStepModuleTopologyRequired,
-    selectedStepModuleUrl,
-    stepModuleParameterValues
-  ]);
+    const articulation = selectedStepModuleDefinition?.articulation || null;
+    return articulation
+      ? { articulation, values: normalizeControlValues(articulation, stepModuleParameterValues) }
+      : null;
+  }, [selectedStepModuleDefinition, stepModuleParameterValues]);
   const selectedStepPartRootActive = !isAssemblyView && expandedStepTreeNodeIds.includes(STEP_MODEL_ROOT_ID);
   const plainStepReferencePickingEnabled = selectedEntryHasReferences && !isAssemblyView;
-  const plainStepReferencePickingRequested =
-    plainStepReferencePickingEnabled &&
-    (selectedStepPartRootActive || selectedStepModuleTopologyRequired);
+  const plainStepReferencePickingRequested = plainStepReferencePickingEnabled && selectedStepPartRootActive;
   const assemblyStepTreeTopologyLoadingEnabled =
     selectedEntryHasReferences &&
     isAssemblyView &&
@@ -1052,7 +1011,7 @@ function StepSurfaceBody({ view, data }) {
     !hasStepGlbByteCost(selectedEntry) &&
     !selectedMeshMatches
   );
-  const referenceLoadingExplicitlyRequested = selectedStepPartRootActive || selectedStepModuleTopologyRequired;
+  const referenceLoadingExplicitlyRequested = selectedStepPartRootActive;
   const selectedTopologyDeferredByCost = Boolean(
     plainStepReferencePickingRequested &&
     selectedTopologyLargeByCost &&
@@ -1455,8 +1414,8 @@ function StepSurfaceBody({ view, data }) {
   // Pose: drag the joints by their handles. Present only where something can be
   // driven (a STEP's mate DOFs). The handles are rebuilt from the pose on screen,
   // so sliders, presets, Reset and a handle up the chain all carry them along.
-  const stepPoseDefinition = selectedStepParameterRuntime?.definition || null;
-  const poseAvailable = stepPosableDofs(stepPoseDefinition).length > 0;
+  const stepPoseDefinition = selectedStepModuleDefinition;
+  const poseAvailable = stepPosableHandles(stepPoseDefinition).length > 0;
   const poseToolActive = !previewing && poseAvailable && tabToolMode === TAB_TOOL_MODE.POSE;
 
   const shellRef = useRef(null);
@@ -3082,21 +3041,17 @@ function StepSurfaceBody({ view, data }) {
     + (!isAssemblyView && selectedPartIds.includes(STEP_MODEL_ROOT_ID) ? 1 : 0);
   // Every CAD format shares the View settings and camera contract.
 
-  // A mated child's label names its parts, and the mesh here is the model at
-  // rest (the viewer poses display records, never this data): the child's centre.
-  const stepPoseSelectorRuntime = selectedStepParameterRuntime?.selectorRuntime || null;
-  const stepPoseFeatures = useMemo(() => (stepPoseDefinition && poseToolActive
-    ? resolveStepModuleFeatures(stepPoseDefinition, { meshData: selectedMeshData, selectorRuntime: stepPoseSelectorRuntime })
-    : null), [stepPoseDefinition, poseToolActive, selectedMeshData, stepPoseSelectorRuntime]);
+  // The handles are placed over the mesh at rest (the viewer poses display records, never
+  // this data): the parts a joint carries give its arm a direction.
   const jointHandles = useMemo(() => {
-    if (!poseToolActive) return null;
+    if (!poseToolActive || !selectedStepParameterRuntime) return null;
     return stepJointHandles({
       definition: stepPoseDefinition,
-      parameterValues: selectedStepParameterRuntime.parameterValues,
-      features: stepPoseFeatures,
+      parameterValues: selectedStepParameterRuntime.values,
+      meshData: selectedMeshData,
       onParameterChange: motion.onParameterChange
     });
-  }, [poseToolActive, stepPoseDefinition, selectedStepParameterRuntime, stepPoseFeatures, motion.onParameterChange]);
+  }, [poseToolActive, stepPoseDefinition, selectedStepParameterRuntime, selectedMeshData, motion.onParameterChange]);
 
   // ---- the viewport ---------------------------------------------------------------------------
   // What the viewport is ALLOWED to show and pick just now: nothing of the model under Pose or
@@ -3166,8 +3121,7 @@ function StepSurfaceBody({ view, data }) {
     meshData: selectedDisplayMeshData, themeSettings: resolvedThemeSettings, displaySettings: resolvedScene.display,
     renderMode: resolvedScene.render.enabled, renderConfiguration: resolvedScene.render.configuration,
     renderPartsIndividually: Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime) ||
-      Boolean(Object.keys(selectedDisplayMeshData?.appearance?.materials || {}).length) ||
-      Boolean(selectedStepParameterRuntime?.definition) || Boolean(selectedAnimationRuntime?.clip),
+      hasAuthoredMaterials(selectedDisplayMeshData) || Boolean(selectedAnimationRuntime?.clip),
     pickMode, pickableParts: layerProps.pickableParts,
     pickableFaces: pickable(viewerPickableFacesForTool), pickableEdges: pickable(viewerPickableEdgesForTool),
     hiddenPartIds: layerProps.hiddenPartIds, selectedPartIds: layerProps.selectedPartIds,
@@ -3217,7 +3171,7 @@ function StepSurfaceBody({ view, data }) {
     }),
     // Position comes straight after Select; only files with movable joints offer it.
     poseAvailable ? shell.tools.own({ id: TAB_TOOL_MODE.POSE, label: "Position",
-      icon: <PositionToolIcon custom={!positionValuesAreDefault(motion.positionControls?.parameterValues, motion.positionControls?.definition?.defaultParameterValues)} />,
+      icon: <PositionToolIcon custom={!positionValuesAreDefault(motion.positionControls?.parameterValues, openingControlValues(motion.positionControls?.definition?.articulation))} />,
       active: poseToolActive, disabled: toolIdle,
       // Its panel is in the tool stack for as long as it is the tool.
       onSelect: () => { if (!poseToolActive) handleSelectTabToolMode(TAB_TOOL_MODE.POSE); } }) : null,

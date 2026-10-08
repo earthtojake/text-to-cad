@@ -6,8 +6,10 @@ import { KinematicsPoseRow, MotionResetButton, NO_PRESET_VALUE } from '../../../
 import { FileSheetSliderField } from '../../../kit/inspector/FileSheet.js';
 import { elements } from '../../../../../scripts/reactHarness.mjs';
 
-const definition = { parameters: [{ id: 'hinge', label: 'Hinge', type: 'number' }],
-  defaultParameterValues: { hinge: 0 }, manifest: { poses: { rest: { hinge: 0 } } } };
+// A definition as the motion hook holds it: cadgen's articulation (one hinge control, one named pose).
+const articulation = { schemaVersion: 1, controls: [{ id: 'hinge', label: 'Hinge', unit: 'deg', min: 0, max: 90, default: 0 }],
+  joints: [], carries: {}, handles: [], poses: { rest: { hinge: 0 } }, opening: { hinge: 0 } };
+const definition = { url: '/hinge.step.json', articulation };
 
 test('Position is poses and joints: without a pose runtime there is no section', () => {
   assert.equal(buildPositionSection(), null);
@@ -34,8 +36,8 @@ test("the pose row and the joints are ONE section's rows, with no section of the
   const rows = def => elements(PoseControlsSection({ runtime: { definition: def } }));
   const kinds = def => rows(def).filter(node => [KinematicsPoseRow, FileSheetSliderField].includes(node.type)).map(node => node.type);
   assert.deepEqual(kinds(definition), [KinematicsPoseRow, FileSheetSliderField]);
-  assert.deepEqual(kinds({ ...definition, parameters: [] }), [KinematicsPoseRow]);
-  assert.deepEqual(kinds({ ...definition, manifest: {} }), [FileSheetSliderField]);
+  assert.deepEqual(kinds({ ...definition, articulation: { ...articulation, controls: [] } }), [KinematicsPoseRow]);
+  assert.deepEqual(kinds({ ...definition, articulation: { ...articulation, poses: {} } }), [FileSheetSliderField]);
 });
 
 test('animation-owned authored values do not claim a named position, and parameters stay editable', () => {

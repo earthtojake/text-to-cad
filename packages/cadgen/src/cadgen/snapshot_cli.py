@@ -1321,33 +1321,27 @@ def resolve_step_render_job(
         cid: asset_url_for_store_path(package_dir / str(entry.get("surf", "")))
         for cid, entry in (descriptor.get("components") or {}).items()
     }
-    resolved["package"] = {"descriptor": descriptor, "componentUrls": component_urls}
-    from cadgen._internal.source_sidecar import (
-        read_source_sidecar,
-        source_sidecar_path,
-        validate_appearance_targets,
-    )
+    from cadgen._internal.source_sidecar import apply_appearance, read_source_sidecar
 
     resolved["documentHash"] = document_hash
-    # Kinematics, animation and materials come from the same pinned annotation
-    # snapshot. The pose and clip names were checked when the job was prepared.
+    # What the sidecar means, resolved here and handed to the page as data it draws and
+    # plays: the appearance composed into the descriptor (every assigned occurrence carries
+    # its finish, base colour and opacity), the articulation of the kinematics with the
+    # control vector this job poses, and the baked animation section. The pose and clip
+    # names were checked when the job was prepared.
     sidecar = read_source_sidecar(input_path, document_hash=document_hash) or {}
     if sidecar.get("appearance") is not None:
-        # Validate canonical occurrence targets here for a clean CLI error;
-        # the browser repeats the same check before it composes its own copy.
-        validate_appearance_targets(descriptor, sidecar["appearance"])
-    if sidecar:
-        # The shared JS source resolver validates the same document binding and
-        # composes appearance into its private descriptor. Inline data avoids a
-        # second browser fetch and leaves the store descriptor untouched.
-        resolved["sourceSidecar"] = sidecar
+        descriptor = apply_appearance(descriptor, sidecar["appearance"])
+    resolved["package"] = {"descriptor": descriptor, "componentUrls": component_urls}
+    animation = sidecar.get("animation")
+    if animation is not None:
+        resolved["animation"] = animation
     animation_request = job.get("animation")
     if is_plain_object(animation_request):
         from cadgen._internal.source_sidecar import bends_a_tube
         from cadgen.snapshot_core import tube_skins_asset_url
 
-        animation = sidecar.get("animation") or {}
-        clip = [entry for entry in animation.get("clips") or [] if entry.get("id") == animation_request["clip"]]
+        clip = [entry for entry in (animation or {}).get("clips") or [] if entry.get("id") == animation_request["clip"]]
         if bends_a_tube({"clips": clip}):
             # The clip bends a tube: cadgen binds it, and the page only skins it.
             resolved["tubeSkinsUrl"] = tube_skins_asset_url(
@@ -1357,11 +1351,17 @@ def resolve_step_render_job(
 
             # Which moments of the clip the frames show: the page renders these.
             resolved["framePlan"] = resolve_frame_plan(job["video"], clip[0])
-    if isinstance(sidecar.get("kinematics"), dict) and sidecar["kinematics"]:
-        # Typed mates are the articulation mechanism: --kinematics DOF values
-        # fold through the shared FK evaluator (@text-to-cad/core kinematicsModule),
-        # which reads the sidecar's kinematics section.
-        resolved["stepParameterUrl"] = asset_url_for_path(source_sidecar_path(input_path), root_path)
+    from cadgen.articulation import articulation_control_values, step_articulation
+
+    try:
+        articulation = step_articulation(descriptor, sidecar.get("kinematics"))
+    except ValueError as exc:
+        raise SnapshotError(f"{input_path.name}: {exc}") from None
+    if articulation is not None:
+        # The page plays the articulation at this vector: every control, the ones the
+        # request named at their values and the rest at rest, validated at the door.
+        resolved["articulation"] = articulation
+        resolved["controls"] = articulation_control_values(articulation, job.get("kinematics"))
     if debug_enabled:
         resolved["debug"] = {"stepArtifact": step_artifact_debug}
 

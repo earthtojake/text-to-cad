@@ -13,7 +13,7 @@ export function completedPackageRevision(entry) {
   if (!renderCapabilities(entrySourceFormat(entry)).topology
       || entry?.runtimeSurfaceViewReplacement || !entry?.file || !entry?.hash) return "";
   return JSON.stringify([entry.file, entry.kind, entry.hash, entryAssetUrl(entry, "glb"),
-    entryMeshAssetSignature(entry), entry.documentHash || "", entry.sourceSidecar?.appearance || null]);
+    entryMeshAssetSignature(entry), entry.documentHash || "", entry.display || null]);
 }
 
 function descriptorIdentity(descriptor) {

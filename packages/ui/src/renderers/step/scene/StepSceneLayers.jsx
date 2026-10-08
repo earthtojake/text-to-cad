@@ -79,7 +79,6 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props: su
   const explosionRef = useRef({ rafId: 0, progress: 0, modelKey: "", enabled: false, layout: null });
   const clipSettingsRef = useRef(normalizeStepClipSettings(null));
   const selectorRuntimeRef = useRef(selectorRuntime);
-  const stepModuleCleanupRef = useRef([]);
   const [transformedSelectorRuntime, setTransformedSelectorRuntime] = useState(null);
   const [error, setError] = useState("");
   // Bumped whenever the exploded view reaches a POSE it will hold: overlays that bake a
@@ -190,8 +189,7 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props: su
 
   const refs = {
     partVisualStateRef, clipSettingsRef, selectorRuntimeRef, staticSceneResetRef,
-    meshSourceAdoptionRef, viewerAlertChangeRef, sceneUpdateAlertRef, sceneEffectsAlertRef, lodCameraChangeRef,
-    stepModuleCleanupRef
+    meshSourceAdoptionRef, viewerAlertChangeRef, sceneUpdateAlertRef, sceneEffectsAlertRef, lodCameraChangeRef
   };
   const layers = {
     viewport, stepScene, props, policy, refs, edges, staticResetRenderToken, explosionRef,

@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { SOURCE_SIDECAR_SCHEMA_VERSION } from '@text-to-cad/core/common/sourceSidecar.js';
 import { AnimationClockProvider, createAnimationClock } from '../../../../dist/renderers/step/workbench/animationClockStore.js';
-import { stepPosableDofs } from '../../../../dist/renderers/step/workbench/jointHandles.js';
+import { stepPosableHandles } from '../../../../dist/renderers/step/workbench/jointHandles.js';
 import { useStepMotion } from '../../../../dist/renderers/step/workbench/useStepMotion.js';
 
 // Every load of a routine's keyframes is counted; what loads is the sidecar's own, one routine, `swing`.
@@ -18,27 +17,31 @@ vi.mock('@text-to-cad/core/common/animationRuntime.js', async (importOriginal) =
 
 afterEach(() => { cleanup(); loads.count = 0; });
 
-const swing = { name: 'swing', kind: 'revolute', parent: '#base', child: '#flap',
-  axis: { origin: [0, 0, 0], dir: [0, 0, 1] }, limits: { value: [0, 120] } };
+// The articulation cadgen writes for one revolute mate `swing` (0..120 deg) carrying the flap.
+const swing = { id: 'swing', min: 0, max: 120 };
 const OPEN = { open: { swing: 90 } };
+function articulationOf(mates: { id: string; min: number; max: number }[], poses: object) {
+  return { schemaVersion: 1,
+    controls: mates.map(mate => ({ id: mate.id, label: mate.id, unit: 'deg', min: mate.min, max: mate.max, default: 0 })),
+    joints: mates.map(mate => ({ id: mate.id, parent: null, kind: 'revolute', origin: [0, 0, 0], axis: [0, 0, 1], turn: { bias: 0, terms: [[mate.id, 1]] } })),
+    carries: Object.fromEntries(mates.map(mate => [mate.id, ['o1.2']])),
+    handles: mates.map(mate => ({ id: mate.id, joint: mate.id, dof: 'turn', control: mate.id, weight: 1, label: mate.id, unit: 'deg', min: mate.min, max: mate.max })),
+    poses, opening: Object.fromEntries(mates.map(mate => [mate.id, 0])) };
+}
 // The flap turning a quarter turn about +Z over the routine's 4 s, as the build bakes it.
 const SWING_CLIP = { id: 'swing', label: 'Swing', duration: 4, loop: true, tracks: [{ targets: ['o1.2'], times: [0, 4], pivot: [0, 0, 0],
   transform: [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, Math.PI / 16, 0],
     [0, 0, 0, 0, 0, Math.SQRT1_2, Math.SQRT1_2, 0, 0, 0, 0, 0, Math.SQRT1_2 * Math.PI / 16, -Math.SQRT1_2 * Math.PI / 16]] }] };
 // One save of hinge.step as the catalog lists it: new STEP bytes, and the sidecar written again
-// beside them (a new version on its URL, bound to those bytes), with its mates, named poses and
-// routines (`routine` is their keyframes' hash, which the catalog lists as `animationHash`). No mates
-// and no routine: no sidecar.
+// beside them (a new version on its URL, bound to those bytes), resolved into the articulation of
+// its mates and named poses, and its routines (`routine` is their keyframes' hash, which the
+// catalog lists as `animationHash`). No mates: no articulation; no routine: no animation.
 function saved(revision: number, { mates = [swing], poses = OPEN, routine = '', clips = [SWING_CLIP] }:
-  { mates?: object[]; poses?: object; routine?: string; clips?: object[] } = {}) {
+  { mates?: { id: string; min: number; max: number }[]; poses?: object; routine?: string; clips?: object[] } = {}) {
   const documentHash = String(revision).repeat(64);
-  const sidecar = { schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION, documentHash,
-    ...(mates.length ? { kinematics: { mates, poses } } : {}),
-    ...(routine ? { animation: { clips } } : {}) };
   return { file: 'hinge.step', kind: 'part', hash: `tree-${revision}`, documentHash,
-    ...(mates.length ? { poseUrl: `/__cad/asset?file=hinge.step.json&v=${revision}` } : {}),
-    ...(mates.length || routine ? { sourceSidecar: sidecar } : {}),
-    ...(routine ? { animationHash: routine } : {}) };
+    ...(mates.length ? { poseUrl: `/__cad/asset?file=hinge.step.json&v=${revision}`, articulation: articulationOf(mates, poses) } : {}),
+    ...(routine ? { animation: { clips }, animationHash: routine } : {}) };
 }
 
 /**
@@ -52,7 +55,7 @@ function mount(entry: ReturnType<typeof saved>) {
   const hook = renderHook(({ entry }) => {
     const motion = useStepMotion({ entry, fileKey: entry.file, resources: null,
       readStored: () => ({ pose: null }), clipboard: null, reportError: () => {} });
-    offered.push(stepPosableDofs(motion.definition).length > 0);
+    offered.push(stepPosableHandles(motion.definition).length > 0);
     listed.push(motion.animationControls.clips.length);
     return motion;
   }, { initialProps: { entry },
@@ -75,13 +78,13 @@ it('a rebuild keeps Position, and the pose set on it, while its sidecar is read 
 
   // A save that changed the joint starts it at the new default: the old pose is not fitted onto it,
   // though 30° would still fit inside the new range.
-  rerender({ entry: saved(3, { mates: [{ ...swing, limits: { value: [0, 40] } }] }) });
+  rerender({ entry: saved(3, { mates: [{ ...swing, max: 40 }] }) });
   await loaded(result, 3);
   expect(result.current.parameterValues).toEqual({ swing: 0 });
 
   // A save that takes the mates out takes Position with them.
   rerender({ entry: saved(4, { mates: [] }) });
-  expect(stepPosableDofs(result.current.definition)).toEqual([]);
+  expect(stepPosableHandles(result.current.definition)).toEqual([]);
 });
 
 it('a rebuild keeps the named pose chosen while the joints and named poses are the same, and drops it with the pose when they changed', async () => {

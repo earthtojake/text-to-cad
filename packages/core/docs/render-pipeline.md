@@ -282,10 +282,7 @@ perspective camera every edge failed its depth test against the surfaces.
 ### `common/source.js`
 
 ```js
-import {
-  loadSource,
-  stepParameterRuntime
-} from "@text-to-cad/core/common/source.js";
+import { loadSource } from "@text-to-cad/core/common/source.js";
 ```
 
 `loadSource(input, options)` returns a normalized STEP render source:
@@ -296,7 +293,8 @@ import {
   meshData,
   selectorRuntime,
   displayEdgeRuntime,
-  stepParameterSource,
+  pose,        // {articulation, values} or null: what buildModel's stepParameters takes
+  animation,   // the baked animation section, or null
   resolved,
   url,
   glbUrl,
@@ -319,11 +317,14 @@ Accepted input fields:
   the docs hero renderer) render one source per page and need nothing.
 - `selectorRuntime` and `displayEdgeRuntime`: preloaded runtimes when a caller
   already owns sidecar loading.
-- `kinematics`: pose values for the model's kinematics — a declared preset name,
-  or `{dof: value}`. Same spelling as the `--kinematics` flag, the snapshot job
-  key and the sidecar section.
-- `stepParameterUrl` or `resolved.stepParameterUrl`: model sidecar
-  (`.step.json`) URL, whose `kinematics` section is compiled here.
+- `articulation` or `resolved.articulation`: cadgen's articulation of the model's
+  kinematics (`cadgen.articulation`), and `controls` or `resolved.controls`: the
+  control vector to pose it at, which cadgen resolved from the job's `kinematics`
+  (a preset name or `{dof: value}`) and validated. A model with no articulation
+  and control values is refused. Together they are the source's `pose`.
+- `sourceAnimation` or `resolved.animation`: the model's baked animation section,
+  which the source carries as it is (`loadSourceAnimation` compiles it). A job's own
+  top-level `animation` is its frame request, not the section.
 - `resolved.tessellation`: the `{chordTolerance, angleTolerance}` a STEP job's
   components are drawn at, both named: cadgen's choice for the job (an explicit
   `quality.tessellation`, else the rung its lighting quality asks for), checked
@@ -335,8 +336,8 @@ STEP-only options are rejected for non-STEP sources. The old shared `params`
 field is rejected, and so is the retired `stepParameters` spelling; use
 `kinematics`.
 
-Use `stepParameterRuntime(stepParameterSource)` to turn the loaded parameter
-source into the runtime object `buildModel` accepts.
+A source's `pose` (`{articulation, values}`, or null) is the `stepParameters`
+object `buildModel` accepts.
 
 ### `common/cadScene.js`
 
@@ -394,9 +395,9 @@ Common settings:
   filter rendered parts before records are built. Viewer-only fields such as
   `selectedPartIds`, `hiddenPartIds`, and `showEdges` affect visual state.
 - `clip`: normalized clip-plane settings.
-- `stepParameters`: compiled kinematics runtime object, from
-  `stepParameterRuntime()`.
-- `parameterSetup`: set `false` to skip sidecar setup lifecycle calls.
+- `stepParameters`: the pose, `{articulation, values}` (a source's `pose`):
+  cadgen's articulation at a control vector, which the one effects pass plays
+  (`applySceneState`) before a clip's frame is merged over it.
 - `renderPartsIndividually`: build per-part records instead of a whole mesh.
 - `edgeRendering`: declarative edge rendering configuration.
 
@@ -669,13 +670,10 @@ Two names, two things, and they are not interchangeable:
   Animation envelopes (`animate`, `fps`, `durationSeconds`, `duration`, `loop`)
   are retired and throw: a still renders one frame at the given values.
 
-* `stepParameters` is the compiled RUNTIME OBJECT that `buildModel()` takes,
-  produced by `stepParameterRuntime(source.stepParameterSource)`.
-
-`common/stepParameters.js` validates the pose values against the loaded
-definition and normalizes defaults.
-`loadSource()` uses it to populate `source.stepParameterSource`; callers then
-pass `stepParameterRuntime()` into `buildModel()`.
+* `stepParameters` is the POSE that `buildModel()` takes: `source.pose`,
+  `{articulation, values}` — cadgen's articulation at the control vector cadgen
+  resolved the job's `kinematics` into (`resolved.controls`), every control
+  present and within its limits (`common/articulation.js`).
 
 ## Examples
 
@@ -683,23 +681,26 @@ Interactive viewer/docs usage:
 
 ```js
 import * as THREE from "three";
-import { loadSource, stepParameterRuntime } from "@text-to-cad/core/common/source.js";
+import { loadSource } from "@text-to-cad/core/common/source.js";
 import { buildModel } from "@text-to-cad/core/common/cadScene.js";
 import { renderModel } from "@text-to-cad/core/common/renderModel.js";
 
+// `articulation` and `sourceAnimation` are what cadgen resolved the model's sidecar into:
+// a catalog entry's, a snapshot job's `resolved`, or a static package's files.
 const source = await loadSource({
   kind: "step",
   glbUrl: "/models/.part.step.glb",
-  sourceSidecarUrl: "/models/part.step.json",
   cadPath: "models/part.step",
-  kinematics: { drive: 180 }
+  articulation,
+  controls: { drive: 180 },
+  sourceAnimation
 });
 
 const model = buildModel(THREE, source, {
   theme,
   displayMode: "shaded_edges",
   edgeSettings,
-  stepParameters: stepParameterRuntime(source.stepParameterSource)
+  stepParameters: source.pose
 });
 
 const viewport = renderModel(THREE, model, {

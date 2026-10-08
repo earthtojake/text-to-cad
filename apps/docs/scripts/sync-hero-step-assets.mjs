@@ -1,15 +1,17 @@
 // Refresh the hero showcase assets from the repo model. The hero renders the
 // planetary gear STEP the same way every @text-to-cad/core client does — from the
-// TREE behind the document (assembly.json) and the mesh cadgen made of each
-// component, plus its schema-v10 SIDECAR (<name>.step.json: kinematics +
-// animation keyframes) — served as plain static files so production (Vercel)
-// needs no backend and no Git LFS.
+// TREE behind the document (assembly.json, with the sidecar's appearance composed
+// in) and the mesh cadgen made of each component, plus what cadgen resolves the
+// sidecar's declarations into: the ARTICULATION of its kinematics
+// (articulation.json) and the baked ANIMATION keyframes (animation.json) — served
+// as plain static files so production (Vercel) needs no backend and no Git LFS.
 //
 // The tree lives in cadgen's store, keyed by the STEP file's bytes, and the
 // store holds no directories: this script asks cadgen to export a view of the
-// tree (assembly.json + components/) and to mesh every component at the
-// default tolerances (components/<cid>.glb, the one level the hero draws), and
-// copies what the browser fetches. Run it after rebuilding the model:
+// tree (assembly.json + components/), to mesh every component at the default
+// tolerances (components/<cid>.glb, the one level the hero draws) and to write
+// the articulation and animation beside them, and copies what the browser
+// fetches. Run it after rebuilding the model:
 //
 //   python models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py
 //   node apps/docs/scripts/sync-hero-step-assets.mjs
@@ -28,8 +30,7 @@ const repoRoot = path.resolve(docsRoot, "..", "..");
 const modelScript = "models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py";
 const modelStep = path.join(repoRoot, "models/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.step");
 const modelSidecar = `${modelStep}.json`;
-const heroDir = path.join(docsRoot, "public/hero");
-const heroTreeDir = path.join(heroDir, "planetary");
+const heroTreeDir = path.join(docsRoot, "public/hero/planetary");
 const rebuildHint = `run: python ${modelScript}`;
 // The Python that has cadgen: PYTHON_BIN when set (a worktree has no .venv of
 // its own), else the repo's .venv.
@@ -52,12 +53,21 @@ const viewDir = execFileSync(
     "import json, sys; from pathlib import Path; " +
       "from cadgen.catalog import result_tree_for; from cadgen.store.view import export_view; " +
       "from cadgen.store import meshes, surfaces; " +
+      "from cadgen._internal.source_sidecar import apply_appearance, read_source_sidecar; " +
+      "from cadgen.articulation import step_articulation; " +
       "tree = result_tree_for(Path(sys.argv[1])); view = export_view(tree) if tree else None; " +
       "descriptor = json.loads((view / 'assembly.json').read_text()) if view else {}; " +
       "surfaces.derive(tree, producer=descriptor['surfaceProducer'], tessellations=[dict(" +
       "chordTolerance=meshes.DEFAULT_CHORD, angleTolerance=meshes.DEFAULT_ANGLE)]) if view else None; " +
       "[(view / 'components' / (cid + '.glb')).write_bytes(meshes.read(meshes.tessellation_key(entry['surfaceInput']))) " +
       "for cid, entry in descriptor.get('components', {}).items()]; " +
+      "sidecar = read_source_sidecar(Path(sys.argv[1])) if view else None; " +
+      "(view / 'assembly.json').write_text(json.dumps(apply_appearance(descriptor, sidecar.get('appearance')))) " +
+      "if sidecar and sidecar.get('appearance') is not None else None; " +
+      "(view / 'articulation.json').write_text(json.dumps(step_articulation(descriptor, sidecar.get('kinematics')), sort_keys=True)) " +
+      "if sidecar and sidecar.get('kinematics') else None; " +
+      "(view / 'animation.json').write_text(json.dumps(sidecar['animation'], sort_keys=True)) " +
+      "if sidecar and sidecar.get('animation') is not None else None; " +
       "print(view or '')",
     modelStep,
   ],
@@ -71,14 +81,20 @@ if (!viewDir) {
 try {
   const descriptor = JSON.parse(fs.readFileSync(path.join(viewDir, "assembly.json"), "utf8"));
 
-  // Ship only what the browser fetches: the descriptor and each component's
-  // mesh, which `packageSourceFromBaseUrl` finds beside the surf path the
-  // descriptor names. The .surf (exact surfaces), the selector table and the
-  // .brep (exact geometry) exist for picking, recognition and exports, which
-  // the hero never does.
+  // Ship only what the browser fetches: the descriptor, each component's mesh,
+  // which `packageSourceFromBaseUrl` finds beside the surf path the descriptor
+  // names, and the articulation and animation cadgen wrote beside them. The
+  // .surf (exact surfaces), the selector table and the .brep (exact geometry)
+  // exist for picking, recognition and exports, which the hero never does.
   fs.rmSync(heroTreeDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(heroTreeDir, "components"), { recursive: true });
   fs.copyFileSync(path.join(viewDir, "assembly.json"), path.join(heroTreeDir, "assembly.json"));
+  for (const name of ["articulation.json", "animation.json"]) {
+    if (!fs.existsSync(path.join(viewDir, name))) {
+      throw new Error(`${modelStep} declares no ${name.replace(".json", "")}; the hero plays both — ${rebuildHint}`);
+    }
+    fs.copyFileSync(path.join(viewDir, name), path.join(heroTreeDir, name));
+  }
 
   let copied = 0;
   for (const [cid, entry] of Object.entries(descriptor.components || {})) {
@@ -91,8 +107,7 @@ try {
     copied += 1;
   }
 
-  fs.copyFileSync(modelSidecar, path.join(heroDir, "planetary_gear_assembly.step.json"));
-  console.log(`Synced hero assets: ${copied} components + schema-v10 sidecar -> ${heroTreeDir}`);
+  console.log(`Synced hero assets: ${copied} components + articulation + animation -> ${heroTreeDir}`);
 } finally {
   fs.rmSync(viewDir, { recursive: true, force: true });
 }

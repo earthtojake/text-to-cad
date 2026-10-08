@@ -5,12 +5,15 @@ import { animationRenderFrame, buildDefaultAnimationState, findAnimationClip } f
 import { AnimationClockProvider, createAnimationClock } from '../../../../dist/renderers/step/workbench/animationClockStore.js';
 import { useStepMotionControls } from '../../../../dist/renderers/step/workbench/useStepMotionControls.js';
 
-const parameters = [
-  { id: 'hinge', type: 'number', defaultValue: 5, min: -90, max: 90 },
-  { id: 'slide', type: 'number', defaultValue: 2, min: 0, max: 100 },
-];
-const definition = { parameters, parameterMap: Object.fromEntries(parameters.map(p => [p.id, p])),
-  defaultParameterValues: { hinge: 5, slide: 2 }, manifest: { poses: { open: { hinge: 80 }, closed: { hinge: -20, slide: 7 } } } };
+// The definition as the motion hook holds it: cadgen's articulation, two controls with rest values.
+const definition = { url: '/hinge.step.json', articulation: { schemaVersion: 1,
+  controls: [
+    { id: 'hinge', label: 'hinge', unit: 'deg', min: -90, max: 90, default: 5 },
+    { id: 'slide', label: 'slide', unit: 'mm', min: 0, max: 100, default: 2 },
+  ],
+  joints: [], carries: {}, handles: [],
+  poses: { open: { hinge: 80 }, closed: { hinge: -20, slide: 7 } }, opening: { hinge: 5, slide: 2 },
+}, defaultParameterValues: { hinge: 5, slide: 2 } };
 const clips = { turn: { id: 'turn', duration: 4, loop: true, tracks: [] }, close: { id: 'close', duration: 2, loop: false, tracks: [] } };
 let frames: Map<number, FrameRequestCallback>;
 beforeEach(() => {

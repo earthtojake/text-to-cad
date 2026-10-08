@@ -345,27 +345,54 @@ def validate_appearance_targets(descriptor: Mapping[str, Any], block: object) ->
     return appearance
 
 
-def apply_appearance(descriptor: Mapping[str, Any], block: object) -> dict[str, Any]:
-    """Compose artifact annotations into an owned descriptor, never a tree object."""
+def occurrence_display(descriptor: Mapping[str, Any], block: object) -> dict[str, dict[str, Any]] | None:
+    """What the appearance section resolves to for each occurrence it assigns, for a page to
+    draw as given: the material's id and name, every finish channel with the defaults filled,
+    the authored base colour when the material has one, and the occurrence's ``opacity`` --
+    its STEP alpha times the material's opacity, the one product every export and the
+    viewport draw (``mesh_formats.occurrence_finish``). ``None`` when nothing is assigned.
+    A page joins this to the tree's occurrences by id; it decides no precedence of its own."""
     appearance = validate_appearance_targets(descriptor, block)
+    if not appearance:
+        return None
+    from cadgen._internal.mesh_formats import occurrence_finish
+
+    materials = appearance["materials"]
+    assignments = appearance["assignments"]
+    display: dict[str, dict[str, Any]] = {}
+    for occurrence in descriptor.get("occurrences") or []:
+        occurrence_id = str(occurrence.get("id") or "")
+        material_id = assignments.get(occurrence_id)
+        if material_id is None:
+            continue
+        authored = materials[material_id]
+        material = {
+            **SOURCE_MATERIAL_DEFAULTS,
+            **{key: authored[key] for key in _NUMERIC_MATERIAL_KEYS if key in authored},
+        }
+        resolved: dict[str, Any] = {
+            "materialId": material_id,
+            "materialName": authored["name"],
+            "material": material,
+            "opacity": (occurrence_finish(material, occurrence.get("color")) or {}).get("opacity", material["opacity"]),
+        }
+        if "baseColor" in authored:
+            resolved["baseColor"] = authored["baseColor"]
+        display[occurrence_id] = resolved
+    return display
+
+
+def apply_appearance(descriptor: Mapping[str, Any], block: object) -> dict[str, Any]:
+    """Compose artifact annotations into an owned descriptor, never a tree object: every
+    assigned occurrence carries what :func:`occurrence_display` resolves for it."""
+    display = occurrence_display(descriptor, block)
     result = deepcopy(dict(descriptor))
-    if appearance:
-        materials = appearance["materials"]
-        assignments = appearance["assignments"]
+    if display:
         for occurrence in result.get("occurrences") or []:
-            material_id = assignments.get(occurrence.get("id"))
-            if material_id is not None:
-                authored = materials[material_id]
-                occurrence["material"] = {
-                    **SOURCE_MATERIAL_DEFAULTS,
-                    **{key: authored[key] for key in _NUMERIC_MATERIAL_KEYS if key in authored},
-                }
-                occurrence["materialId"] = material_id
-                occurrence["materialName"] = authored["name"]
-                if "baseColor" in authored:
-                    occurrence["baseColor"] = authored["baseColor"]
-                else:
-                    occurrence.pop("baseColor", None)
+            resolved = display.get(str(occurrence.get("id") or ""))
+            if resolved is not None:
+                occurrence.pop("baseColor", None)
+                occurrence.update(deepcopy(resolved))
     return result
 
 

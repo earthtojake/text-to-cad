@@ -53,9 +53,10 @@ and assets, so the app does not scan another package's source.
 - **One boundary**: the app imports shared packages through public exports.
   The root dependency checker prevents app-to-app and package-to-app imports.
   The backend is not here: its code, its tests and its laws live with cadgen.
-- **Document boundary**: everything renders from the artifact, its optional
-  schema-10 `.step.json` sidecar and immutable cache views. The sidecar carries
-  appearance, animation keyframes and kinematics: data, never code. The viewer never reads model
+- **Document boundary**: everything renders from the artifact, what cadgen
+  resolved its optional schema-10 `.step.json` sidecar into (the catalog entry's
+  `articulation`, `animation` and per-occurrence `display`: data, never code; the
+  page reads no sidecar) and immutable cache views. The viewer never reads model
   source and never triggers a source build. An already-running build can publish
   complete immutable preview revisions before saving its STEP output.
 - **Independent motion**: kinematics and animation compose in effect records.

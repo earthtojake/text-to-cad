@@ -1,38 +1,5 @@
 import { createLodPublication } from "./lodPublication.js";
 
-const lodDisplaySources = new WeakMap();
-
-function preservesLodPublicationGeometry(displaySource, publicationSource) {
-  const displayedParts = displaySource?.parts;
-  const publicationParts = publicationSource?.parts;
-  return Array.isArray(displayedParts) && Array.isArray(publicationParts)
-    && displayedParts.length === publicationParts.length
-    && displayedParts.every((part, index) => {
-      const published = publicationParts[index];
-      return part?.id === published?.id
-        && part?.occurrenceId === published?.occurrenceId
-        && part?.componentId === published?.componentId
-        && part?.sourceMesh === published?.sourceMesh
-        && part?.transform === published?.transform;
-    });
-}
-
-// Appearance-only display wrappers preserve the complete occurrence geometry,
-// but are not themselves the exact composed source owned by the LOD publisher.
-// Keep that relationship out of serialized mesh data and unwrap it before the
-// ownership state machine compares, commits, or disposes a publication.
-export function registerLodDisplaySource(displaySource, publicationSource) {
-  if (displaySource && publicationSource && displaySource !== publicationSource
-      && preservesLodPublicationGeometry(displaySource, publicationSource)) {
-    lodDisplaySources.set(displaySource, lodDisplaySources.get(publicationSource) || publicationSource);
-  }
-  return displaySource;
-}
-
-function lodPublicationSource(source) {
-  return lodDisplaySources.get(source) || source;
-}
-
 export function lodOccurrenceProof({ source, descriptor, componentId, componentMesh }) {
   const sourceIds = descriptor?.occurrences
     ? descriptor.occurrences.filter(row => row.component === componentId).map(row => row.id)
@@ -76,8 +43,8 @@ export function createLodSceneAdoption(options) {
     ...tracker,
     expectBatch,
     expect: spec => expectBatch({ ...spec, items: [spec] }),
-    adopted: source => tracker.adopted(lodPublicationSource(source)),
-    disposed: (source, detail) => tracker.disposed(lodPublicationSource(source), detail),
-    failed: (source, detail) => tracker.failed(lodPublicationSource(source), detail),
+    adopted: source => tracker.adopted(source),
+    disposed: (source, detail) => tracker.disposed(source, detail),
+    failed: (source, detail) => tracker.failed(source, detail),
   };
 }

@@ -26,7 +26,8 @@ one revolute mate. Every property is there for a test:
 | `components/552fc5fd1b854ab4.selectors.json` | 8,355 | the same route, by the table's own digest (the `selectors` of a `POST /__cad/surfaces` ready row), for the base. cadgen's selector table: the ids, facts, adjacency, chains and tangent groups picking and measuring join to the mesh. |
 | `components/df492f79c6123df5.selectors.json` | 6,499 | the same, for the arm. |
 | `components/<cid>.l<level>.glb` | 3,044–15,064 | the store's meshes (GLB bodies), one per component and LOD level 0–3: what the harness's mesh store serves (`/__tess_cache/` probe, batch and single reads), and what a `POST /__cad/surfaces` naming a tessellation answers with. |
-| `hinge_block.step.json` | 2,217 | **no request at all.** The harness puts it inline on the catalog entry as `sourceSidecar`, which is what the real scanner does, and the renderer reads the kinematics and the routine's keyframes straight from there. |
+| `hinge_block.step.json` | 2,217 | **no request at all.** The harness puts its `animation` section inline on the catalog entry, which is what the real scanner does, and the renderer plays the routine's keyframes straight from there. |
+| `hinge_block.articulation.json` | 921 | **no request at all.** cadgen's articulation of the sidecar's kinematics (`cadgen.articulation.step_articulation` over `assembly.json` and the sidecar), which the harness puts inline on the catalog entry as `articulation`, as the real scanner does; the Position tool plays it. `tests/python/packages/cadgen/test_articulation.py` asserts it is what cadgen writes today. |
 
 Total 96,497 bytes with the meshes and tables. No Git attribute applies here (`git check-attr -a` on these
 paths prints nothing), and the repository carries no LFS. Keep it that way — an
@@ -39,8 +40,8 @@ the catalog names a store view, not the document.
 
 `read_source_sidecar` refuses a sidecar whose `schemaVersion` is not current or
 whose `documentHash` is not the digest of the STEP bytes being resolved, and the
-catalog entry then carries no `sourceSidecar` — so the file silently has no
-Position section and nothing to play in preview. This one is bound: `schemaVersion` is 10 and
+catalog entry then carries no `articulation` and no `animation` — so the file
+silently has no Position section and nothing to play in preview. This one is bound: `schemaVersion` is 10 and
 `documentHash` is
 `3c1e7edf8593d6019706ff355445199971b740e2bd0661eda6ade9b961082f58`, the SHA-256
 of the generated `hinge_block.step`, which is also the `documentHash` in
