@@ -15,11 +15,12 @@ export const TOOL_COLUMN_POSITION = Object.freeze({ top: INSET, left: INSET, bot
  * viewer or under the cube (`ToolPanel.jsx` decides which of them gives way).
  * The 3D views (`RendererShell.jsx`) and the flat ones (a KiCad board's or schematic's) draw the same column.
  *
- * Every tool's panel but Select's has an X that puts the tool down. Select's tree has an X of its
- * own that closes the tree alone: the tool it belongs to then carries the strip's corner mark, and
- * a press on that tool while it is up opens the tree again; from another tool, a press only takes
- * it up, the tree still closed. Until the person has closed or opened it, the tree starts as the
- * tool says this file starts it (`panel.startsClosed`) and closed on a phone.
+ * Every tool's panel but Select's has an X that puts the tool down, back to Select (the default
+ * tool, which cannot be put down). Select's tree has an X of its own that closes the tree alone:
+ * the tool it belongs to then carries the strip's corner mark, and a press on that tool while it is
+ * up opens the tree again; from another tool, a press only takes it up, the tree still closed.
+ * Until the person has closed or opened it, the tree starts as the tool says this file starts it
+ * (`panel.startsClosed`: a single part's) and closed on a phone.
  *
  * @param {{ tools: import("../tools/FloatingToolBar.js").ViewportTool[], layout: object,
  *   onLayoutChange(patch: object | ((layout: object) => object)): void, mobile?: boolean, hidden?: boolean,

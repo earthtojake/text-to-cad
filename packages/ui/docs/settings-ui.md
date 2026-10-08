@@ -119,16 +119,16 @@ none.
 - **View cube** at bottom-left, 2px from the left and 8px off the bottom so the
   axes drawn in its lower corner never touch the edge, in a 6rem area: enlarged
   face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
-- **Display and Preview** at the navbar's right end, its last two controls: for a 3D
+- **Display and Preview** at the navbar's right end, its last controls: for a 3D
   file, the view's own — **Display** (the perspective box: see
   [Display settings](#display-settings-and-section-primitives)) and **Preview** (a play
   icon). They are the navbar's 24px icon buttons with 14px icons, 4px apart, with hints
   below them, in the box FileViewer hands the renderer for them (`navbarSlot`,
   `data-view-controls`). Display's dropdown opens down from its button, end-aligned, and
-  never taller than the viewer below it. A view that is not 3D has neither — but a KiCad
-  board, whose Display is in the same place, with no Preview (see
-  [A KiCad board](#a-kicad-board)) — and neither does a view drawn as a picture, one that is loading or failed to load, or preview, which
-  has the page to itself and draws its own in their place (see
+  never taller than the viewer below it. A KiCad board has Display alone, in the same
+  place (see [A KiCad board](#a-kicad-board)). Any other view that is not 3D has
+  neither, and neither does a view drawn as a picture, one that is loading or failed to
+  load, or preview, which has the page to itself and draws its own in their place (see
   [preview](#camera-animation-and-preview)).
 - **Playbar** (preview's, a file with routines only) sits at bottom-centre, on a
   line 1.75rem up (a host whose control floats over the view's bottom moves it

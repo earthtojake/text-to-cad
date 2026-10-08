@@ -173,6 +173,20 @@ it('a machine without KiCad gets the standard card, carrying the server’s inst
   dispose();
 });
 
+it('a board has no Display while it loads or once it failed to, as a 3D view has none then', async () => {
+  let answer: ((response: Response) => void) | null = null;
+  readPlot = () => new Promise<Response>((resolve) => { answer = resolve; });
+  const { pane, dispose } = await open('blinky.kicad_pcb');
+  // The plot asked for and not yet answered: the board is loading.
+  await waitFor(() => expect(answer).not.toBeNull());
+  expect(pane.querySelector('[data-viewer-navbar] [data-view-controls]')).not.toBeNull();
+  expect(within(pane).queryByRole('button', { name: 'Display' })).toBeNull();
+  await act(async () => { answer!(json({ error: INSTALL }, 400)); });
+  await within(pane).findByRole('alert');
+  expect(within(pane).queryByRole('button', { name: 'Display' })).toBeNull();
+  dispose();
+});
+
 it('host commands a plot cannot answer are declined in its own words; it fits and captures', async () => {
   const schematic = await open('blinky.kicad_sch');
   await opened(schematic.pane);
