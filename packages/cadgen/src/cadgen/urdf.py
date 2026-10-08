@@ -2,7 +2,7 @@
 
 Unlike ``step``/``dxf``/``stl``, this namespace carries no decorator: a robot
 description is an AUTHORED file, not a document cadgen generates, so there is
-nothing to declare (design/format-doors.md). It is a plain module.
+nothing to declare. It is a plain module.
 
 ``cadgen urdf validate`` is an ADAPTER over :func:`validate` rather than a
 generated mirror: ``--packages NAME=PATH`` is repeatable, and a repeatable

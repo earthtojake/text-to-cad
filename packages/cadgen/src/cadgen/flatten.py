@@ -1,7 +1,7 @@
 """Flat patterns from 3D topology: exact 2D geometry for ``@dxf`` drawings.
 
 A drawing generator returns build123d 2D geometry and the engine writes the DXF
-(design/dxf-build123d.md). This module is the bridge from a solid to that
+(cadgen._internal.dxf_emit). This module is the bridge from a solid to that
 geometry: pick the planar faces that make up the flat pattern, lay each one into
 the XY plane, fuse them, and — where the cutting process needs it — offset for
 kerf. Everything it hands back is build123d geometry, ready to return from a

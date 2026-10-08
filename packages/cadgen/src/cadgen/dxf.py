@@ -3,7 +3,7 @@
 ``@dxf`` DECLARES a drawing; ``dxf.snapshot(...)`` renders one. They are the
 same object — this module is callable (see
 :mod:`cadgen._internal.format_namespace`) — so the drawing family is one table
-row like every other format (design/format-doors.md).
+row like every other format (README law 6).
 
 **There is no ``dxf.build``** (deleted, hard cutover). A ``.dxf`` has no derived
 state a door must materialize: the file IS the product, and both the CAD Viewer

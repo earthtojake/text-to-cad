@@ -4,7 +4,7 @@ Every mesh serialization (STL/3MF/GLB) — a `@stl`/`@glb`/`@threemf`
 declaration produced by a model-script run, or an ad-hoc `cadgen stl|3mf|glb
 build` — funnels through :func:`run_mesh_exporter`, so the front doors cannot
 drift: one Node invocation, one tessellation per distinct tolerance pair,
-formats serialized from it (design/unified-tessellation.md).
+formats serialized from it.
 
 Freshness rides content-keyed records in the store's ``index/mesh`` tier: a
 record is keyed by the

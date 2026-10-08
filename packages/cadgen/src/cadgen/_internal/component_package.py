@@ -562,9 +562,8 @@ def _write_component_artifacts_atomic(
     cad_ref: str,
     brep_bytes: bytes | None = None,
 ) -> Path:
-    """Persist one component's DOCUMENT pair (design/
-    step-document-architecture.md): ``<cid>.brep`` — the exact shape, the
-    same location-stripped BinTools bytes that computed the cid — and
+    """Persist one component's DOCUMENT pair: ``<cid>.brep`` — the exact shape,
+    the same location-stripped BinTools bytes that computed the cid — and
     ``<cid>.surf`` — the render view. Surface extraction is READING; the
     component object is a plain write when the hashing payload is already in hand.
     The surf goes in place LAST so its existence signals a complete set.

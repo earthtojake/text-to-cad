@@ -1,4 +1,4 @@
-"""Selector tables from a component ``.surf`` (design/surface-rendering.md R5).
+"""Selector tables from a component ``.surf``.
 
 The Python twin of ``@text-to-cad/core/src/lib/surf/surfSelectorBundle.js`` for the
 consumers that compose topology server-side (``assembly_lookup`` behind

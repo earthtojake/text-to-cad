@@ -1368,7 +1368,7 @@ def route_file(pathname: str, prefix: str, root: Path) -> Path:
     if not path_is_inside_or_equal(file_path, root):
         raise RouteFileError(f"forbidden route path: {pathname}", status=403)
     return file_path
-# --- shared component-tessellation cache (design/unified-tessellation.md) ----
+# --- shared component-tessellation cache -------------------------------------------
 #
 # The snapshot page resolves component tessellations through the SAME disk
 # cache the mesh-export CLI uses (immutable objects plus index/mesh; codec and
@@ -2201,7 +2201,7 @@ def write_render_outputs(result: Mapping[str, object]) -> None:
 # one in the browser reaches stdout by default. A SnapshotResult cannot carry a
 # payload at all, because it has no field for one -- and `--json` becomes
 # `dataclasses.asdict`, the same serialization every other cadgen verb uses
-# (design/format-doors.md).
+# (cadgen.results).
 
 
 def _output_kind(output: Mapping[str, object], path: Path) -> str:

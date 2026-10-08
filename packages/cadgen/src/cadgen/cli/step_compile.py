@@ -3,8 +3,7 @@
 There is no parser here on purpose. Everything the command accepts is derived
 from the verb function's signature by
 :mod:`cadgen._internal.cli_from_function`, so a flag cannot drift from a
-parameter: this module only names which function the command is
-(design/format-doors.md).
+parameter: this module only names which function the command is (README law 6).
 
 INTERNAL. Compiling a document into its tree is what every door and
 the CAD Viewer do on demand, so nothing a user reads should ever tell them to

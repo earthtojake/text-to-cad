@@ -3,7 +3,7 @@
 A GENERATED CLI over :func:`cadgen.stl.snapshot`. There is no parser here on
 purpose: everything the command accepts is derived from the verb function's
 signature by :mod:`cadgen._internal.cli_from_function`, so a flag cannot drift
-from a parameter (design/format-doors.md). Which input kinds the door accepts
+from a parameter (README law 6). Which input kinds the door accepts
 is declared once, beside the verb, in
 :data:`cadgen._internal.snapshot_door.DOOR_KINDS`.
 

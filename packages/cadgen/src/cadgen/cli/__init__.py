@@ -4,7 +4,7 @@ Every subcommand is also reachable as ``python -m cadgen.<module>``; this is the
 front door, not a second implementation. A subcommand's parser lives in its own module and
 owns its arguments, so the console and module entry points cannot drift.
 
-Commands in the ``<format> <verb>`` grammar (design/format-doors.md) go one step further:
+Commands in the ``<format> <verb>`` grammar (README law 6) go one step further:
 their module names only the public verb function, and the parser is DERIVED from that
 function's signature (``cadgen._internal.cli_from_function``). A flag and a parameter
 cannot drift, because there is only one of them.
@@ -31,8 +31,8 @@ import sys
 # argv[0:2] before argv[0], so the two-word form wins where it exists and one-word
 # commands like `daemon` still work.
 #
-# Generation has NO CLI (design/library-first-generation.md): a model script runs
-# itself — `python <model>.py` through the @step/@dxf decorators.
+# Generation has NO CLI (README law 7): a model script runs itself —
+# `python <model>.py` through the @step/@dxf decorators.
 _COMMANDS: dict[str, tuple[str, str]] = {
     # STEP. `build` writes a NEW document (IN OUT); `compile` only makes an
     # existing document's tree current and is INTERNAL — every door

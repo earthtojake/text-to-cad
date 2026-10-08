@@ -3,7 +3,7 @@
 ``@stl`` declares a mesh output on a model, with or without ``@step``;
 ``stl.build(...)`` exports a saved STEP/STP document. They are the same object — this module is callable (see
 :mod:`cadgen._internal.format_namespace`) — so a format stays one table row:
-decorator, verbs, and generated CLI together (design/format-doors.md).
+decorator, verbs, and generated CLI together (README law 6).
 
 ``cadgen stl build`` is this module's ``build`` with a parser derived from its
 signature, so the flags cannot drift from the function. The body is

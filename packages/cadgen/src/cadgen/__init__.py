@@ -58,15 +58,15 @@ __all__ = [
 def __getattr__(name: str):
     if name in {"step", "dxf", "stl", "glb", "threemf"}:
         # A FORMAT NAMESPACE: the declaration decorator and the format's verbs in
-        # one callable module (design/format-doors.md). Returning the module
-        # rather than cadgen.authoring.<name> keeps a single identity —
+        # one callable module (cadgen._internal.format_namespace). Returning the
+        # module rather than cadgen.authoring.<name> keeps a single identity —
         # `import cadgen.stl` would otherwise shadow the decorator.
         import importlib
 
         return importlib.import_module(f"cadgen.{name}")
     if name in {"revolute", "slider", "cylindrical", "fastened", "couple"}:
         # Typed-mates kinematics vocabulary for the kinematics= dict on
-        # @step/@stl/@glb/@threemf (design/pose-animation-split.md).
+        # @step/@stl/@glb/@threemf.
         from cadgen import kinematics
 
         return getattr(kinematics, name)

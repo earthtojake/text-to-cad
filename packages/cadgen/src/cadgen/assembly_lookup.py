@@ -198,9 +198,9 @@ def _place_entity_row(matrix: list[float], row: Mapping[str, Any]) -> dict[str, 
 
 
 def _read_component_bundle(package_dir: Path, component: str):
-    """A component's topology bundle, from its exact-surface artifact
-    (design/surface-rendering.md R5). Pre-surf packages fail the schema
-    gate and rebuild before ever reaching here, so .surf is the only form."""
+    """A component's topology bundle, from its exact-surface artifact.
+    Pre-surf packages fail the schema gate and rebuild before ever reaching
+    here, so .surf is the only form."""
     surf_path = package_dir / COMPONENTS_DIRNAME / f"{component}.surf"
     if not surf_path.is_file():
         return None

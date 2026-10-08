@@ -1,4 +1,4 @@
-"""Derive a CLI from a public verb function's signature (design/format-doors.md).
+"""Derive a CLI from a public verb function's signature (README law 6).
 
 A *mirror* command is one whose parser is GENERATED from the function it calls,
 so a flag and a parameter cannot drift: adding a keyword-only argument adds a
