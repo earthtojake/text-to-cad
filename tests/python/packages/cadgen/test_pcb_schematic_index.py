@@ -286,7 +286,7 @@ class ErcPayloadTest(unittest.TestCase):
     def report(self, violations, path="/"):
         folder = tempfile.mkdtemp()
         report = Path(folder) / "erc.json"
-        report.write_text(json.dumps({"coordinate_units": "mm", "sheets": [{"path": path, "violations": violations}]}))
+        report.write_text(json.dumps({"coordinate_units": "mm", "sheets": [{"path": path, "violations": violations}]}), encoding="utf-8")
         return report
 
     def test_a_pin_finding_names_the_pin(self):

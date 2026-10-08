@@ -99,12 +99,12 @@ class ReviewTest(unittest.TestCase):
     def test_currents_are_read_from_the_project(self):
         with tempfile.TemporaryDirectory() as folder:
             project = Path(folder) / "t.kicad_pro"
-            project.write_text(json.dumps({"cadgen": {"net_currents": {"VBUS": 2.0, "BAD": -1}}}))
+            project.write_text(json.dumps({"cadgen": {"net_currents": {"VBUS": 2.0, "BAD": -1}}}), encoding="utf-8")
             self.assertEqual(net_currents(project), {"VBUS": 2.0})
             for text in ('{"cadgen": []}', '{"cadgen": {"net_currents": [1]}}', '{"cadgen": {"net_currents": {"V": Infinity}}}'):
-                project.write_text(text)
+                project.write_text(text, encoding="utf-8")
                 self.assertEqual(net_currents(project), {}, text)
-            project.write_text("{not json")
+            project.write_text("{not json", encoding="utf-8")
             self.assertEqual(net_currents(project), {})
             self.assertEqual(net_currents(Path(folder) / "missing.kicad_pro"), {})
             self.assertEqual(net_currents(None), {})
@@ -128,7 +128,7 @@ class ReviewTest(unittest.TestCase):
             found = Finding(check="review", severity=severity, type="decoupling_far", description="far", items=(), summary="C1 is far")
             with tempfile.TemporaryDirectory() as folder, mock.patch("cadgen.kicad.check.check_project", return_value=ProjectCheck(findings=(found,))):
                 board = Path(folder) / "b.kicad_pcb"
-                board.write_text("")
+                board.write_text("", encoding="utf-8")
                 for strict in (False, True):
                     result = pcb.validate(board, strict=strict)
                     self.assertTrue(result.ok, (severity, strict, result.issues))
