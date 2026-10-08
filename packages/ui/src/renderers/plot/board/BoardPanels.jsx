@@ -39,6 +39,7 @@ const BoardRow = memo(function BoardTreeRow({ node, depth, highlighted, expanded
   const open = branch && expanded.has(node.id);
   const { choose } = rowActions(node, select);
   const pickable = node.kind !== "group";
+  if (node.kind === "empty") return <li className="min-w-0"><p className="h-6 truncate text-micro leading-6 text-muted-foreground" style={{ paddingLeft: depth * 12 + 16 }}>{node.label}</p></li>;
   return <li className="min-w-0" ref={(element) => { if (element) rowRefs.current.set(node.id, element); else rowRefs.current.delete(node.id); }}>
     <TreeRowSurface dense active={highlighted.has(node.id)} className="gap-0 pr-0" style={{ paddingLeft: depth * 12 }} data-board-row={node.id}>
       {branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${node.label}`} aria-expanded={open}

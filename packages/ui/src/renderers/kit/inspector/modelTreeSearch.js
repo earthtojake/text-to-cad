@@ -37,7 +37,7 @@ export function buildModelTreeSearchIndex(tree) {
   const entries = [];
   const visit = (nodes, parent, prefix) => {
     for (const node of nodes || []) {
-      if (node.kind === 'curve') continue;
+      if (node.kind === 'curve' || node.kind === 'empty') continue;
       const label = String(node.label || '');
       const at = entries.push({
         node, parent, label, prefix,

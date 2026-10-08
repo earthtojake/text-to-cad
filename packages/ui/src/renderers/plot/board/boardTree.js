@@ -75,15 +75,22 @@ export function buildBoardTree(index) {
       detail: `${net.pads.length} ${noun}${net.pads.length === 1 ? "" : "s"}`, selectionId: `net:${net.name}`, searchAliases: [],
       children: net.pads.map((pad) => ({ pad, key: `${pad.ref}.${pad.number}` })).sort((a, b) => naturalCompare(a.key, b.key)).map(({ pad }) => padNode(pad, { underNet: true })),
     }));
-  const checks = index.findings.map((finding) => ({
-    id: `finding:${finding.index}`, kind: "finding", finding, label: finding.type.replaceAll("_", " "),
-    detail: finding.severity, searchAliases: [finding.description], children: [],
-  }));
+  // Checks read as sentences, what stops an order first; a board KiCad found nothing on says so.
+  const rank = { error: 0, warning: 1 };
+  const checks = [...index.findings]
+    .sort((a, b) => (rank[a.severity] ?? 2) - (rank[b.severity] ?? 2) || a.index - b.index)
+    .map((finding) => ({
+      id: `finding:${finding.index}`, kind: "finding", finding, label: finding.summary || finding.description,
+      detail: finding.severity, searchAliases: [finding.description, finding.type.replaceAll("_", " ")], children: [],
+    }));
+  const errors = index.findings.filter((finding) => finding.severity === "error").length;
   const roots = [
     { id: "group:parts", kind: "group", label: "Parts", detail: String(index.parts.size), children: parts },
     { id: "group:nets", kind: "group", label: "Nets", detail: String(nets.length), children: nets },
   ];
-  if (checks.length) roots.push({ id: "group:checks", kind: "group", label: "Checks", detail: String(checks.length), children: checks });
+  roots.push(checks.length
+    ? { id: "group:checks", kind: "group", label: "Checks", detail: errors ? `${errors} to fix` : String(checks.length), children: checks }
+    : { id: "group:checks", kind: "group", label: "Checks", detail: "", children: [{ id: "finding:none", kind: "empty", label: "No problems found", detail: "", searchAliases: [], children: [] }] });
   const nodesById = new Map();
   const parents = new Map();
   const visit = (nodes, parent) => {

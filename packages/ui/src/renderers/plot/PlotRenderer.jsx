@@ -7,6 +7,7 @@ import ToolColumn from "../kit/shell/ToolColumn.jsx";
 import { useViewerShortcuts } from "../kit/shell/useViewerShortcuts.js";
 import QuickEdit from "../kit/tools/quick-edit/QuickEdit.jsx";
 import { normalizeToolStack } from "../kit/tools/toolStackLayout.js";
+import { findingCopyText } from "./board/boardFacts.js";
 import { BOARD_TOOL, useBoardInspector } from "./board/useBoardInspector.js";
 import { useBoardDrawing } from "./board/useBoardDrawing.js";
 import { useCrossProbe } from "./board/useCrossProbe.js";
@@ -175,7 +176,9 @@ function PlotSurface({ view, data }) {
   // which file they belong to when pasted into a prompt spanning several.
   const referencePath = view.file.path;
   const copySelection = useCallback(async (selectors = inspector.selection) => {
-    const text = inspector.copyText(referencePath, selectors);
+    const token = inspector.copyText(referencePath, selectors);
+    // A chosen check copies with its sentence, so a paste says what is wrong as well as where.
+    const text = selectors === inspector.selection ? findingCopyText(inspector.finding, token) : token;
     if (!text) return false;
     try {
       await host.clipboard.writeText(text);
@@ -189,8 +192,9 @@ function PlotSurface({ view, data }) {
   inspector.copyRef.current = copySelection;
   // What is selected, in the prompt grammar: the references a Quick Edit attaches.
   const references = useMemo(() => (inspector.selection.length
-    ? [{ resource: workspace.resource, target: { kind: "cad-selector", selectors: [...inspector.selection] } }] : []),
-  [inspector.selection, workspace.resource]);
+    ? [{ resource: workspace.resource, target: { kind: "cad-selector", selectors: [...inspector.selection] },
+        ...(inspector.finding?.summary ? { summary: inspector.finding.summary } : {}) }] : []),
+  [inspector.selection, inspector.finding, workspace.resource]);
   const rootRef = useRef(null);
   // The pane, once mounted: Display's dropdown keeps inside it, as a 3D view's keeps inside its viewer.
   const [rootElement, setRootElement] = useState(null);
