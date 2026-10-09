@@ -125,10 +125,13 @@ def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verb
     if not contact_tolerance_mm >= 0:
         raise ValueError("contact_tolerance_mm must be zero or more")
     logger = CliLogger("fea", verbose=verbose)
+    logger.info("reading the parts")
     scene = _open(Path(target))
     parts = list_parts(scene)
-    logger.debug(f"{len(parts)} parts; looking for pairs within {max(contact_tolerance_mm, _NEAR_MISS_MM)} mm")
+    logger.info(f"read {len(parts)} parts; looking for pairs within {max(contact_tolerance_mm, _NEAR_MISS_MM)} mm")
     name = {part.ref: part.name for part in parts}
+    found = detect_contacts(parts, max(contact_tolerance_mm, _NEAR_MISS_MM), log=logger.info)
+    logger.info(f"found {len(found)} touching or near pairs")
     pairs = [
         FeaPair(
             between=(name[c.a], name[c.b]),
@@ -137,7 +140,7 @@ def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verb
             gap_mm=round(c.gap_mm, 6),
             type="bonded" if c.gap_mm <= contact_tolerance_mm * (1 + 1e-6) else "not_connected",
         )
-        for c in detect_contacts(parts, max(contact_tolerance_mm, _NEAR_MISS_MM))
+        for c in found
     ]
     return FeaPartsResult(
         ok=True,
@@ -178,10 +181,12 @@ def _find_part(parts: list, names: list[str], key: str, where: str) -> int:
     return named[0]
 
 
-def _plan_assembly(scene: "StepScene", parsed) -> _Plan:
+def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
     from cadgen._internal.fea.assembly import _groups, detect_contacts, list_parts
 
+    logger.info("reading the parts")
     parts = list_parts(scene)
+    logger.info(f"read {len(parts)} parts; looking for contacts within {parsed.contact_tolerance_mm:g} mm")
     names = [part.name for part in parts]
     index_of = {part.ref: i for i, part in enumerate(parts)}
 
@@ -194,7 +199,8 @@ def _plan_assembly(scene: "StepScene", parsed) -> _Plan:
         given.add(index)
         materials[index] = material
 
-    contacts = detect_contacts(parts, parsed.contact_tolerance_mm)
+    contacts = detect_contacts(parts, parsed.contact_tolerance_mm, log=logger.info)
+    logger.info(f"found {len(contacts)} touching pairs")
     pair_of = {frozenset((index_of[c.a], index_of[c.b])) for c in contacts}
     freed: set[frozenset[int]] = set()
     seen: set[frozenset[int]] = set()
@@ -455,13 +461,13 @@ def _unsolved(document: Path, occurrence_ref: str, findings: list[dict]) -> FeaR
     return FeaResult(ok=False, document=document, occurrence=occurrence_ref, glb=None, sidecar=None, findings=tuple(findings))
 
 
-def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_of: dict[str, int], max_h: float | None):
+def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_of: dict[str, int], max_h: float | None, log):
     """The glued, meshed assembly with its faces numbered by position, and the study's checks on it.
 
     Raises ``ValueError`` for a fixture or load on a bonded joint, and :class:`_NotConnected`
     when the glue left a part apart from every fixed face.
     """
-    volume = mesh_assembly(scene, [part.ref for part in plan.parts], plan.bonded, parsed.contact_tolerance_mm, max_h)
+    volume = mesh_assembly(scene, [part.ref for part in plan.parts], plan.bonded, parsed.contact_tolerance_mm, max_h, log)
     # Boundary triangles carry a face's 1-based position; `faces` is keyed by it, as for one occurrence.
     position = {ref: n for n, ref in enumerate(volume.faces, 1)}
     volume = dataclasses.replace(volume, faces={position[ref]: fp for ref, fp in volume.faces.items()})
@@ -554,7 +560,7 @@ def solve_study(
     # A document of several parts is an assembly, whichever faces the study names; one part's study keeps the one-part path.
     plan = None
     if occurrence is None and (len(list(scene.leaves())) > 1 or parsed.parts or parsed.connections):
-        plan = _plan_assembly(scene, parsed)
+        plan = _plan_assembly(scene, parsed, logger)
     ordinal_of: dict[str, int] = {}
     ignored_note = None
     if plan is None:
@@ -594,7 +600,7 @@ def solve_study(
             volume = mesh_occurrence(occurrence, max_h=max_h)
             materials = parsed.material
         else:
-            volume = _mesh_assembly(mesh_assembly, scene, plan, parsed, resolved, ordinal_of, max_h)
+            volume = _mesh_assembly(mesh_assembly, scene, plan, parsed, resolved, ordinal_of, max_h, logger.info)
             materials = plan.materials
         logger.debug(f"meshed: {len(volume.tets)} tets, {len(volume.nodes)} nodes, size {volume.max_h:.3g} mm in {volume.seconds:.1f}s")
         outcome = solve.solve_linear_static(volume, materials, parsed.fixtures, parsed.loads, ordinal_of, log=logger.debug, automatic=automatic)

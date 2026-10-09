@@ -2,8 +2,10 @@
 
 A part is one leaf occurrence of the STEP scene, placed in world coordinates.
 Two parts are in contact when a face of one lies on a face of the other, or
-within the contact tolerance of it, over an area: a bounding-box prefilter
-enlarged by the tolerance, then ``BRepExtrema_DistShapeShape`` for the gap,
+within the contact tolerance of it, over an area. Each stage cheaply drops
+pairs the next would spend long on: a sweep over the parts' boxes (enlarged by
+the tolerance), the boxes of each pair's faces, a lower bound on the distance
+from sampled tessellations, then ``BRepExtrema_DistShapeShape`` for the gap,
 then the common area of the two faces (the second moved across the gap first)
 so that parts meeting only along an edge or at a point are not in contact.
 
@@ -28,6 +30,14 @@ __all__ = ["Contact", "Glued", "Part", "detect_contacts", "glue", "list_parts", 
 _TOUCHING_MM = 1e-7
 # Overlap below this is an edge or a point, not a face in contact.
 _MIN_AREA_MM2 = 1e-6
+# The tessellation behind the faces' distance bound: its deviation from the
+# surface, angle between normals, and the longest triangle edge it is cut to.
+_DEFLECTION_MM = 0.5
+_ANGLE_RAD = 0.5
+_SAMPLE_MM = 2.0
+_SAMPLES_PER_FACE = 400
+# Past this many triangles on one face the cutting stops and the bound is looser.
+_MAX_TRIANGLES = 20_000
 
 
 @dataclass(frozen=True)
@@ -94,13 +104,111 @@ def part_faces(shape) -> list:
 
 
 def _box(shape, enlarge: float):
+    """The tight bounding box of a shape (computed from its geometry, not its control points), grown by ``enlarge``."""
     from OCP.Bnd import Bnd_Box
     from OCP.BRepBndLib import BRepBndLib
 
     box = Bnd_Box()
-    BRepBndLib.Add_s(shape, box)
-    box.Enlarge(enlarge)
+    BRepBndLib.AddOptimal_s(shape, box, False, False)
+    if not box.IsVoid():
+        box.Enlarge(enlarge)
     return box
+
+
+def _close_pairs(boxes: list) -> list[tuple[int, int]]:
+    """The index pairs ``i < j`` whose boxes meet, in order: a sweep along X over the boxes sorted by their low end.
+
+    Each box is compared only with the ones that start before it ends, so a
+    long assembly costs its neighbours, not every pair of parts.
+    """
+    bounds = [(index, box.Get()) for index, box in enumerate(boxes) if not box.IsVoid()]
+    bounds.sort(key=lambda item: item[1][0])
+    pairs = []
+    for position, (i, a) in enumerate(bounds):
+        for j, b in bounds[position + 1:]:
+            if b[0] > a[3]:
+                break
+            if b[1] <= a[4] and a[1] <= b[4] and b[2] <= a[5] and a[2] <= b[5]:
+                pairs.append((min(i, j), max(i, j)))
+    return sorted(pairs)
+
+
+class _Faces:
+    """One part's faces with a bounding box and a lower bound on distance from a sampled surface.
+
+    The bound: every point of a face is within ``radius`` of one of its
+    ``samples`` (the vertices of a tessellation whose triangles are cut down to
+    ``_SAMPLE_MM``, or coarser on a large face, plus the tessellation's own deviation), so two faces whose
+    nearest samples are farther apart than the contact reach plus both radii
+    cannot be in contact, and need no exact distance. A face with no
+    tessellation has no bound.
+    """
+
+    def __init__(self, shape, reach: float):
+        from OCP.BRepMesh import BRepMesh_IncrementalMesh
+
+        BRepMesh_IncrementalMesh(shape, _DEFLECTION_MM, False, _ANGLE_RAD, False)
+        self.faces = part_faces(shape)
+        self.boxes = [_box(face, reach) for face in self.faces]
+        self.bounds = [_sampled(face) for face in self.faces]
+
+
+def _sampled(face):
+    """``(KD-tree of samples, radius)`` of a face, or ``None`` when it has no tessellation."""
+    import numpy as np
+    from OCP.BRep import BRep_Tool
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.TopoDS import TopoDS
+    from scipy.spatial import cKDTree
+
+    location = TopLoc_Location()
+    mesh = BRep_Tool.Triangulation_s(TopoDS.Face_s(face), location)
+    if mesh is None or mesh.NbTriangles() == 0:
+        return None
+    move = location.Transformation()
+    nodes = [mesh.Node(i).Transformed(move) for i in range(1, mesh.NbNodes() + 1)]
+    points = np.array([(p.X(), p.Y(), p.Z()) for p in nodes])
+    corners = np.array([[mesh.Triangle(i).Value(k) - 1 for k in (1, 2, 3)] for i in range(1, mesh.NbTriangles() + 1)])
+    triangles = points[corners]
+    # Cut to _SAMPLE_MM, or coarser on a big face so that it holds about _SAMPLES_PER_FACE samples.
+    area = float(np.linalg.norm(np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]), axis=1).sum()) / 2
+    limit = max(_SAMPLE_MM, (area / _SAMPLES_PER_FACE) ** 0.5)
+    while len(triangles) < _MAX_TRIANGLES:
+        lengths = np.linalg.norm(triangles - np.roll(triangles, -1, axis=1), axis=2)  # edge k joins corner k to k + 1
+        longest = lengths.argmax(axis=1)
+        split = lengths[np.arange(len(triangles)), longest] > limit
+        if not split.any():
+            break
+        # Roll each triangle so its longest edge joins corners 0 and 1, then cut that edge in two.
+        rolled = _rotate(triangles[split], longest[split])
+        middle = (rolled[:, 0] + rolled[:, 1]) / 2
+        halves = np.concatenate([
+            np.stack([rolled[:, 0], middle, rolled[:, 2]], axis=1),
+            np.stack([middle, rolled[:, 1], rolled[:, 2]], axis=1),
+        ])
+        triangles = np.concatenate([triangles[~split], halves])
+    lengths = np.linalg.norm(triangles - np.roll(triangles, -1, axis=1), axis=2)
+    # One sample per cell of half the cut size: a sample stands for the points within a cell's diagonal of it.
+    cell = limit / 2
+    _, first = np.unique(np.floor(triangles.reshape(-1, 3) / cell).astype(np.int64), axis=0, return_index=True)
+    radius = float(lengths.max()) + cell * 3 ** 0.5 + 2 * _DEFLECTION_MM
+    return cKDTree(triangles.reshape(-1, 3)[first]), radius
+
+
+def _rotate(triangles, longest):
+    """Each triangle with its corners rolled so corner ``longest`` comes first."""
+    import numpy as np
+
+    order = (np.arange(3)[None, :] + longest[:, None]) % 3
+    return np.take_along_axis(triangles, order[:, :, None], axis=1)
+
+
+def _too_far(a, b, reach: float) -> bool:
+    """True when the sampled bounds prove two faces are farther apart than ``reach``."""
+    if a is None or b is None:
+        return False
+    nearest, _ = a[0].query(b[0].data, k=1)
+    return float(nearest.min()) - a[1] - b[1] > reach
 
 
 def _distance(a, b):
@@ -144,40 +252,45 @@ def _overlap_area(face_a, face_b, extrema) -> float:
     return float(props.Mass())
 
 
-def detect_contacts(parts: list[Part], tolerance_mm: float) -> list[Contact]:
+def detect_contacts(parts: list[Part], tolerance_mm: float, *, log=None) -> list[Contact]:
     """Every pair of parts in face contact within ``tolerance_mm``, in part order.
 
     The gap is the smallest gap between faces in contact; the area is the sum
-    of their common areas.
+    of their common areas. Boxes first (a sweep, :func:`_close_pairs`), then each
+    face pair's box and sampled bound, and only the faces left get the exact
+    distance and area. ``log`` is told how many close pairs there are to check.
     """
     reach = tolerance_mm * (1 + 1e-6) + _TOUCHING_MM
-    boxes = [_box(part.shape, reach) for part in parts]
-    faces = [[(face, _box(face, reach)) for face in part_faces(part.shape)] for part in parts]
+    candidates = _close_pairs([_box(part.shape, reach) for part in parts])
+    if log:
+        log(f"checking {len(candidates)} close part pairs for touching faces")
+    faces: dict[int, _Faces] = {}
+
+    def faces_of(index: int) -> _Faces:
+        if index not in faces:
+            faces[index] = _Faces(parts[index].shape, reach)
+        return faces[index]
+
     contacts = []
-    for i, first in enumerate(parts):
-        for j in range(i + 1, len(parts)):
-            second = parts[j]
-            if boxes[i].IsOut(boxes[j]):
-                continue
-            extrema = _distance(first.shape, second.shape)
-            if extrema is None or extrema.Value() > reach:
-                continue
-            area, gap = 0.0, None
-            for face_a, box_a in faces[i]:
-                for face_b, box_b in faces[j]:
-                    if box_a.IsOut(box_b):
-                        continue
-                    extrema = _distance(face_a, face_b)
-                    if extrema is None or extrema.Value() > reach:
-                        continue
-                    overlap = _overlap_area(face_a, face_b, extrema)
-                    if overlap > _MIN_AREA_MM2:
-                        area += overlap
-                        gap = extrema.Value() if gap is None else min(gap, extrema.Value())
-            if gap is None:
-                continue
-            a, b = (first, second) if first.volume_mm3 <= second.volume_mm3 else (second, first)
-            contacts.append(Contact(a=a.ref, b=b.ref, area_mm2=area, gap_mm=0.0 if gap <= _TOUCHING_MM else gap))
+    for i, j in candidates:
+        first, second = parts[i], parts[j]
+        mine, theirs = faces_of(i), faces_of(j)
+        area, gap = 0.0, None
+        for face_a, box_a, bound_a in zip(mine.faces, mine.boxes, mine.bounds):
+            for face_b, box_b, bound_b in zip(theirs.faces, theirs.boxes, theirs.bounds):
+                if box_a.IsOut(box_b) or _too_far(bound_a, bound_b, reach):
+                    continue
+                extrema = _distance(face_a, face_b)
+                if extrema is None or extrema.Value() > reach:
+                    continue
+                overlap = _overlap_area(face_a, face_b, extrema)
+                if overlap > _MIN_AREA_MM2:
+                    area += overlap
+                    gap = extrema.Value() if gap is None else min(gap, extrema.Value())
+        if gap is None:
+            continue
+        a, b = (first, second) if first.volume_mm3 <= second.volume_mm3 else (second, first)
+        contacts.append(Contact(a=a.ref, b=b.ref, area_mm2=area, gap_mm=0.0 if gap <= _TOUCHING_MM else gap))
     return contacts
 
 

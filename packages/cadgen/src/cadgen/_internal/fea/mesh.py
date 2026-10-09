@@ -322,13 +322,15 @@ def mesh_assembly(
     bonded: "list[Contact]",
     tolerance_mm: float,
     max_h: float | None = None,
+    log=None,
 ) -> VolumeMesh:
     """Mesh the parts ``part_refs`` as one conforming mesh, bonded parts sharing nodes.
 
     ``bonded`` are the contacts to glue; parts not in any of them stay apart.
     The mesh's ``domain`` is the index into ``part_refs`` of each element's
     part, and ``faces`` holds every face of every part under its own ref, so a
-    study's ``#o2.f6`` means the same face it does in the viewer.
+    study's ``#o2.f6`` means the same face it does in the viewer. ``log``
+    is told when gluing and meshing start.
     """
     require_fea_stack()
     import numpy as np
@@ -345,6 +347,8 @@ def mesh_assembly(
         raise ValueError(f"not a part of this document: {', '.join(missing)}")
     parts = [by_ref[ref] for ref in part_refs]
     index_of = {ref: i for i, ref in enumerate(part_refs)}
+    if log:
+        log(f"gluing {len(bonded)} bonded pairs of {len(parts)} parts")
     glued = glue(
         [part.shape for part in parts],
         [(index_of[c.a], index_of[c.b], c.gap_mm) for c in bonded if c.a in index_of and c.b in index_of],
@@ -398,6 +402,8 @@ def mesh_assembly(
     import netgen.meshing as ngmesh
     import netgen.occ as ngocc
 
+    if log:
+        log(f"meshing the glued shape at {h:.3g} mm")
     with tempfile.TemporaryDirectory(prefix="cadgen-fea-") as tmp:
         brep = Path(tmp) / "assembly.brep"
         _write_brep(glued.shape, brep)

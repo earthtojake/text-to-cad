@@ -12,7 +12,7 @@ import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
@@ -135,6 +135,25 @@ class DetectContactsTest(unittest.TestCase):
         block = next(part.ref for part in parts if part.name == "block")
         self.assertEqual([c for c in contacts if block in (c.a, c.b)], [])
         self.assertEqual(len(contacts), 1)
+
+    def test_a_row_of_parts_is_checked_only_between_neighbours(self):
+        from build123d import Align, Box, Compound, Pos, export_step
+
+        from cadgen._internal.fea.assembly import detect_contacts, list_parts
+        from cadgen.step_scene import read_scene
+
+        row = []
+        for n in range(12):
+            box = Pos(10 * n, 0, 0) * Box(10, 10, 10, align=Align.MIN)
+            box.label = f"box{n}"
+            row.append(box)
+        path = self.tmp / "row.step"
+        export_step(Compound(children=row), str(path))
+        parts = list_parts(read_scene(path))
+        said = []
+        contacts = detect_contacts(parts, TOLERANCE, log=said.append)
+        self.assertEqual(len(contacts), 11)
+        self.assertEqual(said, ["checking 11 close part pairs for touching faces"])  # not 66 pairs
 
 
 @unittest.skipUnless(HAVE_FEA, "cadgen[fea] is not installed")
@@ -275,6 +294,18 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertEqual(pair.type, "bonded")
         self.assertIn("post ↔ base · 100 mm² · bonded", result.human_lines())
 
+    def test_it_says_each_stage_at_default_verbosity(self):
+        from cadgen.cli.fea_parts import main
+
+        err = io.StringIO()
+        with redirect_stderr(err), redirect_stdout(io.StringIO()):
+            main([str(_write_assembly(self.tmp))])
+        lines = err.getvalue().splitlines()
+        self.assertTrue(any(line.endswith("reading the parts") for line in lines), lines)
+        self.assertTrue(any("read 2 parts" in line for line in lines), lines)
+        self.assertTrue(any("checking 1 close part pairs" in line for line in lines), lines)
+        self.assertTrue(any("found 1 touching or near pairs" in line for line in lines), lines)
+
     def test_a_near_miss_is_listed_as_not_connected(self):
         from cadgen import fea
 
@@ -384,6 +415,14 @@ class SolveAssemblyTest(unittest.TestCase):
 
     def _types(self, result) -> list[str]:
         return [finding["type"] for finding in result.findings]
+
+    def test_a_study_says_its_planning_stages_at_default_verbosity(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.solve(self.step, {"base": "6061", "post": "steel"}, name="quiet")
+        text = err.getvalue()
+        for stage in ("reading the parts", "found 1 touching pairs", "gluing 1 bonded pairs of 2 parts", "meshing the glued shape"):
+            self.assertIn(stage, text)
 
     def test_the_reactions_balance_the_load(self):
         self.assertEqual(self.mixed.warnings, ())
