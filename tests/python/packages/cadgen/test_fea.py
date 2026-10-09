@@ -17,7 +17,7 @@ import math
 import os
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
@@ -33,6 +33,13 @@ try:
     HAVE_FEA = True
 except RuntimeError:
     HAVE_FEA = False
+
+@contextmanager
+def quiet():
+    """The CLI's progress lines go to stderr; a test that is not about them keeps them out of the run's output."""
+    with redirect_stderr(io.StringIO()):
+        yield
+
 
 # The cantilever: length along +X, fixed at x = 0, loaded at x = L in -Z.
 # Light enough that steel keeps a safety factor above 3, so it solves once.
@@ -237,7 +244,7 @@ class Cantilever(unittest.TestCase):
         }
         cls.out = directory / "results" / "cantilever.glb"
         cls.solver = _CountingSolve()
-        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", cls.solver):
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", cls.solver), quiet():
             cls.result = fea.solve(cls.step, cls.out, study=cls.study, vtu=True)
 
     @classmethod
@@ -377,7 +384,7 @@ class Cantilever(unittest.TestCase):
         from cadgen import cli
 
         out = io.StringIO()
-        with redirect_stdout(out):
+        with redirect_stdout(out), quiet():
             code = cli.main(["fea", "solve", str(self.step), str(self.out.with_name("again.glb")), "--study", json.dumps(self.study), "--json"])
         self.assertEqual(code, 0, out.getvalue())
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
@@ -398,16 +405,16 @@ class Cantilever(unittest.TestCase):
     def test_a_face_on_a_different_part_or_a_non_face_is_refused(self):
         from cadgen import fea
 
-        with self.assertRaises(ValueError) as caught:
+        with self.assertRaises(ValueError) as caught, quiet():
             fea.solve(self.step, study={**self.study, "fixtures": [{"faces": [self.fixed_ref.rsplit(".", 1)[0]]}]})
         self.assertIn("faces", str(caught.exception))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError), quiet():
             fea.solve(self.step, study={**self.study, "loads": [{"faces": ["#o1.f99"], "type": "force", "vector_N": [1, 0, 0]}]})
 
     def test_out_must_be_a_glb(self):
         from cadgen import fea
 
-        with self.assertRaises(ValueError) as caught:
+        with self.assertRaises(ValueError) as caught, quiet():
             fea.solve(self.step, self.out.with_suffix(".vtu"), study=self.study)
         self.assertIn(".glb", str(caught.exception))
 
@@ -445,7 +452,7 @@ class Yielding(unittest.TestCase):
             return real_mesh(occurrence, **kwargs)
 
         with mock.patch("cadgen._internal.fea.solve.solve_linear_static", cls.solver), \
-                mock.patch("cadgen._internal.fea.mesh.mesh_occurrence", mesh_spy):
+                mock.patch("cadgen._internal.fea.mesh.mesh_occurrence", mesh_spy), quiet():
             cls.result = fea.solve(cls.step, directory / "bar.glb", study=cls.study)
         cls.sidecar = json.loads(cls.result.sidecar.read_text(encoding="utf-8"))
 
@@ -501,7 +508,7 @@ class Yielding(unittest.TestCase):
             )
 
         solver = _CountingSolve(later=halve)
-        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", solver):
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", solver), quiet():
             result = fea.solve(self.step, Path(self._tmp.name) / "lower.glb", study=self.study)
         refined = json.loads(result.sidecar.read_text(encoding="utf-8"))["refined"]
         self.assertLess(refined["max_von_mises_MPa"], refined["from_max_von_mises_MPa"])
@@ -523,7 +530,7 @@ class Yielding(unittest.TestCase):
 
         solver = _CountingSolve(fail_after=1)
         out = Path(self._tmp.name) / "failed-resolve.glb"
-        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", solver):
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", solver), quiet():
             result = fea.solve(self.step, out, study=self.study)
         self.assertEqual(solver.calls, 2)
         self.assertEqual(result.mesh["size_mm"], self.SIZE)
@@ -769,7 +776,7 @@ class DefaultSizeAccuracy(unittest.TestCase):
         rod = tmp / "rod.step"
         export_step(Rot(0, 90, 0) * Cylinder(cls.ROD_RADIUS, cls.ROD_LENGTH, align=(Align.CENTER, Align.CENTER, Align.MIN)), str(rod))
         fixed, loaded = ends(rod)
-        with redirect_stderr(io.StringIO()):
+        with quiet():
             cls.rod = fea.solve(rod, tmp / "rod.glb", vtu=True, study={
                 "material": "steel",
                 "fixtures": [{"faces": [fixed]}],
@@ -780,7 +787,7 @@ class DefaultSizeAccuracy(unittest.TestCase):
         body = Box(cls.PLATE_LENGTH, cls.PLATE_WIDTH, cls.PLATE_THICKNESS, align=(Align.MIN, Align.CENTER, Align.CENTER))
         export_step(body - Pos(cls.PLATE_LENGTH / 2, 0, 0) * Cylinder(cls.HOLE / 2, 2 * cls.PLATE_THICKNESS), str(plate))
         fixed, loaded = ends(plate)
-        with redirect_stderr(io.StringIO()):
+        with quiet():
             cls.plate = fea.solve(plate, tmp / "plate.glb", study={
                 "material": "steel",
                 "fixtures": [{"faces": [fixed]}],

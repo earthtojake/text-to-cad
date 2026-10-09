@@ -346,7 +346,8 @@ class FeaPartsVerbTest(unittest.TestCase):
     def test_lists_parts_and_their_bonded_pair(self):
         from cadgen import fea
 
-        result = fea.parts(_write_assembly(self.tmp))
+        with quiet():
+            result = fea.parts(_write_assembly(self.tmp))
         self.assertEqual([part.name for part in result.parts], ["base", "post"])
         self.assertEqual(len(result.pairs), 1)
         pair = result.pairs[0]
@@ -369,7 +370,8 @@ class FeaPartsVerbTest(unittest.TestCase):
     def test_an_overlap_is_listed_with_its_volume_and_is_not_a_touching_pair(self):
         from cadgen import fea
 
-        result = fea.parts(_write_assembly(self.tmp, overlap_block=True))
+        with quiet():
+            result = fea.parts(_write_assembly(self.tmp, overlap_block=True))
         self.assertEqual([(pair.type, pair.between) for pair in result.pairs], [("bonded", ("post", "base")), ("overlapping", ("block", "base"))])
         self.assertAlmostEqual(result.pairs[1].overlap_mm3, 100.0, places=3)
         self.assertTrue(result.human_lines()[0].endswith(": 3 parts, 1 touching pairs, 1 overlapping"))
@@ -396,7 +398,8 @@ class FeaPartsVerbTest(unittest.TestCase):
     def test_a_near_miss_is_listed_as_not_connected(self):
         from cadgen import fea
 
-        result = fea.parts(_write_assembly(self.tmp, lift=0.3))
+        with quiet():
+            result = fea.parts(_write_assembly(self.tmp, lift=0.3))
         self.assertEqual([pair.type for pair in result.pairs], ["not_connected"])
         self.assertIn("post ↔ base · gap 0.3 mm · not connected", result.human_lines())
 
@@ -422,7 +425,7 @@ class FeaPartsVerbTest(unittest.TestCase):
 
         path = _write_assembly(self.tmp)
         out = io.StringIO()
-        with redirect_stdout(out):
+        with redirect_stdout(out), quiet():
             code = main([str(path), "--json"])
         self.assertEqual(code, 0)
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
@@ -472,7 +475,8 @@ class DuplicateNamesTest(unittest.TestCase):
     def test_the_listing_tells_the_two_bars_apart_by_their_refs(self):
         from cadgen import fea
 
-        lines = fea.parts(self.step).human_lines()
+        with quiet():
+            lines = fea.parts(self.step).human_lines()
         self.assertIn(f"bar ({self.first}) ↔ base · 100 mm² · bonded", lines)
         self.assertIn(f"bar ({self.second}) ↔ base · 100 mm² · bonded", lines)
 
@@ -480,7 +484,8 @@ class DuplicateNamesTest(unittest.TestCase):
         from cadgen import fea
 
         study = self.study(parts={self.first: {"material": "steel"}, self.second: {"material": "6061"}, "base": {"material": "6061"}})
-        result = fea.solve(self.step, self.tmp / "refs.glb", study=study)
+        with quiet():
+            result = fea.solve(self.step, self.tmp / "refs.glb", study=study)
         self.assertTrue(result.ok)
         names = [part["name"] for part in result.summary["parts"]]
         self.assertEqual(names, ["base", f"bar ({self.first})", f"bar ({self.second})"])
@@ -490,7 +495,8 @@ class DuplicateNamesTest(unittest.TestCase):
     def test_sentences_name_a_shared_name_with_its_ref(self):
         from cadgen import fea
 
-        result = fea.solve(self.step, self.tmp / "default.glb", study=self.study(parts={"base": {"material": "6061"}}))
+        with quiet():
+            result = fea.solve(self.step, self.tmp / "default.glb", study=self.study(parts={"base": {"material": "6061"}}))
         summaries = [f["summary"] for f in result.findings if f["type"] == "default_material"]
         self.assertEqual(sorted(summaries), [
             f"'bar' ({self.first}) uses the default material (Aluminum 6061-T6): is that right?",
@@ -500,10 +506,10 @@ class DuplicateNamesTest(unittest.TestCase):
     def test_a_name_both_bars_share_is_an_error_naming_the_refs(self):
         from cadgen import fea
 
-        with self.assertRaisesRegex(ValueError, rf"parts\['bar'\]: 'bar' names 2 parts \({self.first}, {self.second}\); use a ref"):
+        with self.assertRaisesRegex(ValueError, rf"parts\['bar'\]: 'bar' names 2 parts \({self.first}, {self.second}\); use a ref"), quiet():
             fea.solve(self.step, self.tmp / "ambiguous.glb", study=self.study(parts={"bar": {"material": "steel"}}))
         connections = [{"between": ["bar", "base"], "type": "free"}]
-        with self.assertRaisesRegex(ValueError, rf"connections\[0\].between: 'bar' names 2 parts \({self.first}, {self.second}\); use a ref"):
+        with self.assertRaisesRegex(ValueError, rf"connections\[0\].between: 'bar' names 2 parts \({self.first}, {self.second}\); use a ref"), quiet():
             fea.solve(self.step, self.tmp / "ambiguous.glb", study=self.study(connections=connections))
 
     def test_a_connection_can_name_a_bar_by_its_ref_and_the_other_part_by_name(self):
@@ -512,7 +518,8 @@ class DuplicateNamesTest(unittest.TestCase):
         # Freeing the second bar from the base leaves it unheld, and the error says which bar.
         connections = [{"between": [self.second, "base"], "type": "free"}]
         study = self.study(connections=connections)
-        result = fea.solve(self.step, self.tmp / "free.glb", study=study)
+        with quiet():
+            result = fea.solve(self.step, self.tmp / "free.glb", study=study)
         self.assertFalse(result.ok)
         (finding,) = result.findings
         self.assertEqual(finding["type"], "not_connected")
@@ -579,9 +586,10 @@ class SolveAssemblyTest(unittest.TestCase):
         cls.fixed = _face_at(scene, cls.refs["base"], 0.0)
         cls.load = _face_at(scene, cls.refs["post"], 40.0)
         cls.scene = scene
-        cls.mixed = cls.solve(cls.step, {"base": "6061", "post": "steel"}, name="mixed")
-        cls.steel = cls.solve(cls.step, {"base": "steel", "post": "steel"}, name="steel")
-        cls.aluminium = cls.solve(cls.step, {"base": "6061", "post": "6061"}, name="aluminium")
+        with quiet():
+            cls.mixed = cls.solve(cls.step, {"base": "6061", "post": "steel"}, name="mixed")
+            cls.steel = cls.solve(cls.step, {"base": "steel", "post": "steel"}, name="steel")
+            cls.aluminium = cls.solve(cls.step, {"base": "6061", "post": "6061"}, name="aluminium")
 
     @classmethod
     def tearDownClass(cls):
@@ -675,7 +683,8 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertEqual(edges["In 'post'"]["severity"], "warning")
 
     def test_a_part_the_study_does_not_name_uses_the_default_material(self):
-        result = self.solve(self.step, {"post": "steel"}, "default")
+        with quiet():
+            result = self.solve(self.step, {"post": "steel"}, "default")
         (finding,) = [f for f in result.findings if f["type"] == "default_material"]
         self.assertEqual(finding["summary"], "'base' uses the default material (Aluminum 6061-T6): is that right?")
         self.assertNotIn("default_material", self._types(self.mixed))
@@ -763,7 +772,8 @@ class SolveAssemblyTest(unittest.TestCase):
             "loads": [{"faces": [self.load], "type": "force", "vector_N": [1000, 0, 0]}],
             "mesh": {"size_mm": 4.0},
         }
-        result = fea.solve(self.step, self.tmp / "alone.glb", study=study, occurrence=self.refs["post"])
+        with quiet():
+            result = fea.solve(self.step, self.tmp / "alone.glb", study=study, occurrence=self.refs["post"])
         self.assertTrue(result.ok)
         self.assertEqual(result.occurrence, self.refs["post"])
         self.assertNotIn("parts", result.summary)
@@ -776,9 +786,9 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertNotIn("_PART", attributes)
         self.assertNotIn("connections", json.loads(result.sidecar.read_text(encoding="utf-8")))
         # The same study without it is an assembly study of the document.
-        with self.assertRaisesRegex(ValueError, "--occurrence"):
+        with self.assertRaisesRegex(ValueError, "--occurrence"), quiet():
             fea.solve(self.step, self.tmp / "stray.glb", study=self.study(None), occurrence=self.refs["post"])
-        with self.assertRaisesRegex(ValueError, "unknown occurrence"):
+        with self.assertRaisesRegex(ValueError, "unknown occurrence"), quiet():
             fea.solve(self.step, self.tmp / "nope.glb", study=study, occurrence="#o9")
 
     def test_occurrence_says_the_studys_parts_and_connections_are_ignored(self):
@@ -791,9 +801,11 @@ class SolveAssemblyTest(unittest.TestCase):
             "loads": [{"faces": [self.load], "type": "force", "vector_N": [1000, 0, 0]}],
             "mesh": {"size_mm": 4.0},
         }
-        result = fea.solve(self.step, self.tmp / "ignored.glb", study=study, occurrence=self.refs["post"])
+        with quiet():
+            result = fea.solve(self.step, self.tmp / "ignored.glb", study=study, occurrence=self.refs["post"])
         self.assertTrue(any("ignored" in w and "parts" in w for w in result.warnings), result.warnings)
-        plain = fea.solve(self.step, self.tmp / "plain.glb", study={k: v for k, v in study.items() if k != "parts"}, occurrence=self.refs["post"])
+        with quiet():
+            plain = fea.solve(self.step, self.tmp / "plain.glb", study={k: v for k, v in study.items() if k != "parts"}, occurrence=self.refs["post"])
         self.assertFalse(any("ignored" in w for w in plain.warnings))
 
     def test_the_cli_takes_occurrence(self):
@@ -806,7 +818,7 @@ class SolveAssemblyTest(unittest.TestCase):
             "mesh": {"size_mm": 4.0},
         }
         out = io.StringIO()
-        with redirect_stdout(out):
+        with redirect_stdout(out), quiet():
             code = main([str(self.step), str(self.tmp / "cli.glb"), "--study", json.dumps(study), "--occurrence", self.refs["post"], "--json"])
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(out.getvalue().strip().splitlines()[-1])["occurrence"], self.refs["post"])
@@ -827,7 +839,7 @@ class SolveAssemblyTest(unittest.TestCase):
             return outcome
 
         with mock.patch("cadgen._internal.fea.checks.needs_finer", return_value=False), \
-                mock.patch("cadgen._internal.fea.solve.solve_linear_static", spy):
+                mock.patch("cadgen._internal.fea.solve.solve_linear_static", spy), quiet():
             result = fea.solve(self.step, self.tmp / f"{name}.glb", study=self.study({"base": "6061", "post": "steel"}))
         (volume, outcome), = seen
         return result, volume, outcome
@@ -882,7 +894,7 @@ class SolveAssemblyTest(unittest.TestCase):
             "loads": [{"faces": [self.load], "type": "force", "vector_N": [1000, 0, 0]}],
         }
         out = io.StringIO()
-        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", side_effect=AssertionError("solved")), redirect_stdout(out):
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", side_effect=AssertionError("solved")), redirect_stdout(out), quiet():
             code = main([str(step), "--study", json.dumps(study), "--json"])
         self.assertEqual(code, 1)
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
@@ -904,7 +916,8 @@ class SolveAssemblyTest(unittest.TestCase):
             "loads": [{"faces": [_face_at(scene, refs["post"], 40.08)], "type": "force", "vector_N": [1000, 0, 0]}],
             "mesh": {"size_mm": 4.0},
         }
-        result = fea.solve(step, self.tmp / "lifted.glb", study=study)
+        with quiet():
+            result = fea.solve(step, self.tmp / "lifted.glb", study=study)
         (finding,) = [f for f in result.findings if f["type"] == "gap_closed"]
         self.assertEqual(finding["summary"], "Closed a 0.08 mm gap between 'post' and 'base' to bond them")
         self.assertAlmostEqual(result.summary["reaction_force_N"][0], -1000.0, delta=0.5)
@@ -938,7 +951,7 @@ class SolveAssemblyTest(unittest.TestCase):
 
         from cadgen import fea
 
-        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", side_effect=AssertionError("solved")):
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", side_effect=AssertionError("solved")), quiet():
             result = fea.solve(step, self.tmp / "none.glb", study=study)
         self.assertFalse(result.ok)
         self.assertIsNone(result.glb)
@@ -985,7 +998,8 @@ class SolveAssemblyTest(unittest.TestCase):
         from cadgen import fea
 
         step, study = self._with_sunk_block(held_block=True)
-        result = fea.solve(step, self.tmp / "sunk.glb", study=study)
+        with quiet():
+            result = fea.solve(step, self.tmp / "sunk.glb", study=study)
         (finding,) = [f for f in result.findings if f["type"] == "overlapping_parts"]
         self.assertEqual(finding["severity"], "warning")
         self.assertEqual(
@@ -1000,7 +1014,8 @@ class SolveAssemblyTest(unittest.TestCase):
         from cadgen import fea
 
         step, study = self._with_sunk_block(held_block=True, connections=[{"between": ["block", "base"], "type": "free"}])
-        result = fea.solve(step, self.tmp / "sunk-free.glb", study=study)
+        with quiet():
+            result = fea.solve(step, self.tmp / "sunk-free.glb", study=study)
         self.assertNotIn("overlapping_parts", [f["type"] for f in result.findings])
 
     def test_an_overlap_cannot_be_bonded(self):
@@ -1009,7 +1024,7 @@ class SolveAssemblyTest(unittest.TestCase):
         step, study = self._with_sunk_block(
             held_block=True, connections=[{"between": ["block", "base"], "type": "bonded"}]
         )
-        with self.assertRaisesRegex(ValueError, r"overlap by 100 mm³, so they can't be bonded"):
+        with self.assertRaisesRegex(ValueError, r"overlap by 100 mm³, so they can't be bonded"), quiet():
             fea.solve(step, self.tmp / "sunk-bonded.glb", study=study)
 
     def test_a_part_an_overlap_leaves_unheld_says_so(self):
@@ -1053,16 +1068,16 @@ class SolveAssemblyTest(unittest.TestCase):
     def test_bolt_is_not_yet(self):
         from cadgen import fea
 
-        with self.assertRaisesRegex(ValueError, "not yet supported"):
+        with self.assertRaisesRegex(ValueError, "not yet supported"), quiet():
             fea.solve(self.step, self.tmp / "bolt.glb", study=self.study(None, connections=[{"between": ["post", "base"], "type": "bolt"}]))
 
     def test_the_parts_the_study_names_must_exist(self):
         from cadgen import fea
 
-        with self.assertRaisesRegex(ValueError, r"parts\['lid'\]: no part named 'lid'; the parts are 'base', 'post'"):
+        with self.assertRaisesRegex(ValueError, r"parts\['lid'\]: no part named 'lid'; the parts are 'base', 'post'"), quiet():
             fea.solve(self.step, self.tmp / "lid.glb", study=self.study({"lid": "steel"}))
-        with self.assertRaisesRegex(ValueError, "don't touch within 0.1 mm"):
-            far = _write_assembly(self.tmp, far_block=20.0, name="far")
+        far = _write_assembly(self.tmp, far_block=20.0, name="far")
+        with self.assertRaisesRegex(ValueError, "don't touch within 0.1 mm"), quiet():
             fea.solve(far, self.tmp / "far.glb", study=self.study(None, connections=[{"between": ["block", "base"], "type": "bonded"}]))
 
     def test_one_joint_cannot_be_freed_inside_a_bonded_group(self):
@@ -1087,7 +1102,7 @@ class SolveAssemblyTest(unittest.TestCase):
             "loads": [{"faces": [_face_at(scene, refs["right"], 40.0)], "type": "force", "vector_N": [100, 0, 0]}],
             "connections": [{"between": ["left", "right"], "type": "free"}],
         }
-        with self.assertRaisesRegex(ValueError, "'left' and 'right' are also joined through other bonded parts"):
+        with self.assertRaisesRegex(ValueError, "'left' and 'right' are also joined through other bonded parts"), quiet():
             fea.solve(step, self.tmp / "two.glb", study=study)
 
     def test_a_free_joint_that_splits_the_assembly_glues_each_group_apart(self):
@@ -1108,7 +1123,8 @@ class SolveAssemblyTest(unittest.TestCase):
             "connections": [{"between": ["cap", "post"], "type": "free"}],
             "mesh": {"size_mm": 4.0},
         }
-        result = fea.solve(step, self.tmp / "capped.glb", study=study)
+        with quiet():
+            result = fea.solve(step, self.tmp / "capped.glb", study=study)
         self.assertTrue(result.ok)
         self.assertNotIn("not_connected", [f["type"] for f in result.findings])
         sidecar = json.loads(result.sidecar.read_text(encoding="utf-8"))
