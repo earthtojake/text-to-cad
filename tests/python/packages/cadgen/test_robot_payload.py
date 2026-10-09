@@ -341,6 +341,10 @@ class FourBar(_Workspace):
         self.assertEqual([handle["id"] for handle in articulation["handles"]], ["output_joint"], "a mimic of a curve has no inverse to write through")
         rows = joint_values(articulation, {"output_joint": 15})
         self.assertAlmostEqual(rows["pointer_joint"]["turn"], 2 * rows["input_joint"]["turn"] + math.degrees(0.1), places=9)
+        # The follower is held to its own limits over the driver's range, as the crank is: nothing clamps it later.
+        with self.assertRaisesRegex(RobotReadError, "joint 'pointer_joint' mimics 'input_joint', the crank of a four-bar linkage, and reaches "
+                                                    "-110.875 to 100.767 deg over its driver's range, outside its own limits \\[-57.2958, 57.2958\\] deg"):
+            read_robot_description(self.write("narrow.urdf", urdf.replace('lower="-3" upper="3"', 'lower="-1" upper="1"')))
 
     def test_what_cannot_close_is_refused_in_words(self) -> None:
         cases = [

@@ -1252,6 +1252,18 @@ def _articulation(description: _Description) -> dict[str, Any]:
             bias, weights, curve = native_form(leader)
             scaled = None if curve is None else {**curve, "output": [multiplier * value for value in curve["output"]]}
             form = (multiplier * bias + offset, {key: multiplier * weight for key, weight in weights.items()}, scaled)
+            if scaled is not None and joint.type != "continuous" and joint.lower is not None and joint.upper is not None:
+                # A follower of a crank is where the scaled curve puts it over the driver's whole range
+                # (a crank's form has no affine part): held to its own limits here, as the crank is to
+                # its, since nothing clamps it later.
+                low, high = min(scaled["output"]) + form[0], max(scaled["output"]) + form[0]
+                tolerance = math.radians(_FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG)
+                if low < joint.lower - tolerance or high > joint.upper + tolerance:
+                    raise RobotReadError(
+                        f"{description.display} joint {joint.name!r} mimics {leader_name!r}, the crank of a four-bar linkage, and reaches "
+                        f"{math.degrees(low):g} to {math.degrees(high):g} deg over its driver's range, outside its own limits "
+                        f"[{math.degrees(joint.lower):g}, {math.degrees(joint.upper):g}] deg; widen them to contain that range"
+                    )
         forms[joint.name] = form
         return form
 
