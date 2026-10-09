@@ -281,10 +281,11 @@ class OwnOutputAsInputTests(unittest.TestCase):
             if __name__ == "__main__":
                 ouro()
             '''), encoding="utf-8")
-        # Seed the output so the refusal is about ownership, not a missing file.
-        seed = "import build123d as bd, sys\nbd.export_step(bd.Box(6, 6, 6), sys.argv[1])\n"
-        subprocess.run([sys.executable, "-c", seed, str(self.project / "ouro.step")],
-                       env=self.environment, capture_output=True, text=True, check=True)
+        # Seed the output so the refusal is about ownership, not a missing file. Any
+        # tool's STEP will do; this process imports build123d for its own tests anyway.
+        import build123d
+
+        build123d.export_step(build123d.Box(6, 6, 6), str(self.project / "ouro.step"))
         before = (self.project / "ouro.step").read_bytes()
 
         completed = self._run("ouro.py")
