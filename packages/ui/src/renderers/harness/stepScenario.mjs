@@ -85,7 +85,12 @@ const ARM_COUNT = 24, BASE_AT = 19;
  * Two surface inputs may name one surface object — that is what a content-addressed
  * store does with two inputs that produce identical geometry — so the twenty-four arms
  * are twenty-four components served from one `.surf`. They are HELD by input, one gate
- * per batch, so each publish is a test's to place rather than a race.
+ * per batch, so each publish is a test's to place rather than a race — held the way cadgen
+ * holds a part it is still meshing: the store does not list its mesh, and its surface row
+ * answers `pending` until the gate opens, so the page asks again. No response is ever held
+ * open. A browser keeps six connections to a host and the loader runs up to eight lanes
+ * (`navigator.hardwareConcurrency`), so a held body could fill every connection and starve
+ * an unheld component's request queued behind it: the first batch would never land.
  */
 export function stageProgressiveFixture(fixture) {
   const original = fixture.view;
@@ -316,9 +321,11 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
   let current = fixture, listed = entry, revisions = 0;
   const views = new Map([[fixture.view.tree, fixture]]);
   // Each gate is a latch a test can close again (`hold`), so one server can serve the same
-  // package progressively more than once — an open, and then a REOPEN in a fresh page.
-  const opened = {}, gates = {};
-  const hold = name => { gates[name] = new Promise(resolve => { opened[name] = resolve; }); };
+  // package progressively more than once — an open, and then a REOPEN in a fresh page. A
+  // component behind a closed gate is one cadgen is still meshing (`stageProgressiveFixture`).
+  const closed = new Set();
+  const hold = name => { closed.add(name); };
+  const meshing = surfaceInput => closed.has(fixture.heldInputs?.get(surfaceInput));
   for (const name of ['a', 'b']) hold(name);
   let declaring = true;
   // Set by `fail()`: the file was saved again and its build failed.
@@ -332,6 +339,9 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
   const { bundle, bundledCss } = await harnessBundle();
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));
   const requests = [];
+  // What the server is answering right now, and who waits for it to answer nothing (`idle`).
+  const answering = new Map();
+  let idlers = [];
 
   const json = (response, body) => { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(body)); };
   const notFound = (response) => { response.statusCode = 404; response.end(); };
@@ -344,6 +354,11 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
   server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://test');
     requests.push(`${request.method} ${url.pathname}${url.search}`);
+    answering.set(response, `${request.method} ${url.pathname}`);
+    response.once('close', () => {
+      answering.delete(response);
+      if (!answering.size) for (const done of idlers.splice(0)) done();
+    });
     onRequest?.(url, request);
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); return; }
     if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); return; }
@@ -355,14 +370,21 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
         : { state: 'compiled' });
       return;
     }
+    if (url.pathname.endsWith('/__cad/surfaces/cancel')) { response.statusCode = 204; response.end(); return; }
     if (url.pathname.endsWith('/__cad/surfaces')) {
       const body = await readBody(request);
       const shown = views.get(body.tree) || fixture;
+      // A held component is still being meshed: its row is pending under the request's
+      // subscriber token, as cadgen answers one, and the page asks again.
+      const job = body.job || `job-${createHash('sha256').update(JSON.stringify(body.components || [])).digest('hex').slice(0, 16)}`;
+      const waiting = (body.components || []).some(({ surfaceInput }) => meshing(surfaceInput));
       json(response, {
         viewId: shown.view.viewId,
+        ...(waiting ? { job } : {}),
         components: Object.fromEntries((body.components || []).map(({ cid, surfaceInput }) => {
           const surface = fixture.surfaces.get(surfaceInput);
           if (!surface) return [cid, { surfaceInput, state: 'failed', error: `unknown surface input for ${cid}` }];
+          if (meshing(surfaceInput)) return [cid, { surfaceInput, state: 'pending', job }];
           return [cid, { surfaceInput, state: 'ready', surfaceObject: surface.object, byteLength: surface.bytes.length,
             url: `/__cad/store?tree=${shown.view.tree}&surfaceInput=${surfaceInput}&object=${surface.object}`,
             selectors: { object: surface.selectors.object, byteLength: surface.selectors.bytes.length,
@@ -379,11 +401,6 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
         const surface = [...fixture.surfaces.values()].find(entry => entry.object === object || entry.selectors.object === object);
         if (!surface) { notFound(response); return; }
         const bytes = surface.object === object ? surface.bytes : surface.selectors.bytes;
-        // Held by INPUT, not by object: identical components share one object, and it is
-        // one component's download that waits (selectors read it; display reads the mesh,
-        // held where the mesh store answers).
-        const gate = fixture.heldInputs?.get(url.searchParams.get('surfaceInput'));
-        if (gate && request.method !== 'HEAD') await gates[gate];
         response.setHeader('Content-Type', 'application/octet-stream');
         response.setHeader('Content-Length', String(bytes.length));
         response.end(request.method === 'HEAD' ? undefined : bytes);
@@ -398,24 +415,18 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
       notFound(response); return;
     }
     if (url.pathname.endsWith('/__tess_cache/probe')) {
-      json(response, meshes.probe((await readBody(request)).tessellationInputs || []));
+      // A mesh cadgen is still making is not in the store yet, though an earlier open made it:
+      // a reopen's held component is resolved, and waits, as a cold one does.
+      const keys = (await readBody(request)).tessellationInputs || [];
+      json(response, meshes.probe(keys.filter(key => !meshing(String(key).slice(0, 64)))));
       return;
     }
     if (url.pathname.endsWith('/__tess_cache/batch')) {
-      const entries = (await readBody(request)).entries || [];
-      // A warm reopen reads its meshes in batches: a batch carrying a held component waits too.
-      for (const gate of new Set(entries.map(entry => fixture.heldInputs?.get(String(entry?.tessellationInput).slice(0, 64))).filter(Boolean))) {
-        await gates[gate];
-      }
-      meshes.batch(response, entries);
+      meshes.batch(response, (await readBody(request)).entries || []);
       return;
     }
     if (request.method === 'GET' && url.pathname.endsWith('.glb')) {
       const key = decodeURIComponent(url.pathname.split('/__tess_cache/')[1].slice(0, -'.glb'.length));
-      // A cold component's display waits on its mesh, so that is the body a staged batch holds:
-      // by INPUT, as identical components share one mesh's geometry.
-      const gate = fixture.heldInputs?.get(key.slice(0, 64));
-      if (gate) await gates[gate];
       if (meshes.read(response, key)) return;
     }
     // A mesh the store does not hold: a clean 404, never the HTML shell, which a
@@ -493,6 +504,19 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
     listed = entry;
     failing = false;
   };
-  return { open, closePages, requests, fixture, entry, revise, port: () => server.address().port, release: gate => opened[gate]?.(), hold,
+  /**
+   * Settles once the server is answering nothing, as one that never holds a request open soon is
+   * between a page's requests; fails naming what it still answers after `timeout` ms.
+   */
+  const idle = ({ timeout = 10000 } = {}) => new Promise((resolve, reject) => {
+    if (!answering.size) { resolve(); return; }
+    const done = () => { clearTimeout(timer); resolve(); };
+    const timer = setTimeout(() => {
+      idlers = idlers.filter(idler => idler !== done);
+      reject(new Error(`the server still holds ${[...new Set(answering.values())].join(', ')} open`));
+    }, timeout);
+    idlers.push(done);
+  });
+  return { open, closePages, requests, idle, fixture, entry, revise, port: () => server.address().port, release: gate => { closed.delete(gate); }, hold,
     declare: on => { declaring = on !== false; } };
 }
