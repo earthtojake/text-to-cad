@@ -508,7 +508,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
                 _JOBS.observe(frame)
             if is_artifact:
                 if "event" in frame:
-                    raise OSError("artifact worker emitted a source event")
+                    raise _WorkerBrokeProtocol("artifact worker emitted a source event")
                 if "artifactNext" in frame:
                     # Answered at once: the worker waits on it. Never relayed.
                     worker.send({"kind": "artifactNext", "goOn": wanted()})
@@ -521,7 +521,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
                         if inflight.get("result") is not None:
                             raise ValueError("duplicate artifact result")
                     except (ValueError, RuntimeError, TypeError) as exc:
-                        raise OSError(f"invalid artifact worker result: {exc}") from exc
+                        raise _WorkerBrokeProtocol(f"invalid artifact worker result: {exc}") from exc
                     _JOBS.record_artifact_result(job, frame["artifactResult"])
                     _BROKER.publish_artifact_result(inflight, frame["artifactResult"])
             event = frame.get("event")
@@ -554,6 +554,18 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"workerDied": {"pid": worker.pid, "detail": str(exc),
                                         "exitStatus": exc.exit_status}})
+    except _WorkerBrokeProtocol as exc:
+        # The worker answered, and the answer is wrong: the job FAILED, with that reason,
+        # while its client still listens. Never a cancel (the generic OSError below, a
+        # client gone), which hides a deterministic failure as "ask again". A worker that
+        # broke the protocol mid-job is not reused.
+        _log(f"{tool}: {exc}; replacing worker {worker.pid}")
+        if worker.alive():
+            worker.kill()
+        healthy, exit_code = False, 1
+        stderr_tail.append(f"\n{exc}\n")
+        with contextlib.suppress(OSError), send_lock:
+            _send(conn, {"stream": "stderr", "data": f"{exc}\n"})
     except OSError:
         # The CLIENT went away mid-job: a relay send failed before the watchdog's probe
         # did. Same answer as the watchdog's -- the orphaned job's worker is killed, never
@@ -586,6 +598,10 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
          f"(worker {worker.pid}{' extra' if worker.extra else ''})")
     with contextlib.suppress(OSError), send_lock:
         _send(conn, {"exit": exit_code})
+
+
+class _WorkerBrokeProtocol(Exception):
+    """A worker's frame the job cannot accept: a failure of the job, not of its client."""
 
 
 def _code_moved_past(token: str, asked: object) -> bool:

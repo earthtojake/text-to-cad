@@ -486,6 +486,31 @@ class ArtifactCoalescing(unittest.TestCase):
         self.assertTrue(running.killed, "a stopped build kept running")
         pool.release.assert_called_once_with(running, healthy=False, cancelled=True)
 
+    def test_a_wrong_result_fails_the_job_its_client_is_still_waiting_on(self):
+        # A section whose plane was canonicalized twice came back keyed to other inputs. That is
+        # the job failing, with its reason, to a client still connected -- never a cancel, which
+        # reads as "ask again" and hid it, killing a warm worker per request.
+        class WrongWorker(ResultWorker):
+            def frames(inner, **kwargs):
+                yield {"artifactResult": artifacts.result_frame(surface_request(force=True), {})}
+                yield {"exit": 0}
+
+        registry, ledger, pool, running = broker.Broker(1), JobLedger(), mock.Mock(), WrongWorker()
+        pool.acquire.return_value = running
+        connection = Connection()
+        with mock.patch.object(server, "_BROKER", registry), mock.patch.object(server, "_JOBS", ledger), \
+             mock.patch.object(server, "_POOL", pool), mock.patch.object(server, "_log"):
+            server._handle_request(connection, {"tool": "artifact", "argv": [], "artifact": surface_request(),
+                                                "store_root": "/store"})
+        (job,) = ledger.snapshot()
+        self.assertEqual(job["state"], "failed")
+        self.assertIn("invalid artifact worker result", job["error"])
+        self.assertEqual(connection.frames[-1], {"exit": 1})
+        self.assertTrue(any("invalid artifact worker result" in str(frame.get("data", "")) for frame in connection.frames))
+        self.assertTrue(running.killed, "a worker that broke the protocol was reused")
+        pool.release.assert_called_once_with(running, healthy=False, cancelled=False)
+        self.assertEqual(registry.snapshot()["inflight"], 0)
+
     def test_admission_failure_finishes_coalescing_without_starting_work(self):
         registry, ledger, pool = broker.Broker(1), JobLedger(), mock.Mock()
         pool.acquire.side_effect = server.pool_mod.MemoryAdmissionError("memory admission refused")
