@@ -423,6 +423,9 @@ def glue(shapes: list, bonded: list[tuple[int, int, float]], tolerance_mm: float
                 found = solids.FindIndex(image)
                 if found == 0:
                     raise RuntimeError(f"part {index}'s solid {k} is missing from the glued shape")
+                if solid_part[found - 1] not in (-1, index):
+                    # Overlapping parts fused into one solid: it would belong to one of them and the other would vanish.
+                    raise RuntimeError(f"parts {solid_part[found - 1]} and {index} share a solid after gluing: they overlap")
                 solid_part[found - 1] = index
         per_face = []
         for ordinal, face in enumerate(part_faces(shape), 1):

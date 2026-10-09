@@ -251,6 +251,14 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
     for number, group in enumerate(_groups(len(parts), [(index_of[c.a], index_of[c.b]) for c in bonded])):
         for index in group:
             group_of[index] = number
+    for o in overlaps:
+        i, j = index_of[o.a], index_of[o.b]
+        if group_of[i] == group_of[j]:
+            through = _joined_through([(index_of[c.a], index_of[c.b]) for c in bonded], i, j)
+            raise ValueError(
+                f"{quoted(names[i])} and {quoted(names[j])} overlap by {o.volume_mm3:.3g} mm³ and are both bonded to "
+                f"{' and '.join(quoted(names[k]) for k in through)}, so gluing would fuse them: fix the geometry"
+            )
     for pair in freed:
         i, j = sorted(pair)
         if group_of[i] == group_of[j]:
@@ -259,6 +267,26 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
                 "between them can't be freed on its own (not yet supported); free the parts' other connections too"
             )
     return _Plan(parts, names, materials, sorted(set(range(len(parts))) - given), contacts, bonded, overlaps, freed_overlaps, group_of)
+
+
+def _joined_through(pairs: list[tuple[int, int]], start: int, end: int) -> list[int]:
+    """The parts on a shortest chain of bonded pairs from ``start`` to ``end``, not counting either."""
+    near: dict[int, list[int]] = {}
+    for a, b in pairs:
+        near.setdefault(a, []).append(b)
+        near.setdefault(b, []).append(a)
+    came: dict[int, int | None] = {start: None}
+    queue = [start]
+    for node in queue:
+        for other in near.get(node, ()):
+            if other not in came:
+                came[other] = node
+                queue.append(other)
+    chain, node = [], came[end]
+    while node is not None and node != start:
+        chain.append(node)
+        node = came[node]
+    return chain[::-1]
 
 
 def _not_connected(plan: _Plan, unheld: list[list[int]], logger: CliLogger) -> list[dict]:

@@ -1023,6 +1023,41 @@ class SolveAssemblyTest(unittest.TestCase):
         # The 100 N is held by the base alone: the cap carries nothing across the free joint.
         self.assertAlmostEqual(result.summary["reaction_force_N"][0], -100.0, delta=0.5)
 
+    def test_two_parts_that_overlap_and_are_bonded_through_a_third_are_refused(self):
+        from build123d import Align, Box, Compound, Pos, export_step
+
+        from cadgen import fea
+        from cadgen.step_scene import read_scene
+
+        base = Box(40, 20, 10, align=Align.MIN)
+        base.label = "base"
+        left = Pos(0, 5, 10) * Box(10, 10, 30, align=Align.MIN)
+        left.label = "left"
+        right = Pos(8, 5, 10) * Box(10, 10, 30, align=Align.MIN)  # 2 mm into left
+        right.label = "right"
+        step = self.tmp / "overlapping-posts.step"
+        export_step(Compound(children=[base, left, right]), str(step))
+        scene = read_scene(step)
+        refs = _refs(scene)
+        study = {
+            "material": "6061",
+            "fixtures": [{"faces": [_face_at(scene, refs["base"], 0.0)]}],
+            "loads": [{"faces": [_face_at(scene, refs["right"], 40.0)], "type": "force", "vector_N": [100, 0, 0]}],
+            "mesh": {"size_mm": 4.0},
+        }
+        for connections in ([], [{"between": ["left", "right"], "type": "free"}]):
+            with self.assertRaisesRegex(ValueError, r"'left' and 'right' overlap by .* mm³ and are both bonded to 'base'"), quiet():
+                fea.solve(step, self.tmp / "overlapping.glb", study={**study, "connections": connections})
+
+    def test_gluing_refuses_a_solid_two_parts_both_became(self):
+        from cadgen._internal.fea.assembly import glue
+
+        from build123d import Align, Box
+
+        one, same = Box(10, 10, 10, align=Align.MIN).wrapped, Box(10, 10, 10, align=Align.MIN).wrapped
+        with self.assertRaisesRegex(RuntimeError, "parts 0 and 1 share a solid"):
+            glue([one, same], [(0, 1, 0.0)], TOLERANCE)
+
     def test_a_part_the_glue_leaves_apart_is_found_in_the_mesh(self):
         import numpy as np
 
