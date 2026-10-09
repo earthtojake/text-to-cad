@@ -23,8 +23,15 @@ runs:
       uses: actions/setup-python@v7
       with:
         python-version: "3.12"
-        cache: pip
-        cache-dependency-path: requirements-dev.txt
+
+    # uv installs requirements-dev.txt into that interpreter: pip took 99 s of every
+    # Windows job even from its cache. uv's own cache is keyed on the same file.
+    - name: Set up uv
+      if: inputs.python == 'true'
+      uses: astral-sh/setup-uv@v10
+      with:
+        enable-cache: true
+        cache-dependency-glob: requirements-dev.txt
 
     - name: Set up Node.js
       uses: actions/setup-node@v7
@@ -36,9 +43,7 @@ runs:
     - name: Install Python dependencies
       if: inputs.python == 'true'
       shell: bash
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install -r requirements-dev.txt
+      run: uv pip install --system --python python -r requirements-dev.txt
 
     # zig compiles each target's C runtime once and keeps it in its global cache; the
     # Windows one is most of a cold tracer build. Keyed on the pinned zig version.
