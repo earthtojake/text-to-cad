@@ -14,7 +14,7 @@ they disagreed about what an occurrence is:
 
 ``lookup.build_selector_index`` reads the second. So every ref the first hands out -- every ref a
 user can actually pick -- resolved to an error, and ``inspect refs --facts`` reported
-``occurrenceCount: 1`` for a 160-part assembly (issue 0b in tom-cad's FEEDBACK.md). The user's
+``occurrenceCount: 1`` for a 160-part assembly. The user's
 workaround was to re-identify each face by area and position in the owning part's own namespace,
 which is guesswork whenever a part appears at more than one occurrence.
 
@@ -28,8 +28,7 @@ to the flat index rather than replacing it: ``#o1.f19`` keeps resolving exactly 
 Coordinates are WORLD AT REST: occurrence transforms applied, parameter-sidecar poses not.
 That is the frame the viewer shows when the ref is picked and the frame ``snapshot --mode list``
 already reports its bounds in, so the two tools now agree. Reporting component-local coordinates
-instead would recreate the frame confusion that FEEDBACK.md P2 documents costing a wrong edit and
-a full revert.
+instead would recreate a frame confusion that has cost a wrong edit and a full revert.
 """
 
 from __future__ import annotations
@@ -147,8 +146,8 @@ def _transform_params(matrix: list[float], params: object) -> object:
 
     Leaving these in component-local coordinates while `center` and `bbox` are placed would be
     the worst of both: a cylinder whose centre is in the assembly and whose axis origin is in the
-    part, with nothing in the payload saying so. That is the frame mismatch FEEDBACK.md P2 charges
-    a wrong edit and a full revert to.
+    part, with nothing in the payload saying so: a frame mismatch that has cost a wrong edit and
+    a full revert.
     """
     if not isinstance(params, Mapping):
         return params
@@ -171,7 +170,7 @@ def _place_entity_row(matrix: list[float], row: Mapping[str, Any]) -> dict[str, 
     would publish a component-local coordinate in a row whose every other number is in assembly
     space, with nothing marking which is which -- and it would be the same object shared by every
     occurrence of that component, so the two identical spacers would report one position. The
-    frames must not mix silently; that is what FEEDBACK.md P2 cost a wrong edit and a revert.
+    frames must not mix silently; mixing them has cost a wrong edit and a revert.
     """
     placed = dict(row)
     for field in _POINT_FIELDS:
@@ -332,8 +331,8 @@ def merge_assembly_entities(
 
     This is what makes a ref picked in the viewer measurable: `#o1.12.f19` is face 19 of that
     occurrence's component, and until now only the flat whole-assembly namespace resolved, whose
-    numbering does not agree with the component's (FEEDBACK.md: "the assembly's f18 is the wall's
-    face; the part's f18 is a 17.085 mm2 cylinder").
+    numbering does not agree with the component's (the assembly's f18 can be a wall's face where
+    the part's f18 is a 17.085 mm2 cylinder).
 
     Every id and every RANGE is re-based as the tables concatenate. A component's rows index its
     own tables: a face's `edgeStart` points into that component's faceEdgeRows, a shape's

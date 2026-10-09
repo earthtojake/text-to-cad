@@ -1,6 +1,6 @@
 """An assembly's refs must resolve in the namespace the tools actually hand out.
 
-Issue 0b (tom-cad FEEDBACK.md): `snapshot --mode list` and the CAD Viewer enumerate instance-tree
+`snapshot --mode list` and the CAD Viewer enumerate instance-tree
 occurrences -- `#o1.12 shoulder_yaw_yoke` -- while `inspect refs` and `snapshot --focus/--hide`
 resolved against the whole-assembly topology sidecar, which is extracted from the COMPOSED
 compound and therefore describes any assembly as ONE occurrence. Every ref a user could pick was
