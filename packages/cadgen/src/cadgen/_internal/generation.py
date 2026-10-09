@@ -506,16 +506,21 @@ def _generate_part_outputs(
         if writes_step:
             # Publish the final authored result, then write and validate a
             # separate byte-derived saved document tree.
-            from cadgen._internal.atomic_replace import STAGE_PREFIX
+            from cadgen._internal.filetrace import paused
+            from cadgen._internal.temp_leftovers import stage_prefix, sweep_stages
             from cadgen.store.build import build_tree_through_step
             from tempfile import TemporaryDirectory
 
             spec.step_path.parent.mkdir(parents=True, exist_ok=True)
+            # A build killed while it saved (its caller left) left its staging folder,
+            # a full copy of its document, beside its output: gone before this one stages.
+            with paused():
+                sweep_stages(spec.step_path.parent)
             # The private document retains its final basename, so STEP labels
             # and byte canonicalization do not depend on the temporary directory.
             # Publication owns the final rename after validation and the gate.
             stage = publication_cleanup.enter_context(TemporaryDirectory(
-                prefix=f"{STAGE_PREFIX}{spec.step_path.stem}-", dir=spec.step_path.parent
+                prefix=stage_prefix(spec.step_path.stem), dir=spec.step_path.parent
             ))
             staged_step = Path(stage) / spec.step_path.name
             with logger.timed("tree: components"):

@@ -1432,17 +1432,24 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
   isolates its store; tests and CI run this way.
 
 **Scratch outlives a killed process.** A process keeps its served views
-(`cadgen-views/<pid>/`), an exported view (`cadgen-view-<pid>-*`) and a build's
-file-trace log (`cadgen-trace-<pid>-*.log`) in the system temp folder and
-removes them as it ends; a killed one cannot, and a view copies every component
-it shows. A worker sweeps them as it starts, on a thread of its own: the
+(`cadgen-views/<pid>/`), an exported view (`cadgen-view-<pid>-*`), a build's
+file-trace log (`cadgen-trace-<pid>-*.log`) and the private copy of a STEP
+document it parses (`cadgen-step-import-<pid>-*`) in the system temp folder and
+removes them as it ends; a killed one cannot, a view copies every component
+it shows and an import copy the whole document. A job whose caller left ends
+by its worker being killed, so this is routine. A worker sweeps them as it starts, on a thread of its own: the
 scratch of every pid no process holds, and scratch an older cadgen named
 without a pid once it is a day old. A live process's is never touched, a pid it
 cannot judge counts as live, and nothing in the store is involved
 (`_internal/temp_leftovers.py`). A folder is renamed `cadgen-swept-<pid>-…`
 before it is deleted, so a sweep killed midway leaves it condemned rather than
 half there with a fresh mtime, and the next sweep finishes it once that
-sweeper is gone.
+sweeper is gone. A build saves its STEP in a staging folder beside the output
+(`.cadgen-stage-<pid>-<host>-<stem>-*/`) and publishes it from there; before it
+stages, a build removes from that folder the staging folders of this machine's
+builds that are gone (and an older cadgen's unnamed ones once a day old). A
+live build's stays, and so does another machine's: an output's folder can be
+shared, and a pid says nothing about another machine.
 
 **Silence means hung, not busy.** While a job runs, its worker emits a
 heartbeat frame every 10 s (carrying the job's last announced phase and its

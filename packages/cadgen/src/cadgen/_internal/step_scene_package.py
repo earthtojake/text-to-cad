@@ -337,16 +337,20 @@ def load_step_scene_exact(step_path: Path) -> LoadedStepScene:
 
 def _scene_from_selected_bytes(resolved_step_path: Path, payload: bytes) -> LoadedStepScene:
     """The one native parse of already-selected immutable STEP bytes."""
+    from cadgen._internal.temp_leftovers import STEP_IMPORT_PREFIX, owned_prefix
+
     step_hash = hashlib.sha256(payload).hexdigest()
     snapshot_path: Path | None = None
     try:
+        # Named after this process: a worker killed mid-parse (its caller left) never
+        # reaches the unlink below, and the next worker's sweep removes the copy.
         with tempfile.NamedTemporaryFile(
-            prefix="cadgen-step-import-",
+            prefix=owned_prefix(STEP_IMPORT_PREFIX),
             suffix=resolved_step_path.suffix,
             delete=False,
         ) as snapshot:
-            snapshot.write(payload)
             snapshot_path = Path(snapshot.name)
+            snapshot.write(payload)
         # The kernel reads our private snapshot; a failure names the USER's file.
         scene = _load_step_scene_text(snapshot_path, named=resolved_step_path)
     finally:
