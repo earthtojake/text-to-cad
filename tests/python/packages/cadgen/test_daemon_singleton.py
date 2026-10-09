@@ -10,7 +10,6 @@ daemon hands its lock over before it tells a client to restart.
 from __future__ import annotations
 
 import contextlib
-import itertools
 import json
 import os
 import shutil
@@ -193,8 +192,7 @@ class RestartHandoverTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CADGEN_DAEMON_SOCKET": address, "CADGEN_DAEMON_STATE_DIR": str(tmp)}), \
                 mock.patch.object(server, "_POOL", _Pool()), \
                 mock.patch.object(server, "_DAEMON_LOCK", None), \
-                mock.patch.object(server, "compute_version_token",
-                                  side_effect=itertools.chain(["stale"], itertools.repeat("current"))), \
+                mock.patch.object(server, "compute_version_token", return_value="stale"), \
                 mock.patch.object(server.signal, "signal"), \
                 mock.patch.object(server, "_log"):
             stale.start()
@@ -221,8 +219,8 @@ class OneTokenForOneCodeTest(unittest.TestCase):
     a wheel build's egg-info (0.7.19) under ``src``. The daemon, with ``src`` first on its
     path, read one; a client without it read the other; every daemon retired on its first
     request and the next computed the same token: a strict request respawned daemons until
-    it timed out. The token is the version declared beside the code, and a daemon retires
-    only for code that moved past it."""
+    it timed out. The token is the version declared beside the code, so the two read the
+    same files and agree."""
 
     def _tree(self, *, checkout: bool) -> Path:
         root = Path(tempfile.mkdtemp(prefix="cgv-"))
@@ -242,13 +240,6 @@ class OneTokenForOneCodeTest(unittest.TestCase):
     def test_the_version_is_the_one_declared_beside_the_code(self):
         self.assertTrue(client.compute_version_token(self._tree(checkout=True)).startswith("1.2.3:"))
         self.assertTrue(client.compute_version_token(self._tree(checkout=False)).startswith("4.5.6:"))
-
-    def test_a_daemon_retires_only_for_code_that_moved_past_it(self):
-        with mock.patch.object(server, "compute_version_token", return_value="mine"):
-            self.assertFalse(server._code_moved_past("mine", "mine"))
-            self.assertFalse(server._code_moved_past("mine", "the same code, spelled otherwise"))
-        with mock.patch.object(server, "compute_version_token", return_value="edited"):
-            self.assertTrue(server._code_moved_past("mine", "edited"))
 
 
 @unittest.skipIf(os.name == "nt", "a pipe name has no path to outgrow")

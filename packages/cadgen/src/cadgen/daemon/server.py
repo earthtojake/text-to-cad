@@ -604,14 +604,6 @@ class _WorkerBrokeProtocol(Exception):
     """A worker's frame the job cannot accept: a failure of the job, not of its client."""
 
 
-def _code_moved_past(token: str, asked: object) -> bool:
-    """Whether a request's token says this daemon's code is out of date. Only when the
-    code on disk moved past the daemon: a client that spells the same files' token
-    differently is served, since a successor would compute this daemon's token again and
-    retire on the same request, forever."""
-    return asked != token and compute_version_token() != token
-
-
 _INFLIGHT: set[threading.Thread] = set()
 _JOBS = JobLedger()
 _STARTED_AT = time.time()
@@ -803,7 +795,7 @@ def serve() -> int:
                         with contextlib.suppress(OSError):
                             _send(conn, {"status": _status_payload(token)})
                     continue
-                token_changed = _code_moved_past(token, request.get("token"))
+                token_changed = request.get("token") != token
                 dependency_finishing_old_work = bool(
                     request.get("dependency") and (state["draining"] or _active_requests())
                 )
