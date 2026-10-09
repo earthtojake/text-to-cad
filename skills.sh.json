@@ -12,6 +12,7 @@
         "step-parts",
         "dfm",
         "dfam-check",
+        "fea",
         "gcode",
         "bambu-labs",
         "sendcutsend"
