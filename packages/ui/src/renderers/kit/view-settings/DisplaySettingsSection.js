@@ -106,14 +106,9 @@ function DisplaySections({ sections }) {
   </div>;
 }
 
-/**
- * @param {{ extraSections?: { id: string, title: string, content: import("react").ReactNode }[] }} props
- *   `extraSections`: a renderer's own always-open sections (`displaySections` of `useRendererShell`),
- *   placed right after Display's first. Never a gate: they carry no `onEnabledChange`.
- */
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  features = ALL_VIEW_FEATURES, appearanceControl = null, close = null, extraSections = []
+  features = ALL_VIEW_FEATURES, appearanceControl = null, close = null
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -163,8 +158,6 @@ export function DisplaySettingsSection({
             options={Object.entries(PROJECTIONS).map(([value, { label, icon }]) => ({ value, label, icon }))} />
         </FileSheetFieldGrid>
       </> },
-      // A renderer's own, always open, right after Display: what the file itself is about.
-      ...extraSections,
       offers("surfaces") && { id: "surfaces", title: "Surfaces", content: surfaces },
       section("edges", "Edges", <FileSheetFieldGrid>
         <FileSheetSelectRow hideLabel className="px-0" label="Edge visibility" value={view.edges.visibility} onValueChange={visibility => setGroup("edges", { visibility })}

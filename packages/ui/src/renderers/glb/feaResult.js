@@ -8,7 +8,10 @@
  * the mesh extras a `fields` list describing each one (`attribute`, `name`,
  * `units`, `min`, `max`, `attribute_scale`), `deformation_scale` (the
  * multiplier already baked into the positions), the colour `ramp` it used and
- * the result's `safety_factor` (null when it has none).
+ * the result's `safety_factor` (null when it has none). A result written since
+ * the study was recorded also carries the `study` it was solved for (material,
+ * fixtures, loads, mesh), `faces` (the occurrence's face refs) and `_FACE`, the
+ * index into `faces` of the face each vertex lies on (-1 for none).
  * GLTFLoader lower-cases custom attribute names and copies extras into
  * `userData`, which is what is read here.
  *
@@ -18,6 +21,7 @@
  * the mesh so any scale or field can be chosen in any order, and a request
  * for what is already shown does nothing.
  */
+import { Raycaster } from "three";
 import { clamp } from "@text-to-cad/core/common/numbers.js";
 
 const GENERATOR = "cadgen fea";
@@ -91,6 +95,28 @@ function readFindings(raw) {
         at: vector(item?.at),
       })),
     }));
+}
+
+const text = (value) => (typeof value === "string" ? value : "");
+const faceRefs = (raw) => (Array.isArray(raw) ? raw.filter((ref) => typeof ref === "string" && ref) : []);
+const finiteOrNull = (value) => (Number.isFinite(value) ? Number(value) : null);
+
+/** The study the result was solved for, as the file records it; null for a result written before it did. */
+function readStudy(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const material = raw.material && typeof raw.material === "object"
+    ? { name: text(raw.material.name), yieldMPa: finiteOrNull(raw.material.yield_MPa) } : null;
+  const mesh = raw.mesh && typeof raw.mesh === "object"
+    ? { sizeMm: finiteOrNull(raw.mesh.size_mm), refinedFromMm: finiteOrNull(raw.mesh.refined_from_mm) } : null;
+  return {
+    material,
+    fixtures: (Array.isArray(raw.fixtures) ? raw.fixtures : []).filter(Boolean)
+      .map((fixture) => ({ type: text(fixture.type) || "fixed", faces: faceRefs(fixture.faces) })),
+    loads: (Array.isArray(raw.loads) ? raw.loads : []).filter(Boolean).map((load) => ({
+      type: text(load.type), faces: faceRefs(load.faces), vector: vector(load.vector_N), pressure: finiteOrNull(load.pressure_MPa),
+    })),
+    mesh,
+  };
 }
 
 /**
@@ -186,6 +212,8 @@ export function readFeaResult(root) {
       fields,
       ramp: rampStops(extras.ramp),
       findings: readFindings(extras.findings),
+      study: readStudy(extras.study),
+      faces: faceRefs(extras.faces),
     };
   });
   return found;
@@ -225,18 +253,31 @@ export function fieldValues(mesh, field) {
   return out;
 }
 
+// What a chosen face is tinted toward, half way: no colour of the ramp, so a tinted face still shows its stress.
+const HIGHLIGHT = Object.freeze([255, 64, 242]);
+
+/** The face each vertex lies on (`_FACE`), or null for a result that does not say. */
+function vertexFaces(mesh) {
+  const attribute = mesh.geometry.getAttribute("_face");
+  return attribute?.itemSize === 1 ? attribute.array : null;
+}
+
 /**
- * Rewrite the mesh's vertex colours from one field over `[field.min, field.max]`.
- * Returns true when the colours changed; false when that field was already shown.
+ * Rewrite the mesh's vertex colours from one field over `[field.min, field.max]`, with the
+ * vertices of the faces in `highlight` (indices into the result's `faces`) tinted.
+ * Returns true when the colours changed; false when that field and tint were already shown.
  */
-export function recolorByField(mesh, field, ramp = DEFAULT_RAMP) {
+export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = null) {
   const color = mesh.geometry.getAttribute("color");
   const values = fieldValues(mesh, field);
   if (!color || !values) {
     return false;
   }
   const kept = shown(mesh);
-  if (kept.field === field.attribute) {
+  const faces = vertexFaces(mesh);
+  const tinted = faces && highlight?.length ? new Set(highlight) : null;
+  const key = `${field.attribute}|${tinted ? [...tinted].sort((a, b) => a - b).join(",") : ""}`;
+  if (kept.field === key) {
     return false;
   }
   const table = rampTable(ramp);
@@ -247,13 +288,14 @@ export function recolorByField(mesh, field, ramp = DEFAULT_RAMP) {
     const t = span > 0 ? clamp((values[i] - field.min) / span, 0, 1) : 0;
     const entry = Math.round(t * 255) * 3;
     const base = i * stride;
-    bytes[base] = table[entry];
-    bytes[base + 1] = table[entry + 1];
-    bytes[base + 2] = table[entry + 2];
+    const tint = tinted !== null && tinted.has(Math.round(faces[i]));
+    for (let k = 0; k < 3; k += 1) {
+      bytes[base + k] = tint ? Math.round((table[entry + k] + HIGHLIGHT[k]) / 2) : table[entry + k];
+    }
     if (stride > 3) bytes[base + 3] = 255;
   }
   color.needsUpdate = true;
-  kept.field = field.attribute;
+  kept.field = key;
   return true;
 }
 
@@ -345,4 +387,124 @@ export function formatValue(value) {
   if (magnitude >= 10) return v.toFixed(1);
   if (magnitude >= 1) return v.toFixed(2);
   return v.toPrecision(3);
+}
+
+/** A face ref's own number ("#o1.1.f17": 17), or null for a ref that names no face. */
+function faceNumber(ref) {
+  const match = /\.f(\d+)$/.exec(String(ref || ""));
+  return match ? Number(match[1]) : null;
+}
+
+/** A face as a person reads it: "Face 17"; the ref itself for one that names no face. */
+export function faceLabel(ref) {
+  const number = faceNumber(ref);
+  return number === null ? String(ref || "") : `Face ${number}`;
+}
+
+/** Faces after a word: "face 17", "faces 17, 18". */
+function facesWords(refs) {
+  const names = refs.map((ref) => faceNumber(ref) ?? ref);
+  return `${names.length === 1 ? "face" : "faces"} ${names.join(", ")}`;
+}
+
+const AXIS_NAMES = ["X", "Y", "Z"];
+
+/**
+ * Which way a force points, in words, in the part's CAD axes (Z up): "down", "up", "along +X"
+ * for one along an axis, else "along (0.6, 0, -0.8)", its unit vector. "" for no force.
+ */
+export function forceDirection(force) {
+  const length = Math.hypot(...force);
+  if (!(length > 0)) return "";
+  const unit = force.map((value) => value / length);
+  const axis = unit.findIndex((value) => Math.abs(value) > 1 - 1e-6);
+  if (axis === 2) return unit[2] < 0 ? "down" : "up";
+  if (axis >= 0) return `along ${unit[axis] < 0 ? "-" : "+"}${AXIS_NAMES[axis]}`;
+  return `along (${unit.map((value) => plainNumber(value)).join(", ")})`;
+}
+
+/** A load as its row says it: what it is ("2500 N", "2 MPa pressure") and which way it points. */
+function loadWords(load) {
+  if (load.vector) return { amount: `${plainNumber(Math.hypot(...load.vector))} N`, direction: forceDirection(load.vector), noun: "load" };
+  if (load.pressure !== null) return { amount: `${plainNumber(load.pressure)} MPa pressure`, direction: "", noun: "" };
+  return { amount: load.type || "load", direction: "", noun: "" };
+}
+
+/** What a load on these faces is called in a prompt: "2500 N load on face 22", "2 MPa pressure on faces 3, 4". */
+function loadSummary(words, refs) {
+  return `${[words.amount, words.noun].filter(Boolean).join(" ")} on ${facesWords(refs)}`;
+}
+
+const capitalised = (word) => word.charAt(0).toUpperCase() + word.slice(1);
+
+/**
+ * Study's rows for a result's study, in order: the material, the fixed faces, the loads (each
+ * with its faces under it) and the mesh. A row that stands for faces carries them (`faces`, the
+ * file's refs) and what a prompt calls them (`summary`); a group row (`children`) carries none.
+ * [] for a result written before the study was recorded.
+ */
+export function studyRows(result) {
+  const study = result.study;
+  if (!study) return [];
+  const rows = [];
+  const material = study.material;
+  if (material?.name) {
+    const yieldText = material.yieldMPa === null ? "" : `yield ${plainNumber(material.yieldMPa)} MPa`;
+    rows.push({ id: "material", label: "Material", detail: [material.name, yieldText].filter(Boolean).join(" · ") });
+  }
+  const fixed = study.fixtures.flatMap((fixture, index) => fixture.faces.map((ref) => ({
+    id: `fixed:${index}:${ref}`, label: faceLabel(ref), detail: fixture.type, faces: [ref],
+    summary: `${capitalised(fixture.type)} ${facesWords([ref])}`,
+  })));
+  if (fixed.length) rows.push({ id: "fixed", label: "Fixed", detail: "", children: fixed });
+  const loads = study.loads.filter((load) => load.faces.length).map((load, index) => {
+    const words = loadWords(load);
+    return {
+      id: `load:${index}`, label: words.amount, detail: words.direction, faces: load.faces, summary: loadSummary(words, load.faces),
+      children: load.faces.map((ref) => ({ id: `load:${index}:${ref}`, label: faceLabel(ref), detail: "loaded", faces: [ref],
+        summary: loadSummary(words, [ref]) })),
+    };
+  });
+  if (loads.length) rows.push({ id: "loads", label: "Loads", detail: "", children: loads });
+  const mesh = study.mesh;
+  if (mesh?.sizeMm !== null && mesh?.sizeMm !== undefined) {
+    const refined = mesh.refinedFromMm === null ? "not refined" : `refined from ${plainNumber(mesh.refinedFromMm)} mm`;
+    rows.push({ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements · ${refined}` });
+  }
+  return rows;
+}
+
+/** What the study does to a face, in words: "fixed", "2500 N load, down", "2 MPa pressure", or "free". */
+export function faceRole(result, ref) {
+  const study = result.study;
+  if (!study) return "";
+  const roles = [
+    ...study.fixtures.filter((fixture) => fixture.faces.includes(ref)).map((fixture) => fixture.type),
+    ...study.loads.filter((load) => load.faces.includes(ref)).map((load) => {
+      const words = loadWords(load);
+      return [[words.amount, words.noun].filter(Boolean).join(" "), words.direction].filter(Boolean).join(", ");
+    }),
+  ];
+  return roles.length ? roles.join("; ") : "free";
+}
+
+/** The indices into the result's `faces` of these refs, for `recolorByField`'s tint. */
+export function faceIndices(result, refs) {
+  return refs.map((ref) => result.faces.indexOf(ref)).filter((index) => index >= 0);
+}
+
+const raycaster = new Raycaster();
+
+/**
+ * The source face of the result's triangle under a world-space ray: `{ id, ref, point }`, the
+ * scene contract's pick (`kit/scene.js`), with `ref` the file's face ref. null over nothing, and
+ * over a triangle the mesher matched to no face.
+ */
+export function pickFace(result, ray) {
+  const faces = vertexFaces(result.mesh);
+  if (!faces) return null;
+  raycaster.ray.copy(ray);
+  const hit = raycaster.intersectObject(result.mesh, false)[0];
+  const ref = hit?.face ? result.faces[Math.round(faces[hit.face.a])] : null;
+  return ref ? { id: ref, ref, point: hit.point } : null;
 }

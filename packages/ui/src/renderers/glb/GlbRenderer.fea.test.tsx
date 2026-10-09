@@ -4,13 +4,13 @@ import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 // The GLB renderer's FEA surfaces under the real shell, with only what loads the file and the WebGL
-// viewport replaced: a result's field and deformation are Display's (an Analysis section), its colour
+// viewport replaced: a result's study, field and deformation are Select's Study panel, its colour
 // bar is a reading with no controls, and a GLB that is not a result has neither.
-const loaded = vi.hoisted(() => ({ root: null as any, scene: null as any, revision: 'one', animation: null as any, runtime: null as any }));
+const loaded = vi.hoisted(() => ({ root: null as any, scene: null as any, revision: 'one', animation: null as any, runtime: null as any, host: null as any }));
 vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
   default: forwardRef(function StandInViewport(props: any, ref) {
     useImperativeHandle(ref, () => ({ requestRender() {} }));
-    return <div data-stand-in-viewport="">{typeof props.children === 'function' ? props.children({ hostRef: { current: loaded.runtime ? { clientWidth: 800, clientHeight: 600 } : null }, runtimeRef: { current: loaded.runtime }, mountRef: { current: null }, viewerReadyTick: 1, commitScene: () => true }) : props.children}</div>;
+    return <div data-stand-in-viewport="">{typeof props.children === 'function' ? props.children({ hostRef: { current: loaded.host || (loaded.runtime ? { clientWidth: 800, clientHeight: 600, style: {}, addEventListener() {}, removeEventListener() {} } : null) }, runtimeRef: { current: loaded.runtime }, mountRef: { current: null }, viewerReadyTick: 1, commitScene: () => true }) : props.children}</div>;
   })
 }));
 vi.mock('../../../dist/renderers/glb/useGlbScene.js', () => ({
@@ -27,16 +27,18 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
 });
-afterEach(() => { vi.restoreAllMocks(); loaded.animation = null; loaded.runtime = null; cleanup(); vi.unstubAllGlobals(); document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()); });
+afterEach(() => { vi.restoreAllMocks(); loaded.animation = null; loaded.runtime = null; loaded.host = null; cleanup(); vi.unstubAllGlobals(); document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()); });
 
 // Two triangles the way GLTFLoader hands a result over: lower-cased custom attributes, extras in userData.
-function resultRoot(extras: Record<string, unknown> | null) {
+// `faces`: the source face of each vertex (`_FACE`), for a result that records its study.
+function resultRoot(extras: Record<string, unknown> | null, faces: number[] | null = null) {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0]), 3));
   geometry.setIndex([0, 1, 2, 1, 3, 2]);
   geometry.setAttribute('color', new BufferAttribute(new Uint8Array(16).fill(7), 4, true));
   geometry.setAttribute('_von_mises', new BufferAttribute(new Float32Array([0, 50, 100, 25]), 1));
   geometry.setAttribute('_displacement', new BufferAttribute(new Float32Array([0, 0, 0, 0, 0, 0.001, 0, 0, 0.002, 0, 0, 0.0005]), 3));
+  if (faces) geometry.setAttribute('_face', new BufferAttribute(new Float32Array(faces), 1));
   const mesh = new Mesh(geometry);
   if (extras) Object.assign(mesh.userData, extras);
   const root = new Group();
@@ -57,8 +59,8 @@ function ViewerElement({ children }: { children: React.ReactNode }) {
 }
 const colourBytes = (mesh: Mesh) => Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
 
-function mount(extras: Record<string, unknown> | null, state?: unknown, { actions = () => {}, host = testHost() }: { actions?: (actions: readonly any[]) => void, host?: any } = {}) {
-  const built = resultRoot(extras);
+function mount(extras: Record<string, unknown> | null, state?: unknown, { actions = () => {}, host = testHost(), faces = null }: { actions?: (actions: readonly any[]) => void, host?: any, faces?: number[] | null } = {}) {
+  const built = resultRoot(extras, faces);
   loaded.root = built.root;
   // One scene per file, as the hook holds it: a render is not a new result.
   loaded.scene = { document: { scene: built.root }, revision: loaded.revision };
@@ -77,26 +79,30 @@ function mount(extras: Record<string, unknown> | null, state?: unknown, { action
   return { ...view, ...built, save };
 }
 const openDisplay = () => act(() => { fireEvent.click(screen.getByRole('button', { name: 'Display' })); });
+const studyPanel = () => screen.queryByRole('region', { name: 'Study' });
+const rowTexts = (panel: HTMLElement) => Array.from(panel.querySelectorAll('[data-study-row]')).map(row => row.textContent);
 
-it('puts the field and deformation in Display, and a colour bar with one plain line on the view', () => {
+it('puts the field and deformation in Study, under Select, and a colour bar with one plain line on the view', () => {
   const { container } = mount(RESULT);
   const bar = container.querySelector('[role="group"][aria-label="von Mises stress colour bar"]')!;
   expect(bar.querySelector('[data-fea-summary]')!.textContent).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
   expect(bar.textContent).toContain('47.3 MPa');
   // The bar is a reading: nothing on it to press or drag.
   expect(bar.querySelectorAll('button, input, [role="slider"], [role="combobox"]').length).toBe(0);
-  expect(screen.queryByRole('combobox', { name: 'Result field' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
+  const study = studyPanel()!;
+  expect(study.querySelector('[role="combobox"][aria-label="Result field"]')!.textContent).toContain('von Mises stress');
+  expect(study.querySelector('[role="slider"][aria-label="Deformation scale"]')).toBeTruthy();
+  // Display is the view's alone: no Analysis section, no second field select.
   openDisplay();
-  expect(screen.getByText('Analysis')).toBeTruthy();
-  expect(screen.getByRole('combobox', { name: 'Result field' }).textContent).toContain('von Mises stress');
-  expect(screen.getByRole('slider', { name: 'Deformation scale' })).toBeTruthy();
+  expect(screen.queryByText('Analysis')).toBeNull();
+  expect(screen.getAllByRole('combobox', { name: 'Result field' })).toHaveLength(1);
 });
 
 it('the field switch recolours the mesh and changes the bar\'s line', () => {
   const { mesh, container } = mount(RESULT);
   const stress = colourBytes(mesh);
   expect(stress.slice(0, 4)).toEqual([13, 26, 230, 255]);
-  openDisplay();
   act(() => { fireEvent.click(screen.getByRole('combobox', { name: 'Result field' })); });
   act(() => { fireEvent.click(screen.getByRole('option', { name: 'displacement' })); });
   expect(colourBytes(mesh)).not.toEqual(stress);
@@ -108,7 +114,6 @@ it('the deformation value rescales the drawn displacement from the file\'s posit
   vi.useFakeTimers();
   const { mesh, save } = mount(RESULT);
   const position = mesh.geometry.getAttribute('position');
-  openDisplay();
   const value = screen.getByRole('textbox', { name: 'Deformation scale value' });
   act(() => { fireEvent.change(value, { target: { value: '0' } }); fireEvent.blur(value); });
   // 10x of vertex 2's 0.002 m is baked in; at 0x it is back where it was.
@@ -139,9 +144,11 @@ it('the colour bar shows its whole line: it is never truncated, and the card gro
   expect(card.className).not.toMatch(/(^|\s)w-72(\s|$)/);
 });
 
-it('a GLB that is not a result has no colour bar, no Analysis section and its colours untouched', () => {
+it('a GLB that is not a result has no colour bar, no Select tool, no Study and its colours untouched', () => {
   const { mesh, container } = mount(null);
   expect(container.querySelector('[aria-label$="colour bar"]')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
+  expect(studyPanel()).toBeNull();
   openDisplay();
   expect(screen.queryByText('Analysis')).toBeNull();
   expect(colourBytes(mesh).every(byte => byte === 7)).toBe(true);
@@ -275,7 +282,7 @@ it('rings each place at the deformed position under the camera, and follows the 
   expect(paint()).toEqual([[400, 300]]);
 });
 
-it('moves a ring when the Display scale changes on a result that displaces', () => {
+it('moves a ring when Study\'s scale changes on a result that displaces', () => {
   const arcs: number[][] = [];
   const context = { setTransform() {}, clearRect() {}, beginPath() {}, stroke() {}, arc: (...args: number[]) => { arcs.push(args); } } as any;
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
@@ -294,16 +301,14 @@ it('moves a ring when the Display scale changes on a result that displaces', () 
   const paint = () => { arcs.length = 0; act(() => { frame!(); }); return Math.round(arcs[0][0]); };
   // At the file's own 10x the vertex has moved 0.02 m back to z = 0, the screen's middle.
   expect(paint()).toBe(400);
-  openDisplay();
   const value = screen.getByRole('textbox', { name: 'Deformation scale value' });
   act(() => { fireEvent.change(value, { target: { value: '0' } }); fireEvent.blur(value); });
   // At none it is where the part was solved: 0.02 m across, 160px.
   expect(paint()).toBe(560);
 });
 
-it('lays the deformation slider out as Display\'s other sliders are: under its label, never on its row', () => {
+it('lays the deformation slider out as Display\'s sliders are: under its label, never on its row', () => {
   mount(RESULT);
-  openDisplay();
   const label = screen.getByText('Deformation');
   const thumb = screen.getByRole('slider', { name: 'Deformation scale' });
   const slider = thumb.closest('[data-slot="slider"]')!;
@@ -316,4 +321,96 @@ it('lays the deformation slider out as Display\'s other sliders are: under its l
   expect(slider.parentElement!.previousElementSibling).toBe(label);
   // ... and the slider carries the precision-slider height (h-4), so it is no taller than the gap pulled up under the label.
   expect(slider.classList.contains('h-4')).toBe(true);
+});
+
+// What S1 adds: the study the result was solved for, and the face each vertex lies on.
+const STUDY = {
+  material: { name: '6061-T6', yield_MPa: 276, youngs_GPa: 68.9, poisson: 0.33 },
+  fixtures: [{ type: 'fixed', faces: ['#o1.f1'] }],
+  loads: [{ type: 'force', faces: ['#o1.f2'], vector_N: [0, 0, -2500] }],
+  mesh: { size_mm: 1.9205, order: 2, elements: 52271, refined_from_mm: 2.7686 },
+  margin: 2,
+};
+const STUDIED = { ...FOUND, study: STUDY, faces: ['#o1.f1', '#o1.f2'] };
+// Vertices 0-2 lie on face index 0 (#o1.f1), vertex 3 on face index 1 (#o1.f2).
+const FACES = [0, 0, 0, 1];
+async function copiedPrompt(copied: string[]) {
+  act(() => { fireEvent.change(screen.getByRole('textbox', { name: 'Describe your changes' }), { target: { value: 'move it' } }); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' })); });
+  return copied.at(-1);
+}
+const clipboardHost = (copied: string[]) => testHost({ clipboard: { writeText: async (text: any) => { copied.push(await text); }, readText: async () => '', writeImage: async () => {} } });
+
+it('Study lists the material, the fixed faces, each load with its faces and the mesh, then the Result', () => {
+  mount(STUDIED, undefined, { faces: FACES });
+  const study = studyPanel()!;
+  expect(study.querySelector('h3')!.textContent).toBe('Study');
+  expect(study.querySelector('button[aria-label="Close study"]')).toBeTruthy();
+  expect(rowTexts(study)).toEqual([
+    'Material6061-T6 · yield 276 MPa', 'Fixed', 'Face 1fixed', 'Loads', '2500 Ndown', 'Face 2loaded',
+    'Mesh1.9 mm elements · refined from 2.8 mm', 'Result',
+  ]);
+  expect(study.querySelector('[role="combobox"][aria-label="Result field"]')).toBeTruthy();
+});
+
+it('a result written before its study was recorded shows Study with the Result alone', () => {
+  mount(FOUND);
+  const study = studyPanel()!;
+  expect(rowTexts(study)).toEqual(['Result']);
+  expect(study.querySelector('[role="slider"][aria-label="Deformation scale"]')).toBeTruthy();
+});
+
+it('choosing a fixed face tints only its triangles and carries it into Quick Edit by the source STEP', async () => {
+  const copied: string[] = [];
+  const { mesh } = mount(STUDIED, undefined, { faces: FACES, host: clipboardHost(copied) });
+  const plain = colourBytes(mesh);
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select Face 1' })); });
+  const tinted = colourBytes(mesh);
+  // Face index 0's vertices change; vertex 3, face index 1's, keeps its colour.
+  for (const vertex of [0, 1, 2]) expect(tinted.slice(vertex * 4, vertex * 4 + 3)).not.toEqual(plain.slice(vertex * 4, vertex * 4 + 3));
+  expect(tinted.slice(12)).toEqual(plain.slice(12));
+  expect(screen.getByRole('button', { name: 'Select Face 1' }).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('region', { name: 'Quick Edit' }).querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('1 ref');
+  expect(await copiedPrompt(copied)).toBe('move it\n\nFile: /models/part.glb\nReferences:\nFixed face 1 · /models/part.step#o1.f1');
+  // Escape lets go, and the colours come back.
+  act(() => { fireEvent.keyDown(document.querySelector('[data-stand-in-viewport]')!, { key: 'Escape' }); });
+  expect(colourBytes(mesh)).toEqual(plain);
+  expect(screen.getByRole('button', { name: 'Select Face 1' }).getAttribute('aria-pressed')).toBe('false');
+});
+
+it('choosing a load tints its face and says how much, on which face', async () => {
+  const copied: string[] = [];
+  const { mesh } = mount(STUDIED, undefined, { faces: FACES, host: clipboardHost(copied) });
+  const plain = colourBytes(mesh);
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select 2500 N' })); });
+  expect(colourBytes(mesh).slice(0, 12)).toEqual(plain.slice(0, 12));
+  expect(colourBytes(mesh).slice(12, 15)).not.toEqual(plain.slice(12, 15));
+  expect(await copiedPrompt(copied)).toBe('move it\n\nFile: /models/part.glb\nReferences:\n2500 N load on face 2 · /models/part.step#o1.f2');
+});
+
+it('a press on the result with Select picks the face under it into a Reference with its ref, its role and Copy', async () => {
+  const copied: string[] = [];
+  const host = document.createElement('div');
+  host.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+  const canvas = document.createElement('canvas');
+  host.append(canvas);
+  document.body.append(host);
+  // Looking down at the first triangle (face index 0) from above its middle.
+  const camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.375, -0.375, 0.001, 10);
+  camera.position.set(0.25, 0.25, 1);
+  camera.updateMatrixWorld();
+  loaded.runtime = { THREE, camera, renderer: { domElement: canvas } };
+  loaded.host = host;
+  mount(STUDIED, undefined, { faces: FACES, host: clipboardHost(copied) });
+  act(() => {
+    fireEvent.pointerDown(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+    fireEvent.pointerUp(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+  });
+  const reference = screen.getByRole('region', { name: 'Reference details' });
+  expect(reference.querySelector('h3')!.textContent).toBe('Face 1');
+  expect(Array.from(reference.querySelectorAll('[data-info-row]')).map(row => row.textContent)).toEqual(['Ref#o1.f1', 'Studyfixed']);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy' })); });
+  expect(copied).toEqual(['/models/part.step#o1.f1']);
+  expect(screen.getByRole('button', { name: 'Select Face 1' }).getAttribute('aria-pressed')).toBe('true');
+  host.remove();
 });

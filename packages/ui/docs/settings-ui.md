@@ -286,7 +286,7 @@ on the strip.
 
 Under the toolbar, in one column: the shell's tool's panel (**Drawing**) while
 Draw is up; Select's **Features** (STEP; a
-robot's **Links**) and, whenever something is selected, its **Reference** (then
+robot's **Links**; an FEA result's **Study**) and, whenever something is selected, its **Reference** (then
 a `.sdf`'s **SDF**); Position's **Position**; then the panels
 of the effects a person keeps (**Measurements**, **Explode**, **Clip**). A panel
 whose tool is not up is `hidden`, not unmounted: a tree keeps its expansion,
@@ -340,7 +340,7 @@ stack.
   keeps its height. If what cannot give way still does not fit, the column
   itself scrolls — a panel is never cut. On mobile the tree starts closed and,
   opened, may take the whole column, giving way as other panels join it.
-- **Closing the tree.** Select's tree (Features, Links) does not fold: the X at
+- **Closing the tree.** Select's tree (Features, Links, Study) does not fold: the X at
   its filter row's end ("Close features") closes it, `hidden` and kept mounted
   with its expansion, filter, selection and scroll, and Select stays the tool —
   a selection still shows its Reference, a panel of its own. While the tree is
@@ -453,9 +453,7 @@ it (on the model, say), its button again, or the X at the end of its first headi
 ("Display", its Reset, then its X); setting changes leave it up. It is idle while the file
 is, as the tools are. Another file opens with it closed, and entering or leaving preview
 puts it away. In preview it holds the same settings, the file's: what is set there the
-preview draws at once, and the tools view has it on the way back. A renderer may add
-always-open sections of its own (`displaySections`), placed after the first section: what the
-file is about beyond how it is drawn.
+preview draws at once, and the tools view has it on the way back.
 
 One scroller (the dropdown's body), shared section primitives, no sticky headings
 and no nested cards. Nested dropdowns and color pickers own their dismissal:
@@ -464,7 +462,6 @@ Escape closes the innermost popup first, the dropdown only on a later press.
 | Section | Contents |
 | --- | --- |
 | Display | Full-width render Mode; Appearance (when the host gives one) and Projection beneath; a small gray Reset icon at top-right |
-| Analysis | An FEA result's field and deformation (a result only; see [An FEA result](#an-fea-result)) |
 | Surfaces | Style and part-color mode; color or palette and opacity below |
 | Edges | Visibility and color, where the format has topology |
 | Grid / Axes | Two color/opacity controls, left and right in title order, no visible labels |
@@ -473,9 +470,7 @@ Escape closes the innermost popup first, the dropdown only on a later press.
 | Floor | Color/opacity; position and finish side by side |
 
 Display holds the file's view alone: the person's settings are the [app menu](#settings)'s.
-Display and Surfaces are always open, and so is any section a renderer adds of its own
-(`displaySections`: an FEA result's Analysis), placed right after Display's first. Every other
-section is a feature gate
+Display and Surfaces are always open. Every other section is a feature gate
 with plus/minus: expanded means enabled, collapsed means disabled. Grid / Axes
 gates both groups; their settings stay separate in the core/CLI contract. Never
 add an "Enabled" checkbox inside a gated section. Enabling starts at defaults;
@@ -542,13 +537,29 @@ the person comes back to the page.
 ## An FEA result
 
 A GLB that `cadgen fea solve` wrote is a result: its mesh carries every field, the true
-displacement and a plain-language summary (`glb/feaResult.js`). Its choices are Display's,
-and what the colours mean is on the view; there is no panel, tool or mode of its own.
+displacement, a plain-language summary, the study it was solved for and the source face of
+every triangle (`glb/feaResult.js`). Its choices are Study's, and what the colours mean is on
+the view; Display is the view's alone, as a STEP's is. It has no mode of its own.
 
-- **Display gets an Analysis section**, always open, right after Display's own first section
-  (a renderer's `displaySections`): a Field select (von Mises stress, displacement) and a
-  Deformation slider with its committed number, from 0 to four times the file's own
-  exaggeration. A GLB that is not a result has no such section.
+- **Select, and its Study.** A result's strip is Select alone, and Select's panel is **Study**
+  (`glb/FeaStudyPanel.jsx`): the tree of the stack (`tree`, closable like Features, starting
+  open, closed on a phone), headed "Study" with its X, in the Links tree's rows. In order:
+  **Material** ("6061-T6 · yield 276 MPa"); **Fixed**, one row per fixed face ("Face 17",
+  "fixed"); **Loads**, one row per load ("2500 N", its direction in words: "down" and "up" are
+  CAD Z, else "along +X" or the unit vector; or "2 MPa pressure"), its faces under it ("Face 22",
+  "loaded"); **Mesh** ("1.9 mm elements · refined from 2.8 mm", or "not refined"); and
+  **Result**: a Field select (von Mises stress, displacement) and a Deformation slider with its
+  committed number, from 0 to four times the file's own exaggeration. A result written before
+  its study was recorded has Result alone. A GLB that is not a result has no strip at all.
+- **Choosing faces.** A fixed face, a load or a load's face chosen in Study tints its triangles
+  (half way to magenta, which no colour of the ramp is, so the stress still reads) and carries
+  them into Quick Edit by the STEP the result was solved from, with what they are: "Fixed face
+  17", "2500 N load on face 22". A press on the result under Select picks the face under the
+  pointer the same way, called what Study calls it ("Face 3" for a face the study does nothing
+  to), and one face chosen shows the **Reference** under Study: headed "Face 17", its ref and
+  what the study does to it ("fixed", "2500 N load, down", "free"), with **Copy** (the STEP's
+  path and the ref, as a STEP's Copy writes it). Escape, the Reference's X, Quick Edit's clear
+  and a press on nothing let go; one choice at a time, a finding or faces.
 - **A colour bar** floats at bottom-centre on the playbar's line
   (`FLOATING_CHROME_SURFACE_CLASS`, no pointer events): one plain line over the field's range
   and units along the ramp, one playbar's height higher when the result also has routines. Stress: "Peak stress 47 MPa · holds 5.8× this load · moves up to
@@ -564,7 +575,7 @@ and what the colours mean is on the view; there is no panel, tool or mode of its
   orbited and as the deformation moves it) and carries its sentence and the part's faces into Quick
   Edit, when the result names the STEP it was solved from. Escape, Quick Edit's clear and bringing
   the card back let go of the choice.
-- **The choice is the file's view**: the field and the exaggeration are one renderer slice
+- **The field and the exaggeration are the file's view**: one renderer slice
   (`fea`), written against the result's fields and scale, so a re-solved result opens at its own
   defaults.
 

@@ -1,7 +1,8 @@
-import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
+import { BufferAttribute, BufferGeometry, Group, Mesh, Ray, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import {
-  applyDeformation, deformationRange, feaRamp, feaSummaryLine, fieldValues, formatValue, readFeaResult, recolorByField, resultSourcePath, ringPoint, ringTargets
+  applyDeformation, deformationRange, faceLabel, faceRole, feaRamp, feaSummaryLine, fieldValues, forceDirection, formatValue, pickFace, readFeaResult,
+  recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows
 } from './feaResult.js';
 
 /** A two-triangle "result" the way GLTFLoader hands one over: lower-cased custom attributes, extras in userData. */
@@ -179,5 +180,97 @@ describe('a result\'s findings', () => {
     expect(ringPoint(target, 10)[0]).toBeCloseTo(0.11, 9);
     // The CAD axes become glTF's: z up is Y, y is -Z.
     expect(ringTargets(result, [[0, 20, 5]])[0].base).toEqual([0, 0.005, -0.02]);
+  });
+});
+
+// What S1 adds: the study the result was solved for, and the face each vertex came from.
+const STUDY = {
+  material: { name: '6061-T6', yield_MPa: 276, youngs_GPa: 68.9, poisson: 0.33 },
+  fixtures: [{ type: 'fixed', faces: ['#o1.f1'] }],
+  loads: [
+    { type: 'force', faces: ['#o1.f2'], vector_N: [0, 0, -2500] },
+    { type: 'pressure', faces: ['#o1.f3', '#o1.f4'], pressure_MPa: 2 },
+  ],
+  mesh: { size_mm: 1.9205, order: 2, elements: 52271, refined_from_mm: 2.7686 },
+  margin: 2,
+};
+function studyResult(extras: Record<string, unknown> = { study: STUDY, faces: ['#o1.f1', '#o1.f2', '#o1.f3', '#o1.f4'] }) {
+  const built = resultMesh();
+  built.mesh.geometry.setAttribute('_face', new BufferAttribute(new Float32Array([0, 0, 0, 1]), 1));
+  Object.assign(built.mesh.userData, extras);
+  return { ...built, result: readFeaResult(built.root)! };
+}
+const strip = (rows: any[]): any[] => rows.map(({ id, label, detail, summary, faces, children }) =>
+  ({ id, label, detail, ...(summary ? { summary, faces } : {}), ...(children ? { children: strip(children) } : {}) }));
+
+describe('a result\'s study', () => {
+  it('reads as Study\'s rows: material, each fixed face, each load with its faces, and the mesh', () => {
+    expect(strip(studyRows(studyResult().result))).toEqual([
+      { id: 'material', label: 'Material', detail: '6061-T6 · yield 276 MPa' },
+      { id: 'fixed', label: 'Fixed', detail: '', children: [
+        { id: 'fixed:0:#o1.f1', label: 'Face 1', detail: 'fixed', summary: 'Fixed face 1', faces: ['#o1.f1'] },
+      ] },
+      { id: 'loads', label: 'Loads', detail: '', children: [
+        { id: 'load:0', label: '2500 N', detail: 'down', summary: '2500 N load on face 2', faces: ['#o1.f2'], children: [
+          { id: 'load:0:#o1.f2', label: 'Face 2', detail: 'loaded', summary: '2500 N load on face 2', faces: ['#o1.f2'] },
+        ] },
+        { id: 'load:1', label: '2 MPa pressure', detail: '', summary: '2 MPa pressure on faces 3, 4', faces: ['#o1.f3', '#o1.f4'], children: [
+          { id: 'load:1:#o1.f3', label: 'Face 3', detail: 'loaded', summary: '2 MPa pressure on face 3', faces: ['#o1.f3'] },
+          { id: 'load:1:#o1.f4', label: 'Face 4', detail: 'loaded', summary: '2 MPa pressure on face 4', faces: ['#o1.f4'] },
+        ] },
+      ] },
+      { id: 'mesh', label: 'Mesh', detail: '1.9 mm elements · refined from 2.8 mm' },
+    ]);
+  });
+
+  it('says a mesh was not refined, and a result written before the study was recorded has no rows', () => {
+    const plain = studyResult({ study: { ...STUDY, mesh: { ...STUDY.mesh, refined_from_mm: null } }, faces: [] });
+    expect(studyRows(plain.result).at(-1)).toMatchObject({ id: 'mesh', detail: '1.9 mm elements · not refined' });
+    const old = resultMesh();
+    expect(readFeaResult(old.root)!.study).toBeNull();
+    expect(studyRows(readFeaResult(old.root)!)).toEqual([]);
+  });
+
+  it('puts a force\'s direction in words: up and down are CAD Z, the rest an axis or the unit vector', () => {
+    expect(forceDirection([0, 0, -2500])).toBe('down');
+    expect(forceDirection([0, 0, 10])).toBe('up');
+    expect(forceDirection([5, 0, 0])).toBe('along +X');
+    expect(forceDirection([0, -2500, 0])).toBe('along -Y');
+    expect(forceDirection([3, 0, -4])).toBe('along (0.6, 0, -0.8)');
+    expect(forceDirection([0, 0, 0])).toBe('');
+  });
+
+  it('names a face by its number, and says what the study does to it', () => {
+    const { result } = studyResult();
+    expect(faceLabel('#o1.1.f17')).toBe('Face 17');
+    expect(faceLabel('#o1')).toBe('#o1');
+    expect(faceRole(result, '#o1.f1')).toBe('fixed');
+    expect(faceRole(result, '#o1.f2')).toBe('2500 N load, down');
+    expect(faceRole(result, '#o1.f4')).toBe('2 MPa pressure');
+    expect(faceRole(result, '#o1.f9')).toBe('free');
+  });
+
+  it('tints the chosen faces\' vertices over the field colours, and only those', () => {
+    const { mesh, result } = studyResult();
+    const stress = result.fields[0];
+    recolorByField(mesh, stress, result.ramp);
+    const plain = Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
+    expect(recolorByField(mesh, stress, result.ramp, [1])).toBe(true);
+    const tinted = Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
+    // Vertex 3 is face index 1's; the other three keep their colours.
+    expect(tinted.slice(0, 12)).toEqual(plain.slice(0, 12));
+    expect(tinted.slice(12, 15)).not.toEqual(plain.slice(12, 15));
+    expect(recolorByField(mesh, stress, result.ramp, [1])).toBe(false);
+    recolorByField(mesh, stress, result.ramp, null);
+    expect(Array.from(mesh.geometry.getAttribute('color').array as Uint8Array)).toEqual(plain);
+  });
+
+  it('picks the source face of the triangle under a ray', () => {
+    const { mesh, result } = studyResult();
+    mesh.updateMatrixWorld(true);
+    // Above the first triangle (vertices 0, 1, 2: face index 0) and the second (1, 3, 2: its first vertex is face 0's too).
+    const down = (x: number, y: number) => new Ray(new Vector3(x, y, 1), new Vector3(0, 0, -1));
+    expect(pickFace(result, down(0.2, 0.2))).toMatchObject({ id: '#o1.f1', ref: '#o1.f1' });
+    expect(pickFace(result, down(5, 5))).toBeNull();
   });
 });
