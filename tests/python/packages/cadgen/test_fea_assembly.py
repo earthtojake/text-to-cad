@@ -12,7 +12,7 @@ import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
@@ -28,6 +28,13 @@ except RuntimeError:
     HAVE_FEA = False
 
 TOLERANCE = 0.1
+
+
+@contextmanager
+def quiet():
+    """The CLI's progress lines go to stderr; a test that is not about them keeps them out of the run's output."""
+    with redirect_stderr(io.StringIO()):
+        yield
 
 
 def _write_assembly(
@@ -1030,6 +1037,38 @@ class SolveAssemblyTest(unittest.TestCase):
         ordinal = list(joined.faces).index(self.fixed) + 1
         self.assertEqual(_unheld_after_meshing(joined, {ordinal}, 2), [])
         self.assertEqual(_unheld_after_meshing(apart, {ordinal}, 2), [[1]])
+
+
+@unittest.skipUnless(HAVE_FEA, "cadgen[fea] is not installed")
+class RoundPartTest(unittest.TestCase):
+    """A cylinder pin bonded onto a plate: the curved part's volume is what the mesher's linear tets undercount."""
+
+    def test_a_round_pin_on_a_plate_is_meshed_and_solved(self):
+        from build123d import Align, Box, Compound, Cylinder, Pos, export_step
+
+        from cadgen import fea
+        from cadgen.step_scene import read_scene
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            plate = Box(40, 40, 10, align=Align.MIN)
+            plate.label = "plate"
+            pin = Pos(20, 20, 10) * Cylinder(5, 30, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            pin.label = "pin"
+            step = tmp / "pin.step"
+            export_step(Compound(children=[plate, pin]), str(step))
+            scene = read_scene(step)
+            refs = _refs(scene)
+            study = {
+                "material": "6061",
+                "fixtures": [{"faces": [_face_at(scene, refs["plate"], 0.0)]}],
+                "loads": [{"faces": [_face_at(scene, refs["pin"], 40.0)], "type": "force", "vector_N": [100, 0, 0]}],
+                "mesh": {"size_mm": 4.0},
+            }
+            with quiet():
+                result = fea.solve(step, tmp / "pin.glb", study=study)
+        self.assertTrue(result.ok)
+        self.assertAlmostEqual(result.summary["reaction_force_N"][0], -100.0, delta=0.5)
 
 
 if __name__ == "__main__":

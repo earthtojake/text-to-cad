@@ -282,14 +282,44 @@ def _bbox_diagonal(shape) -> float:
     return float(((xmax - xmin) ** 2 + (ymax - ymin) ** 2 + (zmax - zmin) ** 2) ** 0.5)
 
 
+# Keast's 5-point rule for a tetrahedron, exact to degree 3: barycentric points and weights (of the unit tet's 1/6).
+_KEAST = (
+    ((0.25, 0.25, 0.25, 0.25), -2.0 / 15.0),
+    *((tuple(0.5 if k == n else 1.0 / 6.0 for k in range(4)), 3.0 / 40.0) for n in range(4)),
+)
+_EDGES = ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))
+
+
+def curved_volumes(nodes, tets):
+    """Each 10-node tet's volume (mm^3), its mid-edge nodes counted: the curved element, not its corners' straight one.
+
+    The corner tets of a mesh of a round part sit inside the surface, so they
+    sum to a few percent short of the B-rep; the curved elements do not.
+    """
+    import numpy as np
+
+    points = nodes[tets]  # (E, 10, 3)
+    total = np.zeros(len(tets))
+    for bary, weight in _KEAST:
+        # d(shape function)/d(barycentric coordinate), (4 coordinates, 10 nodes)
+        slope = np.zeros((4, 10))
+        for i in range(4):
+            slope[i, i] = 4.0 * bary[i] - 1.0
+        for n, (i, j) in enumerate(_EDGES, 4):
+            slope[i, n], slope[j, n] = 4.0 * bary[j], 4.0 * bary[i]
+        # x depends on three free coordinates (L0 = 1 - L1 - L2 - L3)
+        jacobian = np.einsum("ka,eki->eai", (slope[1:] - slope[:1]).T, points)
+        total += weight * np.abs(np.linalg.det(jacobian))
+    return total
+
+
 def check_domains(nodes, tets, domain, parts) -> None:
     """Raise unless each domain is the part it is taken to be.
 
     The mesher's volume numbers follow the solids' order in the glued shape; a
     mapping that drifted would give every element another part's material. Each
-    domain's volume (summed over corner nodes) must match its part's within 5%,
-    and where two parts' volumes are that close, its centroid must also lie in
-    its part's bounding box.
+    domain's volume (summed over the curved elements) must match its part's
+    within 5%, and its centroid must lie in its part's bounding box.
     """
     import numpy as np
 
@@ -297,8 +327,7 @@ def check_domains(nodes, tets, domain, parts) -> None:
     from OCP.BRepBndLib import BRepBndLib
 
     corners = nodes[tets[:, :4]]
-    edges = corners[:, 1:] - corners[:, :1]
-    volumes = np.abs(np.einsum("ij,ij->i", edges[:, 0], np.cross(edges[:, 1], edges[:, 2]))) / 6.0
+    volumes = curved_volumes(nodes, tets)
     for index, part in enumerate(parts):
         rows = domain == index
         meshed = float(volumes[rows].sum())
@@ -307,13 +336,12 @@ def check_domains(nodes, tets, domain, parts) -> None:
                 f"the mesh's volume {index} holds {meshed:.4g} mm^3 but part {part.ref} is {part.volume_mm3:.4g} mm^3; "
                 "the mesher's volumes do not follow the parts"
             )
-        if any(j != index and abs(other.volume_mm3 - part.volume_mm3) <= 0.05 * part.volume_mm3 for j, other in enumerate(parts)):
-            box = Bnd_Box()
-            BRepBndLib.Add_s(part.shape, box)
-            low, high = np.array(box.Get()[:3]), np.array(box.Get()[3:])
-            centroid = (corners[rows].mean(axis=1) * volumes[rows, None]).sum(axis=0) / volumes[rows].sum()
-            if ((centroid < low - 1e-6) | (centroid > high + 1e-6)).any():
-                raise RuntimeError(f"the mesh's volume {index} lies outside part {part.ref}; the mesher's volumes do not follow the parts")
+        box = Bnd_Box()
+        BRepBndLib.Add_s(part.shape, box)
+        low, high = np.array(box.Get()[:3]), np.array(box.Get()[3:])
+        centroid = (corners[rows].mean(axis=1) * volumes[rows, None]).sum(axis=0) / volumes[rows].sum()
+        if ((centroid < low - 1e-6) | (centroid > high + 1e-6)).any():
+            raise RuntimeError(f"the mesh's volume {index} lies outside part {part.ref}; the mesher's volumes do not follow the parts")
 
 
 def mesh_assembly(
