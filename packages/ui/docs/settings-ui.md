@@ -555,6 +555,14 @@ and what the colours mean is on the view; there is no panel, tool or mode of its
   0.029 mm", with "holds" left out when the result has no safety factor and "yields under this
   load" in its place when the safety factor is under 1; displacement: "Moves up
   to 0.029 mm". It has no controls. The safety factor is the result's own, the conservative one.
+- **Findings are the alert card and its icon**, as a board's are (`kit/status/findings.jsx`): the
+  result's checks, errors first under "Fix before using", the rest under "Suggestions", each in its
+  full sentence. The card is open over the view while something must be fixed; for suggestions alone
+  it is put away, its icon in the navbar saying "3 suggestions", and brings it back. Choosing a
+  finding puts the card away, rings each place it names over the view (following the part as it is
+  orbited and as the deformation moves it) and carries its sentence and the part's faces into Quick
+  Edit, when the result names the STEP it was solved from. Escape, Quick Edit's clear and bringing
+  the card back let go of the choice.
 - **The choice is the file's view**: the field and the exaggeration are one renderer slice
   (`fea`), written against the result's fields and scale, so a re-solved result opens at its own
   defaults.
