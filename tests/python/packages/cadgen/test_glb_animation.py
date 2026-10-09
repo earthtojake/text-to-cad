@@ -3,8 +3,9 @@
 The bake's keys are glTF's own, so the export writes them as they stand. These pin
 the window a request cuts (its edges, and a loop's seam), a transform track as a
 pivot in glTF's Y-up metres, a tube track as a skin, the effects glTF cannot
-animate refused or baked by name -- and one real document exported end to end,
-its cord posed by the file's own joints onto the bend the clip authored.
+animate refused or baked by name -- and one real document exported end to end:
+its pivot playing the sidecar's own keys, and its cord, still or carried by a
+turn, its joints under one skeleton, posed by them onto the bend the clip authored.
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ from tests.python.support.tube_skins import view_skin  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[4]
 SQRT_HALF = math.sqrt(0.5)
+CURL_RADIUS = 20 / (math.pi / 2)  # the real document's 20 mm cord curled into a quarter circle
 
 
 def turn_key(degrees: float, rate: float = 0.0) -> list[float]:
@@ -230,16 +232,28 @@ MODEL = textwrap.dedent("""\
         m.get("#lever").rotate((0, 0, 1), 90 * t)
 
 
-    def bend(t, m):
+    def curl(cord, t, spacing):
         # The 20 mm cord curls into a quarter circle, keeping its length.
         angle = max(t, 1e-3) * math.pi / 2
-        m.get("#cord").deform_tube(rest=REST, path={"normal": [0, 0, 1], "segments": [{
+        cord.deform_tube(rest=REST, path={"normal": [0, 0, 1], "segments": [{
             "kind": "arc", "center": [0, 10 + 20 / angle, 2], "axis": [0, 0, 1], "start": [0, 10, 2],
-            "sweepDeg": math.degrees(angle)}]}, max_segment_length=2)
+            "sweepDeg": math.degrees(angle)}]}, max_segment_length=spacing)
+
+
+    def bend(t, m):
+        curl(m.get("#cord"), t, 2)
+
+
+    def swing(t, m):
+        # Carried a quarter turn about Z as it curls, on joints 4 mm apart: six of them.
+        cord = m.get("#cord")
+        curl(cord, t, 4)
+        cord.rotate((0, 0, 1), 90 * t)
 
 
     @step(out="arm.step", animation={"turn": cadgen.clip(turn, duration=1, loop=False, fps=10),
-                                     "bend": cadgen.clip(bend, duration=1, loop=False, fps=10)})
+                                     "bend": cadgen.clip(bend, duration=1, loop=False, fps=10),
+                                     "swing": cadgen.clip(swing, duration=1, loop=False, fps=10)})
     def arm():
         base = bd.Box(10, 10, 2)
         base.label = "base"
@@ -329,6 +343,53 @@ def _cad(points: np.ndarray) -> np.ndarray:
 class ARealDocumentPlaysItsClip(unittest.TestCase):
     """The door end to end: a built document's clip, through the store's meshes, into a GLB."""
 
+    def assert_one_skeleton(self, gltf: dict, *, under: int | None) -> None:
+        """glTF asks a skin's joints for one common root: every joint is a child of the
+        skin's ``skeleton``, a still node at the scene's root or ``under`` the pivot
+        that carries the tube, and the skinned node itself stays a root."""
+        parents = {child: index for index, node in enumerate(gltf["nodes"]) for child in node.get("children", [])}
+        roots = set(gltf["scenes"][0]["nodes"])
+        for skin in gltf["skins"]:
+            skeleton = skin.get("skeleton")
+            self.assertIsNotNone(skeleton, f"{skin['name']} names no skeleton")
+            self.assertEqual({skeleton}, {parents.get(joint) for joint in skin["joints"]})
+            self.assertEqual(under, parents.get(skeleton))
+            self.assertEqual(under is None, skeleton in roots)
+            self.assertFalse({"translation", "rotation", "scale", "matrix"} & set(gltf["nodes"][skeleton]))
+        for index, node in enumerate(gltf["nodes"]):
+            if "skin" in node:
+                self.assertIn(index, roots)
+                self.assertNotIn(index, parents)
+
+    def assert_curled(self, gltf: dict, binary: bytes, *, carried: float) -> None:
+        """Posed by the file's own last keys as glTF draws a skin -- each joint's world
+        matrix times its inverse bind, the skinned node's own transform ignored -- every
+        vertex of the cord's wall sits 0.8 mm from the quarter circle the clip curled its
+        centerline into, carried ``carried`` degrees about Z."""
+        names = {node["name"]: index for index, node in enumerate(gltf["nodes"])}
+        cord = gltf["nodes"][names["cord"]]
+        skin = gltf["skins"][cord["skin"]]
+        worlds = _worlds(gltf, binary, 1.0)
+        binds = _array(gltf, binary, skin["inverseBindMatrices"]).astype(np.float64)
+        matrices = np.stack([worlds[joint] @ binds[n].reshape(4, 4).T for n, joint in enumerate(skin["joints"])])
+        turn = math.radians(carried)
+        center = (-math.sin(turn) * (10.0 + CURL_RADIUS), math.cos(turn) * (10.0 + CURL_RADIUS))
+        for primitive in gltf["meshes"][cord["mesh"]]["primitives"]:
+            positions = _array(gltf, binary, primitive["attributes"]["POSITION"]).astype(np.float64)
+            joints = _array(gltf, binary, primitive["attributes"]["JOINTS_0"])
+            weights = _array(gltf, binary, primitive["attributes"]["WEIGHTS_0"]).astype(np.float64)
+            # A slot with no weight names joint 0, as glTF asks.
+            self.assertFalse(np.any(joints[weights == 0]), "an unweighted slot names a joint")
+            homogeneous = np.column_stack([positions, np.ones(len(positions))])
+            posed = _cad(sum(weights[:, slot, None] * np.einsum("vij,vj->vi", matrices[joints[:, slot]], homogeneous)
+                             for slot in range(4))[:, :3])
+            rest = _cad(positions)
+            wall = np.hypot(rest[:, 1] - 10.0, rest[:, 2] - 2.0) > 0.79
+            from_axis = np.hypot(np.hypot(posed[:, 0] - center[0], posed[:, 1] - center[1]) - CURL_RADIUS,
+                                 posed[:, 2] - 2.0)
+            self.assertGreater(int(wall.sum()), 0)
+            self.assertLessEqual(float(np.max(np.abs(from_axis[wall] - 0.8))), 0.02)
+
     def test_the_exported_file_moves_and_bends_what_the_clip_does(self):
         with tempfile.TemporaryDirectory(prefix="glb-animation-") as folder:
             root = Path(folder).resolve()
@@ -344,7 +405,7 @@ class ARealDocumentPlaysItsClip(unittest.TestCase):
 
             run("arm.py")
             # A snapshot of the clip that only turns still names the tube skins: its page
-            # loads every clip of the section, and the other one bends the cord.
+            # loads every clip of the section, and the others bend the cord.
             snapshot = run("-c", "import json; from pathlib import Path\n"
                            "from cadgen.snapshot_cli import resolve_step_render_job\n"
                            "here = Path('.').resolve()\n"
@@ -407,33 +468,23 @@ class ARealDocumentPlaysItsClip(unittest.TestCase):
             (clip,) = gltf["animations"]
             targets = {channel["target"]["node"] for channel in clip["channels"]}
             self.assertEqual(set(skin["joints"]), targets)
+            self.assert_one_skeleton(gltf, under=None)
 
             # Posed by the file's own last keys, every vertex of the cord's wall sits 0.8 mm
             # from the quarter circle the clip bent its centerline into.
-            last = {}
-            for channel in clip["channels"]:
-                values = _array(gltf, binary, clip["samplers"][channel["sampler"]]["output"])
-                last.setdefault(channel["target"]["node"], {})[channel["target"]["path"]] = values[-1]
-            binds = _array(gltf, binary, skin["inverseBindMatrices"])
-            matrices = [_matrix(last[joint]["translation"], last[joint]["rotation"]) @ binds[n].reshape(4, 4).T
-                        for n, joint in enumerate(skin["joints"])]
-            radius = 20 / (math.pi / 2)
-            for primitive in gltf["meshes"][cord["mesh"]]["primitives"]:
-                positions = _array(gltf, binary, primitive["attributes"]["POSITION"]).astype(np.float64)
-                joints = _array(gltf, binary, primitive["attributes"]["JOINTS_0"])
-                weights = _array(gltf, binary, primitive["attributes"]["WEIGHTS_0"]).astype(np.float64)
-                # A slot with no weight names joint 0, as glTF asks.
-                self.assertFalse(np.any(joints[weights == 0]), "an unweighted slot names a joint")
-                homogeneous = np.column_stack([positions, np.ones(len(positions))])
-                posed = sum(weights[:, slot, None] * np.einsum(
-                    "vij,vj->vi", np.stack([matrices[j] for j in joints[:, slot]]), homogeneous)
-                    for slot in range(2))[:, :3]
-                cad = np.column_stack([posed[:, 0], -posed[:, 2], posed[:, 1]]) * 1000.0  # back to Z-up mm
-                rest = np.column_stack([positions[:, 0], -positions[:, 2], positions[:, 1]]) * 1000.0
-                wall = np.hypot(rest[:, 1] - 10.0, rest[:, 2] - 2.0) > 0.79
-                from_axis = np.hypot(np.hypot(cad[:, 0], cad[:, 1] - (10.0 + radius)) - radius, cad[:, 2] - 2.0)
-                self.assertGreater(int(wall.sum()), 0)
-                self.assertLessEqual(float(np.max(np.abs(from_axis[wall] - 0.8))), 0.02)
+            self.assert_curled(gltf, binary, carried=0.0)
+
+            # Carried by a turn while it bends, on an even count of joints: the joints
+            # hang from the pivot by their skeleton, and the skinned node stays a root.
+            door = run("-m", "cadgen.cli", "glb", "build", "arm.step", "arm-swing.glb", "--animation", "swing",
+                       "--json")
+            (entry,) = json.loads(door.stdout.strip().splitlines()[-1])["files"]
+            self.assertEqual((1, 1, 6), (entry["animation"]["pivots"], entry["animation"]["skins"],
+                                         entry["animation"]["joints"]))
+            gltf, binary = _read_glb(root / "arm-swing.glb")
+            names = {node["name"]: index for index, node in enumerate(gltf["nodes"])}
+            self.assert_one_skeleton(gltf, under=names["pivot 0 offset"])
+            self.assert_curled(gltf, binary, carried=90.0)
 
             # A CAD view reads the same tubes from the viewer's route, bound in the cord
             # component's own frame; a second read is the store's, binding nothing again.
@@ -464,7 +515,7 @@ class ARealDocumentPlaysItsClip(unittest.TestCase):
             keys = track["keys"].reshape(-1, 11, 7)
             local = binding["positions"].reshape(-1, 3).astype(np.float64)
             p = view_skin(local, binding["along"], binding["rest"].reshape(-1, 7), keys[-1], placement)
-            from_axis = np.hypot(np.hypot(p[:, 0], p[:, 1] - (10.0 + radius)) - radius, p[:, 2] - 2.0)
+            from_axis = np.hypot(np.hypot(p[:, 0], p[:, 1] - (10.0 + CURL_RADIUS)) - CURL_RADIUS, p[:, 2] - 2.0)
             near = np.hypot(local @ placement[:3, :3].T[:, 1] + placement[1, 3] - 10.0,
                             local @ placement[:3, :3].T[:, 2] + placement[2, 3] - 2.0) > 0.79
             self.assertGreater(int(near.sum()), 0)

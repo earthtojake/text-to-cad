@@ -74,10 +74,12 @@ cadgen glb build STEP/hand.step GLB/animated/hand.glb --animation fist
 ```
 
 Each tube's node names its skin; its mesh carries `JOINTS_0` and `WEIGHTS_0`;
-its joints are nodes keyed `LINEAR`, under the pivot that also moves the tube's
-parts when a rigid track carries them. Tubes one track bends must move together:
-a track that bends parts a rigid track moves apart is refused, because a skin's
-joints move as one.
+its joints are nodes keyed `LINEAR`, all children of one still node, the skin's
+`skeleton`, which hangs under the pivot that also moves the tube's parts when a
+rigid track carries them. The tube's own node stays at the scene root: glTF
+ignores a skinned node's transform, so its joints carry all of its motion.
+Tubes one track bends must move together: a track that bends parts a rigid track
+moves apart is refused, because a skin's joints move as one.
 
 Limitations:
 
