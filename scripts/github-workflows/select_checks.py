@@ -21,6 +21,7 @@ module's code would.
 Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs take:
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
+    fea                           fea (the solver tests, with the cadgen[fea] extra installed)
     core_js                       core-js
     web  web_ui  web_client  web_viewer
     mcp
@@ -56,7 +57,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages/cadgen"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "docs", "packaging")
+FLAGS = ("fea", "core_js", "web_ui", "web_client", "web_viewer", "mcp", "docs", "packaging")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -237,6 +238,13 @@ RULES: tuple[Rule, ...] = (
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
     Rule(("packages/cadgen/**", "scripts/bundle/**"), CADGEN_CONSUMERS),
+    # The stress solver's own tests need the optional cadgen[fea] stack, which no other job
+    # installs: it, its commands, the result types it returns, the extra's pins and its skill.
+    Rule((
+        f"{CADGEN_SRC}/_internal/fea/**", f"{CADGEN_SRC}/fea.py", f"{CADGEN_SRC}/cli/fea_*",
+        f"{CADGEN_SRC}/results.py", "packages/cadgen/pyproject.toml", "skills/fea/**",
+        f"{CADGEN_SUITE}/test_fea*.py",
+    ), select(flags=["fea"])),
 
     # The shared UI and the apps. The snapshot runtime is built from core alone, so ui
     # reaches the two hosts and the wheel, not cadgen's suites.
@@ -273,7 +281,7 @@ RULES: tuple[Rule, ...] = (
     Rule(("skills/*/scripts/packages/**",), policy("test_node_builder_bundles.py")),
 
     # The test runners and the gates each one feeds.
-    Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
+    Rule(("scripts/test/test-python.sh",), select(flags=["fea"], cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
     Rule(("scripts/test/test-global.sh",), select(policy=[POLICY_SUITE])),
     Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
     Rule(("scripts/test/test-docs.sh", "scripts/brand/**"), select(flags=["docs"])),

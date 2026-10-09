@@ -62,6 +62,7 @@ jobs:
     outputs:
       cadgen: ${{ steps.select.outputs.cadgen }}
       cadgen_tests: ${{ steps.select.outputs.cadgen_tests }}
+      fea: ${{ steps.select.outputs.fea }}
       core_js: ${{ steps.select.outputs.core_js }}
       web: ${{ steps.select.outputs.web }}
       web_ui: ${{ steps.select.outputs.web_ui }}
@@ -213,6 +214,34 @@ jobs:
           # shellcheck disable=SC2086
           scripts/test/test-python.sh --keep-going --select cadgen --print-weights $TESTS
         shell: bash
+
+  # The stress solver needs the optional cadgen[fea] stack (netgen, scikit-fem, pyamg), which
+  # no other job installs: without it test_fea.py skips its solves. Linux only: the stack is
+  # the same wheels everywhere, and the solves are CPU-bound.
+  fea:
+    name: fea
+    needs: changes
+    if: needs.changes.outputs.fea == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: packages/core
+
+      - name: Install the fea extra
+        run: python -m pip install --editable "./packages/cadgen[fea]"
+
+      - name: Run the fea tests
+        run: scripts/test/test-python.sh --select cadgen --print-weights tests/python/packages/cadgen/test_fea.py
 
   core-js:
     name: core-js
