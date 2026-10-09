@@ -261,26 +261,37 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
     return _Plan(parts, names, materials, sorted(set(range(len(parts))) - given), contacts, bonded, overlaps, freed_overlaps, group_of)
 
 
-def _not_connected(plan: _Plan, unheld: list[list[int]]) -> list[dict]:
-    """One error per group of parts nothing holds: which parts, and the nearest part that is not among them."""
-    from cadgen._internal.fea.assembly import part_centre, part_gap
+def _not_connected(plan: _Plan, unheld: list[list[int]], logger: CliLogger) -> list[dict]:
+    """One error per group of parts nothing holds: which parts, and the nearest part that is not among them.
 
+    The nearest part is found nearest-box first: the exact distance is only
+    taken to parts whose box is nearer than the best found, not to every part.
+    """
+    from cadgen._internal.fea.assembly import _box, part_centre, part_gap
+
+    logger.info(f"{len(unheld)} groups of parts are not connected to a fixed part; finding the nearest part to each")
+    boxes = [_box(part.shape, 0.0) for part in plan.parts]
+    index_of = {part.ref: i for i, part in enumerate(plan.parts)}
     found = []
     for group in unheld:
-        members = ", ".join(f"{quoted(plan.names[i])}" for i in group)
-        nearest = None
-        for other in range(len(plan.parts)):
-            if other in group:
-                continue
-            for i in group:
-                gap = part_gap(plan.parts[i], plan.parts[other])
-                if gap is not None and (nearest is None or gap < nearest[0]):
-                    nearest = (gap, other)
+        members = ", ".join(quoted(plan.names[i]) for i in group)
         refs = {plan.parts[i].ref for i in group}
-        index_of = {part.ref: i for i, part in enumerate(plan.parts)}
         overlapped = max(
             (o for o in plan.overlaps if (o.a in refs) != (o.b in refs)), key=lambda o: o.volume_mm3, default=None
         )
+        nearest = None
+        if overlapped is None:
+            by_box = sorted(
+                (min(boxes[i].Distance(boxes[other]) for i in group), other)
+                for other in range(len(plan.parts)) if other not in group
+            )
+            for lower, other in by_box:
+                if nearest is not None and lower >= nearest[0]:
+                    break
+                for i in group:
+                    gap = part_gap(plan.parts[i], plan.parts[other])
+                    if gap is not None and (nearest is None or gap < nearest[0]):
+                        nearest = (gap, other)
         if overlapped is not None:
             other = overlapped.b if overlapped.a in refs else overlapped.a
             where = (
@@ -623,7 +634,7 @@ def solve_study(
         part_index = {part.ref: i for i, part in enumerate(plan.parts)}
         held = {part_index[resolved[ref].occurrence_ref] for fixture in parsed.fixtures for ref in fixture.faces}
         if unheld := _unheld_groups(plan, held):
-            return _unsolved(document, occurrence_ref, _not_connected(plan, unheld))
+            return _unsolved(document, occurrence_ref, _not_connected(plan, unheld, logger))
 
     import numpy as np
 
@@ -653,7 +664,7 @@ def solve_study(
     try:
         volume, outcome = mesh_and_solve(mesh_size or parsed.mesh_size)
     except _NotConnected as exc:
-        return _unsolved(document, occurrence_ref, _not_connected(plan, exc.groups))
+        return _unsolved(document, occurrence_ref, _not_connected(plan, exc.groups, logger))
     all_solved = solved_of(volume, outcome)
     solved = weakest(all_solved)
     weakest_index = next(i for i, part in enumerate(all_solved) if part is solved)
