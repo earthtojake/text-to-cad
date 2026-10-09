@@ -53,6 +53,7 @@ def solve(
     out: Path | None = None,
     *,
     study: str | dict | None = None,
+    occurrence: str | None = None,
     mesh_size: float | None = None,
     vtu: bool = False,
     verbose: bool = False,
@@ -68,6 +69,10 @@ def solve(
         prints. A document of several parts is solved as one bonded assembly:
         ``parts`` gives each its material, ``connections`` overrides which
         touching pairs are bonded (``cadgen fea parts`` lists them).
+    occurrence: solve only this part occurrence (``#o1.2``), alone, even when the
+        document has several parts: the study's faces must all be on it and
+        ``parts``/``connections`` are not used. Omitted, a document of several
+        parts is solved as one assembly.
     mesh_size: target element size in mm, overriding the study's mesh.size_mm.
         Omitted, a fortieth of the part's bounding diagonal.
     vtu: also write a ``.vtu`` of the result for ParaView.
@@ -75,4 +80,4 @@ def solve(
     """
     from cadgen._internal.fea.run import solve_study
 
-    return solve_study(target, out, study=study, mesh_size=mesh_size, vtu=vtu, verbose=verbose)
+    return solve_study(target, out, study=study, occurrence=occurrence, mesh_size=mesh_size, vtu=vtu, verbose=verbose)

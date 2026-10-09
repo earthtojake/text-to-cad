@@ -20,6 +20,7 @@ so the CAD kernel (OCP) is imported first, here, before netgen ever is.
 
 from __future__ import annotations
 
+import itertools
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -90,6 +91,9 @@ class VolumeMesh:
     #: indices (low, high): (T, 6) node ids like ``boundary``. They are interior,
     #: so they are in no face's ``boundary`` rows.
     interface_triangles: "dict[tuple[int, int], np.ndarray]" = field(default_factory=dict)
+    #: For an assembly, the face refs of each bonded joint, keyed like ``interface_triangles``,
+    #: both parts' sides together.
+    joint_faces: "dict[tuple[int, int], set[str]]" = field(default_factory=dict)
     #: For an assembly, the fuzzy value the glue closed gaps with (0 = none).
     fuzzy_mm: float = 0.0
 
@@ -351,6 +355,13 @@ def mesh_assembly(
         if len(parts_on[image]) > 1
         for position in owners
     }
+    part_of_position = {position: i for (i, _), position in position_of.items()}
+    joint_faces: dict[tuple[int, int], set[str]] = {}
+    for image, owners in sources.items():
+        for pair in itertools.combinations(sorted(parts_on[image]), 2):
+            joint_faces.setdefault(pair, set()).update(
+                refs[position - 1] for position in owners if part_of_position[position] in pair
+            )
     glued_prints = []
     for k in range(1, glued_faces.Extent() + 1):
         area, centre = _area_center(glued_faces.FindKey(k))
@@ -422,5 +433,6 @@ def mesh_assembly(
         domain=domain,
         interface_faces=interface_faces,
         interface_triangles=interface_triangles,
+        joint_faces=joint_faces,
         fuzzy_mm=glued.fuzzy_mm,
     )

@@ -414,9 +414,14 @@ def _solved_part(volume, outcome, parsed, plan: _Plan, index: int, ordinal_of: d
     )
 
 
-def _connections(plan: _Plan) -> list[dict]:
-    """The detected pairs and what the study did with each, for the sidecar."""
+def _connections(plan: _Plan, volume) -> list[dict]:
+    """The detected pairs and what the study did with each, for the sidecar.
+
+    ``faces`` are the interface faces on both sides of a bonded joint, as the
+    GLB's ``faces`` name them; a free pair has none.
+    """
     name_of = {part.ref: plan.names[i] for i, part in enumerate(plan.parts)}
+    index_of = {part.ref: i for i, part in enumerate(plan.parts)}
     bonded = {(c.a, c.b) for c in plan.bonded}
     return [
         {
@@ -425,9 +430,16 @@ def _connections(plan: _Plan) -> list[dict]:
             "type": "bonded" if (c.a, c.b) in bonded else "free",
             "area_mm2": round(c.area_mm2, 4),
             "gap_mm": round(c.gap_mm, 6),
+            "faces": sorted(volume.joint_faces.get(tuple(sorted((index_of[c.a], index_of[c.b]))), ()), key=_face_key),
         }
         for c in plan.contacts
     ]
+
+
+def _face_key(ref: str) -> tuple:
+    """Sorts ``#o1.2.f10`` after ``#o1.2.f9``, parts in order."""
+    owner, _, face = ref.rpartition(".f")
+    return owner, int(face)
 
 
 class _NotConnected(Exception):
@@ -503,11 +515,15 @@ def solve_study(
     out: Path | None,
     *,
     study,
+    occurrence: str | None = None,
     mesh_size: float | None = None,
     vtu: bool = False,
     verbose: bool = False,
 ) -> FeaResult:
     """Mesh, solve and check one study, then write its GLB and sidecar.
+
+    ``occurrence`` solves that one part alone through the single-part path,
+    even in a document of several parts; every face of the study must be on it.
 
     When the safety factor is close to failing (:func:`checks.needs_finer`) the
     part is meshed again at half the element size (:func:`finer_mesh_size`
@@ -536,9 +552,20 @@ def solve_study(
     scene = _open(document)
     resolved, owners = _resolve_faces(scene, parsed.face_refs)
     # A document of several parts is an assembly, whichever faces the study names; one part's study keeps the one-part path.
-    plan = _plan_assembly(scene, parsed) if len(list(scene.leaves())) > 1 or parsed.parts or parsed.connections else None
+    plan = None
+    if occurrence is None and (len(list(scene.leaves())) > 1 or parsed.parts or parsed.connections):
+        plan = _plan_assembly(scene, parsed)
     ordinal_of: dict[str, int] = {}
     if plan is None:
+        if occurrence is not None:
+            chosen = scene.resolve(occurrence)
+            if chosen.kind != "occurrence" or chosen.ref not in {leaf.ref for leaf in scene.leaves()}:
+                raise ValueError(f"{occurrence} is not a part occurrence of {document.name}")
+            if stray := sorted(owners - {chosen.ref}):
+                raise ValueError(
+                    f"--occurrence {chosen.ref}: the study's faces are also on {', '.join(stray)}; "
+                    f"every face must be on {chosen.ref}"
+                )
         occurrence, resolved = _single_occurrence(scene, resolved, owners)
         occurrence_ref = occurrence.ref
         ordinal_of.update({ref: int(selection._ordinal) for ref, selection in resolved.items()})
@@ -705,6 +732,20 @@ def solve_study(
         # What an engineer would say about the result (checks.py), errors first.
         "findings": findings,
     }
+    if plan is not None:
+        # What the viewer reads for an assembly (`_PART` indexes `parts`): the weakest part's line and each joint.
+        extras["weakest_part"] = summary["weakest_part"]
+        extras["weakest_part_peak_MPa"] = summary["weakest_part_peak_MPa"]
+        extras["max_displacement_mm"] = summary["max_displacement_mm"]
+        extras["parts"] = [
+            {key: part[key] for key in ("ref", "name", "material", "yield_MPa", "peak_MPa", "safety_factor", "max_displacement_mm")}
+            for part in summary["parts"]
+        ]
+        extras["connections"] = [
+            {"between": c["refs"], "names": c["between"], "type": c["type"], "area_mm2": c["area_mm2"],
+             "gap_mm": c["gap_mm"], "faces": c["faces"]}
+            for c in _connections(plan, volume)
+        ]
     # Every boundary face of the occurrence in ordinal order; `_FACE` indexes it.
     face_ordinals = sorted(volume.faces)
     face_index = {ordinal: index for index, ordinal in enumerate(face_ordinals)}
@@ -794,7 +835,7 @@ def solve_study(
         "warnings": warnings,
         "findings": findings,
         # An assembly: how its parts are joined (the parts' own results are in the summary).
-        **({} if plan is None else {"connections": _connections(plan)}),
+        **({} if plan is None else {"connections": _connections(plan, volume)}),
         # The first and the finer solve's size and peak, when the part was solved twice.
         "refined": refined,
         "files": {"glb": glb_path.name, "vtu": vtu_path.name if vtu_path else None},

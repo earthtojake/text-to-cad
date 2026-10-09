@@ -457,6 +457,97 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertAlmostEqual(joint["area_mm2"], 100.0, places=3)
         self.assertEqual(sidecar["summary"]["parts"], self.mixed.summary["parts"])
 
+    def test_the_glb_tags_every_vertex_with_its_part(self):
+        import numpy as np
+
+        from tests.python.packages.cadgen.test_fea import _glb_attribute, _glb_extras
+
+        glb = self.mixed.glb
+        part = _glb_attribute(glb, "_PART", 1)[:, 0]
+        position = _glb_attribute(glb, "POSITION", 3)  # glTF metres, Y up: CAD z is glTF y
+        self.assertEqual(set(np.unique(part)), {0.0, 1.0})
+        height = position[:, 1] * 1000.0
+        # The tip moves under load, never by as much as a part's own height.
+        self.assertTrue((height[part == 1.0] > 10 - 1.0).all())
+        self.assertTrue((height[part == 0.0] < 10 + 1.0).all())
+        self.assertGreater((height[part == 1.0] > 10 + 1.0).sum(), 0)
+        extras = _glb_extras(glb)
+        self.assertEqual([p["name"] for p in extras["parts"]], ["base", "post"])
+        self.assertEqual(extras["parts"][1]["ref"], self.refs["post"])
+
+    def test_the_glb_parts_match_the_sidecar(self):
+        from tests.python.packages.cadgen.test_fea import _glb_extras
+
+        extras = _glb_extras(self.mixed.glb)
+        sidecar = json.loads(self.mixed.sidecar.read_text(encoding="utf-8"))
+        keys = ("ref", "name", "material", "yield_MPa", "peak_MPa", "safety_factor", "max_displacement_mm")
+        self.assertEqual(extras["parts"], [{k: part[k] for k in keys} for part in sidecar["summary"]["parts"]])
+        summary = sidecar["summary"]
+        self.assertEqual(extras["weakest_part"], "post")
+        self.assertEqual(extras["weakest_part_peak_MPa"], summary["weakest_part_peak_MPa"])
+        self.assertEqual(extras["safety_factor"], summary["safety_factor"])
+        self.assertEqual(extras["max_displacement_mm"], summary["max_displacement_mm"])
+
+    def test_the_glb_connection_lists_the_interface_faces_of_both_sides(self):
+        from tests.python.packages.cadgen.test_fea import _glb_extras
+
+        extras = _glb_extras(self.mixed.glb)
+        (joint,) = extras["connections"]
+        self.assertEqual(joint["between"], [self.refs["post"], self.refs["base"]])
+        self.assertEqual((joint["names"], joint["type"]), (["post", "base"], "bonded"))
+        self.assertAlmostEqual(joint["area_mm2"], 100.0, places=3)
+        self.assertEqual(joint["gap_mm"], 0.0)
+        # The post's bottom and the base's top, as the GLB's own face list names them.
+        self.assertEqual(set(joint["faces"]), {_face_at(self.scene, self.refs["post"], 10.0), _face_at(self.scene, self.refs["base"], 10.0)})
+        self.assertTrue(set(joint["faces"]) <= set(extras["faces"]))
+        sidecar = json.loads(self.mixed.sidecar.read_text(encoding="utf-8"))
+        self.assertEqual(sidecar["connections"][0]["faces"], joint["faces"])
+
+    def test_occurrence_solves_one_part_alone_through_the_single_part_path(self):
+        import struct
+
+        from cadgen import fea
+        from tests.python.packages.cadgen.test_fea import _glb_extras
+
+        study = {
+            "material": "steel",
+            "fixtures": [{"faces": [_face_at(self.scene, self.refs["post"], 10.0)]}],
+            "loads": [{"faces": [self.load], "type": "force", "vector_N": [1000, 0, 0]}],
+            "mesh": {"size_mm": 4.0},
+        }
+        result = fea.solve(self.step, self.tmp / "alone.glb", study=study, occurrence=self.refs["post"])
+        self.assertTrue(result.ok)
+        self.assertEqual(result.occurrence, self.refs["post"])
+        self.assertNotIn("parts", result.summary)
+        extras = _glb_extras(result.glb)
+        for key in ("parts", "connections", "weakest_part"):
+            self.assertNotIn(key, extras)
+        raw = result.glb.read_bytes()
+        (json_length,) = struct.unpack_from("<I", raw, 12)
+        attributes = json.loads(raw[20:20 + json_length])["meshes"][0]["primitives"][0]["attributes"]
+        self.assertNotIn("_PART", attributes)
+        self.assertNotIn("connections", json.loads(result.sidecar.read_text(encoding="utf-8")))
+        # The same study without it is an assembly study of the document.
+        with self.assertRaisesRegex(ValueError, "--occurrence"):
+            fea.solve(self.step, self.tmp / "stray.glb", study=self.study(None), occurrence=self.refs["post"])
+        with self.assertRaisesRegex(ValueError, "unknown occurrence"):
+            fea.solve(self.step, self.tmp / "nope.glb", study=study, occurrence="#o9")
+
+    def test_the_cli_takes_occurrence(self):
+        from cadgen.cli.fea_solve import main
+
+        study = {
+            "material": "steel",
+            "fixtures": [{"faces": [_face_at(self.scene, self.refs["post"], 10.0)]}],
+            "loads": [{"faces": [self.load], "type": "force", "vector_N": [1000, 0, 0]}],
+            "mesh": {"size_mm": 4.0},
+        }
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main([str(self.step), str(self.tmp / "cli.glb"), "--study", json.dumps(study), "--occurrence", self.refs["post"], "--json"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out.getvalue().strip().splitlines()[-1])["occurrence"], self.refs["post"])
+
     def _first_solve_only(self, name):
         """The mixed study solved once at the first mesh size, with the outcome and the mesh it was solved on."""
         from unittest import mock

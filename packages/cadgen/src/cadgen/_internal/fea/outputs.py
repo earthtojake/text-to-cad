@@ -143,6 +143,8 @@ def write_glb(
     ``values_by_part`` (parts, nodes) holds each part's own field and
     ``part_of_triangle`` the part each triangle belongs to: a vertex takes the
     value of its face's part, so a joint's two sides keep their own stress.
+    ``part_of_triangle`` also becomes ``_PART`` (float, an index into
+    ``extras["parts"]``), one value per vertex; a single part has no ``_PART``.
     """
     import numpy as np
 
@@ -157,11 +159,13 @@ def write_glb(
     face = ((unique_pairs % _FACE_SLOTS) - 1).astype(np.float32)
     tris = compact.reshape(triangles.shape).astype(np.uint32)
     pos = _gltf_space(positions[used] + scale * displacement[used])
+    vertex_part = None
+    if part_of_triangle is not None:
+        vertex_part = np.zeros(len(unique_pairs), dtype=np.int64)
+        vertex_part[compact] = np.tile(np.asarray(part_of_triangle, dtype=np.int64), 4)[:, None]
     if values_by_part is None:
         vals = values[used].astype(np.float32)
     else:
-        vertex_part = np.zeros(len(unique_pairs), dtype=np.int64)
-        vertex_part[compact] = np.tile(np.asarray(part_of_triangle, dtype=np.int64), 4)[:, None]
         vals = values_by_part[vertex_part, used].astype(np.float32)
     disp = _gltf_space(displacement[used])
     lo, hi = value_range
@@ -189,6 +193,17 @@ def write_glb(
 
     ARRAY, ELEMENT = 34962, 34963
     FLOAT, UBYTE, UINT = 5126, 5121, 5125
+    attributes = {
+        "POSITION": add(pos, target=ARRAY, kind="VEC3", component=FLOAT, bounds=True),
+        "NORMAL": add(normals, target=ARRAY, kind="VEC3", component=FLOAT),
+        "COLOR_0": add(rgba, target=ARRAY, kind="VEC4", component=UBYTE, normalized=True),
+        "_VON_MISES": add(vals.reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT),
+        "_DISPLACEMENT": add(disp, target=ARRAY, kind="VEC3", component=FLOAT),
+        # Float: a 2-byte scalar would need padding to the 4-byte vertex alignment glTF asks of attributes.
+        "_FACE": add(face.reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT),
+    }
+    if vertex_part is not None:
+        attributes["_PART"] = add(vertex_part.astype(np.float32).reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT)
     name = extras.get("name", "fea result")
     gltf = {
         "asset": {"version": "2.0", "generator": "cadgen fea"},
@@ -199,15 +214,7 @@ def write_glb(
             "name": name,
             "extras": extras,
             "primitives": [{
-                "attributes": {
-                    "POSITION": add(pos, target=ARRAY, kind="VEC3", component=FLOAT, bounds=True),
-                    "NORMAL": add(normals, target=ARRAY, kind="VEC3", component=FLOAT),
-                    "COLOR_0": add(rgba, target=ARRAY, kind="VEC4", component=UBYTE, normalized=True),
-                    "_VON_MISES": add(vals.reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT),
-                    "_DISPLACEMENT": add(disp, target=ARRAY, kind="VEC3", component=FLOAT),
-                    # Float: a 2-byte scalar would need padding to the 4-byte vertex alignment glTF asks of attributes.
-                    "_FACE": add(face.reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT),
-                },
+                "attributes": attributes,
                 "indices": add(tris.reshape(-1, 1), target=ELEMENT, kind="SCALAR", component=UINT),
                 "material": 0,
                 "mode": 4,
