@@ -68,6 +68,12 @@ test('with nothing read and PyPI failing there is no feed, and a hang is a failu
   assert.equal(await down(), null);
   // Its status alone is logged.
   assert.deepEqual(logged, ['version feed: PyPI failed: pypi_502']);
-  const hung = pypiVersions({ fetch: (url, { signal }) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason))), log: quiet, timeout: 1 });
+  // A request in flight is what keeps a process waiting (a socket); `AbortSignal.timeout`'s timer alone does not,
+  // so the hung request holds a timer of its own until it is aborted.
+  const hang = (url, { signal }) => new Promise((_, reject) => {
+    const held = setInterval(() => {}, 1000);
+    signal.addEventListener('abort', () => { clearInterval(held); reject(signal.reason); });
+  });
+  const hung = pypiVersions({ fetch: hang, log: quiet, timeout: 1 });
   assert.equal(await hung(), null);
 });
