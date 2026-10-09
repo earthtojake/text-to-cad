@@ -144,7 +144,7 @@ def _solved(volume, outcome, parsed, ordinal_of: dict[str, int], part: str) -> "
         displacement_at=tuple(float(c) for c in outcome.dof_locations[moved_node]),
         bbox_diagonal_mm=float(np.linalg.norm(extent)),
         margin=parsed.margin,
-        finer_peak_MPa=None,
+        coarser_peak_MPa=None,
         part=part,
     )
 
@@ -163,8 +163,8 @@ def solve_study(
     When the safety factor is close to failing (:func:`checks.needs_finer`) the
     part is meshed again at half the element size and solved again. The finer
     solve is the more trustworthy one, so when it succeeds its numbers are the
-    ones written and reported; the checks compare its peak with the first's for
-    convergence. When it fails the written GLB stays the first solve's, the
+    ones written, reported and checked; the checks compare its peak with the
+    first's for convergence, and the safety factor takes the higher of the two. When it fails the written GLB stays the first solve's, the
     result carries one warning saying why, and no convergence finding is made.
     """
     from cadgen._internal.fea.study import parse_study
@@ -218,15 +218,12 @@ def solve_study(
                 "the result is the first solve's, and its convergence is unchecked"
             )
         else:
-            # Where things are comes from the finer solve, the one written, so a
-            # finding points at the GLB the viewer shows; the peaks stay the
-            # first solve's, so the convergence and spike checks compare like
-            # with like.
+            # The checks describe the solve that is written, so every number a
+            # finding quotes and every point it names is on the GLB shown; the
+            # first solve's peak rides along for convergence.
             finer = _solved(volume, outcome, parsed, ordinal_of, document.stem)
             refined["max_von_mises_MPa"] = round(finer.peak_MPa, 4)
-            solved = dataclasses.replace(
-                finer, peak_MPa=solved.peak_MPa, peak_gauss_MPa=solved.peak_gauss_MPa, finer_peak_MPa=finer.peak_MPa
-            )
+            solved = dataclasses.replace(finer, coarser_peak_MPa=solved.peak_MPa)
     findings = checks.findings(solved)
 
     # The summary is the one place the numbers are rounded; everything else
@@ -249,7 +246,9 @@ def solve_study(
         "deformation_scale": scale,
     }
     max_vm = summary["max_von_mises_MPa"]
-    summary["safety_factor"] = round(material.yield_strength / max_vm, 3) if max_vm > 0 else None
+    # The checks' factor: against the higher peak of the two solves, when there were two.
+    factor = checks.safety_factor(solved)
+    summary["safety_factor"] = None if factor is None else round(factor, 3)
 
     warnings = list(outcome.warnings)
     if finer_failure:

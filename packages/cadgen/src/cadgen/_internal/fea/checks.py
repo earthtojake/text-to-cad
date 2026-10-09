@@ -42,14 +42,15 @@ class Solved:
     bbox_diagonal_mm: float
     #: The study's required safety factor.
     margin: float
-    #: The nodal peak on a finer mesh, when one was solved.
-    finer_peak_MPa: float | None
+    #: The first, coarser solve's nodal peak, when the written solve is a finer
+    #: re-solve; ``None`` when the part was solved once.
+    coarser_peak_MPa: float | None
     part: str
 
 
 def _peak(solved: Solved) -> float:
-    """The higher of the two solved peaks: a finer mesh that finds more stress counts."""
-    return max(solved.peak_MPa, solved.finer_peak_MPa or 0.0)
+    """The higher of the two solved peaks: whichever mesh finds more stress counts."""
+    return max(solved.peak_MPa, solved.coarser_peak_MPa or 0.0)
 
 
 def safety_factor(solved: Solved) -> float | None:
@@ -156,11 +157,11 @@ def findings(solved: Solved) -> list[dict]:
     if peak_finding is not None:
         add("warning", *peak_finding)
 
-    if solved.finer_peak_MPa is not None and solved.peak_MPa > 0:
-        moved = abs(solved.finer_peak_MPa - solved.peak_MPa) / solved.peak_MPa
+    if solved.coarser_peak_MPa is not None and solved.coarser_peak_MPa > 0:
+        moved = abs(solved.peak_MPa - solved.coarser_peak_MPa) / solved.coarser_peak_MPa
         if moved > CONVERGED_WITHIN:
-            before, after = _number(solved.peak_MPa), _number(solved.finer_peak_MPa)
-            if solved.finer_peak_MPa > solved.peak_MPa:
+            before, after = _number(solved.coarser_peak_MPa), _number(solved.peak_MPa)
+            if solved.peak_MPa > solved.coarser_peak_MPa:
                 summary = (
                     f"The peak kept rising on a finer mesh ({before} to {after} MPa), which usually means "
                     "a sharp corner or the fixed edge: fillet it or judge the stress a little away from it"

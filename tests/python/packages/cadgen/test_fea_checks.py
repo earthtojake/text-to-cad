@@ -24,7 +24,7 @@ def solved(**changes):
         displacement_at=(10.0, 60.0, 5.0),
         bbox_diagonal_mm=90.0,
         margin=2.0,
-        finer_peak_MPa=None,
+        coarser_peak_MPa=None,
         part="bracket",
     )
     base.update(changes)
@@ -78,17 +78,17 @@ class ChecksTest(unittest.TestCase):
         self.assertEqual(types, ["low_margin", "peak_at_fixture"])
 
     def test_not_converged_rising(self):
-        (f,) = findings(solved(finer_peak_MPa=56.0))
+        (f,) = findings(solved(peak_MPa=56.0, coarser_peak_MPa=47.3))
         self.assertEqual(f["type"], "mesh_not_converged")
         self.assertEqual(f["summary"], "The peak kept rising on a finer mesh (47.3 to 56 MPa), which usually means a sharp corner or the fixed edge: fillet it or judge the stress a little away from it")
-        self.assertEqual(findings(solved(finer_peak_MPa=50.0)), [])  # 5.7% < 10%
+        self.assertEqual(findings(solved(peak_MPa=50.0, coarser_peak_MPa=47.3)), [])  # 5.7% < 10%
 
     def test_not_converged_falling(self):
-        (f,) = findings(solved(finer_peak_MPa=39.0))
+        (f,) = findings(solved(peak_MPa=39.0, coarser_peak_MPa=47.3))
         self.assertEqual(f["summary"], "The peak changed 18% on a finer mesh (47.3 to 39 MPa): use a smaller mesh size (mesh.size_mm) before trusting the safety factor")
 
     def test_the_safety_factor_uses_the_higher_peak(self):
-        (f, _) = findings(solved(finer_peak_MPa=300.0))
+        (f, _) = findings(solved(coarser_peak_MPa=300.0))
         self.assertEqual(f["type"], "yields")
         self.assertIn("peak stress 300 MPa", f["summary"])
 

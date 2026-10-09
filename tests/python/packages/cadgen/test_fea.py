@@ -78,20 +78,47 @@ def _glb_extras(path: Path) -> dict:
 
 
 class _CountingSolve:
-    """Wraps the solver to count its calls; ``fail_after`` makes later calls raise."""
+    """Wraps the solver to count its calls; ``fail_after`` makes later calls
+    raise, ``later`` rewrites the outcome of every call after the first."""
 
-    def __init__(self, fail_after: int | None = None):
+    def __init__(self, fail_after: int | None = None, later=None):
         from cadgen._internal.fea import solve
 
         self.real = solve.solve_linear_static
         self.calls = 0
         self.fail_after = fail_after
+        self.later = later
 
     def __call__(self, *args, **kwargs):
         self.calls += 1
         if self.fail_after is not None and self.calls > self.fail_after:
             raise RuntimeError("the mesher gave up at this size")
-        return self.real(*args, **kwargs)
+        outcome = self.real(*args, **kwargs)
+        return self.later(outcome) if self.later and self.calls > 1 else outcome
+
+
+def _glb_peak_at(path: Path) -> list[float]:
+    """The undeformed CAD-mm position of the GLB vertex with the highest ``_VON_MISES``."""
+    import struct
+
+    import numpy as np
+
+    raw = path.read_bytes()
+    json_length, _ = struct.unpack_from("<II", raw, 12)
+    gltf = json.loads(raw[20:20 + json_length])
+    binary = raw[20 + json_length + 8:]
+    primitive = gltf["meshes"][0]["primitives"][0]
+
+    def read(name: str, width: int) -> np.ndarray:
+        accessor = gltf["accessors"][primitive["attributes"][name]]
+        view = gltf["bufferViews"][accessor["bufferView"]]
+        data = np.frombuffer(binary, np.float32, accessor["count"] * width, view["byteOffset"])
+        return data.reshape(-1, width).astype(float)
+
+    vertex = int(read("_VON_MISES", 1).argmax())
+    scale = gltf["meshes"][0]["extras"]["deformation_scale"]
+    x, y, z = read("POSITION", 3)[vertex] - scale * read("_DISPLACEMENT", 3)[vertex]
+    return [x * 1000.0, -z * 1000.0, y * 1000.0]  # glTF (x, z, -y) metres back to CAD mm
 
 
 class StudyFile(unittest.TestCase):
@@ -359,6 +386,33 @@ class Yielding(unittest.TestCase):
         self.assertEqual(refined["max_von_mises_MPa"], self.result.summary["max_von_mises_MPa"])
         self.assertEqual(_glb_extras(self.result.glb)["fields"][0]["max"], self.result.summary["max_von_mises_MPa"])
 
+    def test_the_findings_point_at_the_written_glbs_peak(self):
+        yields = self.sidecar["findings"][0]
+        self.assertEqual(yields["items"][0]["at"], self.result.summary["max_von_mises_at_mm"])
+        for got, want in zip(_glb_peak_at(self.result.glb), yields["items"][0]["at"]):
+            self.assertAlmostEqual(got, want, delta=1e-3)
+
+    def test_the_summary_safety_factor_is_the_checks_when_the_finer_peak_is_lower(self):
+        import dataclasses
+        from unittest import mock
+
+        from cadgen import fea
+
+        def halve(outcome):
+            return dataclasses.replace(
+                outcome, von_mises=outcome.von_mises / 2, von_mises_gauss_max=outcome.von_mises_gauss_max / 2
+            )
+
+        solver = _CountingSolve(later=halve)
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", solver):
+            result = fea.solve(self.step, Path(self._tmp.name) / "lower.glb", study=self.study)
+        refined = json.loads(result.sidecar.read_text(encoding="utf-8"))["refined"]
+        self.assertLess(refined["max_von_mises_MPa"], refined["from_max_von_mises_MPa"])
+        self.assertAlmostEqual(result.summary["safety_factor"], 250.0 / refined["from_max_von_mises_MPa"], places=3)
+        self.assertNotAlmostEqual(result.summary["safety_factor"], 250.0 / result.summary["max_von_mises_MPa"], places=2)
+        (moved,) = [f for f in result.findings if f["type"] == "mesh_not_converged"]
+        self.assertTrue(moved["summary"].startswith("The peak changed "), moved["summary"])
+
     def test_a_peak_on_a_prefixed_fixture_is_at_the_fixture(self):
         at_fixture = [f for f in self.sidecar["findings"] if f["type"] == "peak_at_fixture"]
         self.assertEqual(len(at_fixture), 1)
@@ -405,6 +459,37 @@ class MeshOrderGuard(unittest.TestCase):
         from cadgen._internal.fea.mesh import _require_ten_node_tets
 
         _require_ten_node_tets(self._elements(second_order=True))
+
+
+class PeakFace(unittest.TestCase):
+    """Which face the peak node sits on, from the boundary triangles alone."""
+
+    def _peak_face(self, peak_node: int, fixed: set[int]):
+        from types import SimpleNamespace
+
+        import numpy as np
+
+        from cadgen._internal.fea.run import _peak_face
+
+        # Two triangles on f1, one on f2, sharing node 2 (an edge between them); node 9 is inside.
+        volume = SimpleNamespace(
+            boundary_ordinal=np.array([1, 1, 2]),
+            faces={ordinal: SimpleNamespace(ref=f"#o1.f{ordinal}") for ordinal in (1, 2)},
+        )
+        outcome = SimpleNamespace(boundary_quadratic=np.array([
+            [0, 1, 2, 10, 11, 12], [1, 3, 2, 13, 14, 11], [2, 4, 5, 15, 16, 17],
+        ]))
+        return _peak_face(volume, outcome, peak_node, fixed)
+
+    def test_an_interior_peak_has_no_face(self):
+        self.assertIsNone(self._peak_face(9, {1}))
+
+    def test_a_peak_on_an_unfixed_face_names_it(self):
+        self.assertEqual(self._peak_face(4, {1}), "#o1.f2")
+
+    def test_a_peak_on_an_edge_names_the_fixed_face(self):
+        self.assertEqual(self._peak_face(2, {2}), "#o1.f2")
+        self.assertEqual(self._peak_face(2, set()), "#o1.f1")
 
 
 class MissingExtra(unittest.TestCase):

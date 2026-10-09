@@ -148,19 +148,25 @@ stress. Restate every load in those units before you write it down.
 Every solve checks its own result as an engineer would and lists findings,
 errors first. An **error** makes the part unfit to use: fix it before you call
 the part done. A **warning** is a suggestion: weigh it as an engineer would,
-act on it or tell the user why not. A clean part has no findings. Each finding
-names the face it sits on (`#o1.f12`, the original part's selector) and where,
-in the part's mm.
+act on it or tell the user why not. A clean part has no findings. Most
+findings point at where they apply: the face (`#o1.f12`, the original part's
+selector) when the point is on one, and the point in the part's mm. A peak
+inside the part and `large_displacement` have a point but no face; `no_load`
+has neither.
 
-| Finding | What it means | What to do |
-| --- | --- | --- |
-| `yields` (error) | The peak stress is above the material's yield strength. | Make the part stronger where the peak is (thicker, deeper, a fillet or rib there), choose a stronger material, or confirm the load with the user; solve again. If a `peak_at_fixture` or `peak_concentration` finding sits beside it, read that first: the peak may be the model's, not the part's. |
-| `low_margin` | It holds, but under the study's `margin`. | Strengthen it as for `yields`, or tell the user the margin it has and let them decide; never lower `margin` just to clear the finding. |
-| `peak_at_fixture` | The peak sits on a fixed face, where a perfectly rigid clamp exaggerates stress. | Read the stress a little away from the fixed face (the GLB's colours, or a probe in the VTU) before redesigning; if that is still high, the finding beside it stands. |
-| `peak_concentration` | The Gauss-point peak is well above the nodal one: a sharp corner or concentrated load the mesh cannot resolve. | Fillet the corner, spread the load over a larger face, or set a smaller `mesh.size_mm` and compare. |
-| `mesh_not_converged` | The automatic finer solve moved the peak by more than 10 %. | A peak that kept rising sits on a singularity (a sharp corner, the fixed edge): fillet it or judge the stress away from it. Otherwise set a smaller `mesh.size_mm` and solve again before trusting the safety factor. |
-| `large_displacement` | It moves more than 1 % of its size. | The small-displacement model is stretched: check the fit against mating parts and whether the deflection is acceptable; stiffen the part if not. |
-| `no_load` | The peak stress is zero: no load reaches the part. | Check that the loaded faces are on the part and connected to the fixed ones, and that the force is not zero. |
+The two peak findings, `peak_at_fixture` and `peak_concentration`, appear only
+when the safety factor is under the study's `margin`; above it they would not
+change the answer.
+
+| Finding | Severity | What it means | What to do |
+| --- | --- | --- | --- |
+| `yields` | error | The peak stress is above the material's yield strength. | Make the part stronger where the peak is (thicker, deeper, a fillet or rib there), choose a stronger material, or confirm the load with the user; solve again. If a `peak_at_fixture` or `peak_concentration` finding sits beside it, read that first: the peak may be the model's, not the part's. |
+| `low_margin` | warning | It holds, but under the study's `margin`. | Strengthen it as for `yields`, or tell the user the margin it has and let them decide; never lower `margin` just to clear the finding. |
+| `peak_at_fixture` | warning | The peak sits on a fixed face, where a perfectly rigid clamp exaggerates stress. | Read the stress a little away from the fixed face (the GLB's colours, or a probe in the VTU) before redesigning; if that is still high, the finding beside it stands. |
+| `peak_concentration` | warning | The Gauss-point peak is well above the nodal one: a sharp corner or concentrated load the mesh cannot resolve. | When the safety factor was under 3 the run already solved at half the mesh size, so refining the whole part again is not the next step: fillet the corner or spread the load over a larger face. Above 3 (a `margin` higher than that), halve `mesh.size_mm` once and compare. |
+| `mesh_not_converged` | warning | The automatic finer solve moved the peak by more than 10 %. | A peak that kept rising sits on a singularity (a sharp corner, the fixed edge): fillet it or judge the stress away from it. Otherwise set a smaller `mesh.size_mm` and solve again before trusting the safety factor. |
+| `large_displacement` | warning | It moves more than 1 % of its size. | The small-displacement model is stretched: check the fit against mating parts and whether the deflection is acceptable; stiffen the part if not. |
+| `no_load` | warning | The peak stress is zero: no load reaches the part. | Check that the loaded faces are on the part and connected to the fixed ones, and that the force is not zero. |
 
 A `warning:` line that is not a finding (a slow solve, reactions that do not
 balance, a finer solve that failed) is about the run itself: read it, and
