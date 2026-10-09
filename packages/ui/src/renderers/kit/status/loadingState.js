@@ -5,12 +5,22 @@ function stageFraction(progress) {
     percent: determinate ? Math.round((progress.done / progress.total) * 100) : null };
 }
 
+// A file cadgen is importing: the compile that reads its bytes, whose phases cadgen labels
+// as importing. The word a CAD user knows from opening a file anywhere else.
+function importing(hint) {
+  return /\bcompil|\bimport/.test(hint);
+}
+
 // Internal phases stay diagnostic data. The screen describes the user's wait.
 export function loadingProgress(progress, { finding = false, preparing = false } = {}) {
-  const hint = `${progress?.phase || ""} ${progress?.label || ""}`.toLowerCase();
+  const phase = String(progress?.phase || "").toLowerCase();
+  const hint = `${phase} ${progress?.label || ""}`.toLowerCase();
   const label = finding ? "Finding file"
     : preparing ? "Preparing view"
     : /catalog|metadata|finding/.test(hint) ? "Finding file"
+    : importing(hint) ? "Importing model"
+    // cadgen is meshing parts the store did not hold (a cold open); a warm open only reads them.
+    : phase === "meshing" ? "Meshing parts"
     : /geometry|component|mesh|surface|tessellat/.test(hint) && !/building geometry/.test(hint) ? "Loading geometry"
     : /view|finaliz|writing|saving|saved|module|building assembly/.test(hint) ? "Preparing view"
     : "Reading model";

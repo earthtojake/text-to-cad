@@ -10,3 +10,13 @@ test("surface resolution delegates domain inputs to the supplied service", async
   assert.equal(await resolveSurfaceComponents(descriptor, requested, {client, signal}), tickets);
   assert.throws(() => resolveSurfaceComponents(descriptor, requested), /workspace service/);
 });
+
+test("every callback the loader hears through reaches the service, the deriving one too", async () => {
+  const onReady = () => {}, onFailed = () => {}, onPending = () => {};
+  let seen = null;
+  const client = { resolveSurfaceComponents(view, components, options) { seen = options; return new Map(); } };
+  await resolveSurfaceComponents({}, [], { client, onReady, onFailed, onPending, tessellation: { chordTolerance: 1, angleTolerance: 1 } });
+  assert.equal(seen.onReady, onReady);
+  assert.equal(seen.onFailed, onFailed);
+  assert.equal(seen.onPending, onPending, "a loading screen hears that cadgen is meshing");
+});

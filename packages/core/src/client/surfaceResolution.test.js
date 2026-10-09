@@ -110,9 +110,11 @@ test("a row ready before the rest of its request is announced at once, and once"
     } });
   };
   const announced = [];
+  const deriving = [];
   const result = await resolveSurfaceComponents(descriptor, [{ cid: "part", surfaceInput: D }, { cid: "other", surfaceInput: D2 }],
-    { onReady: (cid, ticket) => announced.push([cid, polls, ticket.surfaceObject]) });
+    { onReady: (cid, ticket) => announced.push([cid, polls, ticket.surfaceObject]), onPending: (cid) => deriving.push([cid, polls]) });
   assert.deepEqual(announced, [["part", 1, O], ["other", 2, O2]]);
+  assert.deepEqual(deriving, [["other", 1]], "the one cadgen was still deriving, while it was");
   assert.equal(result.size, 2);
 });
 

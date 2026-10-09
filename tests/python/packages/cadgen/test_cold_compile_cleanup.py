@@ -118,7 +118,9 @@ class ColdCompileCleanupTest(unittest.TestCase):
         self.assertEqual({os.path.realpath(event["model"]) for event in building}, {os.path.realpath(document)})
         read = next(event for event in building if str(event.get("detail", "")).startswith("Reading "))
         self.assertIn(document.name, read["detail"])
-        collecting = [event for event in building if event.get("phase") == "Collecting parts"]
+        # Every phase says it is an import: the word a CAD Viewer's loading screen shows.
+        self.assertEqual(read["phase"], "Importing STEP")
+        collecting = [event for event in building if event.get("phase") == "Importing STEP: collecting parts"]
         self.assertTrue(collecting and all(isinstance(event.get("total"), int) and event["total"] > 0 for event in collecting),
                         "the parts are counted as they are collected")
         # What a person reads: no component's hash, and no phase showing the last one's detail.

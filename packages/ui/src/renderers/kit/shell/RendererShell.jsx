@@ -7,7 +7,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import ViewerAlertCard, { alertDismissible, useAlertDismissal } from "../status/ViewerAlertCard.jsx";
-import { MODEL_UPDATE_STATUS, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
+import { modelUpdateStatus, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { VIEWER_RENDER_PROFILE, renderProfileKeepsPixelRatio, sceneForRenderProfile } from "../viewport/renderProfile.js";
 import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
@@ -348,7 +348,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, referen
               {failed ? null : <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
                 style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
                 <ViewUpdateStatus status={frame.loading.updating && !frame.viewUpdate.status.error
-                  ? MODEL_UPDATE_STATUS : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry}
+                  ? modelUpdateStatus(frame.loading.progress) : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry}
                   className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
               </div>}
               <ViewerLoadingOverlay

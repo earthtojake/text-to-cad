@@ -276,9 +276,14 @@ no alert: the model renders with no kinematics, no materials and no routine, and
 the migration is announced where it can be acted on — the build and the cad
 skill. Existing usable views remain visible during updates and failures.
 
-**Opening.** Opening shows one step line — **Finding file**, **Reading
-model**, **Loading geometry**, or **Preparing view** — with no headline above
-it; the loading mark itself says a model is opening. Counts measure
+**Opening.** Opening shows one step line — **Finding file**, **Importing
+model** (cadgen compiling a file its store does not hold: reading it, then its
+parts, counted), **Reading model**, **Meshing parts** (cadgen deriving parts its
+store lacked: a cold open), **Loading geometry** (reading stored meshes), or
+**Preparing view** — with no headline above it; the loading mark itself says a
+model is opening. Once the first parts are drawn, a cold open's remaining
+meshing is the update line's "Meshing parts n/total…", not "Updating model…".
+Counts measure
 completed geometry items in the current stage, not assembly occurrences or an
 overall ETA; uncounted stages are indeterminate. Render initialization uses the
 same indicator against the destination backdrop until its first usable frame.

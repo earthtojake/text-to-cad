@@ -44,6 +44,18 @@ class ArtifactKind:
 # A tree: assembly.json + content-addressed components/<cid>.glb.
 STEP_PACKAGE = ArtifactKind(name="step-package")
 
+# The same tree, compiled from a STEP file's bytes rather than built by a model script:
+# what a CAD user knows as importing. Its phases say so, in the terminal and in the CAD
+# Viewer's loading screen, which reads "import" in a phase's label as importing.
+STEP_IMPORT = ArtifactKind(
+    name=STEP_PACKAGE.name,
+    labels={
+        PHASE_GENERATE: "Importing STEP",
+        PHASE_PACKAGE: "Importing STEP: collecting parts",
+        PHASE_COMPONENTS: "Importing STEP: storing parts",
+    },
+)
+
 # The phase a drawing introduces. None of the STEP phase names fit its work, so it is
 # declared here rather than growing the shared PHASE_LABELS dict.
 PHASE_WRITE = "write"

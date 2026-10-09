@@ -24,7 +24,7 @@ from cadgen._internal.generation import (
     _manifest_records_edge_visibility_classes,
     _tree_progress_sink,
 )
-from cadgen.coordination import PHASE_GENERATE, STEP_PACKAGE, artifact_build
+from cadgen.coordination import PHASE_GENERATE, STEP_IMPORT, artifact_build
 from cadgen._internal.doors import STEP_SUFFIXES
 from cadgen.catalog import build_scope
 from cadgen.render import relative_to_cwd
@@ -195,7 +195,7 @@ def build_step_artifact(
     with cli_progress_line(
         spec.source_ref, logger=logger, fallback="Building..."
     ) as progress_sink, artifact_build(
-        STEP_PACKAGE,
+        STEP_IMPORT,
         scope,
         is_current=lambda: _current_artifact_for_spec(spec) is not None,
         force=force,

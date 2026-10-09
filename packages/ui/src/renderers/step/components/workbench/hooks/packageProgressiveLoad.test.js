@@ -123,6 +123,13 @@ test("policy constants: a batch publishes at either ceiling, and the ceilings do
     total: 12,
     determinate: true,
   });
+  assert.deepEqual(progressiveLoadProgress(3, 12, undefined, { meshing: true }), {
+    phase: "meshing",
+    label: "Meshing parts",
+    done: 3,
+    total: 12,
+    determinate: true,
+  });
 });
 
 test("batches publish in order with monotonically increasing component counts; the last is final", async () => {

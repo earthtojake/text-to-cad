@@ -140,12 +140,16 @@ export class SurfaceResolutionError extends Error {
  * or mesh, once, with its own error, and the request goes on for the rest: it
  * resolves with the ready ones. Without it, a failed component fails the request,
  * once every ready row of the response that names it has been announced.
+ *
+ * `onPending(cid)`, when given, hears a component cadgen is still deriving (its
+ * surface or mesh was not in the store), on every answer that says so: what a
+ * loading screen needs to say it is meshing rather than reading.
  */
-export async function resolveSurfaceComponents(descriptor, requested, { signal, client, onReady = null, onFailed = null, tessellation = undefined } = {}) {
+export async function resolveSurfaceComponents(descriptor, requested, { signal, client, onReady = null, onFailed = null, onPending = null, tessellation = undefined } = {}) {
   if (!client) throw new TypeError("Surface resolution requires a CAD workspace service");
   const list = Array.isArray(requested) ? requested : [];
   if (list.length <= SURFACE_REQUEST_MAX_COMPONENTS) {
-    return resolveSurfaceRequest(descriptor, list, { signal, client, onReady, onFailed, tessellation });
+    return resolveSurfaceRequest(descriptor, list, { signal, client, onReady, onFailed, onPending, tessellation });
   }
   // Every chunk is its own request (and subscriber job); one failing stops the others.
   const controller = new AbortController();
@@ -158,7 +162,7 @@ export async function resolveSurfaceComponents(descriptor, requested, { signal, 
       chunks.push(list.slice(start, start + SURFACE_REQUEST_MAX_COMPONENTS));
     }
     const results = await Promise.all(chunks.map((chunk) => (
-      resolveSurfaceRequest(descriptor, chunk, { signal: controller.signal, client, onReady, onFailed, tessellation }).catch((error) => {
+      resolveSurfaceRequest(descriptor, chunk, { signal: controller.signal, client, onReady, onFailed, onPending, tessellation }).catch((error) => {
         controller.abort();
         throw error;
       })
@@ -181,7 +185,7 @@ function subscriberToken(payload) {
   return String(rows.find((row) => row?.job)?.job || "");
 }
 
-async function resolveSurfaceRequest(descriptor, requested, { signal, client, onReady = null, onFailed = null, tessellation = undefined }) {
+async function resolveSurfaceRequest(descriptor, requested, { signal, client, onReady = null, onFailed = null, onPending = null, tessellation = undefined }) {
   const tree = digest(descriptor?.tree, "surface tree");
   const viewId = digest(descriptor?.viewId, "surface viewId");
   const producer = descriptor?.surfaceProducer;
@@ -264,6 +268,7 @@ async function resolveSurfaceRequest(descriptor, requested, { signal, client, on
           if (!rowJob || (job && rowJob !== job)) throw new Error("Surface response has an invalid subscriber token");
           job = rowJob;
           pending = true;
+          onPending?.(request.cid);
           continue;
         }
         const ticket = verifiedReadyRow(row, { tree, ...request, client, tessellation: meshTessellation });

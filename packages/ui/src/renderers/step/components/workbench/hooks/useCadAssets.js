@@ -831,6 +831,10 @@ export function useCadAssets({
         // post-load publish used to produce.
         let publishedOnce = false;
         const componentEntries = Object.entries(packageDescriptor.components || {});
+        // Whether cadgen is meshing any part this open asked for (its store lacked it), and the
+        // parts settled so far: the frame says "Meshing parts" from the first pending answer on.
+        let meshing = false;
+        let settledSoFar = 0;
         setMeshLoadProgress(progressiveLoadProgress(0, componentEntries.length));
         // Runtime tickets bind the geometry descriptor's opaque D to the
         // concrete O selected by either a stored mesh's probe or surface resolution.
@@ -915,6 +919,11 @@ export function useCadAssets({
           },
           resolve: (requested, options) => resolveSurfaceComponents(packageDescriptor, requested, {
             ...options, client, tessellation: coldTessellation,
+            onPending: () => {
+              if (meshing || requestId !== requestIdRef.current || controller.signal.aborted) return;
+              meshing = true;
+              setMeshLoadProgress(progressiveLoadProgress(settledSoFar, componentEntries.length, undefined, { meshing }));
+            },
           }),
           signal: controller.signal,
         });
@@ -1053,6 +1062,7 @@ export function useCadAssets({
             }
             // A component that failed on its own is settled too.
             const settled = loaded + failed;
+            settledSoFar = settled;
             setMeshLoadProgress(settled === total
               ? {
                   phase: "view",
@@ -1061,7 +1071,7 @@ export function useCadAssets({
                   total,
                   determinate: true,
                 }
-              : progressiveLoadProgress(settled, total));
+              : progressiveLoadProgress(settled, total, undefined, { meshing }));
           },
           // The same staleness guard every publish below re-checks: the
           // request is current and not aborted.

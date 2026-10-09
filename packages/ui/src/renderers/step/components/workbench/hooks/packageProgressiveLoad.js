@@ -94,15 +94,17 @@ export function createDecodeSizeEstimator({
   };
 }
 
-export function progressiveLoadProgress(loaded, total, detail = undefined) {
+// `meshing`: cadgen is deriving parts the store did not hold (a cold open), which the
+// screen names as meshing; otherwise the parts are only being read.
+export function progressiveLoadProgress(loaded, total, detail = undefined, { meshing = false } = {}) {
   const normalizedTotal = Math.max(0, Math.floor(Number(total) || 0));
   const normalizedLoaded = Math.max(0, Math.min(
     normalizedTotal,
     Math.floor(Number(loaded) || 0),
   ));
   return {
-    phase: "geometry",
-    label: "Loading geometry",
+    phase: meshing ? "meshing" : "geometry",
+    label: meshing ? "Meshing parts" : "Loading geometry",
     done: normalizedLoaded,
     total: normalizedTotal,
     determinate: true,

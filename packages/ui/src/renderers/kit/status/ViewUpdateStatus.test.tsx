@@ -2,7 +2,7 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ViewerMobileContext } from '../../../file-viewer/responsive.js';
-import { ViewUpdateStatus } from './ViewUpdateStatus.jsx';
+import { MODEL_UPDATE_STATUS, modelUpdateStatus, ViewUpdateStatus } from './ViewUpdateStatus.jsx';
 Object.assign(globalThis, { React });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 it('delays fast changes, announces preparation, and leaves placement to its caller', () => {
@@ -39,4 +39,9 @@ it('mobile progress is a compact icon with tap-to-read detail and a retry for fa
   rerender(wrap({ pending: false, error: 'WebGL failed' }));
   fireEvent.click(screen.getByRole('button', { name: 'Retry', exact: true }));
   expect(retry).toHaveBeenCalledOnce();
+});
+it('names cadgen meshing a cold load behind the view, counted, and calls anything else updating', () => {
+  expect(modelUpdateStatus({ label: 'Meshing parts', counts: '37/256' })).toEqual({ pending: true, label: 'Meshing parts 37/256…' });
+  expect(modelUpdateStatus({ label: 'Loading geometry', counts: '37/256' })).toBe(MODEL_UPDATE_STATUS);
+  expect(modelUpdateStatus(null)).toBe(MODEL_UPDATE_STATUS);
 });
