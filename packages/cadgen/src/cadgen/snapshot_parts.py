@@ -15,6 +15,10 @@ descriptor's order:
   draw (``cadgen.tessellation_policy.snapshot_tessellation``), meshed in the
   build pool when the store has none.
 
+A part whose mesh leaves out a face no mesher could cover is listed, drawn and
+counted without it, and :func:`unmeshed_warnings` names the faces in the result's
+warnings, for a list and a view alike.
+
 ``focus``/``hide`` select the same way the page's scene does for a view: an
 occurrence matches a ref that IS its id, an ancestor group's id (``o1.2``
 covers ``o1.2.3``), or its name.
@@ -26,7 +30,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-__all__ = ["LIST_BOUNDS_DECIMALS", "filter_occurrences", "list_rows"]
+__all__ = ["LIST_BOUNDS_DECIMALS", "filter_occurrences", "list_rows", "unmeshed_warnings"]
 
 # Three decimals of a millimetre is a nanometre: far below any tolerance a model
 # is built to, and a fifth of the payload full float64 noise would be.
@@ -99,6 +103,34 @@ def _mesh_counts(descriptor: Mapping[str, Any], cids: set[str], tessellation: Ma
         if isinstance(record, Mapping):
             counts[cid] = (int(record["indexCount"]) // 3, int(record["vertexCount"]))
     return counts
+
+
+def unmeshed_warnings(
+    descriptor: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    tessellation: Mapping[str, float],
+    consequence: str,
+) -> list[str]:
+    """A warning per component whose stored mesh at ``tessellation`` leaves a face no
+    mesher could cover undrawn (``cadgen.store.meshes``), naming the faces, the
+    occurrences of ``rows`` that place it, and ``consequence``. A probe per component
+    when none is missing."""
+    from cadgen.store import meshes
+
+    chord, angle = float(tessellation["chordTolerance"]), float(tessellation["angleTolerance"])
+    components = descriptor.get("components") if isinstance(descriptor.get("components"), Mapping) else {}
+    placed: dict[str, list[tuple[str, str]]] = {}
+    for row in rows:
+        if row.get("component"):
+            placed.setdefault(str(row["component"]), []).append((str(row["id"]), str(row.get("name") or "")))
+    warnings = []
+    for cid, occurrences in placed.items():
+        surface_input = str((components.get(cid) or {}).get("surfaceInput") or "")
+        if surface_input:
+            faces = meshes.stored_unmeshed_faces(meshes.tessellation_key(surface_input, chord, angle))
+            if faces:
+                warnings.append(meshes.unmeshed_warning(occurrences, faces, consequence))
+    return warnings
 
 
 def list_rows(

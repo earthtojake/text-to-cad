@@ -100,7 +100,7 @@ def _export_mesh_jobs(
     logger: CliLogger,
     force: bool = False,
     animation_source: AnimationSnapshot | None = None,
-) -> "tuple[frozenset[Path], dict[Path, dict]]":
+) -> "tuple[frozenset[Path], dict[Path, dict], dict[Path, list[str]]]":
     """Export every requested mesh job from the document's tree, in one engine call
     (the GLB is Y-up glTF for external tools: (x, y, z) -> (x, z, -y), mm -> m).
 
@@ -148,7 +148,7 @@ def _export_mesh_jobs(
         if force or not document_mesh_current(job.out, document_hash=document_hash, **_variant(job))
     ]
     if not pending:
-        return frozenset(), {}
+        return frozenset(), {}, {}
     for job in pending:
         job.out.parent.mkdir(parents=True, exist_ok=True)
     payload = run_mesh_exporter(
@@ -157,7 +157,7 @@ def _export_mesh_jobs(
     )
     for job in pending:
         record_document_mesh(job.out, document_hash=document_hash, **_variant(job))
-    return frozenset(job.out for job in pending), _baked_animations(payload)
+    return frozenset(job.out for job in pending), _baked_animations(payload), _file_warnings(payload)
 
 
 def _baked_animations(payload: dict) -> "dict[Path, dict]":
@@ -173,6 +173,13 @@ def _baked_animations(payload: dict) -> "dict[Path, dict]":
         if isinstance(summary, dict):
             baked[Path(str(entry["path"]))] = dict(summary)
     return baked
+
+
+def _file_warnings(payload: dict) -> "dict[Path, list[str]]":
+    """Each written file's own warnings, keyed by its path: the faces no mesher could
+    cover, which the file leaves open (``mesh_export.run_mesh_exporter``)."""
+    return {Path(str(entry["path"])): [str(text) for text in entry["warnings"]]
+            for entry in payload.get("files") or [] if entry.get("warnings")}
 
 
 def _ledgered_animation(job: "MeshExportJob") -> "dict | None":
@@ -327,7 +334,7 @@ def export_cad_target(
         )
 
     spec, source = _mesh_package(repo_root, step_path)
-    written, baked = _export_mesh_jobs(
+    written, baked, noted = _export_mesh_jobs(
         spec, source, resolved, logger=logger, force=force,
         animation_source=animation_source,
     )
@@ -336,6 +343,7 @@ def export_cad_target(
     for job in resolved:
         skipped = job.out not in written
         summary = baked.get(job.out)
+        warnings.extend(noted.get(job.out, ()))
         if summary is not None:
             # The warnings ride OUT of the per-file block and into the run's own,
             # so one place answers "what did this export not carry" whether the

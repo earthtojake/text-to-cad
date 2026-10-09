@@ -28,6 +28,13 @@ up), laid out so a reader views every array in place:
   the names the class codes index, and where each table is. It is the
   canonical JSON for those values: a reader rebuilds it and requires it, so
   nothing but the tables grows with the component.
+
+A face the mesh can resolve that no mesher could cover -- OCCT refused it and
+its own tessellation (``cadgen/_internal/face_fallback.py``) did not cover its
+area -- leaves the component meshed without it: its face range is empty, and
+``extras.cadgen.unmeshedFaces`` names it among the ordinals of every such face
+(present only when there is one), so each reader says what it does not draw or
+write; the index record counts them (``unmeshedFaceCount``, likewise).
 """
 
 from __future__ import annotations
@@ -88,16 +95,20 @@ _KEY = re.compile(
 # Any mesher's and payload format's key, this cadgen's or another's (``obsolete_key``).
 _ANY_KEY = re.compile(r"([0-9a-f]{64})-t(\d+)-p(\d+)-l[0-9a-f]{16}-a[0-9a-f]{16}")
 _QUALITY_FIELDS = {"chordTolerance", "chordToleranceF64", "angleTolerance", "angleToleranceF64"}
-# ``extras.cadgen``'s values, in the order the writer spells them; the class names and
-# the table references follow them.
+# ``extras.cadgen``'s values, in the order the writer spells them -- ``unmeshedFaces``
+# last, and only in a body that has one; the class names and the table references follow
+# them.
 _CAD_VALUES = ("payloadVersion", "tessellatorVersion", "tessellationInput", "surfaceInput", "surfaceObject",
                "quality", "bounds", "scale", "partColor", "faceColors")
+_UNMESHED = "unmeshedFaces"
 _COUNT_FIELDS = ("vertexCount", "indexCount", "faceCount", "edgeCount", "edgePointCount")
 _RECORD_FIELDS = {
     "schemaVersion", "object", "byteLength", "decodedBytes", "surfaceInput", "surfaceObject",
     "tessellationInput", "renderIdentity", "quality", "tessellatorVersion", "payloadVersion",
     *_COUNT_FIELDS,
 }
+# The record of a body with unmeshed faces counts them.
+_UNMESHED_COUNT = "unmeshedFaceCount"
 
 
 class MeshConflictError(ValueError):
@@ -314,6 +325,11 @@ class MeshPayload:
                  "indexStart": int(start), "indexCount": int(count)}
                 for ordinal, start, count, ref in self.faces.tolist()]
 
+    @property
+    def unmeshed_faces(self) -> list[int]:
+        """The faces no mesher could cover, which the body does not draw."""
+        return list(self.cad.get(_UNMESHED, []))
+
 
 def _validate_cad(cad: Any) -> None:
     """``extras.cadgen``'s values, before its canonical JSON can be rebuilt from them."""
@@ -332,6 +348,19 @@ def _validate_cad(cad: Any) -> None:
     palette = cad.get("faceColors")
     if type(palette) is not list or not all(map(_color, palette)):
         raise ValueError("invalid tessellation face colours")
+    if _UNMESHED in cad:
+        unmeshed = cad[_UNMESHED]
+        if (type(unmeshed) is not list or not unmeshed or not all(_integer(ordinal) and ordinal > 0 for ordinal in unmeshed)
+                or any(later <= earlier for earlier, later in zip(unmeshed, unmeshed[1:]))):
+            raise ValueError("invalid tessellation unmeshed faces")
+
+
+def _cad_values(cad: dict) -> dict:
+    """``extras.cadgen``'s values, ``unmeshedFaces`` among them where the body has it."""
+    values = {name: cad[name] for name in _CAD_VALUES}
+    if _UNMESHED in cad:
+        values[_UNMESHED] = cad[_UNMESHED]
+    return values
 
 
 def _table_count(cad: dict, name: str) -> int:
@@ -385,7 +414,7 @@ def _payload_json(payload: bytes) -> tuple[dict, dict, dict, int, int]:
     if (counts["edgeCount"] == 0) != (counts["edgePointCount"] == 0):
         raise ValueError("invalid tessellation edge counts")
     try:
-        expected = canonical_gltf({name: cad[name] for name in _CAD_VALUES}, counts)
+        expected = canonical_gltf(_cad_values(cad), counts)
     except KeyError as exc:
         raise ValueError(f"tessellation extras lack {exc}") from exc
     if gltf != expected:
@@ -441,6 +470,10 @@ def decode_payload(payload: bytes) -> MeshPayload:
             raise ValueError(f"incomplete tessellation {name} table")
     if len(faces) and int(faces[:, 3].max()) > len(cad["faceColors"]):
         raise ValueError("a tessellation face colour is not in its palette")
+    if _UNMESHED in cad:
+        empty = {int(ordinal) for ordinal, _start, count, _ref in faces.tolist() if not count}
+        if not set(cad[_UNMESHED]) <= empty:
+            raise ValueError("a tessellation's unmeshed face is not an empty face of its table")
     if len(edges) and (int(edges[:, 2].min()) < 2 or int(edges[:, 3].max()) >= len(EDGE_CLASSES)):
         raise ValueError("invalid tessellation edge polyline or class")
     return MeshPayload(cad, counts, positions, normals, flat, faces, edges, points)
@@ -472,6 +505,8 @@ def _record(key: str, payload: bytes, cad: dict, counts: dict) -> dict:
         "quality": quality, "tessellatorVersion": TESSELLATOR_VERSION, "payloadVersion": PAYLOAD_VERSION,
         **counts,
     }
+    if _UNMESHED in cad:
+        record[_UNMESHED_COUNT] = len(cad[_UNMESHED])
     if not _valid_record(key, record):
         raise ValueError("invalid tessellation index facts")
     return record
@@ -487,7 +522,7 @@ def _array(value: Any, dtype: str, columns: int) -> np.ndarray:
 def encode_payload(*, surface_input: str, surface_object: str, chord: float, angle: float,
                    positions, normals, indices, face_ranges: list[dict],
                    edges: list[tuple[int, str, Any]], bounds: dict, scale: float,
-                   part_color: list | None = None) -> bytes:
+                   part_color: list | None = None, unmeshed_faces: Any = ()) -> bytes:
     """One component's GLB body.
 
     ``positions`` and ``normals`` are float32 xyz per vertex and ``indices`` the
@@ -495,7 +530,8 @@ def encode_payload(*, surface_input: str, surface_object: str, chord: float, ang
     ``bounds`` are the positions' (else the polylines') min and max;
     ``face_ranges`` are ``{ord, indexStart, indexCount, color}`` in ordinal order,
     covering the indices; ``edges`` are ``(ord, class, polyline)`` in ordinal
-    order, each polyline float32 xyz of at least two points. The result is
+    order, each polyline float32 xyz of at least two points; ``unmeshed_faces``
+    are the ordinals of the empty faces no mesher could cover. The result is
     validated before it is returned.
     """
     import numpy as np
@@ -537,6 +573,8 @@ def encode_payload(*, surface_input: str, surface_object: str, chord: float, ang
         "partColor": None if part_color is None else [float(c) for c in part_color],
         "faceColors": [list(color) for color in palette],
     }
+    if unmeshed_faces:
+        cad[_UNMESHED] = sorted(int(ordinal) for ordinal in unmeshed_faces)
     counts = {"vertexCount": len(positions), "indexCount": len(flat), "faceCount": len(faces),
               "edgeCount": len(table), "edgePointCount": len(points)}
     gltf = canonical_gltf(cad, counts)
@@ -558,7 +596,11 @@ def encode_payload(*, surface_input: str, surface_object: str, chord: float, ang
 
 def _valid_record(key: str, record: Any) -> bool:
     try:
-        if type(record) is not dict or set(record) != _RECORD_FIELDS or not valid_key(key):
+        if (type(record) is not dict or set(record) not in (_RECORD_FIELDS, _RECORD_FIELDS | {_UNMESHED_COUNT})
+                or not valid_key(key)):
+            return False
+        if _UNMESHED_COUNT in record and not (
+                _integer(record[_UNMESHED_COUNT]) and 0 < record[_UNMESHED_COUNT] <= record["faceCount"]):
             return False
         quality = _quality(record["quality"])
         if (record["schemaVersion"] != MESH_INDEX_SCHEMA or record["payloadVersion"] != PAYLOAD_VERSION
@@ -622,6 +664,33 @@ def read(key: str, *, expected_object: str | None = None, max_bytes: int | None 
         return payload
     except (OSError, ValueError, TypeError, KeyError, OverflowError, struct.error):
         return None
+
+
+def unmeshed_faces(payload: bytes) -> list[int]:
+    """The faces a valid body leaves undrawn (``unmeshedFaces``), read off its JSON chunk."""
+    return list(_payload_json(payload)[1].get(_UNMESHED, []))
+
+
+def stored_unmeshed_faces(key: str) -> list[int]:
+    """The faces the stored mesh at ``key`` leaves undrawn: none when the store lacks it
+    or its record counts none, so a reader asks every key it drew for the price of a probe."""
+    record = probe(key)
+    if record is None or not record.get(_UNMESHED_COUNT):
+        return []
+    payload = read(key, expected_object=record["object"])
+    return unmeshed_faces(payload) if payload is not None else []
+
+
+def unmeshed_warning(placed: list[tuple[str, str]], faces: list[int], consequence: str) -> str:
+    """What a reader says of a component whose mesh leaves ``faces`` undrawn: the
+    occurrences that place it (``[(ref, name)]``), the faces, and ``consequence``, whose
+    ``{them}`` names the faces as one or several."""
+    where = ", ".join(f"#{ref} {name}" if name and name != ref else f"#{ref}" for ref, name in placed[:3])
+    if len(placed) > 3:
+        where += f" and {len(placed) - 3} more"
+    named = ", ".join(f"f{ordinal}" for ordinal in faces[:8]) + (", ..." if len(faces) > 8 else "")
+    noun, them = ("face", "it") if len(faces) == 1 else ("faces", "them")
+    return f"{where}: {len(faces)} {noun} ({named}) could not be meshed, so {consequence.format(them=them)}"
 
 
 def write(key: str, payload: bytes) -> dict:

@@ -183,7 +183,8 @@ class EmptyFace(unittest.TestCase):
             return result
 
         with mock.patch.object(BRepMesh, "BRepMesh_IncrementalMesh", side_effect=mesher):
-            return _mesh(self.topods)[1]
+            self.body, mesh = _mesh(self.topods)
+        return mesh
 
     def assertBoreMeshed(self, mesh):
         """The bore's range holds triangles, and they lie on the bore: radius 4 about z."""
@@ -211,7 +212,7 @@ class EmptyFace(unittest.TestCase):
 
     def test_a_tessellation_that_misses_the_faces_area_is_not_kept(self):
         from cadgen._internal import face_fallback
-        from cadgen._internal.occt_mesh import MeshProductionError
+        from cadgen.store.meshes import decode_payload
 
         real = face_fallback.tessellate_face
 
@@ -219,9 +220,11 @@ class EmptyFace(unittest.TestCase):
             triangulation, covered = real(*args)
             return triangulation, covered * 2
 
-        with mock.patch.object(face_fallback, "tessellate_face", side_effect=overcounted), \
-                self.assertRaisesRegex(MeshProductionError, rf"did not mesh 1 face\(s\) of the component: f{self.bore}\b"):
-            self.mesh(lambda shape, call: shape.IsSame(self.topods))
+        with mock.patch.object(face_fallback, "tessellate_face", side_effect=overcounted):
+            mesh = self.mesh(lambda shape, call: shape.IsSame(self.topods))
+        bore = next(row for row in mesh.face_ranges if row["ord"] == self.bore)
+        self.assertEqual(bore["indexCount"], 0, "the bore is left out")
+        self.assertEqual(decode_payload(self.body).unmeshed_faces, [self.bore], "and named")
 
 
 def _with_a_stray_degenerated_edge(topods):

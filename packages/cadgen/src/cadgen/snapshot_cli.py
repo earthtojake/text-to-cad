@@ -1099,13 +1099,19 @@ def resolve_step_render_job(
         # The parts are cadgen's facts: the rows every ref resolves against, the
         # store's exact boxes and its stored meshes' counts (cadgen.snapshot_parts).
         # Nothing is drawn, so no browser starts.
-        from cadgen.snapshot_parts import list_rows
+        from cadgen.assembly_lookup import assembly_occurrence_rows
+        from cadgen.snapshot_parts import filter_occurrences, list_rows, unmeshed_warnings
 
         try:
             parts = list_rows(descriptor, package_dir, selection=normalized_selection,
                               tessellation=resolved["tessellation"])
+            listed = filter_occurrences(assembly_occurrence_rows(descriptor, None), normalized_selection)
         except ValueError as error:
             raise SnapshotError(str(error)) from None
+        warnings = unmeshed_warnings(descriptor, listed, resolved["tessellation"],
+                                     "its triangle count leaves {them} out")
+        if warnings:
+            resolved["warnings"] = warnings
         if debug_enabled:
             resolved["debug"] = {"stepArtifact": step_artifact_debug}
         resolved_job = {**job, "resolved": {**resolved, "parts": parts}}

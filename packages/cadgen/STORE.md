@@ -386,7 +386,16 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   body's identity, bounds, scale and colour palette, which every reader rebuilds
   and requires before it views the arrays in place. Any glTF viewer draws it
   (its one node turns Z-up millimetres into Y-up metres); the tables are
-  `extras`. A component is ready once its surface and every mesh asked for are
+  `extras`. A face no mesher covers -- OCCT refused it and the fallback's
+  triangles missed its area by more than a quarter -- never fails the component:
+  it is meshed without that face, whose range is empty, and the body names it
+  (`unmeshedFaces`, only in a body that has one; its record counts them,
+  `unmeshedFaceCount`). Every reader says so: a view or a list warns which faces
+  of which part it does not draw or count, and a mesh export warns that its file
+  has a hole there and is not watertight. A face smaller than the mesh resolves
+  (area under the deflection squared) may have no triangles and is not named. Any
+  other failure -- OCCT raising, a body its encoding refuses -- is the component's
+  `MeshProductionError`. A component is ready once its surface and every mesh asked for are
   stored: the CAD Viewer's cold components ask for the standard level in the
   surface request that derives them, a mesh export asks for its tolerances (a
   build's own export derives them in the build's process, §9), and

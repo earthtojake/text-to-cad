@@ -179,6 +179,13 @@ no longer follows the part). For an absolute chord deviation of X mm on a part
 whose bounding diagonal is D mm, pass X/D: 0.1 mm on a 200 mm part is `5e-4`.
 The same bound applies to `mesh_tolerance=` on a decorator.
 
+A face no mesher can cover (typically a sliver a boolean left, narrower than the
+chord tolerance) never fails the export: the part is written without it, and the
+result's `warnings` name it, for example `#o1.2 pin: 1 face (f3) could not be
+meshed, so pin.stl has a hole in place of it: it is not watertight`. Repair the
+face in the model, or export again with a finer `--mesh-tolerance`, before
+handing the file to a slicer.
+
 ## Workflow
 
 1. For maintained outputs, declare the mesh decorators and run the model script.

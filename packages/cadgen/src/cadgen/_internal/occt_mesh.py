@@ -20,11 +20,14 @@ boundary as crossing itself or open, what a boolean's leftovers do to a valid fa
 -- and no setting or repair of OCCT's meshes it, so it is tessellated over its own
 parameters as cadgen's earlier tessellator did (``face_fallback``), against the
 meshed neighbours, and kept when its triangles cover the face's own area. A face
-that still has none is an error (README law 10) unless it is smaller than the mesh
-can resolve -- its area under the square of the chord tolerance, inside the error
-every triangle may carry -- and such a face earns no finer pass. So is any failure
-inside OCCT. A component with no faces meshes nothing: its edges are sampled from
-their own curves.
+that still has none is left out of the component, which is drawn without it, and
+the body names it (``unmeshedFaces``, ``cadgen.store.meshes``): one face no mesher
+covers never fails a view, a list or an export of the whole document, and each of
+them says which faces of which part it does not draw or write. A face smaller than
+the mesh can resolve -- its area under the square of the chord tolerance, inside the
+error every triangle may carry -- may have none and is not named, and such a face
+earns no finer pass. Any failure inside OCCT is the component's error. A component
+with no faces meshes nothing: its edges are sampled from their own curves.
 
 The arrays leave OCCT through its own glTF writer (``RWGltf_CafWriter``, one
 primitive per face), not one Python call per vertex: that is what keeps a large
@@ -125,7 +128,7 @@ def _mesh(topods, face_map, required: list[int], deflection: float, angle: float
 def _tessellate_refused(topods, face_map, ordinals: list[int], deflection: float, angle: float) -> None:
     """Give each face of ``ordinals`` the triangles ``face_fallback`` builds over its
     parameters, when they cover its own area to ``_FALLBACK_AREA_TOLERANCE``; a face
-    left without stays empty, and is the component's error."""
+    left without stays empty, and the body names it."""
     from cadgen._internal import face_fallback
     from OCP.BRep import BRep_Builder
     from OCP.BRepGProp import BRepGProp
@@ -360,10 +363,8 @@ def _mesh_component(topods, surf_index: dict, *, surface_input: str, surface_obj
     faces = (_faces_from_gltf(topods, triangulated) if triangulated else {})
     if faces is None:
         faces = _faces_one_by_one(triangulated)
+    # A face no mesher covered is left out, and the body names it: every reader says so.
     unmeshed = [ordinal for ordinal in required if ordinal not in faces]
-    if unmeshed:
-        listed = ", ".join(f"f{ordinal}" for ordinal in unmeshed[:8]) + (", ..." if len(unmeshed) > 8 else "")
-        raise MeshProductionError(f"OCCT did not mesh {len(unmeshed)} face(s) of the component: {listed}")
 
     position_parts, normal_parts, index_parts, face_ranges = [], [], [], []
     vertex_base = index_start = 0
@@ -404,5 +405,5 @@ def _mesh_component(topods, surf_index: dict, *, surface_input: str, surface_obj
         surface_input=surface_input, surface_object=surface_object, chord=chord, angle=angle,
         positions=positions, normals=normals, indices=indices, face_ranges=face_ranges, edges=edges,
         bounds=bounds, scale=float(diagonal),
-        part_color=[float(c) for c in part_color] if part_color else None,
+        part_color=[float(c) for c in part_color] if part_color else None, unmeshed_faces=unmeshed,
     )

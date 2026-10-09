@@ -2187,6 +2187,27 @@ async def _render_job(renderer: "BatchSnapshotRenderer", job: Mapping[str, objec
     return result
 
 
+def _unmeshed_view_warnings(job: Mapping[str, object]) -> list[str]:
+    """A STEP view's warnings for the parts it drew without a face no mesher could cover
+    (``cadgen.snapshot_parts.unmeshed_warnings``): asked once the page has drawn, when
+    every mesh it drew is stored. A part the view hides is not one it drew."""
+    resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}
+    package = resolved.get("package")
+    if (str(resolved.get("kind") or "").lower() not in ("step", "stp") or not is_plain_object(package)
+            or not is_plain_object(package.get("descriptor")) or not is_plain_object(resolved.get("tessellation"))):
+        return []
+    from cadgen.assembly_lookup import assembly_occurrence_rows
+    from cadgen.snapshot_parts import filter_occurrences, unmeshed_warnings
+
+    selection = job.get("selection") if is_plain_object(job.get("selection")) else {}
+    descriptor = package["descriptor"]
+    try:
+        rows = filter_occurrences(assembly_occurrence_rows(descriptor, None), {"hide": selection.get("hide")})
+    except ValueError:
+        return []
+    return unmeshed_warnings(descriptor, rows, resolved["tessellation"], "the view does not draw {them}")
+
+
 async def render_resolved_job_packet(
     packet: Mapping[str, object],
     *,
@@ -2222,6 +2243,9 @@ async def render_resolved_job_packet(
             else:
                 result = await _render_job(snapshot_renderer, job)
                 report.advance()
+            unmeshed = _unmeshed_view_warnings(job)
+            if unmeshed:
+                result = {**result, "warnings": [*(result.get("warnings") or []), *unmeshed]}
             # Keep resolution and measured browser work together under --debug.
             # The typed result otherwise intentionally drops browser internals.
             resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}
