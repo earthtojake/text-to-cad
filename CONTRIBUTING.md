@@ -960,9 +960,9 @@ draft release unless `--publish` is passed.
 
 ### Repository settings
 
-`main` requires a PR with eight stable status checks — `Version
+`main` requires a PR with nine stable status checks — `Version
 Check`, `cadgen (Linux)`, `cadgen (Windows)`, `core-js`, `web`, `skills`,
-`docs`, `packaging` — strict (up to date with `main`), squash merges only, a
+`docs`, `packaging`, `api` — strict (up to date with `main`), squash merges only, a
 linear history, no force pushes and no deletions. A job its selection skips
 satisfies its check, so a prose pull request merges on Version Check and the
 light contracts. Changing required check names also requires updating GitHub
