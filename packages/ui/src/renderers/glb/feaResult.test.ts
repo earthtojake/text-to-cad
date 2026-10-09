@@ -119,11 +119,21 @@ describe('the plain line', () => {
     expect(feaSummaryLine(result, result.fields[1])).toBe('Moves up to 0.029 mm');
   });
 
-  it('says it yields under a safety factor below 1, and holds 1× at exactly 1', () => {
+  it('says it yields under a safety factor below 1, and holds 1.0× at exactly 1', () => {
     const under = readFeaResult(resultMesh({ safetyFactor: 0.4 }).root)!;
     expect(feaSummaryLine(under, under.fields[0])).toBe('Peak stress 47 MPa · yields under this load · moves up to 0.029 mm');
     const exactly = readFeaResult(resultMesh({ safetyFactor: 1 }).root)!;
-    expect(feaSummaryLine(exactly, exactly.fields[0])).toBe('Peak stress 47 MPa · holds 1× this load · moves up to 0.029 mm');
+    expect(feaSummaryLine(exactly, exactly.fields[0])).toBe('Peak stress 47 MPa · holds 1.0× this load · moves up to 0.029 mm');
+  });
+
+  it('floors the factor as the findings do, so the bar and the finding agree', () => {
+    const line = (safetyFactor: number) => {
+      const result = readFeaResult(resultMesh({ safetyFactor }).root)!;
+      return feaSummaryLine(result, result.fields[0]);
+    };
+    expect(line(1.96)).toContain('holds 1.9× this load');
+    expect(line(12.9)).toContain('holds 12× this load');
+    expect(line(0.9996)).toContain('yields under this load');
   });
 
   it('leaves out "holds" when there is no safety factor, and says nothing for a field it does not know', () => {
@@ -151,6 +161,7 @@ describe('a result\'s findings', () => {
     expect(resultSourcePath('/work/results/bracket.glb', '../STEP/bracket.step')).toBe('/work/STEP/bracket.step');
     expect(resultSourcePath('/work/results/bracket.glb', '/parts/bracket.step')).toBe('/parts/bracket.step');
     expect(resultSourcePath('/work/results/bracket.glb', '')).toBe('');
+    expect(resultSourcePath('FEA/x.glb', '../part.step')).toBe('part.step');
   });
 
   it('ring the CAD point in the mesh\'s metres, moved by the displacement there at the scale shown', () => {

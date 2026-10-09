@@ -304,6 +304,12 @@ function plainNumber(value) {
   return String(Math.abs(v) >= 10 ? Math.round(v) : Number(v.toPrecision(2)));
 }
 
+/** The safety factor as the findings say it: floored, one decimal under 10, whole from 10 up. */
+function flooredFactor(value) {
+  const v = Number(value) || 0;
+  return String(v >= 10 ? Math.floor(v + 1e-9) : (Math.floor(v * 10 + 1e-9) / 10).toFixed(1));
+}
+
 /**
  * The one line under the colour bar, in plain words, from the numbers the file
  * carries: the peak stress and what it means for the part, and how far it moves.
@@ -322,7 +328,7 @@ export function feaSummaryLine(result, field) {
   }
   const factor = result.safetyFactor;
   // Under 1 the part yields: "holds 0.4×" would read as a pass.
-  const holds = factor === null ? "" : factor < 1 ? "yields under this load" : `holds ${plainNumber(factor)}× this load`;
+  const holds = factor === null ? "" : factor < 1 ? "yields under this load" : `holds ${flooredFactor(factor)}× this load`;
   return [
     `Peak stress ${plainNumber(stress.max)} ${stress.units}`.trim(),
     holds,
