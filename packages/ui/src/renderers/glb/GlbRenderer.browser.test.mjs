@@ -302,7 +302,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   assert.deepEqual(errors, []);
 });
 
-test('an animated GLB opens at rest with its Animation panel up, plays there and in preview, and the panel holds the routine', async (t) => {
+test('an animated GLB opens at rest with its Animation panel up, plays there and in preview, and preview leaves the panel\'s routine as it was', async (t) => {
   // The file's preview settings as a previous session left them: Orbit off, so the preview
   // camera holds still and what moves in a capture is the model alone.
   const { page, pane, errors } = await open(t, 'animated.glb', { record: { version: 2, settings: {},
@@ -328,6 +328,13 @@ test('an animated GLB opens at rest with its Animation panel up, plays there and
   await page.keyboard.press('Home');
   assert.equal(await panelTime(), 0);
   await captureMatching(page, toolsRest, 'the clip at its start is the rest pose');
+  // The panel's routine left at its end: preview has a routine of its own, at rest.
+  await page.keyboard.press('End');
+  await page.waitForFunction(() => Number(document.querySelector(
+    '[data-testid="one"] [aria-label="Animation controls"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')) > 0.25);
+  const panelHeld = await panelTime();
+  const heldCapture = await stillCapture(page);
+  assert.ok(differingPixels(toolsRest, heldCapture) > 200, 'the panel holds the rider at the end of its clip');
 
   await pane.getByRole('button', { name: 'Preview', exact: true }).click();
   await pane.getByRole('button', { name: 'Exit preview', exact: true }).waitFor();
@@ -351,12 +358,12 @@ test('an animated GLB opens at rest with its Animation panel up, plays there and
   const moved = await capture(page);
   assert.ok(differingPixels(rest, moved) > 200, 'the rider moved');
 
-  // Leaving preview hands the routine back to the panel, which holds it where it stopped, in the
-  // tools view's own camera; the panel's start is the rest pose again.
+  // Leaving preview drops its routine and gives the panel's back as it was, in the tools view's own
+  // camera; the panel's start is the rest pose again.
   await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
   await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
-  assert.ok(await panelTime() > 0.25, 'the panel holds the routine where preview left it');
-  assert.ok(differingPixels(toolsRest, await stillCapture(page)) > 200, 'and so does the model');
+  assert.equal(await panelTime(), panelHeld, 'the panel holds its routine where it was before preview');
+  await captureMatching(page, heldCapture, 'and so does the model');
   await panel.getByRole('slider', { name: 'Animation time', exact: true }).focus();
   await page.keyboard.press('Home');
   await captureMatching(page, toolsRest, 'the tools view is at rest again');

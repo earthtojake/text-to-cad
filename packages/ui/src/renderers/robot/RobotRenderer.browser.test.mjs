@@ -600,6 +600,58 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   assert.deepEqual(robot.errors, []);
 });
 
+test('preview draws the robot as it opens, and leaving it finds the tools view as it was: the pose, the hidden visual and the selection', async (t) => {
+  const robot = await open(t, 'arm.urdf');
+  const { page, pane } = robot;
+  const opening = await robot.links();
+  const away = async () => { const surface = await robot.surface(); await page.mouse.move(surface.x + surface.width - 90, surface.y + surface.height / 2); };
+  const enterPreview = async () => {
+    await pane.getByRole('button', { name: 'Preview', exact: true }).click();
+    await pane.getByRole('button', { name: 'Exit preview', exact: true }).waitFor();
+    await robot.settled();
+  };
+  const exitPreview = async () => {
+    await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
+    await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
+  };
+  // Preview orbits by default: Orbit off (the file's setting, kept for the next preview) holds its camera still.
+  await pane.getByRole('button', { name: 'Preview', exact: true }).click();
+  await pane.locator('[data-preview-corner]').getByRole('button', { name: 'Orbit', exact: true }).click();
+  await page.getByRole('menu', { name: 'Orbit', exact: true }).getByRole('menuitemcheckbox', { name: 'Orbit', exact: true }).press('Enter');
+  await page.keyboard.press('Escape');
+  await page.getByRole('menu', { name: 'Orbit', exact: true }).waitFor({ state: 'detached' });
+  await exitPreview();
+  // The robot as preview draws a file opened afresh.
+  await away();
+  await enterPreview();
+  const authored = (await robot.capture()).data;
+  await exitPreview();
+
+  // Work in the tools view: the shoulder turned, the base's visual hidden, the upper arm picked.
+  await robot.type('shoulder', 25);
+  await page.waitForFunction(() => window.__robotLinks().some(({ link }) => link === 'upper_arm'));
+  const posed = await robot.links();
+  assert.notDeepEqual(posed.upper_arm, opening.upper_arm, 'the shoulder turned the upper arm');
+  await robot.tool('Select').click();
+  await pane.getByRole('button', { name: 'Hide base', exact: true }).click();
+  await pane.getByRole('button', { name: 'Reveal base', exact: true }).waitFor();
+  await pane.getByRole('button', { name: 'Select upper_arm', exact: true }).click();
+  await robot.pressed(['Select upper_arm']);
+
+  // Preview draws none of it: the opening pose, every visual, nothing lit.
+  await away();
+  await enterPreview();
+  assert.deepEqual(await robot.links(), opening, 'preview poses the robot as it opens');
+  assert.ok((await robot.capture()).data.equals(authored), 'preview draws the robot as it opens');
+
+  // Leaving finds the tools view's work as it was left.
+  await exitPreview();
+  assert.deepEqual(await robot.links(), posed, 'the pose comes back');
+  await robot.pressed(['Select upper_arm'], 'the selection comes back');
+  assert.equal(await pane.getByRole('button', { name: 'Reveal base', exact: true }).count(), 1, 'the base is still hidden');
+  assert.deepEqual(robot.errors, []);
+});
+
 test('a four-bar linkage closes on screen: the crank cadgen derives follows the rocker through its curve, has no knob or slider of its own, and the Reference names its driver', async (t) => {
   const robot = await open(t, 'linkage.urdf');
   const { page, pane } = robot;

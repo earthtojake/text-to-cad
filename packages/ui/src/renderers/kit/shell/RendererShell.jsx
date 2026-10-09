@@ -142,12 +142,10 @@ export default function RendererShell({ shell, tools, toolPanels = null, referen
   // tools view is drawn for working on the model, preview for looking at it.
   const renderProfile = previewing ? VIEWER_RENDER_PROFILE.PREVIEW : VIEWER_RENDER_PROFILE.TOOLS;
   const drawnScene = useMemo(() => sceneForRenderProfile(resolvedScene, renderProfile), [resolvedScene, renderProfile]);
-  // Routines play in preview and under the Animation tool: entering preview starts one when
-  // Autoplay is on, as taking up the tool does (`useRendererShell`'s `tools.animate`).
-  const enterPreview = () => {
-    setPreviewing(true);
-    if (hasAnimation && shell.autoplay && !animation.playing) animation.onPlayToggle();
-  };
+  // Preview is a state of its own (`useRendererShell`'s `setPreviewing`): it opens on the model as
+  // authored, its routine at rest and started only by Autoplay, as taking up the tool does, and
+  // leaving it gives the tools view back exactly as it was.
+  const enterPreview = () => setPreviewing(true);
   const leavePreview = () => setPreviewing(false);
   // Preview is fullscreen: the page around the view steps aside while it lasts.
   const onFullscreenChange = view.onFullscreenChange;
@@ -158,7 +156,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, referen
   }, [previewing, onFullscreenChange]);
   // Once neither preview nor the Animation tool holds the routine, the model goes back to rest (its
   // Routine, Speed and Loop stay for the next time). Leaving preview with the tool up is not that:
-  // the routine carries on under the tool.
+  // the tool's routine comes back as preview found it.
   const releaseRef = useRef(null);
   releaseRef.current = animation?.onRelease || null;
   const routineHeld = previewing || frame.animateToolActive;

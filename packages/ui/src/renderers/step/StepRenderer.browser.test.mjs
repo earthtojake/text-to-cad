@@ -1015,7 +1015,88 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   assert.deepEqual(errors, []);
 });
 
-test('the Animation tool plays the routine in the tools view, preview carries it on, and putting the tool down puts the model back at rest', async () => {
+test('preview and the tools view are two states: preview draws the model as authored, and leaving it drops what was done there and gives the tools view back as it was', async () => {
+  const view = await open();
+  const { page, pane, errors } = view;
+  const away = () => page.mouse.move(view.box.x + view.box.width - 20, view.box.y + 100);
+  const arm = async () => (await translations(page))['o1.2'];
+  const armAt = expected => page.waitForFunction(at => JSON.stringify(Array.from(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix.slice(12, 15))) === JSON.stringify(at), expected)
+    .catch(() => {});
+  const restArm = await arm();
+  // The model as preview draws a file opened afresh: the picture every later preview draws too,
+  // whatever the tools view holds.
+  await away();
+  await view.enterPreview();
+  const authored = await restingFrame(view);
+  await view.exitPreview();
+
+  // Work in the tools view: the arm swung on Position, the base hidden, the arm picked, the model
+  // clipped, and a camera of the person's own.
+  await view.tool('Position').click();
+  const slider = page.getByLabel('hinge slider value', { exact: true });
+  await slider.fill('60');
+  await slider.press('Enter');
+  await page.waitForFunction(() => Math.abs(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[13]) > 1);
+  const posedArm = await arm();
+  await view.tool('Select').click();
+  await pane.getByRole('button', { name: 'Hide base', exact: true }).click();
+  await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
+  await view.display({ clip: { enabled: true, axis: 'z', offsets: { x: 1, y: 1, z: 0.5 }, invert: false } });
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({ ...window.cadHarness.a.controller.readState().camera, zoom: 1.4, target: [3, 4, 2] }));
+  await page.waitForFunction(() => {
+    const state = window.cadHarness.a.controller.readState();
+    return state.hiddenPartIds.join() === 'o1.1' && state.selectedPartIds.join() === 'o1.2' && state.display.clip?.enabled === true;
+  });
+  await restingCamera(page);
+  const work = await view.state();
+
+  // Preview draws none of it: the arm at rest, the base there, nothing picked or cut away.
+  await away();
+  await view.enterPreview();
+  await armAt(restArm);
+  assert.deepEqual(await arm(), restArm, 'preview poses the model at rest');
+  const shown = await frameWhen(view, shot => differing(authored, shot) === 0, 'drew the model as authored');
+  assert.ok(partBoxes(shown).base && partBoxes(shown).arm, 'both parts are drawn');
+
+  // What is done in preview is preview's: its routine played, its camera turned.
+  const bar = pane.getByRole('toolbar', { name: 'Animation playback' });
+  await bar.getByRole('button', { name: 'Play animation' }).click();
+  await page.waitForFunction(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[1] > 0.2);
+  const orbit = await page.evaluate(() => window.__cadCamera().position);
+  await page.mouse.move(view.box.x + view.box.width / 2, view.box.y + view.box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(view.box.x + view.box.width / 2 + 90, view.box.y + view.box.height / 2 + 20, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForFunction(previous => window.__cadCamera().position.some((value, index) => Math.abs(value - previous[index]) > 1e-3), orbit);
+
+  // Leaving drops it, and gives the tools view back as it was left: the pose, the hidden base, the
+  // pick, the clip and its camera.
+  await view.exitPreview();
+  await armAt(posedArm);
+  assert.deepEqual(await arm(), posedArm, 'the pose comes back');
+  const back = await view.state();
+  assert.deepEqual([back.hiddenPartIds, back.selectedPartIds, back.display.clip], [work.hiddenPartIds, work.selectedPartIds, work.display.clip]);
+  for (const key of ['position', 'target', 'up']) work.camera[key].forEach((value, index) => assert.ok(Math.abs(value - back.camera[key][index]) < 1e-6, `the tools view's camera comes back: ${key}`));
+  assert.equal(back.camera.zoom, work.camera.zoom);
+  await view.tool('Position').click();
+  assert.match(await slider.inputValue(), /^60(\.0+)?°$/);
+
+  // An isolated part is the tools view's too: preview draws the whole model, and leaving finds the part isolated.
+  await view.tool('Select').click();
+  await pane.getByRole('button', { name: 'Reveal base', exact: true }).click();
+  await pane.getByRole('button', { name: 'Select arm', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Isolate', exact: true }).click();
+  await page.getByRole('menu').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().isolatedPartIds.join() === 'o1.2');
+  await away();
+  await view.enterPreview();
+  await frameWhen(view, shot => differing(authored, shot) === 0, 'drew the whole model, as authored');
+  await view.exitPreview();
+  assert.deepEqual((await view.state()).isolatedPartIds, ['o1.2']);
+  assert.deepEqual(errors, []);
+});
+
+test('the Animation tool plays the routine in the tools view, preview leaves its routine as it was, and putting the tool down puts the model back at rest', async () => {
   const view = await open();
   const { page, pane, errors } = view;
   const arm = () => page.evaluate(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix);
@@ -1042,9 +1123,29 @@ test('the Animation tool plays the routine in the tools view, preview carries it
 
   await panel.getByRole('button', { name: 'Play animation' }).click();
   await page.waitForFunction(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[1] > 0.2);
-  // Preview carries the routine on, and coming back with the tool still up leaves it playing.
+  await panel.getByRole('button', { name: 'Pause animation' }).click();
+  await panel.getByRole('button', { name: 'Play animation' }).waitFor();
+  const paused = await translations(page);
+  // Preview's routine is its own: it opens at rest and waits (Autoplay is off), whatever the tool's is doing.
+  const bar = pane.getByRole('toolbar', { name: 'Animation playback' });
+  const atRest = () => page.waitForFunction(rest => JSON.stringify(Array.from(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix.slice(12, 15))) === JSON.stringify(rest), restArm)
+    .catch(() => {});
   await view.enterPreview();
-  await pane.getByRole('toolbar', { name: 'Animation playback' }).getByRole('button', { name: 'Pause animation' }).waitFor();
+  await bar.getByRole('button', { name: 'Play animation', exact: true }).waitFor();
+  await atRest();
+  assert.deepEqual((await translations(page))['o1.2'], restArm, 'preview opens on the model at rest');
+  // Leaving hands the tool's routine back where it was: paused mid-way...
+  await view.exitPreview();
+  await panel.getByRole('button', { name: 'Play animation' }).waitFor();
+  await page.waitForFunction(at => JSON.stringify(Array.from(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix.slice(12, 15))) === JSON.stringify(at), paused['o1.2'])
+    .catch(() => {});
+  assert.deepEqual(await translations(page), paused);
+  // ...or playing, once it plays.
+  await panel.getByRole('button', { name: 'Play animation' }).click();
+  await view.enterPreview();
+  await bar.getByRole('button', { name: 'Play animation', exact: true }).waitFor();
+  await atRest();
+  assert.deepEqual((await translations(page))['o1.2'], restArm, 'preview opens at rest while the tool plays');
   await view.exitPreview();
   await panel.getByRole('button', { name: 'Pause animation' }).waitFor();
   const playing = (await arm())[1];

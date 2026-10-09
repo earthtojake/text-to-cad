@@ -6,7 +6,7 @@ import { createRobotScene } from "@text-to-cad/core/lib/urdf/robotScene.js";
 import { VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
-import { useRendererShell } from "../kit/shell/useRendererShell.js";
+import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { failureAlert } from "../kit/status/loadAlerts.js";
 import JointHandleOverlay from "../kit/tools/pose/JointHandleOverlay.jsx";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
@@ -59,6 +59,16 @@ function RobotSurface({ view, data }) {
   const robotRef = useRef(robot);
   robotRef.current = robot;
 
+  // ---- preview: a state of its own ---------------------------------------------------------
+  // Held here because the scene's writers below run before the shell hook. The person's work —
+  // the pose, the hidden visuals, what is picked and lit — reaches the scene through those writers,
+  // and each draws the robot as it opens while previewing: the opening pose, every visual, nothing
+  // lit. None of the work changes, so leaving preview finds the tools view exactly as it was.
+  const preview = usePreviewState();
+  const previewing = preview.previewing;
+  const previewingRef = useRef(previewing);
+  previewingRef.current = previewing;
+
   // ---- scene ----------------------------------------------------------------------------
   const [scene, setScene] = useState(null);
   useLayoutEffect(() => {
@@ -81,7 +91,7 @@ function RobotSurface({ view, data }) {
   const shellRef = useRef(null);
   // A highlight recolours links and casts no new shadow: its frame keeps the shadow maps.
   const requestHighlightFrame = useCallback(() => shellRef.current?.requestFrame?.(), []);
-  const selection = useLinkSelection({ scene, requestRender: requestHighlightFrame });
+  const selection = useLinkSelection({ scene, requestRender: requestHighlightFrame, shown: !previewing });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
   const live = useMemo(() => ({
@@ -107,7 +117,7 @@ function RobotSurface({ view, data }) {
     shellRef.current?.syncSceneBounds();
     shellRef.current?.scheduleStateSave();
   }, []);
-  const { hiddenPartIds, changeVisibility } = useRobotVisibility({ robot, scene, requestRender: requestVisibilityRender, stored });
+  const { hiddenPartIds, changeVisibility } = useRobotVisibility({ robot, scene, requestRender: requestVisibilityRender, stored, shown: !previewing });
   // The slices are read when the view is WRITTEN: the pose lives outside React; the hidden ids
   // are React state, both against the payload's revision. Until the robot has loaded there is
   // nothing to say, and what was stored is kept.
@@ -118,7 +128,7 @@ function RobotSurface({ view, data }) {
 
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: robot?.revision || "",
-    features: EDGELESS_VIEW_FEATURES, toolModes: ROBOT_TOOL_MODES, previewable: true, scene,
+    features: EDGELESS_VIEW_FEATURES, toolModes: ROBOT_TOOL_MODES, previewable: true, preview, scene,
     sceneScaleMode: VIEWER_SCENE_SCALE.URDF,
     load: { busy: (loaded.busy && !scene) || (Boolean(robot) && !scene), updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
     live, escape, rendererState
@@ -129,23 +139,34 @@ function RobotSurface({ view, data }) {
   // ---- a pose step: k matrices, one frame, no component ----------------------------------
   const handlesRef = useRef(NO_HANDLES);
   const handleLayoutRef = useRef(null);
+  // Poses the scene: the pose in hand, or in preview the opening pose.
+  const presentPoseRef = useRef(null);
   useLayoutEffect(() => {
     if (!scene || !pose || !robot) { handlesRef.current = NO_HANDLES; return undefined; }
     const prepared = prepareRobotJointHandles(THREE, robot.robot, scene);
     let boundsFrame = 0;
     const readHandles = () => { handlesRef.current = robotJointHandles(THREE, prepared, scene, pose.getSnapshot().values, pose.write); };
-    const step = () => {
-      shellRef.current?.scheduleStateSave();
-      if (!scene.setControlValues(pose.getSnapshot().values)) return;
+    const present = () => {
+      if (!scene.setControlValues(previewingRef.current ? pose.defaults : pose.getSnapshot().values)) return;
       readHandles();
       shellRef.current?.requestRender();
       // Lighting, shadows and the floor follow the posed robot: once per frame, however many writes landed in it.
       boundsFrame ||= window.requestAnimationFrame(() => { boundsFrame = 0; shellRef.current?.syncSceneBounds(); });
     };
+    const step = () => {
+      shellRef.current?.scheduleStateSave();
+      present();
+    };
     readHandles();
+    present();
+    presentPoseRef.current = present;
     const unsubscribe = pose.subscribe(step);
-    return () => { unsubscribe(); window.cancelAnimationFrame(boundsFrame); handlesRef.current = NO_HANDLES; };
+    return () => {
+      unsubscribe(); window.cancelAnimationFrame(boundsFrame); handlesRef.current = NO_HANDLES;
+      if (presentPoseRef.current === present) presentPoseRef.current = null;
+    };
   }, [scene, pose, robot]);
+  useLayoutEffect(() => { presentPoseRef.current?.(); }, [previewing]);
 
   // Read-only debug/test seams: where the Pose knobs are (CSS pixels, with each joint's
   // value), where every link IS (so a test asserts what is drawn, not what was asked

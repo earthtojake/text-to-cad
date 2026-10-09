@@ -387,6 +387,9 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
     onScrub: commands.handleAnimationScrub,
     onSpeedChange: commands.handleAnimationSpeedChange,
     onLoopToggle: commands.handleAnimationLoopToggle,
+    onRelease: commands.releaseAnimation,
+    savePlayback: commands.savePlayback,
+    restorePlayback: commands.restorePlayback,
     resetModel: commands.resetMotion,
     // The kit's playbar reads its time from the runtime it is handed, not from a context: the
     // old STEP-only bar did, which is why this object never carried one. It is the same clock

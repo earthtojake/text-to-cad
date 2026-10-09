@@ -92,8 +92,15 @@ Preview (a link or a host request, should either come to) takes it there: it kee
 the normal view. The CAD app's Full size, inline, is the host's display mode, not
 Preview: it shows the normal view, of any file. It is fullscreen
 (`onFullscreenChange`, below): the navbar, with everything in it (the app menu and the
-explorer too), steps aside while it lasts. It never uses the browser Fullscreen API. The shell saves the tools view's camera, fits a preview camera and restores
-the tools view's exact pose on exit; nothing of preview is persisted. Orbit
+explorer too), steps aside while it lasts. It never uses the browser Fullscreen API.
+Preview and the tools view are two states: entering leaves the tools view's state as it
+is (the pose, the selection, hidden and isolated parts, Explode and Clip, measurements,
+the camera, the Animation tool's routine, the tool and its panels) and preview starts
+from the model as authored, with its own camera and its own routine at rest; leaving
+throws preview's state away and gives the tools view back exactly as it was. A renderer
+draws preview from its opening view instead of resetting its own state (`useRendererShell`'s
+`preview`), and the shell saves the tools view's camera and routine on the way in and
+restores them on the way out; nothing of preview is persisted. Orbit
 starts by default, with its speed, unless the file's Orbit says otherwise: preview's
 settings are the file's view's `playback` — orbit on or off and its speed, Autoplay, the
 routine's chosen speed and loop — kept between previews and across a reload, and a
