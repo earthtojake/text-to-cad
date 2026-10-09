@@ -375,10 +375,11 @@ def _solved_part(volume, outcome, parsed, plan: _Plan, index: int, ordinal_of: d
     part, material = plan.parts[index], plan.materials[index]
     rows = volume.domain == index
     dofs = np.unique(outcome.element_dofs[rows])
+    field = outcome.von_mises_parts[index]  # the part's own stress, not smoothed across a joint
     own = {position for position, fp in volume.faces.items() if fp.ref.startswith(f"{part.ref}.f")}
     fixed_ordinals = {ordinal_of[ref] for fixture in parsed.fixtures for ref in fixture.faces} & own
     magnitude = np.linalg.norm(outcome.displacement[dofs], axis=1)
-    peak_node = int(dofs[outcome.von_mises[dofs].argmax()])
+    peak_node = int(dofs[field[dofs].argmax()])
     moved_node = int(dofs[magnitude.argmax()])
     corners = volume.nodes[np.unique(volume.tets[rows][:, :4])]
     here = outcome.dof_locations[peak_node]
@@ -396,7 +397,7 @@ def _solved_part(volume, outcome, parsed, plan: _Plan, index: int, ordinal_of: d
     return Solved(
         material_name=material.name,
         yield_MPa=material.yield_strength,
-        peak_MPa=float(outcome.von_mises[peak_node]),
+        peak_MPa=float(field[peak_node]),
         peak_gauss_MPa=float(outcome.element_von_mises_gauss[rows].max()),
         peak_at=tuple(float(c) for c in here),
         peak_face=_peak_face(volume, outcome, peak_node, fixed_ordinals, own),
@@ -580,6 +581,7 @@ def solve_study(
         return _unsolved(document, occurrence_ref, _not_connected(plan, exc.groups))
     all_solved = solved_of(volume, outcome)
     solved = weakest(all_solved)
+    weakest_index = next(i for i, part in enumerate(all_solved) if part is solved)
     refined = None
     finer_failure = None
     finer_size = None
@@ -596,6 +598,7 @@ def solve_study(
             "from_max_von_mises_MPa": round(solved.peak_MPa, 4),
             "size_mm": round(finer_size, 4),
             "max_von_mises_MPa": None,
+            **({} if plan is None else {"part": solved.part}),
         }
         logger.debug(f"safety factor under {checks.RESOLVE_BELOW:g}: solving again at {finer_size:.3g} mm")
         try:
@@ -611,7 +614,8 @@ def solve_study(
             # finding quotes and every point it names is on the GLB shown; the
             # first solve's peak rides along for convergence.
             finer_parts = solved_of(volume, outcome)
-            refined["max_von_mises_MPa"] = round(weakest(finer_parts).peak_MPa, 4)
+            # Like with like: the finer peak of the part whose first-solve peak is recorded.
+            refined["max_von_mises_MPa"] = round(finer_parts[weakest_index].peak_MPa, 4)
             all_solved = [
                 dataclasses.replace(finer, coarser_peak_MPa=coarse.peak_MPa, coarser_dofs=first_outcome.dofs)
                 for finer, coarse in zip(finer_parts, all_solved)
@@ -655,6 +659,8 @@ def solve_study(
         # The headline is the weakest part: its yield and safety factor; the peak and the colours span the assembly.
         summary["yield_MPa"] = solved.yield_MPa
         summary["weakest_part"] = solved.part
+        summary["weakest_part_peak_MPa"] = round(solved.peak_MPa, 4)
+        summary["weakest_part_peak_at_mm"] = [round(c, 3) for c in solved.peak_at]
         summary["parts"] = [
             {
                 "ref": plan.parts[i].ref,
@@ -704,6 +710,12 @@ def solve_study(
     face_index = {ordinal: index for index, ordinal in enumerate(face_ordinals)}
     face_of_triangle = np.array([face_index.get(int(o), -1) for o in volume.boundary_ordinal], dtype=np.int64)
 
+    if plan is not None:
+        # Each surface triangle's part: a face is one part's, and the part's ref prefixes the face's.
+        owner = {position: next(i for i, part in enumerate(plan.parts) if fp.ref.startswith(f"{part.ref}.f"))
+                 for position, fp in volume.faces.items()}
+        part_of_triangle = np.array([owner[int(o)] for o in volume.boundary_ordinal], dtype=np.int64)
+
     def bare(refs):  # the scene's own `#o1.fN`, whatever form the study named them in
         return [volume.faces[ordinal_of[ref]].ref for ref in refs]
 
@@ -739,6 +751,10 @@ def solve_study(
         scale=scale,
         value_range=(0.0, max_vm),
         extras=extras,
+        **({} if plan is None else {
+            "values_by_part": outcome.von_mises_parts,
+            "part_of_triangle": part_of_triangle,
+        }),
     )
     if vtu_path is not None:
         vertex_count = outcome.vertices

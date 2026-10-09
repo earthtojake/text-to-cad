@@ -72,6 +72,10 @@ class SolveOutcome:
     timings: dict[str, float] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     solver: str = ""
+    #: For an assembly, (parts, M): each part's own von Mises field, projected from its elements alone
+    #: (zero off the part), so stress jumps across a change of material as it does in the part.
+    #: ``von_mises`` is then their envelope.
+    von_mises_parts: "np.ndarray | None" = None
 
 
 def _element_mesh(volume: "VolumeMesh"):
@@ -164,6 +168,37 @@ def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: 
         )
         return spla.spsolve(Kff.tocsc(), ff), "superlu (after amg)"
     return u, f"amg+cg ({len(residuals)} iterations)"
+
+
+def _project_on_elements(scalar, field: "np.ndarray", rows: "np.ndarray") -> "np.ndarray":
+    """The L2 projection of a quadrature-point field onto the scalar basis, over the elements ``rows`` only.
+
+    Zero on the DOF no such element uses.
+    """
+    import numpy as np
+    import scipy.sparse.linalg as spla
+    from skfem import BilinearForm, LinearForm, asm
+
+    mask = np.repeat(rows[:, None], field.shape[1], axis=1).astype(float)
+    used = np.unique(scalar.element_dofs[:, rows])
+
+    @BilinearForm
+    def mass(u, v, w):
+        return w["mask"] * u * v
+
+    @LinearForm
+    def moment(v, w):
+        return w["mask"] * w["field"] * v
+
+    M = asm(mass, scalar, mask=mask).tocsr()[used][:, used]
+    b = asm(moment, scalar, mask=mask, field=field)[used]
+    inverse_diagonal = 1.0 / M.diagonal()
+    solution, info = spla.cg(M, b, rtol=1e-10, atol=0.0, M=spla.LinearOperator(M.shape, lambda x: inverse_diagonal * x), maxiter=500)
+    if info != 0:
+        solution = spla.spsolve(M.tocsc(), b)
+    result = np.zeros(scalar.N)
+    result[used] = np.maximum(solution, 0.0)
+    return result
 
 
 def solve_linear_static(
@@ -302,7 +337,14 @@ def solve_linear_static(
         0.5 * ((s[0, 0] - s[1, 1]) ** 2 + (s[1, 1] - s[2, 2]) ** 2 + (s[2, 2] - s[0, 0]) ** 2)
         + 3.0 * (s[0, 1] ** 2 + s[1, 2] ** 2 + s[0, 2] ** 2)
     )
-    von_mises = np.maximum(scalar.project(von_mises_q), 0.0)
+    von_mises_parts = None
+    if volume.domain is None:
+        von_mises = np.maximum(scalar.project(von_mises_q), 0.0)
+    else:
+        von_mises_parts = np.zeros((len(material), scalar.N))
+        for index in range(len(material)):
+            von_mises_parts[index] = _project_on_elements(scalar, von_mises_q, np.asarray(volume.domain) == index)
+        von_mises = von_mises_parts.max(axis=0)
     displacement = np.zeros((scalar_count, 3))
     for c in range(3):
         displacement[scalar.nodal_dofs[0], c] = u[basis.nodal_dofs[c]]
@@ -325,4 +367,5 @@ def solve_linear_static(
         timings=timings,
         warnings=warnings,
         solver=solver,
+        von_mises_parts=von_mises_parts,
     )

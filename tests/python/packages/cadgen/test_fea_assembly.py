@@ -415,7 +415,21 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertEqual(summary["weakest_part"], "post")
         self.assertEqual(summary["safety_factor"], weakest["safety_factor"])
         self.assertEqual(summary["yield_MPa"], weakest["yield_MPa"])
-        self.assertIn("weakest part: post", self.mixed.human_lines())
+        # The weakest part's numbers are one scope: its peak, its yield and its factor agree.
+        self.assertEqual(summary["weakest_part_peak_MPa"], weakest["peak_MPa"])
+        self.assertEqual(summary["weakest_part_peak_at_mm"], weakest["peak_at_mm"])
+        self.assertAlmostEqual(summary["safety_factor"], summary["yield_MPa"] / summary["weakest_part_peak_MPa"], delta=0.002)
+        self.assertGreaterEqual(summary["max_von_mises_MPa"], summary["weakest_part_peak_MPa"])
+        lines = self.mixed.human_lines()
+        peak = summary["weakest_part_peak_MPa"]
+        from cadgen._internal.fea.checks import safety_factor_text
+
+        self.assertIn(
+            f"weakest part 'post': peak {peak} MPa, yield 250.0 MPa, safety factor {safety_factor_text(summary['safety_factor'])}",
+            lines,
+        )
+        self.assertTrue(any(line.startswith(f"assembly peak von Mises {summary['max_von_mises_MPa']} MPa") for line in lines))
+        self.assertTrue(any(line.startswith("  'base' (Aluminum 6061-T6): peak ") for line in lines))
 
     def test_each_part_that_falls_short_is_named_in_its_findings(self):
         (yields,) = [f for f in self.mixed.findings if f["type"] == "yields"]
@@ -442,6 +456,85 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertEqual((joint["between"], joint["type"]), (["post", "base"], "bonded"))
         self.assertAlmostEqual(joint["area_mm2"], 100.0, places=3)
         self.assertEqual(sidecar["summary"]["parts"], self.mixed.summary["parts"])
+
+    def _first_solve_only(self, name):
+        """The mixed study solved once at the first mesh size, with the outcome and the mesh it was solved on."""
+        from unittest import mock
+
+        from cadgen import fea
+        from cadgen._internal.fea import solve
+
+        seen = []
+        real = solve.solve_linear_static
+
+        def spy(volume, *args, **kwargs):
+            outcome = real(volume, *args, **kwargs)
+            seen.append((volume, outcome))
+            return outcome
+
+        with mock.patch("cadgen._internal.fea.checks.needs_finer", return_value=False), \
+                mock.patch("cadgen._internal.fea.solve.solve_linear_static", spy):
+            result = fea.solve(self.step, self.tmp / f"{name}.glb", study=self.study({"base": "6061", "post": "steel"}))
+        (volume, outcome), = seen
+        return result, volume, outcome
+
+    def test_each_part_has_its_own_stress_field_that_jumps_across_the_joint(self):
+        import numpy as np
+
+        result, volume, outcome = self._first_solve_only("once")
+        self.assertIsNone(json.loads(result.sidecar.read_text(encoding="utf-8"))["refined"])
+        fields = outcome.von_mises_parts
+        # A node in the middle of the joint: z = 10, inside the post's footprint.
+        at = outcome.dof_locations
+        joint = np.flatnonzero((abs(at[:, 2] - 10) < 1e-6) & (at[:, 0] > 16) & (at[:, 0] < 24) & (at[:, 1] > 6) & (at[:, 1] < 14))
+        self.assertGreater(len(joint), 0)
+        base, post = fields[0, joint], fields[1, joint]
+        self.assertTrue((abs(base - post) > 0.01 * np.maximum(base, post)).any())
+        # Each part's peak is the maximum of its own field over its own elements.
+        for index, part in enumerate(result.summary["parts"]):
+            own = np.unique(outcome.element_dofs[volume.domain == index])
+            self.assertEqual(part["peak_MPa"], round(float(fields[index][own].max()), 4))
+        # The field is zero where the part is not.
+        self.assertEqual(fields[1][np.unique(outcome.element_dofs[volume.domain == 0]).tolist()].min(), 0.0)
+        # The assembly-wide peak is the larger of the two.
+        self.assertEqual(result.summary["max_von_mises_MPa"], round(float(fields.max()), 4))
+
+    def test_a_close_call_is_solved_again_and_the_record_compares_one_part_with_itself(self):
+        from cadgen._internal.fea.checks import _number
+
+        coarse, _, _ = self._first_solve_only("coarse")
+        before = {part["name"]: part["peak_MPa"] for part in coarse.summary["parts"]}
+        weakest = coarse.summary["weakest_part"]
+        refined = json.loads(self.mixed.sidecar.read_text(encoding="utf-8"))["refined"]
+        self.assertEqual(refined["part"], weakest)
+        self.assertEqual(refined["from_max_von_mises_MPa"], before[weakest])
+        after = {part["name"]: part["peak_MPa"] for part in self.mixed.summary["parts"]}
+        self.assertEqual(refined["max_von_mises_MPa"], after[weakest])
+        self.assertEqual(refined["size_mm"], 2.0)
+        # Each part's convergence finding quotes that part's own coarser and finer peaks.
+        moved = {f["summary"].split(":")[0]: f["summary"] for f in self.mixed.findings if f["type"] == "mesh_not_converged"}
+        for name in ("base", "post"):
+            self.assertIn(f"({_number(before[name])} to {_number(after[name])} MPa)", moved[f"In '{name}'"])
+
+    def test_a_result_that_stopped_before_the_solve_serializes_through_the_cli(self):
+        from unittest import mock
+
+        from cadgen.cli.fea_solve import main
+
+        step = _write_assembly(self.tmp, far_block=20.0, name="stopped")
+        study = {
+            "material": "6061",
+            "fixtures": [{"faces": [self.fixed]}],
+            "loads": [{"faces": [self.load], "type": "force", "vector_N": [1000, 0, 0]}],
+        }
+        out = io.StringIO()
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", side_effect=AssertionError("solved")), redirect_stdout(out):
+            code = main([str(step), "--study", json.dumps(study), "--json"])
+        self.assertEqual(code, 1)
+        payload = json.loads(out.getvalue().strip().splitlines()[-1])
+        self.assertFalse(payload["ok"])
+        self.assertIsNone(payload["glb"])
+        self.assertEqual(payload["findings"][0]["type"], "not_connected")
 
     def test_a_gap_that_is_closed_to_bond_is_said(self):
         from cadgen import fea

@@ -363,6 +363,29 @@ class FeaFacesResult:
         return lines
 
 
+def _stress_lines(s: dict, safety_factor_text) -> list[str]:
+    """The stress lines of a result: one scope per line (the part, then the assembly, then each part)."""
+    def factor(value):
+        return "n/a" if value is None else safety_factor_text(value)
+
+    if not s.get("weakest_part"):
+        return [
+            f"max von Mises {s.get('max_von_mises_MPa')} MPa (Gauss {s.get('max_von_mises_gauss_MPa')} MPa), "
+            f"yield {s.get('yield_MPa')} MPa, safety factor {factor(s.get('safety_factor'))}"
+        ]
+    lines = [
+        f"weakest part '{s['weakest_part']}': peak {s.get('weakest_part_peak_MPa')} MPa, "
+        f"yield {s.get('yield_MPa')} MPa, safety factor {factor(s.get('safety_factor'))}",
+        f"assembly peak von Mises {s.get('max_von_mises_MPa')} MPa (Gauss {s.get('max_von_mises_gauss_MPa')} MPa)",
+    ]
+    for part in s.get("parts", []):
+        lines.append(
+            f"  '{part['name']}' ({part['material']}): peak {part['peak_MPa']} MPa, yield {part['yield_MPa']} MPa, "
+            f"safety factor {factor(part['safety_factor'])}, moves up to {part['max_displacement_mm']} mm"
+        )
+    return lines
+
+
 @dataclass(frozen=True)
 class FeaResult:
     """The outcome of ``cadgen fea solve``: where the results went, and the numbers.
@@ -398,11 +421,9 @@ class FeaResult:
         lines = [
             f"solved {self.occurrence} of {_display(self.document)}: {self.mesh.get('elements')} tets, "
             f"{self.mesh.get('dofs')} DOF, {self.mesh.get('size_mm')} mm elements",
-            f"max von Mises {s.get('max_von_mises_MPa')} MPa (Gauss {s.get('max_von_mises_gauss_MPa')} MPa), "
-            f"yield {s.get('yield_MPa')} MPa, safety factor {'n/a' if safety is None else safety_factor_text(safety)}",
+            *_stress_lines(s, safety_factor_text),
             f"max displacement {s.get('max_displacement_mm')} mm at {s.get('max_displacement_at_mm')}",
             f"applied {s.get('applied_force_N')} N, reactions {s.get('reaction_force_N')} N",
-            *([f"weakest part: {s['weakest_part']}"] if s.get("weakest_part") else []),
             f"wrote GLB: {_display(self.glb)} (deformation x{s.get('deformation_scale')}), sidecar: {_display(self.sidecar)}"
             + (f", VTU: {_display(self.vtu)}" if self.vtu else ""),
         ]

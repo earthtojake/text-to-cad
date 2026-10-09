@@ -129,6 +129,8 @@ def write_glb(
     scale: float,
     value_range: tuple[float, float],
     extras: dict,
+    values_by_part: "np.ndarray | None" = None,
+    part_of_triangle: "np.ndarray | None" = None,
 ) -> None:
     """A binary glTF of the deformed boundary surface with the value ramp as vertex colour.
 
@@ -137,7 +139,10 @@ def write_glb(
     those node ids, wound consistently, which is kept -- flipped as a whole
     only when the surface encloses negative volume. ``face_of_triangle`` is the
     index into ``extras["faces"]`` of the face each of those triangles lies on
-    (-1 for none): it becomes ``_FACE``, one value per vertex.
+    (-1 for none): it becomes ``_FACE``, one value per vertex. For an assembly,
+    ``values_by_part`` (parts, nodes) holds each part's own field and
+    ``part_of_triangle`` the part each triangle belongs to: a vertex takes the
+    value of its face's part, so a joint's two sides keep their own stress.
     """
     import numpy as np
 
@@ -152,7 +157,12 @@ def write_glb(
     face = ((unique_pairs % _FACE_SLOTS) - 1).astype(np.float32)
     tris = compact.reshape(triangles.shape).astype(np.uint32)
     pos = _gltf_space(positions[used] + scale * displacement[used])
-    vals = values[used].astype(np.float32)
+    if values_by_part is None:
+        vals = values[used].astype(np.float32)
+    else:
+        vertex_part = np.zeros(len(unique_pairs), dtype=np.int64)
+        vertex_part[compact] = np.tile(np.asarray(part_of_triangle, dtype=np.int64), 4)[:, None]
+        vals = values_by_part[vertex_part, used].astype(np.float32)
     disp = _gltf_space(displacement[used])
     lo, hi = value_range
     t = (vals - lo) / (hi - lo) if hi > lo else np.zeros_like(vals)
