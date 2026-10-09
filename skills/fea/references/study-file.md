@@ -149,3 +149,11 @@ path you give (which must end in `.glb`) plus its `.json` twin:
   `connections` and a per-vertex `_PART` index beside `_FACE`.
 - `part.fea.vtu` with `--vtu` — the volume mesh with displacement and von
   Mises point data, for ParaView.
+
+For an assembly the summary mixes two scopes. `yield_MPa` and `safety_factor`
+are the weakest part's (the part named by `weakest_part`, whose own peak is
+`weakest_part_peak_MPa` at `weakest_part_peak_at_mm`). `max_von_mises_MPa`,
+`max_von_mises_gauss_MPa`, `max_von_mises_at_mm` and `max_displacement_mm`
+span the whole assembly: the highest stress can sit in a stronger part, so
+`yield_MPa` over `max_von_mises_MPa` is not the safety factor. Each part's own
+numbers are in `parts`.

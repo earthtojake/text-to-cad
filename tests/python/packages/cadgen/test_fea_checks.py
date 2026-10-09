@@ -218,6 +218,13 @@ class AssemblyChecksTest(unittest.TestCase):
         self.assertEqual(f["summary"], "Closed a 0.01 mm interference between 'post' and 'base' to bond them")
         self.assertEqual(f["description"], "the parts overlapped by 0.01 mm, within the contact tolerance")
 
+    def test_a_part_comfortably_above_the_resolve_threshold_is_not_called_unconverged(self):
+        # The weakest part was solved again; this one moved 40% but stays far from failing.
+        safe = solved(part="base", assembly=True, peak_MPa=60.0, peak_gauss_MPa=70.0, coarser_peak_MPa=100.0)  # SF 4.6
+        self.assertEqual(findings(safe), [])
+        close = solved(part="post", assembly=True, peak_MPa=120.0, peak_gauss_MPa=130.0, coarser_peak_MPa=200.0)  # SF 2.3
+        self.assertIn("mesh_not_converged", [f["type"] for f in findings(close)])
+
     def test_yields_names_the_part_as_it_always_does(self):
         (f,) = findings(solved(part="post", assembly=True, peak_MPa=310.0, peak_gauss_MPa=320.0))
         self.assertEqual(f["summary"], "The post yields: peak stress 310 MPa is above the 276 MPa yield strength of 6061-T6")

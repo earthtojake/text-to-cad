@@ -264,7 +264,12 @@ def findings(solved: Solved) -> list[dict]:
             [peak],
         )
 
-    if moved is not None and moved > CONVERGED_WITHIN:
+    # In an assembly only the weakest part decided the re-solve; another part far from
+    # failing that moved is no reason to distrust the answer.
+    unsettled = moved is not None and moved > CONVERGED_WITHIN
+    if unsettled and solved.assembly and not needs_finer(factor):
+        unsettled = False
+    if unsettled:
         before, after = _number(solved.coarser_peak_MPa), _number(solved.peak_MPa)
         if rising:
             summary = about(

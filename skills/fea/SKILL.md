@@ -217,6 +217,12 @@ part.
   design from one run.
 - Displacement is what the part moves, before any scale. The GLB positions
   carry `deformation_scale` times that; the sidecar has the true number.
+- In an assembly the summary's `yield_MPa` and `safety_factor` are the weakest
+  part's, beside `weakest_part` and `weakest_part_peak_MPa`; `max_von_mises_*`
+  and `max_displacement_mm` are the whole assembly's, wherever they fall. The
+  assembly's peak can be in a stronger part, so do not divide one by the other:
+  quote the weakest part's peak with its safety factor, and each part's own
+  numbers from `parts`.
 
 ## Read the findings
 
@@ -240,7 +246,7 @@ they would not change the answer.
 | `low_margin` | warning | It holds, but under the study's `margin`. | Strengthen it as for `yields`, or tell the user the margin it has and let them decide; never lower `margin` just to clear the finding. |
 | `peak_at_fixture` | warning | The peak sits on a fixed face or at its edge, where a perfectly rigid clamp exaggerates stress, and a finer solve did not settle it. | Read the stress a little away from the fixed face (the GLB's colours, or a probe in the VTU) before redesigning; if that is still high, the finding beside it stands. |
 | `peak_concentration` | warning | The Gauss-point peak is well above the nodal one: a sharp corner or concentrated load the mesh cannot resolve. | When the safety factor was under 3 the run already solved at half the mesh size, so refining the whole part again is not the next step: fillet the corner or spread the load over a larger face. Above 3 (a `margin` higher than that), halve `mesh.size_mm` once and compare. |
-| `mesh_not_converged` | warning | The automatic finer solve moved the peak by more than 10 %. | A peak that kept rising sits on a singularity (a sharp corner, the fixed edge): fillet it or judge the stress away from it. Otherwise set a smaller `mesh.size_mm` and solve again before trusting the safety factor. |
+| `mesh_not_converged` | warning | The automatic finer solve moved the peak by more than 10 %. In an assembly, only for a part whose safety factor is under 3: a part far from failing is not worth distrusting. | A peak that kept rising sits on a singularity (a sharp corner, the fixed edge): fillet it or judge the stress away from it. Otherwise set a smaller `mesh.size_mm` and solve again before trusting the safety factor. |
 | `large_displacement` | warning | It moves more than 1 % of its size. | The small-displacement model is stretched: check the fit against mating parts and whether the deflection is acceptable; stiffen the part if not. |
 | `no_load` | warning | The peak stress is zero: no load reaches the part. | Check that the loaded faces are on the part and connected to the fixed ones, and that the force is not zero. |
 
