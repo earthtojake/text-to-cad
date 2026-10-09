@@ -95,7 +95,9 @@ Run `cadgen fea parts assembly.step` first to see the parts and the pairs.
   `free` pair that is still joined through other bonded parts is refused.
   `bolt` and `contact` are refused with "not yet".
 - `contact_tolerance_mm`: default 0.1. Faces this close are touching; a gap
-  within it is closed to bond the pair (a `gap_closed` finding says so).
+  within it is closed to bond the pair, and so is an overlap no thicker than
+  it (an interference; a `gap_closed` finding says which). A thicker overlap
+  is never bonded.
 - Faces: `#o1.4.f23` is face 23 of occurrence `#o1.4`; faces may be on any
   part. A face that another part only partly covers (a plate's top with a post
   standing on it) holds or loads its exposed area; a face wholly covered by a
@@ -145,7 +147,8 @@ path you give (which must end in `.glb`) plus its `.json` twin:
   the GLB's mesh `extras`) and `refined`: the first and the finer solve's
   element size and peak when the run solved twice, else `null`.
 - for an assembly the sidecar also records `connections` (each joint: parts,
-  type, area, gap, interface faces), and the GLB carries `parts`,
+  type, area, gap, `interference_mm` when the parts overlapped by no more than
+  the tolerance and were bonded, interface faces), and the GLB carries `parts`,
   `connections` and a per-vertex `_PART` index beside `_FACE`.
 - `part.fea.vtu` with `--vtu` — the volume mesh with displacement and von
   Mises point data, for ParaView.
