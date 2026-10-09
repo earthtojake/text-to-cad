@@ -103,7 +103,7 @@ class StudyFile(unittest.TestCase):
         base = {"material": "steel", "fixtures": [{"faces": ["#o1.f1"]}], "loads": [{"faces": ["#o1.f2"], "type": "force", "vector_N": [1, 0, 0]}]}
         self.assertEqual(parse_study(base).margin, 2.0)
         self.assertEqual(parse_study({**base, "margin": 1.5}).margin, 1.5)
-        for bad in (0, -1, "2", True):
+        for bad in (0, -1, 0.5, "2", True):
             with self.subTest(margin=bad), self.assertRaises(ValueError) as caught:
                 parse_study({**base, "margin": bad})
             self.assertIn("margin", str(caught.exception))

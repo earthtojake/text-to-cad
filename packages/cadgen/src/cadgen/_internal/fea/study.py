@@ -12,7 +12,7 @@ caller) of this shape::
       ],
       "mesh": {"size_mm": 2.5},                  # optional; default from the bounding box
       "output": {"deformation_scale": "auto"},   # optional; a number, or "auto"
-      "margin": 2.0                              # optional; the safety factor the part should keep
+      "margin": 2.0                              # optional; the safety factor (>= 1) the part should keep
     }
 
 Face references are the viewer's own selectors (``#o1.f17``, or with the
@@ -212,5 +212,7 @@ def parse_study(study: str | dict | Path | None) -> Study:
     deformation_scale = None if scale_in in (None, "auto") else _number(scale_in, where="output.deformation_scale")
 
     margin = _number(document.get("margin", 2.0), where="margin", positive=True)
+    if margin < 1:
+        raise ValueError(f"margin: a safety factor below 1 means the part yields; must be >= 1, got {margin:g}")
 
     return Study(material, tuple(fixtures), tuple(loads), mesh_size, deformation_scale, margin, document)
