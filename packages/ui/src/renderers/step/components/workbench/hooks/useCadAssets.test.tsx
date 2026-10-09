@@ -308,6 +308,43 @@ it('draws the rest of a model when cadgen cannot mesh one component, and reports
   } finally { owner.dispose(); }
 });
 
+// A face no mesher could cover leaves its component drawn without it: the model is whole and
+// interactive, with no failure, and names the parts drawn short of a face for the viewport's warning.
+it('names the parts drawn without a face cadgen could not mesh', async () => {
+  const { client, model, encoded } = warmLargeStep();
+  const cold = ['c250'].map(cid => createHash('sha256').update(`317-component-${cid}`).digest('hex'));
+  const read = row => encoded.get(row.tessellationInput)?.bytes.slice() || null;
+  const owner = createTessellationCache({ provider: {
+    probeMany: async keys => keys.map(key => (cold.some(input => key.startsWith(input)) ? null : encoded.get(key)?.row || null)),
+    getProbed: async row => read(row), getManyProbed: async rows => rows.map(read) } });
+  const meshing = { ...client, resolveSurfaceComponents: vi.fn(async (_descriptor, requested, options) => new Map(
+    requested.map(({ cid, surfaceInput }) => {
+      // What cadgen stores for it: its first face drawn, its second, which no mesher covered, named.
+      const bytes = encodeMeshFixture({
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+        faceRanges: [{ ord: 1, color: null, indexStart: 0, indexCount: 3 }, { ord: 2, color: null, indexStart: 3, indexCount: 0 }],
+        edges: [], bounds: { min: [0, 0, 0], max: [1, 1, 0] }, scale: 1, unmeshedFaces: [2],
+      }, { surfaceInput, surfaceObject: 'a'.repeat(64), tessellation: options.tessellation });
+      const mesh = validateTessellationProbeRow({ schemaVersion: MESH_INDEX_SCHEMA,
+        object: createHash('sha256').update(bytes).digest('hex'), ...tessellationPayloadFacts(bytes) });
+      encoded.set(mesh.tessellationInput, { bytes, row: mesh });
+      return [cid, { surfaceInput, surfaceObject: 'a'.repeat(64), byteLength: 100, mesh,
+        surfUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}`,
+        selectorsUrl: `https://cad-assets.test/__cad/store?surfaceInput=${surfaceInput}&selectors=1` }];
+    }))) };
+  try {
+    const opened = renderHook(() => assets(model, meshing, owner.createSession()));
+    await act(() => opened.result.current.loadMeshForEntry(model));
+    const state = opened.result.current.meshState;
+    expect([opened.result.current.error, opened.result.current.status]).toEqual(['', 'ready']);
+    expect(state.meshData.parts).toHaveLength(317);
+    expect([state.assemblyInteractionReady, state.assemblyBackgroundError, state.assemblyFailedParts]).toEqual([true, '', []]);
+    expect(state.assemblyUnmeshedParts).toEqual(['c250']);
+    opened.unmount();
+  } finally { owner.dispose(); }
+});
+
 // The core surf fixtures: a component's SURF, cadgen's standard mesh of it and that mesh's probe row.
 function surfFixtures(names: string[]) {
   const dir = path.join(path.dirname(createRequire(import.meta.url).resolve('@text-to-cad/core/lib/surf/container.js')), 'fixtures');

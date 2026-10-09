@@ -201,6 +201,7 @@ function completedPackageMeshState(entry, meshData) {
     file: entry.file, kind: entry.kind, meshHash: entryMeshAssetSignature(entry), meshData,
     assemblyStructureReady: true, assemblyInteractionReady: true,
     assemblyBackgroundError: "", assemblyBackgroundErrorMeshHash: "", assemblyFailedParts: [],
+    assemblyUnmeshedParts: [],
   };
 }
 
@@ -211,6 +212,20 @@ function failedPartNames(descriptor, failures) {
   const names = [];
   for (const occurrence of descriptor?.occurrences || []) {
     if (!failed.has(String(occurrence?.component || ""))) continue;
+    const name = String(occurrence?.name || occurrence?.id || occurrence?.component).trim();
+    if (name && !names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+// The parts drawn without faces no mesher could cover (a component mesh's `unmeshedFaces`), by
+// the names the tree gives them: the model is whole but for those faces, and the viewport says so.
+function unmeshedPartNames(descriptor, componentMeshDataByCid) {
+  const short = new Set(Object.entries(componentMeshDataByCid || {})
+    .filter(([, meshData]) => meshData?.unmeshedFaces?.length).map(([cid]) => cid));
+  const names = [];
+  for (const occurrence of short.size ? descriptor?.occurrences || [] : []) {
+    if (!short.has(String(occurrence?.component || ""))) continue;
     const name = String(occurrence?.name || occurrence?.id || occurrence?.component).trim();
     if (name && !names.includes(name)) names.push(name);
   }
@@ -228,6 +243,7 @@ function detailSwapMeshState(current, entry, meshData) {
     assemblyBackgroundError: current.assemblyBackgroundError || "",
     assemblyBackgroundErrorMeshHash: current.assemblyBackgroundErrorMeshHash || "",
     assemblyFailedParts: current.assemblyFailedParts || [],
+    assemblyUnmeshedParts: current.assemblyUnmeshedParts || [],
   };
 }
 
@@ -256,7 +272,8 @@ export function useCadAssets({
       assemblyInteractionReady: false,
       assemblyBackgroundError: "",
       assemblyBackgroundErrorMeshHash: "",
-      assemblyFailedParts: []
+      assemblyFailedParts: [],
+      assemblyUnmeshedParts: []
     };
   }, [getAssemblyMeshHash, resources]);
 
@@ -1102,6 +1119,7 @@ export function useCadAssets({
               // Named, the rest of the model drawn: the viewport warns rather than fails.
               nextState.assemblyFailedParts = failedPartNames(packageDescriptor, failures);
             }
+            if (final) nextState.assemblyUnmeshedParts = unmeshedPartNames(packageDescriptor, componentMeshDataByCid);
             const ctx = lodPackageRef.current;
             const componentLodLevelByCid = Object.fromEntries(
               Object.entries(componentMeshDataByCid).map(([cid, componentMeshData]) => [

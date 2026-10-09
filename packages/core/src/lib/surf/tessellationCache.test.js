@@ -460,6 +460,8 @@ test("a body that leaves a face no mesher covered names it, and its probe row co
   assert.ok(decoded);
   assert.deepEqual([...decoded.component.unmeshedFaces], [2]);
   assert.deepEqual([...solidComponent().unmeshedFaces], [], "a whole body names none");
+  // The render data carries them, for the viewer to name the part drawn without them.
+  assert.deepEqual(buildMeshDataFromSurf(surfIndexFromCacheEntry(decoded), decoded.component).unmeshedFaces, [2]);
   const row = probeRowFor(leftOut);
   assert.equal(row.unmeshedFaceCount, 1);
   assert.equal(tessellationPayloadFacts(leftOut).unmeshedFaceCount, 1);
