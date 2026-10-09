@@ -3,7 +3,7 @@ from pathlib import Path
 from cadgen import step,build123d as bd
 from lib.compact_mcp_dorsal import compact_mcp_dorsal_hardware
 
-@step(out='../STEP/compact_mcp_dorsal_review.step',mesh_tolerance=.001,mesh_angular_tolerance=.01)
+@step(out='../STEP/compact_mcp_dorsal_review.step',mesh_tolerance=.001,mesh_angular_tolerance=0.05)
 def compact_mcp_dorsal_review():
     rows=compact_mcp_dorsal_hardware();root=Path(__file__).resolve().parents[1]
     (root/'validation/compact_mcp_dorsal_frames.json').write_text(json.dumps([

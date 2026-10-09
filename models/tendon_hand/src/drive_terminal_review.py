@@ -3,7 +3,7 @@ from cadgen import build123d as bd, step
 from lib.drive_terminal import make_terminal_pulley_parts,make_driven_ferrule,make_pulley_grub_screw,make_cover_screw,make_driven_bond_line,arc_tube
 from lib.finish import finish
 
-@step(out='../STEP/drive_terminal_review.step',mesh_tolerance=.0008,mesh_angular_tolerance=.008)
+@step(out='../STEP/drive_terminal_review.step',mesh_tolerance=.0008,mesh_angular_tolerance=0.05)
 def drive_terminal_review():
     children=[]
     for r,x in zip((3.5,4.5,5.5,7.,11.),(-42,-30,-16,2,29)):

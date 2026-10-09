@@ -9,7 +9,7 @@ ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/'STEP/imported/phalanx_guide_mounts_pre_clearance.step'
 assert hashlib.sha256(SOURCE.read_bytes()).hexdigest()=='6995c4c7521451a2e284e9c5c31d582a7a088d6f7f03d3cc2e2cd938c37b1258'
 
-@step(out='../STEP/phalanx_comb_clearance_review.step',mesh_tolerance=.001,mesh_angular_tolerance=.015)
+@step(out='../STEP/phalanx_comb_clearance_review.step',mesh_tolerance=.001,mesh_angular_tolerance=0.05)
 def phalanx_comb_clearance_review():
     original=leaves(read_step(SOURCE));out=[];records=[];changes=[]
     styles=json.loads((ROOT/'validation/integration_native_base_appearance.json').read_text())['occurrences']

@@ -2,7 +2,7 @@
 from cadgen import build123d as bd, step
 from lib.axle import make_axle,make_dowel
 
-@step(out="../STEP/axle_review.step",mesh_tolerance=.0008,mesh_angular_tolerance=.008)
+@step(out="../STEP/axle_review.step",mesh_tolerance=.0008,mesh_angular_tolerance=0.05)
 def axle_review():
     return bd.Compound(label="polished_axle_and_dowel_family",children=[
         bd.Pos(-9,0,0)*make_axle(3.5,label="finger_3_5mm_stub_axle"),

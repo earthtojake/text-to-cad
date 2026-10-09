@@ -6,7 +6,7 @@ from lib.layout import FINGERS,JOINT_BY_NAME
 from lib.bushing import make_bushing
 from lib.assembly import joint_location
 
-@step(out='../STEP/positive_yaw_bushing_review.step',mesh_tolerance=.0008,mesh_angular_tolerance=.008)
+@step(out='../STEP/positive_yaw_bushing_review.step',mesh_tolerance=.0008,mesh_angular_tolerance=0.05)
 def positive_yaw_bushing_review():
  parts=[];frames=[]
  for f in FINGERS:

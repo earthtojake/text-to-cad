@@ -3,7 +3,7 @@ from pathlib import Path
 from cadgen import build123d as bd,step,read_step
 from lib.palm_frame import make_palm_frame
 
-@step(out='../STEP/palm_frame_review.step',mesh_tolerance=.003,mesh_angular_tolerance=.012)
+@step(out='../STEP/palm_frame_review.step',mesh_tolerance=.003,mesh_angular_tolerance=0.05)
 def palm_frame_review():
     main=make_palm_frame()
     little=read_step(Path(__file__).resolve().parents[1]/'STEP/palm_little_review.step')

@@ -6,7 +6,7 @@ from lib.phalanx import make_phalanx
 from lib.layout import FINGERS,THUMB_CMC,THUMB_LENGTHS,finger_fan_matrix
 from lib.assembly import matrix_location
 
-@step(out='../STEP/fingernail_review.step',mesh_tolerance=.003,mesh_angular_tolerance=.03)
+@step(out='../STEP/fingernail_review.step',mesh_tolerance=.003,mesh_angular_tolerance=0.05)
 def fingernail_review():
     parts=[p for p,f,s,k in fingernail_bodies()]+[p for p,f,s,k in fingertip_pad_bodies()]
     for finger in FINGERS:

@@ -2,7 +2,7 @@
 from cadgen import build123d as bd,step
 from lib.drive_terminal import drive_terminal_bodies,capstan_bond_bodies
 
-@step(out='../STEP/drive_terminal_placements.step',mesh_tolerance=.0008,mesh_angular_tolerance=.008)
+@step(out='../STEP/drive_terminal_placements.step',mesh_tolerance=.0008,mesh_angular_tolerance=0.05)
 def drive_terminal_placements():
     return bd.Compound(label='all_48_driven_tendon_terminal_assemblies',children=[s for s,*_ in drive_terminal_bodies()+capstan_bond_bodies()])
 

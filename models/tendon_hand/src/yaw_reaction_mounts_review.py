@@ -2,7 +2,7 @@
 from cadgen import build123d as bd,step
 from lib.yaw_guide_mounts import yaw_reaction_mounts
 
-@step(out='../STEP/yaw_reaction_mounts_review.step',mesh_tolerance=.001,mesh_angular_tolerance=.015)
+@step(out='../STEP/yaw_reaction_mounts_review.step',mesh_tolerance=.001,mesh_angular_tolerance=0.05)
 def yaw_reaction_mounts_review():
     return bd.Compound(label='eight_finger_yaw_reaction_outlet_mounts',children=[s for s,f,y,k in yaw_reaction_mounts()])
 

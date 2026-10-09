@@ -1,7 +1,7 @@
 from cadgen import build123d as bd,step
 from lib.wrist import make_wrist_fixed_fork,make_wrist_yaw_carrier,make_wrist_palm_cradle,make_wrist_bushings
 from lib.pulley import make_pulley
-@step(out='../STEP/wrist_review.step',mesh_tolerance=.001,mesh_angular_tolerance=.01)
+@step(out='../STEP/wrist_review.step',mesh_tolerance=.001,mesh_angular_tolerance=0.05)
 def wrist_review():
     p=[make_wrist_fixed_fork(),make_wrist_yaw_carrier(),make_wrist_palm_cradle()]
     for sign in (-1,1):

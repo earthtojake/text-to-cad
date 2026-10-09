@@ -4,7 +4,7 @@ from lib.pulley import make_pulley
 
 
 @step(out="../STEP/pulley_review.step",
-      mesh_tolerance=0.0008, mesh_angular_tolerance=0.008)
+      mesh_tolerance=0.0008, mesh_angular_tolerance=0.05)
 def pulley_review():
     children = []
     for radius, x in zip((3.5, 4.5, 5.5, 7.0, 11.0), (-40, -29, -16, 0, 22)):

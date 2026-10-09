@@ -6,7 +6,7 @@ from lib.retaining_ring import make_retaining_ring
 from lib.assembly import joint_location
 from lib.layout import JOINT_BY_NAME
 ROOT=Path('models/tendon_hand/validation')
-@step(out='../STEP/cmc_dorsal_ring_review.step',mesh_tolerance=.0008,mesh_angular_tolerance=.008)
+@step(out='../STEP/cmc_dorsal_ring_review.step',mesh_tolerance=.0008,mesh_angular_tolerance=0.05)
 def cmc_dorsal_ring_review():
  report=json.loads((ROOT/'cmc_dorsal_ring_rotation_wide_probe.json').read_text());assert report['sample_count']==225
  best=max(report['rows'],key=lambda r:r['minimum_gap']);assert best['minimum_gap']>0

@@ -2,7 +2,7 @@
 from cadgen import build123d as bd, step
 from lib.axle import make_driven_axle
 
-@step(out='../STEP/driven_axle_review.step',mesh_tolerance=.0008,mesh_angular_tolerance=.008)
+@step(out='../STEP/driven_axle_review.step',mesh_tolerance=.0008,mesh_angular_tolerance=0.05)
 def driven_axle_review():
     return bd.Compound(label='D_keyed_drive_axle_family',children=[
         bd.Pos(-6,0,0)*make_driven_axle(26,label='finger_26mm_through_drive_shaft'),

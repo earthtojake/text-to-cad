@@ -195,7 +195,7 @@ CANDIDATE = [{'flex': 0.0,
                         [3.0, 7.9945832634151985, 0.0],
                         [3.0, 12.25, 0.0]]]}]}]
 
-@step(out='../STEP/thumb_cmc_candidate_review.step',mesh_tolerance=.006,mesh_angular_tolerance=.035)
+@step(out='../STEP/thumb_cmc_candidate_review.step',mesh_tolerance=.006,mesh_angular_tolerance=0.05)
 def thumb_cmc_candidate_review():
     children=[]
     for row in thumb_cmc_packet(atlas_override=CANDIDATE,outlet_y=16.):

@@ -3,7 +3,7 @@ from lib.guide_mounts_continuous_r5 import make_phalanx_comb
 from lib.fixed_guide_mounts_continuous_r5 import make_fixed_outlet_pair
 from lib.layout import FINGERS,finger_fan_matrix
 from lib.assembly import matrix_location
-@step(out="../STEP/phalanx_continuous_supports_r5.step",mesh_tolerance=.001,mesh_angular_tolerance=.018)
+@step(out="../STEP/phalanx_continuous_supports_r5.step",mesh_tolerance=.001,mesh_angular_tolerance=0.05)
 def phalanx_continuous_supports_r5():
     from lib.phalanx_r5_host import warm_host
     warm_host()

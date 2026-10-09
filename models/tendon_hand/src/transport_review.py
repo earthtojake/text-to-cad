@@ -5,7 +5,7 @@ from lib.transport_guide import make_guide, make_tendon
 
 
 @step(out='../STEP/transport_review.step',
-      mesh_tolerance=.006,mesh_angular_tolerance=.035)
+      mesh_tolerance=.006,mesh_angular_tolerance=0.05)
 def transport_review():
     bodies=[]
     for i in range(6):
