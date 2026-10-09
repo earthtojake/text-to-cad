@@ -1172,6 +1172,10 @@ test('a package that arrives in pieces is framed once, on the box it declares; a
   // BATCH ONE: eight arms, all at the origin, so what is placed is one arm's box whichever
   // eight of them got there first. The rest of the package is still downloading.
   await page.waitForFunction(() => window.__cadMeshCost?.loadedComponents === 8, null, { timeout: 60000 });
+  // ...as cadgen holds a part it is still meshing: pending, which holds no request open. A held
+  // response would take one of the browser's six connections to the host, the loader's lanes
+  // (up to eight) could fill them all, and an unheld component queued behind them would never land.
+  await staggered.idle();
   await page.waitForFunction(() => window.__cadStage?.()?.bounds);
   await restingCamera(page);
   const first = await read();
