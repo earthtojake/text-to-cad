@@ -86,10 +86,12 @@ in [the drawing contract](../ui/docs/drawing.md); the mechanism is
   [docs/render-pipeline.md](docs/render-pipeline.md).
 - **Kinematics and choreography are data, independently**: the articulation
   player (`articulation.js`) plays cadgen's articulation — controls with their
-  limits, joints with affine rows over the controls, which occurrences each
-  joint carries, what a drag writes, named poses — by dot products and TRS
+  limits, joints with affine rows over the controls (and, where a joint follows
+  its driver nonlinearly, a curve cadgen sampled from the mechanism's closed
+  form, played by linear interpolation as a glTF sampler is), which occurrences
+  each joint carries, what a drag writes, named poses — by dot products and TRS
   composition, into per-occurrence transforms; it mints no id, decides no
-  default or ownership, and checks nothing cadgen checked. The animation runtime
+  default or ownership, solves no mechanism, and checks nothing cadgen checked. The animation runtime
   (`animationRuntime.js`) plays the baked keyframes,
   `{clips: [{id, label, duration, loop, tracks}, ...]}`, which cadgen bakes
   from the model's Python clips when it builds, as a glTF player plays its

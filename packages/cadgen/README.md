@@ -398,11 +398,14 @@ src/cadgen/
                          #   declare — a mesh decorator alone is a model that
                          #   writes no STEP
   articulation.py        # a model's kinematics resolved for a player:
-                         #   controls, joints as affine rows, carries,
-                         #   handles, poses; the reference evaluator
+                         #   controls, joints as affine rows (plus a sampled
+                         #   curve where a joint follows its driver
+                         #   nonlinearly), carries, handles, poses; the
+                         #   reference evaluator
   robot_payload.py       # a robot description (URDF, SDF, SRDF with its
                          #   URDF) resolved for the page: the articulation
-                         #   above, the visuals in rest space (a box,
+                         #   above (a tcad:four_bar linkage closed here into
+                         #   a curve), the visuals in rest space (a box,
                          #   cylinder, sphere or capsule meshed into the
                          #   store), the facts a person reads back; refused
                          #   at the door in the validators' words, joint

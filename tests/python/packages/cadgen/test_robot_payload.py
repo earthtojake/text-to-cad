@@ -24,10 +24,12 @@ from tests.python.support.paths import REPO_ROOT, add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen import robot_payload  # noqa: E402
-from cadgen.articulation import joint_matrices  # noqa: E402
+from cadgen.articulation import joint_matrices, joint_values  # noqa: E402
 from cadgen.robot_payload import (  # noqa: E402
+    FOUR_BAR_CURVE_TOLERANCE_DEG,
     ROBOT_PAYLOAD_SCHEMA_VERSION,
     RobotReadError,
+    four_bar_input_angle,
     locate_robot_payload,
     read_robot_description,
     robot_control_values,
@@ -92,6 +94,38 @@ SWING_SDF = """<?xml version="1.0"?>
   <joint name="mount" type="fixed"><parent>tip</parent><child>ball</child></joint>
 </model></world></sdf>
 """
+
+
+# A crank-rocker four-bar (the browser fixture, `packages/ui/src/renderers/robot/__fixtures__/linkage.urdf`):
+# the ground runs 0.2 m along +x from the crank's pivot to the rocker's; the rocker (0.08 m, the driver)
+# drives the crank (0.05 m) through a 0.2 m coupler. At zero the rocker points straight up and the crank
+# 87.4 degrees from the ground: the branch the coupler closes on.
+LINKAGE_ZERO = 1.5253680280265103
+LINKAGE = {"input_length": 0.05, "ground_length": 0.2, "output_length": 0.08, "coupler_length": 0.2,
+           "input_zero": LINKAGE_ZERO, "output_zero": math.pi / 2, "branch": 0}
+# The same lengths with the crank driving (a Grashof crank-rocker: the 0.05 m crank turns full circles,
+# the 0.08 m rocker oscillates), so the derived joint is the rocker and the driver turns without limits.
+# At zero the crank points straight up; the rocker then sits at this angle from the ground.
+WIPER_ZERO = 1.5425679797000098
+WIPER = {"input_length": 0.08, "ground_length": 0.2, "output_length": 0.05, "coupler_length": 0.2,
+         "input_zero": WIPER_ZERO, "output_zero": math.pi / 2, "branch": 0}
+
+
+def four_bar_urdf(four_bar=LINKAGE, *, driver_type="revolute", driver_limit=(-0.5, 0.5), crank_limit=(-1.5, 1.5), crank_type="revolute",
+                  driver_origin='xyz="0.2 0 0" rpy="0 0 1.5707963267948966"', driver_axis="0 0 1", element=None, extra_links="", extra_joints=""):
+    """A four-bar as `linkage.urdf` writes one: a ground, the driver's link and the crank's."""
+    numbers = four_bar if element is None else {**four_bar, **element}
+    attributes = " ".join(f'{key}="{numbers[key]!r}"' for key in ("input_length", "ground_length", "output_length", "coupler_length", "input_zero", "output_zero"))
+    limit = f'<limit lower="{driver_limit[0]}" upper="{driver_limit[1]}" effort="1" velocity="1"/>' if driver_type == "revolute" else ""
+    crank_limits = f'<limit lower="{crank_limit[0]}" upper="{crank_limit[1]}" effort="1" velocity="1"/>' if crank_type == "revolute" else ""
+    return f"""<robot name="linkage" xmlns:tcad="https://text-to-cad.dev/urdf">
+  <link name="ground">{box('0.26 0.02 0.01', '0.1 0 -0.01')}</link>
+  <link name="rocker"><visual name="rocker_arm"><origin xyz="0.04 0 0"/><geometry><box size="0.08 0.015 0.01"/></geometry></visual></link>
+  <link name="crank">{box('0.05 0.015 0.01', '0.025 0 0')}</link>{extra_links}
+  <joint name="output_joint" type="{driver_type}"><parent link="ground"/><child link="rocker"/><origin {driver_origin}/><axis xyz="{driver_axis}"/>{limit}</joint>
+  <joint name="input_joint" type="{crank_type}"><parent link="ground"/><child link="crank"/><origin xyz="0 0 0" rpy="0 0 {numbers['input_zero']!r}"/><axis xyz="0 0 1"/>{crank_limits}
+    <tcad:four_bar driver="output_joint" {attributes}/></joint>{extra_joints}
+</robot>"""
 
 
 def transform(matrix: list[list[float]], point) -> list[float]:
@@ -199,6 +233,20 @@ class UrdfArticulation(_Workspace):
         self.assertEqual(joints["grip_mirror"]["mimic"], {"joint": "grip", "multiplier": -1.0, "offset": 0.0})
         self.assertEqual((joints["camera_mount"]["axis"], joints["camera_mount"]["origin"]["rpy"]), (None, [0.0, 0.5, 0.0]))
 
+    def test_a_visual_is_labelled_by_its_own_name_and_by_its_geometry_without_one(self) -> None:
+        (self.root / "meshes").mkdir()
+        (self.root / "meshes" / "bucket.stl").write_bytes(b"solid a\nendsolid a\n")
+        urdf = ('<robot name="bucket_robot"><link name="bucket">'
+                '<visual name="shell"><geometry><mesh filename="meshes/bucket.stl"/></geometry></visual>'
+                '<visual name="  lip "><geometry><box size="0.1 0.1 0.01"/></geometry></visual>'
+                '<visual><geometry><mesh filename="meshes/bucket.stl"/></geometry></visual>'
+                '<visual name=""><geometry><cylinder radius="0.01" length="0.2"/></geometry></visual>'
+                '</link></robot>')
+        payload = read_robot_description(self.write("bucket.urdf", urdf))
+        self.assertEqual([(visual["id"], visual["label"]) for visual in payload["visuals"]],
+                         [("bucket:v1", "shell"), ("bucket:v2", "lip"), ("bucket:v3", "bucket.stl"), ("bucket:v4", "cylinder")])
+        self.assertEqual([fact["name"] for fact in payload["links"][0]["visuals"]], ["shell", "lip", "", ""], "the facts keep the name as written")
+
     def test_a_mimic_chain_with_an_offset_across_units_is_one_affine_row(self) -> None:
         urdf = """<robot name="chain"><link name="a"/><link name="b"/><link name="c"/><link name="d"/>
           <joint name="lead" type="prismatic"><parent link="a"/><child link="b"/><axis xyz="1 0 0"/><limit lower="0" upper="1" effort="1" velocity="1"/></joint>
@@ -214,6 +262,109 @@ class UrdfArticulation(_Workspace):
         self.assertEqual(joints["again"]["turn"]["terms"], [["lead", degrees(-2)]])
         self.assertAlmostEqual(joints["again"]["turn"]["bias"], math.degrees(-0.4))
         self.assertEqual([control["id"] for control in articulation["controls"]], ["lead"])
+
+
+class FourBar(_Workspace):
+    """``<tcad:four_bar>``: the crank of a planar four-bar linkage, derived from its driver. cadgen
+    closes the linkage: it checks the geometry, samples the crank's angle over the driver's whole
+    range from the closed form into a curve on the crank's row, and refuses what cannot close."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.payload = read_robot_description(self.write("linkage.urdf", four_bar_urdf()))
+        self.articulation = self.payload["articulation"]
+        self.crank = {joint["id"]: joint for joint in self.articulation["joints"]}["input_joint"]
+
+    def test_the_crank_is_a_curve_over_its_driver_with_no_control_and_no_handle(self) -> None:
+        self.assertEqual([control["id"] for control in self.articulation["controls"]], ["output_joint"], "the crank is derived, never set")
+        self.assertEqual([handle["id"] for handle in self.articulation["handles"]], ["output_joint"], "and has no knob: its driver's moves it")
+        row = self.crank["turn"]
+        self.assertEqual((row["bias"], row["terms"]), (0.0, []))
+        curve = row["curve"]
+        self.assertEqual(curve["driver"], {"bias": 0.0, "terms": [["output_joint", 1.0]]}, "over the driver's row, in its degrees")
+        self.assertNotIn("period", curve, "a limited driver: held beyond its range, which the door refuses anyway")
+        self.assertEqual(curve["input"], sorted(curve["input"]))
+        self.assertEqual((round(curve["input"][0], 4), round(curve["input"][-1], 4)), (round(math.degrees(-0.5), 4), round(math.degrees(0.5), 4)),
+                         "the driver's whole operating range")
+        self.assertEqual(curve["output"][curve["input"].index(0.0)], 0.0, "the zero pose is a key at exactly zero: the robot as written")
+        self.assertEqual(self.articulation["carries"], {"output_joint": ["rocker"], "input_joint": ["crank"]})
+        facts = {joint["name"]: joint for joint in self.payload["joints"]}
+        self.assertEqual(facts["input_joint"]["fourBar"], {"driver": "output_joint", "inputLength": 0.05, "groundLength": 0.2, "outputLength": 0.08,
+                                                            "couplerLength": 0.2, "inputZero": LINKAGE_ZERO, "outputZero": math.pi / 2})
+        self.assertEqual((facts["input_joint"]["mimic"], facts["output_joint"]["fourBar"]), (None, None))
+        self.assertEqual([visual["label"] for visual in self.payload["visuals"]], ["box", "rocker_arm", "box"])
+
+    def test_the_curve_closes_the_linkage_within_the_tolerance_it_names(self) -> None:
+        # The page interpolates the keys linearly: at every driver angle the crank it plays is within
+        # the named tolerance of the closed form, and the coupler it implies spans its own length.
+        import random
+        draw = random.Random(584)
+        worst = 0.0
+        for _ in range(5000):
+            driver = draw.uniform(-0.5, 0.5)
+            exact = math.degrees(four_bar_input_angle(LINKAGE, driver))
+            played = joint_values(self.articulation, {"output_joint": math.degrees(driver)})["input_joint"]["turn"]
+            worst = max(worst, abs(played - exact))
+            crank = LINKAGE_ZERO + math.radians(played)
+            pin = (0.05 * math.cos(crank), 0.05 * math.sin(crank))
+            rocker = math.pi / 2 + driver
+            output_pin = (0.2 + 0.08 * math.cos(rocker), 0.08 * math.sin(rocker))
+            self.assertLess(abs(math.dist(pin, output_pin) - 0.2), 1e-5, f"the coupler does not close at driver {math.degrees(driver):.3f} deg")
+        self.assertLessEqual(worst, FOUR_BAR_CURVE_TOLERANCE_DEG)
+        self.assertGreater(worst, FOUR_BAR_CURVE_TOLERANCE_DEG / 10, "the sampling is as sparse as the tolerance allows, not denser")
+        self.assertLess(len(self.crank["turn"]["curve"]["input"]), 200, "a few keys per degree, not 720 fixed samples")
+
+    def test_a_parallelogram_turns_with_its_driver_and_a_continuous_driver_turns_one_period(self) -> None:
+        # Crank = rocker, coupler = ground, both straight up at zero: the crank turns exactly with the driver.
+        parallelogram = {**LINKAGE, "input_length": 0.08, "input_zero": math.pi / 2}
+        articulation = read_robot_description(self.write("parallelogram.urdf", four_bar_urdf(parallelogram)))["articulation"]
+        curve = {joint["id"]: joint for joint in articulation["joints"]}["input_joint"]["turn"]["curve"]
+        for x, y in zip(curve["input"], curve["output"]):
+            self.assertAlmostEqual(x, y, places=9)
+        # The crank drives: a full turn is its range, and the curve is one period the player folds into.
+        wiper = read_robot_description(self.write("wiper.urdf", four_bar_urdf(WIPER, driver_type="continuous")))["articulation"]
+        self.assertEqual(wiper["controls"][0]["min"], None)
+        curve = {joint["id"]: joint for joint in wiper["joints"]}["input_joint"]["turn"]["curve"]
+        self.assertEqual((curve["period"], curve["input"][0], curve["input"][-1]), (360.0, -180.0, 180.0))
+        self.assertAlmostEqual(curve["output"][0], curve["output"][-1], places=9, msg="the seam meets itself")
+        at = lambda degrees: joint_values(wiper, {"output_joint": degrees})["input_joint"]["turn"]
+        self.assertAlmostEqual(at(400), at(40), places=9)
+        self.assertAlmostEqual(at(-200), at(160), places=9)
+        self.assertAlmostEqual(at(40), math.degrees(four_bar_input_angle(WIPER, math.radians(40))), delta=FOUR_BAR_CURVE_TOLERANCE_DEG)
+
+    def test_a_mimic_of_the_crank_follows_the_curve_scaled(self) -> None:
+        urdf = four_bar_urdf(extra_links='<link name="pointer"/>',
+                             extra_joints='<joint name="pointer_joint" type="revolute"><parent link="ground"/><child link="pointer"/><axis xyz="0 0 1"/>'
+                                          '<limit lower="-3" upper="3" effort="1" velocity="1"/><mimic joint="input_joint" multiplier="2" offset="0.1"/></joint>')
+        articulation = read_robot_description(self.write("pointer.urdf", urdf))["articulation"]
+        self.assertEqual([control["id"] for control in articulation["controls"]], ["output_joint"])
+        self.assertEqual([handle["id"] for handle in articulation["handles"]], ["output_joint"], "a mimic of a curve has no inverse to write through")
+        rows = joint_values(articulation, {"output_joint": 15})
+        self.assertAlmostEqual(rows["pointer_joint"]["turn"], 2 * rows["input_joint"]["turn"] + math.degrees(0.1), places=9)
+
+    def test_what_cannot_close_is_refused_in_words(self) -> None:
+        cases = [
+            ("a full turn of a rocker", four_bar_urdf(driver_type="continuous"), "range \\[-180, 180\\] deg includes angles where the linkage cannot close"),
+            ("a wider range than closes", four_bar_urdf(driver_limit=(-0.9, 0.9)), "includes angles where the linkage cannot close; narrow the driver's limits"),
+            ("an opposed axis", four_bar_urdf(driver_axis="0 0 -1"), "must turn about parallel, same-direction axes"),
+            ("the wrong ground length", four_bar_urdf(element={"ground_length": 0.25}), "declares ground_length 0.25, but its pivot and its driver 'output_joint''s are 0.2 metres apart"),
+            ("pivots off the plane", four_bar_urdf(driver_origin='xyz="0.2 0 0.01" rpy="0 0 1.5707963267948966"'), "are not coplanar"),
+            ("crank limits that do not hold the derived range", four_bar_urdf(crank_limit=(-0.1, 0.1)), "derives -58.3025 to 47.5186 deg .* outside its own limits \\[-5.72958, 5.72958\\] deg"),
+            ("zero angles off the branch", four_bar_urdf(element={"input_zero": 0.3}), "zero angles do not describe an assembly branch"),
+        ]
+        for label, urdf, pattern in cases:
+            with self.subTest(label), self.assertRaisesRegex(RobotReadError, f"linkage.urdf joint 'input_joint' tcad:four_bar.*{pattern}"):
+                read_robot_description(self.write("linkage.urdf", urdf))
+        # A continuous crank is held to no limits, so its derived range is never refused.
+        read_robot_description(self.write("free.urdf", four_bar_urdf(crank_type="continuous")))
+
+    def test_joint_values_refuse_the_crank_by_name_and_the_driver_outside_the_solved_range(self) -> None:
+        self.assertEqual(robot_control_values(self.payload, {"output_joint": 20}), {"output_joint": 20.0})
+        with self.assertRaisesRegex(RobotReadError, "jointValues\\[input_joint\\]: joint 'input_joint' is the crank of a four-bar linkage \\(tcad:four_bar\\) "
+                                                    "driven by 'output_joint', so it is posed by 'output_joint''s value; set jointValues\\[output_joint\\] instead"):
+            robot_control_values(self.payload, {"input_joint": 10})
+        with self.assertRaisesRegex(RobotReadError, "jointValues\\[output_joint\\] = 40 deg is outside joint 'output_joint''s limits \\[-28.6479, 28.6479\\] deg"):
+            robot_control_values(self.payload, {"output_joint": 40})
 
 
 class SdfArticulation(_Workspace):

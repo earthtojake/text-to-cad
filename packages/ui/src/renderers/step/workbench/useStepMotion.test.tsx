@@ -21,7 +21,7 @@ afterEach(() => { cleanup(); loads.count = 0; });
 const swing = { id: 'swing', min: 0, max: 120 };
 const OPEN = { open: { swing: 90 } };
 function articulationOf(mates: { id: string; min: number; max: number }[], poses: object) {
-  return { schemaVersion: 1,
+  return { schemaVersion: 2,
     controls: mates.map(mate => ({ id: mate.id, label: mate.id, unit: 'deg', min: mate.min, max: mate.max, default: 0 })),
     joints: mates.map(mate => ({ id: mate.id, parent: null, kind: 'revolute', origin: [0, 0, 0], axis: [0, 0, 1], turn: { bias: 0, terms: [[mate.id, 1]] } })),
     carries: Object.fromEntries(mates.map(mate => [mate.id, ['o1.2']])),

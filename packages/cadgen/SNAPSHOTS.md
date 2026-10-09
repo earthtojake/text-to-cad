@@ -54,8 +54,10 @@ snapshot's own.
   the page plays, the visuals it draws) and refuses, by name, what the page
   cannot draw: a validator finding; a mesh that is not an STL, 3MF or GLB file
   beside the description (`package://` and remote URIs are not resolved); a
-  value for a fixed joint or a mimic follower (a follower follows its leader);
-  a leader value that pushes a follower past the follower's own limits. A box,
+  value for a fixed joint, a mimic follower (a follower follows its leader) or a
+  `tcad:four_bar` crank (a crank follows its driver, through the linkage cadgen
+  closes); a leader value that pushes a follower past the follower's own
+  limits, or a four-bar driver outside the range the linkage was solved over. A box,
   cylinder, sphere or capsule is meshed by cadgen into its store. A colour the
   description gives a visual wins over the colours its link mesh carries, and a
   link mesh that cannot be loaded fails the snapshot rather than leaving the

@@ -7,7 +7,7 @@ import { FileSheetSliderField } from '../../../kit/inspector/FileSheet.js';
 import { elements } from '../../../../../scripts/reactHarness.mjs';
 
 // A definition as the motion hook holds it: cadgen's articulation (one hinge control, one named pose).
-const articulation = { schemaVersion: 1, controls: [{ id: 'hinge', label: 'Hinge', unit: 'deg', min: 0, max: 90, default: 0 }],
+const articulation = { schemaVersion: 2, controls: [{ id: 'hinge', label: 'Hinge', unit: 'deg', min: 0, max: 90, default: 0 }],
   joints: [], carries: {}, handles: [], poses: { rest: { hinge: 0 } }, opening: { hinge: 0 } };
 const definition = { url: '/hinge.step.json', articulation };
 

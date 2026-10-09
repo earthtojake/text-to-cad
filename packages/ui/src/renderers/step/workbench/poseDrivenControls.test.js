@@ -15,7 +15,7 @@ const control = (id, min, max, unit = "deg") => ({ id, label: id, unit, min, max
 const row = (...terms) => ({ bias: 0, terms });
 function stage({ sunRatio = 1, carrierRatio = 0.2857142857142857, planetRatio = -0.9523809523809523 } = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     controls: [control("sun", -1260, 1260), control("carrier", -360, 360), control("planet1", -5040, 5040), control("drive", 0, 1260, "")],
     joints: [
       { id: "sun", parent: null, kind: "revolute", origin: [0, 0, 0], axis: [0, 0, 1], turn: row(["sun", 1], ["drive", sunRatio]) },

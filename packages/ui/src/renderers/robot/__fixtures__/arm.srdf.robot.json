@@ -1,10 +1,10 @@
 {
- "schemaVersion": 1,
+ "schemaVersion": 2,
  "kind": "srdf",
  "name": "arm",
  "root": "base_footprint",
  "articulation": {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "controls": [
    {
     "id": "shoulder",
@@ -364,7 +364,7 @@
    ],
    "visuals": [
     {
-     "name": "",
+     "name": "upper_arm_shell",
      "type": "box",
      "filename": "",
      "size": [
@@ -658,7 +658,8 @@
     ]
    },
    "limit": null,
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "shoulder",
@@ -688,7 +689,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "lift",
@@ -718,7 +720,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "camera_mount",
@@ -739,7 +742,8 @@
     ]
    },
    "limit": null,
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "grip",
@@ -769,7 +773,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "grip_mirror",
@@ -803,7 +808,8 @@
     "joint": "grip",
     "multiplier": -1.0,
     "offset": 0.0
-   }
+   },
+   "fourBar": null
   },
   {
    "name": "nod",
@@ -833,7 +839,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   }
  ],
  "visuals": [
@@ -868,7 +875,7 @@
   {
    "id": "upper_arm:v1",
    "link": "upper_arm",
-   "label": "box",
+   "label": "upper_arm_shell",
    "placement": [
     0.001,
     0.0,

@@ -10,7 +10,7 @@ import {
 // The definition as the motion hook holds it: cadgen's articulation, whose controls are what
 // Copy writes out and Paste reads back, in declaration order and within their limits.
 const definition = { url: "/x.step.json", articulation: {
-  schemaVersion: 1,
+  schemaVersion: 2,
   controls: [
     { id: "frame", label: "frame", unit: "deg", min: 0, max: 150, default: 0 },
     { id: "lift", label: "lift", unit: "mm", min: 0, max: 1, default: 0 }

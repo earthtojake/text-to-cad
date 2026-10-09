@@ -11,7 +11,8 @@ import {
   jointValues,
   normalizeControlValues,
   openingControlValues,
-  poseControlValues
+  poseControlValues,
+  rowValue
 } from "./articulation.js";
 import { applySceneState } from "./applySceneState.js";
 import { normalizeAnimationClips } from "./animationRuntime.js";
@@ -21,7 +22,7 @@ import { normalizeAnimationClips } from "./animationRuntime.js";
 // a cylindrical lead screw, a fixed pin riding the elbow, and a coupling `curl` gearing the
 // elbow and the slider. The player decides nothing: what it reads here is what it plays.
 const ARTICULATION = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   controls: [
     { id: "elbow", label: "elbow", unit: "deg", min: 0, max: 150, default: 0 },
     { id: "extend", label: "extend", unit: "mm", min: 0, max: 80, default: 0 },
@@ -68,6 +69,31 @@ test("joint values are the rows' dot products: an own term and a coupling's add"
   assert.deepEqual(jointValues(ARTICULATION, { elbow: 10, curl: 0.5 }).elbow, { turn: 55, travel: 0 });
   assert.equal(articulationAtRest(ARTICULATION, {}), true);
   assert.equal(articulationAtRest(ARTICULATION, { curl: 0.001 }), false);
+});
+
+// A four-bar's crank as cadgen writes it (`cadgen.robot_payload`): no term of its own, a curve
+// over its driver's row, sampled from the closed form. The player only interpolates the keys.
+const CRANK = { bias: 0, terms: [], curve: { driver: { bias: 0, terms: [["rocker", 1]] }, input: [-30, -10, 0, 10, 30], output: [-40, -12, 0, 8, 20] } };
+
+test("a row's curve is played linearly between its keys, held beyond them, folded into its period, and nests", () => {
+  assert.equal(rowValue(CRANK, { rocker: 20 }), 14, "halfway between the keys at 10 and 30");
+  assert.equal(rowValue(CRANK, { rocker: 5 }), 4);
+  assert.equal(rowValue(CRANK, { rocker: 0 }), 0, "a key is hit exactly");
+  assert.equal(rowValue(CRANK, { rocker: -30 }), -40);
+  assert.deepEqual([rowValue(CRANK, { rocker: -50 }), rowValue(CRANK, { rocker: 50 })], [-40, 20], "held at the ends");
+  assert.equal(rowValue({ ...CRANK, bias: 1.5, terms: [["trim", 2]] }, { rocker: 20, trim: 1 }), 17.5, "added to the affine part");
+  // A driver that turns without limits: one period of keys covers every value.
+  const wiper = { bias: 0, terms: [], curve: { driver: { bias: 0, terms: [["spin", 1]] }, input: [-180, 0, 180], output: [0, 10, 0], period: 360 } };
+  assert.deepEqual([rowValue(wiper, { spin: -90 }), rowValue(wiper, { spin: 360 }), rowValue(wiper, { spin: 540 }), rowValue(wiper, { spin: -270 })], [5, 10, 0, 5]);
+  // A curve over a row that carries a curve (a linkage driven by another's crank) evaluates through it.
+  const second = { bias: 0, terms: [], curve: { driver: CRANK, input: [-40, 0, 20], output: [-4, 0, 2] } };
+  assert.ok(Math.abs(rowValue(second, { rocker: 20 }) - 1.4) < 1e-12, "the crank at 14 reads 1.4 on the next linkage");
+  const linkage = { ...ARTICULATION, controls: [{ id: "rocker", label: "rocker", unit: "deg", min: -30, max: 30, default: 0 }],
+    joints: [{ id: "rocker", parent: null, kind: "revolute", origin: [0.2, 0, 0], axis: [0, 0, 1], turn: { bias: 0, terms: [["rocker", 1]] } },
+      { id: "crank", parent: null, kind: "revolute", origin: [0, 0, 0], axis: [0, 0, 1], turn: CRANK }], carries: {}, handles: [], poses: {}, opening: { rocker: 0 } };
+  assert.deepEqual(jointValues(linkage, { rocker: 20 }).crank, { turn: 14, travel: 0 });
+  assert.equal(articulationAtRest(linkage, { rocker: 0 }), true, "the zero pose is a key at exactly zero");
+  assert.equal(articulationAtRest(linkage, { rocker: 1 }), false);
 });
 
 test("a revolute delta turns about its own axis, not the world origin", () => {

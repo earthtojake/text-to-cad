@@ -1174,7 +1174,7 @@ test("buildModel can render silhouette contours without derived mesh edges", () 
 function slideRuntime(partId, distance) {
   return {
     articulation: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       controls: [{ id: "slide", label: "slide", unit: "mm", min: 0, max: 100, default: 0 }],
       joints: [{ id: "slide", parent: null, kind: "slider", origin: [0, 0, 0], axis: [1, 0, 0],
         travel: { bias: 0, terms: [["slide", 1]] } }],
@@ -1758,7 +1758,7 @@ test("direct viewer effects and clip passes synchronize shared surfaces without 
   const { set, slot } = record.surfaceInstance;
   const matrix = new THREE.Matrix4();
   const zero = new THREE.Matrix4().makeScale(0, 0, 0);
-  const turn = { articulation: { schemaVersion: 1,
+  const turn = { articulation: { schemaVersion: 2,
     controls: [{ id: "turn", label: "turn", unit: "deg", min: 0, max: 360, default: 0 }],
     joints: [{ id: "turn", parent: null, kind: "revolute", origin: [0, 0, 0], axis: [0, 0, 1], turn: { bias: 0, terms: [["turn", 1]] } }],
     carries: { turn: ["o0"] }, handles: [], poses: {}, opening: { turn: 0 } }, values: { turn: 30 } };

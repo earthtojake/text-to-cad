@@ -5,7 +5,7 @@ import { stepMotionSources } from "./useStepMotion.js";
 
 test("a STEP's motion comes from its catalog entry: the articulation and the routines cadgen resolved", () => {
   const animation = { clips: [{ id: "swing", label: "Swing", duration: 4, loop: true, tracks: [] }] };
-  const articulation = { schemaVersion: 1, controls: [], joints: [], carries: {}, handles: [], poses: {}, opening: {} };
+  const articulation = { schemaVersion: 2, controls: [], joints: [], carries: {}, handles: [], poses: {}, opening: {} };
   const entry = { file: "/models/arm/hinge.step", hash: "h1", documentHash: "d1", animation,
     poseUrl: "/__cad/asset?file=hinge.step.json&v=1", articulation };
   const sources = stepMotionSources(entry);

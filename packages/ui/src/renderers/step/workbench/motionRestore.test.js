@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { restoreMotionAnimation, restoreMotionParameters } from './motionRestore.js';
-const definition = { url: '/x.step.json', articulation: { schemaVersion: 1,
+const definition = { url: '/x.step.json', articulation: { schemaVersion: 2,
   controls: [{ id: 'x', label: 'x', unit: 'deg', min: -100, max: 100, default: 2 }],
   joints: [], carries: {}, handles: [], poses: {}, opening: { x: 2 } } };
 const clips = { turn: { id: 'turn', duration: 5, tracks: [] } };

@@ -6,7 +6,7 @@ import { AnimationClockProvider, createAnimationClock } from '../../../../dist/r
 import { useStepMotionControls } from '../../../../dist/renderers/step/workbench/useStepMotionControls.js';
 
 // The definition as the motion hook holds it: cadgen's articulation, two controls with rest values.
-const definition = { url: '/hinge.step.json', articulation: { schemaVersion: 1,
+const definition = { url: '/hinge.step.json', articulation: { schemaVersion: 2,
   controls: [
     { id: 'hinge', label: 'hinge', unit: 'deg', min: -90, max: 90, default: 5 },
     { id: 'slide', label: 'slide', unit: 'mm', min: 0, max: 100, default: 2 },

@@ -1,10 +1,10 @@
 {
- "schemaVersion": 1,
+ "schemaVersion": 2,
  "kind": "sdf",
  "name": "swing",
  "root": "base",
  "articulation": {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "controls": [
    {
     "id": "hinge",
@@ -191,7 +191,8 @@
     "lower": -1.2,
     "upper": 1.2
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   }
  ],
  "visuals": [

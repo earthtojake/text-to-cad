@@ -6,10 +6,10 @@
 import { buildRobotParts } from "../robotParts.js";
 
 const DEG = 180 / Math.PI;
-const identity = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-const translation = (x, y, z) => [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, z, 0, 0, 0, 1];
+export const identity = () => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+export const translation = (x, y, z) => [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, z, 0, 0, 0, 1];
 // A primitive is meshed in metres and drawn in millimetres: its placement scales by 0.001.
-const scaled = (x, y, z, s = 0.001) => [s, 0, 0, x, 0, s, 0, y, 0, 0, s, z, 0, 0, 0, 1];
+export const scaled = (x, y, z, s = 0.001) => [s, 0, 0, x, 0, s, 0, y, 0, 0, s, z, 0, 0, 0, 1];
 
 /** A box mesh as the page's loaders hand one back (`buildMeshDataFromGlbBuffer` shape), in millimetres. */
 export function boxMesh([sx, sy, sz], { colors = null, parts = [] } = {}) {
@@ -27,15 +27,15 @@ export function boxMesh([sx, sy, sz], { colors = null, parts = [] } = {}) {
   };
 }
 
-const row = (control, weight = 1, bias = 0) => ({ bias, terms: [[control, weight]] });
+export const row = (control, weight = 1, bias = 0) => ({ bias, terms: [[control, weight]] });
 
 // base -(yaw, continuous Z, 0.1 up)-> turret -(pitch, revolute Y, 1 m up, turned 0.3 about Z)-> arm
 // -(lift, prismatic Z, 1 m along the arm)-> tool, with a fixed camera on the turret, a finger pair
 // (finger_mirror = -finger) on the tool, and a wheel whose geometry sits on its own axis.
 export const ARM = Object.freeze({
-  schemaVersion: 1, kind: "urdf", name: "arm", root: "base",
+  schemaVersion: 2, kind: "urdf", name: "arm", root: "base",
   articulation: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     controls: [
       { id: "yaw", label: "yaw", unit: "deg", min: null, max: null, default: 0 },
       { id: "pitch", label: "pitch", unit: "deg", min: -90, max: 90, default: 0 },
@@ -116,9 +116,9 @@ export const ARM_SRDF = Object.freeze({
 // sits 0.05 along the joint's X at an offset from the joint frame, so the joint frame and the
 // child frame differ: the case a rest-space delta over a rest placement exists for.
 export const SWING = Object.freeze({
-  schemaVersion: 1, kind: "sdf", name: "swing", root: "base",
+  schemaVersion: 2, kind: "sdf", name: "swing", root: "base",
   articulation: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     controls: [{ id: "hinge", label: "hinge", unit: "deg", min: -1.2 * DEG, max: 1.2 * DEG, default: 0 },
       { id: "slide", label: "slide", unit: "m", min: 0, max: 0.3, default: 0 }],
     joints: [

@@ -100,9 +100,10 @@ cadgen urdf snapshot path/to/robot.urdf review.png
 
 It accepts `.urdf` only. Pose the robot with `--joint-values` — `{joint: value}` JSON in degrees (metres for a
 prismatic joint), each naming a joint a person can drive, within its limits, or the request is
-refused before anything renders: a fixed joint or a `<mimic>` follower is refused by name (a
-follower follows its leader), and so is a leader value that would push a follower past the
-follower's own limits. Joints you do not name stay at their defaults, where the CAD Viewer
+refused before anything renders: a fixed joint, a `<mimic>` follower or a `<tcad:four_bar>`
+crank is refused by name (a follower follows its leader, a crank its driver), and so is a
+leader value that would push a follower past the follower's own limits, or a four-bar driver
+outside the range the linkage was solved over (its limits). Joints you do not name stay at their defaults, where the CAD Viewer
 opens the robot (the `"jointValues"` job field is the same thing in a packet). The snapshot
 draws the robot with the viewer's own scene, so it shows what the viewer shows: cadgen
 resolves the description first, meshes a `box`, `cylinder` or `sphere` itself, and refuses by

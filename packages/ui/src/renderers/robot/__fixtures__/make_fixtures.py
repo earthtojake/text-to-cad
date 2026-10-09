@@ -2,9 +2,10 @@
 description here, and the primitive meshes cadgen makes for them.
 
 The descriptions are committed as they are (``arm.urdf``, the ``arm.srdf`` paired with it,
-``swing.sdf``, ``chain.urdf``, and two cadgen refuses: ``gone.urdf``, whose link mesh is
-missing, and ``lonely.srdf``, with no URDF beside it). This script reads each one with
-cadgen (``cadgen.robot_payload``) and writes:
+``swing.sdf``, ``chain.urdf``, ``linkage.urdf`` (a four-bar linkage closed through
+``tcad:four_bar``), and two cadgen refuses: ``gone.urdf``, whose link mesh is missing, and
+``lonely.srdf``, with no URDF beside it). This script reads each one with cadgen
+(``cadgen.robot_payload``) and writes:
 
 * ``<name>.robot.json``: the payload, with every visual's mesh named by the URL the browser
   test's server answers for it (``/meshes/<file>`` for a link mesh file, ``/primitives/<hash>.glb``
@@ -30,7 +31,7 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DESCRIPTIONS = ("arm.urdf", "arm.srdf", "swing.sdf", "chain.urdf", "gone.urdf", "lonely.srdf")
+DESCRIPTIONS = ("arm.urdf", "arm.srdf", "swing.sdf", "chain.urdf", "linkage.urdf", "gone.urdf", "lonely.srdf")
 
 
 def fixture_payloads(cache_dir: Path) -> tuple[dict[str, dict], dict[str, str], dict[str, bytes]]:

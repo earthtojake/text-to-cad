@@ -18,6 +18,7 @@ from cadgen.articulation import (
     articulation_control_values,
     joint_matrices,
     joint_values,
+    row_value,
     step_articulation,
 )
 
@@ -183,6 +184,30 @@ class ReferenceEvaluator(unittest.TestCase):
         # The slider's +x travel, carried by the elbow's quarter turn, moves the carriage +y.
         self.assertEqual(point_through(matrices["extend"], (10, 0, 0)), [10.0, 5.0, 0.0])
         self.assertEqual(matrices["pin"], matrices["elbow"])
+
+
+class CurveRows(unittest.TestCase):
+    """A row's ``curve`` (a four-bar's crank, ``cadgen.robot_payload``), played as the page plays it:
+    linearly between its keys, held beyond them, folded into its period, nested through its driver.
+    The numbers are the JS player's (`packages/core/src/common/articulation.test.js`)."""
+
+    CRANK = {"bias": 0.0, "terms": [], "curve": {"driver": {"bias": 0.0, "terms": [["rocker", 1.0]]},
+                                                 "input": [-30, -10, 0, 10, 30], "output": [-40, -12, 0, 8, 20]}}
+
+    def test_between_held_added_folded_and_nested(self):
+        self.assertEqual(row_value(self.CRANK, {"rocker": 20}), 14.0, "halfway between the keys at 10 and 30")
+        self.assertEqual(row_value(self.CRANK, {"rocker": 5}), 4.0)
+        self.assertEqual(row_value(self.CRANK, {"rocker": 0}), 0.0, "a key is hit exactly")
+        self.assertEqual([row_value(self.CRANK, {"rocker": -50}), row_value(self.CRANK, {"rocker": 50})], [-40.0, 20.0], "held at the ends")
+        self.assertEqual(row_value({**self.CRANK, "bias": 1.5, "terms": [["trim", 2.0]]}, {"rocker": 20, "trim": 1}), 17.5, "added to the affine part")
+        wiper = {"bias": 0.0, "terms": [], "curve": {"driver": {"bias": 0.0, "terms": [["spin", 1.0]]}, "input": [-180, 0, 180], "output": [0, 10, 0], "period": 360}}
+        self.assertEqual([row_value(wiper, {"spin": value}) for value in (-90, 360, 540, -270)], [5.0, 10.0, 0.0, 5.0])
+        second = {"bias": 0.0, "terms": [], "curve": {"driver": self.CRANK, "input": [-40, 0, 20], "output": [-4, 0, 2]}}
+        self.assertAlmostEqual(row_value(second, {"rocker": 20}), 1.4, places=12, msg="the crank at 14 reads 1.4 on the next linkage")
+        linkage = {"joints": [{"id": "rocker", "kind": "revolute", "turn": {"bias": 0.0, "terms": [["rocker", 1.0]]}},
+                              {"id": "crank", "kind": "revolute", "turn": self.CRANK}]}
+        self.assertEqual(joint_values(linkage, {"rocker": 20})["crank"], {"turn": 14.0, "travel": 0.0})
+        self.assertEqual(row_value({"bias": 0.0, "terms": [], "curve": {"driver": {}, "input": [], "output": []}}, {}), 0.0, "no keys, no term")
 
 
 class BrowserFixture(unittest.TestCase):

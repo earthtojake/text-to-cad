@@ -2,7 +2,7 @@
 <robot name="arm">
   <link name="base_footprint"/>
   <link name="base"><visual><origin xyz="0 0 0.05"/><geometry><box size="0.4 0.4 0.1"/></geometry><material name="m0.30.30.351"><color rgba="0.3 0.3 0.35 1"/></material></visual></link>
-  <link name="upper_arm"><visual><origin xyz="0.25 0 0"/><geometry><box size="0.5 0.08 0.08"/></geometry><material name="m0.90.50.11"><color rgba="0.9 0.5 0.1 1"/></material></visual></link>
+  <link name="upper_arm"><visual name="upper_arm_shell"><origin xyz="0.25 0 0"/><geometry><box size="0.5 0.08 0.08"/></geometry><material name="m0.90.50.11"><color rgba="0.9 0.5 0.1 1"/></material></visual></link>
   <link name="carriage"><visual><origin xyz="0 0 0"/><geometry><box size="0.1 0.1 0.1"/></geometry><material name="m0.10.40.91"><color rgba="0.1 0.4 0.9 1"/></material></visual></link>
   <link name="camera"><visual><origin xyz="0 0 0"/><geometry><box size="0.06 0.06 0.06"/></geometry><material name="m0.10.70.31"><color rgba="0.1 0.7 0.3 1"/></material></visual></link>
   <link name="finger_left"><visual><origin xyz="0 0 0.09"/><geometry><box size="0.02 0.02 0.08"/></geometry><material name="m0.80.80.21"><color rgba="0.8 0.8 0.2 1"/></material></visual></link>

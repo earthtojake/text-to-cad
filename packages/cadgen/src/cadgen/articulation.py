@@ -10,10 +10,10 @@ occurrences a joint moves -- is minted here, once.
 The artifact::
 
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "controls": [{"id", "label", "unit", "min", "max", "default"}],
       "joints":   [{"id", "parent", "kind", "origin", "axis",
-                    "turn": {"bias", "terms"}, "travel": {"bias", "terms"}}],
+                    "turn": {"bias", "terms", "curve"?}, "travel": {"bias", "terms", "curve"?}}],
       "carries":  {joint id: [occurrence id, ...]},
       "handles":  [{"id", "joint", "dof", "control", "weight", "label", "unit", "min", "max"}],
       "poses":    {name: {control id: value}},
@@ -35,6 +35,16 @@ The artifact::
   times the leader plus an offset) are the same row. A ``fixed`` joint has no row: it only
   carries its parent's motion. ``kind`` is ``revolute``, ``slider``, ``cylindrical`` or
   ``fixed``.
+- A row may also carry a ``curve``: a sampled function of another row's value, added to the
+  affine part, for a joint that follows its driver nonlinearly (a robot's four-bar linkage,
+  ``cadgen.robot_payload``). ``curve.driver`` is a row (affine, or carrying a curve of its
+  own), ``curve.input`` that row's values in ascending order, ``curve.output`` what the curve
+  adds at each, in the row's units; between two keys the value is interpolated linearly, as a
+  glTF LINEAR sampler is played, and beyond the first and last keys it holds. ``curve.period``,
+  when present, folds the driver's value into one period from ``input[0]`` (a driver that
+  turns without limits). cadgen samples every curve densely enough for the player's linear
+  interpolation to stay within the tolerance the resolver names; the page evaluates nothing
+  of the mechanism itself.
 - ``carries`` names the leaf occurrences each joint moves. Occurrences a deeper joint also
   names belong to the deeper joint (a horn inside a servo group, fastened to the jaw beside
   it, rides the jaw once, never the group's motion on top), so every occurrence appears
@@ -49,12 +59,13 @@ The artifact::
   opens with.
 
 The evaluator at the bottom is the reference the page's player is compared against: joint
-values from controls by dot products, each joint's world delta from its parent's and its
-own displacement.
+values from controls by dot products (plus a curve's interpolated term), each joint's world
+delta from its parent's and its own displacement.
 """
 
 from __future__ import annotations
 
+import bisect
 import math
 from typing import Any, Mapping
 
@@ -64,11 +75,12 @@ __all__ = [
     "ARTICULATION_SCHEMA_VERSION",
     "step_articulation",
     "articulation_control_values",
+    "row_value",
     "joint_values",
     "joint_matrices",
 ]
 
-ARTICULATION_SCHEMA_VERSION = 1
+ARTICULATION_SCHEMA_VERSION = 2
 
 _CYLINDRICAL_ROWS = (("turn", "deg"), ("travel", "mm"))
 
@@ -297,18 +309,46 @@ def articulation_control_values(articulation: Mapping[str, Any], request: object
 # --- the reference evaluator ---------------------------------------------------------
 
 
-def _row_value(row: Mapping[str, Any] | None, values: Mapping[str, float]) -> float:
+def _curve_value(curve: Mapping[str, Any], values: Mapping[str, float]) -> float:
+    """A curve's term at a control vector: its driver row's value, folded into one period when
+    the curve has one, interpolated linearly between its keys and held beyond them."""
+    inputs = [float(v) for v in curve.get("input") or []]
+    outputs = [float(v) for v in curve.get("output") or []]
+    count = min(len(inputs), len(outputs))
+    if not count:
+        return 0.0
+    x = row_value(curve.get("driver"), values)
+    period = float(curve.get("period") or 0.0)
+    if period > 0:
+        x = inputs[0] + (x - inputs[0]) % period
+    if x <= inputs[0]:
+        return outputs[0]
+    if x >= inputs[count - 1]:
+        return outputs[count - 1]
+    after = bisect.bisect_right(inputs, x, 0, count)
+    before = after - 1
+    span = inputs[after] - inputs[before]
+    t = (x - inputs[before]) / span if span > 0 else 0.0
+    return outputs[before] + t * (outputs[after] - outputs[before])
+
+
+def row_value(row: Mapping[str, Any] | None, values: Mapping[str, float]) -> float:
+    """``bias + sum(weight * control)``, plus the row's curve at the vector when it has one."""
     if not row:
         return 0.0
-    return float(row.get("bias") or 0.0) + sum(
+    total = float(row.get("bias") or 0.0) + sum(
         float(weight) * float(values.get(str(control), 0.0)) for control, weight in row.get("terms") or [])
+    curve = row.get("curve")
+    if isinstance(curve, Mapping):
+        total += _curve_value(curve, values)
+    return total
 
 
 def joint_values(articulation: Mapping[str, Any], values: Mapping[str, float]) -> dict[str, dict[str, float]]:
     """Every joint's ``{"turn": degrees, "travel": units}`` at a control vector: the rows'
-    dot products, nothing else."""
+    dot products (and a curve's interpolated term), nothing else."""
     return {
-        str(joint["id"]): {"turn": _row_value(joint.get("turn"), values), "travel": _row_value(joint.get("travel"), values)}
+        str(joint["id"]): {"turn": row_value(joint.get("turn"), values), "travel": row_value(joint.get("travel"), values)}
         for joint in articulation.get("joints") or []
     }
 

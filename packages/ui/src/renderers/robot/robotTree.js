@@ -207,6 +207,7 @@ export function robotLinkFacts(robot, linkName) {
       limit: parentJoint.limit && Object.keys(parentJoint.limit).length ? parentJoint.limit : null,
       origin: origin(parentJoint.origin),
       mimic: parentJoint.mimic || null,
+      fourBar: parentJoint.fourBar || null,
     } : null,
     childJoints: joints.filter(joint => text(joint?.parent) === name)
       .map(joint => ({ name: text(joint.name), type: text(joint.type), childLink: text(joint.child) })),

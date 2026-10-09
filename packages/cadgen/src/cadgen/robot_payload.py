@@ -12,13 +12,13 @@ resolves no frame, meshes no shape and decides no limit.
 The payload::
 
     {
-      "schemaVersion": 1,
+      "schemaVersion": 2,
       "kind": "urdf" | "sdf" | "srdf",
       "name": the robot's (an SDF model's) name,
       "root": the root link; "" for an SDF model whose links float free,
       "articulation": the articulation (``cadgen.articulation``), whose ``carries`` name links,
       "links": [{"name", "placement", "visuals": [facts], "collisions": [facts], "inertial"}],
-      "joints": [{"name", "type", "parent", "child", "axis", "origin", "limit", "mimic"}],
+      "joints": [{"name", "type", "parent", "child", "axis", "origin", "limit", "mimic", "fourBar"}],
       "visuals": [{"id", "link", "label", "placement", "color", "mesh": {"format", ...}}],
       "srdf": the planning semantics the SRDF declares, or null,
       "sdf": what an SDF says about itself beyond its links and joints, or null,
@@ -28,12 +28,23 @@ The payload::
   every joint at zero): a link's is its frame, a visual's its mesh's -- the link frame, the
   visual's origin and the mesh's scale composed, so the page sets it on a mesh and nothing
   else. A link's visuals sit under the joint that carries the link; the joint's delta
-  (``articulation.joint_matrices``) moves them.
+  (``articulation.joint_matrices``) moves them. A visual's ``id`` is ``<link>:v<n>`` and its
+  ``label`` what a row calls it: the ``name`` the description gave it, else its geometry (the
+  mesh file's name, or ``box``, ``cylinder``, ``sphere``, ``capsule``).
 - A control is a joint a person or a job sets: revolute and continuous joints in DEGREES,
   prismatic joints in METRES, each at its declared limits (a continuous joint has none). A
   mimic follower is not a control: its row is its leader's, scaled and offset, so one value
   moves both. ``poses`` are an SRDF's group states (``<group>/<name>``), ``opening`` every
   control at rest with the SRDF's ``home`` state(s) over it.
+- A URDF joint carrying ``<tcad:four_bar>`` (the urdf skill's authoring contract: the input
+  crank of a planar four-bar linkage, derived from the ``driver`` joint on the same ground
+  link) is not a control either, and has no handle: its row is a ``curve`` over the driver's
+  row (``cadgen.articulation``), sampled here from the linkage's closed form over the
+  driver's whole operating range -- its declared limits, or one turn for a continuous driver
+  -- densely enough that the page's linear interpolation stays within
+  ``FOUR_BAR_CURVE_TOLERANCE_DEG``. The linkage's geometry (one ground link, parallel axes,
+  pivots ``ground_length`` apart, the range reachable, the derived range within the joint's
+  limits) is checked here, and refused in words; the page solves nothing.
 - A visual's mesh is the file it names (``format`` the page's decoder: stl, 3mf or glb) or,
   for a box, cylinder, sphere or capsule, a GLB cadgen meshed at the standard rung of the
   display ladder and stored as an object (``_internal.primitive_mesh``). The payload names
@@ -67,9 +78,11 @@ from cadgen.xml_common import children, display_path, local_name
 
 __all__ = [
     "DRAWABLE_MESH_FORMATS",
+    "FOUR_BAR_CURVE_TOLERANCE_DEG",
     "ROBOT_PAYLOAD_SCHEMA_VERSION",
     "ROBOT_SUFFIXES",
     "RobotReadError",
+    "four_bar_input_angle",
     "locate_robot_payload",
     "paired_urdf_for_srdf",
     "read_robot_description",
@@ -79,7 +92,7 @@ __all__ = [
     "robot_payload_scheme",
 ]
 
-ROBOT_PAYLOAD_SCHEMA_VERSION = 1
+ROBOT_PAYLOAD_SCHEMA_VERSION = 2
 ROBOT_SUFFIXES = (".urdf", ".srdf", ".sdf")
 #: The mesh files the page decodes, by suffix: what a link mesh may be.
 DRAWABLE_MESH_FORMATS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb"}
@@ -93,6 +106,22 @@ _SDF_WORLD_FRAME = "world"
 _SDF_EXTERNAL_SCHEMES = {"model", "package", "http", "https", "fuel"}
 _MOVING = ("revolute", "continuous", "prismatic")
 _ANGULAR = ("revolute", "continuous")
+
+#: The interpolation error a four-bar curve is sampled down to, in degrees of the derived
+#: joint: the page plays the curve linearly between its keys, and cadgen halves every
+#: interval whose midpoint it misses by more than this (to ``_FOUR_BAR_MAX_KEYS`` keys). On a
+#: crank of length L the pin then lands within L * 1.7e-4 of the exact closure -- 17 µm on a
+#: 100 mm crank, under a screen pixel at any zoom that shows the crank whole.
+FOUR_BAR_CURVE_TOLERANCE_DEG = 0.01
+_FOUR_BAR_INITIAL_INTERVALS = 64
+_FOUR_BAR_MAX_KEYS = 2049
+# The closed form's tolerances, as the urdf skill's authoring contract has them.
+_FOUR_BAR_INTERSECTION_TOLERANCE = 1e-12
+_FOUR_BAR_AXIS_ALIGNMENT_TOLERANCE = 1e-9
+_FOUR_BAR_GEOMETRY_ABSOLUTE_TOLERANCE_M = 1e-9
+_FOUR_BAR_GEOMETRY_RELATIVE_TOLERANCE = 1e-8
+_FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG = 1e-6
+_FOUR_BAR_ZERO_POSE_TOLERANCE_RAD = 1e-7
 
 
 class RobotReadError(ValueError):
@@ -228,7 +257,7 @@ class _Link:
 
 
 class _Joint:
-    __slots__ = ("name", "type", "parent", "child", "frame", "axis", "lower", "upper", "mimic", "facts")
+    __slots__ = ("name", "type", "parent", "child", "frame", "axis", "lower", "upper", "mimic", "four_bar", "facts")
 
     def __init__(self, name: str, joint_type: str, parent: str, child: str) -> None:
         self.name, self.type, self.parent, self.child = name, joint_type, parent, child
@@ -237,12 +266,13 @@ class _Joint:
         self.lower: float | None = None  # native units: radians or metres
         self.upper: float | None = None
         self.mimic: tuple[str, float, float] | None = None  # (leader, multiplier, offset)
+        self.four_bar: dict[str, Any] | None = None  # the <tcad:four_bar> element's numbers and driver
         self.facts: dict = {}
 
 
 class _Description:
-    def __init__(self, kind: str, name: str) -> None:
-        self.kind, self.name = kind, name
+    def __init__(self, kind: str, name: str, display: str = "") -> None:
+        self.kind, self.name, self.display = kind, name, display
         self.links: list[_Link] = []
         self.joints: list[_Joint] = []
         self.root = ""
@@ -354,6 +384,27 @@ def _resolve_urdf_mesh(filename: str, *, source_path: Path, package_map: dict[st
     return {"format": fmt, "path": str(path)}
 
 
+def _four_bar_element(joint_element: ET.Element) -> dict[str, Any] | None:
+    """The joint's ``<tcad:four_bar>`` as numbers, or None. The validator refused one with a
+    length that is not positive, a zero angle that is not a number, or no driver."""
+    from cadgen.urdf_source import FOUR_BAR_LENGTHS, FOUR_BAR_TAG, FOUR_BAR_ZEROS
+
+    element = joint_element.find(FOUR_BAR_TAG)
+    if element is None:
+        return None
+    numbers = {name: _optional_number(element, name) for name in (*FOUR_BAR_LENGTHS, *FOUR_BAR_ZEROS)}
+    return {"driver": str(element.attrib.get("driver") or "").strip(),
+            **{name: (0.0 if value is None else value) for name, value in numbers.items()}}
+
+
+def _four_bar_facts(four_bar: dict[str, Any] | None) -> dict[str, Any] | None:
+    if four_bar is None:
+        return None
+    return {"driver": four_bar["driver"], "inputLength": four_bar["input_length"], "groundLength": four_bar["ground_length"],
+            "outputLength": four_bar["output_length"], "couplerLength": four_bar["coupler_length"],
+            "inputZero": four_bar["input_zero"], "outputZero": four_bar["output_zero"]}
+
+
 def _read_urdf(path: Path, *, package_map: dict[str, Path] | None = None) -> _Description:
     from cadgen.urdf_source import validate_urdf_file
 
@@ -365,7 +416,7 @@ def _read_urdf(path: Path, *, package_map: dict[str, Path] | None = None) -> _De
     except (OSError, ET.ParseError) as exc:
         raise RobotReadError(f"{display_path(path)} could not be read: {exc}") from None
     display = display_path(path)
-    description = _Description("urdf", source.robot_name)
+    description = _Description("urdf", source.robot_name, display)
     named_colors: dict[str, str] = {}
     for material in root.findall("material"):
         name = str(material.attrib.get("name") or "").strip()
@@ -405,7 +456,9 @@ def _read_urdf(path: Path, *, package_map: dict[str, Path] | None = None) -> _De
             except RobotReadError as exc:
                 undrawable.append(str(exc))
                 continue
-            link.visuals.append(_Visual(f"{link.name}:v{index}", label, local, color, mesh, facts))
+            # The visual's own name is what its author called it, and what tells several visuals
+            # of one link apart; without one, it is named for its geometry.
+            link.visuals.append(_Visual(f"{link.name}:v{index}", facts["name"] or label, local, color, mesh, facts))
         link.collisions = [_urdf_shape_facts(element) for element in link_element.findall("collision")]
         inertial = link_element.find("inertial")
         if inertial is not None:
@@ -444,6 +497,7 @@ def _read_urdf(path: Path, *, package_map: dict[str, Path] | None = None) -> _De
             multiplier = _optional_number(mimic_element, "multiplier")
             offset = _optional_number(mimic_element, "offset")
             joint.mimic = (leader, 1.0 if multiplier is None else multiplier, 0.0 if offset is None else offset)
+        joint.four_bar = _four_bar_element(joint_element)
         limit_element = joint_element.find("limit")
         limit = {key: _optional_number(limit_element, key) for key in ("lower", "upper", "effort", "velocity")}
         joint.facts = {
@@ -455,6 +509,7 @@ def _read_urdf(path: Path, *, package_map: dict[str, Path] | None = None) -> _De
             ),
             "limit": {key: value for key, value in limit.items() if value is not None} if limit_element is not None else None,
             "mimic": {"joint": joint.mimic[0], "multiplier": joint.mimic[1], "offset": joint.mimic[2]} if joint.mimic else None,
+            "fourBar": _four_bar_facts(joint.four_bar),
         }
         joint.facts["_origin"] = _urdf_origin(origin_element, where=where)
         joint.facts["_axis"] = axis
@@ -680,7 +735,7 @@ def _read_sdf(path: Path) -> _Description:
     version = str(root.attrib.get("version") or "").strip()
     document_kind, world_name, model = _sdf_model(root, display=display)
     model_name = str(model.attrib.get("name") or "").strip()
-    description = _Description("sdf", model_name)
+    description = _Description("sdf", model_name, display)
     _declared, relative_to, _values, model_world = _sdf_pose(model, where=f"{display} model {model_name!r}")
     if relative_to and relative_to != _SDF_WORLD_FRAME:
         raise RobotReadError(f"{display} model {model_name!r} pose is relative_to {relative_to!r}; the viewer places a model in the world")
@@ -798,6 +853,7 @@ def _read_sdf(path: Path) -> _Description:
             "origin": _described_origin(raw["pose"][:3], raw["pose"][3:]),
             "limit": raw["limit"] if raw["declared_limit"] else None,
             "mimic": None,
+            "fourBar": None,
         }
         description.joints.append(joint)
     roots = [link.name for link in description.links if link.name not in children_of]
@@ -967,6 +1023,177 @@ def _tree_order(joints: list[_Joint]) -> list[_Joint]:
     return ordered
 
 
+# --- the four-bar linkage --------------------------------------------------------------------
+#
+# The planar four-bar the urdf skill's authoring contract describes: the ground link runs from
+# the input pivot (the derived joint's) to the output pivot (the driver's), ``ground_length``
+# apart along the x axis of a plane whose normal is the joints' shared axis; ``input_zero`` and
+# ``output_zero`` are the crank's and the rocker's angles from that x axis when both joints are
+# at zero. The coupler closes the loop between the two pins, so the crank's angle at a driver
+# angle is a circle-circle intersection: two candidates, of which the one the zero pose
+# describes (the ``branch``) is the linkage as assembled.
+
+
+def _wrap_angle(value: float) -> float:
+    """``value`` in (-pi, pi]."""
+    wrapped = (value + math.pi) % (2.0 * math.pi) - math.pi
+    return math.pi if wrapped == -math.pi and value > 0 else wrapped
+
+
+def _four_bar_candidates(four_bar: Mapping[str, float], driver_rad: float) -> tuple[float, float]:
+    """The crank's two possible angles (radians from the ground direction) at a driver angle."""
+    output_angle = four_bar["output_zero"] + driver_rad
+    pin_x = four_bar["ground_length"] + four_bar["output_length"] * math.cos(output_angle)
+    pin_y = four_bar["output_length"] * math.sin(output_angle)
+    distance = math.hypot(pin_x, pin_y)
+    crank, coupler = four_bar["input_length"], four_bar["coupler_length"]
+    if distance <= _FOUR_BAR_INTERSECTION_TOLERANCE:
+        raise RobotReadError("the output pin coincides with the input pivot")
+    if distance < abs(crank - coupler) - _FOUR_BAR_INTERSECTION_TOLERANCE or distance > crank + coupler + _FOUR_BAR_INTERSECTION_TOLERANCE:
+        raise RobotReadError("the lengths cannot close at this driver angle")
+    along = (crank * crank - coupler * coupler + distance * distance) / (2.0 * distance)
+    height = math.sqrt(max(0.0, crank * crank - along * along))
+    unit_x, unit_y = pin_x / distance, pin_y / distance
+    base_x, base_y = along * unit_x, along * unit_y
+    return (math.atan2(base_y + height * unit_x, base_x - height * unit_y),
+            math.atan2(base_y - height * unit_x, base_x + height * unit_y))
+
+
+def four_bar_input_angle(four_bar: Mapping[str, float], driver_rad: float) -> float:
+    """The derived joint's value (radians, in (-pi, pi]) at a driver angle, on the assembly
+    branch ``four_bar["branch"]`` (0 or 1: the candidate the zero angles describe). The
+    closed form every key of a four-bar curve is sampled from; ``RobotReadError`` where the
+    linkage cannot close."""
+    candidates = _four_bar_candidates(four_bar, driver_rad)
+    return _wrap_angle(candidates[1 if four_bar.get("branch") == 1 else 0] - four_bar["input_zero"])
+
+
+def _four_bar_branch(four_bar: Mapping[str, float]) -> int:
+    first, second = _four_bar_candidates(four_bar, 0.0)
+    errors = (abs(_wrap_angle(first - four_bar["input_zero"])), abs(_wrap_angle(second - four_bar["input_zero"])))
+    return 0 if errors[0] <= errors[1] else 1
+
+
+def _four_bar_geometry(joint: _Joint, driver: _Joint, *, where: str) -> None:
+    """One ground link, parallel same-direction axes, coplanar pivots ``ground_length`` apart:
+    what the joint frames must say for the planar closed form to describe them."""
+    assert joint.four_bar is not None
+    if joint.parent != driver.parent:
+        raise RobotReadError(f"{where} and its driver {driver.name!r} must share one ground link (parents {joint.parent!r} and {driver.parent!r})")
+    if joint.axis is None or driver.axis is None:
+        raise RobotReadError(f"{where} and its driver {driver.name!r} must both turn about an axis")
+    alignment = sum(a * b for a, b in zip(joint.axis, driver.axis))
+    if alignment < 1.0 - _FOUR_BAR_AXIS_ALIGNMENT_TOLERANCE:
+        raise RobotReadError(f"{where} and its driver {driver.name!r} must turn about parallel, same-direction axes")
+    delta = [driver.frame[i][3] - joint.frame[i][3] for i in range(3)]
+    axial = sum(d * a for d, a in zip(delta, joint.axis))
+    planar = math.hypot(*(d - axial * a for d, a in zip(delta, joint.axis)))
+    expected = joint.four_bar["ground_length"]
+    tolerance = _FOUR_BAR_GEOMETRY_ABSOLUTE_TOLERANCE_M + _FOUR_BAR_GEOMETRY_RELATIVE_TOLERANCE * max(abs(planar), abs(expected))
+    if abs(axial) > tolerance:
+        raise RobotReadError(f"{where}: its pivot and its driver {driver.name!r}'s are not coplanar ({axial:g} m apart along the axis)")
+    if abs(planar - expected) > tolerance:
+        raise RobotReadError(f"{where} declares ground_length {expected:g}, but its pivot and its driver {driver.name!r}'s are {planar:g} metres apart")
+
+
+def _range_contains_periodic(lower: float, upper: float, target: float) -> bool:
+    first = math.ceil((lower - target) / (2.0 * math.pi))
+    return target + first * 2.0 * math.pi <= upper + _FOUR_BAR_INTERSECTION_TOLERANCE
+
+
+def _four_bar_reachable(four_bar: Mapping[str, float], lower_rad: float, upper_rad: float, *, where: str, driver: str) -> None:
+    """The whole driver range closes: the output pin's distance from the input pivot stays
+    within the crank's and the coupler's reach, checked in closed form over the range."""
+    low, high = four_bar["output_zero"] + lower_rad, four_bar["output_zero"] + upper_rad
+    ends = (math.cos(low), math.cos(high))
+    cos_min = -1.0 if _range_contains_periodic(low, high, math.pi) else min(ends)
+    cos_max = 1.0 if _range_contains_periodic(low, high, 0.0) else max(ends)
+    base = four_bar["ground_length"] ** 2 + four_bar["output_length"] ** 2
+    scale = 2.0 * four_bar["ground_length"] * four_bar["output_length"]
+    nearest = math.sqrt(max(0.0, base + scale * cos_min))
+    farthest = math.sqrt(max(0.0, base + scale * cos_max))
+    reach_min = abs(four_bar["input_length"] - four_bar["coupler_length"])
+    reach_max = four_bar["input_length"] + four_bar["coupler_length"]
+    if (nearest <= _FOUR_BAR_INTERSECTION_TOLERANCE or nearest < reach_min - _FOUR_BAR_INTERSECTION_TOLERANCE
+            or farthest > reach_max + _FOUR_BAR_INTERSECTION_TOLERANCE):
+        raise RobotReadError(
+            f"{where}: its driver {driver!r}'s range [{math.degrees(lower_rad):g}, {math.degrees(upper_rad):g}] deg includes angles "
+            "where the linkage cannot close; narrow the driver's limits or correct the lengths"
+        )
+
+
+def _four_bar_curve(joint: _Joint, driver: _Joint, *, where: str) -> dict[str, Any]:
+    """The derived joint's value over the driver's whole operating range, sampled from the
+    closed form: ``{"input": driver degrees ascending, "output": derived radians, "period"?}``.
+    Every interval the page's linear interpolation would miss by more than
+    ``FOUR_BAR_CURVE_TOLERANCE_DEG`` at its midpoint is halved, up to ``_FOUR_BAR_MAX_KEYS``
+    keys; the output is unwrapped into one continuous branch, so no interval crosses the
+    (-pi, pi] seam. A derived joint with limits must stay within them over the range."""
+    four_bar = joint.four_bar
+    assert four_bar is not None
+    if driver.type == "continuous" or driver.lower is None or driver.upper is None:
+        lower, upper, period = -math.pi, math.pi, 360.0
+    else:
+        lower, upper, period = driver.lower, driver.upper, None
+    if upper < lower:
+        raise RobotReadError(f"{where}: its driver {driver.name!r} has no operating range (limit lower {lower:g} > upper {upper:g})")
+    _four_bar_reachable(four_bar, lower, upper, where=where, driver=driver.name)
+
+    def sample(x: float) -> float:
+        try:
+            return four_bar_input_angle(four_bar, x)
+        except RobotReadError as exc:
+            raise RobotReadError(f"{where} cannot close at driver angle {math.degrees(x):g} deg: {exc}") from None
+
+    def near(value: float, reference: float) -> float:
+        """``value`` plus the turn count that brings it within half a turn of ``reference``."""
+        return value + 2.0 * math.pi * round((reference - value) / (2.0 * math.pi))
+
+    keys: dict[float, float] = {}
+    grid = [lower + (upper - lower) * index / _FOUR_BAR_INITIAL_INTERVALS for index in range(_FOUR_BAR_INITIAL_INTERVALS + 1)]
+    if lower < 0.0 < upper:
+        grid.append(0.0)  # the zero pose is a key, so the robot as written is exactly q = 0
+    for x in grid:
+        keys[x] = sample(x)
+    tolerance = math.radians(FOUR_BAR_CURVE_TOLERANCE_DEG)
+
+    def refine(x0: float, x1: float, depth: int) -> None:
+        if len(keys) >= _FOUR_BAR_MAX_KEYS or depth == 0:
+            return
+        y0, y1 = keys[x0], keys[x1]
+        xm = (x0 + x1) / 2.0
+        ym = sample(xm)
+        if abs(near(ym, y0) - (y0 + near(y1, y0)) / 2.0) <= tolerance:
+            return
+        keys[xm] = ym
+        refine(x0, xm, depth - 1)
+        refine(xm, x1, depth - 1)
+
+    ordered = sorted(keys)
+    depth = max(1, math.ceil(math.log2(_FOUR_BAR_MAX_KEYS / _FOUR_BAR_INITIAL_INTERVALS)))
+    for x0, x1 in zip(ordered, ordered[1:]):
+        refine(x0, x1, depth)
+
+    ordered = sorted(keys)
+    wrapped = [keys[x] for x in ordered]
+    if joint.type != "continuous" and joint.lower is not None and joint.upper is not None:
+        low_deg, high_deg = math.degrees(min(wrapped)), math.degrees(max(wrapped))
+        if low_deg < math.degrees(joint.lower) - _FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG or high_deg > math.degrees(joint.upper) + _FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG:
+            raise RobotReadError(
+                f"{where} derives {low_deg:g} to {high_deg:g} deg over its driver {driver.name!r}'s range, outside its own limits "
+                f"[{math.degrees(joint.lower):g}, {math.degrees(joint.upper):g}] deg; widen them to contain the derived range"
+            )
+    unwrapped: list[float] = []
+    for value in wrapped:
+        unwrapped.append(value if not unwrapped else near(value, unwrapped[-1]))
+    if 0.0 in keys:
+        unwrapped[ordered.index(0.0)] = 0.0
+    curve: dict[str, Any] = {"input": [math.degrees(x) for x in ordered], "output": unwrapped}
+    if period is not None:
+        curve["period"] = period
+    return curve
+
+
 def _articulation(description: _Description) -> dict[str, Any]:
     joints = _tree_order(description.joints)
     by_name = {joint.name: joint for joint in joints}
@@ -986,35 +1213,52 @@ def _articulation(description: _Description) -> dict[str, Any]:
 
     controls = []
     for joint in joints:
-        if joint.type in _MOVING and joint.mimic is None:
+        if joint.type in _MOVING and joint.mimic is None and joint.four_bar is None:
             lower, upper = limits_of(joint)
             controls.append({"id": joint.name, "label": joint.name, "unit": unit_of(joint), "min": rounded(lower), "max": rounded(upper), "default": 0.0})
     control_ids = {control["id"] for control in controls}
 
     # A joint's value in its native unit (radians or metres) as an affine form over the
-    # controls, in the controls' units: a driven joint is its own control, a follower its
-    # leader's form scaled and offset. The mimic graph is acyclic (the validator refuses a cycle).
-    forms: dict[str, tuple[float, dict[str, float]]] = {}
+    # controls, in the controls' units, plus a curve: a driven joint is its own control, a
+    # follower its leader's form scaled and offset, a four-bar's crank a curve over its driver's
+    # row. The mimic graph is acyclic (the validator refuses a cycle, a four-bar's driver edge
+    # included).
+    forms: dict[str, tuple[float, dict[str, float], dict[str, Any] | None]] = {}
 
-    def native_form(joint: _Joint) -> tuple[float, dict[str, float]]:
+    def native_form(joint: _Joint) -> tuple[float, dict[str, float], dict[str, Any] | None]:
         if joint.name in forms:
             return forms[joint.name]
-        if joint.mimic is None:
-            form = (0.0, {joint.name: (math.pi / 180.0 if joint.type in _ANGULAR else 1.0)})
+        if joint.four_bar is not None:
+            where = f"{description.display} joint {joint.name!r} tcad:four_bar"
+            driver = by_name.get(joint.four_bar["driver"])
+            if driver is None or driver.type not in _ANGULAR:
+                raise RobotReadError(f"{where} driver {joint.four_bar['driver']!r} is not a revolute or continuous joint")
+            if joint.type not in _ANGULAR:
+                raise RobotReadError(f"{where} needs a revolute or continuous joint, not {joint.type!r}")
+            _four_bar_geometry(joint, driver, where=where)
+            four_bar = {**joint.four_bar}
+            four_bar["branch"] = _four_bar_branch(four_bar)
+            if abs(four_bar_input_angle(four_bar, 0.0)) > _FOUR_BAR_ZERO_POSE_TOLERANCE_RAD:
+                raise RobotReadError(f"{where} zero angles do not describe an assembly branch the lengths close at")
+            joint.four_bar = four_bar
+            form = (0.0, {}, {"driver": row_of(driver), **_four_bar_curve(joint, driver, where=where)})
+        elif joint.mimic is None:
+            form = (0.0, {joint.name: (math.pi / 180.0 if joint.type in _ANGULAR else 1.0)}, None)
         else:
             leader_name, multiplier, offset = joint.mimic
             leader = by_name.get(leader_name)
             if leader is None or leader.type not in _MOVING:
                 raise RobotReadError(f"joint {joint.name!r} mimics {leader_name!r}, which is not a moving joint")
-            bias, weights = native_form(leader)
-            form = (multiplier * bias + offset, {key: multiplier * weight for key, weight in weights.items()})
+            bias, weights, curve = native_form(leader)
+            scaled = None if curve is None else {**curve, "output": [multiplier * value for value in curve["output"]]}
+            form = (multiplier * bias + offset, {key: multiplier * weight for key, weight in weights.items()}, scaled)
         forms[joint.name] = form
         return form
 
     def row_of(joint: _Joint) -> dict[str, Any]:
-        if joint.mimic is None:
+        if joint.mimic is None and joint.four_bar is None:
             return {"bias": 0.0, "terms": [[joint.name, 1.0]]}
-        bias, weights = native_form(joint)
+        bias, weights, curve = native_form(joint)
         convert = 180.0 / math.pi if joint.type in _ANGULAR else 1.0
         terms = []
         for control, weight in weights.items():
@@ -1022,7 +1266,20 @@ def _articulation(description: _Description) -> dict[str, Any]:
             # Both angular or both linear: the unit conversions cancel exactly.
             same = (leader.type in _ANGULAR) == (joint.type in _ANGULAR)
             terms.append([control, weight * (180.0 / math.pi) if same and joint.type in _ANGULAR else weight * convert])
-        return {"bias": bias * convert, "terms": terms}
+        row: dict[str, Any] = {"bias": bias * convert, "terms": terms}
+        if curve is not None:
+            row["curve"] = {**curve, "output": [value * convert for value in curve["output"]]}
+        return row
+
+    def emitted(row: dict[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = {"bias": _number(row["bias"]), "terms": [[control, _number(weight)] for control, weight in row["terms"]]}
+        if "curve" in row:
+            curve = row["curve"]
+            out["curve"] = {"driver": emitted(curve["driver"]), "input": [_number(x) for x in curve["input"]],
+                            "output": [_number(y) for y in curve["output"]]}
+            if curve.get("period") is not None:
+                out["curve"]["period"] = _number(curve["period"])
+        return out
 
     out_joints = []
     handles = []
@@ -1033,14 +1290,16 @@ def _articulation(description: _Description) -> dict[str, Any]:
             entry["origin"] = [_number(joint.frame[i][3]) for i in range(3)]
             entry["axis"] = [_number(value) for value in (joint.axis or [0.0, 0.0, 1.0])]
             dof = "turn" if joint.type in _ANGULAR else "travel"
-            row = row_of(joint)
-            row = {"bias": _number(row["bias"]), "terms": [[control, _number(weight)] for control, weight in row["terms"]]}
+            row = emitted(row_of(joint))
             entry[dof] = row
             lower, upper = limits_of(joint)
-            # The one term's control is what a drag writes: a follower drives its leader.
-            control, weight = row["terms"][0][0], row["terms"][0][1]
-            handles.append({"id": joint.name, "joint": joint.name, "dof": dof, "control": control, "weight": weight,
-                            "label": joint.name, "unit": unit_of(joint), "min": rounded(lower), "max": rounded(upper)})
+            # The one term's control is what a drag writes: a follower drives its leader. A row
+            # that follows a curve (a four-bar's crank, or a mimic of one) has no inverse to write
+            # through, so it has no handle: its driver's knob moves it.
+            if row["terms"] and "curve" not in row:
+                control, weight = row["terms"][0][0], row["terms"][0][1]
+                handles.append({"id": joint.name, "joint": joint.name, "dof": dof, "control": control, "weight": weight,
+                                "label": joint.name, "unit": unit_of(joint), "min": rounded(lower), "max": rounded(upper)})
         out_joints.append(entry)
 
     opening = {control["id"]: 0.0 for control in controls}
@@ -1184,11 +1443,13 @@ def robot_control_values(payload: Mapping[str, Any], request: object) -> dict[st
     """The full control vector a ``jointValues`` request means: every control, the ones the
     request names at their values and the rest at the opening. A value for a joint that is not
     a control is refused by name (a fixed joint has no value; a mimic follower is set through its
-    leader), as is a value outside a control's limits and a leader value that puts a follower
-    outside the follower's own limits."""
+    leader; a four-bar's crank through its driver), as is a value outside a control's limits --
+    which, for a four-bar's driver, is the range the linkage was solved over -- and a leader
+    value that puts a follower outside the follower's own limits."""
     articulation = payload.get("articulation") or {}
     controls = {str(control["id"]): control for control in articulation.get("controls") or []}
     rows = {str(joint["id"]): joint for joint in articulation.get("joints") or []}
+    facts_by_name = {str(joint.get("name")): joint for joint in payload.get("joints") or [] if isinstance(joint, Mapping)}
     kind = str(payload.get("kind") or "robot").upper()
     values = {name: float(control.get("default") or 0.0) for name, control in controls.items()}
     values.update({name: float(value) for name, value in (articulation.get("opening") or {}).items() if name in values})
@@ -1210,11 +1471,21 @@ def robot_control_values(payload: Mapping[str, Any], request: object) -> dict[st
             joint = rows[name]
             if joint.get("kind") == "fixed":
                 raise RobotReadError(f"jointValues[{name}]: joint {name!r} is fixed, so it has no value to set; drop it")
+            facts = facts_by_name.get(name) or {}
+            four_bar = facts.get("fourBar")
+            if isinstance(four_bar, Mapping) and four_bar.get("driver"):
+                driver = str(four_bar["driver"])
+                raise RobotReadError(
+                    f"jointValues[{name}]: joint {name!r} is the crank of a four-bar linkage (tcad:four_bar) driven by {driver!r}, "
+                    f"so it is posed by {driver!r}'s value; set jointValues[{driver}] instead"
+                )
             row = joint.get("turn") or joint.get("travel") or {}
-            (leader, weight), bias = (row.get("terms") or [[name, 1.0]])[0], float(row.get("bias") or 0.0)
+            terms, bias = row.get("terms") or [], float(row.get("bias") or 0.0)
+            leader = str((facts.get("mimic") or {}).get("joint") or (terms[0][0] if terms else name))
+            formula = f" ({name} = {_format(float(terms[0][1]))} × {leader}{f' + {_format(bias)}' if bias else ''})" if terms else ""
             raise RobotReadError(
-                f"jointValues[{name}]: joint {name!r} mimics {leader!r} ({name} = {_format(float(weight))} × {leader}"
-                f"{f' + {_format(bias)}' if bias else ''}), so it is posed by {leader!r}'s value; set jointValues[{leader}] instead"
+                f"jointValues[{name}]: joint {name!r} mimics {leader!r}{formula}, so it is posed by {leader!r}'s value; "
+                f"set jointValues[{leader}] instead"
             )
         control = controls[name]
         lo, hi, unit = control.get("min"), control.get("max"), str(control.get("unit") or "")

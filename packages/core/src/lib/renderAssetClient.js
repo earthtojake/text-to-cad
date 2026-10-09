@@ -977,7 +977,7 @@ function robotCacheKey(file, revision) {
 }
 
 /** The payload shape this build reads (`cadgen.robot_payload.ROBOT_PAYLOAD_SCHEMA_VERSION`). */
-export const ROBOT_PAYLOAD_SCHEMA_VERSION = 1;
+export const ROBOT_PAYLOAD_SCHEMA_VERSION = 2;
 
 /** A payload from a cadgen that does not agree with this build about the shape. */
 export class RobotSchemaError extends Error {

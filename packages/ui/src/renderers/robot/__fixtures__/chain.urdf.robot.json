@@ -1,10 +1,10 @@
 {
- "schemaVersion": 1,
+ "schemaVersion": 2,
  "kind": "urdf",
  "name": "chain",
  "root": "l0",
  "articulation": {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "controls": [
    {
     "id": "j0",
@@ -2881,7 +2881,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j1",
@@ -2911,7 +2912,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j2",
@@ -2941,7 +2943,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j3",
@@ -2971,7 +2974,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j4",
@@ -3001,7 +3005,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j5",
@@ -3031,7 +3036,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j6",
@@ -3061,7 +3067,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j7",
@@ -3091,7 +3098,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j8",
@@ -3121,7 +3129,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j9",
@@ -3151,7 +3160,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j10",
@@ -3181,7 +3191,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j11",
@@ -3211,7 +3222,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j12",
@@ -3241,7 +3253,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j13",
@@ -3271,7 +3284,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j14",
@@ -3301,7 +3315,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j15",
@@ -3331,7 +3346,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j16",
@@ -3361,7 +3377,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j17",
@@ -3391,7 +3408,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j18",
@@ -3421,7 +3439,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j19",
@@ -3451,7 +3470,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j20",
@@ -3481,7 +3501,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j21",
@@ -3511,7 +3532,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j22",
@@ -3541,7 +3563,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j23",
@@ -3571,7 +3594,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j24",
@@ -3601,7 +3625,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j25",
@@ -3631,7 +3656,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j26",
@@ -3661,7 +3687,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j27",
@@ -3691,7 +3718,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   },
   {
    "name": "j28",
@@ -3721,7 +3749,8 @@
     "effort": 1.0,
     "velocity": 1.0
    },
-   "mimic": null
+   "mimic": null,
+   "fourBar": null
   }
  ],
  "visuals": [

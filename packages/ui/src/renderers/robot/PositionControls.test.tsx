@@ -33,7 +33,7 @@ it('a plain description has no pose row, and one with nothing to move says so', 
   expect(screen.queryByRole('combobox', { name: 'Pose' })).toBeNull();
   expect(field('shoulder', 'deg').value).toBe('0°');
   cleanup();
-  const fixed = { articulation: { schemaVersion: 1, controls: [], joints: [{ id: 'mount', parent: null, kind: 'fixed' }], carries: { mount: ['camera'] }, handles: [], poses: {}, opening: {} } };
+  const fixed = { articulation: { schemaVersion: 2, controls: [], joints: [{ id: 'mount', parent: null, kind: 'fixed' }], carries: { mount: ['camera'] }, handles: [], poses: {}, opening: {} } };
   render(<PositionControls pose={createPoseStore(fixed)}/>);
   expect(screen.getByText('No movable joints.')).toBeTruthy();
 });

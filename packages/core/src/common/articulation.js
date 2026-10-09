@@ -13,7 +13,10 @@
 //
 // The same player serves a robot description: its articulation puts a link's visuals under
 // the joint that carries them, a mimic is a row with a leader term and a bias, and a
-// continuous joint has no limits.
+// continuous joint has no limits. A row may also carry a `curve` (a four-bar linkage's
+// crank): a sampled function of its driver row's value, played by linear interpolation of
+// the keys cadgen sampled from the closed form, as a glTF LINEAR sampler is played; the
+// page solves nothing of the linkage.
 
 const DEG_TO_RAD = Math.PI / 180;
 
@@ -78,7 +81,31 @@ export function poseControlValues(articulation, name) {
   return normalizeControlValues(articulation, { ...openingControlValues(articulation), ...(isObject(preset) ? preset : {}) });
 }
 
-/** bias + sum(weight * control). */
+/**
+ * A curve's term: its driver row's value (folded into one period from the first key when the
+ * curve has one), interpolated linearly between the keys it falls between, held beyond the ends.
+ */
+function curveValue(curve, values) {
+  const input = Array.isArray(curve.input) ? curve.input : [];
+  const output = Array.isArray(curve.output) ? curve.output : [];
+  const count = Math.min(input.length, output.length);
+  if (!count) return 0;
+  let x = rowValue(curve.driver, values);
+  const period = finite(curve.period, 0);
+  if (period > 0) x = input[0] + (((x - input[0]) % period) + period) % period;
+  if (x <= input[0]) return finite(output[0], 0);
+  if (x >= input[count - 1]) return finite(output[count - 1], 0);
+  let before = 0, after = count - 1;
+  while (after - before > 1) {
+    const middle = (before + after) >> 1;
+    if (input[middle] <= x) before = middle; else after = middle;
+  }
+  const span = input[after] - input[before];
+  const t = span > 0 ? (x - input[before]) / span : 0;
+  return finite(output[before], 0) + t * (finite(output[after], 0) - finite(output[before], 0));
+}
+
+/** bias + sum(weight * control), plus the row's curve at the configuration when it has one. */
 export function rowValue(row, values) {
   if (!isObject(row)) return 0;
   let total = finite(row.bias, 0);
@@ -86,6 +113,7 @@ export function rowValue(row, values) {
     if (!Array.isArray(term)) continue;
     total += finite(term[1], 0) * finite(values?.[term[0]], 0);
   }
+  if (isObject(row.curve)) total += curveValue(row.curve, values);
   return total;
 }
 

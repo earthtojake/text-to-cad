@@ -351,7 +351,8 @@ test("a robot payload loads through the render cache, by file and revision, and 
   await loadRenderRobot(file, { client, revision: "r2" });
   assert.equal(calls, 2);
   const stale = { robot: async () => ({ schemaVersion: ROBOT_PAYLOAD_SCHEMA_VERSION + 1 }) };
-  await assert.rejects(loadRenderRobot(`${file}-stale`, { client: stale }), /schemaVersion 2.*reads version 1/);
+  await assert.rejects(loadRenderRobot(`${file}-stale`, { client: stale }),
+    new RegExp(`schemaVersion ${ROBOT_PAYLOAD_SCHEMA_VERSION + 1}.*reads version ${ROBOT_PAYLOAD_SCHEMA_VERSION}`));
 });
 
 test("a cached render asset is not reused across source scopes", async (t) => {

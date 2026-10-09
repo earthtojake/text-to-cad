@@ -280,7 +280,7 @@ it('a short viewer: the tree gives way first, then the details panels, a kept ef
 
 // ---- Position ------------------------------------------------------------------------------------
 
-const hinge = { url: '/hinge.step.json', articulation: { schemaVersion: 1,
+const hinge = { url: '/hinge.step.json', articulation: { schemaVersion: 2,
   controls: [{ id: 'hinge', label: 'hinge', unit: 'deg', min: -180, max: 180, default: 0 }],
   joints: [], carries: {}, handles: [], poses: { open: { hinge: 90 } }, opening: { hinge: 0 } } };
 /** STEP's Position panel as the tool stack draws it (`StepPanels.js`) over a pose runtime, and the strip's Position icon. */

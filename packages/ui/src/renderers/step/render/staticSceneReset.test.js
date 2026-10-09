@@ -212,7 +212,7 @@ test("actual module and animation removal restores rest records even beside a ne
     const source = buildComposedPackageMeshData(desc, components);
     const control = sceneFixture(source), optimized = sceneFixture(source), visual = visualState(), clip = { enabled: false };
     // The pose: a slider carrying a1 along (3, 2, 1), at the travel that lands it there.
-    const parameters = kind === "parameters" ? { articulation: { schemaVersion: 1,
+    const parameters = kind === "parameters" ? { articulation: { schemaVersion: 2,
       controls: [{ id: "lift", label: "lift", unit: "mm", min: 0, max: 10, default: 0 }],
       joints: [{ id: "lift", parent: null, kind: "slider", origin: [0, 0, 0], axis: [3, 2, 1], travel: { bias: 0, terms: [["lift", 1]] } }],
       carries: { lift: ["a1"] }, handles: [], poses: {}, opening: { lift: 0 } }, values: { lift: Math.hypot(3, 2, 1) } } : null;

@@ -116,7 +116,7 @@ test("link facts report what the payload says and nothing it does not", () => {
   const facts = robotLinkFacts(robot, "arm_link");
   assert.deepEqual(facts.parentJoint, {
     name: "shoulder", type: "revolute", parentLink: "base_link", axis: [0, 0, 1],
-    limit: { lower: -1.5, upper: 1.5, effort: 12, velocity: 3 }, origin: { xyz: [0, 0, 0.2], rpy: [0, 0, 0] }, mimic: null,
+    limit: { lower: -1.5, upper: 1.5, effort: 12, velocity: 3 }, origin: { xyz: [0, 0, 0.2], rpy: [0, 0, 0] }, mimic: null, fourBar: null,
   });
   assert.deepEqual(facts.childJoints, [{ name: "wrist_roll", type: "continuous", childLink: "wrist_link" }]);
   assert.deepEqual(facts.groups, ["manipulator"]);
@@ -162,6 +162,12 @@ test("the facts of a resolved robot: cadgen's host path for a mesh file, an SRDF
   assert.deepEqual([head.groups, head.endEffectors, head.mass, head.collisions], [[], [], null, []]);
   const base = robotLinkFacts(planned, "base");
   assert.deepEqual([base.isRoot, base.parentJoint.name, base.parentJoint.parentLink, base.visuals[0].type, base.visuals[0].color], [false, "footprint", "base_footprint", "box", "#4d4d59"]);
+  // A visual's own name is a fact of the link, as the description wrote it.
+  assert.equal(robotLinkFacts(planned, "upper_arm").visuals[0].name, "upper_arm_shell");
+  // A four-bar's crank reads back the element: its driver and the linkage's numbers, no mimic formula.
+  const crank = robotLinkFacts(fixturePayload("linkage.urdf"), "crank").parentJoint;
+  assert.deepEqual([crank.mimic, crank.fourBar], [null, { driver: "output_joint", inputLength: 0.05, groundLength: 0.2, outputLength: 0.08,
+    couplerLength: 0.2, inputZero: 1.5253680280265103, outputZero: 1.5707963267948966 }]);
 });
 
 test("a root that is only a frame gets no row; a description of nothing but frames keeps them all", () => {

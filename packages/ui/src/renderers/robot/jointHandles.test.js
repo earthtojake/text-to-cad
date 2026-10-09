@@ -64,6 +64,20 @@ test("a robot's handles are its articulation's: one per moving row, a follower's
   scene.dispose();
 });
 
+test("a four-bar's crank has no handle and no control: its driver's knob moves it, through the curve cadgen sampled", () => {
+  const robot = fixturePayload("linkage.urdf");
+  const scene = createRobotScene(THREE, robotOf(robot));
+  const handles = robotJointHandles(THREE, prepareRobotJointHandles(THREE, robot, scene), scene, {}, () => {});
+  assert.deepEqual(handles.map(({ id, kind }) => `${id}:${kind}`), ["output_joint:revolute"]);
+  assert.deepEqual(robot.articulation.controls.map(({ id }) => id), ["output_joint"]);
+  // At a key of the curve the crank is exactly where cadgen's closed form put it.
+  const { curve } = robot.articulation.joints.find(({ id }) => id === "input_joint").turn;
+  const key = Math.floor(curve.input.length / 3);
+  scene.setControlValues({ output_joint: curve.input[key] });
+  assert.equal(scene.jointRow("input_joint").turn, curve.output[key]);
+  scene.dispose();
+});
+
 test("a continuous joint has no stops and its drag winds one turn; a child centred on its own axis still gets an arm that turns with the joint", () => {
   const robot = fixturePayload("arm.urdf");
   // A continuous joint of the arm's own shape: the nod, unbounded.

@@ -150,6 +150,8 @@ export function RobotLinkDetails({ facts, onOpenFile, onSelectLink, hasLinkRow =
       {joint.axis && <InfoRow label="Axis"><CoordValue vector={joint.axis} digits={4}/></InfoRow>}
       <LimitRows joint={joint}/>
       {joint.mimic && <InfoRow label="Mimic"><MonoValue>{`${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}
+      {/* A four-bar's crank follows its driver through the linkage cadgen solved: no formula to show, only the driver. */}
+      {joint.fourBar && <InfoRow label="Four-bar driver"><MonoValue>{joint.fourBar.driver}</MonoValue></InfoRow>}
       {joint.origin && <>
         <InfoRow label="Origin xyz" title="Parent-frame position (m)"><CoordValue vector={joint.origin.xyz} digits={4}/></InfoRow>
         {!isZero(joint.origin.rpy) && <InfoRow label="Origin rpy" title="Roll, pitch, yaw (rad)"><MonoValue>{vectorText(joint.origin.rpy)}</MonoValue></InfoRow>}
