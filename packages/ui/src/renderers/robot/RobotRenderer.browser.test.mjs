@@ -13,13 +13,13 @@ import { PNG } from 'pngjs';
 // The robot renderer end to end in a real browser, over the fixture descriptions in `__fixtures__`
 // as cadgen resolved them (`make_fixtures.py`; the Python suite holds the files current): a URDF of
 // primitives, the SRDF paired with it (a "home" state, a named pose, an end effector), an SDF, a
-// long chain, and the two cadgen refuses, whose refusal must raise an alert instead of a robot.
-// This server answers `GET /__cad/robot` as the viewer's does, from those files, so the page here
-// is the page a CAD Viewer serves. Scene, pose store and handle adapter have unit tests; these are
-// the flows a person actually uses.
+// long chain, a four-bar linkage cadgen closes, and the two cadgen refuses, whose refusal must raise
+// an alert instead of a robot. This server answers `GET /__cad/robot` as the viewer's does, from
+// those files, so the page here is the page a CAD Viewer serves. Scene, pose store and handle adapter
+// have unit tests; these are the flows a person actually uses.
 
 const FIXTURES = new URL('./__fixtures__/', import.meta.url);
-const DESCRIPTIONS = ['arm.urdf', 'arm.srdf', 'swing.sdf', 'chain.urdf', 'gone.urdf', 'lonely.srdf'];
+const DESCRIPTIONS = ['arm.urdf', 'arm.srdf', 'swing.sdf', 'chain.urdf', 'linkage.urdf', 'gone.urdf', 'lonely.srdf'];
 const payloadFile = name => new URL(`${name.slice(0, name.lastIndexOf('.'))}.${name.split('.').pop()}.robot.json`, FIXTURES);
 // cadgen's answer for each description: its payload, or the sentence it refuses it with.
 const PAYLOADS = Object.fromEntries(DESCRIPTIONS.filter(name => existsSync(payloadFile(name))).map(name => [name, readFileSync(payloadFile(name), 'utf8')]));
@@ -169,6 +169,8 @@ async function open(t, file, { panel = true } = {}) {
 const sameCamera = (a, b) => a.every((value, index) => Math.abs(value - b[index]) < 1e-9);
 const round6 = value => Math.round(value * 1e6) / 1e6;
 const translation = matrix => [matrix[3], matrix[7], matrix[11]];
+// A point of a link, in the robot's space: through the link's row-major frame.
+const through = (matrix, [x, y, z]) => [0, 4, 8].map(row => matrix[row] * x + matrix[row + 1] * y + matrix[row + 2] * z + matrix[row + 3]);
 
 test('a robot can enter Position with sidebar controls: knobs drag joints, the camera keeps every other press, every pose write is a jump, and a pose step renders no component', async (t) => {
   const robot = await open(t, 'arm.srdf');
@@ -374,7 +376,7 @@ test('a robot can enter Position with sidebar controls: knobs drag joints, the c
   assert.deepEqual(robot.errors, []);
 });
 
-test('Select picks links at once; a selection lives only under Select; Links shows what the description says and follows what it names', async (t) => {
+test('Select picks a visual at once; a selection lives only under Select; Links shows what the description says and follows what it names', async (t) => {
   const robot = await open(t, 'arm.srdf');
   const { page, pane } = robot;
   await robot.openPosition();
@@ -464,8 +466,13 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await page.mouse.move(...onScreen(spots.shoulder));
   await page.mouse.down(); await page.mouse.up();
   await robot.settle();
-  assert.deepEqual(await robot.pressedRows(), ['Select upper_arm'], 'selected by the next frame');
-  assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedLinks, ['upper_arm']);
+  // A pick selects the visual under the pointer, named by its URDF `name` (cadgen's label for it),
+  // and opens its link so the visual's row is on screen under it; the Reference is headed by that name.
+  assert.deepEqual(await robot.pressedRows(), ['Select upper_arm_shell'], 'selected by the next frame');
+  assert.deepEqual(await page.evaluate(() => (({ selectedLinks, selectedPartIds }) => [selectedLinks, selectedPartIds])(window.cadHarness.a.controller.readState())),
+    [[], ['upper_arm:v1']]);
+  assert.equal(await pane.getByRole('button', { name: 'Collapse upper_arm', exact: true }).getAttribute('aria-expanded'), 'true', 'its link opens');
+  assert.equal(await reference.getByRole('heading').innerText(), 'upper_arm_shell');
   // The shared camera bar provides zoom framing for robots too.
   assert.equal(await pane.getByRole('button', { name: 'Zoom controls', exact: true }).count(), 0);
   assert.equal(await pane.getByLabel('Zoom level percent', { exact: true }).count(), 0);
@@ -475,11 +482,19 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await robot.pressed([], 'a click on nothing clears');
   await page.mouse.click(...onScreen(spots.lift));
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 1);
-  await robot.pressed(['Select carriage']);
-  assert.match(await reference.innerText(), /tool/, 'the end effector mounted on the link');
-  // Shift adds a link to the selection, as it adds a named object.
+  // A visual with no name of its own is named for its geometry.
+  await robot.pressed(['Select box']);
+  // Shift adds a visual to the selection, from another link too.
   await page.keyboard.down('Shift'); await page.mouse.click(...onScreen(spots.shoulder)); await page.keyboard.up('Shift');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 2);
+  await robot.pressed(['Select box', 'Select upper_arm_shell']);
+  assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedPartIds.sort(), ['carriage:v1', 'upper_arm:v1']);
+  assert.equal(await reference.getByRole('heading').innerText(), 'Components');
+  // A link is still selected by its row, with what the description says about it.
+  await pane.getByRole('button', { name: 'Select carriage', exact: true }).click();
+  await robot.pressed(['Select carriage']);
+  assert.match(await reference.innerText(), /tool/, 'the end effector mounted on the link');
+  await page.keyboard.down('Shift'); await pane.getByRole('button', { name: 'Select upper_arm', exact: true }).click(); await page.keyboard.up('Shift');
   await robot.pressed(['Select carriage', 'Select upper_arm']);
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedLinks.sort(), ['carriage', 'upper_arm']);
   await page.keyboard.press('Escape');
@@ -517,9 +532,24 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   assert.deepEqual(robot.errors, []);
 });
 
-test('a reload of the tab brings the pose back, and nothing of the tool or the Display dropdown, and a pose is dropped when the description changed', async (t) => {
+test('a reload of the tab brings the pose and the hidden visuals back, and nothing of the tool or the Display dropdown, and both are dropped when the description changed', async (t) => {
   const robot = await open(t, 'arm.urdf');
   const { page, pane } = robot;
+  // A link's eye hides its own visuals and leaves its child links; the eye stays crossed out
+  // while they are hidden, and Reveal draws exactly what was there.
+  const shown = (await robot.capture()).data;
+  await pane.getByRole('button', { name: 'Hide upper_arm', exact: true }).click();
+  await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).waitFor();
+  await robot.settled();
+  assert.ok(!(await robot.capture()).data.equals(shown), 'the hidden visual is not drawn');
+  await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).click();
+  // Off the row, which lights its link while the pointer is on it.
+  const surface = await robot.surface();
+  await page.mouse.move(surface.x + surface.width - 90, surface.y + surface.height / 2);
+  await robot.settled();
+  assert.ok((await robot.capture()).data.equals(shown), 'and Reveal draws it again');
+  await pane.getByRole('button', { name: 'Hide upper_arm', exact: true }).click();
+  await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).waitFor();
   await robot.openPosition();
   await page.waitForFunction(() => window.__cadJointHandles?.().length > 0);
   await robot.type('shoulder', 25);
@@ -536,13 +566,16 @@ test('a reload of the tab brings the pose back, and nothing of the tool or the D
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {}).some(record => record?.renderer?.pose?.value?.jointValues?.nod === 12));
   const record = await page.evaluate(() => window.cadHarness.state.renderers[JSON.stringify(['/models/arm.urdf', 'robot'])]);
   assert.deepEqual([record.renderer.pose.value.jointValues.shoulder, record.renderer.pose.value.jointValues.lift], [25, 0.2]);
-  assert.deepEqual(Object.keys(record.renderer), ['pose'], 'one slice: the pose, and no selection or tree');
+  assert.deepEqual(Object.keys(record.renderer).sort(), ['pose', 'visibility'], 'two slices: the pose and the hidden visuals, and no selection or tree');
+  assert.deepEqual(record.renderer.visibility.value, { hiddenPartIds: ['upper_arm:v1'] });
   assert.equal('tool' in record, false, 'the view keeps no tool');
   assert.match(record.renderer.pose.signature, /arm\.urdf-1$/);
+  assert.equal(record.renderer.visibility.signature, record.renderer.pose.signature, 'both against the description');
   await page.evaluate(() => window.cadHarness.mounted(true));
   // The tool is never saved: the reloaded file opens in Select, Display shut.
   await robot.linksPanel().waitFor();
   assert.deepEqual(await robot.toolNames(), ['Select:true', 'Position:false']);
+  await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).waitFor();
   assert.equal(await robot.displayPanel().count(), 0, 'it comes back with Display shut');
   await robot.openPosition();
   await robot.jointField('shoulder').waitFor();
@@ -561,6 +594,45 @@ test('a reload of the tab brings the pose back, and nothing of the tool or the D
   await robot.openPosition();
   await robot.jointField('shoulder').waitFor();
   assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue()], ['0°', '0 m'], 'a pose belongs to the description it was made on');
+  await robot.tool('Select').click();
+  await pane.getByRole('button', { name: 'Hide upper_arm', exact: true }).waitFor();
+  assert.equal(await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).count(), 0, 'and so do its hidden visuals');
+  assert.deepEqual(robot.errors, []);
+});
+
+test('a four-bar linkage closes on screen: the crank cadgen derives follows the rocker through its curve, has no knob or slider of its own, and the Reference names its driver', async (t) => {
+  const robot = await open(t, 'linkage.urdf');
+  const { page, pane } = robot;
+  const linkage = JSON.parse(PAYLOADS['linkage.urdf']);
+  const fourBar = linkage.joints.find(joint => joint.name === 'input_joint').fourBar;
+  // The two pins, in the robot's space: the crank's at its length along its link, the rocker's at its.
+  // The linkage closes when the coupler between them spans exactly its own length, whatever the pose.
+  const closes = async (where) => {
+    const links = await robot.links();
+    const crank = through(links.crank, [fourBar.inputLength, 0, 0]), rocker = through(links.rocker, [fourBar.outputLength, 0, 0]);
+    const gap = Math.hypot(crank[0] - rocker[0], crank[1] - rocker[1], crank[2] - rocker[2]);
+    // Within what cadgen's sampling tolerance (0.01 degrees of the crank) allows at the pin.
+    assert.ok(Math.abs(gap - fourBar.couplerLength) < 2e-5, `${where}: the coupler spans ${gap} m, not ${fourBar.couplerLength}`);
+  };
+  await closes('as written');
+  await robot.openPosition();
+  await page.waitForFunction(() => window.__cadJointHandles?.().length > 0);
+  assert.deepEqual(Object.keys(await robot.handles()), ['output_joint'], 'one knob, the rocker; the crank has none');
+  assert.equal(await robot.jointField('input_joint').count(), 0, 'and no slider');
+  for (const driverDeg of [-28, -10, 15, 28]) {
+    await robot.type('output_joint', driverDeg);
+    await page.waitForFunction(wanted => window.__cadJointHandles().find(handle => handle.id === 'output_joint').value === wanted, driverDeg);
+    await closes(`the rocker at ${driverDeg} degrees`);
+  }
+  assert.equal((await robot.stats()).lastPoseWrites, 2, 'a step writes the rocker and the crank it drives');
+  // The Reference for the crank names its four-bar driver, not a mimic formula.
+  await robot.tool('Select').click();
+  await pane.getByRole('button', { name: 'Select crank', exact: true }).click();
+  const reference = pane.getByRole('region', { name: 'Reference details', exact: true });
+  await reference.getByText('Four-bar driver', { exact: true }).waitFor();
+  const said = await reference.innerText();
+  assert.match(said, /output_joint/);
+  assert.doesNotMatch(said, /Mimic/);
   assert.deepEqual(robot.errors, []);
 });
 

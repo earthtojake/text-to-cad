@@ -20,6 +20,7 @@ import { prepareRobotJointHandles, robotJointHandles } from "./jointHandles.js";
 import { createPoseStore, poseLogic } from "./poseStore.js";
 import { ROBOT_DECLINED_LIVE_COMMANDS, ROBOT_TOOL, ROBOT_TOOL_MODES } from "./tools.js";
 import { useLinkSelection } from "./useLinkSelection.js";
+import { useRobotVisibility } from "./useRobotVisibility.js";
 import { useRobotDocument } from "./useRobotDocument.js";
 
 const NO_HANDLES = Object.freeze([]);
@@ -35,9 +36,9 @@ function RobotSurface({ view, data }) {
   const kind = String(document.entry?.kind || "").toLowerCase();
 
   // ---- pose: outside React ------------------------------------------------------------
-  // This renderer's one slice of the file's view (`kit/shell/fileView.js`): the control values,
-  // written against the payload's revision, so a reopened file takes its pose back only
-  // if it is the same robot. The selection and the tree's disclosure are not in it.
+  // The pose slice of the file's view (`kit/shell/fileView.js`): the control values, written
+  // against the payload's revision, so a reopened file takes its pose back only if it is the
+  // same robot. The selection and the tree's disclosure are not in it.
   const [stored] = useState(() => view.state);
   const poseRef = useRef(null);
   const pose = useMemo(() => {
@@ -57,10 +58,6 @@ function RobotSurface({ view, data }) {
   poseRef.current = pose;
   const robotRef = useRef(robot);
   robotRef.current = robot;
-  // The slice is read when the view is WRITTEN: the pose lives outside React. Until the robot
-  // has loaded there is nothing to say, and what was stored is kept.
-  const rendererState = useMemo(() => (robot && pose
-    ? { signatures: { pose: robot.revision }, read: () => ({ pose: { jointValues: pose.getSnapshot().values } }) } : null), [robot, pose]);
 
   // ---- scene ----------------------------------------------------------------------------
   const [scene, setScene] = useState(null);
@@ -101,6 +98,23 @@ function RobotSurface({ view, data }) {
     // Escape clears the selection.
     handle: () => { if (!selectionRef.current.active) return false; selectionRef.current.clear(); return true; }
   }), [selection.active]);
+
+  // ---- visibility: React state, the scene told ---------------------------------------------
+  // A hidden visual leaves the render and the pick; the bounds (lighting, floor) follow, and the
+  // view's record is saved with the ids.
+  const requestVisibilityRender = useCallback(() => {
+    shellRef.current?.requestRender();
+    shellRef.current?.syncSceneBounds();
+    shellRef.current?.scheduleStateSave();
+  }, []);
+  const { hiddenPartIds, changeVisibility } = useRobotVisibility({ robot, scene, requestRender: requestVisibilityRender, stored });
+  // The slices are read when the view is WRITTEN: the pose lives outside React; the hidden ids
+  // are React state, both against the payload's revision. Until the robot has loaded there is
+  // nothing to say, and what was stored is kept.
+  const rendererState = useMemo(() => (robot && pose ? {
+    signatures: { pose: robot.revision, visibility: robot.revision },
+    read: () => ({ pose: { jointValues: pose.getSnapshot().values }, visibility: { hiddenPartIds } })
+  } : null), [robot, pose, hiddenPartIds]);
 
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: robot?.revision || "",
@@ -194,7 +208,7 @@ function RobotSurface({ view, data }) {
   const linksShown = !shell.previewing && toolMode === ROBOT_TOOL.SELECT;
   const toolPanels = <>
     <LinksSection key={modelKey} active={linksShown} robot={robot?.robot || null} components={robot?.components}
-      parts={robot?.parts} selection={treeSelection} onOpenFile={view.onOpenFile} />
+      parts={robot?.parts} hiddenPartIds={hiddenPartIds} onVisibilityChange={changeVisibility} selection={treeSelection} onOpenFile={view.onOpenFile} />
     {kind === "sdf" ? <ToolPanel id="sdf" title="SDF" label="SDF" fit="details" defaultCollapsed hidden={!linksShown}>
       <SdfSection info={robot?.robot?.sdf || null} />
     </ToolPanel> : null}

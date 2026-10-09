@@ -508,10 +508,10 @@ the loader asks which format it was. The STEP renderer matches none of them.
   screen (a development React build), which is what a frame costs. The opening pose is
   the articulation's (`opening`: every control at rest, then the SRDF group state(s)
   named `home`, decided in cadgen, where a snapshot opens the robot too).
-- **Select**: a selection is any number of links or any number of named objects,
-  never both (`robot/useLinkSelection.js`; Shift in the viewport, Shift, Ctrl or Cmd
-  on a row add), and the Reference panel names several by what they are ("Links",
-  "Mesh objects") and lists them. It exists only while Select is the tool: a pick under
+- **Select**: a selection is any number of links or any number of visuals (or the named
+  objects of a visual's mesh), never both (`robot/useLinkSelection.js`; Shift in the
+  viewport, Shift, Ctrl or Cmd on a row add), and the Reference panel names several by
+  what they are ("Links", "Components") and lists them. It exists only while Select is the tool: a pick under
   another tool returns to Select first, and leaving Select clears it. A pick opens
   nothing: its Reference joins the stack under Links. Escape clears the selection. Hover and selection are drawn by the scene (`setHighlight`), with
   the highlight ink a STEP part wears; hover is not React state. A robot has no
@@ -1494,8 +1494,9 @@ Links are the rows, carrying no icon; a child link sits under its parent link
 and shows the joint between them as muted text (`shoulder_pan · revolute`); the
 visual components (`robotComponents` in core's `lib/urdf/robotParts.js`) are leaves under that
 link, after its child links. Every visual contributes a component, including STL
-meshes and built-in primitives, named by its URDF `name` or, without one, by its
-geometry (`bucket.stl`, `box`). A mesh with named objects still splits into
+meshes and built-in primitives, named as the payload labels it (`visuals[].label`,
+minted by cadgen: the visual's URDF `name` or, without one, its geometry —
+`bucket.stl`, `box`). A mesh with named objects still splits into
 those objects; an unsliceable mesh stays whole as one selectable component. Every link appears once: a cycle, a second parent or a
 missing parent cannot hang the builder or drop a link, and orphans become
 roots. A root that is only a frame — no geometry, no mass, and one child
@@ -1528,18 +1529,26 @@ Escape clears it. A click acts at once, as a STEP's does; a
 robot has no double-click at all.
 
 Each link or component row has the Hide/Reveal eye of an assembly row
-(`settings-ui.md`), also in search results.
+(`settings-ui.md`; `robot/RobotVisibilityButton.jsx`), also in search results.
 A link hides its own visuals, leaving child links visible and all joints active.
 A partially hidden link hides its remaining visuals; a fully hidden one reveals
-all of them. Hidden geometry is excluded from rendering, picking and selection
-highlights. The scene retains its meshes for reveal without rebuilding them.
-Hidden component ids are saved with the file view against its revision; a live
-reload retains only ids still present.
+all of them (`robot/visibility.js`). Hidden geometry is excluded from rendering,
+picking, the bounds and selection highlights: the scene takes the ids
+(`setHiddenPartIds`) and keeps its meshes for a reveal without rebuilding them.
+Hidden component ids are the `visibility` slice of the file view, saved against the
+payload's revision beside the pose (`robot/useRobotVisibility.js`); a live reload
+retains only ids still present.
 
-The `tcad:four_bar` extension is a nonlinear mimic in core's URDF parser and
-kinematics solver. Its dependent joint has no Position slider or joint handle;
-the Reference panel names its four-bar driver instead of an affine mimic formula.
-The authoring contract specifies the namespace, geometry and range constraints.
+A URDF joint carrying `tcad:four_bar` (the urdf skill's authoring contract) is the
+crank of a planar four-bar linkage, derived from its driver joint. cadgen closes the
+linkage, not the page (`cadgen.robot_payload`): it checks the geometry when it resolves
+the description, refusing what cannot close in words, and samples the crank's angle
+over the driver's whole range from the closed form into a `curve` on the joint's
+articulation row, which the player (`core/common/articulation.js`) interpolates
+linearly, within the tolerance cadgen names. The crank is not a control: it has no
+Position slider or joint handle (its driver's moves it), and the Reference panel names
+its four-bar driver (the payload's `fourBar` fact) instead of a mimic formula. A
+snapshot's `--joint-values` refuses the crank by name, as it refuses a mimic follower.
 
 The Reference panel, headed by the link's name, reads back what the description says
 about the link, in sections: its SRDF planning groups (the payload's `srdf.groupsByLink`) and end effectors;

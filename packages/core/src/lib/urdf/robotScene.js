@@ -82,11 +82,14 @@ function boxOf(bounds) {
  *   `links` and `visuals`). `parts`: `buildRobotParts` — one per visual, or per named object of a visual's mesh.
  * @returns {import("../viewer/sceneContract.js").KitScene & object}  The contract, plus: `setControlValues(values)`
  *   (true when a matrix was written), `setHighlight({ hoveredLink, hoveredComponent, selectedLinks, selectedComponents })`,
- *   `jointRow(id)`, `motionFrame(jointId)`, `linkFrames()`, `linkCentre(name)`, `hasComponent(id)`,
+ *   `setHiddenPartIds(ids)`, `jointRow(id)`, `motionFrame(jointId)`, `linkFrames()`, `linkCentre(name)`, `hasComponent(id)`,
  *   and `stats` (test seam: matrix writes per pose).
  */
 export function createRobotScene(THREE, { robot, parts }) {
   const articulation = robot?.articulation || null;
+  // Hidden visuals: out of the render, the pick and the highlight, their meshes kept for a reveal.
+  let hiddenPartIds = new Set();
+  const isVisible = record => !hiddenPartIds.has(record.mesh.userData.partId);
   const root = new THREE.Group();
   root.name = "robot";
   place(root, null);
@@ -142,8 +145,9 @@ export function createRobotScene(THREE, { robot, parts }) {
     if (Number.isInteger(part.fillIndex)) mesh.userData.cadFillIndex = part.fillIndex;
     place(mesh, part.placement);
     const owner = carrier.get(linkName);
-    (owner?.object || root).add(mesh);
-    const record = { mesh, sourceBounds: boxOf(part.sourceBounds || part.bounds), box: null, dirty: true, ghostRecord: null };
+    const holder = owner?.object || root;
+    holder.add(mesh);
+    const record = { mesh, holder, sourceBounds: boxOf(part.sourceBounds || part.bounds), box: null, dirty: true, ghostRecord: null };
     meshes.push(record);
     if (part.componentName) recordByComponent.set(mesh.name, record);
     meshesByLink.set(linkName, [...(meshesByLink.get(linkName) || []), record]);
@@ -263,7 +267,7 @@ export function createRobotScene(THREE, { robot, parts }) {
   function recordsFor(linkNames, componentIds) {
     const records = [linkNames].flat().flatMap(linkName => (linkName ? meshesByLink.get(linkName) || [] : []));
     for (const id of componentIds) if (recordByComponent.has(id)) records.push(recordByComponent.get(id));
-    return records;
+    return records.filter(isVisible);
   }
   function paint(record, selected) {
     const material = record.mesh.material;
@@ -303,7 +307,7 @@ export function createRobotScene(THREE, { robot, parts }) {
 
   // ---- pick --------------------------------------------------------------------------
   const raycaster = new THREE.Raycaster();
-  const pickable = meshes.map(record => record.mesh);
+  let pickable = meshes.map(record => record.mesh);
   // A hover is a pick per frame, and a link mesh is tens of thousands of triangles: each
   // geometry gets its accelerator in idle time, the first time a ray reaches its bounds
   // (until then, and for a mesh too large for one, the ray is tested the plain way).
@@ -313,7 +317,7 @@ export function createRobotScene(THREE, { robot, parts }) {
   let disposed = false;
   return {
     object3D: root,
-    get bounds() { return (boundsCache ||= merged(meshes) || restBounds); },
+    get bounds() { return (boundsCache ||= merged(meshes.filter(isVisible)) || restBounds); },
     restBounds,
     stats,
     partCount: meshes.length,
@@ -363,12 +367,24 @@ export function createRobotScene(THREE, { robot, parts }) {
       return [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
     },
     hasComponent(id) { return recordByComponent.has(id); },
+    /** Hide visual meshes only: their joint nodes still carry and pose the links below them. */
+    setHiddenPartIds(ids) {
+      if (disposed) return;
+      hiddenPartIds = new Set((Array.isArray(ids) ? ids : []).filter(id => recordByComponent.has(id)));
+      for (const record of meshes) {
+        if (!isVisible(record)) record.mesh.removeFromParent();
+        else if (!record.mesh.parent) record.holder.add(record.mesh);
+      }
+      pickable = meshes.filter(isVisible).map(record => record.mesh);
+      boundsCache = null;
+      applyHighlight();
+    },
     setHighlight(next) {
       if (disposed) return;
       highlight = { hoveredLink: "", hoveredComponent: "", selectedLinks: [], selectedComponents: [], ...next };
       applyHighlight();
     },
-    // The first surface under the ray: a named object is itself, anything else is its link.
+    // The first visible surface under the ray: a component is itself, anything else is its link.
     pick(ray) {
       if (disposed) return null;
       root.updateMatrixWorld();

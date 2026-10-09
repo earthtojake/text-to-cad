@@ -4,8 +4,10 @@ import { paletteIndices } from "../render/meshObjects.js";
 // payload cadgen resolved (`cadgen.robot_payload`), or per NAMED object of a visual's mesh,
 // each with its link, its rest placement, the mesh it draws in that mesh's own units and
 // frame (a loaded link mesh, or the primitive cadgen meshed into the store), the colour the
-// description gives it, and the place "Color by part" deals it. Posing never touches this
-// list: a pose is the scene graph's joint matrices (`robotScene.js`).
+// description gives it, and the place "Color by part" deals it. Every part is a component
+// (a row of the Links tree, pickable in the viewport, hidden and revealed by its eye): a
+// visual whole, or each named object of its mesh. Posing never touches this list: a pose is
+// the scene graph's joint matrices (`robotScene.js`).
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 const IDENTITY_PLACEMENT = Object.freeze([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -171,21 +173,29 @@ function sourceObjectMesh(mesh, part) {
   };
 }
 
+// Every visual is a component: clicking any part of the robot selects its row in the tree. A
+// visual whose mesh carries no named objects is one component, named as the payload labels
+// it (the description's `name` for the visual, else its geometry).
+function wholeVisual(visual) {
+  const name = String(visual?.label || visual?.name || visual?.id || "").trim();
+  return { ...visual, componentName: name, visualId: visual.id };
+}
+
 function splitVisual(visual) {
   const objects = visual.sourceMesh?.parts;
-  if (!Array.isArray(objects) || !objects.some(componentName)) return [visual];
+  if (!Array.isArray(objects) || !objects.some(componentName)) return [wholeVisual(visual)];
   const split = [];
   for (const [index, object] of objects.entries()) {
     const sourceMesh = sourceObjectMesh(visual.sourceMesh, object);
     // One unsliceable object forfeits the components for its VISUAL, not the visual's
     // geometry: dropping the object alone would silently delete triangles from the
-    // render, so the visual stays whole and simply contributes no component rows.
-    if (!sourceMesh) return [visual];
+    // render, so the visual stays whole as one selectable component.
+    if (!sourceMesh) return [wholeVisual(visual)];
     split.push({
       ...visual,
       id: `${visual.id}/object/${index}`,
       name: componentName(object) || visual.name,
-      componentName: componentName(object),
+      componentName: componentName(object) || `${wholeVisual(visual).componentName}:${index + 1}`,
       visualId: visual.id,
       meshObjectId: String(object.id || index),
       meshObjectIndex: index,

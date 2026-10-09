@@ -48,13 +48,15 @@ const parts = [
 ];
 const components = [
   { id: 'wrist_link:v1/object/0', name: 'flange', link: 'wrist_link', color: '#336699', triangleCount: 1200, vertexCount: 700, sizeMillimetres: [40, 40, 8] },
+  { id: 'wrist_link:v1/object/1', name: 'cap', link: 'wrist_link', color: '', triangleCount: 300, vertexCount: 150, sizeMillimetres: [40, 40, 2] },
 ];
 
 // What the scene graph was last asked to draw: the viewport half of a selection.
 let highlight: Record<string, unknown> = {};
 const scene = { hasComponent: (id: string) => components.some(component => component.id === id), setHighlight(next: Record<string, unknown>) { highlight = next; } };
 const drawn = () => JSON.stringify([highlight.selectedLinks || [], highlight.selectedComponents || []]);
-function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload = robot as typeof planned, onOpenFile = undefined as ((path: string) => void) | undefined }) {
+function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload = robot as typeof planned, onOpenFile = undefined as ((path: string) => void) | undefined,
+  hiddenPartIds = undefined as string[] | undefined, onVisibilityChange = undefined as ((ids: string[], visible: boolean) => void) | undefined }) {
   const selection = useLinkSelection({ scene, hidden: false, requestRender() {} });
   const observed = {
     ...selection,
@@ -62,7 +64,7 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload
     selectLink: (name: string, options?: any) => { spy.selectLink?.(name); selection.selectLink(name, options); },
     hoverLink: (name: string) => { spy.hoverLink?.(name); selection.hoverLink(name); },
   };
-  return <LinksSection robot={payload} components={components} parts={parts} selection={observed} onOpenFile={onOpenFile}/>;
+  return <LinksSection robot={payload} components={components} parts={parts} selection={observed} onOpenFile={onOpenFile} hiddenPartIds={hiddenPartIds} onVisibilityChange={onVisibilityChange}/>;
 }
 const rows = () => within(screen.getByRole('list', { name: 'Robot links' })).getAllByRole('button', { name: /^Select / }).map(row => row.getAttribute('aria-label'));
 const filter = () => screen.getByRole('textbox', { name: 'Filter links' });
@@ -251,6 +253,39 @@ it('a viewport pick of a surface selects its link; a named object selects itself
   fireEvent.click(screen.getByRole('button', { name: 'Pick surface' }));
   fireEvent.click(screen.getByRole('button', { name: 'Pick nothing' }));
   expect(screen.queryByRole('region', { name: 'Reference details' })).toBeNull();
+});
+
+it('a row that draws something has the Hide/Reveal eye: a link hides its own visuals, a partly hidden link the rest, and several visuals head the Reference as Components', () => {
+  const onVisibilityChange = vi.fn();
+  const { rerender } = render(<Harness onVisibilityChange={onVisibilityChange} hiddenPartIds={[]}/>);
+  // A link with no geometry of its own (shoulder_link) has no eye; base_link draws one visual.
+  expect(screen.queryByRole('button', { name: /^(Hide|Reveal) shoulder_link$/ })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Hide base_link' }));
+  expect(onVisibilityChange).toHaveBeenLastCalledWith(['base_link:v1'], false);
+  // The eye is its own press: the row is not selected by it.
+  expect(screen.getByRole('button', { name: 'Select base_link' }).getAttribute('aria-pressed')).toBe('false');
+  // wrist_link's two objects: with one hidden the link is partly hidden, so its eye hides the rest.
+  fireEvent.click(screen.getByRole('button', { name: 'Expand shoulder_link' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Expand elbow_link' }));
+  rerender(<Harness onVisibilityChange={onVisibilityChange} hiddenPartIds={['wrist_link:v1/object/0']}/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Hide wrist_link' }));
+  expect(onVisibilityChange).toHaveBeenLastCalledWith(['wrist_link:v1/object/0', 'wrist_link:v1/object/1'], false);
+  rerender(<Harness onVisibilityChange={onVisibilityChange} hiddenPartIds={['wrist_link:v1/object/0', 'wrist_link:v1/object/1']}/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Reveal wrist_link' }));
+  expect(onVisibilityChange).toHaveBeenLastCalledWith(['wrist_link:v1/object/0', 'wrist_link:v1/object/1'], true);
+  // A search hit carries the eye too, and a visual's eye is its own.
+  fireEvent.change(filter(), { target: { value: 'flange' } });
+  fireEvent.click(within(screen.getByRole('list', { name: 'Link search results' })).getByRole('button', { name: 'Reveal flange' }));
+  expect(onVisibilityChange).toHaveBeenLastCalledWith(['wrist_link:v1/object/0'], true);
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+  // Two visuals selected: the Reference is headed by what they are.
+  fireEvent.click(screen.getByRole('button', { name: 'Expand wrist_link' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Select flange' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Select cap' }), { shiftKey: true });
+  expect(within(screen.getByRole('region', { name: 'Reference details' })).getByRole('heading').textContent).toBe('Components');
+  // Without a handler there is no eye at all.
+  rerender(<Harness/>);
+  expect(screen.queryByRole('button', { name: /^(Hide|Reveal) / })).toBeNull();
 });
 
 it('a modified click adds a link to the selection, as it adds an object, and a plain one goes back to one', () => {

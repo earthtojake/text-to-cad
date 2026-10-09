@@ -4,7 +4,7 @@ import * as THREE from "three";
 
 import { jointDeltas, jointValues } from "../../common/articulation.js";
 import { isKitScene, sceneFramingBounds } from "../viewer/sceneContract.js";
-import { ARM, ARM_SRDF, SWING, boxMesh, robotOf } from "./__tests__/robotFixtures.js";
+import { ARM, ARM_SRDF, SWING, boxMesh, identity, robotOf, row, scaled, translation } from "./__tests__/robotFixtures.js";
 import { createRobotScene } from "./robotScene.js";
 
 // The articulation player (`common/articulation.js`, the one STEP poses with) is the ORACLE here:
@@ -191,22 +191,83 @@ test("a colour the description gives a visual wins over the colours its mesh bro
   scene.dispose();
 });
 
-test("picking names the link under the ray; a named object is itself; the pick follows the pose", () => {
+test("picking selects the visual under the ray, on its link; a named object is itself; a hidden visual is not there; the pick follows the pose", () => {
   const model = robotOf(ARM);
   // The tool's box as a named object of its mesh, as a GLB link's objects are.
   const parts = model.parts.map(part => (part.id === "tool:v1" ? { ...part, id: "tool:v1/object/0", componentName: "flange" } : part));
   const scene = createRobotScene(THREE, { robot: ARM, parts });
   const down = (x, y) => new THREE.Ray(new THREE.Vector3(x, y, 10), new THREE.Vector3(0, 0, -1));
-  const arm = scene.pick(down(0.5 * Math.cos(0.3), 0.5 * Math.sin(0.3)));
-  assert.deepEqual([arm.kind, arm.linkName, arm.id], ["link", "arm", "link:arm"]);
+  const overArm = down(0.5 * Math.cos(0.3), 0.5 * Math.sin(0.3));
+  const arm = scene.pick(overArm);
+  // Every visual is a component: the arm's box is its own visual, still on the arm link.
+  assert.deepEqual([arm.kind, arm.linkName, arm.componentId, arm.id], ["component", "arm", "arm:v1", "arm:v1"]);
   assert.ok(Math.abs(arm.point.z - 1.2) < 1e-6, "the surface the ray met first");
   assert.equal(scene.pick(down(5, 5)), null);
   // Just past the arm's end, where only the tool's box is under the ray.
   const flange = scene.pick(down(1.03 * Math.cos(0.3), 1.03 * Math.sin(0.3)));
   assert.deepEqual([flange.kind, flange.linkName, flange.componentId, flange.id], ["component", "tool", "tool:v1/object/0", "tool:v1/object/0"]);
   assert.equal(scene.hasComponent("tool:v1/object/0"), true);
+  // Hidden, the arm's visual is out of the render, the pick, the bounds and the highlight, and
+  // its joint node still carries the tool below it.
+  const shown = scene.bounds;
+  let armMesh = null;
+  scene.object3D.traverse((object) => { if (object.userData.partId === "arm:v1") armMesh = object; });
+  scene.setHiddenPartIds(["arm:v1", "not-a-part"]);
+  assert.notEqual(scene.pick(overArm)?.componentId, "arm:v1");
+  assert.equal(armMesh.parent, null, "off the graph");
+  assert.equal(scene.object3D.getObjectByName("joint:pitch").children.some(child => child.isMesh), false);
+  assert.equal(scene.pick(down(1.03 * Math.cos(0.3), 1.03 * Math.sin(0.3)))?.componentId, "tool:v1/object/0");
+  assert.ok(scene.bounds.max[2] < shown.max[2] - 0.04, "the bounds no longer reach the top of the arm's box (the tool's, at its tip, is thinner)");
+  scene.setHighlight({ selectedLinks: ["arm"] });
+  assert.equal(armMesh.renderOrder, 0, "a hidden visual is not painted by its link's selection");
+  scene.setHiddenPartIds([]);
+  assert.equal(armMesh.parent.name, "joint:pitch", "revealed where it was, without a rebuild");
+  assert.equal(scene.pick(overArm)?.componentId, "arm:v1");
+  assert.deepEqual(scene.bounds, shown);
+  // Posed, the pick follows: the arm is no longer under the ray it was under.
   scene.setControlValues({ yaw: 90 });
-  assert.equal(scene.pick(down(0.5 * Math.cos(0.3), 0.5 * Math.sin(0.3)))?.linkName ?? "base", "base");
+  assert.equal(scene.pick(overArm)?.linkName ?? "base", "base");
+  scene.dispose();
+});
+
+// A four-bar linkage as cadgen resolves one: the rocker is the control, the crank's row a curve
+// over the rocker's, sampled from the closed form; the graph plays the keys and nothing else.
+const LINKAGE = Object.freeze({
+  schemaVersion: 2, kind: "urdf", name: "linkage", root: "ground",
+  articulation: {
+    schemaVersion: 2,
+    controls: [{ id: "rocker", label: "rocker", unit: "deg", min: -30, max: 30, default: 0 }],
+    joints: [
+      { id: "rocker", parent: null, kind: "revolute", origin: [0.2, 0, 0], axis: [0, 0, 1], turn: row("rocker") },
+      { id: "crank", parent: null, kind: "revolute", origin: [0, 0, 0], axis: [0, 0, 1],
+        turn: { bias: 0, terms: [], curve: { driver: row("rocker"), input: [-30, -10, 0, 10, 30], output: [-40, -12, 0, 8, 20] } } }
+    ],
+    carries: { rocker: ["rocker_link"], crank: ["crank_link"] },
+    handles: [{ id: "rocker", joint: "rocker", dof: "turn", control: "rocker", weight: 1, label: "rocker", unit: "deg", min: -30, max: 30 }],
+    poses: {}, opening: { rocker: 0 }
+  },
+  links: [
+    { name: "ground", placement: identity(), visuals: [], collisions: [], inertial: null },
+    { name: "rocker_link", placement: translation(0.2, 0, 0), visuals: [], collisions: [], inertial: null },
+    { name: "crank_link", placement: identity(), visuals: [], collisions: [], inertial: null }
+  ],
+  joints: [], visuals: [
+    { id: "rocker_link:v1", link: "rocker_link", label: "box", placement: scaled(0.24, 0, 0), color: "", mesh: { format: "glb", url: "/primitives/box-0.08-0.01-0.01.glb" } },
+    { id: "crank_link:v1", link: "crank_link", label: "box", placement: scaled(0.025, 0, 0), color: "", mesh: { format: "glb", url: "/primitives/box-0.05-0.01-0.01.glb" } }
+  ], srdf: null, sdf: null
+});
+
+test("a four-bar's crank follows its driver through the curve cadgen sampled: one write for the driver, one for the crank", () => {
+  const scene = createRobotScene(THREE, robotOf(LINKAGE));
+  assert.equal(scene.setControlValues({ rocker: 20 }), true);
+  assert.equal(scene.stats.lastPoseWrites, 2, "the rocker, and the crank it drives");
+  assert.deepEqual(scene.jointRow("crank"), { turn: 14, travel: 0 }, "halfway between the keys at 10 and 30 degrees");
+  const crank = scene.linkFrames().get("crank_link");
+  assert.ok(Math.abs(crank[0] - Math.cos(14 * Math.PI / 180)) < 1e-12 && Math.abs(crank[4] - Math.sin(14 * Math.PI / 180)) < 1e-12, "the crank link turned 14 degrees about z");
+  assert.equal(scene.setControlValues({ rocker: 100 }), true, "clamped to the rocker's limit");
+  assert.equal(scene.jointRow("crank").turn, 20);
+  scene.setControlValues({});
+  assert.deepEqual(scene.jointRow("crank"), { turn: 0, travel: 0 }, "the zero pose is the robot as written");
   scene.dispose();
 });
 
