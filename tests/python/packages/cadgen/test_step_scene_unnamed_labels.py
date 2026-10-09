@@ -9,7 +9,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from build123d import Box, Compound, Location  # noqa: E402
+from build123d import Box, Compound, Location, Solid  # noqa: E402
 
 from cadgen.step_export import build_build123d_step_scene  # noqa: E402
 from cadgen._internal.step_scene_loader import _normalize_label_name  # noqa: E402
@@ -115,6 +115,30 @@ class XcafLabelEntryTests(unittest.TestCase):
         scene = read_scene(path)
         self.assertEqual("o1", scene.roots[0].label)
         self.assertEqual(["l_bracket"], [leaf.label for leaf in scene.leaves()])
+
+    def test_an_unnamed_occurrence_never_shows_a_siblings_label(self) -> None:
+        from cadgen import read_scene
+        from cadgen.step_export import export_build123d_step_file
+
+        roots = IsolatedCadRoots(self, prefix="xcaf-borrowed-name-")
+        # Four occurrences of one shared product, which the writer names after the last
+        # occurrence's label: `motor`. Two labels read as no name -- an XCAF entry and a
+        # shape kind -- and those occurrences show their ids, not `motor`.
+        box = Box(4, 4, 4)
+        children = []
+        for index, label in enumerate(["=>[0:1:1:3]", "bracket", "SOLID", "motor"]):
+            child = Solid(box.wrapped.Moved(Location((6.0 * index, 0.0, 0.0)).wrapped))  # one TShape: one product
+            child.label = label
+            children.append(child)
+        path = roots.cad_root / "names.step"
+        export_build123d_step_file(Compound(children=children, label="names"), path)
+        self.assertEqual(2, path.read_text(encoding="utf-8").count("PRODUCT("))  # the root, and `motor`
+        self.assertIn("PRODUCT('motor'", path.read_text(encoding="utf-8"))
+
+        scene = read_scene(path)
+        self.assertEqual([("#o1.1", "o1.1"), ("#o1.2", "bracket"), ("#o1.3", "o1.3"), ("#o1.4", "motor")],
+                         [(leaf.ref, leaf.label) for leaf in scene.leaves()])
+        self.assertEqual("#o1.4", scene.resolve("#motor").ref)
 
 
 if __name__ == "__main__":

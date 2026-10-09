@@ -15,10 +15,12 @@ from OCP.IFSelect import IFSelect_RetDone
 from OCP.Quantity import Quantity_ColorRGBA
 from OCP.STEPCAFControl import STEPCAFControl_Reader
 from OCP.STEPControl import STEPControl_Reader
+from OCP.TCollection import TCollection_AsciiString
 from OCP.TCollection import TCollection_ExtendedString
 from OCP.TDF import TDF_ChildIterator
 from OCP.TDF import TDF_Label
 from OCP.TDF import TDF_LabelSequence
+from OCP.TDF import TDF_Tool
 from OCP.TDataStd import TDataStd_Name
 from OCP.TDocStd import TDocStd_Document
 from OCP.TopAbs import TopAbs_FACE
@@ -379,8 +381,11 @@ def _load_occurrence_tree_from_xcaf_doc(
         local_location = _shape_location(base_shape)
         current_location = _compose_locations(parent_location, local_location)
         children = _xcaf_children(shape_tool, label, resolved_label)
-        name = _label_name(label) or _label_name(resolved_label)
-        source_name = _label_name(resolved_label) or name
+        # An occurrence's own name, and its product's: one label for a shape no reference
+        # places. Which of them it shows is settled once every occurrence is read
+        # (_withhold_borrowed_product_names).
+        name = _label_name(label)
+        source_name = _label_name(resolved_label) if resolved_label is not label else name
         occurrence_color = (
             _color_from_label(color_tool, label)
             or _color_from_shape(color_tool, instance_shape)
@@ -413,7 +418,7 @@ def _load_occurrence_tree_from_xcaf_doc(
         ]
         if prototype_key is None and not child_nodes:
             return None
-        return OccurrenceNode(
+        node = OccurrenceNode(
             path=path,
             name=name,
             source_name=source_name,
@@ -424,7 +429,10 @@ def _load_occurrence_tree_from_xcaf_doc(
             location=current_location,
             children=child_nodes,
         )
+        usages.append((node, _label_entry(resolved_label)))
+        return node
 
+    usages: list[tuple[OccurrenceNode, str]] = []
     roots = [
         node
         for index in range(1, free_labels.Length() + 1)
@@ -432,7 +440,31 @@ def _load_occurrence_tree_from_xcaf_doc(
     ]
     if not roots:
         return None
+    _withhold_borrowed_product_names(usages)
     return roots, prototypes, prototype_names, prototype_colors, prototype_face_colors
+
+
+def _label_entry(label: object) -> str:
+    """A label's address in its document (``0:1:1:3``): which product a reference places."""
+    entry = TCollection_AsciiString()
+    TDF_Tool.Entry_s(label, entry)
+    return entry.ToCString()
+
+
+def _withhold_borrowed_product_names(usages: list[tuple[OccurrenceNode, str]]) -> None:
+    """An occurrence with no name of its own shows its product's -- unless that name is
+    another occurrence's own label, which is how a writer names a product its occurrences
+    share (cadgen's after the last of them). Shown on the unnamed one, it would give two
+    parts one name, and ``#motor`` would mean either: that occurrence shows its id instead.
+
+    ``usages`` is every node with the address of the product it places."""
+    own_names: dict[str, set[str]] = {}
+    for node, product in usages:
+        if node.name is not None:
+            own_names.setdefault(product, set()).add(node.name)
+    for node, product in usages:
+        if node.name is None and node.source_name in own_names.get(product, ()):
+            node.source_name = None
 
 
 def load_step_scene_from_xcaf_doc(
