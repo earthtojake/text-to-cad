@@ -1,4 +1,4 @@
-// React face of viewport LOD (design/unified-tessellation.md Phase 5).
+// React face of viewport LOD (packages/ui/docs/lod.md).
 //
 // Owns a lodScheduler for the current package: camera-settle events sample
 // the viewer (projection, viewport height, live distances to each unique

@@ -1,4 +1,5 @@
-"""The three mesh format doors: `cadgen stl|3mf|glb build` (design/format-doors.md).
+"""The three mesh format doors: `cadgen stl|3mf|glb build` (packages/cadgen/README.md,
+law 6).
 
 What a door owns is the mapping from argv to ONE engine call — the tessellation
 itself belongs to `cadgen._internal.mesh_export` and is tested against real

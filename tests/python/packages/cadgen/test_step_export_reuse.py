@@ -1,7 +1,7 @@
 """STEP output behavior (a model-script run ALWAYS writes the STEP file, assembled
-from the tree's exact-shape component objects — design/step-document-architecture.md):
+from the tree's exact-shape component objects):
 closure-keyed reuse, new-path copy via -o, metadata injection, and the
-verbose export spans (once silently orphaned — design/FEEDBACK.md item 9)."""
+verbose export spans (once silently orphaned)."""
 
 from __future__ import annotations
 

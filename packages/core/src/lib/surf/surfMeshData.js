@@ -6,8 +6,7 @@
 // of the exact surfaces, in CAD units, handed on INDEXED: the mesh's shared
 // vertices, normals and index buffer are the render buffers, never expanded
 // per corner. CAD edges ride beside the triangles as indexed line segments
-// built from the same mesh's edge table and points (design/viewer-memory.md
-// lever B).
+// built from the same mesh's edge table and points.
 
 import { linearRgbToHex } from "../color.js";
 import { MESH_EDGE_CLASSES, MESH_TABLE_COLUMNS } from "./tessellationCache.js";

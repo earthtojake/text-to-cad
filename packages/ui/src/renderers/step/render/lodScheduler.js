@@ -1,4 +1,4 @@
-// Viewport LOD scheduler (design/unified-tessellation.md Phase 5).
+// Viewport LOD scheduler (packages/ui/docs/lod.md).
 //
 // Non-React glue between camera samples and level-keyed re-tessellation. The
 // policy math lives in cadgen-js (lodPolicy.js — pure); this module owns TIME:

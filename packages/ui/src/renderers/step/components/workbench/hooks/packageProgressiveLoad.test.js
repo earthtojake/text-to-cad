@@ -1,4 +1,4 @@
-// Progressive publish of a component package (design/viewer-memory.md §6).
+// Progressive publish of a component package (packages/ui/docs/lod.md, section 4).
 // Fake components (no tessellation): the policy under test is batching,
 // ordering, staleness and release, not geometry.
 import assert from "node:assert/strict";

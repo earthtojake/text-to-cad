@@ -1,4 +1,4 @@
-// LOD policy math (design/unified-tessellation.md Phase 5): projected chord
+// LOD policy math (packages/ui/docs/lod.md, section 2): projected chord
 // error picks levels, the enter/exit band prevents thrash, and work ranks
 // worst-error-first.
 import assert from "node:assert/strict";
