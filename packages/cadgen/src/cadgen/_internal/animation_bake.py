@@ -769,9 +769,17 @@ def _tube_key(key: Mapping[str, Any] | None, rest: Mapping[str, Any]) -> dict[st
 
 
 def sample_times(duration: float, fps: float) -> list[float]:
-    """0, 1/fps, ... and ``duration`` itself: the last pose is always sampled."""
+    """0, 1/fps, ... and ``duration`` itself: the last pose is always sampled. Times are
+    written to :data:`_TIME_DIGITS` places, so a sample that would be written at the time
+    of the one before it is not taken, and the last is the duration as written."""
     count = max(1, math.ceil(duration * fps - 1e-9))
-    return [index / fps for index in range(count)] + [duration]
+    times: list[float] = []
+    for t in [index / fps for index in range(count)]:
+        if not times or _round(t, _TIME_DIGITS) > _round(times[-1], _TIME_DIGITS):
+            times.append(t)
+    if times and _round(times[-1], _TIME_DIGITS) >= _round(duration, _TIME_DIGITS):
+        times.pop()
+    return times + [duration]
 
 
 def _signature(channel: str, value: Any) -> Any:
@@ -793,7 +801,12 @@ def bake_clip(
     """Sample one :class:`cadgen.animation.Clip` and reduce it to tracks. ``leaf_boxes``
     (``get(leaf)`` -> (min, max) or None) gives each part's own box, where a track's
     error is measured; without it, or for a part it has no box for, the model's."""
-    times = sample_times(clip.duration, clip.fps)
+    # The duration as the sidecar writes it, so its last key is its end.
+    duration = _round(clip.duration, _TIME_DIGITS)
+    if duration <= 0:
+        raise AnimationError(f"animation clip {clip_id!r}: its duration {clip.duration:g} s is shorter than "
+                             f"the {10.0 ** -_TIME_DIGITS:g} s a key's time is written to; make it longer")
+    times = sample_times(duration, clip.fps)
     frames: list[_Frame] = []
     for t in times:
         frame = _Frame()
@@ -915,7 +928,7 @@ def bake_clip(
     return {
         "id": clip_id,
         "label": clip.label or clip_id,
-        "duration": clip.duration,
+        "duration": duration,
         "loop": clip.loop,
         "tracks": tracks,
     }

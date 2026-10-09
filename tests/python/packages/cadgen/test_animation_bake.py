@@ -545,6 +545,23 @@ class TheBakedSection(unittest.TestCase):
         self.assertIsNone(normalize_baked_animation({"clips": []}))
         self.assertIsNone(normalize_baked_animation(None))
 
+    def test_any_duration_reads_back_and_ends_on_its_last_key(self) -> None:
+        # Key times are written to a millionth of a second: a duration that is not a whole
+        # number of them (2/3 s, pi s) is written the same way, so its last key is its end,
+        # and samples a millionth apart at an absurd fps are taken once.
+        def spin(t, m):
+            m.get("#link").rotate((0, 0, 1), 20 * t, (10, 0, 0))
+
+        for duration, fps in ((2 / 3, 30), (math.pi, 30), (1 / 60, 30), (2e-6, 3e6)):
+            with self.subTest(duration=duration, fps=fps):
+                section = bake_animation({"c": cadgen.clip(spin, duration=duration, fps=fps)}, TARGETS, BOUNDS)
+                self.assertEqual(section, normalize_baked_animation(json.loads(json.dumps(section))))
+                (clip,) = section["clips"]
+                self.assertEqual(clip["duration"], clip["tracks"][0]["times"][-1])
+        with self.assertRaisesRegex(AnimationError, r"^animation clip 'c': its duration 1e-07 s is shorter than "
+                                                    r"the 1e-06 s a key's time is written to; make it longer$"):
+            bake_animation({"c": cadgen.clip(spin, duration=1e-7)}, TARGETS, BOUNDS)
+
     def test_a_malformed_section_is_refused_with_what_is_wrong(self) -> None:
         cases = (
             (lambda s: s.update(clips={c["id"]: c for c in s["clips"]}), "the section must be {'clips': [...]}"),
