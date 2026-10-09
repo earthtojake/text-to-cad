@@ -257,6 +257,28 @@ class Cantilever(unittest.TestCase):
         self.assertIn(".glb", str(caught.exception))
 
 
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class MeshOrderGuard(unittest.TestCase):
+    def _elements(self, second_order: bool):
+        import netgen.occ as ngocc
+
+        mesh = ngocc.OCCGeometry(ngocc.Box((0, 0, 0), (1, 1, 1))).GenerateMesh(maxh=0.5)
+        if second_order:
+            mesh.SecondOrder()
+        return mesh.Elements3D().NumPy().copy()
+
+    def test_first_order_mesh_is_refused(self):
+        from cadgen._internal.fea.mesh import _require_ten_node_tets
+
+        with self.assertRaises(RuntimeError):
+            _require_ten_node_tets(self._elements(second_order=False))
+
+    def test_second_order_mesh_is_accepted(self):
+        from cadgen._internal.fea.mesh import _require_ten_node_tets
+
+        _require_ten_node_tets(self._elements(second_order=True))
+
+
 class MissingExtra(unittest.TestCase):
     def test_the_install_hint_names_the_extra(self):
         import builtins

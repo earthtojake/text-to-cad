@@ -71,12 +71,15 @@ dependencies = [
   "shapely",
 ]
 
+# An exception to the "a dependency of every install, not an extra" principle above:
+# the solver stack (netgen with its own OpenCascade, scikit-fem, pyamg, scipy) is heavy
+# and most installs never run a stress study.
 # Opt-in: `cadgen fea` only. The solver stack is large and no other command needs it,
 # so it is not in `dependencies`. netgen meshes the B-rep (LGPL-2.1, brings its own
 # OpenCascade), scikit-fem assembles, pyamg solves; wheels exist on every packaged target.
 [project.optional-dependencies]
 fea = [
-  "netgen-mesher>=6.2.2607",
+  "netgen-mesher>=6.2.2608",
   "scikit-fem>=12,<13",
   "pyamg>=5.2",
   "numpy>=1.26",

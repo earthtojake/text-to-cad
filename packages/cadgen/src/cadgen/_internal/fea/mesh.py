@@ -149,6 +149,18 @@ def _match_faces(fingerprints: list[FaceFingerprint], ng_faces, scale: float) ->
     return mapping
 
 
+def _require_ten_node_tets(e3) -> None:
+    """Refuse a mesh that is not all 10-node tetrahedra (``SecondOrder`` not applied).
+
+    netgen's ``nodes`` field is only as wide as the element order: 4 columns on a
+    first-order mesh. Older builds padded it with zeros instead; node numbers are
+    1-based, so a zero in the first ten is the same signal.
+    """
+    nodes = e3["nodes"]
+    if nodes.shape[1] < 10 or not (nodes[:, :10] > 0).all():
+        raise RuntimeError("the mesher produced elements that are not 10-node tetrahedra")
+
+
 def mesh_occurrence(occurrence: "Occurrence", *, max_h: float | None = None) -> VolumeMesh:
     """Mesh one placed occurrence with second-order tetrahedra."""
     require_fea_stack()
@@ -186,9 +198,7 @@ def mesh_occurrence(occurrence: "Occurrence", *, max_h: float | None = None) -> 
 
     if len(e3) == 0:
         raise RuntimeError(f"the mesher produced no volume elements for {occurrence.ref}; is it a closed solid?")
-    # Nodes are 1-based, so a zero among the ten slots marks a first-order element.
-    if not np.all(e3["nodes"][:, :10] > 0):
-        raise RuntimeError("the mesher produced elements that are not 10-node tetrahedra")
+    _require_ten_node_tets(e3)
     ordinal_of = np.zeros(int(e2["index"].max()) + 1, dtype=np.int64)
     for index, ordinal in mapping.items():
         ordinal_of[index + 1] = ordinal
