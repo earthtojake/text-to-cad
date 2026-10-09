@@ -119,6 +119,13 @@ describe('the plain line', () => {
     expect(feaSummaryLine(result, result.fields[1])).toBe('Moves up to 0.029 mm');
   });
 
+  it('says it yields under a safety factor below 1, and holds 1× at exactly 1', () => {
+    const under = readFeaResult(resultMesh({ safetyFactor: 0.4 }).root)!;
+    expect(feaSummaryLine(under, under.fields[0])).toBe('Peak stress 47 MPa · yields under this load · moves up to 0.029 mm');
+    const exactly = readFeaResult(resultMesh({ safetyFactor: 1 }).root)!;
+    expect(feaSummaryLine(exactly, exactly.fields[0])).toBe('Peak stress 47 MPa · holds 1× this load · moves up to 0.029 mm');
+  });
+
   it('leaves out "holds" when there is no safety factor, and says nothing for a field it does not know', () => {
     const result = readFeaResult(resultMesh({ safetyFactor: null }).root)!;
     expect(result.safetyFactor).toBeNull();

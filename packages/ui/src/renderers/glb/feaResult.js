@@ -243,9 +243,12 @@ export function feaSummaryLine(result, field) {
   if (field.attribute !== "_von_mises") {
     return "";
   }
+  const factor = result.safetyFactor;
+  // Under 1 the part yields: "holds 0.4×" would read as a pass.
+  const holds = factor === null ? "" : factor < 1 ? "yields under this load" : `holds ${plainNumber(factor)}× this load`;
   return [
     `Peak stress ${plainNumber(stress.max)} ${stress.units}`.trim(),
-    result.safetyFactor === null ? "" : `holds ${plainNumber(result.safetyFactor)}× this load`,
+    holds,
     moves ? `moves up to ${moves}` : "",
   ].filter(Boolean).join(" · ");
 }

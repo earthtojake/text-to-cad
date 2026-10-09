@@ -131,8 +131,9 @@ none.
   [preview](#camera-animation-and-preview)).
 - **Playbar** (preview's, a file with routines only) sits at bottom-centre, on a
   line 1.75rem up (a host whose control floats over the view's bottom moves it
-  with `--cad-viewport-bottom-center`), and nothing else does; a static file has
-  nothing at the bottom. The routines lead it at its left end, as a playlist, and the
+  with `--cad-viewport-bottom-center`), and nothing else does but an FEA result's colour bar
+  (see [An FEA result](#an-fea-result)), which steps up above the playbar when the result also
+  has routines; a static file has nothing else at the bottom. The routines lead it at its left end, as a playlist, and the
   routine's settings end it at its right (see [preview](#camera-animation-and-preview)).
 - **Model update status** sits at top-centre of the viewport, vertically centred
   in the same 34px row as the top-left toolbar in every host.
@@ -452,7 +453,9 @@ it (on the model, say), its button again, or the X at the end of its first headi
 ("Display", its Reset, then its X); setting changes leave it up. It is idle while the file
 is, as the tools are. Another file opens with it closed, and entering or leaving preview
 puts it away. In preview it holds the same settings, the file's: what is set there the
-preview draws at once, and the tools view has it on the way back.
+preview draws at once, and the tools view has it on the way back. A renderer may add
+always-open sections of its own (`displaySections`), placed after the first section: what the
+file is about beyond how it is drawn.
 
 One scroller (the dropdown's body), shared section primitives, no sticky headings
 and no nested cards. Nested dropdowns and color pickers own their dismissal:
@@ -470,7 +473,9 @@ Escape closes the innermost popup first, the dropdown only on a later press.
 | Floor | Color/opacity; position and finish side by side |
 
 Display holds the file's view alone: the person's settings are the [app menu](#settings)'s.
-Display and Surfaces are always open. Every other section is a feature gate
+Display and Surfaces are always open, and so is any section a renderer adds of its own
+(`displaySections`: an FEA result's Analysis), placed right after Display's first. Every other
+section is a feature gate
 with plus/minus: expanded means enabled, collapsed means disabled. Grid / Axes
 gates both groups; their settings stay separate in the core/CLI contract. Never
 add an "Enabled" checkbox inside a gated section. Enabling starts at defaults;
@@ -546,9 +551,10 @@ and what the colours mean is on the view; there is no panel, tool or mode of its
   exaggeration. A GLB that is not a result has no such section.
 - **A colour bar** floats at bottom-centre on the playbar's line
   (`FLOATING_CHROME_SURFACE_CLASS`, no pointer events): one plain line over the field's range
-  and units along the ramp. Stress: "Peak stress 47 MPa · holds 5.8× this load · moves up to
-  0.03 mm", with "holds" left out when the result has no safety factor; displacement: "Moves up
-  to 0.03 mm". It has no controls. The safety factor is the result's own, the conservative one.
+  and units along the ramp, one playbar's height higher when the result also has routines. Stress: "Peak stress 47 MPa · holds 5.8× this load · moves up to
+  0.029 mm", with "holds" left out when the result has no safety factor and "yields under this
+  load" in its place when the safety factor is under 1; displacement: "Moves up
+  to 0.029 mm". It has no controls. The safety factor is the result's own, the conservative one.
 - **The choice is the file's view**: the field and the exaggeration are one renderer slice
   (`fea`), written against the result's fields and scale, so a re-solved result opens at its own
   defaults.

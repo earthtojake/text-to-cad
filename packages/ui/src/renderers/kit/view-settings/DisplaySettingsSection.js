@@ -106,6 +106,11 @@ function DisplaySections({ sections }) {
   </div>;
 }
 
+/**
+ * @param {{ extraSections?: { id: string, title: string, content: import("react").ReactNode }[] }} props
+ *   `extraSections`: a renderer's own always-open sections (`displaySections` of `useRendererShell`),
+ *   placed right after Display's first. Never a gate: they carry no `onEnabledChange`.
+ */
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
   features = ALL_VIEW_FEATURES, appearanceControl = null, close = null, extraSections = []

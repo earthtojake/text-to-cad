@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { finiteOr } from "@text-to-cad/core/common/numbers.js";
+import { clamp, finiteOr } from "@text-to-cad/core/common/numbers.js";
 import { EDGELESS_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
@@ -7,7 +7,7 @@ import { useRendererShell } from "../kit/shell/useRendererShell.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { feaAnalysisSection } from "./FeaAnalysisSection.jsx";
 import FeaColourBar from "./FeaColourBar.jsx";
-import { applyDeformation, readFeaResult, recolorByField } from "./feaResult.js";
+import { applyDeformation, deformationRange, readFeaResult, recolorByField } from "./feaResult.js";
 import { GLB_DECLINED_LIVE_COMMANDS } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
 import { useGlbScene } from "./useGlbScene.js";
@@ -34,7 +34,9 @@ function GlbSurface({ view, data }) {
   const [edited, setEdited] = useState({ signature: "", ...NO_CHOICE });
   const choice = edited.signature === signature ? { ...restored, ...edited } : restored;
   const activeField = fea ? fea.fields.find((entry) => entry.attribute === choice.field) || fea.fields[0] : null;
-  const activeScale = fea ? finiteOr(choice.scale, fea.deformationScale) : null;
+  // A stored scale is held to the slider's own range, whatever was written.
+  const range = fea ? deformationRange(fea.deformationScale) : null;
+  const activeScale = fea ? clamp(finiteOr(choice.scale, fea.deformationScale), range.min, range.max) : null;
   const choiceRef = useRef(choice);
   choiceRef.current = choice;
   const rendererState = useMemo(() => (fea
@@ -74,7 +76,7 @@ function GlbSurface({ view, data }) {
     }
   }, [fea, activeScale, requestRenderRef]);
 
-  const overlay = fea ? <FeaColourBar result={fea} field={activeField} /> : null;
+  const overlay = fea ? <FeaColourBar result={fea} field={activeField} raised={Boolean(animation)} /> : null;
   return <RendererShell shell={shell} tools={[]} viewportOverlay={overlay} />;
 }
 

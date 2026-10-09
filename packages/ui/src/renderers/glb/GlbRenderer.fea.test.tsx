@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 // The GLB renderer's FEA surfaces under the real shell, with only what loads the file and the WebGL
 // viewport replaced: a result's field and deformation are Display's (an Analysis section), its colour
 // bar is a reading with no controls, and a GLB that is not a result has neither.
-const loaded = vi.hoisted(() => ({ root: null as any, revision: 'one' }));
+const loaded = vi.hoisted(() => ({ root: null as any, revision: 'one', animation: null as any }));
 vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
   default: forwardRef(function StandInViewport(props: any, ref) {
     useImperativeHandle(ref, () => ({ requestRender() {} }));
@@ -16,7 +16,7 @@ vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
 vi.mock('../../../dist/renderers/glb/useGlbScene.js', () => ({
   useGlbScene: () => ({ scene: { document: { scene: loaded.root }, revision: loaded.revision }, revision: loaded.revision, busy: false, error: null, progress: null })
 }));
-vi.mock('../../../dist/renderers/glb/useGlbAnimation.js', () => ({ useGlbAnimation: () => null }));
+vi.mock('../../../dist/renderers/glb/useGlbAnimation.js', () => ({ useGlbAnimation: () => loaded.animation }));
 import GlbRenderer from '../../../dist/renderers/glb/GlbRenderer.js';
 import { writeFileView } from '../../../dist/renderers/kit/shell/fileView.js';
 import { ViewerHostContext } from '../../../dist/host/context.js';
@@ -26,7 +26,7 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()); });
+afterEach(() => { loaded.animation = null; cleanup(); vi.unstubAllGlobals(); document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()); });
 
 // Two triangles the way GLTFLoader hands a result over: lower-cased custom attributes, extras in userData.
 function resultRoot(extras: Record<string, unknown> | null) {
@@ -126,4 +126,19 @@ it('a GLB that is not a result has no colour bar, no Analysis section and its co
   openDisplay();
   expect(screen.queryByText('Analysis')).toBeNull();
   expect(colourBytes(mesh).every(byte => byte === 7)).toBe(true);
+});
+
+it('the colour bar steps up above the playbar when the result also has routines, and a stored scale is held to the slider\'s range', () => {
+  const plain = mount(RESULT);
+  const low = (plain.container.querySelector('[aria-label$="colour bar"]')!.parentElement as HTMLElement).style.bottom;
+  expect(low).toBe('var(--cad-viewport-bottom-center, 1.75rem)');
+  cleanup();
+  loaded.animation = { clips: [{ id: 'a' }] };
+  const stored = writeFileView({ renderer: { fea: { field: null, scale: 9999 } }, signatures: { fea: '_von_mises,_displacement:10' } });
+  const animated = mount(RESULT, stored);
+  const high = (animated.container.querySelector('[aria-label$="colour bar"]')!.parentElement as HTMLElement).style.bottom;
+  expect(high).not.toBe(low);
+  expect(high).toContain('3rem');
+  // The slider tops out at four times the file's own 10x.
+  expect(animated.mesh.geometry.getAttribute('position').getZ(2)).toBeCloseTo(0.06, 6);
 });

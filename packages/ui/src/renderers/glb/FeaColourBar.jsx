@@ -3,18 +3,21 @@ import { FLOATING_CHROME_SURFACE_CLASS } from "../../lib/floatingSurface.js";
 import { VIEWPORT_BOTTOM_CENTER } from "../kit/shell/viewportLayout.js";
 import { feaRampGradient, feaSummaryLine, formatValue } from "./feaResult.js";
 
+// A result that is also animated has a playbar on that line in preview: the bar steps up above it.
+const PLAYBAR_CLEARANCE = "3rem";
+
 /**
  * What the colours of a GLB with an FEA result mean, over the bottom of its viewport: the
  * field's range and units along the ramp, and one plain line about the result. It is only
  * a reading: the field and the deformation are chosen in Display (`FeaAnalysisSection.jsx`).
  *
- * Bottom-centre, on the line the playbar uses. The card takes no pointer events, so
+ * Bottom-centre, on the line the playbar uses, or one playbar's height above it when the file has routines (`raised`). The card takes no pointer events, so
  * orbiting past it still works. `field` arrives resolved.
  */
-export default function FeaColourBar({ result, field }) {
+export default function FeaColourBar({ result, field, raised = false }) {
   const line = feaSummaryLine(result, field);
   return (
-    <div className="pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3" style={{ bottom: VIEWPORT_BOTTOM_CENTER }}>
+    <div className="pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3" style={{ bottom: raised ? `calc(${VIEWPORT_BOTTOM_CENTER} + ${PLAYBAR_CLEARANCE})` : VIEWPORT_BOTTOM_CENTER }}>
       <div
         className={cn("flex w-72 max-w-full flex-col gap-1 rounded-md px-2 py-1.5 text-tiny", FLOATING_CHROME_SURFACE_CLASS)}
         role="group"
