@@ -457,8 +457,9 @@ def read_source_sidecar(
             f"{source_sidecar_path(artifact).name}: unsupported sidecar schema {found} "
             f"(expected {SOURCE_SIDECAR_SCHEMA_VERSION}), so the kinematics, materials and "
             f"animation it declares cannot be read and this model poses and plays nothing. "
-            f"Migrate it now: rebuild the model (python {artifact.stem}.py) or re-annotate "
-            f"the document (cadgen step build)"
+            f"Migrate it now: write it again with what wrote it, the model script "
+            f"(python {artifact.stem}.py) or, for a document `cadgen step build` annotated, "
+            f"that command"
         )
     expected = _verified_document_hash(step_path, document_hash)
     found = str(payload.get("documentHash") or "").strip().lower()
@@ -467,10 +468,17 @@ def read_source_sidecar(
     unknown = set(payload) - set(_SIDECAR_SECTIONS)
     if unknown:
         raise SidecarSchemaError(f"{source_sidecar_path(step_path).name}: unknown sidecar fields: {', '.join(sorted(unknown))}")
-    if "appearance" in payload:
-        payload["appearance"] = normalize_appearance(payload["appearance"])
-    if "animation" in payload:
-        payload["animation"] = normalize_animation(payload["animation"])
+    try:
+        if "appearance" in payload:
+            payload["appearance"] = normalize_appearance(payload["appearance"])
+        if "animation" in payload:
+            payload["animation"] = normalize_animation(payload["animation"])
+    except SidecarSchemaError as exc:
+        # A section another build of cadgen wrote in a shape this one does not read.
+        raise SidecarSchemaError(
+            f"{source_sidecar_path(step_path).name}: {exc} -- write it again with the model "
+            f"script (python {Path(step_path).stem}.py)"
+        ) from None
     return payload
 
 

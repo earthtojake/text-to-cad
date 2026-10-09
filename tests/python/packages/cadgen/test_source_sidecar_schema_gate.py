@@ -172,3 +172,25 @@ class SidecarSchemaGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AnUnreadableSection(unittest.TestCase):
+    def test_names_the_model_script_that_writes_it_again(self) -> None:
+        import tempfile
+        from cadgen._internal import source_sidecar
+
+        with tempfile.TemporaryDirectory(prefix="sidecar-section-") as folder:
+            document = Path(folder) / "hinge.step"
+            document.write_text("ISO-10303-21;\n", encoding="utf-8")
+            digest = source_sidecar._verified_document_hash(document, None)
+            source_sidecar.source_sidecar_path(document).write_text(json.dumps({
+                "schemaVersion": source_sidecar.SOURCE_SIDECAR_SCHEMA_VERSION,
+                "documentHash": digest,
+                "animation": {"clips": "not a list"},
+            }), encoding="utf-8")
+            with self.assertRaises(source_sidecar.SidecarSchemaError) as caught:
+                source_sidecar.read_source_sidecar(document)
+        message = str(caught.exception)
+        self.assertIn("hinge.step.json", message)
+        self.assertIn("python hinge.py", message)
+
