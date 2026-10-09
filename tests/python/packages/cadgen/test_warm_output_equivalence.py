@@ -178,7 +178,7 @@ class _Daemon:
         # A pipe name is not a filesystem path, so a temp FILE is not a usable address on
         # Windows. Handing one over does not fail loudly either -- the daemon simply never
         # binds, every "warm" run is quietly cold, and the comparison stops meaning
-        # anything. served_a_job() is what catches that, and it caught exactly this.
+        # anything. jobs_served() is what catches that, and it caught exactly this.
         if os.name == "nt":
             self.address = rf"\\.\pipe\cadgen-warm-eq-{tmp.name}"
         else:
@@ -208,13 +208,14 @@ class _Daemon:
         )
         return False
 
-    def served_a_job(self) -> bool:
-        """Proof the warm run was actually warm, so a silent cold fallback cannot pass.
+    def jobs_served(self) -> int:
+        """How many jobs this daemon has completed: a warm run that served one adds one, so
+        a silent cold fallback cannot pass.
 
-        Looks for a completed job (`gen [...] -> exit 0`), not just the daemon's startup
-        line: a daemon can be running while the client still fell back to cold.
+        Counts completed jobs (`gen [...] -> exit 0`), not the daemon's startup line: a
+        daemon can be running while the client still fell back to cold.
         """
-        return self.log.is_file() and "-> exit" in self.log.read_text(encoding="utf-8", errors="replace")
+        return self.log.read_text(encoding="utf-8", errors="replace").count("-> exit") if self.log.is_file() else 0
 
 
 # The whole harness compares a WARM run against a cold one, so it needs a daemon to
@@ -223,6 +224,41 @@ class _Daemon:
 # os.name so that a platform which somehow has neither skips instead of failing, and so
 # that a silent cold fallback still shows up as a failure rather than a pass.
 _DAEMON_AVAILABLE = _daemon_available()
+
+# ONE daemon serves every warm run here, as one daemon serves every build of a working
+# session: each test's warm run is a job on it (`jobs_served` says it was), and the
+# module pays one daemon start and one warm-worker import, not one per test.
+_SHARED: dict = {}
+
+
+def setUpModule() -> None:
+    if _DAEMON_AVAILABLE:
+        root = pathlib.Path(tempfile.mkdtemp(prefix="tmp-warm-eq-sock-")).resolve()
+        _SHARED.update(root=root, daemon=_Daemon(root))
+
+
+def tearDownModule() -> None:
+    if "daemon" in _SHARED:
+        try:
+            _SHARED["daemon"].__exit__(None, None, None)
+        finally:
+            shutil.rmtree(_SHARED["root"], ignore_errors=True)
+
+
+class _WarmRun:
+    """A run on the shared daemon, and the proof that the daemon served it."""
+
+    def __init__(self, case: unittest.TestCase):
+        self.case, self.daemon = case, _SHARED["daemon"]
+
+    def __enter__(self):
+        self.before = self.daemon.jobs_served()
+        return self.daemon
+
+    def __exit__(self, kind, *exc):
+        if kind is None:
+            self.case.assertGreater(self.daemon.jobs_served(), self.before, "the warm run fell back to cold")
+        return False
 
 
 @unittest.skipUnless(_DAEMON_AVAILABLE, "no daemon transport on this platform")
@@ -270,11 +306,10 @@ class WarmOutputEquivalence(unittest.TestCase):
         cold, cold_out = self._cold_part, self._cold_part_out
 
         tree = self._tree("widget.py", PART)
-        with _Daemon(tree) as daemon:
+        with _WarmRun(self) as daemon:
             code, warm_out = _run(argv, tree, **daemon.env())
             self.assertEqual(code, 0, warm_out)
-            self.assertTrue(daemon.served_a_job(), "the warm run fell back to cold")
-            self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
+        self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
         self.assertEqual(warm_out, cold_out)
 
     def test_four_parallel_builds_through_one_daemon_all_match_cold(self):
@@ -283,17 +318,15 @@ class WarmOutputEquivalence(unittest.TestCase):
         cold = self._cold_part
 
         trees = [self._tree("widget.py", PART) for _ in range(4)]
-        shared = pathlib.Path(tempfile.mkdtemp(prefix="tmp-warm-eq-sock-")).resolve()
-        self.addCleanup(shutil.rmtree, shared, ignore_errors=True)
-        with _Daemon(shared) as daemon:
+        with _WarmRun(self) as daemon:
             with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
                 results = list(pool.map(lambda t: _run(argv, t, **daemon.env()), trees))
-            for index, (code, out) in enumerate(results):
-                with self.subTest(build=index):
-                    self.assertEqual(code, 0, out)
-            for index, tree in enumerate(trees):
-                with self.subTest(build=index):
-                    self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
+        for index, (code, out) in enumerate(results):
+            with self.subTest(build=index):
+                self.assertEqual(code, 0, out)
+        for index, tree in enumerate(trees):
+            with self.subTest(build=index):
+                self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
 
     def test_a_drawing_package_is_byte_identical_warm(self):
         """DXF is the format that USED to have a determinism hazard: ezdxf's emitted
@@ -304,11 +337,10 @@ class WarmOutputEquivalence(unittest.TestCase):
         cold, _ = self._cold("plate.py", DRAWING, argv)
         self.assertTrue(cold, "the cold DXF build produced nothing to compare")
         tree = self._tree("plate.py", DRAWING)
-        with _Daemon(tree) as daemon:
+        with _WarmRun(self) as daemon:
             code, out = _run(argv, tree, **daemon.env())
             self.assertEqual(code, 0, out)
-            self.assertTrue(daemon.served_a_job(), "the warm DXF run fell back to cold")
-            self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
+        self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
 
     def test_a_failing_build_fails_the_same_way_warm(self):
         """Exit code and message are contract too, not just successful output."""
@@ -325,7 +357,7 @@ class WarmOutputEquivalence(unittest.TestCase):
         self.assertNotEqual(cold_code, 0)
 
         tree2 = self._tree("broken.py", broken)
-        with _Daemon(tree2) as daemon:
+        with _WarmRun(self) as daemon:
             warm_code, warm_out = _run(["broken.py"], tree2, **daemon.env())
         self.assertEqual(warm_code, cold_code)
         # Deliberately not asserting the message TEXT: cadgen masks a raising generator
@@ -351,14 +383,14 @@ class InputSurfaceEquivalence(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         from cadgen.cli import _DAEMON_TOOLS
 
-        with _Daemon(tmp) as daemon:
-            for command in sorted(_DAEMON_TOOLS):
-                argv = [*command.split(), "--help"]
-                with self.subTest(command=command):
-                    cold_code, cold_help = _run(argv, tmp)
-                    warm_code, warm_help = _run(argv, tmp, **daemon.env())
-                    self.assertEqual(cold_code, warm_code)
-                    self.assertEqual(warm_help, cold_help)
+        daemon = _SHARED["daemon"]
+        for command in sorted(_DAEMON_TOOLS):
+            argv = [*command.split(), "--help"]
+            with self.subTest(command=command):
+                cold_code, cold_help = _run(argv, tmp)
+                warm_code, warm_help = _run(argv, tmp, **daemon.env())
+                self.assertEqual(cold_code, warm_code)
+                self.assertEqual(warm_help, cold_help)
 
 
 if __name__ == "__main__":
