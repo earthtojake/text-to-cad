@@ -11,6 +11,7 @@ needs the solver.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 
 __all__ = ["CONVERGED_WITHIN", "GAUSS_RATIO", "MATERIALLY_FINER", "LARGE_DISPLACEMENT", "RESOLVE_BELOW", "Solved", "assembly_findings", "default_material", "findings", "gap_closed", "needs_finer", "safety_factor", "safety_factor_text"]
@@ -95,6 +96,12 @@ def _distinct(low: float, high: float) -> tuple[str, str]:
     return _number(low, extra), _number(high, extra)
 
 
+def quoted(name: str) -> str:
+    """A part's name for a sentence: ``'bar'``, or ``'bar' (#o1.3)`` when the name is shared and carries its ref."""
+    shared = re.fullmatch(r"(.*) \((#o[\d.]+)\)", name)
+    return f"'{shared.group(1)}' ({shared.group(2)})" if shared else f"'{name}'"
+
+
 def _item(text: str, ref: str | None, at: tuple[float, float, float]) -> dict:
     return {"text": text, "ref": ref, "at": [round(c, 3) for c in at]}
 
@@ -115,8 +122,8 @@ def default_material(part: str, material_name: str) -> dict:
     return _finding(
         "warning",
         "default_material",
-        f"'{part}' uses the default material ({material_name}): is that right?",
-        f"the study's parts name no material for '{part}'",
+        f"{quoted(part)} uses the default material ({material_name}): is that right?",
+        f"the study's parts name no material for {quoted(part)}",
         [],
     )
 
@@ -126,7 +133,7 @@ def gap_closed(first: str, second: str, gap_mm: float) -> dict:
     return _finding(
         "warning",
         "gap_closed",
-        f"Closed a {_number(gap_mm)} mm gap between '{first}' and '{second}' to bond them",
+        f"Closed a {_number(gap_mm)} mm gap between {quoted(first)} and {quoted(second)} to bond them",
         f"the parts were {gap_mm:.4g} mm apart, within the contact tolerance",
         [],
     )
@@ -137,7 +144,7 @@ def overlapping_parts(first: str, second: str, volume_mm3: float) -> dict:
     return _finding(
         "warning",
         "overlapping_parts",
-        f"'{first}' and '{second}' overlap by {_number(volume_mm3)} mm³: real parts can't, "
+        f"{quoted(first)} and {quoted(second)} overlap by {_number(volume_mm3)} mm³: real parts can't, "
         "so the model may be wrong; fix the geometry or mark them free",
         "overlapping parts are not bonded to each other, so no load passes between them",
         [],
@@ -147,14 +154,14 @@ def overlapping_parts(first: str, second: str, volume_mm3: float) -> dict:
 def findings(solved: Solved) -> list[dict]:
     """The findings for one solved study, errors first."""
     found: list[dict] = []
-    peak = _item(f"the peak stress in '{solved.part}'" if solved.assembly else "the peak stress", solved.peak_face, solved.peak_at)
+    peak = _item(f"the peak stress in {quoted(solved.part)}" if solved.assembly else "the peak stress", solved.peak_face, solved.peak_at)
     factor = safety_factor(solved)
     peak_MPa = solved.peak_MPa
     # An assembly's sentences name the part; "The post yields" already does.
-    it = f"'{solved.part}'" if solved.assembly else "It"
+    it = quoted(solved.part) if solved.assembly else "It"
 
     def about(summary: str) -> str:
-        return f"In '{solved.part}': {summary[0].lower()}{summary[1:]}" if solved.assembly else summary
+        return f"In {quoted(solved.part)}: {summary[0].lower()}{summary[1:]}" if solved.assembly else summary
 
     def add(severity: str, kind: str, summary: str, description: str, items: list[dict]) -> None:
         found.append(_finding(severity, kind, summary, description, items))
@@ -241,7 +248,7 @@ def findings(solved: Solved) -> list[dict]:
         add(
             "warning",
             "bonded_edge_peak",
-            f"In '{solved.part}': the peak sits on the edge of the bonded joint with '{solved.joint_with}', "
+            f"In {quoted(solved.part)}: the peak sits on the edge of the bonded joint with {quoted(solved.joint_with)}, "
             "where a bonded model exaggerates stress: check the stress a little away from the joint before redesigning",
             f"nodal peak {_number(solved.peak_MPa)} MPa, Gauss-point peak {_number(solved.peak_gauss_MPa)} MPa",
             [peak],

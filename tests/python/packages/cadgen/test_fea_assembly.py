@@ -366,6 +366,93 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertAlmostEqual(payload["pairs"][0]["area_mm2"], 100.0, places=2)
 
 
+@unittest.skipUnless(HAVE_FEA, "cadgen[fea] is not installed")
+class DuplicateNamesTest(unittest.TestCase):
+    """A base with two posts that are both called ``bar``: the study has to say which."""
+
+    @classmethod
+    def setUpClass(cls):
+        from build123d import Align, Box, Compound, Pos, export_step
+
+        from cadgen.step_scene import read_scene
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.tmp = Path(cls._tmp.name)
+        base = Box(40, 20, 10, align=Align.MIN)
+        base.label = "base"
+        children = [base]
+        for x in (2, 26):
+            bar = Pos(x, 5, 10) * Box(10, 10, 30, align=Align.MIN)
+            bar.label = "bar"
+            children.append(bar)
+        cls.step = cls.tmp / "bars.step"
+        export_step(Compound(children=children), str(cls.step))
+        cls.scene = read_scene(cls.step)
+        cls.base, cls.first, cls.second = [leaf.ref for leaf in cls.scene.leaves()]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def study(self, **extra) -> dict:
+        return {
+            "material": "6061",
+            "fixtures": [{"faces": [_face_at(self.scene, self.base, 0.0)]}],
+            "loads": [{"faces": [_face_at(self.scene, self.first, 40.0)], "type": "force", "vector_N": [500, 0, 0]}],
+            "mesh": {"size_mm": 4.0},
+            **extra,
+        }
+
+    def test_the_listing_tells_the_two_bars_apart_by_their_refs(self):
+        from cadgen import fea
+
+        lines = fea.parts(self.step).human_lines()
+        self.assertIn(f"bar ({self.first}) ↔ base · 100 mm² · bonded", lines)
+        self.assertIn(f"bar ({self.second}) ↔ base · 100 mm² · bonded", lines)
+
+    def test_a_study_can_name_each_bar_by_its_ref(self):
+        from cadgen import fea
+
+        study = self.study(parts={self.first: {"material": "steel"}, self.second: {"material": "6061"}, "base": {"material": "6061"}})
+        result = fea.solve(self.step, self.tmp / "refs.glb", study=study)
+        self.assertTrue(result.ok)
+        names = [part["name"] for part in result.summary["parts"]]
+        self.assertEqual(names, ["base", f"bar ({self.first})", f"bar ({self.second})"])
+        materials = {part["ref"]: part["material"] for part in result.summary["parts"]}
+        self.assertTrue(materials[self.first].startswith("Steel"))  # the ref chose the material
+
+    def test_sentences_name_a_shared_name_with_its_ref(self):
+        from cadgen import fea
+
+        result = fea.solve(self.step, self.tmp / "default.glb", study=self.study(parts={"base": {"material": "6061"}}))
+        summaries = [f["summary"] for f in result.findings if f["type"] == "default_material"]
+        self.assertEqual(sorted(summaries), [
+            f"'bar' ({self.first}) uses the default material (Aluminum 6061-T6): is that right?",
+            f"'bar' ({self.second}) uses the default material (Aluminum 6061-T6): is that right?",
+        ])
+
+    def test_a_name_both_bars_share_is_an_error_naming_the_refs(self):
+        from cadgen import fea
+
+        with self.assertRaisesRegex(ValueError, rf"parts\['bar'\]: 'bar' names 2 parts \({self.first}, {self.second}\); use a ref"):
+            fea.solve(self.step, self.tmp / "ambiguous.glb", study=self.study(parts={"bar": {"material": "steel"}}))
+        connections = [{"between": ["bar", "base"], "type": "free"}]
+        with self.assertRaisesRegex(ValueError, rf"connections\[0\].between: 'bar' names 2 parts \({self.first}, {self.second}\); use a ref"):
+            fea.solve(self.step, self.tmp / "ambiguous.glb", study=self.study(connections=connections))
+
+    def test_a_connection_can_name_a_bar_by_its_ref_and_the_other_part_by_name(self):
+        from cadgen import fea
+
+        # Freeing the second bar from the base leaves it unheld, and the error says which bar.
+        connections = [{"between": [self.second, "base"], "type": "free"}]
+        study = self.study(connections=connections)
+        result = fea.solve(self.step, self.tmp / "free.glb", study=study)
+        self.assertFalse(result.ok)
+        (finding,) = result.findings
+        self.assertEqual(finding["type"], "not_connected")
+        self.assertTrue(finding["summary"].startswith(f"'bar' ({self.second}) isn't connected"), finding["summary"])
+
+
 class AssemblyStudyFileTest(unittest.TestCase):
     """The study's assembly keys parse without the FEA stack."""
 

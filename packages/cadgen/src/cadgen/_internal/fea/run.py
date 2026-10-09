@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from cadgen._internal.fea.checks import quoted
 from cadgen.cli_logging import CliLogger
 from cadgen.results import FeaFace, FeaFacesResult, FeaPair, FeaPart, FeaPartsResult, FeaResult
 
@@ -118,7 +119,7 @@ _NEAR_MISS_MM = 1.0
 
 
 def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verbose: bool = False) -> FeaPartsResult:
-    from cadgen._internal.fea.assembly import detect_contacts, detect_overlaps, list_parts
+    from cadgen._internal.fea.assembly import detect_contacts, detect_overlaps, display_names, list_parts
     from cadgen._internal.fea.mesh import require_fea_stack
 
     require_fea_stack()
@@ -129,7 +130,7 @@ def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verb
     scene = _open(Path(target))
     parts = list_parts(scene)
     logger.info(f"read {len(parts)} parts; looking for pairs within {max(contact_tolerance_mm, _NEAR_MISS_MM)} mm")
-    name = {part.ref: part.name for part in parts}
+    name = dict(zip((part.ref for part in parts), display_names(parts)))
     overlaps = detect_overlaps(parts, log=logger.info)
     logger.info(f"found {len(overlaps)} overlapping pairs")
     found = detect_contacts(
@@ -180,25 +181,25 @@ class _Plan:
 
 
 def _find_part(parts: list, names: list[str], key: str, where: str) -> int:
-    """The part a study names by occurrence ref or by name."""
+    """The part a study names by occurrence ref or by name; ``names`` are the display names, for the error."""
     for index, part in enumerate(parts):
         if key in (part.ref, f"#{key}"):
             return index
-    named = [index for index, name in enumerate(names) if name == key]
+    named = [index for index, part in enumerate(parts) if part.name == key]
     if len(named) > 1:
         raise ValueError(f"{where}: {key!r} names {len(named)} parts ({', '.join(parts[i].ref for i in named)}); use a ref")
     if not named:
-        raise ValueError(f"{where}: no part named {key!r}; the parts are {', '.join(repr(name) for name in names)}")
+        raise ValueError(f"{where}: no part named {key!r}; the parts are {', '.join(quoted(name) for name in names)}")
     return named[0]
 
 
 def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
-    from cadgen._internal.fea.assembly import _groups, detect_contacts, detect_overlaps, list_parts
+    from cadgen._internal.fea.assembly import _groups, detect_contacts, detect_overlaps, display_names, list_parts
 
     logger.info("reading the parts")
     parts = list_parts(scene)
     logger.info(f"read {len(parts)} parts; looking for contacts within {parsed.contact_tolerance_mm:g} mm")
-    names = [part.name for part in parts]
+    names = display_names(parts)
     index_of = {part.ref: i for i, part in enumerate(parts)}
 
     materials = [parsed.material] * len(parts)
@@ -206,7 +207,7 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
     for key, material in parsed.parts.items():
         index = _find_part(parts, names, key, f"parts[{key!r}]")
         if index in given:
-            raise ValueError(f"parts[{key!r}]: '{names[index]}' is named twice in 'parts'")
+            raise ValueError(f"parts[{key!r}]: {quoted(names[index])} is named twice in 'parts'")
         given.add(index)
         materials[index] = material
 
@@ -226,18 +227,18 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
         i, j = (_find_part(parts, names, key, f"{where}.between") for key in connection.between)
         pair = frozenset((i, j))
         if i == j:
-            raise ValueError(f"{where}.between: both names are '{names[i]}'")
+            raise ValueError(f"{where}.between: both names are {quoted(names[i])}")
         if pair in seen:
-            raise ValueError(f"{where}: '{names[i]}' and '{names[j]}' are connected twice")
+            raise ValueError(f"{where}: {quoted(names[i])} and {quoted(names[j])} are connected twice")
         seen.add(pair)
         if connection.type == "bonded" and pair in overlap_of:
             raise ValueError(
-                f"{where}: '{names[i]}' and '{names[j]}' overlap by {overlap_of[pair].volume_mm3:.3g} mm³, "
+                f"{where}: {quoted(names[i])} and {quoted(names[j])} overlap by {overlap_of[pair].volume_mm3:.3g} mm³, "
                 "so they can't be bonded; fix the geometry"
             )
         if connection.type == "bonded" and pair not in pair_of:
             raise ValueError(
-                f"{where}: '{names[i]}' and '{names[j]}' don't touch within {parsed.contact_tolerance_mm:g} mm, "
+                f"{where}: {quoted(names[i])} and {quoted(names[j])} don't touch within {parsed.contact_tolerance_mm:g} mm, "
                 "so they can't be bonded; raise contact_tolerance_mm or move them together"
             )
         if connection.type == "free" and pair in pair_of:
@@ -254,7 +255,7 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
         i, j = sorted(pair)
         if group_of[i] == group_of[j]:
             raise ValueError(
-                f"connections: '{names[i]}' and '{names[j]}' are also joined through other bonded parts, so one joint "
+                f"connections: {quoted(names[i])} and {quoted(names[j])} are also joined through other bonded parts, so one joint "
                 "between them can't be freed on its own (not yet supported); free the parts' other connections too"
             )
     return _Plan(parts, names, materials, sorted(set(range(len(parts))) - given), contacts, bonded, overlaps, freed_overlaps, group_of)
@@ -266,7 +267,7 @@ def _not_connected(plan: _Plan, unheld: list[list[int]]) -> list[dict]:
 
     found = []
     for group in unheld:
-        members = ", ".join(f"'{plan.names[i]}'" for i in group)
+        members = ", ".join(f"{quoted(plan.names[i])}" for i in group)
         nearest = None
         for other in range(len(plan.parts)):
             if other in group:
@@ -283,15 +284,15 @@ def _not_connected(plan: _Plan, unheld: list[list[int]]) -> list[dict]:
         if overlapped is not None:
             other = overlapped.b if overlapped.a in refs else overlapped.a
             where = (
-                f": it overlaps '{plan.names[index_of[other]]}' by {overlapped.volume_mm3:.3g} mm³ instead of touching it, "
+                f": it overlaps {quoted(plan.names[index_of[other]])} by {overlapped.volume_mm3:.3g} mm³ instead of touching it, "
                 "so it isn't bonded to it; fix the geometry or move them apart"
             )
         elif nearest is None:
             where = ""
         elif nearest[0] <= 1e-6:
-            where = f": it touches '{plan.names[nearest[1]]}' but isn't bonded to it"
+            where = f": it touches {quoted(plan.names[nearest[1]])} but isn't bonded to it"
         else:
-            where = f": nearest part '{plan.names[nearest[1]]}' is {nearest[0]:.3g} mm away"
+            where = f": nearest part {quoted(plan.names[nearest[1]])} is {nearest[0]:.3g} mm away"
         found.append({
             "check": "fea",
             "severity": "error",
@@ -299,7 +300,7 @@ def _not_connected(plan: _Plan, unheld: list[list[int]]) -> list[dict]:
             "summary": f"{members} {'isn' if len(group) == 1 else 'aren'}'t connected to anything that is held{where}",
             "description": "no chain of bonded parts joins it to a fixed face, so the solve was not run",
             "items": [
-                {"text": f"'{plan.names[i]}'", "ref": plan.parts[i].ref,
+                {"text": f"{quoted(plan.names[i])}", "ref": plan.parts[i].ref,
                  "at": [round(c, 3) for c in part_centre(plan.parts[i])]}
                 for i in group
             ],
@@ -515,9 +516,9 @@ def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_
                 plan.names[index_of[c.b if index_of[c.a] == owner else c.a]]
                 for c in plan.bonded if owner in (index_of[c.a], index_of[c.b])
             })
-            joined = " and ".join(f"'{name}'" for name in partners)
+            joined = " and ".join(quoted(name) for name in partners)
             raise ValueError(
-                f"{ref} is where '{plan.names[owner]}' is bonded to {joined}: "
+                f"{ref} is where {quoted(plan.names[owner])} is bonded to {joined}: "
                 "a fixture or load can't sit on a joint; choose a face on the outside of the part"
             )
     held = {ordinal_of[ref] for fixture in parsed.fixtures for ref in fixture.faces}

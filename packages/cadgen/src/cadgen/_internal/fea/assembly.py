@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from cadgen.step_scene import StepScene
 
-__all__ = ["Contact", "Glued", "Overlap", "Part", "detect_contacts", "detect_overlaps", "glue", "list_parts", "part_centre", "part_faces", "part_gap"]
+__all__ = ["Contact", "Glued", "Overlap", "Part", "detect_contacts", "detect_overlaps", "display_names", "glue", "list_parts", "part_centre", "part_faces", "part_gap"]
 
 # OpenCascade's own confusion distance: a gap below it is touching.
 _TOUCHING_MM = 1e-7
@@ -107,6 +107,14 @@ def list_parts(scene: "StepScene") -> list[Part]:
         BRepGProp.VolumeProperties_s(shape, props)
         parts.append(Part(ref=leaf.ref, name=leaf.label or leaf.ref, volume_mm3=float(props.Mass()), shape=shape))
     return parts
+
+
+def display_names(parts: list[Part]) -> list[str]:
+    """Each part's name, with its ref added (``bar (#o1.3)``) when another part has the same name."""
+    count: dict[str, int] = {}
+    for part in parts:
+        count[part.name] = count.get(part.name, 0) + 1
+    return [f"{part.name} ({part.ref})" if count[part.name] > 1 else part.name for part in parts]
 
 
 def part_faces(shape) -> list:
