@@ -384,8 +384,10 @@ def _load_occurrence_tree_from_xcaf_doc(
         # An occurrence's own name, and its product's: one label for a shape no reference
         # places. Which of them it shows is settled once every occurrence is read
         # (_withhold_borrowed_product_names).
-        name = _label_name(label)
-        source_name = _label_name(resolved_label) if resolved_label is not label else name
+        own = _label_name(label)
+        product = _label_name(resolved_label) if resolved_label is not label else own
+        name = own or product
+        source_name = product or name
         occurrence_color = (
             _color_from_label(color_tool, label)
             or _color_from_shape(color_tool, instance_shape)
@@ -429,10 +431,10 @@ def _load_occurrence_tree_from_xcaf_doc(
             location=current_location,
             children=child_nodes,
         )
-        usages.append((node, _label_entry(resolved_label)))
+        usages.append((node, _label_entry(resolved_label), own is None))
         return node
 
-    usages: list[tuple[OccurrenceNode, str]] = []
+    usages: list[tuple[OccurrenceNode, str, bool]] = []
     roots = [
         node
         for index in range(1, free_labels.Length() + 1)
@@ -451,19 +453,21 @@ def _label_entry(label: object) -> str:
     return entry.ToCString()
 
 
-def _withhold_borrowed_product_names(usages: list[tuple[OccurrenceNode, str]]) -> None:
+def _withhold_borrowed_product_names(usages: list[tuple[OccurrenceNode, str, bool]]) -> None:
     """An occurrence with no name of its own shows its product's -- unless that name is
     another occurrence's own label, which is how a writer names a product its occurrences
     share (cadgen's after the last of them). Shown on the unnamed one, it would give two
     parts one name, and ``#motor`` would mean either: that occurrence shows its id instead.
 
-    ``usages`` is every node with the address of the product it places."""
+    ``usages`` is every node with the address of the product it places and whether its
+    name is borrowed from that product."""
     own_names: dict[str, set[str]] = {}
-    for node, product in usages:
-        if node.name is not None:
+    for node, product, borrowed in usages:
+        if not borrowed and node.name is not None:
             own_names.setdefault(product, set()).add(node.name)
-    for node, product in usages:
-        if node.name is None and node.source_name in own_names.get(product, ()):
+    for node, product, borrowed in usages:
+        if borrowed and node.name in own_names.get(product, ()):
+            node.name = None
             node.source_name = None
 
 
