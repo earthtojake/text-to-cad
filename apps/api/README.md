@@ -18,7 +18,7 @@ the build daemon reach it over HTTPS.
 
 ```
 api/v1.js       # the one Vercel Function: web-standard GET and POST, every /v1 path
-src/            # the handler, the receiver (events.mjs), PostHog's store, the feed; their tests
+src/            # the handler, the receiver (events.mjs), the drop list (noise.mjs), PostHog's store, the feed; their tests
 public/         # what Vercel serves besides the function: robots.txt alone
 scripts/        # the one-off Neon-to-PostHog migration
 vercel.json     # /v1/(.*) -> /api/v1; no framework, no build, no deploy on push
@@ -80,6 +80,23 @@ counts events.
   the release is logged only when it reads as one. Never a value, an install id or a
   service's message (`handler.mjs`: `reasonOf`); an error that is ours is logged by its
   name or string code alone (`TimeoutError`, `posthog_503`).
+- **Never cadgen's bug: dropped.** A crash row that matches the drop list
+  (`NEVER_OURS` in `src/noise.mjs`) goes no further than the receiver: released clients
+  keep sending what a later one learned to leave out, and each would be an issue in
+  PostHog with no fix in cadgen. A signature goes on the list only when it can never
+  be a mistake in cadgen's code, never because it is frequent, and in the same change
+  the client stops sending it (`GONE` and `signature` in `cadgen/analytics.py`). Each
+  entry matches on `where`, `type`, `status` and frames alone: any `ConnectionError` at a
+  `route` (a page that left mid-reply); a `BrokenPipeError` at a `command` (its output's
+  reader closed it, `| head`); an `AttributeError` whose innermost frame is
+  `cadgen/build123d.py` `__getattr__` or `cadgen/color.py` `_parse_hex` with the
+  person's code above it (a model asking for a build123d name that does not exist, or
+  a colour that is not a string); a `WorkerDied` with status `-15`, `-2` or `-1` (a
+  worker stopped by SIGTERM, SIGINT or SIGHUP); and a `RecursionError` with `<user>`
+  among its frames (the person's code is in the cycle). Only `exception` rows are ever
+  dropped, and dropping one is not a refusal: the batch is answered `204` and its other
+  rows are stored. Each batch that had any logs one `console.info` line counting them
+  by name: `telemetry dropped page_left 4, worker_stopped 1 (schema 3, cadgen 0.7.17)`.
 - **No browser posts.** Both POSTs must be `application/json` (`415` otherwise) and
   carry no `Origin` header (`403`): cadgen posts from Python, which sends none, and a
   browser sends one with every POST, a form's, `sendBeacon`'s and a no-cors fetch's included.

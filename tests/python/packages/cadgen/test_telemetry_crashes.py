@@ -111,6 +111,40 @@ class SignatureTest(unittest.TestCase):
                 self.assertIsNone(analytics.signature(error, "build", bugs_only=True))
         self.assertIs(bd.Box, __import__("build123d").Box, "a name it has is build123d's own")
 
+    def test_the_other_end_leaving_or_the_persons_own_recursion_is_never_a_crash(self) -> None:
+        def write() -> None:
+            raise BrokenPipeError(32, "Broken pipe")
+
+        # A page that left a route mid-reply, a reader that closed a command's output (`| head`).
+        for error, where in ((ConnectionAbortedError(10053, "aborted"), "route"), (ConnectionResetError(), "route"),
+                             (_caught(write), "command")):
+            with self.subTest(type=type(error).__name__, where=where):
+                self.assertIsNone(analytics.signature(error, where, handled=False))
+        # Anywhere else it may be cadgen's: a tool's call, a request, a command's own connection.
+        self.assertEqual(analytics.signature(ConnectionAbortedError(), "tool")["type"], "ConnectionAbortedError")
+        self.assertEqual(analytics.signature(ConnectionResetError(), "command")["type"], "ConnectionResetError")
+
+        # A RecursionError: whose cycle it is. This file stands in for cadgen's code.
+        def ours() -> None:
+            ours()
+
+        def model() -> None:  # cadgen's wrapper, calling a model that calls itself through it
+            _user_calls(model, "/work/model.py")()
+
+        file_of, here = analytics._file_of, os.path.realpath(__file__)
+        self.addCleanup(sys.setrecursionlimit, sys.getrecursionlimit())
+        sys.setrecursionlimit(200)  # a short stack: each frame's file is looked up on disk
+        with mock.patch.object(analytics, "_file_of", lambda path: "cadgen/authoring.py"
+                               if os.path.realpath(path) == here else file_of(path)):
+            theirs, mine = _caught(model), _caught(_user_calls(ours, "/work/model.py"))
+            sys.setrecursionlimit(1000)
+            for where, bugs_only in (("build", True), ("tool", False)):
+                with self.subTest(where=where):
+                    self.assertIsNone(analytics.signature(theirs, where, bugs_only=bugs_only), "theirs is in the cycle")
+                    found = analytics.signature(mine, where, bugs_only=bugs_only)
+                    self.assertEqual((found["type"], {frame["file"] for frame in found["frames"]}),
+                                     ("RecursionError", {"cadgen/authoring.py"}), "the person's call is far outside it")
+
     def test_an_installed_package_that_is_not_cadgens_is_never_named(self) -> None:
         site = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, site, ignore_errors=True)
@@ -263,6 +297,25 @@ class CommandCrashTest(unittest.TestCase):
                 mock.patch.object(cli, "_tell"), self.assertRaises(KeyError):
             cli.main(["telemetry", "status"])
         self.assertEqual([(crash["where"], crash["handled"]) for crash in self.crashes()], [("command", False)])
+
+    @unittest.skipIf(sys.platform == "win32", "Windows has no SIGPIPE, and says a closed pipe is EINVAL")
+    def test_a_command_whose_output_is_closed_stops_quietly_and_reports_nothing(self) -> None:
+        import subprocess
+
+        # `cadgen ... | head`, its reader gone before it writes: no traceback, the exit a shell gives
+        # `yes | head`, and nothing handed over, which a command would do through `report`.
+        read, write = os.pipe()
+        os.close(read)
+        code = ("import sys\nfrom cadgen import analytics, cli\n"
+                "analytics.report = lambda *a, **k: sys.stderr.write('reported\\n')\n"
+                "cli._run = lambda *a: sys.stdout.write('x' * 1_000_000) and 0\n"
+                "sys.exit(cli.main(['telemetry', 'status']))\n")
+        try:
+            done = subprocess.run([sys.executable, "-c", code], stdout=write, stderr=subprocess.PIPE,
+                                  env={**os.environ, "CADGEN_TELEMETRY": "0"}, timeout=60)
+        finally:
+            os.close(write)
+        self.assertEqual((done.returncode, done.stderr), (141, b""))
 
     def test_a_commands_reported_failure_is_a_crash_only_when_it_is_a_mistake_in_cadgens_code(self) -> None:
         import io

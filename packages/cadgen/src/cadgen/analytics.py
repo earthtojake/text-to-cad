@@ -226,6 +226,14 @@ CRASHES_PENDING = 16  # past this many different crashes waiting, a process coun
 BUGS = (AttributeError, LookupError, TypeError, NameError, AssertionError, ZeroDivisionError, RecursionError,
         NotImplementedError)
 _RAISED = re.compile(r"(?:^|:)\s*raise\b")
+# Errors that are never cadgen's bug where they happen, whoever catches them: the other end leaving -- a page that
+# left a viewer route mid-reply (Windows' WSAECONNABORTED among them), or whatever reads a command's output closing
+# it (``cadgen ... | head``, which the command answers by stopping quietly). And a ``RecursionError`` with the
+# person's code among its innermost frames: their code is in the cycle (a model that calls itself never ends).
+# The rule for the next noisy class: an error goes here only when, there, it can never be a mistake in cadgen's
+# code -- never because it is frequent -- and in the same change the receiver drops it from the releases already
+# out (``NEVER_OURS`` in the API's ``noise.mjs``), so it stops costing anything at once.
+GONE = {"route": ConnectionError, "command": BrokenPipeError}
 USER = "<user>"  # the person's own code, a frame or an exception's type: never named
 _CHUNK_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")  # a page chunk's debug id
 _FILE = re.compile(r"(?!\.\.?(?:/|$))[A-Za-z0-9_.+-]{1,64}(?:/(?!\.\.?(?:/|$))[A-Za-z0-9_.+-]{1,64}){0,8}")
@@ -672,6 +680,8 @@ def signature(error: BaseException, where: str, *, tool: str | None = None, hand
     send."""
     if where not in WHERE or not isinstance(error, Exception):  # an interrupt, an exit: no crash
         return None
+    if where in GONE and isinstance(error, GONE[where]):  # the other end left: no crash
+        return None
     if bugs_only and not isinstance(error, BUGS):  # before reading any frame: a failure is never kept waiting
         return None
     frames: list[dict[str, Any]] = []
@@ -688,7 +698,10 @@ def signature(error: BaseException, where: str, *, tool: str | None = None, hand
         frames.append({"file": file, "function": function if _FUNCTION.fullmatch(function) else "<?>", "line": int(line or 0)})
     if bugs_only and (decisive is None or decisive[0] is None or _RAISED.search(linecache.getline(decisive[1], decisive[2]))):
         return None
-    found = {"where": where, "type": _type_of(error), "handled": bool(handled), "frames": frames[-MAX_FRAMES:]}
+    frames = frames[-MAX_FRAMES:]
+    if isinstance(error, RecursionError) and any(frame["file"] == USER for frame in frames):  # the person's recursion
+        return None
+    found = {"where": where, "type": _type_of(error), "handled": bool(handled), "frames": frames}
     if tool is not None and _TOOL.fullmatch(str(tool)):
         found["tool"] = tool
     return found
