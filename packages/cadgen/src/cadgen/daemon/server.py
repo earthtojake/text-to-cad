@@ -567,8 +567,10 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     finally:
         watchdog_done.set()
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)
-        # A killed worker is not reusable; release() drops it and the pool respawns.
-        _POOL.release(worker, healthy=healthy and worker.alive())
+        # A killed worker is not reusable; release() drops it and the pool respawns. A job
+        # stopped because its caller left is no crash, though its worker is killed.
+        _POOL.release(worker, healthy=healthy and worker.alive(),
+                      cancelled=ended == "cancelled" or left.is_set())
         if is_artifact and exit_code == 0 and inflight.get("result") is None:
             exit_code = 1
             stderr_tail.append("artifact worker completed without an artifact result")
@@ -652,6 +654,14 @@ def _bind(address: str, *, wait: float = 0.0) -> transport.Server | None:
             return None
         time.sleep(LOCK_POLL_SECONDS)
     _DAEMON_LOCK = lock  # held while this daemon serves the address
+    try:
+        # A socket moved out of a deep state directory needs a folder no one else owns.
+        transport.claim_folder(address, create=True)
+    except transport.AddressUnusable as exc:
+        _log(f"cannot bind {address}: {exc}")
+        lock.release()
+        _DAEMON_LOCK = None
+        return None
     if transport.address_is_stale(address):
         transport.clear_address(address)
     while True:

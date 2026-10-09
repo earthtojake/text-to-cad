@@ -10,6 +10,7 @@ and ordinary frames arrive exactly as before, with no heartbeat relayed or left 
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -61,6 +62,17 @@ _TOOL = textwrap.dedent('''
             return 0
         if verb == "sleep":
             time.sleep(float(rest[0]))
+        elif verb == "fd1-to-stderr":
+            # What a STEP read does while the kernel parses (kernel_messages_on_stderr):
+            # fd 1 points at stderr for the whole read, here a sleep the heartbeat must outlive.
+            saved = os.dup(1)
+            os.dup2(2, 1)
+            try:
+                os.write(1, b"kernel diagnostics\\n")
+                time.sleep(float(rest[0]))
+            finally:
+                os.dup2(saved, 1)
+                os.close(saved)
         elif verb == "gil-idle":
             _hold_gil_idle(float(rest[0]))
         elif verb == "gil-busy":
@@ -128,6 +140,58 @@ class SilenceIsNotBusy(_WorkerCase):
         # worker's CPU clock is what kept it.
         self.assertTrue(reads, "the silence window never elapsed; the busy body did not starve the heartbeat")
         self.assertTrue(all(value is not None for value in reads))
+
+    def test_a_body_that_points_fd1_at_stderr_still_beats_to_the_supervisor(self):
+        # The beats written while fd 1 is the log reach the frame channel all the same;
+        # written to fd 1, they went to the log and the sleeping body was killed as hung.
+        frames = self.run_job("fd1-to-stderr", str(SILENCE * 3))
+        self.assertEqual(frames[-1]["exit"], 0)
+        self.assertIn({"stream": "stdout", "data": "body done"}, frames)
+        self.assertNotIn("kernel diagnostics", "".join(str(frame.get("data")) for frame in frames))
+
+
+class AnOrphanStops(unittest.TestCase):
+    """A worker whose supervisor is gone ends mid-job: its client is already running the
+    job again without the daemon, and its body would only build alongside that rerun."""
+
+    def test_a_worker_nobody_reads_ends_at_its_next_beat(self):
+        temporary = generated_cad_directory(prefix="daemon-orphan-")
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name).resolve()
+        (root / "heartbeat_fixture_tool.py").write_text(_TOOL, encoding="utf-8")
+        prelude = textwrap.dedent(f"""
+            import sys
+            sys.path.insert(0, {str(root)!r})
+            from cadgen.daemon import server, worker
+            server._TOOL_IMPORTS["fixture"] = "heartbeat_fixture_tool"
+            worker._warm_imports = lambda: None
+            worker.HEARTBEAT_INTERVAL_SECONDS = {HEARTBEAT!r}
+            raise SystemExit(worker.serve())
+        """)
+        # The supervisor's end of the pipes, held here: closing the frame pipe's read end
+        # is what a SIGKILLed daemon does to its workers.
+        process = subprocess.Popen([sys.executable, "-P", "-c", prelude], stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE, text=True, cwd=root)
+
+        def stop() -> None:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+            for pipe in (process.stdin, process.stdout):
+                try:
+                    pipe.close()
+                except OSError:
+                    pass
+
+        self.addCleanup(stop)
+        self.assertIn("ready", process.stdout.readline())
+        process.stdin.write(json.dumps({"kind": "run", "tool": "fixture", "argv": ["sleep", "600"], "env": {},
+                                        "cwd": str(root), "store_root": str(root / "store"),
+                                        "job_id": "test:job-1"}) + "\n")
+        process.stdin.flush()
+        self.assertIn("heartbeat", process.stdout.readline())  # the job has started
+        process.stdout.close()
+        self.assertEqual(process.wait(timeout=60), 1)  # at its next beat, not after its body
 
 
 class WedgedIsStillKilled(_WorkerCase):

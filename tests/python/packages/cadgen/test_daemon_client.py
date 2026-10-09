@@ -106,9 +106,32 @@ class DeadWorkerMessage(unittest.TestCase):
         self.assertEqual(out, "")
         self.assertIn("died mid-job", err)
         self.assertIn("killed by SIGKILL (signal 9)", err)
-        self.assertIn("Running it cold now", err)
+        self.assertEqual(err.count("Running it cold now"), 1, err)
         self.assertNotIn("NOT retried", err)
         self.assertNotIn("CADGEN_DAEMON=0", err)
+
+    def test_a_daemon_lost_mid_request_says_the_job_runs_again_cold(self):
+        """The daemon itself killed mid-build: the client reran the whole build in its
+        own process and said nothing, so a rerun from the start read as a slow build."""
+        outcome, out, err = self._run([{"stream": "stdout", "data": ""}])  # then the connection closes
+
+        self.assertIsNone(outcome, "the ordinary fallback still runs it cold")
+        self.assertEqual(out, "")
+        self.assertIn("lost the build service running `cadgen step compile tmp/noexh/noexh.step --force`", err)
+        self.assertIn("closed the connection", err)
+        self.assertIn("Running it cold now, in this process", err)
+
+    def test_ctrl_c_while_waiting_on_the_daemon_is_one_line(self):
+        err = io.StringIO()
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON": "1"}), \
+                mock.patch.object(client, "_run_with_retry", side_effect=KeyboardInterrupt), \
+                redirect_stderr(err):
+            os.environ.pop("CADGEN_DAEMON_CHILD", None)
+            with self.assertRaises(SystemExit) as stop:
+                client.run_via_daemon("run", ["/w/box.py"], "/w", prog="python box.py")
+        self.assertEqual(stop.exception.code, 130)
+        self.assertEqual(err.getvalue(), "\npython box.py: interrupted\n")
+        self.assertTrue(stop.exception.__suppress_context__, "no traceback through the wait")
 
     def test_a_job_with_no_prog_is_named_by_its_tool(self):
         payload = {**PAYLOAD, "tool": "probe", "prog": None, "argv": ["a b.step"]}
@@ -312,7 +335,7 @@ class ServerRelaysTheDeath(unittest.TestCase):
         self.assertEqual(died["exitStatus"], -9)
         self.assertIn(pool_mod.describe_exit(-9), died["detail"])  # the worker's own words, as this platform names the signal
         self.assertEqual(conn.frames[-1], {"exit": 1})
-        pool.release.assert_called_once_with(worker, healthy=False)
+        pool.release.assert_called_once_with(worker, healthy=False, cancelled=False)
         self.assertTrue(any("died mid-job" in line for line in logged), logged)
 
     @unittest.skipIf(os.name == "nt", "a Windows worker's exit status is a code, never a signal")
@@ -336,7 +359,23 @@ class ServerRelaysTheDeath(unittest.TestCase):
                                                   "prog": "cadgen step compile"})
                 self.assertEqual(build.finish.call_args.args[1], ended)
                 self.assertEqual(worker_died.call_args_list, [mock.call(status)] if ended == "crashed" else [])
+                # The pool's crash count (`cadgen daemon status`) agrees: a stopped job is no crash.
+                self.assertEqual(pool.release.call_args.kwargs["cancelled"], ended == "cancelled")
                 self.assertEqual(next(frame["workerDied"]["exitStatus"] for frame in conn.frames if "workerDied" in frame), status)
+
+    def test_a_job_whose_caller_left_is_released_as_cancelled_not_crashed(self):
+        class Gone(self._Conn):
+            def send(self, raw: bytes) -> None:
+                raise BrokenPipeError("the client left")
+
+        pool = mock.Mock()
+        worker = self._DyingWorker()
+        pool.acquire.return_value = worker
+        with mock.patch.object(server, "_JOBS", JobLedger()), mock.patch.object(server, "_POOL", pool), \
+                mock.patch.object(server, "_log"), mock.patch.object(server, "CLIENT_LIVENESS_INTERVAL_SECONDS", 60.0):
+            server._handle_request(Gone(), {"tool": "step-compile", "argv": ["x.step"], "cwd": "/w",
+                                            "prog": "cadgen step compile"})
+        pool.release.assert_called_once_with(worker, healthy=False, cancelled=True)
 
 
 class ServerStatusIdentity(unittest.TestCase):

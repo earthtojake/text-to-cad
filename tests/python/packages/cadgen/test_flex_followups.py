@@ -207,6 +207,28 @@ class FollowUps(unittest.TestCase):
         self.assertNotIn("pathlib", completed.stderr)
         self.assertNotIn("Traceback", completed.stderr)
 
+    @unittest.skipIf(os.name == "nt" or os.geteuid() == 0, "a read-only folder needs POSIX permissions and a non-root user")
+    def test_a_read_only_store_with_its_folders_already_made_is_the_same_sentence(self) -> None:
+        # A store that has built before already has the shard folder a new object goes in,
+        # so the refusal comes at the temp file, not at a folder it makes.
+        from unittest import mock
+
+        from cadgen.store import objects
+        from cadgen.store.paths import StoreUnwritableError
+
+        data, source = b"a new object", self.root / "source.bin"
+        source.write_bytes(data)
+        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.store)}):
+            shard = objects.object_path(objects.object_hash(data)).parent
+            shard.mkdir(parents=True)
+            os.chmod(shard, stat.S_IRUSR | stat.S_IXUSR)
+            try:
+                for put in (lambda: objects.put_object(data), lambda: objects.put_object_from_file(source)):
+                    with self.assertRaisesRegex(StoreUnwritableError, "point CADGEN_CACHE_DIR at a folder"):
+                        put()
+            finally:
+                os.chmod(shard, stat.S_IRWXU)
+
     # ---- item 12 -------------------------------------------------------------------------------
 
     def test_store_info_lists_every_index_kind(self) -> None:

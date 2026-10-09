@@ -289,7 +289,7 @@ class DaemonTelemetryTest(unittest.TestCase):
             self.assertIsNone(telemetry._RECORDER)
             self.assertEqual(len(self.sent), 1)
         analytics.Recorder(path=self.tmp / "settings.json", send=lambda payload: self.sent.append(payload) or True).send_kept()
-        # The pool's own crashes take in workers killed because their client left: never read here.
+        # The pool's own crash count is never read here: crashes are counted as each job ends.
         self.assertEqual([payload["events"] for payload in self.sent], [
             [{"name": "health", "workers": 2, "crashes": 0, "recycles": 0, "refusals": 0}],
             [{"name": "health", "workers": 1, "crashes": 0, "recycles": 1, "refusals": 2}],

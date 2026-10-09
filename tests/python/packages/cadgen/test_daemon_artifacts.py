@@ -364,7 +364,7 @@ class ArtifactCoalescing(unittest.TestCase):
             owner.result(5)
             follower.result(5)
         pool.acquire.assert_called_once_with("", dependency=True, on_start=mock.ANY)
-        pool.release.assert_called_once_with(running, healthy=True)
+        pool.release.assert_called_once_with(running, healthy=True, cancelled=False)
         self.assertEqual(running.request["kind"], "artifact")
         self.assertEqual(running.request["argv"], [])
         self.assertEqual(first.frames[-1], {"exit": int(fail)})
@@ -412,7 +412,7 @@ class ArtifactCoalescing(unittest.TestCase):
             follower.result(5)
         self.assertFalse(running.killed)
         pool.acquire.assert_called_once_with("", dependency=False, on_start=mock.ANY)
-        pool.release.assert_called_once_with(running, healthy=True)
+        pool.release.assert_called_once_with(running, healthy=True, cancelled=False)
         self.assertEqual(late.frames[-1], {"exit": 0})
         self.assertEqual(sorted(job["state"] for job in ledger.snapshot()), ["done", "done"])
         self.assertEqual(registry.snapshot()["inflight"], 0)
@@ -461,7 +461,7 @@ class ArtifactCoalescing(unittest.TestCase):
             follower[0].result()
         self.assertEqual(running.answers, [True, True, False])
         self.assertFalse(running.killed)
-        pool.release.assert_called_once_with(running, healthy=True)
+        pool.release.assert_called_once_with(running, healthy=True, cancelled=False)
         self.assertEqual(registry.snapshot()["inflight"], 0)
 
     def test_a_model_build_whose_client_left_is_still_stopped(self):
@@ -484,7 +484,7 @@ class ArtifactCoalescing(unittest.TestCase):
             gone.disconnected.set()
             build.result(5)
         self.assertTrue(running.killed, "a stopped build kept running")
-        pool.release.assert_called_once_with(running, healthy=False)
+        pool.release.assert_called_once_with(running, healthy=False, cancelled=True)
 
     def test_admission_failure_finishes_coalescing_without_starting_work(self):
         registry, ledger, pool = broker.Broker(1), JobLedger(), mock.Mock()

@@ -2,7 +2,9 @@
 
 There is no advisory progress record any more: a build's position is the daemon's
 job ledger (``cadgen.daemon.jobs``), read over the socket. What lives here is the
-address, the auth key and the log — process state, never store content.
+address, the auth key, the locks and the log — process state, never store content.
+A socket path too long to bind moves to a short folder of its own
+(``cadgen.daemon.transport.address_for``); the rest stays.
 """
 
 from __future__ import annotations
