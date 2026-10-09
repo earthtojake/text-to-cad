@@ -16,7 +16,7 @@ import types
 import unittest
 from unittest import mock
 
-from cadgen.daemon import artifacts, broker, client, server, transport, worker
+from cadgen.daemon import artifacts, broker, client, executors, pool, server, transport, worker
 from cadgen.daemon.jobs import JobLedger
 from tests.python.support.tmp_root import generated_cad_directory
 
@@ -218,8 +218,6 @@ class ArtifactRequests(unittest.TestCase):
                 artifacts.normalize_request(request)
 
     def test_work_is_dealt_one_job_per_cpu_slot_and_every_job_ends_before_a_failure_is_raised(self):
-        from cadgen.daemon import executors, pool
-
         def jobs(count, *, warm, per_started_worker=32, cpus=4):
             with mock.patch.object(executors, "use_daemon", return_value=warm is not None), \
                     mock.patch.object(pool, "spare_count", return_value=warm or 0), \
@@ -683,6 +681,30 @@ class ArtifactLeases(unittest.TestCase):
         self.fake.derive.assert_called_once_with("a" * 64, ["b" * 16, "c" * 16], producer=PRODUCER,
                                                expected_objects={"d" * 64: "e" * 64}, force=False,
                                                keep_going=None)
+
+    def test_a_build_does_the_first_share_itself_and_deals_only_what_repays_a_started_worker(self):
+        dispatched = []
+
+        def dispatch(request, root):
+            dispatched.append((request, root))
+            return done({"components": []})
+
+        requests = [surface_request(), surface_request(cids=["f" * 16])]
+        with mock.patch.object(executors, "use_daemon", return_value=True), \
+                mock.patch.object(pool, "spare_count", return_value=2), \
+                mock.patch.object(broker, "job_limit", return_value=4), \
+                mock.patch.object(artifacts, "_dispatch", side_effect=dispatch), \
+                broker.held("build", required=True), artifacts.worker_context(self.root):
+            self.assertEqual([len(share) for share in artifacts.deal(range(40), per_started_worker=32)], [40],
+                             "work that repays no started worker stays in the build, though spares are warm")
+            self.assertEqual([len(share) for share in artifacts.deal(range(100), per_started_worker=32)],
+                             [34, 33, 33])
+            results = artifacts.resolve_artifacts(requests, store_root=self.root)
+        self.assertEqual(results, [{"components": ["b" * 16]}, {"components": []}])
+        self.fake.derive.assert_called_once()
+        self.assertEqual(self.fake.derive.call_args.args, ("a" * 64, ["b" * 16, "c" * 16]), "the first share, here")
+        self.assertEqual(dispatched, [(artifacts.normalize_request(requests[1]), self.root)], "the rest, to the pool")
+        self.assertEqual(self.settled()["peakRunning"], 1)
 
     def test_worker_source_isolation_and_failure_release_real_lease(self):
         readable = Path(self.root) / "unrelated.py"

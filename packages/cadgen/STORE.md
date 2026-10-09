@@ -386,7 +386,8 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   (its one node turns Z-up millimetres into Y-up metres); the tables are
   `extras`. A component is ready once its surface and every mesh asked for are
   stored: the CAD Viewer's cold components ask for the standard level in the
-  surface request that derives them, a mesh export asks for its tolerances, and
+  surface request that derives them, a mesh export asks for its tolerances (a
+  build's own export derives them in the build's process, §9), and
   the snapshot host has the build pool mesh what its page found missing, from
   the stored surface record alone (`POST /__tess_cache/produce`: `meshes` jobs
   running `produce_meshes`, the keys dealt across the daemon's warm workers, and
@@ -1531,7 +1532,17 @@ CPU scheduling and reuse remain independent of memory admission:
    — queuing if it must — when that wait ends. A waiting parent holds no CPU slot, which is
    why a 1-slot pool still builds a 3-level tree. It retains its geometry and
    memory reservation. Slots count kernel work only:
-   the build pipeline takes one around a model body and its emit. **Doors take
+   the build pipeline takes one around a model body and its emit. The artifact
+   work a build asks for under its slot — the surfaces and meshes its declared
+   mesh exports lack — runs in the build's own process, under that slot,
+   whichever executor runs the build (`artifacts.worker_context`): its kernel and
+   store are loaded there, where a pool job cost a cold box's export 2.6 s of
+   kernel import for 0.03 s of work. The build does the first share itself and
+   deals the pool only shares that repay starting a worker (`artifacts.deal`:
+   32 components' surfaces each), so a 250-part export spreads and a 40-part one
+   does not; the daemon's warm spares get none of it, because the build has
+   bound one of them and the next share waited on a kernel import. A door and a
+   server hold no slot, so their artifact work is always pool jobs. **Doors take
    none and never run a body**: `snapshot` and the mesh doors
    (`stl|3mf|glb build`) ask one question of a document — does the store have a
    tree for this file's bytes (`doors.document_tree`: `sha256(bytes)` →

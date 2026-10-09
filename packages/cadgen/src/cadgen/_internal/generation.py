@@ -1199,7 +1199,7 @@ def _run_with_spec_generation_status(
                 _current_source_result(spec, checked_tree)
             _tree_event(spec, "current")
             return _SkippedGeneration(spec, checked_tree)
-        from cadgen.daemon import broker
+        from cadgen.daemon import artifacts, broker
 
         # One running build per core: the body and its emit hold a job slot; the
         # wait for a forced child gives it back (cadgen.store.lazy). `queued` shows
@@ -1211,7 +1211,11 @@ def _run_with_spec_generation_status(
             if on_queued is not None:
                 on_queued()
 
-        with broker.held(spec.source_ref, on_queued=queued), settle_child_builds():
+        # The build's own artifact work -- its declared meshes' surfaces and meshes --
+        # runs in this process under that slot, where the kernel and the store are
+        # already loaded, whichever process runs the build (daemon/artifacts.py).
+        with broker.held(spec.source_ref, on_queued=queued), \
+                artifacts.worker_context(artifacts.store_path()), settle_child_builds():
             _tree_event(spec, "building", phase="generate")
             try:
                 result = action(spec, run)

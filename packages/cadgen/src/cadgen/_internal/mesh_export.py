@@ -307,8 +307,12 @@ def stored_meshes(source: MeshSource, pairs: list, appearance: object,
     every pair: SURF where missing, then OCCT's mesh at each tolerance), the
     missing components dealt across the pool (``artifacts.deal``) as a view's
     are: one job did them one after another, half a cold export's wall time on
-    moonwatch. A pinned producer this runtime cannot implement is replaced by
-    the current one, once, as the views do (``store.view.materialize_view_surfaces``)."""
+    moonwatch. A model build exporting its own outputs derives them in its own
+    process, where the kernel is loaded, and deals to the pool only the shares
+    past the first that repay starting a worker: a pool job there cost a cold
+    box 2.6 s of kernel import for 0.03 s of work. A pinned producer this runtime
+    cannot implement is replaced by the current one, once, as the views do
+    (``store.view.materialize_view_surfaces``)."""
     from cadgen.daemon.artifacts import (
         SURFACES_PER_STARTED_WORKER, ArtifactJobError, deal, resolve_artifact, resolve_artifacts)
     from cadgen.store import meshes, surfaces
