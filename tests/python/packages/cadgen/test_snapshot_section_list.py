@@ -5,7 +5,8 @@ The cut is cadgen's: an OCCT section of each part's exact BREP (a build-pool job
 a tiny assembly built here -- a 20 x 10 x 5 plate at the origin and a radius-5 pin standing at
 x = 30 -- and read back what was written:
 
-* the PNG is the cut, framed as a section always was, with the pin a true circle;
+* the PNG is the cut, framed as a section always was, with the pin a true circle -- and the
+  same assembly ten kilometres out draws the same picture;
 * an SVG output is cadgen's, so a job with only SVG outputs never starts a browser;
 * focus/hide pick what is cut, and a plane that misses says so;
 * `--mode list` is answered from the tree and the store, with no browser: the refs every
@@ -29,15 +30,17 @@ add_repo_path("packages/cadgen/src")
 
 SIZE = (400, 300)
 PIN = (30.0, 0.0, 5.0)  # centre x, centre y, radius
+# Where the far copy of the assembly stands: ten kilometres out along every axis.
+FAR = 1e7
 
 
-def write_assembly(path) -> None:
+def write_assembly(path, at: float = 0.0) -> None:
     from build123d import Compound, Location, Solid
     from cadgen.step_export import export_build123d_step_file
 
-    plate = Solid.make_box(20, 10, 5)
+    plate = Solid.make_box(20, 10, 5).moved(Location((at, at, at)))
     plate.label = "plate"
-    pin = Solid.make_cylinder(PIN[2], 20).moved(Location((PIN[0], PIN[1], 0)))
+    pin = Solid.make_cylinder(PIN[2], 20).moved(Location((PIN[0] + at, PIN[1] + at, at)))
     pin.label = "pin"
     export_build123d_step_file(Compound(children=[plate, pin], label="asm"), path)
 
@@ -52,6 +55,7 @@ class SnapshotSectionTests(unittest.TestCase):
         cls._roots = ClassCadRoots(prefix="snapshot-section-")
         cls.workspace = cls._roots.cad_root
         write_assembly(cls.workspace / "asm.step")
+        write_assembly(cls.workspace / "far.step", at=FAR)
         import cadgen.step as step_door
 
         cls.step = step_door
@@ -60,11 +64,14 @@ class SnapshotSectionTests(unittest.TestCase):
              "outputs": [{"path": "cut.png", "width": SIZE[0], "height": SIZE[1]}, {"path": "cut.svg"}]},
             {"input": "asm.step", "mode": "section", "section": {"plane": "XY", "offset": 50},
              "outputs": [{"path": "miss.png", "width": SIZE[0], "height": SIZE[1]}]},
+            {"input": "far.step", "mode": "section", "section": {"plane": "XY", "offset": FAR + 2},
+             "outputs": [{"path": "far.png", "width": SIZE[0], "height": SIZE[1]}]},
         ]}
         job = cls.workspace / "packet.json"
         job.write_text(json.dumps(packet), encoding="utf-8")
         cls.result = step_door.snapshot(job=job)
         cls.image = read_png((cls.workspace / "cut.png").read_bytes())
+        cls.far_image = read_png((cls.workspace / "far.png").read_bytes())
         cls.svg = (cls.workspace / "cut.svg").read_text(encoding="utf-8")
 
     @classmethod
@@ -81,26 +88,35 @@ class SnapshotSectionTests(unittest.TestCase):
 
     def test_every_output_was_written_and_the_miss_is_said(self) -> None:
         self.assertTrue(self.result.ok)
-        self.assertEqual(["cut.png", "cut.svg", "miss.png"], sorted(file.path.name for file in self.result.files))
+        self.assertEqual(["cut.png", "cut.svg", "far.png", "miss.png"],
+                         sorted(file.path.name for file in self.result.files))
         self.assertEqual({"png", "svg"}, {file.kind for file in self.result.files})
         self.assertEqual(SIZE, (self.image.width, self.image.height))
-        self.assertEqual(["SECTION XY @ Z=50.000 does not intersect the model; the section is empty"],
+        self.assertEqual(["SECTION XY @ Z=50.000 cuts no material; the section is empty"],
                          list(self.result.warnings))
 
-    def test_the_png_is_the_exact_cut_where_the_old_framing_put_it(self) -> None:
-        background = self.image.pixel(2, 2)
+    def assert_the_exact_cut(self, image) -> None:
+        background = image.pixel(2, 2)
         self.assertEqual((255, 255, 255), background)
         # Inside the plate and the pin: the grey fill, not the background.
         for point in ((10.0, 5.0), (PIN[0] + 2.5, PIN[1] - 2.5)):
             x, y = self.screen(*point)
-            self.assertLess(sum(self.image.pixel(x, y)), 3 * 245, f"{point} is not filled")
+            self.assertLess(sum(image.pixel(x, y)), 3 * 245, f"{point} is not filled")
         # The pin's outline crosses its exact radius at every angle: a dark ring there. (Its
         # upper half: the cut locator sits over the bottom right corner of a small picture.)
         for angle in range(0, 180, 30):
             radians = math.radians(angle + 15)
             x, y = self.screen(PIN[0] + PIN[2] * math.cos(radians), PIN[1] + PIN[2] * math.sin(radians))
-            darkest = min(sum(self.image.pixel(x + dx, y + dy)) for dx in (-1, 0, 1) for dy in (-1, 0, 1))
+            darkest = min(sum(image.pixel(x + dx, y + dy)) for dx in (-1, 0, 1) for dy in (-1, 0, 1))
             self.assertLess(darkest, 3 * 120, f"no outline at {angle + 15} degrees")
+
+    def test_the_png_is_the_exact_cut_where_the_old_framing_put_it(self) -> None:
+        self.assert_the_exact_cut(self.image)
+
+    def test_a_cut_ten_kilometres_out_is_drawn_as_cleanly_as_at_the_origin(self) -> None:
+        # The page paints in 32-bit floats: drawn in model coordinates this far out, the pin
+        # came out jagged and lost its outline. (The framing is centred, so the same pixels.)
+        self.assert_the_exact_cut(self.far_image)
 
     def test_the_svg_draws_the_pin_as_its_exact_circle(self) -> None:
         self.assertIn('transform="scale(1 -1)"', self.svg)
@@ -120,8 +136,11 @@ class SnapshotSectionTests(unittest.TestCase):
                                         focus=("#o1.1",))
         self.assertTrue(result.ok)
         svg = out.read_text(encoding="utf-8")
-        self.assertIn("M 0 0 L 20 0 L 20 10 L 0 10 L 0 0 Z", svg.replace("M 0 10 L 0 0 L 20 0 L 20 10 L 0 10 Z",
-                                                                         "M 0 0 L 20 0 L 20 10 L 0 10 L 0 0 Z"))
+        # The plate's outline: its four corners, one closed loop, whichever corner it starts at.
+        [outline] = re.findall(r'<path d="([^"]+)"[^>]*stroke-width="3"', svg)
+        self.assertRegex(outline, r"^M [-\d. ]+( L [-\d. ]+){4} Z$")
+        corners = {tuple(map(float, point.split())) for point in re.findall(r"[ML] ([-\d.]+ [-\d.]+)", outline)}
+        self.assertEqual({(0.0, 0.0), (20.0, 0.0), (20.0, 10.0), (0.0, 10.0)}, corners)
         self.assertNotIn(" C ", svg, "the focused plate has no curve; the pin was cut too")
 
 

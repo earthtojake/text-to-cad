@@ -1,23 +1,30 @@
 """``cadgen step snapshot --mode section``: the exact cut, as a 2D drawing.
 
-Each placed occurrence's component is cut by the requested plane in its own
-coordinates (``cadgen.store.sections``: an OCCT section of the exact BREP, a
-build-pool job, cached by component and plane). This module places those loops
+Each placed occurrence whose box reaches the requested plane has its component
+cut by it in its own coordinates (``cadgen.store.sections``: an OCCT section of
+the exact BREP, a build-pool job, cached by component and plane); one whose box
+is clear of the plane is never cut. This module places those loops
 in the world, projects them onto the plane and emits ONE drawing payload -- the
 same shape ``cadgen.drawing_payload`` gives a DXF, which the snapshot page paints
 with the viewer's own 2D painter (``@text-to-cad/core/lib/drawing2d``) -- plus
 the SVG of that payload, which is written here and never touches a browser.
 
 Coordinates are the plane's own, y up: ``XY`` draws (X, Y), ``XZ`` draws
-(X, Z), ``YZ`` draws (Y, Z), in model units. A circle the plane cuts is drawn
-as cubic Beziers of its exact centre and radius (four to a full turn), lines as
+(X, Z), ``YZ`` draws (Y, Z), in model units, measured from the drawing's
+``origin`` (:func:`drawing_origin`): the model origin unless the cut lies far
+from it, where a round point beside the cut keeps every coordinate small
+enough for a renderer's 32-bit floats. A circle the plane cuts is drawn as
+cubic Beziers of its exact centre and radius (four to a full turn), lines as
 lines, and any other curve as the polyline its cut was sampled to.
 
-What is drawn, in order: each occurrence's closed loops filled (even-odd, so a
-hole is a hole), hatched at 45 degrees, red dash-dot centre lines through the
-cut's box, and every loop's outline. The hatch pitch and the dash lengths are
-stated in output pixels and converted with the scale the page will fit the
-drawing at, so they look the same at every model size.
+What is drawn, in order: each occurrence's solid material filled (its
+``filled`` loops, even-odd, so a hole is a hole), hatched at 45 degrees, red
+dash-dot centre lines through the cut's box, and every loop's outline -- a
+sheet's cut curves too, which bound no material and are never filled. The
+hatch pitch and the dash lengths are stated in output pixels and converted with
+the scale the page will fit the drawing at, so they look the same at every
+model size. What the picture says in numbers -- the plane's label, the
+locator -- is in model coordinates, and the SVG names its origin.
 """
 
 from __future__ import annotations
@@ -27,7 +34,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-__all__ = ["SECTION_FRAMES", "SectionDrawing", "locator_fraction", "section_drawing"]
+__all__ = ["SECTION_FRAMES", "SectionDrawing", "drawing_origin", "locator_fraction", "section_drawing"]
 
 # Each plane: its normal (the axis the offset moves along), and the two axes it
 # draws as x and y. The plane is named by the two axes it contains.
@@ -59,11 +66,16 @@ _ARC_SAMPLE_RADIANS = math.radians(2.0)
 
 @dataclass
 class SectionDrawing:
-    """One job's section: the drawing payload, its SVG, and what the picture says about it."""
+    """One job's section: the drawing payload, its SVG, and what the picture says about it.
+
+    ``origin`` is the model point, in the plane's own (x, y), that the payload's
+    and the SVG's (0, 0) stands for.
+    """
 
     payload: dict
     svg: str
     label: str
+    origin: tuple[float, float] = (0.0, 0.0)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -166,6 +178,14 @@ class _Loop:
     commands: list  # path commands, unrounded
     polyline: list  # sampled points, for the hatch
     closed: bool
+    filled: bool  # bounds a solid's material: filled and hatched
+
+    def shifted(self, origin) -> "_Loop":
+        """This loop measured from ``origin`` instead of the plane's own (0, 0)."""
+        ox, oy = origin
+        commands = [[command[0], *(value - (ox if index % 2 == 0 else oy) for index, value in enumerate(command[1:]))]
+                    for command in self.commands]
+        return _Loop(commands, [(x - ox, y - oy) for x, y in self.polyline], self.closed, self.filled)
 
 
 def _loop_2d(placement: _Placement, loop: Mapping[str, Any]) -> _Loop:
@@ -209,20 +229,20 @@ def _loop_2d(placement: _Placement, loop: Mapping[str, Any]) -> _Loop:
     closed = bool(loop.get("closed"))
     if closed and commands:
         commands.append(["Z"])
-    return _Loop(commands, polyline, closed)
+    return _Loop(commands, polyline, closed, closed and bool(loop.get("filled")))
 
 
 def _hatch(loops: Sequence[_Loop], pitch: float) -> list[list[float]]:
     """45-degree hatch segments inside ``loops`` (even-odd), ``pitch`` model units apart.
 
     A scanline in the hatch's own frame: ``a`` runs along a hatch line (+x+y),
-    ``b`` across them. Every edge of every closed loop's polyline is crossed with
+    ``b`` across them. Every edge of every filled loop's polyline is crossed with
     each line ``b = k * pitch``; the crossings, sorted along the line, pair into
     the inside spans.
     """
     import numpy as np
 
-    rings = [np.asarray(loop.polyline, dtype=float) for loop in loops if loop.closed and len(loop.polyline) >= 3]
+    rings = [np.asarray(loop.polyline, dtype=float) for loop in loops if loop.filled and len(loop.polyline) >= 3]
     if not rings or not pitch > 0:
         return []
     root = math.sqrt(0.5)
@@ -304,11 +324,48 @@ def _frame_scale(span_x: float, span_y: float, size: tuple[int, int]) -> float:
     )
 
 
+def drawing_origin(min_x: float, min_y: float, max_x: float, max_y: float) -> tuple[float, float]:
+    """The model point a cut with this box is drawn about: the drawing's (0, 0).
+
+    Renderers hold a coordinate as a 32-bit float (Skia's paths, a browser's
+    SVG), whose 24 bits are spent on its distance from (0, 0): drawn in model
+    coordinates, a 10 mm cut a kilometre out snaps to 1/16 mm steps -- a jagged
+    hole -- and the strokes over it are lost. So the drawing is measured from
+    the cut's centre rounded to a multiple of ``step``, the smallest power of
+    ten at least a hundred times the cut's size. That is the model origin
+    whenever the cut lies within fifty of its own sizes of it, so the usual
+    drawing is in model coordinates outright; elsewhere it is a round number,
+    and no coordinate is more than about 500 of the cut's sizes from zero,
+    which a 32-bit float still holds to a few hundred-thousandths of the cut.
+    """
+    span = max(max_x - min_x, max_y - min_y, MIN_FRAMED_SPAN)
+    step = 10.0 ** math.ceil(math.log10(100.0 * span))
+    return (round((min_x + max_x) / 2 / step) * step + 0.0, round((min_y + max_y) / 2 / step) * step + 0.0)
+
+
 def _units(descriptor: Mapping[str, Any]) -> dict:
     units = str(descriptor.get("units") or "mm")
     if units == "mm":
         return {"insunits": 4, "name": "Millimeters", "toMillimetres": 1.0}
     return {"insunits": 0, "name": units, "toMillimetres": None}
+
+
+def _reaches(row: Mapping[str, Any], axis: int, offset: float) -> bool:
+    """Whether the plane ``axis == offset`` can meet the occurrence: its placed box reaches it.
+
+    The box is the component's exact one placed by the occurrence (every corner
+    transformed), so it holds the whole part, and a part it shows clear of the
+    plane is never cut: on a big assembly most parts are, and cutting them was
+    most of a section's time. A part whose face lies in the plane is on the
+    box's edge and still cut; a hair of slack absorbs the placement's rounding.
+    An occurrence with no box is cut.
+    """
+    box = row.get("bbox")
+    if not isinstance(box, Mapping):
+        return True
+    low, high = float(box["min"][axis]), float(box["max"][axis])
+    slack = 1e-6 * max(1.0, abs(low), abs(high), math.dist(box["min"], box["max"]))
+    return low - slack <= offset <= high + slack
 
 
 def _plane_label(plane: str, offset: float) -> str:
@@ -339,9 +396,10 @@ def section_drawing(
 
     placed = []  # (row, matrix, key)
     items: dict[str, dict] = {}
+    axis = "XYZ".index(frame[3])
     for row in rows:
         component = components.get(str(row.get("component") or ""))
-        if not isinstance(component, Mapping):
+        if not isinstance(component, Mapping) or not _reaches(row, axis, float(offset)):
             continue
         matrix = list(row["transform"])
         local_normal, local_offset = occurrence_plane(matrix, normal, float(offset))
@@ -382,11 +440,13 @@ def section_drawing(
         "primitives": [],
     }
     if not points:
-        warnings.append(f"SECTION {label} does not intersect the model; the section is empty")
-        return SectionDrawing(payload, _svg(payload, size), label, warnings)
+        warnings.append(f"SECTION {label} cuts no material; the section is empty")
+        return SectionDrawing(payload, _svg(payload, size), label, warnings=warnings)
 
     xs, ys = [x for x, _ in points], [y for _, y in points]
-    min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
+    origin = drawing_origin(min(xs), min(ys), max(xs), max(ys))
+    shapes = [[loop.shifted(origin) for loop in loops] for loops in shapes]
+    min_x, max_x, min_y, max_y = min(xs) - origin[0], max(xs) - origin[0], min(ys) - origin[1], max(ys) - origin[1]
     scale = _frame_scale(max_x - min_x, max_y - min_y, size)
     # The page fits the payload's bounds inside its own gutter. Bounds padded out
     # to exactly the area that gutter leaves land the cut at the scale above,
@@ -404,10 +464,10 @@ def section_drawing(
         layer_counts[primitive["layer"]] = layer_counts.get(primitive["layer"], 0) + 1
 
     for loops in shapes:
-        closed = [loop for loop in loops if loop.closed]
-        if closed:
+        filled = [loop for loop in loops if loop.filled]
+        if filled:
             add({"type": "filled-paths", "layer": "section-fill", "color": FILL_COLOR, "opacity": FILL_OPACITY,
-                 "geometry": [_rounded_commands(loop.commands) for loop in closed]})
+                 "geometry": [_rounded_commands(loop.commands) for loop in filled]})
     hatch = [segment for loops in shapes for segment in _hatch(loops, HATCH_PITCH_PX * math.sqrt(0.5) * pixel)]
     if hatch:
         add({"type": "lines", "layer": "section-hatch", "color": HATCH_COLOR, "opacity": HATCH_OPACITY,
@@ -427,7 +487,7 @@ def section_drawing(
                          _number(centre[0] + half_w), _number(centre[1] + half_h)]
     payload["layers"] = [{"name": name, "color": None, "count": count} for name, count in layer_counts.items()]
     payload["primitives"] = primitives
-    return SectionDrawing(payload, _svg(payload, size), label, warnings)
+    return SectionDrawing(payload, _svg(payload, size, origin), label, origin, warnings)
 
 
 def locator_fraction(rows: Sequence[Mapping[str, Any]], plane: str, offset: float) -> float:
@@ -468,16 +528,18 @@ def _svg_style(primitive, *, fill: bool) -> str:
     return style + (f' stroke-opacity="{_svg_number(opacity)}"' if opacity is not None else "")
 
 
-def _svg(payload: Mapping[str, Any], size: tuple[int, int]) -> str:
+def _svg(payload: Mapping[str, Any], size: tuple[int, int], origin: tuple[float, float] = (0.0, 0.0)) -> str:
     """The payload as a standalone SVG, y up as drawn, strokes in screen pixels.
 
     The default pen (``color: null``) is ``currentColor``: black on its own, and
-    whatever colour a page that embeds it sets.
+    whatever colour a page that embeds it sets. ``data-origin`` on the root is
+    the model point (the plane's own x and y) its (0, 0) stands for.
     """
     bounds = payload.get("bounds")
     head = f'<svg xmlns="http://www.w3.org/2000/svg" width="{size[0]}" height="{size[1]}"'
     if not bounds:
         return head + "/>"
+    head += f' data-origin="{_svg_number(origin[0])} {_svg_number(origin[1])}"'
     min_x, min_y, max_x, max_y = bounds
     view_box = " ".join(_svg_number(value) for value in (min_x, -max_y, max_x - min_x, max_y - min_y))
     body = []

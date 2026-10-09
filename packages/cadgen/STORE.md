@@ -157,9 +157,9 @@ same for a document's bending tubes as a CAD view plays them
 (`_internal/tube_skin_payload.py`): its key hashes the payload's scheme, the
 document's content hash, the digest of the sidecar animation that bends them and
 the mesh entries they bind, so an edited clip, a new mesher or a new binding rule
-lands on a new key. `index/section` is one component's exact section (`store/sections.py`): an
-OCCT cut of its BREP by a plane in its own coordinates, made by a build-pool
-`sections` job. Its key hashes the section scheme, the BREP's codec and object
+lands on a new key. `index/section` is one component's exact section (`store/sections.py`): the
+material a plane cuts from its BREP's solids (and the curves it cuts from its
+sheets), in its own coordinates, made by a build-pool `sections` job. Its key hashes the section scheme, the BREP's codec and object
 hash, and the plane (unit normal and offset, rounded before they key or cut
 anything), so every occurrence a plane meets the same way shares one entry,
 and a new scheme lands on new keys. `index/document` is the document lookup: `sha256(file bytes)` → the

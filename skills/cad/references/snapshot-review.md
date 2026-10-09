@@ -207,16 +207,20 @@ cadgen step snapshot STEP/housing.step tmp/cut.svg --mode section --section YZ
 Y for `XZ`, X for `YZ`) and defaults to 0, so `XZ:12.5` cuts at Y = 12.5. In a job
 it is `"section": {"plane": "XZ", "offset": 12.5}` beside `"mode": "section"`;
 those are its only two keys, and a `section` on a job whose mode is not `section`
-is refused. A plane that misses the model renders an empty drawing with a
-warning that says so. Section mode is STEP-only, and takes no kinematics,
-animation or Render display.
+is refused. A plane that cuts no material — it misses the model, only touches
+it, or meets nothing but curves — renders an empty drawing with a warning that
+says so. Section mode is STEP-only, and takes no kinematics, animation or Render
+display.
 
 The cut is exact: cadgen sections each part's solid with the plane, so a bore
 cut across its axis is a true circle, not a polygon. `--focus` and `--hide` pick
-the parts that are cut. Each part's cut is filled and hatched, outlined in the
-appearance's foreground (or `display.edges.color`), with dash-dot centre lines
-and a cut locator; `--view-labels` adds the plane's label. A `.svg` is the same
-drawing, y up, and a job whose outputs are all `.svg` needs no browser.
+the parts that are cut. Each solid's cut is filled and hatched (a face lying in
+the plane counts), outlined in the appearance's foreground (or
+`display.edges.color`), with dash-dot centre lines and a cut locator;
+`--view-labels` adds the plane's label. A surface (sheet) body's cut is drawn as
+lines and never filled. A `.svg` is the same drawing, y up, in model units
+measured from the point its root's `data-origin` names: `0 0`, unless the cut
+lies far from the origin. A job whose outputs are all `.svg` needs no browser.
 
 `--mode list` writes no image: it prints one row per placed part — its `ref`
 (what `--focus`, `--hide` and `scene.resolve(ref)` accept), its `name`, its exact
