@@ -1,6 +1,6 @@
 import { clamp } from "@text-to-cad/core/common/numbers.js";
 import { Slider } from "@text-to-cad/ui/primitives/slider";
-import { FileSheetFieldGrid, FileSheetSelectRow, FileSheetSliderField, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
+import { FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetFieldGrid, FileSheetSelectRow, FileSheetSliderField, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
 import { deformationRange, formatValue } from "./feaResult.js";
 
 /**
@@ -34,6 +34,7 @@ function FeaAnalysisControls({ result, field, scale, onFieldChange, onScaleChang
         valueInputProps={{ ariaLabel: "Deformation scale value" }}
       >
         <Slider
+          className={FILE_SHEET_PRECISION_SLIDER_CLASSES}
           value={[scale]}
           min={range.min}
           max={range.max}

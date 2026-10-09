@@ -300,3 +300,20 @@ it('moves a ring when the Display scale changes on a result that displaces', () 
   // At none it is where the part was solved: 0.02 m across, 160px.
   expect(paint()).toBe(560);
 });
+
+it('lays the deformation slider out as Display\'s other sliders are: under its label, never on its row', () => {
+  mount(RESULT);
+  openDisplay();
+  const label = screen.getByText('Deformation');
+  const thumb = screen.getByRole('slider', { name: 'Deformation scale' });
+  const slider = thumb.closest('[data-slot="slider"]')!;
+  const column = label.closest('[data-position-control] > div')!;
+  // Same silhouette as FileSheetSliderField's other uses: label and slider are separate blocks in one column ...
+  expect(slider.contains(label) || label.contains(slider)).toBe(false);
+  expect(column.contains(slider)).toBe(true);
+  expect(label.parentElement).toBe(column);
+  expect(slider.parentElement!.parentElement).toBe(column);
+  expect(slider.parentElement!.previousElementSibling).toBe(label);
+  // ... and the slider carries the precision-slider height (h-4), so it is no taller than the gap pulled up under the label.
+  expect(slider.classList.contains('h-4')).toBe(true);
+});
