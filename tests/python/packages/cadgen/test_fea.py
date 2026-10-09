@@ -17,7 +17,7 @@ import math
 import os
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path
@@ -697,8 +697,8 @@ class SmallFeatures(unittest.TestCase):
         cls._tmp.cleanup()
 
     def test_a_fillet_does_not_multiply_the_mesh(self):
-        # netgen's own defaults made 187k tets of this 60 x 40 x 10 plate at 15 mm.
-        self.assertLess(len(self.rounded.tets), 60_000)
+        # netgen's own defaults made 187k tets of this 60 x 40 x 10 plate at 15 mm; _MESHING makes about 64k.
+        self.assertLess(len(self.rounded.tets), 90_000)
 
     def test_the_feature_size_is_reported_only_when_it_sets_the_mesh(self):
         from cadgen._internal.fea.mesh import small_feature_mm
@@ -707,6 +707,110 @@ class SmallFeatures(unittest.TestCase):
         size = small_feature_mm(self.rounded)
         self.assertIsNotNone(size)
         self.assertLess(size, 1.0)
+
+
+def _vtu_von_mises(path: Path) -> "tuple[np.ndarray, np.ndarray]":
+    """The VTU's corner-node positions (N, 3) and von Mises (N,)."""
+    import numpy as np
+
+    vtu = path.read_text(encoding="utf-8")
+
+    def block(marker: str) -> np.ndarray:
+        start = vtu.index(">", vtu.index(marker) + len(marker)) + 1
+        return np.array(vtu[start:vtu.index("</DataArray>", start)].split(), dtype=float)
+
+    return block("<Points><DataArray").reshape(-1, 3), block('Name="von_mises"')
+
+
+@unittest.skipUnless(HAVE_FEA, "cadgen[fea] is not installed")
+class DefaultSizeAccuracy(unittest.TestCase):
+    """Round and holed parts at the default element size, against closed forms, within 10%.
+
+    The mesher is told how finely to follow curvature (``_MESHING``); too
+    coarse a setting facets a slender rod or a small hole with elements the
+    size of its radius. These two cases are where that shows: a rod whose
+    default element size is close to its radius, and a hole a tenth of the
+    plate's width.
+    """
+
+    # The rod: 6 mm round steel, 100 mm long, fixed at x = 0, 10 N down at x = L.
+    ROD_LENGTH, ROD_RADIUS, ROD_FORCE = 100.0, 3.0, 10.0
+    # The plate: 120 x 40 x 5 mm steel with a 4 mm hole at its centre, 2 kN along +X.
+    PLATE_LENGTH, PLATE_WIDTH, PLATE_THICKNESS, HOLE, PULL = 120.0, 40.0, 5.0, 4.0, 2000.0
+
+    @classmethod
+    def setUpClass(cls):
+        from build123d import Align, Box, Cylinder, Pos, Rot, export_step
+
+        from cadgen import fea
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(cls._tmp.name)
+
+        def ends(step: Path) -> tuple[str, str]:
+            planes = [f for f in fea.faces(step).faces if f.surface == "plane" and f.normal and abs(abs(f.normal[0]) - 1) < 1e-6]
+            return min(planes, key=lambda f: f.center_mm[0]).ref, max(planes, key=lambda f: f.center_mm[0]).ref
+
+        rod = tmp / "rod.step"
+        export_step(Rot(0, 90, 0) * Cylinder(cls.ROD_RADIUS, cls.ROD_LENGTH, align=(Align.CENTER, Align.CENTER, Align.MIN)), str(rod))
+        fixed, loaded = ends(rod)
+        with redirect_stderr(io.StringIO()):
+            cls.rod = fea.solve(rod, tmp / "rod.glb", vtu=True, study={
+                "material": "steel",
+                "fixtures": [{"faces": [fixed]}],
+                "loads": [{"faces": [loaded], "type": "force", "vector_N": [0, 0, -cls.ROD_FORCE]}],
+            })
+
+        plate = tmp / "plate.step"
+        body = Box(cls.PLATE_LENGTH, cls.PLATE_WIDTH, cls.PLATE_THICKNESS, align=(Align.MIN, Align.CENTER, Align.CENTER))
+        export_step(body - Pos(cls.PLATE_LENGTH / 2, 0, 0) * Cylinder(cls.HOLE / 2, 2 * cls.PLATE_THICKNESS), str(plate))
+        fixed, loaded = ends(plate)
+        with redirect_stderr(io.StringIO()):
+            cls.plate = fea.solve(plate, tmp / "plate.glb", study={
+                "material": "steel",
+                "fixtures": [{"faces": [fixed]}],
+                "loads": [{"faces": [loaded], "type": "force", "vector_N": [cls.PULL, 0, 0]}],
+            })
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_the_rod_is_meshed_at_the_default_size(self):
+        self.assertIsNone(json.loads(self.rod.sidecar.read_text(encoding="utf-8"))["refined"])
+        self.assertGreater(self.rod.mesh["size_mm"], 0.8 * self.ROD_RADIUS)
+
+    def test_the_round_rods_tip_deflection_matches_beam_theory(self):
+        inertia = math.pi * self.ROD_RADIUS ** 4 / 4
+        expected = self.ROD_FORCE * self.ROD_LENGTH ** 3 / (3 * STEEL.E * inertia)
+        self.assertAlmostEqual(self.rod.summary["max_displacement_mm"] / expected, 1.0, delta=0.10)
+
+    def test_the_round_rods_top_fibre_stress_matches_my_over_i(self):
+        # Not the peak: that sits on the clamped edge, a singularity that grows
+        # with every refinement. A quarter along (four diameters from the
+        # clamp, past its reach) the top fibre carries the beam's own M y / I,
+        # compared node by node with the moment and height at each node.
+        import numpy as np
+
+        xyz, von_mises = _vtu_von_mises(self.rod.vtu)
+        size = self.rod.mesh["size_mm"]
+        x, y, z = xyz.T
+        top = (np.abs(x - self.ROD_LENGTH / 4) < size) & (z > 0.7 * self.ROD_RADIUS) & (np.hypot(y, z) > self.ROD_RADIUS - 1e-3)
+        self.assertGreaterEqual(top.sum(), 3)
+        inertia = math.pi * self.ROD_RADIUS ** 4 / 4
+        beam = self.ROD_FORCE * (self.ROD_LENGTH - x[top]) * z[top] / inertia
+        self.assertAlmostEqual(float(np.mean(von_mises[top] / beam)), 1.0, delta=0.10)
+
+    def test_the_holes_peak_matches_petersons_kt(self):
+        # Peterson's finite-width Kt (Howland's values, net section) for a
+        # central hole in tension; the peak is the nodal one the run reports,
+        # and it must sit on the hole's wall, not at the clamp.
+        ratio = self.HOLE / self.PLATE_WIDTH
+        kt = 3.0 - 3.14 * ratio + 3.667 * ratio ** 2 - 1.527 * ratio ** 3
+        net = self.PULL / ((self.PLATE_WIDTH - self.HOLE) * self.PLATE_THICKNESS)
+        x, y, _ = self.plate.summary["max_von_mises_at_mm"]
+        self.assertAlmostEqual(math.hypot(x - self.PLATE_LENGTH / 2, y), self.HOLE / 2, delta=0.05)
+        self.assertAlmostEqual(self.plate.summary["max_von_mises_MPa"] / (kt * net), 1.0, delta=0.10)
 
 
 @unittest.skipUnless(HAVE_FEA, "cadgen[fea] is not installed")

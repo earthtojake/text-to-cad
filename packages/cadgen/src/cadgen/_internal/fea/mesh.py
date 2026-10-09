@@ -98,12 +98,13 @@ class VolumeMesh:
     fuzzy_mm: float = 0.0
 
 
-# netgen's defaults refine to a fillet's or chamfer's own size, however large the
-# element size asked for: the 4-part rover cut came to 155k tets at any
-# ``mesh.size_mm``. Under a safety of 1 each radius of curvature holds about one
-# element and grading 0.5 lets the size grow faster away from small features,
-# so the element size set by the study decides the mesh, not a 0.4 mm fillet.
-_MESHING = {"curvaturesafety": 1.0, "grading": 0.5}
+# netgen's defaults (curvature safety 2, grading 0.3) refine to a fillet's or
+# chamfer's own size, however large the element size asked for: the 4-part rover
+# cut came to 155k tets at any ``mesh.size_mm``. Grading 0.5 lets the size grow
+# faster away from small features, and a curvature safety of 1.5 keeps elements
+# under about a radius: 1 put one element across a 6 mm rod's radius at the
+# default size and read its bending stress 20% high (test_fea.DefaultSizeAccuracy).
+_MESHING = {"curvaturesafety": 1.5, "grading": 0.5}
 
 
 def default_mesh_size(bbox_diagonal: float) -> float:
