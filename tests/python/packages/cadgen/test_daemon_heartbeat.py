@@ -10,6 +10,7 @@ and ordinary frames arrive exactly as before, with no heartbeat relayed or left 
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess
@@ -67,6 +68,8 @@ _TOOL = textwrap.dedent('''
             _hold_gil_busy(float(rest[0]))
         elif verb == "stop":
             os.kill(os.getpid(), signal.SIGSTOP)
+        elif verb == "prefix":
+            print(sys.prefix, flush=True)
         print("body done", flush=True)
         return 0
 ''')
@@ -95,9 +98,13 @@ class _WorkerCase(unittest.TestCase):
                 return original_popen([*argv[:-2], "-c", prelude], **kwargs)
             return original_popen(argv, **kwargs)
 
-        with mock.patch.object(pool_mod.subprocess, "Popen", start):
+        with mock.patch.object(pool_mod.subprocess, "Popen", start), self.interpreter():
             self.worker = pool_mod.Worker()
         self.addCleanup(self.worker.kill)
+
+    def interpreter(self):
+        """The Python the daemon runs as, while its worker starts: this one."""
+        return contextlib.nullcontext()
 
     def run_job(self, *argv: str) -> list[dict]:
         self.worker.send({
@@ -128,6 +135,46 @@ class SilenceIsNotBusy(_WorkerCase):
         # worker's CPU clock is what kept it.
         self.assertTrue(reads, "the silence window never elapsed; the busy body did not starve the heartbeat")
         self.assertTrue(all(value is not None for value in reads))
+
+
+class AVirtualEnvironmentsWorker(_WorkerCase):
+    """A daemon running in a virtual environment, as ``uvx`` runs cadgen. On Windows the
+    environment's ``python.exe`` is a launcher that runs the base interpreter as its child:
+    a worker started through it was two processes, and the CPU clock the silence watch read
+    was the launcher's, which never moves, so a long native call was killed as a hang."""
+
+    def interpreter(self):
+        environment = self.root / "env"
+        subprocess.run([sys.executable, "-m", "venv", "--system-site-packages", "--without-pip", str(environment)],
+                       check=True, capture_output=True)
+        self.environment = environment
+        python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        stack = contextlib.ExitStack()
+        # What a daemon in that environment sees: its launcher, and the interpreter behind it.
+        stack.enter_context(mock.patch.object(sys, "executable", str(python)))
+        stack.enter_context(mock.patch.object(sys, "_base_executable", getattr(sys, "_base_executable", sys.executable),
+                                              create=True))
+        return stack
+
+    def test_the_worker_is_the_interpreter_and_runs_in_the_environment(self):
+        self.assertEqual(self.worker.proc.pid, self.worker.pid)
+        frames = self.run_job("prefix")
+        self.assertEqual(frames[-1]["exit"], 0)
+        printed = "".join(frame.get("data", "") for frame in frames if frame.get("stream") == "stdout")
+        self.assertEqual(os.path.normcase(printed.splitlines()[0]), os.path.normcase(str(self.environment)))
+
+    def test_a_native_call_holding_the_gil_while_computing_survives_on_its_cpu_clock(self):
+        reads: list[float | None] = []
+        real = pool_mod.process_cpu_seconds
+
+        def spy(pid):
+            reads.append(real(pid))
+            return reads[-1]
+
+        with mock.patch.object(pool_mod, "process_cpu_seconds", spy):
+            frames = self.run_job("gil-busy", str(SILENCE * 3))
+        self.assertEqual(frames[-1]["exit"], 0)
+        self.assertTrue(reads, "the silence window never elapsed; the busy body did not starve the heartbeat")
 
 
 class WedgedIsStillKilled(_WorkerCase):

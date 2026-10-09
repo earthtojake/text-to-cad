@@ -1342,6 +1342,21 @@ burst of starts, spreads over minutes, so it is waited for while its CPU clock
 moves and killed only after 120 s with neither its announcement nor CPU
 progress. Meanwhile the job it is for is listed `queued`, detail `Starting a
 geometry kernel`: nothing the job runs can say so before its worker exists.
+The clock read is the worker's own, which is why a worker is its interpreter
+itself: on Windows a virtual environment's `python.exe` is a launcher that runs
+the base interpreter as a child, so the daemon starts that base interpreter
+directly and names the environment to it as the launcher does
+(`__PYVENV_LAUNCHER__`, as `multiprocessing` does). Through the launcher, the
+clock read was the launcher's, which never moves, and every long native call
+was killed as a hang.
+
+**A worker that dies is a crash, with its exit status** -- a signal on POSIX,
+on Windows the exception code a fault ended it with (`0xC0000005`) -- unless
+whoever asked left (the job is cancelled), someone signalled it to stop, or the
+daemon's own installation was removed under it (a package manager replacing the
+environment): then no worker can start, and the daemon retires as one with a
+changed version token does, so its clients start the next from their own
+installation.
 
 **One daemon per address, by lock.** The daemon takes an exclusive lock keyed
 by its socket address (`cadgen.daemon.transport.SingletonLock`: `flock` on
