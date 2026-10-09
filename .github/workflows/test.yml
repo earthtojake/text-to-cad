@@ -216,8 +216,8 @@ jobs:
         shell: bash
 
   # The stress solver needs the optional cadgen[fea] stack (netgen, scikit-fem, pyamg), which
-  # no other job installs: without it test_fea.py skips its solves. Linux only: the stack is
-  # the same wheels everywhere, and the solves are CPU-bound.
+  # no other job installs: without it test_fea.py and test_fea_assembly.py skip their solves.
+  # Linux only: the stack is the same wheels everywhere, and the solves are CPU-bound.
   fea:
     name: fea
     needs: changes
@@ -241,7 +241,7 @@ jobs:
         run: python -m pip install --editable "./packages/cadgen[fea]"
 
       - name: Run the fea tests
-        run: scripts/test/test-python.sh --select cadgen --print-weights tests/python/packages/cadgen/test_fea.py
+        run: scripts/test/test-python.sh --select cadgen --print-weights tests/python/packages/cadgen/test_fea.py tests/python/packages/cadgen/test_fea_assembly.py
 
   core-js:
     name: core-js
