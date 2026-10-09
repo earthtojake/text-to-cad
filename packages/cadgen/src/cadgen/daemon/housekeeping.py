@@ -8,10 +8,12 @@ for ``QUIET_SECONDS``, one look -- a stat walk that keeps nothing per file:
    full pass with the cap (retire, evict, sweep). ``band`` is the fifth of the
    cap between the cap and its low watermark.
 2. **Otherwise, a retired index kind** (``index/op``), **or a store holding
-   surfaces or meshes that no pass under these versions has looked at for a
-   day**: a pass that retires the retired and the week-old obsolete entries
-   and sweeps only the objects they named. Obsolete entries -- the surfaces
-   and meshes an older extractor or mesher of cadgen's wrote -- cannot be told
+   surfaces, meshes, records or document entries that no pass under these
+   versions has looked at for a day**: a pass that retires the retired and the
+   week-old obsolete entries -- the records and document entries at keys this
+   cadgen does not own among them -- and sweeps only the objects the retired
+   and obsolete derived entries named. Obsolete entries -- the surfaces and
+   meshes an older extractor or mesher of cadgen's wrote -- cannot be told
    from a stat walk, so the daemon notes when its last retiring pass ran, per
    store and per the versions it ran under (``gc.producer_versions``), in a
    file of their own: a daemon of another release sharing the store keeps a
@@ -160,8 +162,10 @@ class Housekeeper:
             self._note_retired(root, versions)
             return _summary(report)
         # A full pass retires obsolete entries too; without one, a store that holds
-        # surfaces or meshes earns a pass when none under these versions ran today.
-        obsolete = (any((resolved / "index" / kind).is_dir() for kind in ("surface", "selector", "mesh"))
+        # surfaces, meshes, records or documents earns a pass when none under these
+        # versions ran today.
+        obsolete = (any((resolved / "index" / kind).is_dir()
+                        for kind in ("surface", "selector", "mesh", "model", "document"))
                     and self._retire_due(root, versions))
         retired = found.retired and self._clock() - self._retired_at.get(root, float("-inf")) >= DEFAULT_GRACE_SECONDS
         if obsolete or retired:

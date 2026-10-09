@@ -46,7 +46,7 @@ One word per concept; the code uses these words and no others.
 | **stale / current**, **gate** | the freshness state and the check that decides it |
 | **claim** | what a write does to an object it finds already present: its mtime becomes now, less two ticks of its clock, so the sweeper's grace window covers it and the claiming process keeps what it verified of it (§8) |
 | **evict** | drop a derived entry to keep the store under its cap; only the derived kinds are ever evicted (§8) |
-| **obsolete** | a surface, selector-table or mesh entry an older extractor, table scheme or mesher of cadgen's wrote: no reader of this cadgen asks for it again, and the sweeper retires it once it is a week old (§2, §8) |
+| **obsolete** | a surface, selector-table or mesh entry an older extractor, table scheme or mesher of cadgen's wrote, or a record or document entry at a key this cadgen does not own (another schema version's): no reader of this cadgen asks for it again, and the sweeper retires it once it is a week old (§2, §8) |
 | **worker / spare / extra**, **job** | daemon vocabulary (the daemon's own documentation) |
 
 Retired words: node, package, manifest, ref (as a store concept), scope, blob.
@@ -64,8 +64,8 @@ One word is NOT retired, and it has exactly one meaning:
 ```
 ~/.cache/cadgen/                      (CADGEN_CACHE_DIR overrides; else the platform cache dir)
   objects/ab/cdef…                    immutable, content-addressed, sharded like git
-  index/document/<sha256(file bytes)> ARTIFACT side: {schemaVersion, tree, kind, surfaceProducer?, meshes?} for a file's bytes
-  index/model/<sha256(script::function)>  records (input-addressed, mutable, atomic)
+  index/document/<sha256(file bytes)>-v<schema>  ARTIFACT side: {schemaVersion, tree, kind, surfaceProducer?, meshes?} for a file's bytes
+  index/model/<sha256(script::function)>-v<schema>  records (input-addressed, mutable, atomic)
   index/output/<sha256(output path)>  {model}: which script wrote the file at this path
   index/component/<cid>               geometry-input entries → encoded BREP and intrinsic recipe
   index/surface/<surfaceInput>        attested extraction inputs → SURF object hash
@@ -102,7 +102,20 @@ sweeper retires an obsolete entry, with every object only it named, once it
 was last written a week ago (`gc.OBSOLETE_RETIRE_AFTER_SECONDS`), and an
 obsolete surface with its meshes and table, once the youngest is (§8): an older cadgen
 still in use derives each again at most once a week, and an upgrade's
-leftovers go within about a week. A newer cadgen's entry is never obsolete.
+leftovers go within about a week. A newer cadgen's derived entry is never obsolete.
+
+Records and document entries carry their schema version in their key,
+`<key>-v<schema>` (`index.versioned_key`; `RECORD_SCHEMA_VERSION` and
+`DOCUMENT_SCHEMA_VERSION` in `store/records.py`). A cadgen reads and writes only
+the keys of its own versions (`gc.owned_key`): two cadgens of different schemas
+sharing a store -- a plugin pinned to one release, a checkout on the next --
+each compile a document and build a model once and then find their own entry,
+and neither rewrites the other's (and with it its mesh ledger). A format change
+bumps the version and so lands on new keys; nothing reads, recognises or
+migrates another version's entry. Any key this cadgen does not own --
+another schema version's, or the unversioned key a cadgen before this rule
+wrote -- is obsolete here, retired a week after its last write like the others
+(§8), and until then the trees it names stay reachable.
 Kernel versions are not ordered here: an entry of another build123d or OCP is
 left to the cap.
 
@@ -162,8 +175,8 @@ material a plane cuts from its BREP's solids (and the curves it cuts from its
 sheets), in its own coordinates, made by a build-pool `sections` job. Its key hashes the section scheme, the BREP's codec and object
 hash, and the plane (unit normal and offset, rounded before they key or cut
 anything), so every occurrence a plane meets the same way shares one entry,
-and a new scheme lands on new keys. `index/document` is the document lookup: `sha256(file bytes)` → the
-tree describing those bytes (plus a mesh ledger keyed by format × tolerances
+and a new scheme lands on new keys. `index/document` is the document lookup: `sha256(file bytes)`, under
+this cadgen's document schema (above), → the tree describing those bytes (plus a mesh ledger keyed by format × tolerances
 × pose × appearance — the bare mesh doors read and write it, and a script run notes its
 declared meshes there too, so the two front doors never redo each other's work).
 Mesh variants and model output entries also carry their format's final serializer
@@ -221,9 +234,9 @@ the store makes:
   Entries are mutable and written temp + rename.
 
 No directories per result, no hardlinks, no staging directories, no version
-salts in object addresses or document-byte keys. An input-addressed derivation
-includes its extraction algorithm/schema along with the inputs that affect its
-output; this does not change the content address of any object it produces.
+salts in object addresses. An input-addressed entry's key includes what its
+value depends on, its extraction algorithm or schema version along with its
+inputs; this does not change the content address of any object it produces.
 The `.step` document, its sidecar and declared mesh files are
 **outputs** in the project, not store contents; the record lists them with shas.
 
@@ -578,8 +591,8 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
 
 ### Record
 
-The mutable per-model entry, `index/model/<sha256(model ref)>` where the model
-ref is `<resolved script path>::<function name>` — the script and the decorated
+The mutable per-model entry, `index/model/<sha256(model ref)>-v<schema>` (the
+record schema below, §2) where the model ref is `<resolved script path>::<function name>` — the script and the decorated
 function, because a file may hold several models (each its own record, output
 and job). An imported document's record is keyed on its own path (no function).
 A real one (`link_robot`: a base, two placements of `link_arm`, one of
@@ -981,7 +994,7 @@ Each with the failure it prevents.
   after the last (`step_scene_loader._withhold_borrowed_product_names`) -- and
   otherwise the document tree names it by its id. Readers show the tree's
   names as given (`DOCUMENT_SCHEMA_VERSION` 6: a document entry from before
-  these rules is a miss, and its bytes compile again).
+  these rules is at another key, never read here, and its bytes compile again).
 - **Publish rule.** `cadgen.store.publish.decide`: a build rejects replacing a
   current record with a stale one — if the record on disk already reflects the
   closure as it is NOW and the build that finished ran against older sources,
@@ -1266,7 +1279,10 @@ kinds of thing:
    obsolete entry stays, objects and all, like a current one. An entry naming
    an object the grace window still keeps waits for the next pass, so that
    object goes with its entry rather than with the next full sweep, and an
-   entry written again since the scan stays.
+   entry written again since the scan stays. The records and document entries
+   at keys this cadgen does not own go on the same rule -- a week after their
+   last write, and not if written again since the scan; their trees' objects
+   are left to the sweep (3), which takes what nothing else reaches.
 2. **Evicted entries**, only under a cap: the derived kinds -- `mesh`,
    `surface`, `selector`, `component`, `bounds`, `drawing`, `skin`, `section`,
    `robot` -- least recently written first, until the store fits 80% of the cap. Sizes
@@ -1279,7 +1295,9 @@ kinds of thing:
    **Records, document entries and output entries are never evicted.**
 3. **Unreachable objects.** Kept: every object in the closure, through links,
    of a current-schema record's `tree` or `documentTree` or a current-schema
-   document entry's tree (the *protected* set); every object a surviving
+   document entry's tree, and of those trees of a record or document entry at
+   a key this cadgen does not own while it is younger than a week, as far as
+   this cadgen reads their format (the *protected* set); every object a surviving
    derived entry names; anything written or claimed within the grace window
    (default 1 h). Everything else goes, and so do temp files a crashed writer
    or an interrupted pass left, once past the grace window. A saved document
@@ -1340,10 +1358,14 @@ know, written within the last 30 days (`NEWER_CADGEN_SECONDS`), removes
 nothing at all and reports why (`deferred`); the newer cadgen collects the
 store. Thirty days after the newer cadgen's last write, it is taken to be
 gone, and passes resume: its records and trees are then a format nothing here
-reads, like any older cadgen's. The other way round needs only a week: a newer
+reads, like any older cadgen's, and its records and document entries, at keys
+this cadgen does not own, are retired. The other way round needs only a week: a newer
 cadgen treats an older format as garbage, which is how an upgrade frees the
 space the old one used, and an older cadgen still in use rebuilds what it
-needs -- an obsolete surface, selector-table or mesh entry at most once a week (§2). A pass
+needs -- an obsolete surface, selector-table or mesh entry, a record or a
+document entry, at most once a week (§2). Until then each version keeps its
+own record and document entry at its own key, so neither recompiles a
+document or rebuilds a model because the other one did. A pass
 never touches anything outside its own folders: object shards
 named by two hex digits, and the `index/` folders in `INDEX_KINDS` and
 `RETIRED_KINDS`. This is why a new field that names objects, in a record, a
@@ -1366,11 +1388,13 @@ with every request):
 
 - larger than `max(cap, after + cap/5)` -- `after` being where its last pass
   under that cap ended -- gets a full pass with the cap;
-- otherwise, a store holding a retired kind, or holding surfaces, selector tables or meshes that
+- otherwise, a store holding a retired kind, or holding surfaces, selector tables, meshes,
+  records or document entries that
   no retiring pass under this cadgen's versions (`gc.producer_versions`: the
   extractor's and the mesher's) has looked at for a day, gets a retiring pass,
-  which retires the retired entries and the week-old obsolete ones and sweeps
-  only the objects they named. Obsolete entries cannot be told from a stat
+  which retires the retired entries and the week-old obsolete ones -- the
+  records and document entries at keys this cadgen does not own among them --
+  and sweeps only the objects the retired and obsolete derived entries named. Obsolete entries cannot be told from a stat
   walk, so when that pass ran is noted per store and per versions, in a note of
   its own beside `after`'s: a daemon of another release sharing the store keeps
   its own and never moves this one. So a store gets one such pass after an
@@ -1862,7 +1886,7 @@ supersession does not cancel their exports.
 
 ## 10. Debugging
 
-- Which record: `index/model/<sha256(script::function)>` —
+- Which record: `index/model/<sha256(script::function)>-v<schema>` —
   `cadgen store why <model.py>` prints it (every model of the file; name one
   as `model.py::function`), the gate's verdict clause by
   clause (with each child's pinned vs current tree), the closure files (a
@@ -1921,7 +1945,7 @@ supersession does not cancel their exports.
 - **Resets, smallest first.** `python model.py --force` rebuilds one model
   now. `cadgen store forget <model.py>` drops that model's record (the next
   run rebuilds it; children untouched, parents see the moved pin then);
-  `cadgen store forget <document>` drops the `index/document` entry for the
+  `cadgen store forget <document>` drops this cadgen's `index/document` entry for the
   file's bytes and the record that wrote it, so the next open or door call
   compiles it again. `forget` never deletes objects — `cadgen store gc` does,
   for whatever no record reaches any more. Clearing the store is always safe:
@@ -1938,7 +1962,7 @@ supersession does not cancel their exports.
   the hash; entries: temp + rename).
 - Put a path, a timestamp, or anything machine-specific into an object.
 - Derive a model's dependencies from its tree's links.
-- Add a version salt to a store name, or a global schema number to component
+- Add a version salt to an object's address, or a global schema number to component
   identity (§2, geometry identity and versions).
 - Add a lock that a reader consults to decide freshness — or any build lock
   at all; the publish rule and pins are the whole concurrency story.

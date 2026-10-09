@@ -373,13 +373,14 @@ class SavedStepReadbackTest(unittest.TestCase):
         from cadgen._internal.step_scene_loader import load_step_scene
         from cadgen.store.index import remove_entry
         from cadgen.store.objects import object_path
+        from cadgen.store.records import document_key
         from cadgen.store.trees import get_tree
 
         expected = self.seed()
         component = next(iter(get_tree(expected[2]["documentTree"])["components"].values()))
         for force in (False, True):
             with self.subTest(force=force):
-                remove_entry("document", expected[3])
+                remove_entry("document", document_key(expected[3]))
                 path = object_path(component["brep"])
                 original = path.read_bytes()
                 path.write_bytes(b"corrupt component, no document index")

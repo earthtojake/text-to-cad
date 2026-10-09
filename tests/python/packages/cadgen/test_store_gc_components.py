@@ -26,13 +26,14 @@ class ComponentGcReachability(unittest.TestCase):
         from cadgen.store.gc import collect
         from cadgen.store.index import write_entry, remove_entry
         from cadgen.store.objects import has_object, put_object
+        from cadgen.store.records import document_key
         from cadgen.store.trees import get_tree
         import hashlib
         tree = self.seed()
         entry = next(iter(get_tree(tree)["components"].values()))
         cid = entry["contentHash"][:16]
         write_entry("component", cid, {"schemaVersion": 1, **entry})
-        remove_entry("document", hashlib.sha256(b"fixture document").hexdigest())
+        remove_entry("document", document_key(hashlib.sha256(b"fixture document").hexdigest()))
         remove_entry("model", next((self.store / "index/model").iterdir()).name)
         orphan = put_object(b"unreferenced")
         report = collect(grace_seconds=0)
@@ -56,7 +57,7 @@ class ComponentGcReachability(unittest.TestCase):
         from cadgen.store.gc import collect
         from cadgen.store.index import iter_entries, remove_entry
         from cadgen.store.objects import has_object, put_object
-        from cadgen.store.records import note_document_tree, note_document_mesh
+        from cadgen.store.records import document_key, note_document_tree, note_document_mesh
         from cadgen.store.trees import put_tree, tree_complete, IDENTITY_16
         child = self.seed()
         parent = put_tree({"label":"parent","units":"mm","entryKind":"assembly","components":{},"occurrences":[],
@@ -72,19 +73,7 @@ class ComponentGcReachability(unittest.TestCase):
         self.assertEqual(report.reachable, 3)
         self.assertTrue(tree_complete(parent))
         self.assertFalse(has_object(external))
-        remove_entry("document", "d" * 64)
+        remove_entry("document", document_key("d" * 64))
         self.assertEqual(collect(grace_seconds=0).removed, 3)
-
-    def test_obsolete_document_index_does_not_retain_tree(self):
-        from cadgen.store.gc import collect
-        from cadgen.store.index import iter_entries, remove_entry, write_entry
-        from cadgen.store.objects import has_object
-        from cadgen.store.records import DOCUMENT_SCHEMA_VERSION
-        tree = self.seed()
-        for kind in ("document", "model", "surface"):
-            for key, _ in list(iter_entries(kind)): remove_entry(kind, key)
-        write_entry("document", "a" * 64, {"schemaVersion": DOCUMENT_SCHEMA_VERSION - 1, "tree": tree})
-        self.assertEqual(collect(grace_seconds=0).reachable, 0)
-        self.assertFalse(has_object(tree))
 
 if __name__ == "__main__": unittest.main()

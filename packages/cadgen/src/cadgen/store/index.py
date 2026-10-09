@@ -3,7 +3,9 @@
 Every entry is a small JSON file written temp + rename. The key is what
 PRODUCED the entry (a model's script, measured bytes, a surface × tolerance),
 never the content — that is the one distinction between ``index/`` and
-``objects/``.
+``objects/``. What the entry's value depends on is in its key too, its
+format included (``versioned_key``), so two cadgens sharing a store each read
+and write their own entry.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -19,6 +22,7 @@ from cadgen.store.paths import index_dir
 
 
 MODEL_REF_SEP = "::"
+_VERSIONED_KEY = re.compile(r"[0-9a-f]{64}-v(\d+)")
 
 
 def _resolved_text(path: Path | str) -> str:
@@ -93,6 +97,19 @@ def model_key(model: Path | str) -> str:
 def path_key(path: Path | str) -> str:
     """The index key of a plain path (output entries): sha256 of the resolved path."""
     return hashlib.sha256(_resolved_text(path).encode("utf-8")).hexdigest()
+
+
+def versioned_key(key: str, version: int) -> str:
+    """``key`` under one format of its kind's entries, ``<key>-v<version>``: a
+    record's or a document entry's. A cadgen of another format reads and writes
+    its own key beside it, never this one."""
+    return f"{key}-v{version}"
+
+
+def key_version(name: str) -> int | None:
+    """The format a ``versioned_key`` names; None for a name that names none."""
+    match = _VERSIONED_KEY.fullmatch(name) if isinstance(name, str) else None
+    return int(match[1]) if match else None
 
 
 def entry_path(kind: str, key: str) -> Path:

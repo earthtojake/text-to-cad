@@ -242,7 +242,7 @@ def _cmd_gc(dry_run: bool, grace_hours: float, max_size: str | None, as_json: bo
     for kind, count in sorted(report.retired.items()):
         print(f"index/{kind} is retired: {verb} {count} entries, then the objects only they named")
     for kind, count in sorted(report.obsolete.items()):
-        print(f"{kind} entries an older cadgen wrote are obsolete: {verb} {count}, then the objects only they named")
+        print(f"{kind} entries another version of cadgen wrote are obsolete: {verb} {count}, then the objects only they named")
     if max_size is not None:
         if report.cap is None:
             print("no cap (0): nothing is evicted")
