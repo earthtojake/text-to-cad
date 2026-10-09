@@ -32,8 +32,42 @@ def _joint(body: str = "", *, joint_type: str = "revolute", limit: str = '<limit
     )
 
 
+_INERTIAL = '<inertial><mass value="0.1"/><inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/></inertial>'
+_PARALLELOGRAM = (
+    'driver="output_joint" input_length="0.05" ground_length="0.2" output_length="0.05"'
+    ' coupler_length="0.2" input_zero="1.5707963" output_zero="1.5707963"'
+)
+
+
+def _four_bar(four_bar: str = _PARALLELOGRAM, *, extra: str = "", input_parent: str = "ground", driver_type: str = "revolute") -> str:
+    """A parallelogram four-bar: the output joint drives the input crank through `<tcad:four_bar>`."""
+    limit = '<limit lower="-1" upper="1" effort="1" velocity="1"/>'
+    element = f"<tcad:four_bar {four_bar}/>" if four_bar is not None else ""
+    return (
+        f'<robot name="linkage" xmlns:tcad="https://text-to-cad.dev/urdf">'
+        f'<link name="ground"/><link name="stand">{_INERTIAL}</link>'
+        f'<link name="output">{_INERTIAL}</link><link name="input">{_INERTIAL}</link>'
+        '<joint name="stand_joint" type="fixed"><parent link="ground"/><child link="stand"/></joint>'
+        f'<joint name="output_joint" type="{driver_type}"><parent link="ground"/><child link="output"/>'
+        f'<origin xyz="0.2 0 0"/><axis xyz="0 0 1"/>{limit}</joint>'
+        f'<joint name="input_joint" type="revolute"><parent link="{input_parent}"/><child link="input"/>'
+        f'<axis xyz="0 0 1"/>{limit}{element}{extra}</joint>'
+        "</robot>"
+    )
+
+
 # (case name, xml text, expected finding code, expected severity)
 ERROR_CASES = [
+    ("four_bar_without_driver", _four_bar(_PARALLELOGRAM.replace('driver="output_joint" ', "")), "missing_four_bar_driver"),
+    ("four_bar_missing_driver", _four_bar(_PARALLELOGRAM.replace("output_joint", "ghost")), "missing_four_bar_driver"),
+    ("four_bar_self_driver", _four_bar(_PARALLELOGRAM.replace("output_joint", "input_joint")), "self_four_bar_driver"),
+    ("four_bar_fixed_driver", _four_bar(_PARALLELOGRAM.replace("output_joint", "stand_joint")), "four_bar_driver_type"),
+    ("four_bar_prismatic_driver", _four_bar(driver_type="prismatic"), "four_bar_driver_type"),
+    ("four_bar_other_ground", _four_bar(input_parent="stand"), "four_bar_ground_link"),
+    ("four_bar_with_mimic", _four_bar(extra='<mimic joint="output_joint"/>'), "mimic_and_four_bar"),
+    ("four_bar_twice", _four_bar(extra=f"<tcad:four_bar {_PARALLELOGRAM}/>"), "multiple_four_bar"),
+    ("four_bar_zero_length", _four_bar(_PARALLELOGRAM.replace('coupler_length="0.2"', 'coupler_length="0"')), "nonpositive_dimension"),
+    ("four_bar_missing_zero", _four_bar(_PARALLELOGRAM.replace(' output_zero="1.5707963"', "")), "missing_attribute"),
     ("duplicate_visual_geometry", _wrap('<link name="base"><visual><geometry><sphere radius="1"/></geometry><geometry><sphere radius="2"/></geometry></visual></link>'), "duplicate_geometry"),
     ("duplicate_collision_geometry", _wrap('<link name="base"><collision><geometry><sphere radius="1"/></geometry><geometry><sphere radius="2"/></geometry></collision></link>'), "duplicate_geometry"),
     ("duplicate_geometry_first_invalid", _wrap('<link name="base"><visual><geometry><sphere radius="-1"/></geometry><geometry><sphere radius="2"/></geometry></visual></link>'), "nonpositive_dimension"),
@@ -283,6 +317,24 @@ class UrdfFindingsTests(unittest.TestCase):
         )
         _, warning_codes = self._codes(xml_text)
         self.assertNotIn("unknown_element", warning_codes)
+
+    def test_valid_four_bar_is_clean_and_its_joint_is_driven(self) -> None:
+        path = self.temp_root / "linkage.urdf"
+        path.write_text(_four_bar(), encoding="utf-8")
+        source, result = validate_urdf_file(path)
+        # Clean under --strict too: no finding at all, warnings included.
+        self.assertEqual([], result.all_findings(), [f.format() for f in result.all_findings()])
+        joints = {joint.name: joint for joint in source.joints}
+        # Derived from its driver, as a mimic is: never a planning variable an SRDF may set.
+        self.assertTrue(joints["input_joint"].mimic)
+        self.assertFalse(joints["output_joint"].mimic)
+
+    def test_four_bar_driver_cycle_is_an_error(self) -> None:
+        xml_text = _four_bar().replace(
+            '<origin xyz="0.2 0 0"/>', '<origin xyz="0.2 0 0"/><mimic joint="input_joint"/>', 1
+        )
+        error_codes, _ = self._codes(xml_text)
+        self.assertIn("mimic_cycle", error_codes)
 
     def test_continuous_joint_without_limits_is_clean(self) -> None:
         xml_text = _wrap(

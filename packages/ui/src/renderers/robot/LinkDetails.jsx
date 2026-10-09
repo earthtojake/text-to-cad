@@ -147,7 +147,8 @@ export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, ha
       <InfoRow label="Parent">{/* A frame-only root has no row to go to; it is still named. */}<LinkName name={joint.parentLink} onSelect={onSelectLink} selectable={hasLinkRow(joint.parentLink)}/></InfoRow>
       {joint.axis && <InfoRow label="Axis"><CoordValue vector={joint.axis} digits={4}/></InfoRow>}
       <LimitRows joint={joint}/>
-      {joint.mimic && <InfoRow label="Mimic"><MonoValue>{`${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}
+      {joint.mimic && <InfoRow label={joint.mimic.kind === "fourBar" ? "Four-bar driver" : "Mimic"}><MonoValue>{joint.mimic.kind === "fourBar"
+        ? joint.mimic.joint : `${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}
       {joint.origin && <>
         <InfoRow label="Origin xyz" title="Parent-frame position (m)"><CoordValue vector={joint.origin.xyz} digits={4}/></InfoRow>
         {!isZero(joint.origin.rpy) && <InfoRow label="Origin rpy" title="Roll, pitch, yaw (rad)"><MonoValue>{vectorText(joint.origin.rpy)}</MonoValue></InfoRow>}

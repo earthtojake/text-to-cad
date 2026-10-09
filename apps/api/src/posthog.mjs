@@ -11,7 +11,7 @@
  * background, so what "deleted" means is "queued for deletion". Retention is PostHog's: events go after the
  * period its plan keeps them.
  *
- * Its settings are the host's (route.ts): the project's API key, which captures; a personal API key with
+ * Its settings are the host's (api/v1.js): the project's API key, which captures; a personal API key with
  * `person:write`, which deletes, and `project:read`, which checks the project is there; the project's id; and
  * its region, `us` or `eu`. `fetch` is handed in, so the tests need no network.
  */

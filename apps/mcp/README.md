@@ -85,7 +85,7 @@ reference host `basic-host` does.
   there lands where nobody is looking. Only a `cad_show` that names the sidebar's view reaches
   it. Only sidebar views are shared; a thread's tabs are that conversation's.
 - **Two requests to the network: the version check, and analytics with consent.**
-  Both go to `api.texttocad.dev` (the docs site's `/v1`). Once a day at most, cadgen
+  Both go to `api.texttocad.dev` (`apps/api`). Once a day at most, cadgen
   reads the version feed (`cadgen/updates.py`): one anonymous GET, with no id and
   nothing about the person (`CADGEN_UPDATE_CHECK=0` turns it off; never in CI or from
   a source tree). While this install is behind, the navbar and the home show the
