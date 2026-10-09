@@ -109,7 +109,7 @@ class ChecksTest(unittest.TestCase):
     def test_a_factor_of_exactly_one_holds(self):
         (f,) = findings(solved(peak_MPa=276.0, peak_gauss_MPa=276.0))
         self.assertEqual((f["severity"], f["type"]), ("warning", "low_margin"))
-        self.assertIn("only 1×", f["summary"].replace("1.0×", "1×"))
+        self.assertEqual(f["summary"], "It holds, but only 1.0× the load: under the 2× margin")
 
     def test_yields_prints_more_decimals_when_the_numbers_would_tie(self):
         (f,) = findings(solved(peak_MPa=276.4, peak_gauss_MPa=276.4))
