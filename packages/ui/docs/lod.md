@@ -278,9 +278,11 @@ skill. Existing usable views remain visible during updates and failures.
 
 **Opening.** Opening shows one step line — **Finding file**, **Importing
 model** (cadgen compiling a file its store does not hold: reading it, then its
-parts, counted), **Reading model**, **Meshing parts** (cadgen deriving parts its
-store lacked: a cold open), **Loading geometry** (reading stored meshes), or
-**Preparing view** — with no headline above it; the loading mark itself says a
+parts, counted), **Building model** (a model script running: every phase of its
+build), **Reading model** (reading a model the store holds), **Meshing parts**
+(cadgen deriving parts its store lacked: a cold open), **Loading geometry**
+(reading stored meshes), **Preparing view**, or **Opening model** for a wait
+with nothing more specific to say — with no headline above it; the loading mark itself says a
 model is opening. Once the first parts are drawn, a cold open's remaining
 meshing is the update line's "Meshing parts n/total…", not "Updating model…".
 Counts measure

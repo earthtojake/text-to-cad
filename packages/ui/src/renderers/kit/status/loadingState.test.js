@@ -23,7 +23,7 @@ test("a build of the file is an update of the model on screen until it ends", ()
 
 test("technical stages have a small vocabulary and uncounted waits never claim a fraction", () => {
   for (const phase of ["compile", "generate", "package", "Source ready", "finalize", "tessellating surfaces", "saving STEP", "module"]) {
-    assert.ok(["Finding file", "Reading model", "Importing model", "Meshing parts", "Loading geometry", "Preparing view"].includes(loadingProgress({ phase }).label));
+    assert.ok(["Finding file", "Opening model", "Reading model", "Importing model", "Building model", "Meshing parts", "Loading geometry", "Preparing view"].includes(loadingProgress({ phase }).label));
     assert.equal(loadingProgress({ phase }).percent, null);
   }
   assert.equal(loadingProgress({ phase: "geometry", total: 8, done: 8, determinate: true }, { preparing: true }).counts, "");
@@ -44,8 +44,14 @@ test("a file being imported reads as importing, and a cold open's meshing as mes
   assert.deepEqual(
     loadingProgress({ phase: "package", label: "Importing STEP: collecting parts", done: 120, total: 256, determinate: true }),
     { label: "Importing model", detail: "", counts: "120/256", percent: 47, connectionLost: null });
-  // A model script's own build is not an import.
-  assert.equal(loadingProgress({ phase: "generate", label: "Building geometry" }).label, "Reading model");
+  // A model script's own build is not an import, nor a read: every phase of it is building,
+  // the parts it stores included.
+  for (const [phase, label] of [["generate", "Building geometry"], ["package", "Collecting parts"], ["components", "Storing parts"], ["finalize", "Writing outputs"]]) {
+    assert.equal(loadingProgress({ phase, label }).label, "Building model");
+  }
+  // "Reading model" is a read; a wait with nothing to say is opening.
+  assert.equal(loadingProgress(null).label, "Opening model");
+  assert.equal(loadingProgress({ phase: "waiting", label: "Waiting for build status" }).label, "Opening model");
   // cadgen meshing what its store lacked, against reading meshes it already had.
   assert.deepEqual(loadingProgress({ phase: "meshing", label: "Meshing parts", done: 37, total: 256, determinate: true }),
     { label: "Meshing parts", detail: "", counts: "37/256", percent: 14, connectionLost: null });

@@ -21,7 +21,7 @@ export default function LoadingIndicator({ progress, operationKey = "" }) {
     <div className="flex w-[22rem] max-w-[90vw] flex-col gap-3" role="status" aria-live="polite" data-viewer-loading="true">
       <LoadingIcon size={80} active={!waiting} reducedMotion={reducedMotion} className="self-center" />
       <div className="flex items-baseline justify-between gap-4 text-xs opacity-75">
-        <span className="truncate">{waiting ? `Last step: ${progress?.label || "Reading model"}` : progress?.label || "Preparing view"}</span>
+        <span className="truncate">{waiting ? `Last step: ${progress?.label || "Opening model"}` : progress?.label || "Preparing view"}</span>
         <span className="shrink-0 tabular-nums">{progress?.counts || ""}</span>
       </div>
       <Progress value={progress?.percent ?? null} aria-label={progress?.label || "Preparing view"}
