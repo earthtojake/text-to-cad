@@ -240,7 +240,7 @@ def _skinned_tubes(descriptor: dict, tessellations: dict, clip: Any, default_col
             refined = bound.indices.reshape(-1, 3)
             source = (bound.source_triangles if bound.source_triangles is not None
                       else np.arange(len(refined), dtype=np.int64))
-            colors = occurrence_colors(descriptor, occurrence, tessellation, default_color)
+            colors = occurrence_colors(occurrence, tessellation, default_color)
             triangle_colors = np.asarray([colors[int(face)] for face in ranges[source]])
             primitives = []
             for color in sorted(set(triangle_colors.tolist())):

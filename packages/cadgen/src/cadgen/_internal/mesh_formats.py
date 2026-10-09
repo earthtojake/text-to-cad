@@ -12,7 +12,7 @@ reads the store or imports the kernel.
   inverse-transpose carries the normals) and groups the triangles by resolved
   colour and finish. The colour of a face is the first of: its own intrinsic
   colour, the occurrence's (a named material's ``baseColor``, then its STEP
-  colour), the component's, the part's, the export default.
+  colour), the part's, the export default -- what the CAD Viewer draws.
 - :func:`stl_bytes` is binary STL, colourless by format, without the triangles
   that cover nothing (as the 3MF weld drops them).
 - :func:`threemf_bytes` is one ``basematerials`` group with one object per
@@ -244,18 +244,19 @@ def _place(positions: np.ndarray, normals: np.ndarray, placement: _Placement) ->
 
 
 def occurrence_colors(
-    descriptor: Mapping[str, Any], occurrence: Mapping[str, Any], tessellation: Tessellation,
-    default_color: str | None = None,
+    occurrence: Mapping[str, Any], tessellation: Tessellation, default_color: str | None = None,
 ) -> list[str]:
     """Every face range of one occurrence resolved to its export colour: its own,
     else the occurrence's (a named material's ``baseColor``, then its STEP colour),
-    the component's, the part's, the export default. The one chain, for the soup
-    and for a bent tube's skin that replaces an occurrence's primitives alike."""
-    cid = str(occurrence.get("component") or "")
+    the part's, the export default -- the chain the CAD Viewer and snapshots draw. The
+    one chain, for the soup and for a bent tube's skin that replaces an occurrence's
+    primitives alike.
+
+    Never the component's: occurrences share a component, which carries whichever
+    coloured occurrence the build met first, so an uncoloured sibling would take it."""
     base_color = str(occurrence.get("baseColor") or "")
     occurrence_color = base_color.lower() if _HEX.fullmatch(base_color) else linear_rgb_to_hex(occurrence.get("color"))
-    component_color = linear_rgb_to_hex(((descriptor.get("components") or {}).get(cid) or {}).get("color"))
-    fallback = (occurrence_color or component_color or linear_rgb_to_hex(tessellation.part_color)
+    fallback = (occurrence_color or linear_rgb_to_hex(tessellation.part_color)
                 or (default_color or DEFAULT_COLOR).lower())
     return [linear_rgb_to_hex(face_range.get("color")) or fallback for face_range in tessellation.face_ranges]
 
@@ -344,7 +345,7 @@ def build_primitives(
                     material_id=material_id, material_name=material_name,
                 )
             continue
-        colors = occurrence_colors(descriptor, occurrence, tessellation, default_color)
+        colors = occurrence_colors(occurrence, tessellation, default_color)
         for range_index, face_range in enumerate(tessellation.face_ranges):
             if int(face_range.get("indexCount") or 0) < 3:
                 continue
