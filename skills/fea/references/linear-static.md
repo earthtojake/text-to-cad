@@ -54,13 +54,23 @@ and how to tell a good answer from a bad one.
 ## Mesh
 
 - First run at the default size (a fortieth of the bounding diagonal).
+  `mesh.size_mm` is the largest element; small features (thin walls, fillets,
+  chamfers, small holes) make the mesher go finer there by itself, with
+  elements under about their radius or thickness.
 - The run reports both the nodal and the Gauss-point von Mises peak. When the
   Gauss-point value is more than 50 % above the nodal one, the peak is not
   resolved; when that matters the run lists a `peak_concentration` finding.
-  When the safety factor is under 3 the run halves the element size and
-  solves again by itself, and lists `mesh_not_converged` when the peak moved
-  more than 10 %. Otherwise halve `mesh.size_mm` yourself (`--mesh-size` on
-  the command line) and compare the peaks.
+  When the safety factor is under 3 the run solves again by itself on a finer
+  mesh, finer at fillets and holes by the same ratio, and lists
+  `mesh_not_converged` when the peak moved more than 10 %.
+- To check convergence yourself, solve twice and compare the peaks; how
+  depends on where the peak is. Away from small features, halve
+  `mesh.size_mm` (`--mesh-size` on the command line). At a fillet, hole or
+  chamfer, halving it changes little: the elements there are already sized
+  by the feature, not by `mesh.size_mm` (the run's slow-solve warning says
+  so when small features set the mesh). Set `mesh.size_mm` to about a third
+  of that feature's radius instead, then halve that; this refines the whole
+  part, so watch the degrees of freedom.
 - A peak that moves less than about 10 % between the two runs is converged
   enough for a first answer. A peak that keeps growing sits on a singularity:
   a clamped edge, a sharp inside corner, a point load. Report the value a

@@ -436,7 +436,16 @@ class Yielding(unittest.TestCase):
             "mesh": {"size_mm": cls.SIZE},
         }
         cls.solver = _CountingSolve()
-        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", cls.solver):
+        from cadgen._internal.fea import mesh
+
+        real_mesh, cls.meshed = mesh.mesh_occurrence, []
+
+        def mesh_spy(occurrence, **kwargs):
+            cls.meshed.append(kwargs)
+            return real_mesh(occurrence, **kwargs)
+
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", cls.solver), \
+                mock.patch("cadgen._internal.fea.mesh.mesh_occurrence", mesh_spy):
             cls.result = fea.solve(cls.step, directory / "bar.glb", study=cls.study)
         cls.sidecar = json.loads(cls.result.sidecar.read_text(encoding="utf-8"))
 
@@ -461,6 +470,12 @@ class Yielding(unittest.TestCase):
         self.assertEqual(_glb_extras(self.result.glb)["fields"][0]["max"], self.result.summary["max_von_mises_MPa"])
         mesh = _glb_extras(self.result.glb)["study"]["mesh"]
         self.assertEqual((mesh["size_mm"], mesh["refined_from_mm"]), (self.SIZE / 2, self.SIZE))
+
+    def test_the_finer_solve_refines_curved_features_by_the_same_ratio(self):
+        first, finer = self.meshed
+        self.assertEqual(first.get("refine", 1.0), 1.0)
+        self.assertAlmostEqual(finer["refine"], first["max_h"] / finer["max_h"], places=9)
+        self.assertGreater(finer["refine"], 1.0)
 
     def test_the_findings_point_at_the_written_glbs_peak(self):
         yields = self.sidecar["findings"][0]
@@ -811,6 +826,36 @@ class DefaultSizeAccuracy(unittest.TestCase):
         x, y, _ = self.plate.summary["max_von_mises_at_mm"]
         self.assertAlmostEqual(math.hypot(x - self.PLATE_LENGTH / 2, y), self.HOLE / 2, delta=0.05)
         self.assertAlmostEqual(self.plate.summary["max_von_mises_MPa"] / (kt * net), 1.0, delta=0.10)
+
+
+@unittest.skipUnless(HAVE_FEA, "cadgen[fea] is not installed")
+class FinerAtCurves(unittest.TestCase):
+    """A part whose 0.5 mm fillets set its mesh: a smaller element size alone leaves it as it was."""
+
+    @classmethod
+    def setUpClass(cls):
+        from build123d import Box, export_step, fillet
+
+        from cadgen._internal.fea.mesh import mesh_occurrence
+        from cadgen.step_scene import read_scene
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        step = Path(cls._tmp.name) / "rounded.step"
+        export_step(fillet(Box(30, 20, 6).edges(), 0.5), str(step))
+        occurrence = next(iter(read_scene(step).leaves()))
+        cls.first = len(mesh_occurrence(occurrence, max_h=8.0).tets)
+        cls.halved = len(mesh_occurrence(occurrence, max_h=4.0).tets)
+        cls.refined = len(mesh_occurrence(occurrence, max_h=4.0, refine=2.0).tets)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_halving_the_element_size_alone_barely_changes_a_fillet_governed_mesh(self):
+        self.assertLess(self.halved, 1.3 * self.first)
+
+    def test_refining_curved_features_by_the_same_ratio_makes_it_materially_finer(self):
+        self.assertGreater(self.refined, 2.0 * self.first)
 
 
 @unittest.skipUnless(HAVE_FEA, "cadgen[fea] is not installed")

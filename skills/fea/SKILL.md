@@ -109,7 +109,8 @@ stress. Restate every load in those units before you write it down.
    ```
 
    When the safety factor comes out under 3 the run meshes again at half the
-   element size and solves again, by itself; the finer result is the one
+   element size (and half the size at fillets and holes too) and solves again,
+   by itself; the finer result is the one
    written and reported, and the sidecar's `refined` block records both
    sizes and peaks. The finer size is capped to keep the solve under the
    degrees-of-freedom budget, so a part near the limit takes longer (minutes)
@@ -245,7 +246,7 @@ they would not change the answer.
 | `yields` | error | The peak stress is above the material's yield strength. | Make the part stronger where the peak is (thicker, deeper, a fillet or rib there), choose a stronger material, or confirm the load with the user; solve again. If a `peak_at_fixture` or `peak_concentration` finding sits beside it, read that first: the peak may be the model's, not the part's. |
 | `low_margin` | warning | It holds, but under the study's `margin`. | Strengthen it as for `yields`, or tell the user the margin it has and let them decide; never lower `margin` just to clear the finding. |
 | `peak_at_fixture` | warning | The peak sits on a fixed face or at its edge, where a perfectly rigid clamp exaggerates stress, and a finer solve did not settle it. | Read the stress a little away from the fixed face (the GLB's colours, or a probe in the VTU) before redesigning; if that is still high, the finding beside it stands. |
-| `peak_concentration` | warning | The Gauss-point peak is well above the nodal one: a sharp corner or concentrated load the mesh cannot resolve. | When the safety factor was under 3 the run already solved at half the mesh size, so refining the whole part again is not the next step: fillet the corner or spread the load over a larger face. Above 3 (a `margin` higher than that), halve `mesh.size_mm` once and compare. |
+| `peak_concentration` | warning | The Gauss-point peak is well above the nodal one: a sharp corner or concentrated load the mesh cannot resolve. | When the safety factor was under 3 the run already solved at half the mesh size, so refining the whole part again is not the next step: fillet the corner or spread the load over a larger face. Above 3 (a `margin` higher than that), refine once and compare: halve `mesh.size_mm`, or at a fillet or hole set it to a third of the radius (see [Mesh](references/linear-static.md#mesh)). |
 | `mesh_not_converged` | warning | The automatic finer solve moved the peak by more than 10 %. In an assembly, only for a part whose safety factor is under 3: a part far from failing is not worth distrusting. | A peak that kept rising sits on a singularity (a sharp corner, the fixed edge): fillet it or judge the stress away from it. Otherwise set a smaller `mesh.size_mm` and solve again before trusting the safety factor. |
 | `large_displacement` | warning | It moves more than 1 % of its size. | The small-displacement model is stretched: check the fit against mating parts and whether the deflection is acceptable; stiffen the part if not. |
 | `no_load` | warning | The peak stress is zero: no load reaches the part. | Check that the loaded faces are on the part and connected to the fixed ones, and that the force is not zero. |

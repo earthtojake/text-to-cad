@@ -107,6 +107,15 @@ class VolumeMesh:
 _MESHING = {"curvaturesafety": 1.5, "grading": 0.5}
 
 
+def _meshing(refine: float) -> dict:
+    """netgen's settings for a mesh ``refine`` times finer than the default at curved features.
+
+    ``maxh`` alone does not refine a fillet or a hole: there the curvature safety
+    sets the size, so a finer solve scales it with the ratio it shrinks ``maxh`` by.
+    """
+    return {**_MESHING, "curvaturesafety": _MESHING["curvaturesafety"] * max(refine, 1.0)}
+
+
 def default_mesh_size(bbox_diagonal: float) -> float:
     """The element size a study gets when it names none: a fortieth of the
     bounding diagonal, which lands a typical part at 30-100k DOF."""
@@ -219,8 +228,11 @@ def _require_ten_node_tets(e3) -> None:
         raise RuntimeError("the mesher produced elements that are not 10-node tetrahedra")
 
 
-def mesh_occurrence(occurrence: "Occurrence", *, max_h: float | None = None) -> VolumeMesh:
-    """Mesh one placed occurrence with second-order tetrahedra."""
+def mesh_occurrence(occurrence: "Occurrence", *, max_h: float | None = None, refine: float = 1.0) -> VolumeMesh:
+    """Mesh one placed occurrence with second-order tetrahedra.
+
+    ``refine`` also shrinks the elements at curved features by that ratio (:func:`_meshing`).
+    """
     require_fea_stack()
     import numpy as np
 
@@ -245,7 +257,7 @@ def mesh_occurrence(occurrence: "Occurrence", *, max_h: float | None = None) -> 
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
             mapping = _match_faces(fingerprints, list(geometry.faces), diagonal)
-            mesh = geometry.GenerateMesh(maxh=h, **_MESHING)
+            mesh = geometry.GenerateMesh(maxh=h, **_meshing(refine))
             mesh.SecondOrder()
             # Copies, deliberately: netgen hands out views into the mesh
             # object's own memory, and the mesh does not outlive this block.
@@ -352,6 +364,7 @@ def mesh_assembly(
     tolerance_mm: float,
     max_h: float | None = None,
     log=None,
+    refine: float = 1.0,
 ) -> VolumeMesh:
     """Mesh the parts ``part_refs`` as one conforming mesh, bonded parts sharing nodes.
 
@@ -359,7 +372,7 @@ def mesh_assembly(
     The mesh's ``domain`` is the index into ``part_refs`` of each element's
     part, and ``faces`` holds every face of every part under its own ref, so a
     study's ``#o2.f6`` means the same face it does in the viewer. ``log``
-    is told when gluing and meshing start.
+    is told when gluing and meshing start; ``refine`` is :func:`mesh_occurrence`'s.
     """
     require_fea_stack()
     import numpy as np
@@ -440,7 +453,7 @@ def mesh_assembly(
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
             mapping = _match_faces(glued_prints, list(geometry.faces), diagonal)
-            mesh = geometry.GenerateMesh(maxh=h, **_MESHING)
+            mesh = geometry.GenerateMesh(maxh=h, **_meshing(refine))
             mesh.SecondOrder()
             coordinates = np.array(mesh.Coordinates(), dtype=float, copy=True)
             e3 = mesh.Elements3D().NumPy().copy()

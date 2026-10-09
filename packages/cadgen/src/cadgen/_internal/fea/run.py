@@ -542,13 +542,13 @@ def _unsolved(document: Path, occurrence_ref: str, findings: list[dict]) -> FeaR
     return FeaResult(ok=False, document=document, occurrence=occurrence_ref, glb=None, sidecar=None, findings=tuple(findings))
 
 
-def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_of: dict[str, int], max_h: float | None, log):
+def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_of: dict[str, int], max_h: float | None, log, refine: float = 1.0):
     """The glued, meshed assembly with its faces numbered by position, and the study's checks on it.
 
     Raises ``ValueError`` for a fixture or load on a face that is wholly a bonded joint, and :class:`_NotConnected`
     when the glue left a part apart from every fixed face.
     """
-    volume = mesh_assembly(scene, [part.ref for part in plan.parts], plan.bonded, parsed.contact_tolerance_mm, max_h, log)
+    volume = mesh_assembly(scene, [part.ref for part in plan.parts], plan.bonded, parsed.contact_tolerance_mm, max_h, log, refine=refine)
     # Boundary triangles carry a face's 1-based position; `faces` is keyed by it, as for one occurrence.
     position = {ref: n for n, ref in enumerate(volume.faces, 1)}
     volume = dataclasses.replace(volume, faces={position[ref]: fp for ref, fp in volume.faces.items()})
@@ -585,7 +585,8 @@ def _document_ref(document: Path, glb_path: Path) -> str:
 def finer_mesh_size(size_mm: float, dofs: int) -> float | None:
     """The element size of the automatic re-solve: half, unless that passes the DOF budget.
 
-    The DOF count grows with the cube of the size ratio, so the budget is
+    The DOF count grows with the cube of the size ratio (the mesher refines
+    curved features by the same ratio, so they grow too), so the budget is
     spent from the first solve's: under ``DOF_WARN`` when that leaves a
     meaningfully finer mesh, otherwise under ``DOF_LIMIT`` (with a tenth of
     headroom for the estimate's error). ``None`` when even that leaves none.
@@ -616,7 +617,8 @@ def solve_study(
 
     When the safety factor is close to failing (:func:`checks.needs_finer`) the
     part is meshed again at half the element size (:func:`finer_mesh_size`
-    keeps that under the DOF budget) and solved again. The finer solve is the
+    keeps that under the DOF budget), finer by the same ratio at curved
+    features, and solved again. The finer solve is the
     more trustworthy one, so when it succeeds its numbers are the ones
     written, reported and checked; the checks compare its peak with the
     first's for convergence only.
@@ -677,13 +679,13 @@ def solve_study(
     from cadgen._internal.fea import solve
     from cadgen._internal.fea.outputs import RAMP, auto_deformation_scale, write_glb, write_vtu
 
-    def mesh_and_solve(max_h: float | None, automatic: bool = False):
+    def mesh_and_solve(max_h: float | None, automatic: bool = False, refine: float = 1.0):
         logger.debug(f"meshing {occurrence_ref}")
         if plan is None:
-            volume = mesh_occurrence(occurrence, max_h=max_h)
+            volume = mesh_occurrence(occurrence, max_h=max_h, refine=refine)
             materials = parsed.material
         else:
-            volume = _mesh_assembly(mesh_assembly, scene, plan, parsed, resolved, ordinal_of, max_h, logger.info)
+            volume = _mesh_assembly(mesh_assembly, scene, plan, parsed, resolved, ordinal_of, max_h, logger.info, refine)
             materials = plan.materials
         logger.debug(f"meshed: {len(volume.tets)} tets, {len(volume.nodes)} nodes, size {volume.max_h:.3g} mm in {volume.seconds:.1f}s")
         outcome = solve.solve_linear_static(volume, materials, parsed.fixtures, parsed.loads, ordinal_of, log=logger.debug, automatic=automatic)
@@ -725,7 +727,8 @@ def solve_study(
         logger.debug(f"safety factor under {checks.RESOLVE_BELOW:g}: solving again at {finer_size:.3g} mm")
         try:
             first_outcome, first_small = outcome, small_feature_mm(volume)
-            volume, outcome = mesh_and_solve(finer_size, automatic=True)
+            # Finer at fillets and holes too, by the same ratio: there the curvature, not the size, sets the mesh.
+            volume, outcome = mesh_and_solve(finer_size, automatic=True, refine=volume.max_h / finer_size)
         except Exception as exc:  # a finer solve is a second opinion; the first answer stands without it
             finer_failure = (
                 f"the finer solve at {refined['size_mm']:g} mm failed ({exc}); "
