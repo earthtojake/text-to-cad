@@ -139,10 +139,18 @@ def _rigid_body_modes(locations: "np.ndarray", component: "np.ndarray") -> "np.n
     return B
 
 
-def dof_warning(dofs: int, automatic: bool) -> str:
-    """The slow-solve warning; the automatic finer re-solve chose its own size, so it never blames the person's."""
+def dof_warning(dofs: int, automatic: bool, small_feature_mm: float | None = None) -> str:
+    """The slow-solve warning; the automatic finer re-solve chose its own size, so it never blames the person's.
+
+    ``small_feature_mm`` is set when small features, not the element size, drove the mesh: then a larger size is no cure.
+    """
     if automatic:
         return f"the automatic finer check used {dofs} degrees of freedom, so this study took longer"
+    if small_feature_mm is not None:
+        return (
+            f"{dofs} degrees of freedom: expect a slow solve; small fillets and chamfers set the mesh here "
+            f"(elements down to {small_feature_mm:.2g} mm), so a larger mesh.size_mm won't help much"
+        )
     return f"{dofs} degrees of freedom: expect a slow solve; a larger mesh.size_mm is usually enough"
 
 
@@ -218,6 +226,7 @@ def solve_linear_static(
     domain, and E and nu vary from element to element.
     """
     import numpy as np
+    from cadgen._internal.fea.mesh import small_feature_mm
     from skfem import Basis, BilinearForm, ElementTetP2, ElementVector, LinearForm, asm
     from skfem.helpers import ddot, sym_grad, trace
     from skfem.models.elasticity import lame_parameters, linear_elasticity
@@ -238,7 +247,7 @@ def solve_linear_static(
             f"(now {volume.max_h:.3g} mm) and run again"
         )
     if basis.N > DOF_WARN:
-        warnings.append(dof_warning(basis.N, automatic))
+        warnings.append(dof_warning(basis.N, automatic, small_feature_mm(volume)))
 
     # DOF bookkeeping: skfem numbers scalar DOF vertices first, then edges.
     if not (np.array_equal(scalar.nodal_dofs[0], np.arange(vertices))

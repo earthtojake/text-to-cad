@@ -546,7 +546,7 @@ def solve_study(
     vtu_path = glb_path.with_suffix(".vtu") if vtu else None
 
     from cadgen._internal.fea import checks
-    from cadgen._internal.fea.mesh import mesh_assembly, mesh_occurrence, require_fea_stack
+    from cadgen._internal.fea.mesh import mesh_assembly, mesh_occurrence, require_fea_stack, small_feature_mm
 
     require_fea_stack()
     scene = _open(document)
@@ -635,7 +635,7 @@ def solve_study(
         }
         logger.debug(f"safety factor under {checks.RESOLVE_BELOW:g}: solving again at {finer_size:.3g} mm")
         try:
-            first_outcome = outcome
+            first_outcome, first_small = outcome, small_feature_mm(volume)
             volume, outcome = mesh_and_solve(finer_size, automatic=True)
         except Exception as exc:  # a finer solve is a second opinion; the first answer stands without it
             finer_failure = (
@@ -655,7 +655,7 @@ def solve_study(
             ]
             solved = weakest(all_solved)
             if first_outcome.dofs > solve.DOF_WARN:  # the person's own size was already large
-                outcome.warnings.insert(0, solve.dof_warning(first_outcome.dofs, automatic=False))
+                outcome.warnings.insert(0, solve.dof_warning(first_outcome.dofs, automatic=False, small_feature_mm=first_small))
     if plan is None:
         findings = checks.findings(solved)
     else:

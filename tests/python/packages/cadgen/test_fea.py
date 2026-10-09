@@ -662,6 +662,52 @@ class DofWarning(unittest.TestCase):
             "500000 degrees of freedom: expect a slow solve; a larger mesh.size_mm is usually enough",
         )
 
+    def test_small_features_are_named_as_the_cause(self):
+        from cadgen._internal.fea.solve import dof_warning
+
+        text = dof_warning(755373, automatic=False, small_feature_mm=0.4)
+        self.assertIn("small fillets and chamfers set the mesh here", text)
+        self.assertIn("elements down to 0.4 mm", text)
+        self.assertIn("a larger mesh.size_mm won't help much", text)
+
+
+@unittest.skipUnless(HAVE_FEA, "cadgen[fea] is not installed")
+class SmallFeatures(unittest.TestCase):
+    """A part of small fillets meshes by its own size, not by a ten-times larger element size asked for."""
+
+    @classmethod
+    def setUpClass(cls):
+        from build123d import Box, export_step, fillet
+
+        from cadgen._internal.fea.mesh import mesh_occurrence
+        from cadgen.step_scene import read_scene
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(cls._tmp.name)
+        plain, rounded = Box(60, 40, 10), fillet(Box(60, 40, 10).edges(), 0.3)
+        meshes = []
+        for name, shape in (("plain", plain), ("rounded", rounded)):
+            export_step(shape, str(tmp / f"{name}.step"))
+            occurrence = next(iter(read_scene(tmp / f"{name}.step").leaves()))
+            meshes.append(mesh_occurrence(occurrence, max_h=15.0))
+        cls.plain, cls.rounded = meshes
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_a_fillet_does_not_multiply_the_mesh(self):
+        # netgen's own defaults made 187k tets of this 60 x 40 x 10 plate at 15 mm.
+        self.assertLess(len(self.rounded.tets), 60_000)
+
+    def test_the_feature_size_is_reported_only_when_it_sets_the_mesh(self):
+        from cadgen._internal.fea.mesh import small_feature_mm
+
+        self.assertIsNone(small_feature_mm(self.plain))
+        size = small_feature_mm(self.rounded)
+        self.assertIsNotNone(size)
+        self.assertLess(size, 1.0)
+
 
 class HumanLine(unittest.TestCase):
     def test_the_cli_line_floors_the_safety_factor_like_the_findings(self):

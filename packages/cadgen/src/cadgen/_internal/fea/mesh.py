@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from cadgen._internal.fea.assembly import Contact
     from cadgen.step_scene import Occurrence, StepScene
 
-__all__ = ["FaceFingerprint", "VolumeMesh", "default_mesh_size", "face_area_center", "mesh_assembly", "mesh_occurrence", "occurrence_fingerprints", "require_fea_stack"]
+__all__ = ["FaceFingerprint", "VolumeMesh", "default_mesh_size", "face_area_center", "mesh_assembly", "mesh_occurrence", "occurrence_fingerprints", "require_fea_stack", "small_feature_mm"]
 
 
 def require_fea_stack() -> None:
@@ -98,10 +98,37 @@ class VolumeMesh:
     fuzzy_mm: float = 0.0
 
 
+# netgen's defaults refine to a fillet's or chamfer's own size, however large the
+# element size asked for: the 4-part rover cut came to 155k tets at any
+# ``mesh.size_mm``. Under a safety of 1 each radius of curvature holds about one
+# element and grading 0.5 lets the size grow faster away from small features,
+# so the element size set by the study decides the mesh, not a 0.4 mm fillet.
+_MESHING = {"curvaturesafety": 1.0, "grading": 0.5}
+
+
 def default_mesh_size(bbox_diagonal: float) -> float:
     """The element size a study gets when it names none: a fortieth of the
     bounding diagonal, which lands a typical part at 30-100k DOF."""
     return max(bbox_diagonal / 40.0, 1e-3)
+
+
+def small_feature_mm(volume: "VolumeMesh") -> float | None:
+    """The shortest element edge (mm) when small features, not ``max_h``, set the mesh; else ``None``.
+
+    An element of a mesh that max_h governs has edges near max_h. Where the mean
+    element's edge is under half of it, fillets and chamfers forced the
+    refinement, and a larger ``mesh.size_mm`` will not coarsen it much.
+    """
+    import numpy as np
+
+    corners = volume.nodes[volume.tets[:, :4]]
+    edges = corners[:, 1:] - corners[:, :1]
+    total = float(np.abs(np.einsum("ij,ij->i", edges[:, 0], np.cross(edges[:, 1], edges[:, 2]))).sum()) / 6.0
+    mean_edge = (6.0 * 2**0.5 * total / len(corners)) ** (1.0 / 3.0)
+    if mean_edge >= 0.5 * volume.max_h:
+        return None
+    pairs = ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))
+    return float(min(np.linalg.norm(corners[:, a] - corners[:, b], axis=1).min() for a, b in pairs))
 
 
 def face_area_center(face) -> tuple[float, tuple[float, float, float]]:
@@ -217,7 +244,7 @@ def mesh_occurrence(occurrence: "Occurrence", *, max_h: float | None = None) -> 
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
             mapping = _match_faces(fingerprints, list(geometry.faces), diagonal)
-            mesh = geometry.GenerateMesh(maxh=h)
+            mesh = geometry.GenerateMesh(maxh=h, **_MESHING)
             mesh.SecondOrder()
             # Copies, deliberately: netgen hands out views into the mesh
             # object's own memory, and the mesh does not outlive this block.
@@ -378,7 +405,7 @@ def mesh_assembly(
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
             mapping = _match_faces(glued_prints, list(geometry.faces), diagonal)
-            mesh = geometry.GenerateMesh(maxh=h)
+            mesh = geometry.GenerateMesh(maxh=h, **_MESHING)
             mesh.SecondOrder()
             coordinates = np.array(mesh.Coordinates(), dtype=float, copy=True)
             e3 = mesh.Elements3D().NumPy().copy()
