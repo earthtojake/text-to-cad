@@ -589,20 +589,30 @@ def _sdf_pose(element: ET.Element, *, where: str) -> tuple[bool, str, list[float
 
 class _SdfScope:
     """One model's namespace in the frame graph: the top-level model's (no prefix, its frame
-    ``__model__``) or a nested model's (``arm::``, its frame the node ``arm``)."""
+    ``__model__``) or a nested model's (``arm::``, its frame the node ``arm``), and the names
+    its links, frames, joints and nested models declare."""
 
-    __slots__ = ("name", "prefix", "frame")
+    __slots__ = ("name", "prefix", "frame", "declared")
 
-    def __init__(self, name: str, prefix: str, frame: str) -> None:
-        self.name, self.prefix, self.frame = name, prefix, frame
+    def __init__(self, model: ET.Element, prefix: str, frame: str) -> None:
+        self.name, self.prefix, self.frame = str(model.attrib.get("name") or "").strip(), prefix, frame
+        self.declared = {str(element.attrib.get("name") or "").strip()
+                         for tag in ("link", "frame", "joint", "model") for element in children(model, tag)}
+
+    def own(self, element: ET.Element) -> str:
+        """The graph key of an element this model declares."""
+        return self.prefix + str(element.attrib.get("name") or "").strip()
 
     def key(self, name: object, default: str) -> str:
-        """The graph key a name written in this model means: its own frame for ``__model__`` or
-        its own name, ``world`` for the world, else the name in this model's namespace -- a
-        scoped name (``hand::palm``) reaching into a model nested in it."""
+        """The graph key a name written in this model means: what the model declares by that
+        name, ``world`` for the world, the model's own frame for ``__model__`` or its own name,
+        else the name in this model's namespace -- a scoped name (``hand::palm``) reaching
+        into a model nested in it."""
         text = str(name or "").strip()
         if not text:
             return default
+        if text in self.declared:
+            return self.prefix + text
         if text == _SDF_WORLD_FRAME:
             return _SDF_WORLD_FRAME
         if text in (self.name, _SDF_MODEL_FRAME):
@@ -796,31 +806,30 @@ def _read_sdf(path: Path) -> _Description:
             raise RobotReadError(f"{where_model} is placed by its placement_frame, which the viewer does not place by; "
                                  "drop placement_frame and pose the model's own frame")
         for link_element in children(element, "link"):
-            key = scope.key(link_element.attrib.get("name"), "")
+            key = scope.own(link_element)
             _declared, relative_to, _values, transform = _sdf_pose(link_element, where=f"{display} link {key!r}")
             frames.links.add(key)
             frames.add(key, {"kind": "link", "pose": transform, "relative_to": scope.key(relative_to, scope.frame)})
             link_elements.append((key, link_element, scope))
         for frame_element in children(element, "frame"):
-            key = scope.key(frame_element.attrib.get("name"), "")
+            key = scope.own(frame_element)
             attached = scope.key(frame_element.attrib.get("attached_to"), scope.frame)
             _declared, relative_to, _values, transform = _sdf_pose(frame_element, where=f"{display} frame {key!r}")
             frames.add(key, {"kind": "frame", "pose": transform, "relative_to": scope.key(relative_to, attached), "attached": attached})
             frame_count += 1
         for nested in children(element, "model"):
-            key = scope.key(nested.attrib.get("name"), "")
+            key = scope.own(nested)
             _declared, relative_to, _values, transform = _sdf_pose(nested, where=f"{display} model {key!r}")
-            inner = _SdfScope(str(nested.attrib.get("name") or "").strip(), f"{key}::", key)
+            inner = _SdfScope(nested, f"{key}::", key)
             canonical = str(nested.attrib.get("canonical_link") or "").strip()
             first = _sdf_first(nested, "link") if not canonical else None
             first_model = _sdf_first(nested, "model") if not canonical and first is None else None
-            canonical_key = (inner.key(canonical, "") if canonical
-                             else inner.key(first.attrib.get("name"), "") if first is not None
-                             else inner.key(first_model.attrib.get("name"), "") if first_model is not None else "")
+            canonical_key = (inner.key(canonical, "") if canonical else inner.own(first) if first is not None
+                             else inner.own(first_model) if first_model is not None else "")
             frames.add(key, {"kind": "model", "pose": transform, "relative_to": scope.key(relative_to, scope.frame), "canonical": canonical_key})
             collect(nested, inner)
         for joint_element in children(element, "joint"):
-            key = scope.key(joint_element.attrib.get("name"), "")
+            key = scope.own(joint_element)
             joint_type = str(joint_element.attrib.get("type") or "").strip().lower()
             if joint_type not in (*_MOVING, "fixed"):
                 raise RobotReadError(f"{display} joint {key!r} is a {joint_type!r} joint; the viewer poses fixed, revolute, continuous and prismatic joints")
@@ -843,7 +852,7 @@ def _read_sdf(path: Path) -> _Description:
                                "expressed_in": scope.key(expressed_in, key), "limit": limit, "declared_limit": limit_element is not None,
                                "pose": values})
 
-    collect(model, _SdfScope(model_name, "", _SDF_MODEL_FRAME))
+    collect(model, _SdfScope(model, "", _SDF_MODEL_FRAME))
 
     links: dict[str, _Link] = {}
     undrawable: list[str] = []  # every visual the page cannot draw, named together

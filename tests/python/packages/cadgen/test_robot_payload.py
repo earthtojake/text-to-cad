@@ -495,6 +495,10 @@ class SdfNestedModels(_Workspace):
             robot_control_values(self.payload, {"elbow": 30})
         with self.assertRaisesRegex(RobotReadError, "SDF model 'rig' refers to frame 'arm::nope', which it does not declare"):
             read_robot_description(self.write("nope.sdf", NESTED_SDF.replace("<child>arm::upper</child>", "<child>arm::nope</child>")))
+        # A name a model declares is that element, even where it is the model's own name too.
+        named = read_robot_description(self.write("box.sdf", """<sdf version="1.9"><model name="box"><pose>0 0 5 0 0 0</pose>
+          <link name="box"><pose>1 0 0 0 0 0</pose></link><link name="lid"><pose relative_to="box">0 0 1 0 0 0</pose></link></model></sdf>"""))
+        self.assertEqual([(link["name"], link["placement"][3::4][:3]) for link in named["links"]], [("box", [1.0, 0.0, 5.0]), ("lid", [1.0, 0.0, 6.0])])
         with self.assertRaisesRegex(RobotReadError, "placed.sdf model 'arm' is placed by its placement_frame, which the viewer does not place by; "
                                                     "drop placement_frame and pose the model's own frame"):
             read_robot_description(self.write("placed.sdf", NESTED_SDF.replace('<model name="arm">', '<model name="arm" placement_frame="upper">')))
