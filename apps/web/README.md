@@ -313,7 +313,7 @@ user's state directory, shared with the CAD app.
 ### Usage stats (telemetry)
 
 cadgen's usage stats (`cadgen/analytics.py`) are on by default once a `cadgen` command has said
-so, once, in its output; nothing in the Viewer asks. **Share usage stats** in the app menu turns
+so, once, in its output; nothing in the Viewer asks. **Share anonymous usage data** in the app menu turns
 them off or on, and the answer is kept in the user's state directory, so one answer counts for
 both apps. The page reads and answers it through the CAD client (`consent`, `/__cad/analytics`),
 and reports a person touching the page (at most every 2 s) to `/__cad/analytics/activity`; a

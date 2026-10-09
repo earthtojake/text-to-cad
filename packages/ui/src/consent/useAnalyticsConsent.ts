@@ -12,7 +12,7 @@ export interface AnalyticsConsent {
 }
 
 /**
- * The app menu's Share usage stats toggle, from the host's server (`consent()` reads, `consent(share)`
+ * The app menu's Share anonymous usage data toggle, from the host's server (`consent()` reads, `consent(share)`
  * answers): read once, read again whenever the person comes back to the page (another view, the agent or
  * the CLI may have changed it meanwhile), and changed by a click. Nothing asks: cadgen's telemetry is on
  * by default once a `cadgen` command has said so. Each read and answer takes a number and only the latest
@@ -42,8 +42,8 @@ export function useAnalyticsConsent(consent: (share?: boolean) => Promise<Analyt
   const appSettings = useMemo<AppSetting[] | undefined>(() => state ? [{
     id: "analytics", checked: state.sharing, onCheckedChange: (checked: boolean) => answer(checked),
     ...(state.reason === "environment"
-      ? { label: "Share usage stats (set by your environment)", disabled: true }
-      : { label: "Share usage stats" }),
+      ? { label: "Share anonymous usage data (set by your environment)", disabled: true }
+      : { label: "Share anonymous usage data" }),
   }] : undefined, [state, answer]);
   return { consent: state, appSettings };
 }

@@ -749,7 +749,7 @@ class CadApp:
     # --- usage stats (telemetry) --------------------------------------------
 
     def _consent(self, share=None) -> dict:
-        """The app menu's Share usage stats toggle: whether sharing is on and why, and, from the person's
+        """The app menu's Share anonymous usage data toggle: whether sharing is on and why, and, from the person's
         click, their answer, which changes it whenever. Nothing asks: telemetry is on by default once a
         ``cadgen`` command has said so (``cadgen/analytics.py``)."""
         from cadgen.analytics import PRIVACY_URL

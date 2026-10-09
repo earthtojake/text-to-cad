@@ -304,7 +304,7 @@ it('an answer is never undone by a read sent just before it, and a choice the en
   fixed.server.answers['/__cad/analytics'] = () => ({ sharing: false, reason: 'environment', policy: POLICY });
   render(<App bridge={fixed.bridge as any} server={fixed.server as any} launch={home} />);
   await act(async () => {});
-  expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Share usage stats (set by your environment)' }));
+  expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Share anonymous usage data (set by your environment)' }));
 });
 
 it("the app menu's features: Quick edit is read from the server, turned off there for every view, and handed to the viewer", async () => {
@@ -315,7 +315,7 @@ it("the app menu's features: Quick edit is read from the server, turned off ther
   expect(viewer.props!.features).toEqual({ quickEdit: true });
   // Settings: Analytics, then Features.
   expect(viewer.props!.appSettings!.map(setting => [setting.label, setting.checked]))
-    .toEqual([['Share usage stats', false], ['Quick edit', true]]);
+    .toEqual([['Share anonymous usage data', false], ['Quick edit', true]]);
   await act(async () => viewer.props!.appSettings!.find(setting => setting.id === 'quickEdit')!.onCheckedChange(false));
   expect(server.asked('/__cad/features').at(-1)).toEqual({ quickEdit: false });
   expect(viewer.props!.features).toEqual({ quickEdit: false });
