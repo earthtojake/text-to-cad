@@ -177,7 +177,14 @@ Linear tolerance is relative, not an absolute deflection in millimetres, and is
 refused above `0.05` (a twentieth of the bounding diagonal — past that the mesh
 no longer follows the part). For an absolute chord deviation of X mm on a part
 whose bounding diagonal is D mm, pass X/D: 0.1 mm on a 200 mm part is `5e-4`.
-The same bound applies to `mesh_tolerance=` on a decorator.
+Angular tolerance is refused above `1.5708` (π/2, a quarter turn between
+neighbouring facets).
+
+Neither may be finer than cadgen meshes: linear tolerance at least `5e-5`,
+angular tolerance at least `0.05` radians. That is past any display or print
+need, and finer settings take minutes per curved face rather than seconds. The
+same bounds apply to `mesh_tolerance=` and `mesh_angular_tolerance=` on a
+decorator, and a value outside them is refused before anything builds.
 
 ## Workflow
 

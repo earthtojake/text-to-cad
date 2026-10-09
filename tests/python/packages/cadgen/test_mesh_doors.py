@@ -281,29 +281,27 @@ class DoorTolerances(unittest.TestCase):
             self.assertIn("at most 0.05", err.getvalue())
             self.assertIn("X/D", err.getvalue())
 
-    def test_the_bound_itself_is_accepted_and_the_angle_is_not_bounded_by_it(self):
-        from cadgen.metadata import MESH_TOLERANCE_MAX, normalize_mesh_numeric
-
-        self.assertEqual(MESH_TOLERANCE_MAX, normalize_mesh_numeric(MESH_TOLERANCE_MAX, field_name="mesh_tolerance"))
-        self.assertEqual(0.5, normalize_mesh_numeric(0.5, field_name="mesh_angular_tolerance"))
-        with self.assertRaisesRegex(ValueError, "RELATIVE"):
-            normalize_mesh_numeric(0.0501, field_name="mesh_tolerance")
+    def test_every_door_refuses_an_angle_outside_the_bounds_before_any_work(self):
+        # The old floor, 0.005 rad, meshed a sphere and a torus for over 47 minutes;
+        # 10 rad is no tolerance at all.
+        for value, bound in (("5e-3", "at least 0.05 radians"), ("10", "at most 1.5708 radians")):
+            for fmt, module, _ in DOORS:
+                err = io.StringIO()
+                with self.subTest(format=fmt, value=value), mock.patch(
+                    "cadgen._internal.doors.document_snapshot",
+                    side_effect=AssertionError("refused before the document is looked up"),
+                ), contextlib.redirect_stderr(err):
+                    self.assertEqual(1, module.main([str(self.document), "--mesh-angular-tolerance", value]))
+                self.assertIn(f"mesh_angular_tolerance {float(value):g}", err.getvalue())
+                self.assertIn(bound, err.getvalue())
 
     def test_a_decorator_argument_is_refused_by_the_same_rule(self):
         from cadgen import stl
 
         with self.assertRaisesRegex(TypeError, "@stl mesh_tolerance 2 is too large.*RELATIVE"):
             stl(mesh_tolerance=2.0)
-
-    def test_a_tolerance_finer_than_cadgen_meshes_is_refused_where_it_enters(self):
-        from cadgen import stl
-        from cadgen.metadata import MESH_ANGULAR_TOLERANCE_MIN, MESH_TOLERANCE_MIN, normalize_mesh_numeric
-
-        self.assertEqual(MESH_TOLERANCE_MIN, normalize_mesh_numeric(MESH_TOLERANCE_MIN, field_name="mesh_tolerance"))
         with self.assertRaisesRegex(TypeError, "@stl mesh_tolerance 1e-06 is finer than cadgen meshes"):
             stl(mesh_tolerance=1e-6)
-        with self.assertRaisesRegex(ValueError, "at least 0.005 radians"):
-            normalize_mesh_numeric(MESH_ANGULAR_TOLERANCE_MIN / 2, field_name="mesh_angular_tolerance")
 
 
 class DoorImports(unittest.TestCase):

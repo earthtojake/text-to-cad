@@ -392,8 +392,8 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   the stored surface record alone (`POST /__tess_cache/produce`: `meshes` jobs
   running `produce_meshes`, the keys dealt across the daemon's warm workers, and
   across more only for enough keys to repay starting one), with no tree.
-  Tolerances below the floors (`MIN_CHORD`, `MIN_ANGLE`) are refused, never
-  meshed. No client writes a mesh: every reader probes and reads, and the routes
+  Tolerances outside the tessellation policy's bounds
+  (`tessellation_policy.tolerance_refusal`) are refused, never meshed. No client writes a mesh: every reader probes and reads, and the routes
   refuse a POST to an entry (405).
 
 - `assembly.root` is the grouping the author's compound expressed; a link
