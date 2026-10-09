@@ -164,8 +164,9 @@ def solve_study(
     part is meshed again at half the element size and solved again. The finer
     solve is the more trustworthy one, so when it succeeds its numbers are the
     ones written, reported and checked; the checks compare its peak with the
-    first's for convergence, and the safety factor takes the higher of the two. When it fails the written GLB stays the first solve's, the
-    result carries one warning saying why, and no convergence finding is made.
+    first's for convergence, and the safety factor takes the higher of the two.
+    When it fails the written GLB stays the first solve's, the result carries
+    one warning saying why, and no convergence finding is made.
     """
     from cadgen._internal.fea.study import parse_study
 

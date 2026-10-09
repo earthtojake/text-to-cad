@@ -11,14 +11,14 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-__all__ = ["CONVERGED_WITHIN", "GAUSS_RATIO", "LARGE_BEND", "RESOLVE_BELOW", "Solved", "findings", "needs_finer", "safety_factor"]
+__all__ = ["CONVERGED_WITHIN", "GAUSS_RATIO", "LARGE_DISPLACEMENT", "RESOLVE_BELOW", "Solved", "findings", "needs_finer", "safety_factor"]
 
 #: Re-solve finer only when the safety factor is this close to failing.
 RESOLVE_BELOW = 3.0
 #: A finer mesh moving the peak more than this share: not converged.
 CONVERGED_WITHIN = 0.10
-#: Displacement over this share of the part's size is a large bend.
-LARGE_BEND = 0.01
+#: Displacement over this share of the part's size is a large displacement.
+LARGE_DISPLACEMENT = 0.01
 #: A Gauss-point peak over the nodal peak by this factor: an unresolved concentration.
 GAUSS_RATIO = 1.5
 
@@ -173,7 +173,7 @@ def findings(solved: Solved) -> list[dict]:
                 )
             add("warning", "mesh_not_converged", summary, f"half the mesh size moved the nodal peak {moved:.1%}", [peak])
 
-    if solved.bbox_diagonal_mm > 0 and solved.max_displacement_mm > LARGE_BEND * solved.bbox_diagonal_mm:
+    if solved.bbox_diagonal_mm > 0 and solved.max_displacement_mm > LARGE_DISPLACEMENT * solved.bbox_diagonal_mm:
         share = solved.max_displacement_mm / solved.bbox_diagonal_mm
         add(
             "warning",
