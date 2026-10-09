@@ -387,6 +387,9 @@ waits on a request beyond the two waits above.
 src/cadgen/
   <format>.py            # public namespaces: step, stl, threemf, glb, dxf,
                          #   urdf, srdf, sdf — each binds its verbs
+  fea.py                 # linear static stress: `faces` and `solve` over a
+                         #   STEP part (the `fea` extra: netgen, scikit-fem,
+                         #   pyamg); mechanism in _internal/fea/
   authoring.py           # @step/@dxf/@stl/@glb/@threemf decorators; a call
                          #   builds at top level and composes (a lazy child)
                          #   inside a body; a model's outputs are what they

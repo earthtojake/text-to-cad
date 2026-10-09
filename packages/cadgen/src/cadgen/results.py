@@ -19,6 +19,9 @@ from pathlib import Path
 __all__ = [
     "BuildResult",
     "CompileResult",
+    "FeaFace",
+    "FeaFacesResult",
+    "FeaResult",
     "MeshExportFile",
     "MeshExportResult",
     "SnapshotFile",
@@ -317,4 +320,79 @@ class ValidationResult:
         else:
             blocking = sum(1 for issue in self.issues if issue.severity == "error")
             lines.append(f"FAILED {_display(self.path)}: {blocking or len(self.issues)} blocking finding(s)")
+        return lines
+
+
+@dataclass(frozen=True)
+class FeaFace:
+    """One B-rep face of a part, as ``cadgen fea faces`` lists it: the selector a
+    study names it by, and enough geometry to pick it from a description."""
+
+    #: The viewer's selector (``#o1.f17``).
+    ref: str
+    area_mm2: float
+    #: Centre of mass, mm.
+    center_mm: tuple[float, float, float]
+    #: ``plane``, ``cylinder``, ``torus``, ... (the underlying surface type).
+    surface: str
+    #: Unit normal for a plane, else ``None``.
+    normal: tuple[float, float, float] | None
+    #: ``plane, normal -Z, largest`` -- words an agent can match to a request.
+    hint: str
+
+
+@dataclass(frozen=True)
+class FeaFacesResult:
+    """The outcome of ``cadgen fea faces``: the faces of one part occurrence."""
+
+    ok: bool
+    document: Path
+    occurrence: str
+    faces: tuple[FeaFace, ...] = ()
+
+    def human_lines(self) -> list[str]:
+        lines = [f"{self.occurrence} in {_display(self.document)}: {len(self.faces)} faces"]
+        for face in self.faces:
+            c = face.center_mm
+            lines.append(
+                f"  {face.ref:<10} {face.area_mm2:>10.2f} mm^2  at ({c[0]:.2f}, {c[1]:.2f}, {c[2]:.2f})  {face.hint}"
+            )
+        return lines
+
+
+@dataclass(frozen=True)
+class FeaResult:
+    """The outcome of ``cadgen fea solve``: where the results went, and the numbers.
+
+    ``summary`` carries the answer an engineer asks for first: max von Mises
+    (nodal and Gauss-point), safety factor against yield, max displacement,
+    and the applied-versus-reaction balance. The GLB is what the viewer shows;
+    the JSON sidecar holds this whole result plus the study it came from.
+    """
+
+    ok: bool
+    document: Path
+    occurrence: str
+    glb: Path
+    sidecar: Path
+    vtu: Path | None = None
+    summary: dict = field(default_factory=dict)
+    mesh: dict = field(default_factory=dict)
+    timings: dict = field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
+
+    def human_lines(self) -> list[str]:
+        s = self.summary
+        safety = s.get("safety_factor")
+        lines = [
+            f"solved {self.occurrence} of {_display(self.document)}: {self.mesh.get('elements')} tets, "
+            f"{self.mesh.get('dofs')} DOF, {self.mesh.get('size_mm')} mm elements",
+            f"max von Mises {s.get('max_von_mises_MPa')} MPa (Gauss {s.get('max_von_mises_gauss_MPa')} MPa), "
+            f"yield {s.get('yield_MPa')} MPa, safety factor {'n/a' if safety is None else safety}",
+            f"max displacement {s.get('max_displacement_mm')} mm at {s.get('max_displacement_at_mm')}",
+            f"applied {s.get('applied_force_N')} N, reactions {s.get('reaction_force_N')} N",
+            f"wrote GLB: {_display(self.glb)} (deformation x{s.get('deformation_scale')}), sidecar: {_display(self.sidecar)}"
+            + (f", VTU: {_display(self.vtu)}" if self.vtu else ""),
+        ]
+        lines += [f"warning: {warning}" for warning in self.warnings]
         return lines

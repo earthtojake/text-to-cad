@@ -71,6 +71,18 @@ dependencies = [
   "shapely",
 ]
 
+# Opt-in: `cadgen fea` only. The solver stack is large and no other command needs it,
+# so it is not in `dependencies`. netgen meshes the B-rep (LGPL-2.1, brings its own
+# OpenCascade), scikit-fem assembles, pyamg solves; wheels exist on every packaged target.
+[project.optional-dependencies]
+fea = [
+  "netgen-mesher>=6.2.2607",
+  "scikit-fem>=12,<13",
+  "pyamg>=5.2",
+  "numpy>=1.26",
+  "scipy>=1.11",
+]
+
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"
 Repository = "https://github.com/earthtojake/text-to-cad"
