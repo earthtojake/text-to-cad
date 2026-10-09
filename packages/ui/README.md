@@ -275,7 +275,10 @@ Display (its settings, a dropdown that opens down), then Preview. Preview is the
 mode, where routines play and the model orbits, and takes the whole page, the navbar with
 it; its own controls sit at the view's top-right, on the navbar's geometry — Orbit, then
 Display where it sat in the navbar, then Exit preview where Preview sat — and its playbar
-holds the routines at its left end and their settings at its right. Keep app-specific
+holds the routines at its left end and their settings at its right. Preview and the tools
+view are two states: preview starts from the model as authored and leaves the tools view's
+state untouched, and leaving it throws preview's away and gives the tools view back exactly
+as it was ([preview](docs/settings-ui.md#camera-animation-and-preview)). Keep app-specific
 effects in the [host contract](docs/viewer-host.md), not in renderer components.
 
 One per-file settings store serves controls, live commands and persistence.

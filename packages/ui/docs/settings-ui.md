@@ -270,8 +270,10 @@ hint are "Routine"); then the transport: play/pause, its glyph on the title's
 edge), then the scrubber, which ends where the dropdown does. Taking it up leaves the model at rest
 unless Autoplay is on, which starts the routine, as entering preview does. While
 it is up the routine owns the pose and nothing on the model is picked or
-hovered; the kept effects stay as they are. Preview carries a playing routine
-on, and leaving preview with Animation up leaves it playing. Putting it down
+hovered; the kept effects stay as they are. Preview leaves the tool's routine
+as it is and plays its own (see [preview](#camera-animation-and-preview)): leaving
+preview with Animation up finds the routine where it was, playing or paused at its
+time. Putting it down
 stops the routine and puts the model back at rest, with the Position values it
 set aside; the Routine, Speed and Loop stay for the next time. An update of the
 model that changes its routines keeps Animation up and its Routine chosen (while
@@ -584,7 +586,8 @@ starts the pose at the new defaults, never fitting the old values onto other joi
 Reset restores the authored
 values (an SRDF's home included), stops motion and hands control back to
 Position. A routine playing, in preview or under Animation, sets the Position
-values aside and gives them back once it is put down. A Position edit, Reset included, stops and rewinds a
+values aside and gives them back once it is put down; preview never shows them at all
+(it draws the model at rest, see [preview](#camera-animation-and-preview)). A Position edit, Reset included, stops and rewinds a
 routine but keeps its Routine, Speed and Loop for the next play. Kinematics, named poses and
 animation are separate capabilities; the absence of one never leaves empty
 controls for another.
@@ -736,10 +739,12 @@ a 150ms fade: movement wakes them, and hovering their area or any open dropdown 
 Display's included, holds them.
 
 Routines play in preview and under the [Animation tool](#tools-and-lifecycle).
-Entering preview starts the routine when Autoplay is on (off by default); leaving
-it stops the routine and puts the model back at rest — unless Animation is up,
-under which it carries on — keeping the Routine for the next time while the file
-is open. An update of the model that leaves its routines as they were
+Preview's routine is its own: it opens at rest on the tools view's Routine, whatever the
+Animation tool was doing, and starts when Autoplay is on (off by default). Leaving
+preview stops its routine — a routine chosen there, its time, whether it played — and
+hands the tools view's back as preview found it: at rest, or under Animation where it
+was, paused at its time or playing on from it (`savePlayback` and `restorePlayback`
+on the playbar runtime, `kit/tools/playbar/ViewportAnimationBar.js`). An update of the model that leaves its routines as they were
 neither stops nor rewinds one that is playing; a changed routine starts at rest.
 Orbit's settings and the playbar's are the file's own and are remembered between leaving
 and re-entering preview and across a reload of the tab: Orbit on or off (on by
@@ -749,14 +754,22 @@ are these same settings. Another file has its own, and a file the tab
 left starts at the defaults again. Nothing of the routine — which one, its time,
 whether it plays — is saved. Orbit is not an animation setting.
 
-Previewing turns off picks, hover, selection highlights, recognition, Draw,
-Measure, joint handles and Position as tools, and Explode and Clip, without
-discarding any of their values. The two modes keep separate cameras: entering
-saves the tools view's camera and fits a preview camera at the default angle;
-dragging in preview moves only that camera; leaving restores the tools view's
-exact pose (in the projection and lens the Display settings now hold) and every
-suspended tool with its panels. Preview's pose is never kept: the next preview
-fits afresh. The viewport stays mounted throughout.
+**Preview and the tools view are two states.** Entering preview leaves the tools view's
+state exactly as it is — the tool in hand and its panels, the Position pose, the
+selection, hidden and isolated parts, Explode and Clip, Measure's results, Draw's ink,
+the camera, the Animation tool's routine — and preview starts clean, from the model as
+authored: at its opening pose, every part shown, nothing isolated, picked, hovered,
+measured, exploded or clipped, its own camera fitted at the default angle, its routine
+at rest. Leaving preview throws away what was done there — its camera, its routine —
+and the tools view comes back exactly as it was, its camera in the projection and lens
+the Display settings now hold. Nothing of the tools view is reset to make room for
+preview and nothing of preview's is kept: the next preview starts clean again. A
+renderer holds this by drawing preview from its opening view rather than resetting
+its own state (`useRendererShell`'s `preview`); the routine, which both modes play on
+the one model, is saved on the way in and handed back on the way out (above). The
+viewport stays mounted throughout. What is not either mode's state is the file's
+settings, shared by both and kept: its Display settings (an edit in preview's Display
+is the tools view's too), and Orbit and the Playback settings.
 
 **Render profiles.** One viewport draws the same Display settings two ways
 (`kit/viewport/renderProfile.js`). The tools view is drawn for working on the

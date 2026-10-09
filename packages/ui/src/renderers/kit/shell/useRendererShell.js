@@ -63,8 +63,6 @@ export const SHELL_TOOL = Object.freeze({ DRAW: "draw", ANIMATE: "animate" });
 
 const SESSION_SAVE_DELAY_MS = 180;
 const EMPTY = Object.freeze({});
-// What asking for Preview does in a view that does not offer it: nothing.
-const NO_PREVIEW = () => {};
 
 /**
  * Everything a file-family renderer needs from its host that is not about its
@@ -111,8 +109,11 @@ const NO_PREVIEW = () => {};
  *   the normal view on screen (`previewing` stays false, `setPreviewing` does nothing).
  * @param {{ previewing: boolean, set: (previewing: boolean) => void }} [options.preview]  Preview mode
  *   (`usePreviewState`), when the renderer holds that state itself: a renderer whose own gates
- *   (picking, recognition, tool effects) run before this hook cannot wait for it. Every gate reads this one
- *   state; the Preview button, Escape and its X write it. Omitted: the shell holds it.
+ *   (picking, recognition, tool effects) and whose scene's inputs run before this hook cannot wait for it.
+ *   Every gate reads this one state; the Preview button, Escape and its X write it, through the returned
+ *   `setPreviewing`. Omitted: the shell holds it. While it is on, the renderer draws the model as it opens
+ *   (at rest, nothing hidden, isolated, picked or measured) and leaves its own state as it is, so leaving
+ *   finds the tools view exactly as it was.
  * @param {{ mode: string, set: (update: (current: string) => string) => void }} [options.tool]  The tool in
  *   hand, when the renderer holds that state itself: a renderer whose LOAD, or what Escape means in it,
  *   turns on which tool is up cannot wait for this hook to hand it back. The rules stay the shell's —
@@ -126,7 +127,8 @@ const NO_PREVIEW = () => {};
  *   routines. They play in preview — the shell puts them on the playbar under the model (its Routines, the
  *   transport, its Playback settings) — and, where the renderer puts `tools.animate` on its strip, under the
  *   Animation tool, whose panel is the shell's. Once neither holds the routine, the runtime's `onRelease` puts
- *   the model back at rest.
+ *   the model back at rest. Each mode's routine is its own: entering preview saves the tools view's
+ *   (`savePlayback`) and starts at rest, and leaving hands it back (`restorePlayback`).
  * @param {{ commands?: Record<string, (...args: any[]) => void>, declined?: Record<string, string>,
  *   state?: () => object, resource?: () => object }} [options.live]  Live commands this renderer adds (by name) or
  *   declines (name to the error its caller reads), and extra fields for the live state. Every name in
@@ -189,7 +191,31 @@ export function useRendererShell({
   const previewState = preview || ownPreview;
   // Preview is a 3D view's alone: one whose renderer did not declare it never enters it, whatever asks.
   const previewing = previewable && previewState.previewing;
-  const setPreviewing = previewable ? previewState.set : NO_PREVIEW;
+  const previewingRef = useRef(previewing);
+  previewingRef.current = previewing;
+  // Preview and the tools view are two states. The tools view's is never touched by preview: the
+  // renderer draws preview from the model as it opens (`previewing`), and keeps its own work as it
+  // is. The routine is the one thing both modes play on the same model, so it crosses here, on
+  // every way in and out: entering saves the tools view's routine as it stands and puts it down —
+  // preview opens at rest, playing only under Autoplay — and leaving puts preview's down and hands
+  // the saved one back, as it was.
+  const animationRef = useRef(animation);
+  animationRef.current = animation;
+  const autoplayRef = useRef(false);
+  const toolsRoutine = useRef(null);
+  const setPreviewing = useCallback(next => {
+    const entering = Boolean(next);
+    // A view that does not offer Preview stays as it is, whatever asks.
+    if (!previewable || entering === previewingRef.current) return;
+    previewingRef.current = entering;
+    const runtime = animationControlsHaveContent(animationRef.current) ? animationRef.current : null;
+    if (entering) toolsRoutine.current = runtime ? runtime.savePlayback() : null;
+    runtime?.onRelease();
+    if (!entering && runtime && toolsRoutine.current) runtime.restorePlayback(toolsRoutine.current);
+    if (!entering) toolsRoutine.current = null;
+    previewState.set(entering);
+    if (entering && runtime && autoplayRef.current) runtime.onPlayToggle();
+  }, [previewable, previewState.set]);
 
   // ---- the file's view --------------------------------------------------------
   const [restored] = useState(() => readFileView(view.state));
@@ -319,6 +345,7 @@ export function useRendererShell({
     services.onPreferenceChange({ toolStack: next });
   }, [services.onPreferenceChange]);
   const autoplay = playback.autoplay;
+  autoplayRef.current = autoplay;
   const setAutoplay = useCallback(value => setPlayback({ autoplay: value === true }), [setPlayback]);
   const hostRef = useRef(null);
   const [hostElement, setHostElement] = useState(null);

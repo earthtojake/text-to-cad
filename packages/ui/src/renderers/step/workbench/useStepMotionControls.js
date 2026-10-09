@@ -286,10 +286,36 @@ export function useStepMotionControls({
     };
   }, [animationState.enabled, animationState.playing, selectedActiveAnimationClip]);
 
+  // Leaving preview or the Animation tool: the clip hands the pose back to Position, as Position
+  // left it, and keeps nothing of where it was — only the transport preferences, for the next play.
+  // A routine already at rest, with nothing of Position's set aside, has nothing to hand back.
+  const releaseAnimation = useCallback(() => {
+    const current = animationStateRef.current;
+    if (current.enabled === false && !current.playing && !current.elapsedSec && !heldPositionRef.current) return;
+    activatePositionControls();
+  }, [activatePositionControls]);
+  // Preview's routine is its own (`kit/shell/useRendererShell.js`): the tools view's is saved as it
+  // stands — which routine, where its clock is, whether it plays — and handed back as it was. A
+  // routine that owned the pose takes it again, Position's values set aside as before.
+  const savePlayback = useCallback(() => {
+    const { activeClipId, enabled, playing, elapsedSec } = animationStateRef.current;
+    return { activeClipId, enabled, playing, elapsedSec: playing ? getAnimationClock() : elapsedSec };
+  }, [getAnimationClock]);
+  const restorePlayback = useCallback((saved) => {
+    const clip = findAnimationClip(selectedAnimationClips, saved?.activeClipId);
+    if (!clip) return;
+    const elapsedSec = clampAnimationElapsed(saved.elapsedSec, animationClipDuration(clip));
+    if (saved.enabled !== false) activateAnimationControls();
+    else motionRevisionRef.current += 1;
+    const nextState = { ...animationStateRef.current, activeClipId: clip.id, enabled: saved.enabled !== false,
+      playing: saved.enabled !== false && saved.playing === true, elapsedSec };
+    animationStateRef.current = nextState;
+    setAnimationState(nextState);
+    setAnimationClock(elapsedSec);
+  }, [selectedAnimationClips, activateAnimationControls]);
+
   return { handleStepModuleParameterChange, applyStepModuleParameterValues, handleResetStepModuleParameters,
     handleApplyPose, handleAnimationClipSelect, handleAnimationPlayToggle, handleAnimationRestart,
     handleAnimationScrub, handleAnimationSpeedChange, handleAnimationLoopToggle, resetMotion, resetPosition,
-    // Leaving preview or the Animation tool: the clip hands the pose back to Position, as Position
-    // left it, and keeps nothing of where it was — only the transport preferences, for the next play.
-    releaseAnimation: activatePositionControls };
+    releaseAnimation, savePlayback, restorePlayback };
 }

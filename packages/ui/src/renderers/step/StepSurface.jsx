@@ -126,6 +126,9 @@ const TOPOLOGY_FILTERS = new Set(["faces", "edges"]);
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
 const EMPTY_ID_SET = new Set();
 const TOPOLOGY_EXPANSION_INTERVAL_MS = 150;
+// Preview's hover resolver: nothing is hovered in a model shown as it opens.
+const NO_HOVER = Object.freeze({ hoveredPartId: "", hoveredReferenceId: "" });
+const NOTHING_HOVERED = () => NO_HOVER;
 // --- zoom to selection -------------------------------------------------------
 // What a selection occupies NOW: the boxes of its references, from the selector runtime as
 // posed, merged with the boxes of its parts, from the records on screen (explosion included).
@@ -994,6 +997,20 @@ function StepSurfaceBody({ view, data }) {
       ? { articulation, values: normalizeControlValues(articulation, stepModuleParameterValues) }
       : null;
   }, [selectedStepModuleDefinition, stepModuleParameterValues]);
+  // What preview draws of the person's work: nothing. The model as it opens — the articulation at its
+  // opening values, nothing hidden, isolated, picked, hovered or measured, no knobs — in place of
+  // everything the tools view hands the scene (`toolsWork`, by the viewport below).
+  const openingWork = useMemo(() => {
+    const articulation = selectedStepModuleDefinition?.articulation || null;
+    return {
+      stepParameterRuntime: articulation ? { articulation, values: openingControlValues(articulation) } : null,
+      hiddenPartIds: EMPTY_LIST, focusedPartIds: EMPTY_LIST, selectedPartIds: EMPTY_LIST, selectedReferenceIds: EMPTY_LIST,
+      resolveHover: NOTHING_HOVERED, jointHandles: null,
+      measureState: null, activeMeasurementId: "", measureModeActive: false,
+      onHoverReferenceChange: null, onActivateReference: null, onDoubleActivateReference: null,
+      onMeasurePick: null, onMeasureHoverPoint: null
+    };
+  }, [selectedStepModuleDefinition]);
   const selectedStepPartRootActive = !isAssemblyView && expandedStepTreeNodeIds.includes(STEP_MODEL_ROOT_ID);
   const plainStepReferencePickingEnabled = selectedEntryHasReferences && !isAssemblyView;
   const plainStepReferencePickingRequested = plainStepReferencePickingEnabled && selectedStepPartRootActive;
@@ -1570,7 +1587,8 @@ function StepSurfaceBody({ view, data }) {
   // What the viewport draws as hovered, from the hover store's snapshot: the parts to light
   // and the reference to outline. The viewport's layers call it with each hover change
   // (`scene/StepSceneLayers.jsx`); it changes identity only with what it resolves THROUGH —
-  // the menu that marks a part while it is up, the assembly's part mapping, preview.
+  // the menu that marks a part while it is up, the assembly's part mapping. Preview resolves
+  // none (`openingWork`).
   const resolveViewerHover = useCallback((hover) => {
     const hoveredModelReferenceId = hover.modelReferenceId;
     const hoveredListPartId = hover.listPartId;
@@ -1603,12 +1621,11 @@ function StepSurfaceBody({ view, data }) {
     })();
     const effectiveHoveredReferenceId = String(viewerContextMenu?.referenceId || "").trim() || hoveredReferenceId;
     return {
-      hoveredPartId: !previewing ? viewerHoveredPartIds : "",
-      hoveredReferenceId: !previewing && !retainingPreviousStepMesh ? effectiveHoveredReferenceId : ""
+      hoveredPartId: viewerHoveredPartIds,
+      hoveredReferenceId: !retainingPreviousStepMesh ? effectiveHoveredReferenceId : ""
     };
   }, [
     isAssemblyView,
-    previewing,
     renderPartIdsForAssemblySelection,
     renderPartIdsForWholeTopologyReference,
     resolvePickedAssemblyPartId,
@@ -3073,9 +3090,33 @@ function StepSurfaceBody({ view, data }) {
   // One shared empty list: a fresh [] per render — per animation frame — invalidated the
   // layers' pickable memos and reference map.
   const pickable = list => (!retainingPreviousStepMesh && !watching ? list : EMPTY_LIST);
+  // The person's work, as the scene draws it. Everything a person does to the model in the tools
+  // view reaches the scene through this one object: the Position pose, hidden and isolated parts,
+  // picks and hover, Measure, Position's knobs. Preview is a state of its own: it draws the model
+  // as it opens (`openingWork`) and changes none of this, so leaving it finds the tools view's work
+  // exactly as it was. A new input of the person's belongs here, and in `openingWork`.
   // Part-state lists pass through by IDENTITY: what reaches the layers is already stable for as
   // long as its contents hold, because every one of them is derived through a memo above.
+  const toolsWork = {
+    stepParameterRuntime: selectedStepParameterRuntime,
+    hiddenPartIds: viewerHiddenPartIdsForRenderPane({ inspectionEnabled: true, hasParts: true, hiddenPartIds: hiddenPartIds }),
+    focusedPartIds: focusedAssemblyRenderPartIds,
+    selectedPartIds: viewerSelectedPartIdsForRenderPane({ hasParts: true, selectedPartIds: viewerSelectedPartIds }),
+    selectedReferenceIds: !retainingPreviousStepMesh ? selectedReferenceIds : EMPTY_LIST,
+    // Hover is not a prop: the layers subscribe to it and resolve it through the surface.
+    resolveHover: resolveViewerHover,
+    jointHandles,
+    measureState: measure.state,
+    activeMeasurementId: measure.activeId,
+    measureModeActive,
+    onHoverReferenceChange: handleModelHoverChange,
+    onActivateReference: handleModelReferenceActivate,
+    onDoubleActivateReference: handleModelReferenceDoubleActivate,
+    onMeasurePick: measure.onPick,
+    onMeasureHoverPoint: measure.onHoverPoint
+  };
   const layerProps = {
+    ...(previewing ? openingWork : toolsWork),
     meshData: selectedDisplayMeshData,
     modelKey: selectedKey,
     isLoading: viewportIsLoading,
@@ -3087,45 +3128,31 @@ function StepSurfaceBody({ view, data }) {
     previewMode: previewing,
     pickMode,
     pickableParts: !retainingPreviousStepMesh ? viewerAssemblyRenderParts : EMPTY_LIST,
-    hiddenPartIds: viewerHiddenPartIdsForRenderPane({ inspectionEnabled: true, hasParts: true, hiddenPartIds: hiddenPartIds }),
-    selectedPartIds: previewing ? EMPTY_LIST : viewerSelectedPartIdsForRenderPane({ hasParts: true, selectedPartIds: viewerSelectedPartIds }),
-    // Hover is not a prop: the layers subscribe to it and resolve it through the surface.
     hoverStore,
-    resolveHover: resolveViewerHover,
-    selectedReferenceIds: !previewing && !retainingPreviousStepMesh ? selectedReferenceIds : EMPTY_LIST,
     selectorRuntime: viewerSelectorRuntimeForRenderPane({ hasTopology: true,
       retainingPreviousStepMesh: retainingPreviousStepMesh, selectorRuntime: effectiveSelectorRuntime }),
-    stepParameterRuntime: selectedStepParameterRuntime,
     // {clip, elapsedSec, playing} or null. Null means no clip is selected, and the evaluator never runs.
+    // Preview's routine is its own (`kit/shell/useRendererShell.js`), never the tools view's.
     stepAnimationRuntime: selectedAnimationRuntime,
     // Nothing is picked and a routine may own the pose: pick-only state stands still (`useStepPose`).
     animateMode: previewing || animateToolActive,
-    jointHandles: previewing ? null : jointHandles,
-    measureState: previewing ? null : measure.state,
-    activeMeasurementId: measure.activeId,
-    measureModeActive: !previewing && measureModeActive,
     onLodCameraChange: onLodCameraMoved,
     onMeshSourceAdoption: handleDisplayMeshAdoption,
     onViewerAlertChange: handleViewerAlertChange,
-    onHoverReferenceChange: !previewing ? handleModelHoverChange : null,
-    onActivateReference: !previewing ? handleModelReferenceActivate : null,
-    onDoubleActivateReference: !previewing ? handleModelReferenceDoubleActivate : null,
     // Under another tool a pick takes up Select (`ensureSelectTool`): it waits the double-click
     // window first, so a double-click there isolates and leaves the tool as it was.
     deferActivation: !selectionToolActive,
-    onMeasurePick: !previewing ? measure.onPick : null,
-    onMeasureHoverPoint: !previewing ? measure.onHoverPoint : null,
     pickAtRef
   };
   const viewPolicyResolved = useStepViewPolicy({
     meshData: selectedDisplayMeshData, themeSettings: resolvedThemeSettings, displaySettings: resolvedScene.display,
     renderMode: resolvedScene.render.enabled, renderConfiguration: resolvedScene.render.configuration,
-    renderPartsIndividually: Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime) ||
+    renderPartsIndividually: Boolean(layerProps.stepParameterRuntime) || Boolean(selectedAnimationRuntime) ||
       hasAuthoredMaterials(selectedDisplayMeshData) || Boolean(selectedAnimationRuntime?.clip),
     pickMode, pickableParts: layerProps.pickableParts,
     pickableFaces: pickable(viewerPickableFacesForTool), pickableEdges: pickable(viewerPickableEdgesForTool),
     hiddenPartIds: layerProps.hiddenPartIds, selectedPartIds: layerProps.selectedPartIds,
-    focusedPartId: focusedAssemblyRenderPartIds
+    focusedPartId: layerProps.focusedPartIds
   });
   lodSelectedPartIdsRef.current = layerProps.selectedPartIds;
 
