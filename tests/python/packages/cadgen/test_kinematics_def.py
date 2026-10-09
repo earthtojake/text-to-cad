@@ -111,10 +111,10 @@ class ConstructorTests(unittest.TestCase):
         ]
         normalize_kinematics({"mates": mates, "poses": {"up": {"elbow": 150, "lead.travel": 40}}}, where="@step")
         with self.assertRaisesRegex(
-            ValueError, r"poses\['up'\] value 160 deg is outside DOF 'elbow''s limits \[0, 150\] deg"
+            ValueError, r"poses\['up'\] value 160 deg is outside the limits \[0, 150\] deg of DOF 'elbow'"
         ):
             normalize_kinematics({"mates": mates, "poses": {"up": {"elbow": 160}}}, where="@step")
-        with self.assertRaisesRegex(ValueError, r"41 mm is outside DOF 'lead\.travel''s limits \[0, 40\] mm"):
+        with self.assertRaisesRegex(ValueError, r"41 mm is outside the limits \[0, 40\] mm of DOF 'lead\.travel'"):
             normalize_kinematics({"mates": mates, "poses": {"out": {"lead.travel": 41}}}, where="@step")
 
     def test_refs_axes_limits_and_defaults_are_validated(self) -> None:

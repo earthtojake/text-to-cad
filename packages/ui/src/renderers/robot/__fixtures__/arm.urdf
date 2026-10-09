@@ -7,7 +7,7 @@
   <link name="camera"><visual><origin xyz="0 0 0"/><geometry><box size="0.06 0.06 0.06"/></geometry><material name="m0.10.70.31"><color rgba="0.1 0.7 0.3 1"/></material></visual></link>
   <link name="finger_left"><visual><origin xyz="0 0 0.09"/><geometry><box size="0.02 0.02 0.08"/></geometry><material name="m0.80.80.21"><color rgba="0.8 0.8 0.2 1"/></material></visual></link>
   <link name="finger_right"><visual><origin xyz="0 0 0.09"/><geometry><box size="0.02 0.02 0.08"/></geometry><material name="m0.80.80.21"><color rgba="0.8 0.8 0.2 1"/></material></visual></link>
-  <link name="head"><visual><geometry><mesh filename="meshes/head.glb" scale="0.001 0.001 0.001"/></geometry></visual></link>
+  <link name="head"><visual><geometry><mesh filename="meshes/head.glb"/></geometry></visual></link>
   <joint name="footprint" type="fixed"><parent link="base_footprint"/><child link="base"/></joint>
   <joint name="shoulder" type="revolute"><parent link="base"/><child link="upper_arm"/><origin xyz="0 0 0.2"/><axis xyz="0 1 0"/><limit lower="-1.5708" upper="1.5708" effort="1" velocity="1"/></joint>
   <joint name="lift" type="prismatic"><parent link="base"/><child link="carriage"/><origin xyz="-0.15 0.15 0.15"/><axis xyz="0 0 1"/><limit lower="0" upper="0.3" effort="1" velocity="1"/></joint>

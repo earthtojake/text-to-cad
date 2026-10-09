@@ -31,6 +31,11 @@ The payload::
   (``articulation.joint_matrices``) moves them. A visual's ``id`` is ``<link>:v<n>`` and its
   ``label`` what a row calls it: the ``name`` the description gave it, else its geometry (the
   mesh file's name, or ``box``, ``cylinder``, ``sphere``, ``capsule``).
+- An SDF model's nested models (SDFormat 1.6+) are part of the robot: their links, frames
+  and joints are named by scope (``arm::elbow``, ``arm::hand::palm``), a name written in a
+  nested model resolves in that model's namespace, a nested model is posed in the model it is
+  nested in and attached to its ``canonical_link`` (else its first link), and a joint outside
+  it names its links by scoped name. A model placed by ``placement_frame`` is refused.
 - A control is a joint a person or a job sets: revolute and continuous joints in DEGREES,
   prismatic joints in METRES, each at its declared limits (a continuous joint has none). A
   mimic follower is not a control: its row is its leader's, scaled and offset, so one value
@@ -49,7 +54,11 @@ The payload::
   for a box, cylinder, sphere or capsule, a GLB cadgen meshed at the standard rung of the
   display ladder and stored as an object (``_internal.primitive_mesh``). The payload names
   a file by its absolute path (``path``) and a primitive by its object hash (``object``);
-  the host that serves it mints each one's ``url`` (:func:`locate_robot_payload`).
+  the host that serves it mints each one's ``url`` (:func:`locate_robot_payload`). A mesh
+  lands in the robot's metres as its format defines it: a GLB is metres by the glTF spec,
+  so one authored in metres needs no mesh scale, while an STL or a 3MF is drawn as the
+  numbers it holds, which the mesh scale converts (``0.001`` for millimetres). The placement
+  carries the conversion from the page's decoded unit (a GLB decodes into millimetres).
 - Refusals are the validators' (``cadgen.urdf_source``, ``cadgen.sdf_validation``,
   ``cadgen.srdf_validation``) plus what the page cannot draw: a mesh in a format it has no
   decoder for, a shape it has no mesh for, a mesh it cannot reach. Every refusal is a
@@ -93,13 +102,28 @@ __all__ = [
 ]
 
 ROBOT_PAYLOAD_SCHEMA_VERSION = 2
+# Raised when the same description resolves to a different payload of the same shape (2: a
+# GLB link mesh in metres, an SDF's nested models), so a payload the store cached before is
+# never read again (``robot_payload_scheme``).
+_RESOLUTION_REVISION = 2
 ROBOT_SUFFIXES = (".urdf", ".srdf", ".sdf")
 #: The mesh files the page decodes, by suffix: what a link mesh may be.
 DRAWABLE_MESH_FORMATS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb"}
 #: The shapes cadgen meshes for a visual (``_internal.primitive_mesh``).
 DRAWABLE_SHAPES = ("box", "capsule", "cylinder", "sphere")
-# The page draws a GLB in millimetres; a primitive is meshed in metres.
-_PRIMITIVE_SCALE = 0.001
+# What a visual's placement multiplies a decoded mesh by, by format, so the mesh lands in the
+# robot's metres. glTF is metres by its spec and the page decodes a GLB into millimetres (the
+# CAD Viewer's scene unit), so every GLB -- a link's mesh file and a primitive cadgen meshed
+# alike -- carries 0.001. An STL has no unit and the page does not read a 3MF's: both are
+# drawn as the numbers they hold, which the description's mesh scale converts to metres.
+_DECODED_TO_METRES = {"glb": 0.001, "stl": 1.0, "3mf": 1.0}
+
+
+def _mesh_scale(fmt: str, scale: list[float] | None = None) -> list[list[float]]:
+    """The scale a visual's placement ends in: the description's mesh scale, if any, on the
+    decoded mesh's own unit conversion to metres."""
+    unit = _DECODED_TO_METRES[fmt]
+    return _scale(*(unit * value for value in (scale or [1.0, 1.0, 1.0])))
 _IDENTITY = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
 _SDF_MODEL_FRAME = "__model__"
 _SDF_WORLD_FRAME = "world"
@@ -444,7 +468,7 @@ def _read_urdf(path: Path, *, package_map: dict[str, Path] | None = None) -> _De
                     scale = _numbers(mesh_element.attrib.get("scale"), 3, where=f"{where} mesh scale", default=[1.0, 1.0, 1.0])
                     facts["path"] = mesh["path"]
                     label = PurePosixPath(filename).name or "mesh"
-                    local = _multiply(local, _scale(*scale))
+                    local = _multiply(local, _mesh_scale(mesh["format"], scale))
                 else:
                     shape = facts["type"]
                     if shape not in DRAWABLE_SHAPES:
@@ -452,7 +476,7 @@ def _read_urdf(path: Path, *, package_map: dict[str, Path] | None = None) -> _De
                     dimensions = {key: facts[key] for key in ("size", "radius", "length") if facts.get(key) is not None}
                     mesh = _primitive_mesh(shape, dimensions)
                     label = shape
-                    local = _multiply(local, _scale(_PRIMITIVE_SCALE, _PRIMITIVE_SCALE, _PRIMITIVE_SCALE))
+                    local = _multiply(local, _mesh_scale(mesh["format"]))
             except RobotReadError as exc:
                 undrawable.append(str(exc))
                 continue
@@ -563,34 +587,60 @@ def _sdf_pose(element: ET.Element, *, where: str) -> tuple[bool, str, list[float
     return True, str(pose.attrib.get("relative_to") or "").strip(), values, _pose(values[:3], values[3:])
 
 
+class _SdfScope:
+    """One model's namespace in the frame graph: the top-level model's (no prefix, its frame
+    ``__model__``) or a nested model's (``arm::``, its frame the node ``arm``), and the names
+    its links, frames, joints and nested models declare."""
+
+    __slots__ = ("name", "prefix", "frame", "declared")
+
+    def __init__(self, model: ET.Element, prefix: str, frame: str) -> None:
+        self.name, self.prefix, self.frame = str(model.attrib.get("name") or "").strip(), prefix, frame
+        self.declared = {str(element.attrib.get("name") or "").strip()
+                         for tag in ("link", "frame", "joint", "model") for element in children(model, tag)}
+
+    def own(self, element: ET.Element) -> str:
+        """The graph key of an element this model declares."""
+        return self.prefix + str(element.attrib.get("name") or "").strip()
+
+    def key(self, name: object, default: str) -> str:
+        """The graph key a name written in this model means: what the model declares by that
+        name, ``world`` for the world, the model's own frame for ``__model__`` or its own name,
+        else the name in this model's namespace -- a scoped name (``hand::palm``) reaching
+        into a model nested in it."""
+        text = str(name or "").strip()
+        if not text:
+            return default
+        if text in self.declared:
+            return self.prefix + text
+        if text == _SDF_WORLD_FRAME:
+            return _SDF_WORLD_FRAME
+        if text in (self.name, _SDF_MODEL_FRAME):
+            return self.frame
+        return self.prefix + text
+
+
 class _SdfFrames:
-    """The model's frame graph: links, frames and joints to their rest transforms in the
-    model's world, by the SDFormat 1.7+ rules (``relative_to``, ``attached_to``, a joint's
-    pose relative to its child, a frame's to what it is attached to)."""
+    """The model's frame graph: its links, frames, joints and nested models, and theirs, keyed
+    by scoped name (``arm::elbow``), to their rest transforms in the model's world by the
+    SDFormat rules (``relative_to``, ``attached_to``, a joint's pose relative to its child, a
+    frame's to what it is attached to, a nested model's to the model it is nested in). Every
+    node's ``relative_to`` is a key, resolved in its own model's namespace when it was added."""
 
     def __init__(self, model_name: str, model_world: list[list[float]]) -> None:
         self.model_name = model_name
         self.nodes: dict[str, dict] = {
             _SDF_WORLD_FRAME: {"kind": "world", "world": _IDENTITY},
-            _SDF_MODEL_FRAME: {"kind": "model", "world": model_world},
+            _SDF_MODEL_FRAME: {"kind": "model", "world": model_world, "canonical": ""},
         }
         self.links: set[str] = set()
 
-    def normalize(self, name: str, default: str) -> str:
-        text = str(name or "").strip()
-        if not text:
-            return default
-        if text in (self.model_name, _SDF_MODEL_FRAME):
-            return _SDF_MODEL_FRAME
-        return text
+    def add(self, key: str, node: dict) -> None:
+        if key in self.nodes:
+            raise RobotReadError(f"SDF model {self.model_name!r} names {key!r} twice: links, frames, joints and nested models share one namespace")
+        self.nodes[key] = node
 
-    def add(self, name: str, node: dict) -> None:
-        if name in self.nodes:
-            raise RobotReadError(f"SDF model {self.model_name!r} names {name!r} twice: links, frames and joints share one namespace")
-        self.nodes[name] = node
-
-    def world(self, name: str, default: str = _SDF_MODEL_FRAME, resolving: tuple[str, ...] = ()) -> list[list[float]]:
-        key = self.normalize(name, default)
+    def world(self, key: str, resolving: tuple[str, ...] = ()) -> list[list[float]]:
         node = self.nodes.get(key)
         if node is None:
             raise RobotReadError(f"SDF model {self.model_name!r} refers to frame {key!r}, which it does not declare")
@@ -598,15 +648,14 @@ class _SdfFrames:
             return node["world"]
         if key in resolving:
             raise RobotReadError(f"SDF model {self.model_name!r} frame graph cycles at {key!r}")
-        relative = self.normalize(node["relative_to"], node["default"])
-        node["world"] = _multiply(self.world(relative, _SDF_MODEL_FRAME, (*resolving, key)), node["pose"])
+        node["world"] = _multiply(self.world(node["relative_to"], (*resolving, key)), node["pose"])
         return node["world"]
 
-    def attached_link(self, name: str, resolving: tuple[str, ...] = ()) -> str:
-        key = self.normalize(name, _SDF_MODEL_FRAME)
+    def attached_link(self, key: str, resolving: tuple[str, ...] = ()) -> str:
+        """The link a frame moves with: a nested model's frame is attached to its canonical link."""
         if key in self.links:
             return key
-        if key in (_SDF_MODEL_FRAME, _SDF_WORLD_FRAME):
+        if key == _SDF_WORLD_FRAME:
             return ""
         node = self.nodes.get(key)
         if node is None:
@@ -617,6 +666,8 @@ class _SdfFrames:
             return self.attached_link(node["attached"], (*resolving, key))
         if node["kind"] == "joint":
             return self.attached_link(node["child"], (*resolving, key))
+        if node["kind"] == "model" and node["canonical"]:
+            return self.attached_link(node["canonical"], (*resolving, key))
         return ""
 
 
@@ -741,48 +792,72 @@ def _read_sdf(path: Path) -> _Description:
         raise RobotReadError(f"{display} model {model_name!r} pose is relative_to {relative_to!r}; the viewer places a model in the world")
     frames = _SdfFrames(model_name, model_world)
 
-    link_elements = children(model, "link")
-    for link_element in link_elements:
-        name = str(link_element.attrib.get("name") or "").strip()
-        _declared, relative_to, _values, transform = _sdf_pose(link_element, where=f"{display} link {name!r}")
-        frames.links.add(name)
-        frames.add(name, {"kind": "link", "pose": transform, "relative_to": relative_to, "default": _SDF_MODEL_FRAME})
-    frame_elements = children(model, "frame")
-    for frame_element in frame_elements:
-        name = str(frame_element.attrib.get("name") or "").strip()
-        attached = frames.normalize(frame_element.attrib.get("attached_to"), _SDF_MODEL_FRAME)
-        _declared, relative_to, _values, transform = _sdf_pose(frame_element, where=f"{display} frame {name!r}")
-        frames.add(name, {"kind": "frame", "pose": transform, "relative_to": relative_to, "default": attached, "attached": attached})
-    joint_elements = children(model, "joint")
+    # The model and every model nested in it (SDFormat 1.6+), as one frame graph: each nested
+    # model's links, frames and joints under its scoped name (``arm::elbow``), each nested
+    # model's frame posed in the model it is nested in and attached to its canonical link.
+    link_elements: list[tuple[str, ET.Element, _SdfScope]] = []
+    frame_count = 0
     raw_joints: list[dict] = []
-    for joint_element in joint_elements:
-        name = str(joint_element.attrib.get("name") or "").strip()
-        joint_type = str(joint_element.attrib.get("type") or "").strip().lower()
-        if joint_type not in (*_MOVING, "fixed"):
-            raise RobotReadError(f"{display} joint {name!r} is a {joint_type!r} joint; the viewer poses fixed, revolute, continuous and prismatic joints")
-        parent_frame = frames.normalize(_sdf_text(joint_element, "parent"), "")
-        child_frame = frames.normalize(_sdf_text(joint_element, "child"), "")
-        _declared, relative_to, values, transform = _sdf_pose(joint_element, where=f"{display} joint {name!r}")
-        frames.add(name, {"kind": "joint", "pose": transform, "relative_to": relative_to, "default": child_frame, "child": child_frame})
-        axis_element = _sdf_first(joint_element, "axis")
-        xyz_element = _sdf_first(axis_element, "xyz") if axis_element is not None else None
-        axis = _numbers(xyz_element.text if xyz_element is not None else None, 3, where=f"{display} joint {name!r} axis", default=[0.0, 0.0, 1.0])
-        expressed_in = str((xyz_element.attrib.get("expressed_in") if xyz_element is not None else None)
-                           or (axis_element.attrib.get("expressed_in") if axis_element is not None else None) or "").strip()
-        limit_element = _sdf_first(axis_element, "limit") if axis_element is not None else None
-        limit: dict = {}
-        for key in ("lower", "upper", "effort", "velocity"):
-            value = _optional_numbers(_sdf_text(limit_element, key), 1) if limit_element is not None else None
-            if value is not None:
-                limit[key] = value[0]
-        raw_joints.append({"name": name, "type": joint_type, "parent": parent_frame, "child": child_frame, "axis": axis,
-                           "expressed_in": expressed_in, "limit": limit, "declared_limit": limit_element is not None,
-                           "pose": values})
+
+    def collect(element: ET.Element, scope: _SdfScope) -> None:
+        nonlocal frame_count
+        where_model = f"{display} model {(scope.prefix[:-2] or model_name)!r}"
+        if str(element.attrib.get("placement_frame") or "").strip():
+            raise RobotReadError(f"{where_model} is placed by its placement_frame, which the viewer does not place by; "
+                                 "drop placement_frame and pose the model's own frame")
+        for link_element in children(element, "link"):
+            key = scope.own(link_element)
+            _declared, relative_to, _values, transform = _sdf_pose(link_element, where=f"{display} link {key!r}")
+            frames.links.add(key)
+            frames.add(key, {"kind": "link", "pose": transform, "relative_to": scope.key(relative_to, scope.frame)})
+            link_elements.append((key, link_element, scope))
+        for frame_element in children(element, "frame"):
+            key = scope.own(frame_element)
+            attached = scope.key(frame_element.attrib.get("attached_to"), scope.frame)
+            _declared, relative_to, _values, transform = _sdf_pose(frame_element, where=f"{display} frame {key!r}")
+            frames.add(key, {"kind": "frame", "pose": transform, "relative_to": scope.key(relative_to, attached), "attached": attached})
+            frame_count += 1
+        for nested in children(element, "model"):
+            key = scope.own(nested)
+            _declared, relative_to, _values, transform = _sdf_pose(nested, where=f"{display} model {key!r}")
+            inner = _SdfScope(nested, f"{key}::", key)
+            canonical = str(nested.attrib.get("canonical_link") or "").strip()
+            first = _sdf_first(nested, "link") if not canonical else None
+            first_model = _sdf_first(nested, "model") if not canonical and first is None else None
+            canonical_key = (inner.key(canonical, "") if canonical else inner.own(first) if first is not None
+                             else inner.own(first_model) if first_model is not None else "")
+            frames.add(key, {"kind": "model", "pose": transform, "relative_to": scope.key(relative_to, scope.frame), "canonical": canonical_key})
+            collect(nested, inner)
+        for joint_element in children(element, "joint"):
+            key = scope.own(joint_element)
+            joint_type = str(joint_element.attrib.get("type") or "").strip().lower()
+            if joint_type not in (*_MOVING, "fixed"):
+                raise RobotReadError(f"{display} joint {key!r} is a {joint_type!r} joint; the viewer poses fixed, revolute, continuous and prismatic joints")
+            parent_frame = scope.key(_sdf_text(joint_element, "parent"), "")
+            child_frame = scope.key(_sdf_text(joint_element, "child"), "")
+            _declared, relative_to, values, transform = _sdf_pose(joint_element, where=f"{display} joint {key!r}")
+            frames.add(key, {"kind": "joint", "pose": transform, "relative_to": scope.key(relative_to, child_frame), "child": child_frame})
+            axis_element = _sdf_first(joint_element, "axis")
+            xyz_element = _sdf_first(axis_element, "xyz") if axis_element is not None else None
+            axis = _numbers(xyz_element.text if xyz_element is not None else None, 3, where=f"{display} joint {key!r} axis", default=[0.0, 0.0, 1.0])
+            expressed_in = ((xyz_element.attrib.get("expressed_in") if xyz_element is not None else None)
+                            or (axis_element.attrib.get("expressed_in") if axis_element is not None else None))
+            limit_element = _sdf_first(axis_element, "limit") if axis_element is not None else None
+            limit: dict = {}
+            for name in ("lower", "upper", "effort", "velocity"):
+                value = _optional_numbers(_sdf_text(limit_element, name), 1) if limit_element is not None else None
+                if value is not None:
+                    limit[name] = value[0]
+            raw_joints.append({"name": key, "type": joint_type, "parent": parent_frame, "child": child_frame, "axis": axis,
+                               "expressed_in": scope.key(expressed_in, key), "limit": limit, "declared_limit": limit_element is not None,
+                               "pose": values})
+
+    collect(model, _SdfScope(model, "", _SDF_MODEL_FRAME))
 
     links: dict[str, _Link] = {}
     undrawable: list[str] = []  # every visual the page cannot draw, named together
-    for link_element in link_elements:
-        link = _Link(str(link_element.attrib.get("name") or "").strip())
+    for link_key, link_element, scope in link_elements:
+        link = _Link(link_key)
         link.placement = frames.world(link.name)
         inverse = _invert_rigid(link.placement)
         for index, visual_element in enumerate(children(link_element, "visual"), start=1):
@@ -791,7 +866,7 @@ def _read_sdf(path: Path) -> _Description:
             color = _sdf_color(visual_element)
             facts["color"], facts["materialName"] = color, ""
             _declared, relative_to, _values, pose = _sdf_pose(visual_element, where=where)
-            local = _multiply(inverse, _multiply(frames.world(relative_to, link.name), pose))
+            local = _multiply(inverse, _multiply(frames.world(scope.key(relative_to, link.name)), pose))
             kind = facts["type"]
             try:
                 if kind == "mesh":
@@ -802,7 +877,7 @@ def _read_sdf(path: Path) -> _Description:
                     facts["path"] = mesh["path"]
                     scale = _numbers(_sdf_text(_sdf_first(_sdf_first(visual_element, "geometry"), "mesh"), "scale"), 3,
                                      where=f"{where} mesh scale", default=[1.0, 1.0, 1.0])
-                    local = _multiply(local, _scale(*scale))
+                    local = _multiply(local, _mesh_scale(mesh["format"], scale))
                     label = PurePosixPath(uri).name or "mesh"
                 elif kind in DRAWABLE_SHAPES:
                     dimensions = {key: facts[key] for key in ("size", "radius", "length") if facts.get(key) is not None}
@@ -810,7 +885,7 @@ def _read_sdf(path: Path) -> _Description:
                             or (kind in ("cylinder", "capsule") and "length" not in dimensions):
                         raise RobotReadError(f"{where} is a <{kind}> with missing or non-positive dimensions; give it positive dimensions")
                     mesh = _primitive_mesh(kind, dimensions)
-                    local = _multiply(local, _scale(_PRIMITIVE_SCALE, _PRIMITIVE_SCALE, _PRIMITIVE_SCALE))
+                    local = _multiply(local, _mesh_scale(mesh["format"]))
                     label = kind
                 else:
                     what = "has no <geometry>" if kind == "missing" else f"uses <{kind}> geometry, which the viewer cannot draw"
@@ -841,7 +916,7 @@ def _read_sdf(path: Path) -> _Description:
         joint = _Joint(raw["name"], raw["type"], parent_link, child_link)
         joint.frame = frames.world(raw["name"])
         if joint.type != "fixed":
-            axis_frame = frames.world(raw["expressed_in"], raw["name"])
+            axis_frame = frames.world(raw["expressed_in"])
             joint.axis = _unit(_rotate(axis_frame, raw["axis"]))
             if joint.axis is None:
                 raise RobotReadError(f"{display} joint {raw['name']!r} axis must be nonzero")
@@ -865,9 +940,9 @@ def _read_sdf(path: Path) -> _Description:
         "modelName": model_name,
         "rootLink": description.root,
         "rootLinks": roots,
-        "frameCount": len(frame_elements),
+        "frameCount": frame_count,
         "linkCount": len(link_elements),
-        "jointCount": len(joint_elements),
+        "jointCount": len(raw_joints),
         "staticMetadata": _sdf_metadata(root),
     }
     return description
@@ -1041,7 +1116,8 @@ def _wrap_angle(value: float) -> float:
 
 
 def _four_bar_candidates(four_bar: Mapping[str, float], driver_rad: float) -> tuple[float, float]:
-    """The crank's two possible angles (radians from the ground direction) at a driver angle."""
+    """The crank's two possible angles (radians from the ground direction) at a driver angle.
+    ``RobotReadError`` says why the coupler cannot reach, for a caller to place in its sentence."""
     output_angle = four_bar["output_zero"] + driver_rad
     pin_x = four_bar["ground_length"] + four_bar["output_length"] * math.cos(output_angle)
     pin_y = four_bar["output_length"] * math.sin(output_angle)
@@ -1050,7 +1126,10 @@ def _four_bar_candidates(four_bar: Mapping[str, float], driver_rad: float) -> tu
     if distance <= _FOUR_BAR_INTERSECTION_TOLERANCE:
         raise RobotReadError("the output pin coincides with the input pivot")
     if distance < abs(crank - coupler) - _FOUR_BAR_INTERSECTION_TOLERANCE or distance > crank + coupler + _FOUR_BAR_INTERSECTION_TOLERANCE:
-        raise RobotReadError("the lengths cannot close at this driver angle")
+        raise RobotReadError(
+            f"the output pin is {distance:g} m from the input pivot, outside the {abs(crank - coupler):g} to {crank + coupler:g} m "
+            f"that input_length {crank:g} and coupler_length {coupler:g} reach"
+        )
     along = (crank * crank - coupler * coupler + distance * distance) / (2.0 * distance)
     height = math.sqrt(max(0.0, crank * crank - along * along))
     unit_x, unit_y = pin_x / distance, pin_y / distance
@@ -1091,9 +1170,15 @@ def _four_bar_geometry(joint: _Joint, driver: _Joint, *, where: str) -> None:
     expected = joint.four_bar["ground_length"]
     tolerance = _FOUR_BAR_GEOMETRY_ABSOLUTE_TOLERANCE_M + _FOUR_BAR_GEOMETRY_RELATIVE_TOLERANCE * max(abs(planar), abs(expected))
     if abs(axial) > tolerance:
-        raise RobotReadError(f"{where}: its pivot and its driver {driver.name!r}'s are not coplanar ({axial:g} m apart along the axis)")
+        raise RobotReadError(
+            f"{where}: its pivot and the pivot of its driver {driver.name!r} are not coplanar ({axial:g} m apart along the axis); "
+            "place both joints' origins in one plane normal to the axis"
+        )
     if abs(planar - expected) > tolerance:
-        raise RobotReadError(f"{where} declares ground_length {expected:g}, but its pivot and its driver {driver.name!r}'s are {planar:g} metres apart")
+        raise RobotReadError(
+            f"{where} declares ground_length {expected:g}, but its pivot and the pivot of its driver {driver.name!r} are {planar:g} metres apart; "
+            "set ground_length to that distance, or move the joints' origins"
+        )
 
 
 def _range_contains_periodic(lower: float, upper: float, target: float) -> bool:
@@ -1117,7 +1202,7 @@ def _four_bar_reachable(four_bar: Mapping[str, float], lower_rad: float, upper_r
     if (nearest <= _FOUR_BAR_INTERSECTION_TOLERANCE or nearest < reach_min - _FOUR_BAR_INTERSECTION_TOLERANCE
             or farthest > reach_max + _FOUR_BAR_INTERSECTION_TOLERANCE):
         raise RobotReadError(
-            f"{where}: its driver {driver!r}'s range [{math.degrees(lower_rad):g}, {math.degrees(upper_rad):g}] deg includes angles "
+            f"{where}: the range [{math.degrees(lower_rad):g}, {math.degrees(upper_rad):g}] deg of its driver {driver!r} includes angles "
             "where the linkage cannot close; narrow the driver's limits or correct the lengths"
         )
 
@@ -1143,7 +1228,10 @@ def _four_bar_curve(joint: _Joint, driver: _Joint, *, where: str) -> dict[str, A
         try:
             return four_bar_input_angle(four_bar, x)
         except RobotReadError as exc:
-            raise RobotReadError(f"{where} cannot close at driver angle {math.degrees(x):g} deg: {exc}") from None
+            raise RobotReadError(
+                f"{where} cannot close with its driver {driver.name!r} at {math.degrees(x):g} deg: {exc}; "
+                "narrow the driver's limits or correct the lengths"
+            ) from None
 
     def near(value: float, reference: float) -> float:
         """``value`` plus the turn count that brings it within half a turn of ``reference``."""
@@ -1180,7 +1268,7 @@ def _four_bar_curve(joint: _Joint, driver: _Joint, *, where: str) -> dict[str, A
         low_deg, high_deg = math.degrees(min(wrapped)), math.degrees(max(wrapped))
         if low_deg < math.degrees(joint.lower) - _FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG or high_deg > math.degrees(joint.upper) + _FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG:
             raise RobotReadError(
-                f"{where} derives {low_deg:g} to {high_deg:g} deg over its driver {driver.name!r}'s range, outside its own limits "
+                f"{where} derives {low_deg:g} to {high_deg:g} deg over the range of its driver {driver.name!r}, outside its own limits "
                 f"[{math.degrees(joint.lower):g}, {math.degrees(joint.upper):g}] deg; widen them to contain the derived range"
             )
     unwrapped: list[float] = []
@@ -1237,9 +1325,18 @@ def _articulation(description: _Description) -> dict[str, Any]:
                 raise RobotReadError(f"{where} needs a revolute or continuous joint, not {joint.type!r}")
             _four_bar_geometry(joint, driver, where=where)
             four_bar = {**joint.four_bar}
-            four_bar["branch"] = _four_bar_branch(four_bar)
+            zero_pose = f"at the zero pose (its driver {driver.name!r} at 0 deg)"
+            try:
+                four_bar["branch"] = _four_bar_branch(four_bar)
+            except RobotReadError as exc:
+                raise RobotReadError(f"{where} cannot close {zero_pose}: {exc}; correct the lengths so the linkage closes as written") from None
             if abs(four_bar_input_angle(four_bar, 0.0)) > _FOUR_BAR_ZERO_POSE_TOLERANCE_RAD:
-                raise RobotReadError(f"{where} zero angles do not describe an assembly branch the lengths close at")
+                closes = " or ".join(f"{math.degrees(angle):g}" for angle in _four_bar_candidates(four_bar, 0.0))
+                raise RobotReadError(
+                    f"{where} zero angles do not describe an assembly branch the lengths close at: {zero_pose} the coupler closes "
+                    f"the crank at {closes} deg from the ground line, not at input_zero {math.degrees(four_bar['input_zero']):g} deg; "
+                    "set input_zero to the angle of the branch the linkage is assembled on"
+                )
             joint.four_bar = four_bar
             form = (0.0, {}, {"driver": row_of(driver), **_four_bar_curve(joint, driver, where=where)})
         elif joint.mimic is None:
@@ -1376,8 +1473,9 @@ def read_robot_description(path: Path | str, *, package_map: dict[str, Path] | N
 
 
 def robot_payload_scheme() -> str:
-    """What the payload's shape and its primitive meshes depend on, hashed into the index key."""
-    return f"robot-payload-{ROBOT_PAYLOAD_SCHEMA_VERSION}-articulation-{ARTICULATION_SCHEMA_VERSION}-" \
+    """What the payload's shape, its resolution and its primitive meshes depend on, hashed into
+    the index key."""
+    return f"robot-payload-{ROBOT_PAYLOAD_SCHEMA_VERSION}-resolution-{_RESOLUTION_REVISION}-articulation-{ARTICULATION_SCHEMA_VERSION}-" \
            + json.dumps(DEFAULT_TESSELLATION, sort_keys=True)
 
 
@@ -1451,18 +1549,47 @@ def _format(value: float) -> str:
     return f"{value:g}"
 
 
+def _plus(value: float) -> str:
+    """A term added to a formula, its sign the operator: `` + 2`` or `` - 2``."""
+    return f" - {_format(-value)}" if value < 0 else f" + {_format(value)}"
+
+
 def robot_control_values(payload: Mapping[str, Any], request: object) -> dict[str, float]:
     """The full control vector a ``jointValues`` request means: every control, the ones the
     request names at their values and the rest at the opening. A value for a joint that is not
-    a control is refused by name (a fixed joint has no value; a mimic follower is set through its
-    leader; a four-bar's crank through its driver), as is a value outside a control's limits --
-    which, for a four-bar's driver, is the range the linkage was solved over -- and a leader
-    value that puts a follower outside the follower's own limits."""
+    a control is refused by name (a fixed joint has no value; a mimic follower is set through the
+    control its chain of leaders ends at; a four-bar's crank through its driver), as is a value
+    outside a control's limits -- which, for a four-bar's driver, is the range the linkage was
+    solved over -- and a leader value that puts a follower outside the follower's own limits."""
     articulation = payload.get("articulation") or {}
     controls = {str(control["id"]): control for control in articulation.get("controls") or []}
     rows = {str(joint["id"]): joint for joint in articulation.get("joints") or []}
     facts_by_name = {str(joint.get("name")): joint for joint in payload.get("joints") or [] if isinstance(joint, Mapping)}
     kind = str(payload.get("kind") or "robot").upper()
+
+    def driven_by(name: str) -> tuple[str, str]:
+        """``(the control that poses joint name, how the joint follows it)``: the chain of mimic
+        leaders and four-bar drivers from the joint to the control it ends at."""
+        steps: list[str] = []
+        current, seen = name, {name}
+        while current not in controls:
+            facts = facts_by_name.get(current) or {}
+            four_bar, mimic = facts.get("fourBar"), facts.get("mimic")
+            if isinstance(four_bar, Mapping) and four_bar.get("driver"):
+                current = str(four_bar["driver"])
+                steps.append(f"is the crank of a four-bar linkage (tcad:four_bar) driven by {current!r}")
+            elif isinstance(mimic, Mapping) and mimic.get("joint"):
+                current = str(mimic["joint"])
+                steps.append(f"mimics {current!r}")
+            else:
+                break
+            if current in seen:
+                break
+            seen.add(current)
+        return current, ", which ".join(steps)
+
+    def unit_of(name: str) -> str:
+        return "m" if (facts_by_name.get(name) or {}).get("type") == "prismatic" else "deg"
     values = {name: float(control.get("default") or 0.0) for name, control in controls.items()}
     values.update({name: float(value) for name, value in (articulation.get("opening") or {}).items() if name in values})
     if request is None:
@@ -1483,21 +1610,18 @@ def robot_control_values(payload: Mapping[str, Any], request: object) -> dict[st
             joint = rows[name]
             if joint.get("kind") == "fixed":
                 raise RobotReadError(f"jointValues[{name}]: joint {name!r} is fixed, so it has no value to set; drop it")
-            facts = facts_by_name.get(name) or {}
-            four_bar = facts.get("fourBar")
-            if isinstance(four_bar, Mapping) and four_bar.get("driver"):
-                driver = str(four_bar["driver"])
-                raise RobotReadError(
-                    f"jointValues[{name}]: joint {name!r} is the crank of a four-bar linkage (tcad:four_bar) driven by {driver!r}, "
-                    f"so it is posed by {driver!r}'s value; set jointValues[{driver}] instead"
-                )
+            root, chain = driven_by(name)
+            # A follower's row is affine in the control its chain ends at: say how it follows, in
+            # that control's terms. A row on a curve (a crank, or a mimic of one) has no such form.
             row = joint.get("turn") or joint.get("travel") or {}
             terms, bias = row.get("terms") or [], float(row.get("bias") or 0.0)
-            leader = str((facts.get("mimic") or {}).get("joint") or (terms[0][0] if terms else name))
-            formula = f" ({name} = {_format(float(terms[0][1]))} × {leader}{f' + {_format(bias)}' if bias else ''})" if terms else ""
+            formula = ""
+            if len(terms) == 1 and str(terms[0][0]) == root and "curve" not in row:
+                offset = f"{_plus(bias)} {unit_of(name)}" if bias else ""
+                formula = f" ({name} = {_format(float(terms[0][1]))} × {root}{offset})"
             raise RobotReadError(
-                f"jointValues[{name}]: joint {name!r} mimics {leader!r}{formula}, so it is posed by {leader!r}'s value; "
-                f"set jointValues[{leader}] instead"
+                f"jointValues[{name}]: joint {name!r} {chain}{formula}, so it is posed by the value of {root!r}; "
+                f"set jointValues[{root}] instead"
             )
         control = controls[name]
         lo, hi, unit = control.get("min"), control.get("max"), str(control.get("unit") or "")
@@ -1506,8 +1630,8 @@ def robot_control_values(payload: Mapping[str, Any], request: object) -> dict[st
             tolerance = 1e-9 * max(1.0, abs(float(lo)), abs(float(hi)))
             if not float(lo) - tolerance <= float(value) <= float(hi) + tolerance:
                 raise RobotReadError(
-                    f"jointValues[{name}] = {_format(float(value))} {unit} is outside joint {name!r}'s "
-                    f"limits [{_format(float(lo))}, {_format(float(hi))}] {unit}; pass a value within them"
+                    f"jointValues[{name}] = {_format(float(value))} {unit} is outside the limits "
+                    f"[{_format(float(lo))}, {_format(float(hi))}] {unit} of joint {name!r}; pass a value within them"
                 )
         values[name] = float(value)
     # A leader's value puts each follower somewhere: refuse one that lands outside the follower's limits.
@@ -1523,9 +1647,10 @@ def robot_control_values(payload: Mapping[str, Any], request: object) -> dict[st
             leader = str(handle.get("control") or "")
             if leader not in request:
                 continue
+            leader_unit = str(controls[leader].get("unit") or "")
             raise RobotReadError(
-                f"jointValues[{leader}] = {_format(values[leader])} {unit} puts joint {joint_id!r}, which mimics "
-                f"{leader!r}, at {_format(value)} {unit}, outside its limits [{_format(lo)}, {_format(hi)}] {unit}; "
+                f"jointValues[{leader}] = {_format(values[leader])} {leader_unit} puts joint {joint_id!r}, which {driven_by(joint_id)[1]}, "
+                f"at {_format(value)} {unit}, outside its limits [{_format(lo)}, {_format(hi)}] {unit}; "
                 f"pass a value that keeps it within them"
             )
     return values

@@ -663,11 +663,11 @@ class PoseLimitTests(_Workspace):
     def test_step_kinematics_values_must_lie_within_each_dofs_limits(self) -> None:
         self.prepare({"input": "hinge.step", "kinematics": {"swing": 120, "crown.travel": 0, "wind": 1}})
         refused = [
-            ({"swing": 121}, r"kinematics\[swing\] = 121 deg is outside DOF 'swing''s limits \[0, 120\] deg"),
+            ({"swing": 121}, r"kinematics\[swing\] = 121 deg is outside the limits \[0, 120\] deg of DOF 'swing'"),
             ({"crown.travel": -0.5}, r"kinematics\[crown\.travel\] = -0\.5 mm is outside .*\[0, 2\] mm"),
             ({"crown.turn": 91}, r"kinematics\[crown\.turn\] = 91 deg is outside .*\[-90, 90\] deg"),
             # A coupling with no declared limits spans (0, 1).
-            ({"wind": 1.5}, r"kinematics\[wind\] = 1\.5 is outside DOF 'wind''s limits \[0, 1\];"),
+            ({"wind": 1.5}, r"kinematics\[wind\] = 1\.5 is outside the limits \[0, 1\] of DOF 'wind';"),
             ({"swing": "90"}, r"kinematics\[swing\] must be a number"),
         ]
         for values, pattern in refused:
@@ -690,10 +690,10 @@ class PoseLimitTests(_Workspace):
         # the follower past the follower's own limits is refused too.
         self.prepare({**job, "jointValues": {"elbow": 20, "slide": 0.1, "wheel": 720}})
         refused = [
-            ({"elbow": 60}, r"jointValues\[elbow\] = 60 deg is outside joint 'elbow''s limits \[-57\.2958, 57\.2958\] deg"),
-            ({"slide": 0.2}, r"jointValues\[slide\] = 0\.2 m is outside joint 'slide''s limits \[0, 0\.1\] m"),
+            ({"elbow": 60}, r"jointValues\[elbow\] = 60 deg is outside the limits \[-57\.2958, 57\.2958\] deg of joint 'elbow'"),
+            ({"slide": 0.2}, r"jointValues\[slide\] = 0\.2 m is outside the limits \[0, 0\.1\] m of joint 'slide'"),
             ({"finger": 5}, r"jointValues\[finger\]: joint 'finger' mimics 'elbow' \(finger = 1 × elbow\), so it is posed "
-                            r"by 'elbow''s value; set jointValues\[elbow\] instead"),
+                            r"by the value of 'elbow'; set jointValues\[elbow\] instead"),
             ({"elbow": 40}, r"jointValues\[elbow\] = 40 deg puts joint 'finger', which mimics 'elbow', at 40 deg, "
                             r"outside its limits \[0, 28\.6479\] deg"),
             ({"elbow": -10}, r"puts joint 'finger', which mimics 'elbow', at -10 deg"),

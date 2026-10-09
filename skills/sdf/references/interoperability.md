@@ -51,7 +51,7 @@ CAD Viewer can review `.sdf` files visually and help catch gross placement or re
 
 After creating or modifying `.sdf` files, show them ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 
-CAD Viewer renders SDF as static structure plus direct inspection controls. It lists plugins, sensors, lights, includes, and nested models as metadata, but does not execute plugins or consume file-authored motion contracts.
+CAD Viewer renders SDF as static structure plus direct inspection controls. It draws a model nested in the model with it (its links and joints named by scope, `arm::elbow`), lists plugins, sensors, lights and includes as metadata (an included model is not drawn), and does not execute plugins or consume file-authored motion contracts.
 
 ## Gazebo / libsdformat
 

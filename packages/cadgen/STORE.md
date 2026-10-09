@@ -146,7 +146,9 @@ content hash, so the same bytes are never flattened twice and an upgrade lands
 on a new key instead of invalidating an old one in place. `index/robot` is the
 same for a robot description (URDF, SDF, or an SRDF with its paired URDF)
 resolved into the articulation and visual list a page plays
-(`cadgen.robot_payload`): its key hashes the scheme, the description's path
+(`cadgen.robot_payload`): its key hashes the scheme (the payload's shape, its
+resolution revision -- raised when the same bytes resolve differently -- the
+articulation's format and the display tessellation), the description's path
 (the payload names each link mesh by the absolute path it resolved beside the
 description) and the content hashes of the description and the paired URDF,
 and the entry also names the primitive meshes the payload draws (`meshes`),

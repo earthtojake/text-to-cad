@@ -110,7 +110,8 @@ cadgen snapshot path/to/robot.srdf review.png
 Hand it the `.srdf`; it routes by suffix and renders the paired URDF's geometry — the same-folder `.urdf` whose `<robot name>` matches, exactly as `cadgen srdf validate` pairs them. No match, or more than one, is refused before anything renders, naming the robot name it looked for and the `.urdf` files it found; so is an SRDF the validator refuses (no planning group, a name the URDF does not have). Pose the robot with `--joint-values` — `{joint: value}` JSON in degrees (metres for a
 prismatic joint), each naming a joint a person can drive, within its limits, or the request is
 refused before anything renders: a fixed joint or a `<mimic>` follower is refused by name (a
-follower follows its leader), and so is a leader value that would push a follower past the
+follower follows its leader, so the refusal names the driven joint its chain of leaders ends
+at, to set instead), and so is a leader value that would push a follower past the
 follower's own limits. Joints you do not name stay where the CAD Viewer opens the robot: each
 at its default, then this SRDF's `home` group state if it declares one (the `"jointValues"`
 job field is the same thing in a packet). The snapshot draws the robot with the viewer's own

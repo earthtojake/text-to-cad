@@ -139,7 +139,9 @@ a leader value that would push a follower past the follower's own limits. Joints
 name stay at their defaults, where the CAD Viewer opens the robot (the `"jointValues"` job
 field is the same thing in a packet). The snapshot draws the robot with the viewer's own
 scene, so it shows what the viewer shows: cadgen resolves the description first — the frame
-graph (`relative_to`, `attached_to`) into every link's rest placement — meshes a `box`,
+graph (`relative_to`, `attached_to`) into every link's rest placement, a model nested in the
+model included, its links and joints named by scope (`arm::elbow`, the name `--joint-values`
+takes) — meshes a `box`,
 `cylinder`, `sphere` or `capsule` itself, and refuses by name a visual it cannot draw: a
 `plane`, `heightmap`, `polyline` or `ellipsoid`, a mesh `<uri>` that is not an STL, 3MF or
 GLB file beside the description (`model://`, `package://` and remote URIs are not resolved)

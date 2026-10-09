@@ -11,9 +11,9 @@ Each mesh is one glTF binary: positions and normals in glTF's Y-up metres, one t
 primitive, no material (the robot's visual paints it: the description's colour, else the
 viewer's surface), and the ``cadUpAxis`` declaration every cadgen GLB carries. It is a
 store object addressed by its bytes (``cadgen.store.objects``), so one shape at one size
-is meshed once for every robot that draws it. The page draws a GLB in millimetres, so a
-primitive's placement carries the same ``0.001`` a ``<mesh scale>`` on a cadgen-written
-link mesh does (``cadgen.robot_payload``).
+is meshed once for every robot that draws it. The page decodes a GLB into millimetres, so a
+primitive's placement carries the same ``0.001`` every GLB link mesh's does
+(``cadgen.robot_payload``).
 """
 
 from __future__ import annotations

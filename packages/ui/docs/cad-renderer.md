@@ -441,7 +441,8 @@ by core's `common/articulation.js` — the visuals it draws (each mesh at its re
 placement: a link's mesh file, or a box, cylinder, sphere or capsule cadgen meshed into
 its store) and the facts a person reads back. An SRDF is its paired URDF with the SRDF's
 semantics on it (group states as named poses, end effectors, planning groups), an SDF a
-robot with one more section. The page parses nothing: a description cadgen refuses (its
+robot with one more section (a model nested in its model is part of it, its links and
+joints named by scope: `arm::elbow`). The page parses nothing: a description cadgen refuses (its
 validators' findings, a mesh the page cannot draw, a `package://` or remote mesh, an SRDF
 with no single URDF beside it) is refused at the door, in cadgen's words. Nothing below
 the loader asks which format it was. The STEP renderer matches none of them.

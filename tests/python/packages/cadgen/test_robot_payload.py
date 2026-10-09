@@ -95,6 +95,29 @@ SWING_SDF = """<?xml version="1.0"?>
 </model></world></sdf>
 """
 
+# A model nested in the model, and one nested in that: arm stands on the base, its elbow posed on its
+# upper link and its lower link on the elbow, a wrist frame on the lower link, the hand on that frame;
+# the rig's shoulder attaches arm by its scoped link name.
+NESTED_SDF = """<?xml version="1.0"?>
+<sdf version="1.9"><model name="rig">
+  <link name="base"><visual name="v"><geometry><box><size>0.4 0.4 0.02</size></box></geometry></visual></link>
+  <model name="arm">
+    <pose relative_to="base">0.1 0 0.05 0 0 0</pose>
+    <link name="upper"><pose>0 0 0.05 0 0 0</pose><visual name="v"><geometry><box><size>0.02 0.02 0.1</size></box></geometry></visual></link>
+    <link name="lower"><pose relative_to="elbow">0 0 0.05 0 0 0</pose><visual name="v"><geometry><cylinder><radius>0.01</radius><length>0.1</length></cylinder></geometry></visual></link>
+    <frame name="wrist" attached_to="lower"><pose>0 0 0.05 0 0 0</pose></frame>
+    <joint name="elbow" type="revolute"><pose relative_to="upper">0 0 0.05 0 0 0</pose><parent>upper</parent><child>lower</child>
+      <axis><xyz expressed_in="__model__">0 1 0</xyz><limit><lower>-1.6</lower><upper>1.6</upper></limit></axis></joint>
+    <model name="hand">
+      <pose relative_to="wrist">0 0 0.01 0 0 0</pose>
+      <link name="palm"><visual name="v"><geometry><sphere><radius>0.02</radius></sphere></geometry></visual></link>
+    </model>
+    <joint name="wrist_mount" type="fixed"><parent>wrist</parent><child>hand::palm</child></joint>
+  </model>
+  <joint name="shoulder" type="revolute"><parent>base</parent><child>arm::upper</child><axis><xyz>0 0 1</xyz></axis></joint>
+</model></sdf>
+"""
+
 
 # A crank-rocker four-bar (the browser fixture, `packages/ui/src/renderers/robot/__fixtures__/linkage.urdf`):
 # the ground runs 0.2 m along +x from the crank's pivot to the rocker's; the rocker (0.08 m, the driver)
@@ -336,8 +359,14 @@ class FourBar(_Workspace):
         urdf = four_bar_urdf(extra_links='<link name="pointer"/>',
                              extra_joints='<joint name="pointer_joint" type="revolute"><parent link="ground"/><child link="pointer"/><axis xyz="0 0 1"/>'
                                           '<limit lower="-3" upper="3" effort="1" velocity="1"/><mimic joint="input_joint" multiplier="2" offset="0.1"/></joint>')
-        articulation = read_robot_description(self.write("pointer.urdf", urdf))["articulation"]
+        payload = read_robot_description(self.write("pointer.urdf", urdf))
+        articulation = payload["articulation"]
         self.assertEqual([control["id"] for control in articulation["controls"]], ["output_joint"])
+        # A value of its own is refused with the control the chain ends at, past the crank it mimics.
+        with self.assertRaisesRegex(RobotReadError, "jointValues\\[pointer_joint\\]: joint 'pointer_joint' mimics 'input_joint', which is the crank of a "
+                                                    "four-bar linkage \\(tcad:four_bar\\) driven by 'output_joint', so it is posed by the value of "
+                                                    "'output_joint'; set jointValues\\[output_joint\\] instead"):
+            robot_control_values(payload, {"pointer_joint": 10})
         self.assertEqual([handle["id"] for handle in articulation["handles"]], ["output_joint"], "a mimic of a curve has no inverse to write through")
         rows = joint_values(articulation, {"output_joint": 15})
         self.assertAlmostEqual(rows["pointer_joint"]["turn"], 2 * rows["input_joint"]["turn"] + math.degrees(0.1), places=9)
@@ -348,13 +377,19 @@ class FourBar(_Workspace):
 
     def test_what_cannot_close_is_refused_in_words(self) -> None:
         cases = [
-            ("a full turn of a rocker", four_bar_urdf(driver_type="continuous"), "range \\[-180, 180\\] deg includes angles where the linkage cannot close"),
+            ("a full turn of a rocker", four_bar_urdf(driver_type="continuous"), "the range \\[-180, 180\\] deg of its driver 'output_joint' includes angles where the linkage cannot close"),
             ("a wider range than closes", four_bar_urdf(driver_limit=(-0.9, 0.9)), "includes angles where the linkage cannot close; narrow the driver's limits"),
             ("an opposed axis", four_bar_urdf(driver_axis="0 0 -1"), "must turn about parallel, same-direction axes"),
-            ("the wrong ground length", four_bar_urdf(element={"ground_length": 0.25}), "declares ground_length 0.25, but its pivot and its driver 'output_joint''s are 0.2 metres apart"),
+            ("the wrong ground length", four_bar_urdf(element={"ground_length": 0.25}), "declares ground_length 0.25, but its pivot and the pivot of its driver 'output_joint' are 0.2 metres apart; set ground_length to that distance"),
             ("pivots off the plane", four_bar_urdf(driver_origin='xyz="0.2 0 0.01" rpy="0 0 1.5707963267948966"'), "are not coplanar"),
             ("crank limits that do not hold the derived range", four_bar_urdf(crank_limit=(-0.1, 0.1)), "derives -58.3025 to 47.5186 deg .* outside its own limits \\[-5.72958, 5.72958\\] deg"),
-            ("zero angles off the branch", four_bar_urdf(element={"input_zero": 0.3}), "zero angles do not describe an assembly branch"),
+            ("zero angles off the branch", four_bar_urdf(element={"input_zero": 0.3}),
+             "zero angles do not describe an assembly branch the lengths close at: at the zero pose \\(its driver 'output_joint' at 0 deg\\) "
+             "the coupler closes the crank at .* deg from the ground line, not at input_zero 17.1887 deg; set input_zero"),
+            # The pin sits 0.2154 m from the crank's pivot, nearer than a 0.05 m crank on a 0.3 m coupler reaches.
+            ("lengths that cannot close as written", four_bar_urdf(element={"coupler_length": 0.3}),
+             "cannot close at the zero pose \\(its driver 'output_joint' at 0 deg\\): the output pin is 0.215407 m from the input pivot, "
+             "outside the 0.25 to 0.35 m that input_length 0.05 and coupler_length 0.3 reach; correct the lengths"),
         ]
         for label, urdf, pattern in cases:
             with self.subTest(label), self.assertRaisesRegex(RobotReadError, f"linkage.urdf joint 'input_joint' tcad:four_bar.*{pattern}"):
@@ -365,9 +400,9 @@ class FourBar(_Workspace):
     def test_joint_values_refuse_the_crank_by_name_and_the_driver_outside_the_solved_range(self) -> None:
         self.assertEqual(robot_control_values(self.payload, {"output_joint": 20}), {"output_joint": 20.0})
         with self.assertRaisesRegex(RobotReadError, "jointValues\\[input_joint\\]: joint 'input_joint' is the crank of a four-bar linkage \\(tcad:four_bar\\) "
-                                                    "driven by 'output_joint', so it is posed by 'output_joint''s value; set jointValues\\[output_joint\\] instead"):
+                                                    "driven by 'output_joint', so it is posed by the value of 'output_joint'; set jointValues\\[output_joint\\] instead"):
             robot_control_values(self.payload, {"input_joint": 10})
-        with self.assertRaisesRegex(RobotReadError, "jointValues\\[output_joint\\] = 40 deg is outside joint 'output_joint''s limits \\[-28.6479, 28.6479\\] deg"):
+        with self.assertRaisesRegex(RobotReadError, "jointValues\\[output_joint\\] = 40 deg is outside the limits \\[-28.6479, 28.6479\\] deg of joint 'output_joint'"):
             robot_control_values(self.payload, {"output_joint": 40})
 
 
@@ -423,6 +458,52 @@ class SdfArticulation(_Workspace):
         self.assertEqual([visual["label"] for visual in payload["visuals"]], ["capsule", "box"])
 
 
+class SdfNestedModels(_Workspace):
+    """A model nested in the model (SDFormat 1.6+) is part of the robot: its links, frames and
+    joints resolve in its own namespace under scoped names (``arm::elbow``), its pose in the model
+    it is nested in, and a joint outside it attaches to its links by scoped name."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.payload = read_robot_description(self.write("rig.sdf", NESTED_SDF))
+
+    def test_every_nested_link_and_joint_is_placed_in_rest_space(self) -> None:
+        placed = {link["name"]: [round(v, 6) + 0.0 for v in link["placement"][3::4][:3]] for link in self.payload["links"]}
+        self.assertEqual(placed, {"base": [0.0, 0.0, 0.0], "arm::upper": [0.1, 0.0, 0.1], "arm::lower": [0.1, 0.0, 0.2],
+                                  "arm::hand::palm": [0.1, 0.0, 0.26]},
+                         "arm sits on the base, its links in arm's frame, hand on arm's wrist frame")
+        self.assertEqual([visual["id"] for visual in self.payload["visuals"]], ["base:v1", "arm::upper:v1", "arm::lower:v1", "arm::hand::palm:v1"])
+        articulation = self.payload["articulation"]
+        joints = {joint["id"]: joint for joint in articulation["joints"]}
+        self.assertEqual(list(joints), ["shoulder", "arm::elbow", "arm::wrist_mount"], "parents first, across the namespaces")
+        self.assertEqual((joints["arm::elbow"]["origin"], joints["arm::elbow"]["axis"], joints["arm::elbow"]["parent"]),
+                         ([0.1, 0.0, 0.15], [0.0, 1.0, 0.0], "shoulder"))
+        self.assertEqual(joints["arm::wrist_mount"]["parent"], "arm::elbow", "a joint on a frame rides the frame's link")
+        self.assertEqual(articulation["carries"], {"shoulder": ["arm::upper"], "arm::elbow": ["arm::lower"], "arm::wrist_mount": ["arm::hand::palm"]})
+        self.assertEqual((self.payload["root"], self.payload["sdf"]["linkCount"], self.payload["sdf"]["jointCount"], self.payload["sdf"]["frameCount"]),
+                         ("base", 4, 3, 1))
+        # A quarter turn of the elbow about +Y swings the hand 0.11 m above it out along +X.
+        delta = joint_matrices(articulation, {"arm::elbow": 90})["arm::wrist_mount"]
+        self.assertEqual(transform(delta, (0.1, 0, 0.26)), [0.21, 0.0, 0.15])
+
+    def test_a_scoped_name_is_what_a_job_sets_and_what_a_refusal_says(self) -> None:
+        self.assertEqual([control["id"] for control in self.payload["articulation"]["controls"]], ["shoulder", "arm::elbow"])
+        self.assertEqual(robot_control_values(self.payload, {"arm::elbow": 30}), {"shoulder": 0.0, "arm::elbow": 30.0})
+        with self.assertRaisesRegex(RobotReadError, "jointValues\\[arm::wrist_mount\\]: joint 'arm::wrist_mount' is fixed"):
+            robot_control_values(self.payload, {"arm::wrist_mount": 1})
+        with self.assertRaisesRegex(RobotReadError, "Unknown joint\\(s\\): elbow. This SDF declares: arm::elbow, shoulder"):
+            robot_control_values(self.payload, {"elbow": 30})
+        with self.assertRaisesRegex(RobotReadError, "SDF model 'rig' refers to frame 'arm::nope', which it does not declare"):
+            read_robot_description(self.write("nope.sdf", NESTED_SDF.replace("<child>arm::upper</child>", "<child>arm::nope</child>")))
+        # A name a model declares is that element, even where it is the model's own name too.
+        named = read_robot_description(self.write("box.sdf", """<sdf version="1.9"><model name="box"><pose>0 0 5 0 0 0</pose>
+          <link name="box"><pose>1 0 0 0 0 0</pose></link><link name="lid"><pose relative_to="box">0 0 1 0 0 0</pose></link></model></sdf>"""))
+        self.assertEqual([(link["name"], link["placement"][3::4][:3]) for link in named["links"]], [("box", [1.0, 0.0, 5.0]), ("lid", [1.0, 0.0, 6.0])])
+        with self.assertRaisesRegex(RobotReadError, "placed.sdf model 'arm' is placed by its placement_frame, which the viewer does not place by; "
+                                                    "drop placement_frame and pose the model's own frame"):
+            read_robot_description(self.write("placed.sdf", NESTED_SDF.replace('<model name="arm">', '<model name="arm" placement_frame="upper">')))
+
+
 class SrdfArticulation(_Workspace):
     def test_group_states_are_poses_and_home_is_the_opening(self) -> None:
         self.write("arm.urdf", ARM_URDF)
@@ -468,6 +549,32 @@ class Refusals(_Workspace):
         self.assertEqual(visual["placement"][0], 0.001, "the mesh scale is in the placement")
         self.assertEqual(payload["links"][0]["visuals"][0]["path"], visual["mesh"]["path"])
 
+    def test_a_mesh_lands_in_metres_as_its_format_defines_it(self) -> None:
+        # One 0.05 x 0.22 x 0.05 m box, written as each format holds it: an STL in metres with no
+        # scale, an STL and a 3MF in millimetres with scale 0.001, and a GLB, which glTF defines in
+        # metres, with none. The page decodes a GLB into millimetres and an STL or a 3MF as written
+        # (packages/core glbMeshData), so the placement times what the page decodes is where the
+        # box's corner is drawn: the same point for every one, through either door.
+        decoded = {"stl": 1.0, "3mf": 1.0, "glb": 1000.0}
+        corner = (0.025, 0.11, 0.025)
+        cases = [("metres.stl", "", 1.0), ("millimetres.stl", "0.001 0.001 0.001", 1000.0),
+                 ("millimetres.3mf", "0.001 0.001 0.001", 1000.0), ("metres.glb", "", 1.0)]
+        for name, _scale, _unit in cases:
+            (self.root / name).write_bytes(b"solid a\nendsolid a\n")
+        for name, scale, unit in cases:
+            urdf_scale = f' scale="{scale}"' if scale else ""
+            sdf_scale = f"<scale>{scale}</scale>" if scale else ""
+            urdf = (f'<robot name="r"><link name="arm"><visual><origin xyz="0 0 0.11"/><geometry><mesh filename="{name}"{urdf_scale}/>'
+                    '</geometry></visual></link></robot>')
+            sdf = (f'<sdf version="1.9"><model name="r"><link name="arm"><visual name="v"><pose>0 0 0.11 0 0 0</pose><geometry><mesh>'
+                   f'<uri>{name}</uri>{sdf_scale}</mesh></geometry></visual></link></model></sdf>')
+            for door, text in (("urdf", urdf), ("sdf", sdf)):
+                with self.subTest(mesh=name, door=door):
+                    visual = read_robot_description(self.write(f"r.{door}", text))["visuals"][0]
+                    placement = [visual["placement"][row * 4:row * 4 + 4] for row in range(4)]
+                    drawn = transform(placement, [decoded[visual["mesh"]["format"]] * unit * value for value in corner])
+                    self.assertEqual(drawn, [0.025, 0.11, 0.135])
+
     def test_every_undrawable_sdf_visual_is_named_at_once(self) -> None:
         # A plane is valid SDF the page has no mesh for; a shape the validator does not know is its finding.
         sdf = """<sdf version="1.9"><model name="rig">
@@ -501,14 +608,37 @@ class Refusals(_Workspace):
         refused = [
             ({"nope": 1}, "Unknown joint\\(s\\): nope. This URDF declares: grip, lift, shoulder, spin"),
             ({"camera_mount": 1}, "joint 'camera_mount' is fixed, so it has no value to set; drop it"),
-            ({"grip_mirror": 0.01}, "joint 'grip_mirror' mimics 'grip' \\(grip_mirror = -1 × grip\\), so it is posed by 'grip''s value; set jointValues\\[grip\\] instead"),
-            ({"grip": 0.05}, "jointValues\\[grip\\] = 0.05 m is outside joint 'grip''s limits \\[0, 0.04\\] m; pass a value within them"),
+            ({"grip_mirror": 0.01}, "joint 'grip_mirror' mimics 'grip' \\(grip_mirror = -1 × grip\\), so it is posed by the value of 'grip'; set jointValues\\[grip\\] instead"),
+            ({"grip": 0.05}, "jointValues\\[grip\\] = 0.05 m is outside the limits \\[0, 0.04\\] m of joint 'grip'; pass a value within them"),
             ({"shoulder": "10"}, "must be a number"),
             ([1], "must be an object"),
         ]
         for request, pattern in refused:
             with self.subTest(request=request), self.assertRaisesRegex(RobotReadError, pattern):
                 robot_control_values(payload, request)
+
+    def test_a_follower_down_a_mimic_chain_names_the_control_its_chain_ends_at(self) -> None:
+        urdf = f"""<robot name="m"><link name="base"/><link name="a"/><link name="b"/><link name="c"/><link name="d"/>
+          <joint name="ja" type="revolute"><parent link="base"/><child link="a"/><axis xyz="0 0 1"/>{limit(-1, 1)}</joint>
+          <joint name="jb" type="revolute"><parent link="a"/><child link="b"/><axis xyz="0 0 1"/>{limit(-1.5, 2.5)}<mimic joint="ja" multiplier="2" offset="0.1"/></joint>
+          <joint name="jc" type="revolute"><parent link="b"/><child link="c"/><axis xyz="0 0 1"/>{limit(-0.6, 0.6)}<mimic joint="jb" multiplier="-0.5"/></joint>
+          <joint name="jd" type="prismatic"><parent link="base"/><child link="d"/><axis xyz="0 0 1"/>{limit(0, 0.05)}<mimic joint="ja" multiplier="0.02" offset="0.02"/></joint>
+        </robot>"""
+        payload = read_robot_description(self.write("m.urdf", urdf))
+        # jc = -0.5 * (2 * ja + 0.1) = -ja - 0.05 rad: in the controls' degrees, -1 x ja - 2.86479.
+        refused = [
+            ({"jc": 10}, "jointValues[jc]: joint 'jc' mimics 'jb', which mimics 'ja' (jc = -1 × ja - 2.86479 deg), so it is posed by the value of 'ja'; "
+                         "set jointValues[ja] instead"),
+            ({"jd": 0.03}, "jointValues[jd]: joint 'jd' mimics 'ja' (jd = 0.000349066 × ja + 0.02 m), so it is posed by the value of 'ja'; "
+                           "set jointValues[ja] instead"),
+            ({"ja": 40}, "jointValues[ja] = 40 deg puts joint 'jc', which mimics 'jb', which mimics 'ja', at -42.8648 deg, outside its limits "
+                         "[-34.3775, 34.3775] deg; pass a value that keeps it within them"),
+        ]
+        for request, message in refused:
+            with self.subTest(request=request), self.assertRaises(RobotReadError) as caught:
+                robot_control_values(payload, request)
+            self.assertEqual(str(caught.exception), message)
+        self.assertEqual(robot_control_values(payload, {"ja": 10}), {"ja": 10.0}, "the joint the refusal names is one a value poses")
 
     def test_a_leader_may_not_push_its_follower_past_the_followers_limits(self) -> None:
         urdf = """<robot name="g"><link name="a"/><link name="b"/><link name="c"/>

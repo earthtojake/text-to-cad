@@ -612,11 +612,7 @@
      "name": "",
      "type": "mesh",
      "filename": "meshes/head.glb",
-     "scale": [
-      0.001,
-      0.001,
-      0.001
-     ],
+     "scale": null,
      "origin": {
       "xyz": [
        0.0,
