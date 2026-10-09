@@ -2,7 +2,7 @@
 
 Pinned on hand-built cubes, so every number is known: what each format carries
 (placements baked in and mirrored safely, colours resolved face > occurrence >
-component > part > default, the GLB's Y-up metres, node layout, extras and
+part > default as the viewer draws them, the GLB's Y-up metres, node layout, extras and
 finishes, the 3MF's shared vertices and stored zip) and that the same input is
 the same bytes. Real geometry runs through the engine in the export suites.
 """
@@ -140,7 +140,8 @@ class Colour(unittest.TestCase):
             ({"components": components, "occurrences": [occurrence("o1", baseColor="#00FF00", color=half_grey)]},
              cube(), {"#00ff00"}),
             ({"components": components, "occurrences": [occurrence("o1", color=half_grey)]}, cube(), {"#bcbcbc"}),
-            ({"components": components, "occurrences": [occurrence("o1")]}, cube(), {"#0000ff"}),
+            # Never the component's: a shared one carries whichever occurrence the build met first.
+            ({"components": components, "occurrences": [occurrence("o1")]}, cube(), {"#d4d4d8"}),
             ({"components": {"c1": {}}, "occurrences": [occurrence("o1")]}, cube(part_color=half_grey), {"#bcbcbc"}),
             ({"components": {"c1": {}}, "occurrences": [occurrence("o1")]}, cube(), {"#d4d4d8"}),
         ]
@@ -149,6 +150,34 @@ class Colour(unittest.TestCase):
                 self.assertEqual(expected, self.colours(descriptor, tessellation))
         self.assertEqual({"#123456"}, self.colours({"components": {"c1": {}}, "occurrences": [occurrence("o1")]},
                                                    cube(), default_color="#123456"))
+
+    def test_an_uncoloured_occurrence_never_takes_a_siblings_colour_in_any_format(self):
+        # Two occurrences of one component, one red: the store's build gives the shared
+        # component the colour of the first coloured occurrence it meets. The viewer draws
+        # the plain one in the default grey, whichever comes first, and so must each file.
+        red = [1.0, 0.0, 0.0, 1.0]
+        painted, plain = occurrence("o1.1", color=red), occurrence("o1.2", transform=placed(20))
+        namespace = {"m": "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"}
+        for order in ([painted, plain], [plain, painted]):
+            primitives = build_primitives({"components": {"c1": {"color": red}}, "occurrences": order}, {"c1": cube()})
+            with self.subTest(first=order[0]["id"], format="glb"):
+                gltf, binary = read_glb(glb_bytes(primitives, name="two"))
+                colours = {}
+                for node in gltf["nodes"]:
+                    for primitive in gltf["meshes"][node["mesh"]]["primitives"]:
+                        factor = gltf["materials"][primitive["material"]]["pbrMetallicRoughness"]["baseColorFactor"]
+                        x = accessor(gltf, binary, primitive["attributes"]["POSITION"]).reshape(-1, 3)[:, 0]
+                        colours[round(float(x.mean()) * 1000)] = linear_rgb_to_hex(factor)
+                self.assertEqual({0: "#ff0000", 20: "#d4d4d8"}, colours)
+            with self.subTest(first=order[0]["id"], format="3mf"):
+                model = ET.fromstring(zipfile.ZipFile(io.BytesIO(threemf_bytes(primitives, name="two")))
+                                      .read("3D/3dmodel.model"))
+                bases = [base.get("displaycolor")
+                         for base in model.findall("m:resources/m:basematerials/m:base", namespace)]
+                centres = [round(float(np.mean([float(vertex.get("x"))
+                                                for vertex in obj.iter(f"{{{namespace['m']}}}vertex")])))
+                           for obj in model.findall("m:resources/m:object", namespace)]
+                self.assertEqual({0: "#FF0000FF", 20: "#D4D4D8FF"}, dict(zip(centres, bases)))
 
     def test_one_colour_is_one_static_primitive_until_a_finish_tells_them_apart(self):
         two = {"components": {"c1": {}}, "occurrences": [

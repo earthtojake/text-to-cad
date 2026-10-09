@@ -132,9 +132,9 @@ and nothing cadgen runs needs Node. A model script needs no change:
   once, with OCCT's triangles: the same surfaces within the same tolerances, in
   different bytes and triangle counts. Compare meshes by geometry, never by
   hash.
-- A tolerance finer than cadgen meshes is refused where it enters, before
-  anything builds: `mesh_tolerance` below `1e-5` of the bounding diagonal, or
-  `mesh_angular_tolerance` below `0.005` radians.
+- A tolerance outside what cadgen meshes is refused where it enters, before
+  anything builds: `mesh_tolerance` below `5e-5` of the bounding diagonal, or
+  `mesh_angular_tolerance` below `0.05` or above `1.5708` radians.
 - `CADGEN_MESH_CACHE` is gone and nothing reads it: a mesh is an ordinary store
   entry, evicted and rebuilt like the rest.
 - Each model's first view or snapshot after upgrading derives its surfaces and

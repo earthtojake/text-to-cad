@@ -394,8 +394,8 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   the stored surface record alone (`POST /__tess_cache/produce`: `meshes` jobs
   running `produce_meshes`, the keys dealt across the daemon's warm workers, and
   across more only for enough keys to repay starting one), with no tree.
-  Tolerances below the floors (`MIN_CHORD`, `MIN_ANGLE`) are refused, never
-  meshed. No client writes a mesh: every reader probes and reads, and the routes
+  Tolerances outside the tessellation policy's bounds
+  (`tessellation_policy.tolerance_refusal`) are refused, never meshed. No client writes a mesh: every reader probes and reads, and the routes
   refuse a POST to an entry (405).
 
 - `assembly.root` is the grouping the author's compound expressed; a link
@@ -975,10 +975,13 @@ Each with the failure it prevents.
   OCCT writes its label's address instead (`0:1:1:2`, `=>[0:1:1:2]`; a
   single-part document's root is one): that, a blank, the translator's
   default, a shape kind and digits alone read as no name
-  (`step_scene_loader._normalize_label_name`), and the document tree names
-  the occurrence by its id. Readers show the tree's names as given
-  (`DOCUMENT_SCHEMA_VERSION` 5: a document entry from before the entry rule
-  is a miss, and its bytes compile again).
+  (`step_scene_loader._normalize_label_name`). An occurrence with no name of
+  its own shows its product's, unless that is another occurrence's own label
+  -- a writer names a product its occurrences share after one of them, cadgen's
+  after the last (`step_scene_loader._withhold_borrowed_product_names`) -- and
+  otherwise the document tree names it by its id. Readers show the tree's
+  names as given (`DOCUMENT_SCHEMA_VERSION` 6: a document entry from before
+  these rules is a miss, and its bytes compile again).
 - **Publish rule.** `cadgen.store.publish.decide`: a build rejects replacing a
   current record with a stale one — if the record on disk already reflects the
   closure as it is NOW and the build that finished ran against older sources,

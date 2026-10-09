@@ -39,7 +39,7 @@ from cadgen.assets import require_browser_runtime
 from cadgen.coordination import PHASE_RENDER, resolve as resolve_progress
 from cadgen.results import SnapshotFile, SnapshotResult, SnapshotTimings
 from cadgen.section_drawing import SECTION_FRAMES
-from cadgen.tessellation_policy import TESSELLATION_FLOORS
+from cadgen.tessellation_policy import TESSELLATION_FLOORS, tolerance_refusal
 from cadgen._internal.atomic_replace import write_bytes_atomic
 
 
@@ -110,12 +110,6 @@ RETIRED_OUTPUT_SETTINGS_KEYS = {"paddingPercent": "padding"}
 OUTPUT_PADDING_RANGE = (0, 0.15)
 OUTPUT_RENDER_SCALE_RANGE = (1, 3)
 SUPPORTED_QUALITY_KEYS = frozenset({"tessellation"})
-# Floors for `quality.tessellation`: the finest anything may ask cadgen to mesh
-# (cadgen.tessellation_policy). Chord tolerance is RELATIVE to each component's
-# bounding diagonal and angle tolerance is radians, so these are ~100x finer than
-# the standard rung and past any display need at any output size; a finer request
-# is refused here, before anything is meshed or a browser launched.
-MIN_RENDER_TESSELLATION = dict(TESSELLATION_FLOORS)
 SUPPORTED_OUTPUT_KEYS = frozenset(
     {
         "path",
@@ -1017,29 +1011,28 @@ def normalize_snapshot_job_packet(raw_payload: object) -> tuple[bool, list[objec
     return True, [raw_payload]
 def validate_render_tessellation(value: object) -> None:
     """Refuse an unusable ``quality.tessellation`` here, the one place it is
-    checked: the page draws the tolerances the resolved job names
-    (``cadgen.tessellation_policy.snapshot_tessellation``)."""
+    checked, before anything is meshed or a browser launched: the page draws the
+    tolerances the resolved job names (``cadgen.tessellation_policy.snapshot_tessellation``),
+    each within the policy's bounds (``tolerance_refusal``)."""
     if value is None:
         return
     if not is_plain_object(value):
         raise SnapshotError("quality.tessellation must be an object of chordTolerance/angleTolerance")
-    unknown = sorted(set(value) - set(MIN_RENDER_TESSELLATION))
+    unknown = sorted(set(value) - set(TESSELLATION_FLOORS))
     if unknown:
         raise SnapshotError(
             f"quality.tessellation has unknown key(s): {', '.join(unknown)}; "
-            f"supported keys: {', '.join(sorted(MIN_RENDER_TESSELLATION))}"
+            f"supported keys: {', '.join(sorted(TESSELLATION_FLOORS))}"
         )
-    for key, floor in MIN_RENDER_TESSELLATION.items():
+    for key in TESSELLATION_FLOORS:
         if key not in value:
             continue
         raw = value[key]
         if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not isfinite(float(raw)) or float(raw) <= 0:
             raise SnapshotError(f"quality.tessellation.{key} must be a positive finite number")
-        if float(raw) < floor:
-            raise SnapshotError(
-                f"quality.tessellation.{key} must be at least {floor}; finer sampling "
-                "exhausts the renderer instead of improving the image"
-            )
+        refusal = tolerance_refusal(key, float(raw), name=f"quality.tessellation.{key}")
+        if refusal is not None:
+            raise SnapshotError(refusal)
 
 
 def normalize_common_job(

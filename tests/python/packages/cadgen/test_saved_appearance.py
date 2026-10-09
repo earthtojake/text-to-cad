@@ -231,7 +231,7 @@ class SavedAppearanceTest(unittest.TestCase):
         note_document_tree(document_hash, current_tree)
         current_document = read_entry("document", document_hash)
         self.assertEqual(DOCUMENT_SCHEMA_VERSION, current_document["schemaVersion"])
-        self.assertEqual(5, current_document["schemaVersion"])
+        self.assertEqual(6, current_document["schemaVersion"])
         self.assertEqual(current_tree, tree_for_document_hash(document_hash))
         self.assertNotIn("meshes", current_document)
         note_document_mesh(document_hash, "new", "current-mesh")

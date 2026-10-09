@@ -34,18 +34,43 @@ class TessellationPolicyTests(unittest.TestCase):
                          meshes.tessellation_key("a" * 64, standard["chordTolerance"], standard["angleTolerance"]))
         # Every rung is one any request may ask to have meshed.
         for level in levels:
-            self.assertGreaterEqual(level["chordTolerance"], meshes.MIN_CHORD)
-            self.assertGreaterEqual(level["angleTolerance"], meshes.MIN_ANGLE)
+            for key, value in level.items():
+                self.assertIsNone(policy.tolerance_refusal(key, value, name=key), level)
 
-    def test_one_set_of_floors_holds_the_store_the_doors_and_the_snapshot(self) -> None:
-        from cadgen.metadata import MESH_ANGULAR_TOLERANCE_MIN, MESH_TOLERANCE_MIN
-        from cadgen.snapshot_core import MIN_RENDER_TESSELLATION
+    def test_one_rule_bounds_a_tolerance_at_every_door_and_names_the_bound(self) -> None:
+        from cadgen.metadata import normalize_mesh_numeric
+        from cadgen.snapshot_core import SnapshotError, validate_render_tessellation
         from cadgen.store import meshes
 
-        floors = {"chordTolerance": MESH_TOLERANCE_MIN, "angleTolerance": MESH_ANGULAR_TOLERANCE_MIN}
-        self.assertEqual(floors, policy.TESSELLATION_FLOORS)
-        self.assertEqual(floors, MIN_RENDER_TESSELLATION)
-        self.assertEqual((meshes.MIN_CHORD, meshes.MIN_ANGLE), (MESH_TOLERANCE_MIN, MESH_ANGULAR_TOLERANCE_MIN))
+        def flag(key, value):
+            normalize_mesh_numeric(value, field_name={"chordTolerance": "mesh_tolerance",
+                                                      "angleTolerance": "mesh_angular_tolerance"}[key])
+
+        def snapshot(key, value):
+            validate_render_tessellation({key: value})
+
+        def request(key, value):
+            meshes.normalize_tessellations([{**policy.DEFAULT_TESSELLATION, key: value}])
+
+        def stored(key, value):
+            pair = {**policy.DEFAULT_TESSELLATION, key: value}
+            key_ = meshes.tessellation_key("a" * 64, pair["chordTolerance"], pair["angleTolerance"])
+            if meshes.meshable_key(key_) is None:
+                raise ValueError("not a key anything may ask to have meshed")
+
+        doors = {"flag": flag, "snapshot": snapshot, "request": request, "stored key": stored}
+        for key in ("chordTolerance", "angleTolerance"):
+            floor, ceiling = policy.TESSELLATION_FLOORS[key], policy.TESSELLATION_CEILINGS[key]
+            for door, check in doors.items():
+                with self.subTest(key=key, door=door):
+                    check(key, floor)
+                    check(key, ceiling)
+                    for outside, bound in ((floor * 0.99, f"at least {floor:g}"), (ceiling * 1.01, f"at most {ceiling:g}"),
+                                           (1e300, f"at most {ceiling:g}")):
+                        with self.assertRaises((ValueError, SnapshotError)) as caught:
+                            check(key, outside)
+                        if door != "stored key":
+                            self.assertIn(bound, str(caught.exception))
 
     def test_a_snapshot_draws_the_rung_its_display_asks_for_or_what_it_names(self) -> None:
         levels = policy.TESSELLATION_LADDER

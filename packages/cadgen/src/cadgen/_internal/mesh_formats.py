@@ -12,9 +12,10 @@ reads the store or imports the kernel.
   inverse-transpose carries the normals) and groups the triangles by resolved
   colour and finish. The colour of a face is the first of: its own intrinsic
   colour, the occurrence's (a named material's ``baseColor``, then its STEP
-  colour), the component's, the part's, the export default.
-- :func:`stl_bytes` is binary STL, colourless by format, without the triangles
-  that cover nothing (as the 3MF weld drops them).
+  colour), the part's, the export default -- what the CAD Viewer draws. It
+  leaves out the triangles that cover nothing (two corners one point), so no
+  format carries them.
+- :func:`stl_bytes` is binary STL, colourless by format.
 - :func:`threemf_bytes` is one ``basematerials`` group with one object per
   primitive, its vertices shared by exact position (what a slicer welds on).
 - :func:`glb_bytes` is glTF 2.0, Y-up metres: one node per primitive for a static
@@ -244,18 +245,19 @@ def _place(positions: np.ndarray, normals: np.ndarray, placement: _Placement) ->
 
 
 def occurrence_colors(
-    descriptor: Mapping[str, Any], occurrence: Mapping[str, Any], tessellation: Tessellation,
-    default_color: str | None = None,
+    occurrence: Mapping[str, Any], tessellation: Tessellation, default_color: str | None = None,
 ) -> list[str]:
     """Every face range of one occurrence resolved to its export colour: its own,
     else the occurrence's (a named material's ``baseColor``, then its STEP colour),
-    the component's, the part's, the export default. The one chain, for the soup
-    and for a bent tube's skin that replaces an occurrence's primitives alike."""
-    cid = str(occurrence.get("component") or "")
+    the part's, the export default -- the chain the CAD Viewer and snapshots draw. The
+    one chain, for the soup and for a bent tube's skin that replaces an occurrence's
+    primitives alike.
+
+    Never the component's: occurrences share a component, which carries whichever
+    coloured occurrence the build met first, so an uncoloured sibling would take it."""
     base_color = str(occurrence.get("baseColor") or "")
     occurrence_color = base_color.lower() if _HEX.fullmatch(base_color) else linear_rgb_to_hex(occurrence.get("color"))
-    component_color = linear_rgb_to_hex(((descriptor.get("components") or {}).get(cid) or {}).get("color"))
-    fallback = (occurrence_color or component_color or linear_rgb_to_hex(tessellation.part_color)
+    fallback = (occurrence_color or linear_rgb_to_hex(tessellation.part_color)
                 or (default_color or DEFAULT_COLOR).lower())
     return [linear_rgb_to_hex(face_range.get("color")) or fallback for face_range in tessellation.face_ranges]
 
@@ -344,7 +346,7 @@ def build_primitives(
                     material_id=material_id, material_name=material_name,
                 )
             continue
-        colors = occurrence_colors(descriptor, occurrence, tessellation, default_color)
+        colors = occurrence_colors(occurrence, tessellation, default_color)
         for range_index, face_range in enumerate(tessellation.face_ranges):
             if int(face_range.get("indexCount") or 0) < 3:
                 continue
@@ -376,7 +378,10 @@ def build_primitives(
     primitives: list[Primitive] = []
     for key in sorted([*groups, *spliced]):
         if key in spliced:
-            primitives.append(spliced[key])
+            primitive = spliced[key]
+            triangles = primitive.indices.reshape(-1, 3)
+            primitives.append(dataclasses.replace(
+                primitive, indices=triangles[_covering(primitive.positions, triangles)].reshape(-1)))
             continue
         group = groups[key]
         positions, normals, indices = [], [], []
@@ -387,6 +392,7 @@ def build_primitives(
             placed, turned = _place(tessellation.positions[used], tessellation.normals[used], placement)
             if placement.mirrored:
                 triangles = triangles[:, [0, 2, 1]]  # keeps recomputed facet normals outward
+            triangles = triangles[_covering(placed, triangles)]
             positions.append(placed)
             normals.append(turned)
             indices.append((triangles + np.uint32(base)).reshape(-1))
@@ -400,6 +406,16 @@ def build_primitives(
             material_id=group.material_id, material_name=group.material_name,
         ))
     return [primitive for primitive in primitives if primitive.triangle_count]
+
+
+def _covering(positions: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """Which of ``triangles`` (t, 3) cover something: no two of its corners are one point.
+
+    OCCT's mesh has such triangles at a sphere's pole and a cone's apex. They cover
+    nothing and still carry their edges, which a slicer or a watertightness check welding
+    by position counts four times. ``==`` holds -0.0 and 0.0 one point."""
+    a, b, c = (positions[triangles[:, corner]] for corner in range(3))
+    return ~((a == b).all(axis=1) | (b == c).all(axis=1) | (c == a).all(axis=1))
 
 
 def total_triangles(primitives: list[Primitive]) -> int:
@@ -426,18 +442,11 @@ def _facet_normals(corners: np.ndarray) -> np.ndarray:
 
 
 def stl_bytes(primitives: list[Primitive], *, name: str = "model") -> bytes:
-    """Binary STL: an 80-byte header naming the model, then every triangle that covers
-    something."""
+    """Binary STL: an 80-byte header naming the model, then every triangle."""
     corners = np.concatenate(
         [primitive.positions[primitive.indices].reshape(-1, 9) for primitive in primitives]
         or [np.zeros((0, 9), np.float32)]
     )
-    # A triangle two of whose corners are one point (OCCT's mesh has them at a
-    # sphere's pole, a cone's apex) covers nothing and still carries its edges,
-    # which a slicer welding by position then counts four times. Left out, as the
-    # 3MF weld leaves it out; == holds -0.0 and 0.0 one point, as that weld does.
-    a, b, c = corners[:, 0:3], corners[:, 3:6], corners[:, 6:9]
-    corners = corners[~((a == b).all(axis=1) | (b == c).all(axis=1) | (c == a).all(axis=1))]
     records = np.zeros(len(corners), dtype=_STL_RECORD)
     records["normal"] = _facet_normals(corners)
     records["corners"] = corners
@@ -455,7 +464,8 @@ def xml_escape(value: object) -> str:
 
 def _welded(primitive: Primitive) -> tuple[np.ndarray, np.ndarray]:
     """The primitive's corners shared by EXACT position, numbered in first-seen
-    order, with triangles that collapse onto a repeated vertex dropped."""
+    order. No triangle collapses onto a repeated vertex: ``build_primitives`` left
+    out every one with two corners at one point."""
     # +0.0 makes -0.0 the same vertex as 0.0.
     corners = np.ascontiguousarray(primitive.positions[primitive.indices] + np.float32(0.0))
     if not len(corners):
@@ -465,10 +475,7 @@ def _welded(primitive: Primitive) -> tuple[np.ndarray, np.ndarray]:
     order = np.argsort(first, kind="stable")
     rank = np.empty_like(order)
     rank[order] = np.arange(len(order))
-    triangles = rank[inverse.reshape(-1)].reshape(-1, 3)
-    keep = ((triangles[:, 0] != triangles[:, 1]) & (triangles[:, 1] != triangles[:, 2])
-            & (triangles[:, 2] != triangles[:, 0]))
-    return corners[first[order]], triangles[keep]
+    return corners[first[order]], rank[inverse.reshape(-1)].reshape(-1, 3)
 
 
 def _zip_stored(files: list[tuple[str, bytes]]) -> bytes:

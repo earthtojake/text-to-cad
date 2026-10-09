@@ -40,7 +40,7 @@ import re
 import struct
 from typing import TYPE_CHECKING, Any
 
-from cadgen.tessellation_policy import DEFAULT_TESSELLATION, TESSELLATION_FLOORS
+from cadgen.tessellation_policy import DEFAULT_TESSELLATION, tolerance_refusal
 from cadgen.store.index import entry_path, write_entry
 from cadgen.store.objects import object_path, put_object
 
@@ -65,10 +65,6 @@ MAX_SAFE_INTEGER = 2**53 - 1
 # that names no tolerances means.
 DEFAULT_CHORD = DEFAULT_TESSELLATION["chordTolerance"]
 DEFAULT_ANGLE = DEFAULT_TESSELLATION["angleTolerance"]
-# The finest tolerances anything may ask to have meshed, the same floors a model's
-# or a door's tolerance is held to where it enters (cadgen.tessellation_policy).
-MIN_CHORD = TESSELLATION_FLOORS["chordTolerance"]
-MIN_ANGLE = TESSELLATION_FLOORS["angleTolerance"]
 # The class codes of the edge table, in this order (tessellationCache.js MESH_EDGE_CLASSES).
 EDGE_CLASSES = ("none", "feature", "tangent", "seam", "degenerate", "boundary", "nonManifold", "unknown")
 _EDGE_CODES = {name: code for code, name in enumerate(EDGE_CLASSES)}
@@ -156,7 +152,8 @@ def normalize_tessellations(value: Any) -> list[tuple[float, float]]:
     """``[{chordTolerance, angleTolerance}, ...]`` as sorted, distinct (chord, angle) pairs.
 
     What a request may ask to have meshed: both tolerances, positive finite
-    binary64 values no finer than ``MIN_CHORD``/``MIN_ANGLE``; anything else is a
+    binary64 values within the tessellation policy's bounds
+    (``cadgen.tessellation_policy.tolerance_refusal``); anything else is a
     ValueError before any work starts.
     """
     if value is None:
@@ -169,8 +166,10 @@ def normalize_tessellations(value: Any) -> list[tuple[float, float]]:
             raise ValueError("a tessellation is exactly {chordTolerance, angleTolerance}")
         chord, angle = item["chordTolerance"], item["angleTolerance"]
         tessellation_quality(chord, angle)  # positive finite binary64 values, or ValueError
-        if chord < MIN_CHORD or angle < MIN_ANGLE:
-            raise ValueError(f"a tessellation is at least chordTolerance {MIN_CHORD} and angleTolerance {MIN_ANGLE}")
+        refusal = (tolerance_refusal("chordTolerance", float(chord), name="chordTolerance")
+                   or tolerance_refusal("angleTolerance", float(angle), name="angleTolerance"))
+        if refusal is not None:
+            raise ValueError(refusal)
         pairs.add((float(chord), float(angle)))
     return sorted(pairs)
 
@@ -202,11 +201,13 @@ def parse_key(key: Any) -> tuple[str, float, float] | None:
 
 
 def meshable_key(key: Any) -> tuple[str, float, float] | None:
-    """``parse_key`` for a key anything may ask to have meshed: its tolerances no
-    finer than ``MIN_CHORD``/``MIN_ANGLE``, as ``normalize_tessellations`` holds a
-    request's. None for anything else, a valid key finer than that included."""
+    """``parse_key`` for a key anything may ask to have meshed: its tolerances within
+    the tessellation policy's bounds, as ``normalize_tessellations`` holds a
+    request's. None for anything else, a valid key outside them included."""
     parsed = parse_key(key)
-    return parsed if parsed is not None and parsed[1] >= MIN_CHORD and parsed[2] >= MIN_ANGLE else None
+    if parsed is None or tolerance_refusal("chordTolerance", parsed[1], name="chordTolerance") is not None:
+        return None
+    return parsed if tolerance_refusal("angleTolerance", parsed[2], name="angleTolerance") is None else None
 
 
 def valid_key(key: Any) -> bool:

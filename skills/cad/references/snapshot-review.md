@@ -25,6 +25,10 @@ When skipping, report the reason and the deterministic evidence that still ran.
 
 Do not loop on snapshots. Rerender only when a source repair changed visible geometry or when a specific visual finding needs confirmation.
 
+A STEP model with no surfaces (empty, or only curves and points) has nothing a
+view can draw: the snapshot still writes its image and warns that the model has
+no surfaces. Treat that warning as a finding about the model, not the camera.
+
 ## Packet sizing
 
 Choose views that expose the features being checked. One may be enough;
@@ -126,9 +130,9 @@ These positive numeric overrides have cadgen mesh the exact STEP surfaces at
 those tolerances, stored as separate mesh entries. They do not change the STEP geometry or a model's
 declared mesh-export tolerances. Use them only when visible faceting needs finer
 sampling; lower tolerances cost more memory and render time. `chordTolerance`
-must be at least `0.00001` and `angleTolerance` at least `0.005` — finer than
-that exhausts the renderer instead of improving the image, and the job is
-refused.
+must be from `0.00005` to `0.05` and `angleTolerance` from `0.05` to `1.5708`
+radians, the same bounds as a mesh export's; finer sampling costs minutes of
+meshing instead of improving the image, and a job outside them is refused.
 Existing mesh documents cannot be remeshed this way. The explicit top-level
 sampling request works in every display mode. When it is omitted,
 `display.lighting.quality` selects the photographic preview or final LOD.

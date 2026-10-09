@@ -36,8 +36,10 @@ from cadgen._internal.mesh_animation import AnimationSnapshot
 # misses without touching geometry or the store's meshes. Not the glTF container
 # version and not a tessellation-cache salt. GLB 4, STL 1 and 3MF 1: OCCT's stored
 # meshes and this package's writers replaced the JavaScript tessellator and
-# serializers, so no file either wrote is reported current.
-SERIALIZATION_VERSIONS = {"glb": 4, "stl": 1, "3mf": 1}
+# serializers, so no file either wrote is reported current. GLB 5 and 3MF 2: an
+# uncoloured occurrence no longer takes a sibling's colour, and a GLB no longer
+# carries triangles that cover nothing.
+SERIALIZATION_VERSIONS = {"glb": 5, "stl": 1, "3mf": 2}
 GLB_SERIALIZATION_VERSION = SERIALIZATION_VERSIONS["glb"]
 
 # Declarable formats, and the decorator that declares each (the digit rule
@@ -240,7 +242,7 @@ def _skinned_tubes(descriptor: dict, tessellations: dict, clip: Any, default_col
             refined = bound.indices.reshape(-1, 3)
             source = (bound.source_triangles if bound.source_triangles is not None
                       else np.arange(len(refined), dtype=np.int64))
-            colors = occurrence_colors(descriptor, occurrence, tessellation, default_color)
+            colors = occurrence_colors(occurrence, tessellation, default_color)
             triangle_colors = np.asarray([colors[int(face)] for face in ranges[source]])
             primitives = []
             for color in sorted(set(triangle_colors.tolist())):

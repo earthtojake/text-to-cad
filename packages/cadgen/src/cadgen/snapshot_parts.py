@@ -101,6 +101,27 @@ def _mesh_counts(descriptor: Mapping[str, Any], cids: set[str], tessellation: Ma
     return counts
 
 
+def has_surfaces(descriptor: Mapping[str, Any], package_dir: Path) -> bool:
+    """Whether any placed occurrence's component has a face to draw, by its SURF's
+    face count. A model with none -- empty, or only curves and points -- is drawn as
+    nothing, which nobody would guess from a blank image. A SURF that does not read
+    is taken to have faces: this never claims an absence it did not see."""
+    from cadgen._internal.surf_container import read_surf_index
+
+    components = descriptor.get("components") if isinstance(descriptor.get("components"), Mapping) else {}
+    occurrences = descriptor.get("occurrences") if isinstance(descriptor.get("occurrences"), list) else []
+    placed = dict.fromkeys(str(row.get("component") or "") for row in occurrences if isinstance(row, Mapping))
+    for cid in placed:
+        surf = str((components.get(cid) or {}).get("surf") or "")
+        try:
+            counts = read_surf_index(package_dir / surf).get("counts") if surf else None
+        except (OSError, ValueError):
+            return True
+        if not isinstance(counts, Mapping) or int(counts.get("faces") or 0) > 0:
+            return True
+    return False
+
+
 def list_rows(
     descriptor: Mapping[str, Any],
     package_dir: Path,

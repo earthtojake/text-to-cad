@@ -9,7 +9,8 @@ x = 30 -- and read back what was written:
 * an SVG output is cadgen's, so a job with only SVG outputs never starts a browser;
 * focus/hide pick what is cut, and a plane that misses says so;
 * `--mode list` is answered from the tree and the store, with no browser: the refs every
-  selector resolves, the parts' exact boxes, and the stored meshes' counts.
+  selector resolves, the parts' exact boxes, and the stored meshes' counts;
+* a view of a model with no surfaces -- only curves and points, or nothing -- warns so.
 """
 
 from __future__ import annotations
@@ -200,6 +201,43 @@ class SnapshotListTests(unittest.TestCase):
         done = subprocess.run([sys.executable, "-c", script, str(self.workspace / "asm.step")],
                               capture_output=True, text=True, check=True, cwd=self.workspace, env=env)
         self.assertEqual([2, []], json.loads(done.stdout.strip().splitlines()[-1]), done.stderr)
+
+
+class NoSurfacesTests(unittest.TestCase):
+    """A view of a model with no faces says so: the image alone is blank, with exit 0."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from build123d import Compound, Edge, Solid, Vertex
+        from cadgen.step_export import export_build123d_step_file
+
+        cls._roots = ClassCadRoots(prefix="snapshot-no-surfaces-")
+        cls.workspace = cls._roots.cad_root
+        # Not the other classes' assembly: the same bytes in another store share this
+        # process's view of them.
+        export_build123d_step_file(Solid.make_box(3, 2, 1), cls.workspace / "block.step")
+        wire = Compound(children=[Edge.make_line((0, 0, 0), (10, 0, 0)), Edge.make_circle(5), Vertex(1, 2, 3)])
+        export_build123d_step_file(wire, cls.workspace / "wire.step")
+        export_build123d_step_file(Compound([]), cls.workspace / "empty.step")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._roots.cleanup()
+
+    def warnings(self, name: str) -> list:
+        from cadgen.snapshot_cli import resolve_step_render_job
+
+        job = resolve_step_render_job({"input": name, "mode": "view", "outputs": []}, kind="step",
+                                      input_path=self.workspace / name, root_path=self.workspace,
+                                      reference_root=self.workspace)
+        return job["resolved"].get("warnings") or []
+
+    def test_curves_and_points_or_nothing_are_named_as_no_surfaces(self) -> None:
+        for name in ("wire.step", "empty.step"):
+            with self.subTest(name):
+                self.assertEqual(["this model has no surfaces to draw: it is empty, or only curves and points"],
+                                 self.warnings(name))
+        self.assertEqual([], self.warnings("block.step"))
 
 
 class FilterOccurrencesTests(unittest.TestCase):

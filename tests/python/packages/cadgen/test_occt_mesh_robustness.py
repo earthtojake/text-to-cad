@@ -38,14 +38,14 @@ def _surf_index(topods) -> dict:
     return read_surf(extract_surface_component(topods))[0]
 
 
-def _mesh(shape):
+def _mesh(shape, *, chord=CHORD, angle=ANGLE):
     """``shape`` meshed as the store meshes a component: its GLB body, decoded."""
     from cadgen._internal.mesh_formats import decode_tessellation
     from cadgen._internal.occt_mesh import mesh_component
 
     topods = getattr(shape, "wrapped", shape)
     body = mesh_component(topods, _surf_index(topods), surface_input="1" * 64, surface_object="a" * 64,
-                          chord=CHORD, angle=ANGLE)
+                          chord=chord, angle=angle)
     return body, decode_tessellation(body)
 
 
@@ -122,28 +122,51 @@ class DegenerateComponents(unittest.TestCase):
         self.assertEqual(stored, [True, True, True])
 
 
-class StlAtSingularPoints(unittest.TestCase):
-    def test_an_stl_of_poles_and_apexes_is_manifold_and_watertight(self):
+class AtTheFloors(unittest.TestCase):
+    def test_a_face_curved_all_the_way_round_meshes_at_the_finest_tolerances_accepted(self):
+        # Below the floors one such face meshed for minutes (cadgen.tessellation_policy);
+        # at them, it is a mesh, closed, and finer than the standard rung's.
+        from build123d import Sphere
+
+        from cadgen.tessellation_policy import TESSELLATION_FLOORS
+
+        _body, standard = _mesh(Sphere(5))
+        _body, finest = _mesh(Sphere(5), chord=TESSELLATION_FLOORS["chordTolerance"],
+                              angle=TESSELLATION_FLOORS["angleTolerance"])
+        self.assertGreater(len(finest.indices), 10 * len(standard.indices))
+        self.assertEqual(0, _open_edges(finest))
+
+
+class ExportAtSingularPoints(unittest.TestCase):
+    def test_an_export_of_poles_and_apexes_is_manifold_and_watertight_in_every_format(self):
         import trimesh
         from build123d import Box, Cone, Pos, Sphere, fillet
 
-        from cadgen._internal.mesh_formats import build_primitives, stl_bytes
+        from cadgen._internal.mesh_formats import build_primitives, glb_bytes, stl_bytes, threemf_bytes
 
         parts = {
             "fully filleted box": fillet(Box(20, 20, 20).edges(), 3),
             "sphere beside a cone": _compound(Sphere(6), Pos(20, 0, 0) * Cone(5, 0, 10)),
         }
         descriptor = {"components": {"c": {}}, "occurrences": [{"id": "o1", "component": "c", "transform": IDENTITY}]}
-        with generated_cad_directory(prefix="occt-mesh-stl-") as temporary:
+        with generated_cad_directory(prefix="occt-mesh-export-") as temporary:
             for label, shape in parts.items():
-                with self.subTest(label):
-                    _body, mesh = _mesh(shape)
-                    # The case is still the case: OCCT's mesh, as stored, has them.
-                    self.assertTrue(_collapsed(_corners(mesh)).any(), "the stored mesh has collapsed triangles")
-                    path = Path(temporary) / f"{label}.stl"
-                    path.write_bytes(stl_bytes(build_primitives(descriptor, {"c": mesh})))
-                    exported.MeshExportManifoldTest.assertManifold(self, path, label)
-                    self.assertTrue(trimesh.load(path).is_watertight)
+                _body, mesh = _mesh(shape)
+                # The case is still the case: OCCT's mesh, as stored, has them.
+                self.assertTrue(_collapsed(_corners(mesh)).any(), "the stored mesh has collapsed triangles")
+                primitives = build_primitives(descriptor, {"c": mesh})
+                for fmt, write in (("stl", stl_bytes), ("glb", glb_bytes), ("3mf", threemf_bytes)):
+                    with self.subTest(label, format=fmt):
+                        path = Path(temporary) / f"{label}.{fmt}"
+                        path.write_bytes(write(primitives))
+                        if fmt == "stl":
+                            exported.MeshExportManifoldTest.assertManifold(self, path, label)
+                        # Read as the file says, then welded by exact position, as a slicer welds.
+                        read = trimesh.load(path, force="mesh", process=False)
+                        corners = np.asarray(read.vertices)[np.asarray(read.faces)]
+                        self.assertFalse(_collapsed(corners).any(), f"{fmt} carries triangles that cover nothing")
+                        read.merge_vertices(merge_tex=True, merge_norm=True)
+                        self.assertTrue(read.is_watertight)
 
 
 def _range_area(mesh, ordinal: int) -> float:

@@ -113,13 +113,15 @@ def _mesh_keys(keys):
     """The tessellation keys a meshes request names, in one canonical order: each a
     key this cadgen writes at tolerances any request may ask to have meshed
     (``store.meshes.meshable_key``), none twice."""
-    from cadgen.store.meshes import MIN_ANGLE, MIN_CHORD, meshable_key
+    from cadgen.store.meshes import meshable_key
+    from cadgen.tessellation_policy import TESSELLATION_CEILINGS, TESSELLATION_FLOORS
 
     if not isinstance(keys, (list, tuple)) or not keys or len(keys) > MESH_KEYS_MAX:
         raise ValueError(f"artifact meshes keys must be a nonempty list of at most {MESH_KEYS_MAX}")
     if any(meshable_key(key) is None for key in keys):
-        raise ValueError("artifact meshes keys must be this cadgen's tessellation keys, "
-                         f"at least chordTolerance {MIN_CHORD} and angleTolerance {MIN_ANGLE}")
+        bounds = " and ".join(f"{name} {TESSELLATION_FLOORS[name]:g} to {TESSELLATION_CEILINGS[name]:g}"
+                              for name in TESSELLATION_FLOORS)
+        raise ValueError(f"artifact meshes keys must be this cadgen's tessellation keys, at {bounds}")
     if len(set(keys)) != len(keys):
         raise ValueError("artifact meshes keys must not contain duplicates")
     return sorted(keys)
