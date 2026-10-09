@@ -28,7 +28,7 @@ runs:
     # Windows job even from its cache. uv's own cache is keyed on the same file.
     - name: Set up uv
       if: inputs.python == 'true'
-      uses: astral-sh/setup-uv@v10
+      uses: astral-sh/setup-uv@v10.2.0
       with:
         enable-cache: true
         cache-dependency-glob: requirements-dev.txt
