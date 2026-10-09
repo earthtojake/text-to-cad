@@ -1,8 +1,9 @@
 """``cadgen step snapshot --mode section``: the exact cut, as a 2D drawing.
 
-Each placed occurrence's component is cut by the requested plane in its own
-coordinates (``cadgen.store.sections``: an OCCT section of the exact BREP, a
-build-pool job, cached by component and plane). This module places those loops
+Each placed occurrence whose box reaches the requested plane has its component
+cut by it in its own coordinates (``cadgen.store.sections``: an OCCT section of
+the exact BREP, a build-pool job, cached by component and plane); one whose box
+is clear of the plane is never cut. This module places those loops
 in the world, projects them onto the plane and emits ONE drawing payload -- the
 same shape ``cadgen.drawing_payload`` gives a DXF, which the snapshot page paints
 with the viewer's own 2D painter (``@text-to-cad/core/lib/drawing2d``) -- plus
@@ -349,6 +350,24 @@ def _units(descriptor: Mapping[str, Any]) -> dict:
     return {"insunits": 0, "name": units, "toMillimetres": None}
 
 
+def _reaches(row: Mapping[str, Any], axis: int, offset: float) -> bool:
+    """Whether the plane ``axis == offset`` can meet the occurrence: its placed box reaches it.
+
+    The box is the component's exact one placed by the occurrence (every corner
+    transformed), so it holds the whole part, and a part it shows clear of the
+    plane is never cut: on a big assembly most parts are, and cutting them was
+    most of a section's time. A part whose face lies in the plane is on the
+    box's edge and still cut; a hair of slack absorbs the placement's rounding.
+    An occurrence with no box is cut.
+    """
+    box = row.get("bbox")
+    if not isinstance(box, Mapping):
+        return True
+    low, high = float(box["min"][axis]), float(box["max"][axis])
+    slack = 1e-6 * max(1.0, abs(low), abs(high), math.dist(box["min"], box["max"]))
+    return low - slack <= offset <= high + slack
+
+
 def _plane_label(plane: str, offset: float) -> str:
     return f"{plane} @ {SECTION_FRAMES[plane][3]}={float(offset):.3f}"
 
@@ -377,9 +396,10 @@ def section_drawing(
 
     placed = []  # (row, matrix, key)
     items: dict[str, dict] = {}
+    axis = "XYZ".index(frame[3])
     for row in rows:
         component = components.get(str(row.get("component") or ""))
-        if not isinstance(component, Mapping):
+        if not isinstance(component, Mapping) or not _reaches(row, axis, float(offset)):
             continue
         matrix = list(row["transform"])
         local_normal, local_offset = occurrence_plane(matrix, normal, float(offset))

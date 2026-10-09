@@ -37,6 +37,10 @@ HOLED = {"loops": [SQUARE["loops"][0], {"closed": True, "filled": True, "edges":
     "sweep": 2 * math.pi}}]}]}
 
 
+# The component's own box: around every fixture above, 10 thick about its local XY plane.
+LOCAL_BOX = {"min": [-25.0, -25.0, -5.0], "max": [25.0, 25.0, 5.0]}
+
+
 def numbers(value):
     """Every number in a payload's bounds and geometry, however deeply nested."""
     if isinstance(value, dict):
@@ -62,13 +66,18 @@ class SectionDrawingTests(unittest.TestCase):
         self.addCleanup(patch.stop)
         self.entry = sections.component_entry(dict(COMPONENT))
 
-    def place(self, cut, matrix, *, plane="XY", offset=0.0):
-        """Store ``cut`` as the component's section by the plane this placement sees."""
+    def place(self, cut, matrix, *, plane="XY", offset=0.0, local_box=LOCAL_BOX):
+        """Store ``cut`` as the component's section by the plane this placement sees.
+
+        The row carries the component's box placed by ``matrix``, as the store composes it.
+        """
+        from cadgen.assembly_lookup import transform_bbox
+
         normal = drawing.SECTION_FRAMES[plane][0]
         local_normal, local_offset = drawing.occurrence_plane(matrix, normal, offset)
         sections.write(sections.section_key(self.entry, local_normal, local_offset), {"schemaVersion": 1, **cut})
         return {"id": "o1", "name": "part", "component": "c0", "transform": matrix,
-                "bbox": {"min": [-10.0, -10.0, -5.0], "max": [10.0, 10.0, 5.0]}}
+                "bbox": transform_bbox(matrix, local_box)}
 
     def draw(self, rows, **options):
         descriptor = {"units": "mm", "components": {"c0": COMPONENT}}
@@ -178,6 +187,24 @@ class SectionDrawingTests(unittest.TestCase):
         [outline] = [p for p in section.payload["primitives"] if p["layer"] == "section-outline"]
         self.assertEqual(["Z"], outline["geometry"][-1])
         self.assertNotIn('fill-rule="evenodd"', section.svg)
+
+    def test_only_a_part_whose_placed_box_reaches_the_plane_is_cut(self) -> None:
+        from cadgen.assembly_lookup import transform_bbox
+
+        # On a big assembly most parts are clear of the plane, and cutting every one of them was
+        # most of a section's time. A part standing on the plane has its floor on the box's
+        # edge and is cut; one with no box is cut; one 100 above it is never asked for -- no
+        # cut is stored for it, and `draw` refuses to cut anything.
+        standing = self.place(SQUARE, translated(0.0, 0.0, 5.0))
+        boxless = {**self.place(DISC, translated(50.0)), "id": "o3", "bbox": None}
+        above = translated(0.0, 0.0, 100.0)
+        clear = {"id": "o2", "name": "clear", "component": "c0", "transform": above,
+                 "bbox": transform_bbox(above, LOCAL_BOX)}
+        section = self.draw([standing, clear, boxless])
+        self.assertEqual([], section.warnings)
+        outlines = [p["geometry"] for p in section.payload["primitives"] if p["layer"] == "section-outline"]
+        self.assertEqual([["M", "L", "L", "L", "L", "Z"], ["M", "C", "C", "C", "C", "Z"]],
+                         [[command[0] for command in outline] for outline in outlines])
 
     def test_a_plane_that_misses_is_said_and_draws_nothing(self) -> None:
         section = self.draw([self.place({"loops": []}, translated(), offset=50.0)], offset=50.0)

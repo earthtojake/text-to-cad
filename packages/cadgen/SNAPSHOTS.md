@@ -135,7 +135,8 @@ plane that cuts no material returns an empty drawing with a warning.
 The cut is exact. cadgen sections each part's BREP with the plane, in the part's
 own coordinates (`cadgen.store.sections`, a build-pool job cached by part and
 plane in the store's `section` index), so a cylinder cut across its axis is a
-circle of its true radius, never the chords of a tessellation. A section is the
+circle of its true radius, never the chords of a tessellation. Only a part whose
+placed box reaches the plane is cut; the rest of a big assembly costs nothing. A section is the
 material the plane cuts, and only a solid has any: a solid's cut is the region
 of the plane inside it (a face of it lying in the plane included), a plane that
 only touches a solid (tangent to a torus's top) cuts nothing, a sheet body's cut
