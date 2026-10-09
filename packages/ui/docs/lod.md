@@ -287,6 +287,7 @@ Counts measure
 completed geometry items in the current stage, not assembly occurrences or an
 overall ETA; uncounted stages are indeterminate. Render initialization uses the
 same indicator against the destination backdrop until its first usable frame.
-Long waits show elapsed time; interrupted progress explains that the viewer is
-waiting for a response before offering recovery. Selection and edge preparation
+There is no elapsed-time clock: a long wait adds the step's detail line, and
+interrupted progress explains that the viewer is waiting for a response before
+offering recovery. Selection and edge preparation
 report beside their controls, not as whole-model loading.

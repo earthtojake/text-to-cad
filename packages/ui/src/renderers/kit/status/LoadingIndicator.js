@@ -3,22 +3,19 @@ import LoadingIcon from "@text-to-cad/ui/loading-icon";
 import { useContext, useEffect, useState } from "react";
 import { ViewerHostContext } from "../../../host/context.js";
 import { Progress } from "@text-to-cad/ui/primitives/progress";
-import { prolongedLoadingMessage } from "./loadingMessage.js";
 
-// Shared by file opening and graphics initialization. Time is elapsed, never an ETA.
-// There is no headline: that a model is opening is plain from the mark, and the step
-// line under it says what is actually happening.
+// Shared by file opening and graphics initialization. There is no headline and no clock:
+// that a model is opening is plain from the mark, and the step line under it says what is
+// actually happening. A long wait only adds the step's detail line.
 export default function LoadingIndicator({ progress, operationKey = "" }) {
-  const [timing, setTiming] = useState(() => ({ key: operationKey, started: Date.now(), elapsed: 0 }));
+  // The operation that has been loading for over ten seconds, if any: its detail line shows.
+  const [longKey, setLongKey] = useState(null);
   useEffect(() => {
-    const started = Date.now();
-    setTiming({ key: operationKey, started, elapsed: 0 });
-    const timer = setInterval(() => setTiming({ key: operationKey, started, elapsed: Date.now() - started }), 1000);
-    return () => clearInterval(timer);
+    const timer = setTimeout(() => setLongKey(operationKey), 10_000);
+    return () => clearTimeout(timer);
   }, [operationKey]);
-  const elapsed = timing.key === operationKey ? timing.elapsed : 0;
+  const long = longKey === operationKey;
   const waiting = Boolean(progress?.connectionLost);
-  const explanation = prolongedLoadingMessage(elapsed, progress?.connectionLost);
   const reducedMotion = useContext(ViewerHostContext)?.environment.reducedMotion === true;
   return (
     <div className="flex w-[22rem] max-w-[90vw] flex-col gap-3" role="status" aria-live="polite" data-viewer-loading="true">
@@ -29,8 +26,8 @@ export default function LoadingIndicator({ progress, operationKey = "" }) {
       </div>
       <Progress value={progress?.percent ?? null} aria-label={progress?.label || "Preparing view"}
         className={waiting ? "[&_[data-slot=progress-indicator]]:[animation-play-state:paused]" : undefined} />
-      {explanation ? <div className="text-xs opacity-75" aria-live="off">{explanation}</div> : null}
-      {elapsed >= 10_000 && progress?.detail ? <TooltipHint content={progress.detail}><div className="truncate text-xs opacity-60" >{progress.detail}</div></TooltipHint> : null}
+      {waiting ? <div className="text-xs opacity-75" aria-live="off">Waiting for a response. Retrying…</div> : null}
+      {long && progress?.detail ? <TooltipHint content={progress.detail}><div className="truncate text-xs opacity-60" >{progress.detail}</div></TooltipHint> : null}
     </div>
   );
 }

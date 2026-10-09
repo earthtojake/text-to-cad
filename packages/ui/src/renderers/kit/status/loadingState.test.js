@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { loadingProgress, viewerLoadingState } from "./loadingState.js";
-import { prolongedLoadingMessage } from "./loadingMessage.js";
 
 test("opening counts real geometry work and an update preserves the prior view", () => {
   const progress = { phase: "geometry", label: "Loading geometry", done: 3, total: 8, determinate: true };
@@ -35,12 +34,6 @@ test("a loader names its STAGE in `phase`; its own label never has to be recogni
   assert.deepEqual(loadingProgress({ phase: "read", label: "Loading description", determinate: false }), { label: "Reading model", detail: "", counts: "", percent: null, connectionLost: null });
   assert.deepEqual(loadingProgress({ phase: "meshes", label: "Loading meshes", done: 7, total: 13, determinate: true }), { label: "Loading geometry", detail: "", counts: "7/13", percent: 54, connectionLost: null });
   assert.equal(loadingProgress({ phase: "view", label: "Building anything at all", determinate: false }).label, "Preparing view");
-});
-
-test("a long wait reports elapsed time without inferring a stall", () => {
-  assert.equal(prolongedLoadingMessage(9999), "");
-  assert.match(prolongedLoadingMessage(65_000), /1m 5s elapsed/);
-  assert.match(prolongedLoadingMessage(100, { failures: 1 }), /Waiting for a response/);
 });
 
 test("a file being imported reads as importing, and a cold open's meshing as meshing", () => {
