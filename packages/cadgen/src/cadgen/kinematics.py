@@ -421,7 +421,7 @@ def dof_value_outside_limits(block: Mapping[str, Any], dof: str, value: float) -
     if lo <= value <= hi:
         return None
     suffix = f" {unit}" if unit else ""
-    return f"{value:g}{suffix} is outside DOF {dof!r}'s limits [{lo:g}, {hi:g}]{suffix}"
+    return f"{value:g}{suffix} is outside the limits [{lo:g}, {hi:g}]{suffix} of DOF {dof!r}"
 
 
 def _validated_pose_values(block: Mapping[str, Any], values: Mapping[str, Any], *, where: str) -> dict[str, float]:

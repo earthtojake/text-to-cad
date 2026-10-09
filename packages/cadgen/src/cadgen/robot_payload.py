@@ -1056,7 +1056,8 @@ def _wrap_angle(value: float) -> float:
 
 
 def _four_bar_candidates(four_bar: Mapping[str, float], driver_rad: float) -> tuple[float, float]:
-    """The crank's two possible angles (radians from the ground direction) at a driver angle."""
+    """The crank's two possible angles (radians from the ground direction) at a driver angle.
+    ``RobotReadError`` says why the coupler cannot reach, for a caller to place in its sentence."""
     output_angle = four_bar["output_zero"] + driver_rad
     pin_x = four_bar["ground_length"] + four_bar["output_length"] * math.cos(output_angle)
     pin_y = four_bar["output_length"] * math.sin(output_angle)
@@ -1065,7 +1066,10 @@ def _four_bar_candidates(four_bar: Mapping[str, float], driver_rad: float) -> tu
     if distance <= _FOUR_BAR_INTERSECTION_TOLERANCE:
         raise RobotReadError("the output pin coincides with the input pivot")
     if distance < abs(crank - coupler) - _FOUR_BAR_INTERSECTION_TOLERANCE or distance > crank + coupler + _FOUR_BAR_INTERSECTION_TOLERANCE:
-        raise RobotReadError("the lengths cannot close at this driver angle")
+        raise RobotReadError(
+            f"the output pin is {distance:g} m from the input pivot, outside the {abs(crank - coupler):g} to {crank + coupler:g} m "
+            f"that input_length {crank:g} and coupler_length {coupler:g} reach"
+        )
     along = (crank * crank - coupler * coupler + distance * distance) / (2.0 * distance)
     height = math.sqrt(max(0.0, crank * crank - along * along))
     unit_x, unit_y = pin_x / distance, pin_y / distance
@@ -1106,9 +1110,15 @@ def _four_bar_geometry(joint: _Joint, driver: _Joint, *, where: str) -> None:
     expected = joint.four_bar["ground_length"]
     tolerance = _FOUR_BAR_GEOMETRY_ABSOLUTE_TOLERANCE_M + _FOUR_BAR_GEOMETRY_RELATIVE_TOLERANCE * max(abs(planar), abs(expected))
     if abs(axial) > tolerance:
-        raise RobotReadError(f"{where}: its pivot and its driver {driver.name!r}'s are not coplanar ({axial:g} m apart along the axis)")
+        raise RobotReadError(
+            f"{where}: its pivot and the pivot of its driver {driver.name!r} are not coplanar ({axial:g} m apart along the axis); "
+            "place both joints' origins in one plane normal to the axis"
+        )
     if abs(planar - expected) > tolerance:
-        raise RobotReadError(f"{where} declares ground_length {expected:g}, but its pivot and its driver {driver.name!r}'s are {planar:g} metres apart")
+        raise RobotReadError(
+            f"{where} declares ground_length {expected:g}, but its pivot and the pivot of its driver {driver.name!r} are {planar:g} metres apart; "
+            "set ground_length to that distance, or move the joints' origins"
+        )
 
 
 def _range_contains_periodic(lower: float, upper: float, target: float) -> bool:
@@ -1132,7 +1142,7 @@ def _four_bar_reachable(four_bar: Mapping[str, float], lower_rad: float, upper_r
     if (nearest <= _FOUR_BAR_INTERSECTION_TOLERANCE or nearest < reach_min - _FOUR_BAR_INTERSECTION_TOLERANCE
             or farthest > reach_max + _FOUR_BAR_INTERSECTION_TOLERANCE):
         raise RobotReadError(
-            f"{where}: its driver {driver!r}'s range [{math.degrees(lower_rad):g}, {math.degrees(upper_rad):g}] deg includes angles "
+            f"{where}: the range [{math.degrees(lower_rad):g}, {math.degrees(upper_rad):g}] deg of its driver {driver!r} includes angles "
             "where the linkage cannot close; narrow the driver's limits or correct the lengths"
         )
 
@@ -1158,7 +1168,10 @@ def _four_bar_curve(joint: _Joint, driver: _Joint, *, where: str) -> dict[str, A
         try:
             return four_bar_input_angle(four_bar, x)
         except RobotReadError as exc:
-            raise RobotReadError(f"{where} cannot close at driver angle {math.degrees(x):g} deg: {exc}") from None
+            raise RobotReadError(
+                f"{where} cannot close with its driver {driver.name!r} at {math.degrees(x):g} deg: {exc}; "
+                "narrow the driver's limits or correct the lengths"
+            ) from None
 
     def near(value: float, reference: float) -> float:
         """``value`` plus the turn count that brings it within half a turn of ``reference``."""
@@ -1195,7 +1208,7 @@ def _four_bar_curve(joint: _Joint, driver: _Joint, *, where: str) -> dict[str, A
         low_deg, high_deg = math.degrees(min(wrapped)), math.degrees(max(wrapped))
         if low_deg < math.degrees(joint.lower) - _FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG or high_deg > math.degrees(joint.upper) + _FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG:
             raise RobotReadError(
-                f"{where} derives {low_deg:g} to {high_deg:g} deg over its driver {driver.name!r}'s range, outside its own limits "
+                f"{where} derives {low_deg:g} to {high_deg:g} deg over the range of its driver {driver.name!r}, outside its own limits "
                 f"[{math.degrees(joint.lower):g}, {math.degrees(joint.upper):g}] deg; widen them to contain the derived range"
             )
     unwrapped: list[float] = []
@@ -1252,9 +1265,18 @@ def _articulation(description: _Description) -> dict[str, Any]:
                 raise RobotReadError(f"{where} needs a revolute or continuous joint, not {joint.type!r}")
             _four_bar_geometry(joint, driver, where=where)
             four_bar = {**joint.four_bar}
-            four_bar["branch"] = _four_bar_branch(four_bar)
+            zero_pose = f"at the zero pose (its driver {driver.name!r} at 0 deg)"
+            try:
+                four_bar["branch"] = _four_bar_branch(four_bar)
+            except RobotReadError as exc:
+                raise RobotReadError(f"{where} cannot close {zero_pose}: {exc}; correct the lengths so the linkage closes as written") from None
             if abs(four_bar_input_angle(four_bar, 0.0)) > _FOUR_BAR_ZERO_POSE_TOLERANCE_RAD:
-                raise RobotReadError(f"{where} zero angles do not describe an assembly branch the lengths close at")
+                closes = " or ".join(f"{math.degrees(angle):g}" for angle in _four_bar_candidates(four_bar, 0.0))
+                raise RobotReadError(
+                    f"{where} zero angles do not describe an assembly branch the lengths close at: {zero_pose} the coupler closes "
+                    f"the crank at {closes} deg from the ground line, not at input_zero {math.degrees(four_bar['input_zero']):g} deg; "
+                    "set input_zero to the angle of the branch the linkage is assembled on"
+                )
             joint.four_bar = four_bar
             form = (0.0, {}, {"driver": row_of(driver), **_four_bar_curve(joint, driver, where=where)})
         elif joint.mimic is None:
@@ -1466,18 +1488,47 @@ def _format(value: float) -> str:
     return f"{value:g}"
 
 
+def _plus(value: float) -> str:
+    """A term added to a formula, its sign the operator: `` + 2`` or `` - 2``."""
+    return f" - {_format(-value)}" if value < 0 else f" + {_format(value)}"
+
+
 def robot_control_values(payload: Mapping[str, Any], request: object) -> dict[str, float]:
     """The full control vector a ``jointValues`` request means: every control, the ones the
     request names at their values and the rest at the opening. A value for a joint that is not
-    a control is refused by name (a fixed joint has no value; a mimic follower is set through its
-    leader; a four-bar's crank through its driver), as is a value outside a control's limits --
-    which, for a four-bar's driver, is the range the linkage was solved over -- and a leader
-    value that puts a follower outside the follower's own limits."""
+    a control is refused by name (a fixed joint has no value; a mimic follower is set through the
+    control its chain of leaders ends at; a four-bar's crank through its driver), as is a value
+    outside a control's limits -- which, for a four-bar's driver, is the range the linkage was
+    solved over -- and a leader value that puts a follower outside the follower's own limits."""
     articulation = payload.get("articulation") or {}
     controls = {str(control["id"]): control for control in articulation.get("controls") or []}
     rows = {str(joint["id"]): joint for joint in articulation.get("joints") or []}
     facts_by_name = {str(joint.get("name")): joint for joint in payload.get("joints") or [] if isinstance(joint, Mapping)}
     kind = str(payload.get("kind") or "robot").upper()
+
+    def driven_by(name: str) -> tuple[str, str]:
+        """``(the control that poses joint name, how the joint follows it)``: the chain of mimic
+        leaders and four-bar drivers from the joint to the control it ends at."""
+        steps: list[str] = []
+        current, seen = name, {name}
+        while current not in controls:
+            facts = facts_by_name.get(current) or {}
+            four_bar, mimic = facts.get("fourBar"), facts.get("mimic")
+            if isinstance(four_bar, Mapping) and four_bar.get("driver"):
+                current = str(four_bar["driver"])
+                steps.append(f"is the crank of a four-bar linkage (tcad:four_bar) driven by {current!r}")
+            elif isinstance(mimic, Mapping) and mimic.get("joint"):
+                current = str(mimic["joint"])
+                steps.append(f"mimics {current!r}")
+            else:
+                break
+            if current in seen:
+                break
+            seen.add(current)
+        return current, ", which ".join(steps)
+
+    def unit_of(name: str) -> str:
+        return "m" if (facts_by_name.get(name) or {}).get("type") == "prismatic" else "deg"
     values = {name: float(control.get("default") or 0.0) for name, control in controls.items()}
     values.update({name: float(value) for name, value in (articulation.get("opening") or {}).items() if name in values})
     if request is None:
@@ -1498,21 +1549,18 @@ def robot_control_values(payload: Mapping[str, Any], request: object) -> dict[st
             joint = rows[name]
             if joint.get("kind") == "fixed":
                 raise RobotReadError(f"jointValues[{name}]: joint {name!r} is fixed, so it has no value to set; drop it")
-            facts = facts_by_name.get(name) or {}
-            four_bar = facts.get("fourBar")
-            if isinstance(four_bar, Mapping) and four_bar.get("driver"):
-                driver = str(four_bar["driver"])
-                raise RobotReadError(
-                    f"jointValues[{name}]: joint {name!r} is the crank of a four-bar linkage (tcad:four_bar) driven by {driver!r}, "
-                    f"so it is posed by {driver!r}'s value; set jointValues[{driver}] instead"
-                )
+            root, chain = driven_by(name)
+            # A follower's row is affine in the control its chain ends at: say how it follows, in
+            # that control's terms. A row on a curve (a crank, or a mimic of one) has no such form.
             row = joint.get("turn") or joint.get("travel") or {}
             terms, bias = row.get("terms") or [], float(row.get("bias") or 0.0)
-            leader = str((facts.get("mimic") or {}).get("joint") or (terms[0][0] if terms else name))
-            formula = f" ({name} = {_format(float(terms[0][1]))} × {leader}{f' + {_format(bias)}' if bias else ''})" if terms else ""
+            formula = ""
+            if len(terms) == 1 and str(terms[0][0]) == root and "curve" not in row:
+                offset = f"{_plus(bias)} {unit_of(name)}" if bias else ""
+                formula = f" ({name} = {_format(float(terms[0][1]))} × {root}{offset})"
             raise RobotReadError(
-                f"jointValues[{name}]: joint {name!r} mimics {leader!r}{formula}, so it is posed by {leader!r}'s value; "
-                f"set jointValues[{leader}] instead"
+                f"jointValues[{name}]: joint {name!r} {chain}{formula}, so it is posed by the value of {root!r}; "
+                f"set jointValues[{root}] instead"
             )
         control = controls[name]
         lo, hi, unit = control.get("min"), control.get("max"), str(control.get("unit") or "")
@@ -1521,8 +1569,8 @@ def robot_control_values(payload: Mapping[str, Any], request: object) -> dict[st
             tolerance = 1e-9 * max(1.0, abs(float(lo)), abs(float(hi)))
             if not float(lo) - tolerance <= float(value) <= float(hi) + tolerance:
                 raise RobotReadError(
-                    f"jointValues[{name}] = {_format(float(value))} {unit} is outside joint {name!r}'s "
-                    f"limits [{_format(float(lo))}, {_format(float(hi))}] {unit}; pass a value within them"
+                    f"jointValues[{name}] = {_format(float(value))} {unit} is outside the limits "
+                    f"[{_format(float(lo))}, {_format(float(hi))}] {unit} of joint {name!r}; pass a value within them"
                 )
         values[name] = float(value)
     # A leader's value puts each follower somewhere: refuse one that lands outside the follower's limits.
@@ -1538,9 +1586,10 @@ def robot_control_values(payload: Mapping[str, Any], request: object) -> dict[st
             leader = str(handle.get("control") or "")
             if leader not in request:
                 continue
+            leader_unit = str(controls[leader].get("unit") or "")
             raise RobotReadError(
-                f"jointValues[{leader}] = {_format(values[leader])} {unit} puts joint {joint_id!r}, which mimics "
-                f"{leader!r}, at {_format(value)} {unit}, outside its limits [{_format(lo)}, {_format(hi)}] {unit}; "
+                f"jointValues[{leader}] = {_format(values[leader])} {leader_unit} puts joint {joint_id!r}, which {driven_by(joint_id)[1]}, "
+                f"at {_format(value)} {unit}, outside its limits [{_format(lo)}, {_format(hi)}] {unit}; "
                 f"pass a value that keeps it within them"
             )
     return values

@@ -336,8 +336,14 @@ class FourBar(_Workspace):
         urdf = four_bar_urdf(extra_links='<link name="pointer"/>',
                              extra_joints='<joint name="pointer_joint" type="revolute"><parent link="ground"/><child link="pointer"/><axis xyz="0 0 1"/>'
                                           '<limit lower="-3" upper="3" effort="1" velocity="1"/><mimic joint="input_joint" multiplier="2" offset="0.1"/></joint>')
-        articulation = read_robot_description(self.write("pointer.urdf", urdf))["articulation"]
+        payload = read_robot_description(self.write("pointer.urdf", urdf))
+        articulation = payload["articulation"]
         self.assertEqual([control["id"] for control in articulation["controls"]], ["output_joint"])
+        # A value of its own is refused with the control the chain ends at, past the crank it mimics.
+        with self.assertRaisesRegex(RobotReadError, "jointValues\\[pointer_joint\\]: joint 'pointer_joint' mimics 'input_joint', which is the crank of a "
+                                                    "four-bar linkage \\(tcad:four_bar\\) driven by 'output_joint', so it is posed by the value of "
+                                                    "'output_joint'; set jointValues\\[output_joint\\] instead"):
+            robot_control_values(payload, {"pointer_joint": 10})
         self.assertEqual([handle["id"] for handle in articulation["handles"]], ["output_joint"], "a mimic of a curve has no inverse to write through")
         rows = joint_values(articulation, {"output_joint": 15})
         self.assertAlmostEqual(rows["pointer_joint"]["turn"], 2 * rows["input_joint"]["turn"] + math.degrees(0.1), places=9)
@@ -348,13 +354,19 @@ class FourBar(_Workspace):
 
     def test_what_cannot_close_is_refused_in_words(self) -> None:
         cases = [
-            ("a full turn of a rocker", four_bar_urdf(driver_type="continuous"), "range \\[-180, 180\\] deg includes angles where the linkage cannot close"),
+            ("a full turn of a rocker", four_bar_urdf(driver_type="continuous"), "the range \\[-180, 180\\] deg of its driver 'output_joint' includes angles where the linkage cannot close"),
             ("a wider range than closes", four_bar_urdf(driver_limit=(-0.9, 0.9)), "includes angles where the linkage cannot close; narrow the driver's limits"),
             ("an opposed axis", four_bar_urdf(driver_axis="0 0 -1"), "must turn about parallel, same-direction axes"),
-            ("the wrong ground length", four_bar_urdf(element={"ground_length": 0.25}), "declares ground_length 0.25, but its pivot and its driver 'output_joint''s are 0.2 metres apart"),
+            ("the wrong ground length", four_bar_urdf(element={"ground_length": 0.25}), "declares ground_length 0.25, but its pivot and the pivot of its driver 'output_joint' are 0.2 metres apart; set ground_length to that distance"),
             ("pivots off the plane", four_bar_urdf(driver_origin='xyz="0.2 0 0.01" rpy="0 0 1.5707963267948966"'), "are not coplanar"),
             ("crank limits that do not hold the derived range", four_bar_urdf(crank_limit=(-0.1, 0.1)), "derives -58.3025 to 47.5186 deg .* outside its own limits \\[-5.72958, 5.72958\\] deg"),
-            ("zero angles off the branch", four_bar_urdf(element={"input_zero": 0.3}), "zero angles do not describe an assembly branch"),
+            ("zero angles off the branch", four_bar_urdf(element={"input_zero": 0.3}),
+             "zero angles do not describe an assembly branch the lengths close at: at the zero pose \\(its driver 'output_joint' at 0 deg\\) "
+             "the coupler closes the crank at .* deg from the ground line, not at input_zero 17.1887 deg; set input_zero"),
+            # The pin sits 0.2154 m from the crank's pivot, nearer than a 0.05 m crank on a 0.3 m coupler reaches.
+            ("lengths that cannot close as written", four_bar_urdf(element={"coupler_length": 0.3}),
+             "cannot close at the zero pose \\(its driver 'output_joint' at 0 deg\\): the output pin is 0.215407 m from the input pivot, "
+             "outside the 0.25 to 0.35 m that input_length 0.05 and coupler_length 0.3 reach; correct the lengths"),
         ]
         for label, urdf, pattern in cases:
             with self.subTest(label), self.assertRaisesRegex(RobotReadError, f"linkage.urdf joint 'input_joint' tcad:four_bar.*{pattern}"):
@@ -365,9 +377,9 @@ class FourBar(_Workspace):
     def test_joint_values_refuse_the_crank_by_name_and_the_driver_outside_the_solved_range(self) -> None:
         self.assertEqual(robot_control_values(self.payload, {"output_joint": 20}), {"output_joint": 20.0})
         with self.assertRaisesRegex(RobotReadError, "jointValues\\[input_joint\\]: joint 'input_joint' is the crank of a four-bar linkage \\(tcad:four_bar\\) "
-                                                    "driven by 'output_joint', so it is posed by 'output_joint''s value; set jointValues\\[output_joint\\] instead"):
+                                                    "driven by 'output_joint', so it is posed by the value of 'output_joint'; set jointValues\\[output_joint\\] instead"):
             robot_control_values(self.payload, {"input_joint": 10})
-        with self.assertRaisesRegex(RobotReadError, "jointValues\\[output_joint\\] = 40 deg is outside joint 'output_joint''s limits \\[-28.6479, 28.6479\\] deg"):
+        with self.assertRaisesRegex(RobotReadError, "jointValues\\[output_joint\\] = 40 deg is outside the limits \\[-28.6479, 28.6479\\] deg of joint 'output_joint'"):
             robot_control_values(self.payload, {"output_joint": 40})
 
 
@@ -527,14 +539,37 @@ class Refusals(_Workspace):
         refused = [
             ({"nope": 1}, "Unknown joint\\(s\\): nope. This URDF declares: grip, lift, shoulder, spin"),
             ({"camera_mount": 1}, "joint 'camera_mount' is fixed, so it has no value to set; drop it"),
-            ({"grip_mirror": 0.01}, "joint 'grip_mirror' mimics 'grip' \\(grip_mirror = -1 × grip\\), so it is posed by 'grip''s value; set jointValues\\[grip\\] instead"),
-            ({"grip": 0.05}, "jointValues\\[grip\\] = 0.05 m is outside joint 'grip''s limits \\[0, 0.04\\] m; pass a value within them"),
+            ({"grip_mirror": 0.01}, "joint 'grip_mirror' mimics 'grip' \\(grip_mirror = -1 × grip\\), so it is posed by the value of 'grip'; set jointValues\\[grip\\] instead"),
+            ({"grip": 0.05}, "jointValues\\[grip\\] = 0.05 m is outside the limits \\[0, 0.04\\] m of joint 'grip'; pass a value within them"),
             ({"shoulder": "10"}, "must be a number"),
             ([1], "must be an object"),
         ]
         for request, pattern in refused:
             with self.subTest(request=request), self.assertRaisesRegex(RobotReadError, pattern):
                 robot_control_values(payload, request)
+
+    def test_a_follower_down_a_mimic_chain_names_the_control_its_chain_ends_at(self) -> None:
+        urdf = f"""<robot name="m"><link name="base"/><link name="a"/><link name="b"/><link name="c"/><link name="d"/>
+          <joint name="ja" type="revolute"><parent link="base"/><child link="a"/><axis xyz="0 0 1"/>{limit(-1, 1)}</joint>
+          <joint name="jb" type="revolute"><parent link="a"/><child link="b"/><axis xyz="0 0 1"/>{limit(-1.5, 2.5)}<mimic joint="ja" multiplier="2" offset="0.1"/></joint>
+          <joint name="jc" type="revolute"><parent link="b"/><child link="c"/><axis xyz="0 0 1"/>{limit(-0.6, 0.6)}<mimic joint="jb" multiplier="-0.5"/></joint>
+          <joint name="jd" type="prismatic"><parent link="base"/><child link="d"/><axis xyz="0 0 1"/>{limit(0, 0.05)}<mimic joint="ja" multiplier="0.02" offset="0.02"/></joint>
+        </robot>"""
+        payload = read_robot_description(self.write("m.urdf", urdf))
+        # jc = -0.5 * (2 * ja + 0.1) = -ja - 0.05 rad: in the controls' degrees, -1 x ja - 2.86479.
+        refused = [
+            ({"jc": 10}, "jointValues[jc]: joint 'jc' mimics 'jb', which mimics 'ja' (jc = -1 × ja - 2.86479 deg), so it is posed by the value of 'ja'; "
+                         "set jointValues[ja] instead"),
+            ({"jd": 0.03}, "jointValues[jd]: joint 'jd' mimics 'ja' (jd = 0.000349066 × ja + 0.02 m), so it is posed by the value of 'ja'; "
+                           "set jointValues[ja] instead"),
+            ({"ja": 40}, "jointValues[ja] = 40 deg puts joint 'jc', which mimics 'jb', which mimics 'ja', at -42.8648 deg, outside its limits "
+                         "[-34.3775, 34.3775] deg; pass a value that keeps it within them"),
+        ]
+        for request, message in refused:
+            with self.subTest(request=request), self.assertRaises(RobotReadError) as caught:
+                robot_control_values(payload, request)
+            self.assertEqual(str(caught.exception), message)
+        self.assertEqual(robot_control_values(payload, {"ja": 10}), {"ja": 10.0}, "the joint the refusal names is one a value poses")
 
     def test_a_leader_may_not_push_its_follower_past_the_followers_limits(self) -> None:
         urdf = """<robot name="g"><link name="a"/><link name="b"/><link name="c"/>
