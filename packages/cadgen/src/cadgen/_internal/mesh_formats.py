@@ -596,9 +596,12 @@ def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: An
     and skins name the primitives' ``node`` keys. A pivot is two nodes -- one at
     ``pivot + d`` turned by ``q``, keyed CUBICSPLINE, over one at ``-pivot`` that
     carries the pivot's occurrence nodes -- and a skin is a joint node per joint,
-    keyed LINEAR, under the pivot that also moves its tube or at the scene's root.
-    Every node's own transform is its pose at the clip's first moment: what the file
-    shows when nothing plays it.
+    keyed LINEAR, all children of one still node, the skin's ``skeleton`` (glTF
+    asks a skin's joints for one common root), which hangs under the pivot that also
+    moves its tube or at the scene's root. A skinned tube's own node stays at the
+    root even when a pivot carries its occurrence: its joints carry the motion, and
+    glTF ignores a skinned node's transform. Every node's own transform is its pose
+    at the clip's first moment: what the file shows when nothing plays it.
     """
     binary: list[bytes] = []
     size = 0
@@ -728,6 +731,8 @@ def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: An
                 target = node_index.get(str(member))
                 if target is None:
                     raise ValueError(f"animation pivot {ordinal} carries {member!r}, which no primitive declared")
+                if "skin" in nodes[target]:
+                    continue  # its joints ride the pivot; the skinned node stays a root
                 members.append(target)
                 roots.discard(target)
             nodes.append({"name": f"pivot {ordinal} offset", "translation": [float(c) for c in pivot.child_translation],
@@ -751,20 +756,26 @@ def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: An
                 }), "CUBICSPLINE")
         for ordinal, skin in enumerate(animation.skins):
             count, keys = skin.translations.shape[1], len(skin.times)
-            first_joint = len(nodes)
+            # The joints' one common root: still, at the identity, so their keys stand
+            # in its frame exactly as they would in its parent's.
+            skeleton = len(nodes)
+            first_joint = skeleton + 1
+            joints = list(range(first_joint, first_joint + count))
+            nodes.append({"name": f"tube {ordinal} skeleton", "children": joints})
             for joint in range(count):
                 nodes.append({"name": f"tube {ordinal} joint {joint}",
                               "translation": [float(c) for c in skin.translations[0, joint]],
                               "rotation": [float(c) for c in skin.rotations[0, joint]]})
-            joints = list(range(first_joint, first_joint + count))
             if skin.parent is None:
-                roots.update(joints)
+                roots.add(skeleton)
             else:
-                nodes[offsets[skin.parent]]["children"] += joints
-            skins.append({"name": f"tube {ordinal}", "joints": joints, "inverseBindMatrices": accessor({
+                nodes[offsets[skin.parent]]["children"].append(skeleton)
+            binds = accessor({
                 "bufferView": view(np.asarray(skin.inverse_binds, dtype="<f4").tobytes()), "byteOffset": 0,
                 "componentType": _FLOAT, "count": count, "type": "MAT4",
-            })})
+            })
+            skins.append({"name": f"tube {ordinal}", "skeleton": skeleton, "joints": joints,
+                          "inverseBindMatrices": binds})
             times = time_accessor(skin.times)
             # Every joint's keys contiguous, so each joint's output is one slice of a view.
             for path, values, width, kind in (("translation", skin.translations, 3, "VEC3"),

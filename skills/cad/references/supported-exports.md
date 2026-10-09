@@ -100,16 +100,16 @@ A mesh door never writes a `.step` file. A generated model's STEP is the OUTPUT 
 
 ### Carrying a clip into the GLB
 
-GLB is the one mesh format with somewhere to put motion. `--animation` resamples one of the clips in the document's sidecar into the file as glTF node animation, so an external viewer plays it:
+GLB is the one mesh format with somewhere to put motion. `--animation` writes one of the clips in the document's sidecar into the file as glTF animation, its keyframes as they stand, so an external viewer plays what the CAD Viewer plays:
 
 ```bash
 cadgen glb build STEP/model.step meshes/model.glb --animation demo
 cadgen glb build STEP/model.step meshes/model.glb \
-  --animation '{"clip": "demo", "fps": 30, "seconds": 24, "start": 0}'
+  --animation '{"clip": "demo", "seconds": 24, "start": 0}'
 ```
 
-`fps` is the rate at which the export samples the clip's keyframes. Translation and rotation are supported;
-visibility and opacity tracks are rejected unless explicitly dropped.
+Rigid motion and bending tubes are supported; visibility and opacity tracks are
+rejected unless explicitly dropped.
 Animated GLB requires an explicit OUT so the clip does not overwrite the default
 static export. STL and 3MF have no animation export. See [kinematics](kinematics.md)
 for clip requests and supported channels.
