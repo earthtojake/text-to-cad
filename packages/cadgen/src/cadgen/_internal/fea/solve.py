@@ -34,6 +34,8 @@ __all__ = ["SolveOutcome", "solve_linear_static"]
 DOF_LIMIT = 1_500_000
 #: Above this many it warns that the solve will be slow.
 DOF_WARN = 400_000
+#: Multigrid attempts (one random seed each) before the direct solver takes over.
+_AMG_ATTEMPTS = 3
 #: Below this many free DOF the direct solver wins on setup cost.
 DIRECT_SOLVE_BELOW = 20_000
 
@@ -165,17 +167,41 @@ def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: 
     import pyamg
 
     B = _rigid_body_modes(locations[free], component[free])
-    ml = pyamg.smoothed_aggregation_solver(Kff, B=B, symmetry="symmetric", strength="symmetric", max_coarse=500)
-    residuals: list[float] = []
-    u = ml.solve(ff, tol=1e-8, accel="cg", maxiter=600, residuals=residuals)
-    relative = residuals[-1] / max(residuals[0], 1e-300) if residuals else 1.0
-    if relative > 1e-6:
-        warnings.append(
-            f"the multigrid solve stopped at a relative residual of {relative:.1e} after {len(residuals)} "
-            "iterations; falling back to the direct solver (slower). Check that the fixtures hold the part."
-        )
-        return spla.spsolve(Kff.tocsc(), ff), "superlu (after amg)"
-    return u, f"amg+cg ({len(residuals)} iterations)"
+    # pyamg estimates the smoother's spectral radius from a random vector, and on a
+    # stiff graded mesh a bad estimate now and then made the iteration diverge. Seeded,
+    # a run repeats; a diverging attempt is stopped early and tried again with another seed.
+    import numpy as np
+
+    class Diverged(Exception):
+        pass
+
+    start = float(np.linalg.norm(ff))
+    for seed in range(_AMG_ATTEMPTS):
+        np.random.seed(seed)
+        ml = pyamg.smoothed_aggregation_solver(Kff, B=B, symmetry="symmetric", strength="symmetric", max_coarse=500)
+        count = 0
+
+        def watch(x):
+            nonlocal count
+            count += 1
+            if count % 25 == 0:
+                residual = float(np.linalg.norm(ff - Kff @ x))
+                if residual > 10.0 * start or (count >= 150 and residual > 0.5 * start):
+                    raise Diverged
+
+        residuals: list[float] = []
+        try:
+            u = ml.solve(ff, tol=1e-8, accel="cg", maxiter=600, residuals=residuals, callback=watch)
+        except Diverged:
+            continue
+        relative = residuals[-1] / max(residuals[0], 1e-300) if residuals else 1.0
+        if relative <= 1e-6:
+            return u, f"amg+cg ({len(residuals)} iterations)"
+    warnings.append(
+        f"the multigrid solve did not converge in {_AMG_ATTEMPTS} attempts; falling back to the direct solver "
+        "(slower). Check that the fixtures hold the part."
+    )
+    return spla.spsolve(Kff.tocsc(), ff), "superlu (after amg)"
 
 
 def _project_on_elements(scalar, field: "np.ndarray", rows: "np.ndarray") -> "np.ndarray":

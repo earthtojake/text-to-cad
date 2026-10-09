@@ -709,6 +709,56 @@ class SmallFeatures(unittest.TestCase):
         self.assertLess(size, 1.0)
 
 
+@unittest.skipUnless(HAVE_FEA, "cadgen[fea] is not installed")
+class MultigridRetry(unittest.TestCase):
+    """A multigrid attempt that diverges is stopped and tried again, not left to run to the iteration cap."""
+
+    N = 21000  # past DIRECT_SOLVE_BELOW
+
+    def _system(self):
+        import numpy as np
+        import scipy.sparse as sparse
+
+        K = sparse.diags(np.linspace(1.0, 2.0, self.N)).tocsr()
+        return K, np.ones(self.N), np.arange(self.N), np.zeros((self.N, 3)), np.arange(self.N) % 3
+
+    def _fake(self, diverges: bool, K, f):
+        import numpy as np
+
+        class Fake:
+            def solve(self, rhs, tol, accel, maxiter, residuals, callback):
+                if diverges:
+                    for _ in range(50):
+                        callback(1e6 * np.ones(len(rhs)))
+                    raise AssertionError("a diverging attempt must be stopped by the callback")
+                residuals.extend([1.0, 1e-9])
+                return rhs / K.diagonal()
+
+        return Fake()
+
+    def _run(self, diverging: list[bool]):
+        from unittest import mock
+
+        from cadgen._internal.fea.solve import _solve_system
+
+        K, f, free, locations, component = self._system()
+        fakes = iter(self._fake(d, K, f) for d in diverging)
+        warnings: list[str] = []
+        with mock.patch("pyamg.smoothed_aggregation_solver", side_effect=lambda *a, **k: next(fakes)):
+            _, how = _solve_system(K, f, free, locations, component, warnings)
+        return how, warnings
+
+    def test_a_diverging_attempt_is_retried(self):
+        how, warnings = self._run([True, False])
+        self.assertEqual(how, "amg+cg (2 iterations)")
+        self.assertEqual(warnings, [])
+
+    def test_the_direct_solver_takes_over_when_every_attempt_fails(self):
+        how, warnings = self._run([True, True, True])
+        self.assertEqual(how, "superlu (after amg)")
+        self.assertIn("did not converge in 3 attempts", warnings[0])
+
+
 class HumanLine(unittest.TestCase):
     def test_the_cli_line_floors_the_safety_factor_like_the_findings(self):
         from cadgen.results import FeaResult
