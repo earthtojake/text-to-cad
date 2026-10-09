@@ -166,9 +166,32 @@ def request_timeout() -> float:
     return DEFAULT_REQUEST_TIMEOUT_SECONDS
 
 
+def _declared_version(base: Path) -> str:
+    """The version declared beside the code under ``base``: its source tree's pyproject,
+    else the metadata installed with it. Never the first ``cadgen`` metadata on
+    ``sys.path``: a checkout can carry several (a stale editable install's, a wheel
+    build's egg-info under ``src``), the daemon and its clients put ``src`` at different
+    places on their paths, and two answers for the same files would retire every daemon
+    the moment a client spoke to it."""
+    import tomllib
+
+    pyproject = base.parent.parent / "pyproject.toml"
+    try:
+        with pyproject.open("rb") as handle:
+            project = tomllib.load(handle).get("project") or {}
+        if project.get("name") == "cadgen" and project.get("version"):
+            return str(project["version"])
+    except (OSError, ValueError):
+        pass
+    for metadata in sorted(base.parent.glob("cadgen-*.dist-info")):
+        return metadata.name[len("cadgen-"):-len(".dist-info")]
+    return "0+unknown"
+
+
 def compute_version_token(root: Path | None = None) -> str:
-    """The running daemon's identity: cadgen's version plus the newest ``.py`` mtime under
-    it. Client and server compute this identically; inequality means restart."""
+    """The running daemon's identity: the version declared beside its code plus the newest
+    ``.py`` mtime under it. Client and server compute this identically from the same
+    files; inequality means restart."""
     base = Path(root) if root is not None else CADGEN_DIR
     newest = 0
     for dirpath, dirnames, filenames in os.walk(base):
@@ -181,10 +204,7 @@ def compute_version_token(root: Path | None = None) -> str:
             except OSError:
                 continue
             newest = max(newest, mtime)
-
-    from cadgen import __version__
-
-    return f"{__version__}:{newest}"
+    return f"{_declared_version(base)}:{newest}"
 
 
 def _request_payload(
