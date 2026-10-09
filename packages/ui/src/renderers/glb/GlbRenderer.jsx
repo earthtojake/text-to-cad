@@ -1,13 +1,19 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { finiteOr } from "@text-to-cad/core/common/numbers.js";
 import { EDGELESS_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
+import { readFileView } from "../kit/shell/fileView.js";
 import { useRendererShell } from "../kit/shell/useRendererShell.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
+import { feaAnalysisSection } from "./FeaAnalysisSection.jsx";
+import FeaColourBar from "./FeaColourBar.jsx";
+import { applyDeformation, readFeaResult, recolorByField } from "./feaResult.js";
 import { GLB_DECLINED_LIVE_COMMANDS } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
 import { useGlbScene } from "./useGlbScene.js";
 
 const LIVE = Object.freeze({ declined: GLB_DECLINED_LIVE_COMMANDS });
+const NO_CHOICE = Object.freeze({ field: null, scale: null });
 
 function GlbSurface({ view, data }) {
   const document = useWorkspaceDocument({ view, data });
@@ -17,18 +23,59 @@ function GlbSurface({ view, data }) {
     catalogError: document.catalogError, error: loaded.error, modelKey: document.modelKey, hasScene: Boolean(scene)
   }), [document.catalogError, loaded.error, document.modelKey, scene]);
 
+  // An FEA result (cadgen fea solve) carries its fields and true displacement in the file; which
+  // field is shown and how exaggerated the displacement is are chosen in Display, per tab. That
+  // choice is this renderer's one slice of the file's view (`kit/shell/fileView.js`), written
+  // against the result's own fields and scale: a re-solved result opens at its own defaults.
+  const fea = useMemo(() => readFeaResult(scene?.document?.scene), [scene]);
+  const signature = fea ? `${fea.fields.map((entry) => entry.attribute).join(",")}:${fea.deformationScale}` : "";
+  const [stored] = useState(() => view.state);
+  const restored = useMemo(() => (fea ? readFileView(stored, { fea: signature }).renderer.fea || NO_CHOICE : NO_CHOICE), [fea, stored, signature]);
+  const [edited, setEdited] = useState({ signature: "", ...NO_CHOICE });
+  const choice = edited.signature === signature ? { ...restored, ...edited } : restored;
+  const activeField = fea ? fea.fields.find((entry) => entry.attribute === choice.field) || fea.fields[0] : null;
+  const activeScale = fea ? finiteOr(choice.scale, fea.deformationScale) : null;
+  const choiceRef = useRef(choice);
+  choiceRef.current = choice;
+  const rendererState = useMemo(() => (fea
+    ? { signatures: { fea: signature }, read: () => ({ fea: { field: choiceRef.current.field, scale: choiceRef.current.scale } }) }
+    : null), [fea, signature]);
+
   const requestRenderRef = useMemo(() => ({ current: null }), []);
   const animation = useGlbAnimation(scene?.document || null, () => requestRenderRef.current?.());
+  const shellRef = useRef(null);
+  const choose = useCallback((patch) => {
+    setEdited({ ...choiceRef.current, ...patch, signature });
+    shellRef.current?.scheduleStateSave();
+  }, [signature]);
+  const displaySections = useMemo(() => (fea ? [feaAnalysisSection({
+    result: fea, field: activeField, scale: activeScale,
+    onFieldChange: (attribute) => choose({ field: attribute }), onScaleChange: (scale) => choose({ scale })
+  })] : undefined), [fea, activeField, activeScale, choose]);
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: loaded.revision,
     features: EDGELESS_VIEW_FEATURES, previewable: true, scene,
     load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
-    animation, live: LIVE
+    animation, live: LIVE, rendererState, displaySections
   });
+  shellRef.current = shell;
   requestRenderRef.current = shell.requestRender;
   useDeclinedSelectReference(document);
 
-  return <RendererShell shell={shell} tools={[]} />;
+  // The colours and the drawn displacement follow the choice, in place on the loaded geometry.
+  useEffect(() => {
+    if (fea && recolorByField(fea.mesh, activeField, fea.ramp)) {
+      requestRenderRef.current?.();
+    }
+  }, [fea, activeField, requestRenderRef]);
+  useEffect(() => {
+    if (fea && applyDeformation(fea.mesh, activeScale, fea.deformationScale)) {
+      requestRenderRef.current?.();
+    }
+  }, [fea, activeScale, requestRenderRef]);
+
+  const overlay = fea ? <FeaColourBar result={fea} field={activeField} /> : null;
+  return <RendererShell shell={shell} tools={[]} viewportOverlay={overlay} />;
 }
 
 export default function GlbRenderer(props) {

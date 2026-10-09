@@ -291,6 +291,7 @@ class Cantilever(unittest.TestCase):
         self.assertEqual((extras["fields"][0]["units"], extras["fields"][0]["max"]), ("MPa", self.result.summary["max_von_mises_MPa"]))
         self.assertEqual(extras["fields"][1]["max"], self.result.summary["max_displacement_mm"])
         self.assertEqual(len(extras["ramp"]), 5)
+        self.assertEqual(extras["safety_factor"], self.result.summary["safety_factor"])
         colour = gltf["accessors"][attributes["COLOR_0"]]
         self.assertEqual((colour["type"], colour["componentType"], colour.get("normalized")), ("VEC4", 5121, True))
         position = gltf["accessors"][attributes["POSITION"]]

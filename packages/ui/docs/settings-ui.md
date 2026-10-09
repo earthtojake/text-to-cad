@@ -461,6 +461,7 @@ Escape closes the innermost popup first, the dropdown only on a later press.
 | Section | Contents |
 | --- | --- |
 | Display | Full-width render Mode; Appearance (when the host gives one) and Projection beneath; a small gray Reset icon at top-right |
+| Analysis | An FEA result's field and deformation (a result only; see [An FEA result](#an-fea-result)) |
 | Surfaces | Style and part-color mode; color or palette and opacity below |
 | Edges | Visibility and color, where the format has topology |
 | Grid / Axes | Two color/opacity controls, left and right in title order, no visible labels |
@@ -532,6 +533,25 @@ Nothing of a file is in it: a file's view is
 view's or a tab's: the host keeps it where every view of theirs reads it (both apps: their
 settings, `settings.json` in cadgen's state directory), and a view reads it again whenever
 the person comes back to the page.
+
+## An FEA result
+
+A GLB that `cadgen fea solve` wrote is a result: its mesh carries every field, the true
+displacement and a plain-language summary (`glb/feaResult.js`). Its choices are Display's,
+and what the colours mean is on the view; there is no panel, tool or mode of its own.
+
+- **Display gets an Analysis section**, always open, right after Display's own first section
+  (a renderer's `displaySections`): a Field select (von Mises stress, displacement) and a
+  Deformation slider with its committed number, from 0 to four times the file's own
+  exaggeration. A GLB that is not a result has no such section.
+- **A colour bar** floats at bottom-centre on the playbar's line
+  (`FLOATING_CHROME_SURFACE_CLASS`, no pointer events): one plain line over the field's range
+  and units along the ramp. Stress: "Peak stress 47 MPa · holds 5.8× this load · moves up to
+  0.03 mm", with "holds" left out when the result has no safety factor; displacement: "Moves up
+  to 0.03 mm". It has no controls. The safety factor is the result's own, the conservative one.
+- **The choice is the file's view**: the field and the exaggeration are one renderer slice
+  (`fea`), written against the result's fields and scale, so a re-solved result opens at its own
+  defaults.
 
 ## Position and references
 

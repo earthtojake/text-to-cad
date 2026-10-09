@@ -263,6 +263,8 @@ def solve_study(
         "document": document.name,
         "occurrence": occurrence.ref,
         "deformation_scale": scale,
+        # The summary's (conservative) safety factor, for the viewer's plain line; null when there is none.
+        "safety_factor": summary["safety_factor"],
         # One entry per raw attribute the GLB carries, for a viewer's field
         # switch. `attribute_scale` turns the stored value into the units named:
         # the displacement vector is stored in glTF metres.

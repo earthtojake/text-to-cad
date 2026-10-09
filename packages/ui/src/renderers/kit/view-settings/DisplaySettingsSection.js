@@ -108,7 +108,7 @@ function DisplaySections({ sections }) {
 
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  features = ALL_VIEW_FEATURES, appearanceControl = null, close = null
+  features = ALL_VIEW_FEATURES, appearanceControl = null, close = null, extraSections = []
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -158,6 +158,8 @@ export function DisplaySettingsSection({
             options={Object.entries(PROJECTIONS).map(([value, { label, icon }]) => ({ value, label, icon }))} />
         </FileSheetFieldGrid>
       </> },
+      // A renderer's own, always open, right after Display: what the file itself is about.
+      ...extraSections,
       offers("surfaces") && { id: "surfaces", title: "Surfaces", content: surfaces },
       section("edges", "Edges", <FileSheetFieldGrid>
         <FileSheetSelectRow hideLabel className="px-0" label="Edge visibility" value={view.edges.visibility} onValueChange={visibility => setGroup("edges", { visibility })}

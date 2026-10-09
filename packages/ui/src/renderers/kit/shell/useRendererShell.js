@@ -59,6 +59,7 @@ export const SHELL_TOOL = Object.freeze({ DRAW: "draw" });
 
 const SESSION_SAVE_DELAY_MS = 180;
 const EMPTY = Object.freeze({});
+const NO_SECTIONS = Object.freeze([]);
 // What asking for Preview does in a view that does not offer it: nothing.
 const NO_PREVIEW = () => {};
 
@@ -142,6 +143,9 @@ const NO_PREVIEW = () => {};
  *   against; a slice comes back (`readFileView`, which the renderer calls itself on mount) only under the same
  *   signature. The renderer calls `shell.scheduleStateSave()` when a slice changed. Null, or omitted, keeps
  *   what is stored as it is: a renderer that has not loaded yet, or one with no slices of its own.
+ * @param {{ id: string, title: string, content: import("react").ReactNode }[]} [options.displaySections]  Sections
+ *   of this file's own that Display shows, always open, right after its first: what the file is about
+ *   beyond how it is drawn (an FEA result's field and deformation). Never a gate, never a panel.
  * @param {() => void} [options.onCameraSettled]  The camera came to rest on a new view: it moved and was
  *   recorded, a preview camera moved (preview mode, which records nothing), or the viewport's size
  *   changed — which can expose part of a scene without changing position, target or zoom at all. For a
@@ -166,7 +170,7 @@ export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes = null, tool = null, previewable = false, preview = null, scene, load,
   viewSettings = null, viewerRef: providedViewerRef = null,
   animation = null, live = EMPTY, promptReferences = null, promptContext = createViewPromptContext,
-  escape = EMPTY, rendererState = null,
+  escape = EMPTY, rendererState = null, displaySections = NO_SECTIONS,
   onCameraSettled = null, preserveInteractionPixelRatio = false, runtimeLifecycle = null,
   onRuntimeAlert = null, presentationReport = null,
   sceneScaleMode = VIEWER_SCENE_SCALE.CAD
@@ -501,7 +505,7 @@ export function useRendererShell({
   // The content of Display's dropdown (`DisplayPopover.jsx`): every renderer's, built here from its
   // display settings, its first heading ending in the dropdown's X.
   const display = <DisplaySettingsSection appearanceControl={view.displayActions}
-    features={features} viewSettings={displaySettings} hostAppearance={colorScheme} lightingQuality="preview"
+    features={features} extraSections={displaySections} viewSettings={displaySettings} hostAppearance={colorScheme} lightingQuality="preview"
     resolvedView={desiredScene.view} onViewSettingsPatch={viewSettingsStore.patch}
     onGroupEnabledChange={viewSettingsStore.setEnabled} onModeChange={viewSettingsStore.selectPreset}
     onViewReset={viewSettingsStore.reset} close={<DisplayPopoverClose />} />;
