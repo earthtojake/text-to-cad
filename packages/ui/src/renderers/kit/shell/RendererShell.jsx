@@ -97,13 +97,16 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   `frameProvider`: the renderer wraps the WHOLE frame — its own context, above the tool
  *   stack as well as the viewport, because both read it. It is given the frame and returns
  *   it wrapped; a renderer that passes none is mounted exactly as it is.
+ *   `alertBody`, `alertStartsDismissed`: what a renderer lists under the alert it raised itself (a
+ *   result's findings: `kit/status/findings.jsx`) — a function of the card's `dismiss`, so a row
+ *   chosen can put the card away — and whether that alert starts put away (suggestions only).
  *   `onCanvasPointerDown`: a press that landed on the canvas, before anything in the viewport sees
  *   it. The frame focuses itself on such a press whatever the renderer does; this is for a renderer
  *   that also has something to put down when the person reaches for the model.
  */
 export default function RendererShell({ shell, tools, playback = null, toolPanels = null, references = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null,
-  frameProvider = null, onCanvasPointerDown = null }) {
+  alertBody = null, alertStartsDismissed = false, frameProvider = null, onCanvasPointerDown = null }) {
   const frame = shell.frame;
   const mobile = useViewerMobile();
   const { view, resolvedScene, viewerLoading, scene } = frame;
@@ -195,7 +198,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   const failed = Boolean(frame.viewerAlert) && !alertDismissible(frame.viewerAlert, hasContent);
   // The card's dismissal is the frame's, so it outlives the card (gone in preview): while the person
   // has the card put away, its icon is the navbar's way back to it, leftmost of the right-hand group.
-  const alertDismissal = useAlertDismissal(frame.viewerAlert, { hasContent, scope: frame.modelKey, onNavigationActionsChange: view.onNavigationActionsChange });
+  const alertDismissal = useAlertDismissal(frame.viewerAlert, { hasContent, scope: frame.modelKey,
+    startDismissed: alertStartsDismissed, onNavigationActionsChange: view.onNavigationActionsChange });
   // While the model loads, or once it has failed to, the viewer shows none of its own chrome: no
   // tools, no Quick Edit, no cube, no view actions and no update status -- only the load itself,
   // or the card saying why it failed. They arrive with the model, and stay through a rebuild that
@@ -288,7 +292,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                   >{overlay}</ShellViewport>
                   {/* The file as the alert names it (the catalog's absolute path), which Report Issue keeps out of its issue. */}
                   {!previewing ? <ViewerAlertCard alert={frame.viewerAlert} hasContent={hasContent} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss}
-                    onReload={view.reload} file={frame.modelKey || view.file?.path} /> : null}
+                    onReload={view.reload} file={frame.modelKey || view.file?.path}
+                    body={alertBody ? alertBody(alertDismissal.dismiss) : null} /> : null}
                 </div>
               </div>
 

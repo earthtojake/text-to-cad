@@ -6,27 +6,28 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 // The GLB renderer's FEA surfaces under the real shell, with only what loads the file and the WebGL
 // viewport replaced: a result's field and deformation are Display's (an Analysis section), its colour
 // bar is a reading with no controls, and a GLB that is not a result has neither.
-const loaded = vi.hoisted(() => ({ root: null as any, revision: 'one', animation: null as any }));
+const loaded = vi.hoisted(() => ({ root: null as any, scene: null as any, revision: 'one', animation: null as any, runtime: null as any }));
 vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
   default: forwardRef(function StandInViewport(props: any, ref) {
     useImperativeHandle(ref, () => ({ requestRender() {} }));
-    return <div data-stand-in-viewport="">{typeof props.children === 'function' ? props.children({ hostRef: { current: null }, runtimeRef: { current: null }, mountRef: { current: null }, viewerReadyTick: 1, commitScene: () => true }) : props.children}</div>;
+    return <div data-stand-in-viewport="">{typeof props.children === 'function' ? props.children({ hostRef: { current: loaded.runtime ? { clientWidth: 800, clientHeight: 600 } : null }, runtimeRef: { current: loaded.runtime }, mountRef: { current: null }, viewerReadyTick: 1, commitScene: () => true }) : props.children}</div>;
   })
 }));
 vi.mock('../../../dist/renderers/glb/useGlbScene.js', () => ({
-  useGlbScene: () => ({ scene: { document: { scene: loaded.root }, revision: loaded.revision }, revision: loaded.revision, busy: false, error: null, progress: null })
+  useGlbScene: () => ({ scene: loaded.scene, revision: loaded.revision, busy: false, error: null, progress: null })
 }));
 vi.mock('../../../dist/renderers/glb/useGlbAnimation.js', () => ({ useGlbAnimation: () => loaded.animation }));
 import GlbRenderer from '../../../dist/renderers/glb/GlbRenderer.js';
 import { writeFileView } from '../../../dist/renderers/kit/shell/fileView.js';
 import { ViewerHostContext } from '../../../dist/host/context.js';
 import { testHost } from '../../../dist/host/testing/host.js';
+import * as THREE from 'three';
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
 });
-afterEach(() => { loaded.animation = null; cleanup(); vi.unstubAllGlobals(); document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()); });
+afterEach(() => { vi.restoreAllMocks(); loaded.animation = null; loaded.runtime = null; cleanup(); vi.unstubAllGlobals(); document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()); });
 
 // Two triangles the way GLTFLoader hands a result over: lower-cased custom attributes, extras in userData.
 function resultRoot(extras: Record<string, unknown> | null) {
@@ -51,9 +52,11 @@ const RESULT = {
 };
 const colourBytes = (mesh: Mesh) => Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
 
-function mount(extras: Record<string, unknown> | null, state?: unknown) {
+function mount(extras: Record<string, unknown> | null, state?: unknown, { actions = () => {}, host = testHost() }: { actions?: (actions: readonly any[]) => void, host?: any } = {}) {
   const built = resultRoot(extras);
   loaded.root = built.root;
+  // One scene per file, as the hook holds it: a render is not a new result.
+  loaded.scene = { document: { scene: built.root }, revision: loaded.revision };
   const slot = document.createElement('div');
   slot.setAttribute('data-test-navbar', '');
   document.body.append(slot);
@@ -63,9 +66,9 @@ function mount(extras: Record<string, unknown> | null, state?: unknown) {
   const catalog = { entries: [], error: null };
   const client = { resources: {}, subscribe: () => () => {}, getSnapshot: () => catalog };
   const props = { source: { id: 'one' }, file: { path: '/models/part.glb', name: 'part.glb', kind: 'file' }, document: null, navbarSlot: slot,
-    onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' }, state, onStateChange: save, onNavigationActionsChange() {}, reload() {},
+    onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' }, state, onStateChange: save, onNavigationActionsChange: actions, reload() {},
     data: { client, entry: { path: '/models/part.glb', hash: 'h' }, services: { preferences } } };
-  const view = render(<ViewerHostContext.Provider value={testHost()}><GlbRenderer {...(props as any)} /></ViewerHostContext.Provider>);
+  const view = render(<ViewerHostContext.Provider value={host}><GlbRenderer {...(props as any)} /></ViewerHostContext.Provider>);
   return { ...view, ...built, save };
 }
 const openDisplay = () => act(() => { fireEvent.click(screen.getByRole('button', { name: 'Display' })); });
@@ -141,4 +144,94 @@ it('the colour bar steps up above the playbar when the result also has routines,
   expect(high).toContain('3rem');
   // The slider tops out at four times the file's own 10x.
   expect(animated.mesh.geometry.getAttribute('position').getZ(2)).toBeCloseTo(0.06, 6);
+});
+
+// What the result's checks found: errors first, as the card a board's are.
+const PEAK = { check: 'fea', severity: 'error', type: 'peak', summary: 'The peak stress, 120 MPa, is above the 100 MPa this material yields at',
+  description: 'The peak stress is above yield.', items: [{ text: 'the peak stress', ref: '#o1.f3', at: [10, 20, 30] }, { text: 'a fixed face', ref: '#o1.f1', at: [0, 0, 0] }] };
+const SOFT = { check: 'fea', severity: 'warning', type: 'bend', summary: 'The part bends visibly: 0.4 mm', description: 'It bends.', items: [{ text: 'the tip', ref: null }] };
+const FOUND = { ...RESULT, document: 'part.step', occurrence: 'o1' };
+const alertCard = () => screen.queryByRole('alert');
+
+it('opens the card for what must be fixed, listing errors under their heading and the rest under Suggestions', () => {
+  const actions = vi.fn();
+  mount({ ...FOUND, findings: [SOFT, PEAK] }, undefined, { actions });
+  const card = alertCard()!;
+  expect(card.textContent).toContain('1 to fix, 1 suggestion');
+  expect(card.textContent).toContain('Fix before using');
+  expect(card.textContent).toContain('Suggestions');
+  expect(Array.from(card.querySelectorAll('[data-finding-row]')).map(row => row.textContent)).toEqual([PEAK.summary, SOFT.summary]);
+  expect(card.querySelector('[data-report-issue]')).toBeNull();
+  // Nothing is in the navbar while the card is up.
+  expect(actions.mock.calls.flat(2).filter((action: any) => action?.label)).toEqual([]);
+});
+
+it('puts suggestions alone away, their icon in the navbar saying what is there, and brings the card back from it', () => {
+  const actions = vi.fn();
+  mount({ ...FOUND, findings: [SOFT] }, undefined, { actions });
+  expect(alertCard()).toBeNull();
+  const published = actions.mock.calls.at(-1)![0];
+  expect(published.map((action: any) => action.label)).toEqual(['1 suggestion']);
+  act(() => { published[0].onInvoke(); });
+  expect(alertCard()!.textContent).toContain('The part bends visibly');
+  expect(alertCard()!.textContent).not.toContain('Fix before using');
+});
+
+it('a GLB with no findings, or whose findings are not a list, raises no card', () => {
+  mount({ ...FOUND, findings: [] });
+  expect(alertCard()).toBeNull();
+  cleanup();
+  mount({ ...FOUND, findings: 'nope' });
+  expect(alertCard()).toBeNull();
+  expect(document.querySelector('[data-quick-edit-chip]')).toBeNull();
+});
+
+it('choosing a finding puts the card away, rings the places it names and carries its sentence and the part\'s face into Quick Edit', async () => {
+  const copied: string[] = [];
+  const host = testHost({ clipboard: { writeText: async (text: any) => { copied.push(await text); }, readText: async () => '', writeImage: async () => {} } });
+  const actions = vi.fn();
+  mount({ ...FOUND, findings: [PEAK, SOFT] }, undefined, { host, actions });
+  expect(document.querySelector('[data-fea-finding-rings]')).toBeNull();
+  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
+  expect(alertCard()).toBeNull();
+  expect(actions.mock.calls.at(-1)![0].map((action: any) => action.label)).toEqual(['1 to fix, 1 suggestion']);
+  expect(document.querySelector('[data-fea-finding-rings]')).toBeTruthy();
+  const box = screen.getByRole('region', { name: 'Quick Edit' });
+  expect(box.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('2 refs');
+  const note = screen.getByRole('textbox', { name: 'Describe your changes' });
+  act(() => { fireEvent.change(note, { target: { value: 'thicken it' } }); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' })); });
+  // The STEP the result records, beside the GLB, named by its faces, after the sentence.
+  expect(copied).toEqual([`thicken it\n\nFile: /models/part.glb\nReferences:\n${PEAK.summary} · /models/part.step#o1.f1,o1.f3`]);
+});
+
+it('a finding about no face names the whole part, and a result that names no source offers no reference', () => {
+  const actions = vi.fn();
+  mount({ ...FOUND, findings: [SOFT] }, undefined, { actions });
+  act(() => { actions.mock.calls.at(-1)![0][0].onInvoke(); });
+  act(() => { fireEvent.click(screen.getByText(SOFT.summary)); });
+  expect(screen.getByRole('region', { name: 'Quick Edit' }).querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('1 ref');
+  cleanup();
+  mount({ ...FOUND, document: '', findings: [PEAK] });
+  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
+  expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull();
+  expect(document.querySelector('[data-fea-finding-rings]')).toBeTruthy();
+});
+
+it('rings each place at the deformed position under the camera, and follows the deformation scale', () => {
+  const arcs: number[][] = [];
+  const context = { setTransform() {}, clearRect() {}, beginPath() {}, stroke() {}, arc: (...args: number[]) => { arcs.push(args); } } as any;
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
+  let frame: (() => void) | null = null;
+  vi.stubGlobal('requestAnimationFrame', (callback: () => void) => { frame = callback; return 1; });
+  vi.stubGlobal('cancelAnimationFrame', () => {});
+  const camera = new THREE.OrthographicCamera(-0.05, 0.05, 0.0375, -0.0375, 0.001, 10);
+  camera.position.set(0, 0, 1);
+  camera.updateMatrixWorld();
+  loaded.runtime = { THREE, camera };
+  mount({ ...FOUND, findings: [{ ...PEAK, items: [{ text: 'the tip', ref: '#o1.f3', at: [0, 10, 0] }] }] });
+  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
+  const paint = () => { arcs.length = 0; act(() => { frame!(); }); return arcs.map(([x, y]) => [Math.round(x), Math.round(y)]); };
+  // CAD (0, 10, 0) mm is glTF (0, 0, -0.01) m: the screen's centre, before the displacement moves it.
+  expect(paint()).toEqual([[400, 300]]);
 });

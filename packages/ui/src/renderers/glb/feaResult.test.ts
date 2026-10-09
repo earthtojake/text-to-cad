@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import {
-  applyDeformation, deformationRange, feaRamp, feaSummaryLine, fieldValues, formatValue, readFeaResult, recolorByField
+  applyDeformation, deformationRange, feaRamp, feaSummaryLine, fieldValues, formatValue, readFeaResult, recolorByField, resultSourcePath, ringPoint, ringTargets
 } from './feaResult.js';
 
 /** A two-triangle "result" the way GLTFLoader hands one over: lower-cased custom attributes, extras in userData. */
@@ -131,5 +131,42 @@ describe('the plain line', () => {
     expect(result.safetyFactor).toBeNull();
     expect(feaSummaryLine(result, result.fields[0])).toBe('Peak stress 47 MPa · moves up to 0.029 mm');
     expect(feaSummaryLine(result, { ...result.fields[0], attribute: '_other' })).toBe('');
+  });
+});
+
+describe('a result\'s findings', () => {
+  const finding = { check: 'fea', severity: 'error', type: 'peak', summary: 'Too much', description: 'Far too much.', items: [{ text: 'the peak', ref: '#o1.f3', at: [1, 2, 3] }, { text: 'a face', ref: null }] };
+  it('are read in the file\'s order with their places, malformed ones left out', () => {
+    const { mesh, root } = resultMesh();
+    mesh.userData.findings = [finding, 'nope', { severity: 'note', summary: 'Soft', items: [{ at: [1, 2] }, { ref: '', at: [0, 0, NaN] }] }];
+    const found = readFeaResult(root)!.findings;
+    expect(found.map(entry => [entry.index, entry.severity, entry.summary])).toEqual([[0, 'error', 'Too much'], [1, 'warning', 'Soft']]);
+    expect(found[0].items).toEqual([{ text: 'the peak', ref: '#o1.f3', at: [1, 2, 3] }, { text: 'a face', ref: null, at: null }]);
+    expect(found[1].items.map(item => [item.ref, item.at])).toEqual([[null, null], [null, null]]);
+    expect(readFeaResult(resultMesh().root)!.findings).toEqual([]);
+  });
+
+  it('name their source STEP beside the GLB unless it is absolute', () => {
+    expect(resultSourcePath('/work/results/bracket.glb', 'bracket.step')).toBe('/work/results/bracket.step');
+    expect(resultSourcePath('/work/results/bracket.glb', '../STEP/bracket.step')).toBe('/work/STEP/bracket.step');
+    expect(resultSourcePath('/work/results/bracket.glb', '/parts/bracket.step')).toBe('/parts/bracket.step');
+    expect(resultSourcePath('/work/results/bracket.glb', '')).toBe('');
+  });
+
+  it('ring the CAD point in the mesh\'s metres, moved by the displacement there at the scale shown', () => {
+    // Two vertices whose positions carry 10x their displacement, as the writer bakes it.
+    const geometry = new BufferGeometry();
+    const displacement = [0, 0, 0, 0.001, 0, 0];
+    geometry.setAttribute('_displacement', new BufferAttribute(new Float32Array(displacement), 3));
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 0.1 + 0.01, 0, 0]), 3));
+    const mesh = new Mesh(geometry);
+    const result = { mesh, deformationScale: 10 } as any;
+    // CAD (100, 0, 0) mm is (0.1, 0, 0) m: the second vertex, undeformed.
+    const [target] = ringTargets(result, [[100, 0, 0]]);
+    expect(target.base).toEqual([0.1, 0, 0]);
+    expect(ringPoint(target, 0)[0]).toBeCloseTo(0.1, 9);
+    expect(ringPoint(target, 10)[0]).toBeCloseTo(0.11, 9);
+    // The CAD axes become glTF's: z up is Y, y is -Z.
+    expect(ringTargets(result, [[0, 20, 5]])[0].base).toEqual([0, 0.005, -0.02]);
   });
 });

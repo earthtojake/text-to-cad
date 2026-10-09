@@ -5,15 +5,19 @@ import RendererShell from "../kit/shell/RendererShell.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
 import { useRendererShell } from "../kit/shell/useRendererShell.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
+import FindingsList, { findingsAlert } from "../kit/status/findings.jsx";
+import FindingRings from "./FindingRings.jsx";
 import { feaAnalysisSection } from "./FeaAnalysisSection.jsx";
 import FeaColourBar from "./FeaColourBar.jsx";
-import { applyDeformation, deformationRange, readFeaResult, recolorByField } from "./feaResult.js";
+import { applyDeformation, deformationRange, findingSelector, readFeaResult, recolorByField, resultSourcePath, ringTargets } from "./feaResult.js";
 import { GLB_DECLINED_LIVE_COMMANDS } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
 import { useGlbScene } from "./useGlbScene.js";
 
 const LIVE = Object.freeze({ declined: GLB_DECLINED_LIVE_COMMANDS });
 const NO_CHOICE = Object.freeze({ field: null, scale: null });
+const FINDING_HEADINGS = Object.freeze({ fix: "Fix before using", suggestions: "Suggestions" });
+const NO_TARGETS = Object.freeze([]);
 
 function GlbSurface({ view, data }) {
   const document = useWorkspaceDocument({ view, data });
@@ -43,6 +47,29 @@ function GlbSurface({ view, data }) {
     ? { signatures: { fea: signature }, read: () => ({ fea: { field: choiceRef.current.field, scale: choiceRef.current.scale } }) }
     : null), [fea, signature]);
 
+  // What the result's checks found is the viewer's alert card, as a board's are (`kit/status/findings.jsx`):
+  // open over the view while something must be fixed, put away (its icon in the navbar) for suggestions
+  // alone. A failure to load owns the card; the findings have it otherwise.
+  const compact = Boolean(view.appearance?.compact);
+  const findings = fea && !compact && fea.findings.length ? fea.findings : null;
+  const card = useMemo(() => findingsAlert(findings), [findings]);
+  const [chosen, setChosen] = useState({ findings: null, index: -1 });
+  const finding = findings && chosen.findings === findings ? findings.find((entry) => entry.index === chosen.index) || null : null;
+  // The part the result was solved from, the file a chosen finding's references name.
+  const source = useMemo(() => (fea ? resultSourcePath(view.file.path, fea.document) : ""), [fea, view.file.path]);
+  const references = useMemo(() => {
+    if (!findings) return null;
+    if (!finding || !source) return [];
+    const refs = [...new Set(finding.items.map((item) => item.ref).filter(Boolean).map(findingSelector))];
+    // A finding about no face is about the whole part.
+    const selectors = refs.length ? refs : fea.occurrence ? [fea.occurrence] : [];
+    return selectors.length ? [{ resource: { kind: "workspace-file", path: source }, target: { kind: "cad-selector", selectors },
+      ...(finding.summary ? { summary: finding.summary } : {}) }] : [];
+  }, [findings, finding, source, fea]);
+  // The places it names, in the mesh's space with the displacement there, ringed over the view.
+  const targets = useMemo(() => (finding && fea ? ringTargets(fea, finding.items.map((item) => item.at).filter(Boolean)) : NO_TARGETS),
+    [finding, fea]);
+
   const requestRenderRef = useMemo(() => ({ current: null }), []);
   const animation = useGlbAnimation(scene?.document || null, () => requestRenderRef.current?.());
   const shellRef = useRef(null);
@@ -57,7 +84,7 @@ function GlbSurface({ view, data }) {
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: loaded.revision,
     features: EDGELESS_VIEW_FEATURES, previewable: true, scene,
-    load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
+    load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert || card },
     animation, live: LIVE, rendererState, displaySections
   });
   shellRef.current = shell;
@@ -76,8 +103,18 @@ function GlbSurface({ view, data }) {
     }
   }, [fea, activeScale, requestRenderRef]);
 
-  const overlay = fea ? <FeaColourBar result={fea} field={activeField} raised={Boolean(animation)} /> : null;
-  return <RendererShell shell={shell} tools={[]} viewportOverlay={overlay} />;
+  const showingFindings = Boolean(card) && shell.frame.viewerAlert === card;
+  const overlay = fea ? (viewport) => <>
+    <FeaColourBar result={fea} field={activeField} raised={Boolean(animation)} />
+    {targets.length ? <FindingRings runtimeRef={viewport.runtimeRef} hostRef={viewport.hostRef} mesh={fea.mesh} targets={targets}
+      severity={finding.severity} scale={activeScale} /> : null}
+  </> : null;
+  // A finding chosen in the card puts it away and rings what it names, with its sentence in Quick Edit.
+  const chooseFinding = (dismiss) => (entry) => { setChosen({ findings, index: entry.index }); dismiss(); };
+  return <RendererShell shell={shell} tools={[]} viewportOverlay={overlay} references={references}
+    onClearReferences={() => setChosen({ findings: null, index: -1 })}
+    alertBody={showingFindings ? (dismiss) => <FindingsList findings={findings} headings={FINDING_HEADINGS} onChoose={chooseFinding(dismiss)} /> : null}
+    alertStartsDismissed={showingFindings && card.severity === "warning"} />;
 }
 
 export default function GlbRenderer(props) {
