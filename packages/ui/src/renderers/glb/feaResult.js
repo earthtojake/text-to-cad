@@ -289,6 +289,8 @@ export function fieldValues(mesh, field) {
 // reads at the ramp's blue end and its red end alike while its stress still shows through.
 const HIGHLIGHT = Object.freeze([255, 64, 242]);
 const HIGHLIGHT_BLEND = 0.68;
+// A chosen joint also tints the two parts it joins, lightly: the interface faces sit hidden between them.
+const SOFT_BLEND = 0.3;
 
 /** The face each vertex lies on (`_FACE`), or null for a result that does not say. */
 function vertexFaces(mesh) {
@@ -305,10 +307,11 @@ function vertexParts(mesh) {
 /**
  * Rewrite the mesh's vertex colours from one field over `[field.min, field.max]`, with the
  * vertices of the faces in `highlight` (indices into the result's `faces`) and of the parts in
- * `parts` (indices into its `parts`) tinted.
+ * `parts` (indices into its `parts`) tinted, and the parts in `softParts` tinted lightly (a joint's
+ * two parts; its interface faces keep the full tint).
  * Returns true when the colours changed; false when that field and tint were already shown.
  */
-export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = null, parts = null) {
+export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = null, parts = null, softParts = null) {
   const color = mesh.geometry.getAttribute("color");
   const values = fieldValues(mesh, field);
   if (!color || !values) {
@@ -319,8 +322,9 @@ export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = nul
   const tinted = faces && highlight?.length ? new Set(highlight) : null;
   const partOf = vertexParts(mesh);
   const tintedParts = partOf && parts?.length ? new Set(parts) : null;
+  const lightParts = partOf && softParts?.length ? new Set(softParts) : null;
   const sorted = (set) => (set ? [...set].sort((a, b) => a - b).join(",") : "");
-  const key = `${field.attribute}|${sorted(tinted)}|${sorted(tintedParts)}`;
+  const key = `${field.attribute}|${sorted(tinted)}|${sorted(tintedParts)}|${sorted(lightParts)}`;
   if (kept.field === key) {
     return false;
   }
@@ -333,8 +337,9 @@ export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = nul
     const entry = Math.round(t * 255) * 3;
     const base = i * stride;
     const tint = (tinted !== null && tinted.has(Math.round(faces[i]))) || (tintedParts !== null && tintedParts.has(Math.round(partOf[i])));
+    const blend = tint ? HIGHLIGHT_BLEND : lightParts !== null && lightParts.has(Math.round(partOf[i])) ? SOFT_BLEND : 0;
     for (let k = 0; k < 3; k += 1) {
-      bytes[base + k] = tint ? Math.round(table[entry + k] + (HIGHLIGHT[k] - table[entry + k]) * HIGHLIGHT_BLEND) : table[entry + k];
+      bytes[base + k] = blend ? Math.round(table[entry + k] + (HIGHLIGHT[k] - table[entry + k]) * blend) : table[entry + k];
     }
     if (stride > 3) bytes[base + 3] = 255;
   }
@@ -418,7 +423,7 @@ export function feaSummaryLine(result, field) {
   // An assembly leads with its weakest part, whose peak (not the assembly's) and factor these are.
   const weakest = result.weakestPart && result.weakestPartPeakMPa !== null;
   return [
-    weakest ? `Weakest: ${result.weakestPart}` : "",
+    weakest ? `Weakest: ${spaced(result.weakestPart)}` : "",
     `${weakest ? "peak stress" : "Peak stress"} ${plainNumber(weakest ? result.weakestPartPeakMPa : stress.max)} ${stress.units}`.trim(),
     holds,
     moves ? `${weakest ? "the assembly moves" : "moves"} up to ${moves}` : "",
@@ -447,6 +452,9 @@ export function faceLabel(ref) {
   const number = faceNumber(ref);
   return number === null ? String(ref || "") : `Face ${number}`;
 }
+
+/** A part's name as a person reads it, its underscores spaces so a long one wraps at words. */
+const spaced = (name) => String(name).replace(/_/g, " ");
 
 /** Faces after a word: "face 17", "faces 17, 18". */
 function facesWords(refs) {
@@ -526,12 +534,13 @@ function jointSummary(joint) {
 function assemblyRows(result) {
   const rows = [];
   const parts = result.parts.map((part, index) => ({
-    id: `part:${index}`, label: part.name || part.ref, detail: partDetail(part), wrap: true, refs: part.ref ? [part.ref] : [], parts: [index],
+    id: `part:${index}`, label: spaced(part.name || part.ref), detail: partDetail(part), wrap: true, refs: part.ref ? [part.ref] : [], parts: [index],
     summary: `Part '${part.name || part.ref}'`,
   }));
   if (parts.length) rows.push({ id: "parts", label: "Parts", detail: "", children: parts });
   const joints = result.connections.map((joint, index) => ({
-    id: `joint:${index}`, label: `${joint.names[0]} ↔ ${joint.names[1]}`, detail: jointDetail(joint), wrap: true,
+    id: `joint:${index}`, label: `${spaced(joint.names[0])} ↔ ${spaced(joint.names[1])}`, detail: jointDetail(joint), wrap: true,
+    softParts: joint.between.map((ref) => result.parts.findIndex((part) => part.ref === ref)).filter((at) => at >= 0),
     ...(joint.faces.length ? { faces: joint.faces } : { refs: joint.between.filter(Boolean) }), summary: jointSummary(joint),
   }));
   if (joints.length) rows.push({ id: "connections", label: "Connections", detail: "", children: joints });
@@ -554,14 +563,14 @@ export function studyRows(result) {
     rows.push({ id: "material", label: "Material", detail: [material.name, yieldText].filter(Boolean).join(" · ") });
   }
   const fixed = study.fixtures.flatMap((fixture, index) => fixture.faces.map((ref) => ({
-    id: `fixed:${index}:${ref}`, label: faceLabel(ref), detail: fixture.type, faces: [ref], summary: faceSummary(study, ref),
+    id: `fixed:${index}:${ref}`, label: faceTitle(result, ref), detail: fixture.type, faces: [ref], summary: faceSummary(study, ref),
   })));
   if (fixed.length) rows.push({ id: "fixed", label: "Fixed", detail: "", children: fixed });
   const loads = study.loads.filter((load) => load.faces.length).map((load, index) => {
     const words = loadWords(load);
     return {
       id: `load:${index}`, label: words.amount, detail: words.direction, faces: load.faces, summary: loadSummary(words, load.faces),
-      children: load.faces.map((ref) => ({ id: `load:${index}:${ref}`, label: faceLabel(ref), detail: "loaded", faces: [ref],
+      children: load.faces.map((ref) => ({ id: `load:${index}:${ref}`, label: faceTitle(result, ref), detail: "loaded", faces: [ref],
         summary: study.fixtures.some((fixture) => fixture.faces.includes(ref)) ? faceSummary(study, ref) : loadSummary(words, [ref]) })),
     };
   });
@@ -574,10 +583,10 @@ export function studyRows(result) {
   return rows;
 }
 
-/** A picked face's heading: "Face 17", and in an assembly "post · face 17", the part it is on. */
+/** A face's heading: "Face 17", and in an assembly "post · face 17", the part it is on (a long name's underscores spaced). */
 export function faceTitle(result, ref) {
   const part = result.parts.find((entry) => entry.ref && String(ref).startsWith(`${entry.ref}.`));
-  return part?.name ? `${part.name} · ${faceLabel(ref).toLowerCase()}` : faceLabel(ref);
+  return part?.name ? `${spaced(part.name)} · ${faceLabel(ref).toLowerCase()}` : faceLabel(ref);
 }
 
 /** What a prompt calls a face, by what the study does to it; "Face 17" for a face it does nothing to. */

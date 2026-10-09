@@ -369,6 +369,51 @@ describe('an assembly result', () => {
     expect(feaSummaryLine(result, result.fields[1])).toBe('Moves up to 0.029 mm');
   });
 
+  it('spaces a part\'s underscores so names wrap at words, in rows, titles and the colour bar line only', () => {
+    const named = [{ ...ASSEMBLY.parts[0], name: 'bulkhead_right_support_block' }, ASSEMBLY.parts[1]];
+    const { result } = studyResult({ ...ASSEMBLY, parts: named, weakest_part: 'bulkhead_right_support_block',
+      connections: [{ ...ASSEMBLY.connections[0], names: ['bulkhead_right_support_block', 'base'] }] });
+    const [parts, joints] = studyRows(result) as any[];
+    expect(parts.children[0]).toMatchObject({ label: 'bulkhead right support block', summary: "Part 'bulkhead_right_support_block'" });
+    expect(joints.children[0]).toMatchObject({ label: 'bulkhead right support block ↔ base',
+      summary: "Bonded joint between 'bulkhead_right_support_block' and 'base'" });
+    expect(faceTitle(result, '#o1.1.f1')).toBe('bulkhead right support block · face 1');
+    expect(feaSummaryLine(result, result.fields[0])).toMatch(/^Weakest: bulkhead right support block · /);
+  });
+
+  it('names the part on an assembly\'s fixed and load rows, and leaves a single part\'s as Face N', () => {
+    const study = { ...STUDY, fixtures: [{ type: 'fixed', faces: ['#o1.2.f9'] }], loads: [{ type: 'force', faces: ['#o1.1.f23'], vector_N: [0, 0, -5] }] };
+    const { result } = studyResult({ ...ASSEMBLY, study });
+    const rows = studyRows(result) as any[];
+    const fixed = rows.find((row) => row.id === 'fixed');
+    const loads = rows.find((row) => row.id === 'loads');
+    expect(fixed.children[0].label).toBe('base · face 9');
+    expect(loads.children[0].children[0].label).toBe('post · face 23');
+    expect(loads.children[0].label).toBe('5 N');
+    expect((studyRows(studyResult().result) as any[])[1].children[0].label).toBe('Face 1');
+  });
+
+  it('tints a chosen joint\'s two parts lightly while its interface faces keep the full tint', () => {
+    const { mesh, result } = assemblyResult();
+    const stress = result.fields[0];
+    recolorByField(mesh, stress, result.ramp);
+    const plain = colours(mesh);
+    const [, joints] = studyRows(result) as any[];
+    expect(joints.children[0].softParts).toEqual([0, 1]);
+    // Interface face index 1 (vertex 3, the base) is full; the post (vertices 0-2) only soft.
+    expect(recolorByField(mesh, stress, result.ramp, [1], null, [0, 1])).toBe(true);
+    const both = colours(mesh);
+    recolorByField(mesh, stress, result.ramp, [1]);
+    const full = colours(mesh);
+    expect(vertexColour(both, 3)).toEqual(vertexColour(full, 3));
+    for (const v of [0, 1, 2]) {
+      expect(vertexColour(both, v)).not.toEqual(vertexColour(plain, v));
+      expect(vertexColour(both, v)).not.toEqual(vertexColour(full, 3));
+    }
+    // A free pair names parts only by ref; one that is not in the result adds none.
+    expect(joints.children[1].softParts).toEqual([0]);
+  });
+
   it('leaves a single part exactly as it was: no groups, the plain line', () => {
     const { result } = studyResult();
     expect(result.parts).toEqual([]);

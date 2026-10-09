@@ -476,8 +476,11 @@ it('choosing a joint tints both sides\' interface faces and carries both parts i
   const plain = colourBytes(mesh);
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select post ↔ base' })); });
   const joint = colourBytes(mesh);
-  // Vertex 2 lies on a face that is no interface; the others (and the base's vertex 3) are tinted.
-  expect(joint.slice(8, 11)).toEqual(plain.slice(8, 11));
+  // Vertex 2 lies on a face that is no interface but is the post's: tinted lightly, so between the plain
+  // colour and the interface vertices' full tint, and the base's vertex 3 on its interface face is full.
+  const channel = (vertex: number) => joint[vertex * 4] - plain[vertex * 4];
+  expect(joint.slice(8, 11)).not.toEqual(plain.slice(8, 11));
   for (const vertex of [0, 1, 3]) expect(joint.slice(vertex * 4, vertex * 4 + 3)).not.toEqual(plain.slice(vertex * 4, vertex * 4 + 3));
+  expect(Math.abs(channel(2))).toBeLessThan(Math.abs(channel(0)));
   expect(await copiedPrompt(copied)).toBe("move it\n\nFile: /models/part.glb\nReferences:\nBonded joint between 'post' and 'base' · /models/part.step#o1.1.f1,o1.2.f1");
 });

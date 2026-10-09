@@ -27,7 +27,7 @@ const FINDING_HEADINGS = Object.freeze({ fix: "Fix before using", suggestions: "
 const EMPTY = Object.freeze([]);
 const NO_FINDING = Object.freeze({ findings: null, index: -1 });
 // `refs`: what Quick Edit gets when it is not the faces' own (a part's or a joint's parts); `parts`: parts to tint.
-const NO_FACES = Object.freeze({ result: null, id: "", faces: EMPTY, refs: EMPTY, parts: EMPTY, summary: "" });
+const NO_FACES = Object.freeze({ result: null, id: "", faces: EMPTY, refs: EMPTY, parts: EMPTY, softParts: EMPTY, summary: "" });
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
 // Select's own panel, Study, which a person can close; a result opens with it up, except on a phone.
 const STUDY_PANEL = Object.freeze({ id: "tree", label: "Study", startsClosed: false });
@@ -91,7 +91,7 @@ function GlbSurface({ view, data }) {
   const finding = findings && chosen.findings === findings ? findings.find((entry) => entry.index === chosen.index) || null : null;
   const faces = fea && chosenFaces.result === fea ? chosenFaces : NO_FACES;
   const rows = useMemo(() => (fea ? studyRows(fea) : EMPTY), [fea]);
-  const chooseFaces = useCallback((row) => { setChosen(NO_FINDING); setChosenFaces({ result: fea, id: row.id, faces: row.faces || EMPTY, refs: row.refs || EMPTY, parts: row.parts || EMPTY, summary: row.summary }); }, [fea]);
+  const chooseFaces = useCallback((row) => { setChosen(NO_FINDING); setChosenFaces({ result: fea, id: row.id, faces: row.faces || EMPTY, refs: row.refs || EMPTY, parts: row.parts || EMPTY, softParts: row.softParts || EMPTY, summary: row.summary }); }, [fea]);
   // A press on the result picks the face under it, called what Study calls it.
   const pickScene = useMemo(() => (fea ? { pick: (ray) => pickFace(fea, ray) } : null), [fea]);
   const pick = useCallback((hit) => {
@@ -141,10 +141,10 @@ function GlbSurface({ view, data }) {
   // the faces (or a part's triangles) chosen in Study, or picked, tinted over the field.
   const tinted = useMemo(() => (fea ? faceIndices(fea, faces.faces) : EMPTY), [fea, faces]);
   useEffect(() => {
-    if (fea && recolorByField(fea.mesh, activeField, fea.ramp, tinted, faces.parts)) {
+    if (fea && recolorByField(fea.mesh, activeField, fea.ramp, tinted, faces.parts, faces.softParts)) {
       requestRenderRef.current?.();
     }
-  }, [fea, activeField, tinted, faces.parts, requestRenderRef]);
+  }, [fea, activeField, tinted, faces.parts, faces.softParts, requestRenderRef]);
   useEffect(() => {
     if (fea && applyDeformation(fea.mesh, activeScale, fea.deformationScale)) {
       requestRenderRef.current?.();
