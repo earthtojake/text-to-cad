@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -19,7 +19,7 @@ vi.mock('../../../dist/renderers/glb/useGlbScene.js', () => ({
 vi.mock('../../../dist/renderers/glb/useGlbAnimation.js', () => ({ useGlbAnimation: () => loaded.animation }));
 import GlbRenderer from '../../../dist/renderers/glb/GlbRenderer.js';
 import { writeFileView } from '../../../dist/renderers/kit/shell/fileView.js';
-import { ViewerHostContext } from '../../../dist/host/context.js';
+import { ViewerElementContext, ViewerHostContext } from '../../../dist/host/context.js';
 import { testHost } from '../../../dist/host/testing/host.js';
 import * as THREE from 'three';
 
@@ -50,6 +50,11 @@ const RESULT = {
     { attribute: '_DISPLACEMENT', name: 'displacement', units: 'mm', min: 0, max: 0.0288, attribute_scale: 1000 },
   ],
 };
+// The viewer's own element, which the shell asks whose Escape it is.
+function ViewerElement({ children }: { children: React.ReactNode }) {
+  const element = useRef<HTMLDivElement | null>(null);
+  return <ViewerElementContext.Provider value={element}><div ref={element}>{children}</div></ViewerElementContext.Provider>;
+}
 const colourBytes = (mesh: Mesh) => Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
 
 function mount(extras: Record<string, unknown> | null, state?: unknown, { actions = () => {}, host = testHost() }: { actions?: (actions: readonly any[]) => void, host?: any } = {}) {
@@ -68,7 +73,7 @@ function mount(extras: Record<string, unknown> | null, state?: unknown, { action
   const props = { source: { id: 'one' }, file: { path: '/models/part.glb', name: 'part.glb', kind: 'file' }, document: null, navbarSlot: slot,
     onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' }, state, onStateChange: save, onNavigationActionsChange: actions, reload() {},
     data: { client, entry: { path: '/models/part.glb', hash: 'h' }, services: { preferences } } };
-  const view = render(<ViewerHostContext.Provider value={host}><GlbRenderer {...(props as any)} /></ViewerHostContext.Provider>);
+  const view = render(<ViewerHostContext.Provider value={host}><ViewerElement><GlbRenderer {...(props as any)} /></ViewerElement></ViewerHostContext.Provider>);
   return { ...view, ...built, save };
 }
 const openDisplay = () => act(() => { fireEvent.click(screen.getByRole('button', { name: 'Display' })); });
@@ -205,17 +210,40 @@ it('choosing a finding puts the card away, rings the places it names and carries
   expect(copied).toEqual([`thicken it\n\nFile: /models/part.glb\nReferences:\n${PEAK.summary} · /models/part.step#o1.f1,o1.f3`]);
 });
 
-it('a finding about no face names the whole part, and a result that names no source offers no reference', () => {
+it('a finding about no face names the whole part, and a result that names no source offers no reference', async () => {
+  const copied: string[] = [];
+  const host = testHost({ clipboard: { writeText: async (text: any) => { copied.push(await text); }, readText: async () => '', writeImage: async () => {} } });
   const actions = vi.fn();
-  mount({ ...FOUND, findings: [SOFT] }, undefined, { actions });
+  mount({ ...FOUND, findings: [SOFT] }, undefined, { actions, host });
   act(() => { actions.mock.calls.at(-1)![0][0].onInvoke(); });
   act(() => { fireEvent.click(screen.getByText(SOFT.summary)); });
   expect(screen.getByRole('region', { name: 'Quick Edit' }).querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('1 ref');
+  act(() => { fireEvent.change(screen.getByRole('textbox', { name: 'Describe your changes' }), { target: { value: 'thicken it' } }); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' })); });
+  expect(copied).toEqual([`thicken it\n\nFile: /models/part.glb\nReferences:\n${SOFT.summary} · /models/part.step#o1`]);
   cleanup();
   mount({ ...FOUND, document: '', findings: [PEAK] });
   act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
   expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull();
   expect(document.querySelector('[data-fea-finding-rings]')).toBeTruthy();
+});
+
+it('lets go of a chosen finding\'s ring on Escape and when the card is brought back, with no reference to clear it through Quick Edit', () => {
+  const actions = vi.fn();
+  const { container } = mount({ ...FOUND, document: '', findings: [PEAK] }, undefined, { actions });
+  const rings = () => document.querySelector('[data-fea-finding-rings]');
+  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
+  expect(rings()).toBeTruthy();
+  act(() => { fireEvent.keyDown(container.querySelector('[data-stand-in-viewport]')!, { key: 'Escape' }); });
+  expect(rings()).toBeNull();
+  // Chosen again, then the card comes back from its icon: nothing is chosen under it.
+  expect(alertCard()).toBeNull();
+  act(() => { actions.mock.calls.at(-1)![0][0].onInvoke(); });
+  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
+  expect(rings()).toBeTruthy();
+  act(() => { actions.mock.calls.at(-1)![0][0].onInvoke(); });
+  expect(alertCard()).toBeTruthy();
+  expect(rings()).toBeNull();
 });
 
 it('rings each place at the deformed position under the camera, and follows the deformation scale', () => {
@@ -234,4 +262,30 @@ it('rings each place at the deformed position under the camera, and follows the 
   const paint = () => { arcs.length = 0; act(() => { frame!(); }); return arcs.map(([x, y]) => [Math.round(x), Math.round(y)]); };
   // CAD (0, 10, 0) mm is glTF (0, 0, -0.01) m: the screen's centre, before the displacement moves it.
   expect(paint()).toEqual([[400, 300]]);
+});
+
+it('moves a ring when the Display scale changes on a result that displaces', () => {
+  const arcs: number[][] = [];
+  const context = { setTransform() {}, clearRect() {}, beginPath() {}, stroke() {}, arc: (...args: number[]) => { arcs.push(args); } } as any;
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
+  let frame: (() => void) | null = null;
+  vi.stubGlobal('requestAnimationFrame', (callback: () => void) => { frame = callback; return 1; });
+  vi.stubGlobal('cancelAnimationFrame', () => {});
+  // Looking down -x, so the displacement along z is sideways on the screen: screen x is minus z.
+  const camera = new THREE.OrthographicCamera(-0.05, 0.05, 0.0375, -0.0375, 0.001, 10);
+  camera.position.set(1, 0, 0);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  loaded.runtime = { THREE, camera };
+  // The CAD point of the third vertex before it moves: glTF (0, 1, -0.02) m.
+  mount({ ...FOUND, findings: [{ ...PEAK, items: [{ text: 'the tip', ref: '#o1.f3', at: [0, 20, 1000] }] }] });
+  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
+  const paint = () => { arcs.length = 0; act(() => { frame!(); }); return Math.round(arcs[0][0]); };
+  // At the file's own 10x the vertex has moved 0.02 m back to z = 0, the screen's middle.
+  expect(paint()).toBe(400);
+  openDisplay();
+  const value = screen.getByRole('textbox', { name: 'Deformation scale value' });
+  act(() => { fireEvent.change(value, { target: { value: '0' } }); fireEvent.blur(value); });
+  // At none it is where the part was solved: 0.02 m across, 160px.
+  expect(paint()).toBe(560);
 });

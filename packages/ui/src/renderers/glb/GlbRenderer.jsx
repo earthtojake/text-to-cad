@@ -18,6 +18,13 @@ const LIVE = Object.freeze({ declined: GLB_DECLINED_LIVE_COMMANDS });
 const NO_CHOICE = Object.freeze({ field: null, scale: null });
 const FINDING_HEADINGS = Object.freeze({ fix: "Fix before using", suggestions: "Suggestions" });
 const NO_TARGETS = Object.freeze([]);
+const NO_FINDING = Object.freeze({ findings: null, index: -1 });
+
+/** The card's body, mounted only while the card is up: a card brought back from its icon starts with no finding chosen. */
+function FindingsBody({ onShown, ...list }) {
+  useEffect(() => { onShown(); }, [onShown]);
+  return <FindingsList {...list} />;
+}
 
 function GlbSurface({ view, data }) {
   const document = useWorkspaceDocument({ view, data });
@@ -53,7 +60,8 @@ function GlbSurface({ view, data }) {
   const compact = Boolean(view.appearance?.compact);
   const findings = fea && !compact && fea.findings.length ? fea.findings : null;
   const card = useMemo(() => findingsAlert(findings), [findings]);
-  const [chosen, setChosen] = useState({ findings: null, index: -1 });
+  const [chosen, setChosen] = useState(NO_FINDING);
+  const clearChoice = useCallback(() => setChosen(NO_FINDING), []);
   const finding = findings && chosen.findings === findings ? findings.find((entry) => entry.index === chosen.index) || null : null;
   // The part the result was solved from, the file a chosen finding's references name.
   const source = useMemo(() => (fea ? resultSourcePath(view.file.path, fea.document) : ""), [fea, view.file.path]);
@@ -85,7 +93,9 @@ function GlbSurface({ view, data }) {
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: loaded.revision,
     features: EDGELESS_VIEW_FEATURES, previewable: true, scene,
     load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert || card },
-    animation, live: LIVE, rendererState, displaySections
+    animation, live: LIVE, rendererState, displaySections,
+    // Escape lets go of a chosen finding's ring, which a result with no source to edit has no Quick Edit to clear.
+    escape: { active: Boolean(finding), handle: () => { if (!finding) return false; clearChoice(); return true; } }
   });
   shellRef.current = shell;
   requestRenderRef.current = shell.requestRender;
@@ -112,8 +122,8 @@ function GlbSurface({ view, data }) {
   // A finding chosen in the card puts it away and rings what it names, with its sentence in Quick Edit.
   const chooseFinding = (dismiss) => (entry) => { setChosen({ findings, index: entry.index }); dismiss(); };
   return <RendererShell shell={shell} tools={[]} viewportOverlay={overlay} references={references}
-    onClearReferences={() => setChosen({ findings: null, index: -1 })}
-    alertBody={showingFindings ? (dismiss) => <FindingsList findings={findings} headings={FINDING_HEADINGS} onChoose={chooseFinding(dismiss)} /> : null}
+    onClearReferences={clearChoice}
+    alertBody={showingFindings ? (dismiss) => <FindingsBody onShown={clearChoice} findings={findings} headings={FINDING_HEADINGS} onChoose={chooseFinding(dismiss)} /> : null}
     alertStartsDismissed={showingFindings && card.severity === "warning"} />;
 }
 
