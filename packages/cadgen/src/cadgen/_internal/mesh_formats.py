@@ -645,8 +645,11 @@ def glb_bytes(primitives: list[Primitive], *, name: str = "model", animation: An
             }),
         }
         if primitive.joints is not None:
+            # A slot a vertex gives no weight names joint 0, as glTF asks (the validator's
+            # ACCESSOR_JOINTS_USED_ZERO_WEIGHT): a vertex exactly on a joint rides it alone.
+            joints = np.where(primitive.weights > 0, primitive.joints, 0)
             attributes["JOINTS_0"] = accessor({
-                "bufferView": view(primitive.joints.astype("<u2").tobytes(), _ARRAY_BUFFER), "byteOffset": 0,
+                "bufferView": view(joints.astype("<u2").tobytes(), _ARRAY_BUFFER), "byteOffset": 0,
                 "componentType": _UNSIGNED_SHORT, "count": count, "type": "VEC4",
             })
             attributes["WEIGHTS_0"] = accessor({

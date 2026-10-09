@@ -344,6 +344,8 @@ class ARealDocumentPlaysItsClip(unittest.TestCase):
                 positions = _array(gltf, binary, primitive["attributes"]["POSITION"]).astype(np.float64)
                 joints = _array(gltf, binary, primitive["attributes"]["JOINTS_0"])
                 weights = _array(gltf, binary, primitive["attributes"]["WEIGHTS_0"]).astype(np.float64)
+                # A slot with no weight names joint 0, as glTF asks.
+                self.assertFalse(np.any(joints[weights == 0]), "an unweighted slot names a joint")
                 homogeneous = np.column_stack([positions, np.ones(len(positions))])
                 posed = sum(weights[:, slot, None] * np.einsum(
                     "vij,vj->vi", np.stack([matrices[j] for j in joints[:, slot]]), homogeneous)
