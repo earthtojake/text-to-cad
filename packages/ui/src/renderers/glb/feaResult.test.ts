@@ -288,3 +288,80 @@ describe('a result\'s study', () => {
     expect(pickFace(result, down(5, 5))).toBeNull();
   });
 });
+
+// A two-part assembly: the post is vertices 0-2 (face index 0), the base vertex 3 (face index 1).
+const ASSEMBLY = {
+  study: STUDY,
+  faces: ['#o1.1.f1', '#o1.2.f1'],
+  weakest_part: 'post', weakest_part_peak_MPa: 180, safety_factor: 1.46, max_displacement_mm: 0.2,
+  parts: [
+    { ref: '#o1.1', name: 'post', material: '6061-T6', yield_MPa: 276, peak_MPa: 180, safety_factor: 1.53, max_displacement_mm: 0.2 },
+    { ref: '#o1.2', name: 'base', material: 'Steel', yield_MPa: 250, peak_MPa: 40, safety_factor: 0.8, max_displacement_mm: 0.01 },
+  ],
+  connections: [
+    { between: ['#o1.1', '#o1.2'], names: ['post', 'base'], type: 'bonded', area_mm2: 100, gap_mm: 0, faces: ['#o1.1.f1', '#o1.2.f1'] },
+    { between: ['#o1.1', '#o1.3'], names: ['post', 'lid'], type: 'free', area_mm2: 0, gap_mm: 0.5, faces: [] },
+  ],
+};
+function assemblyResult() {
+  const built = studyResult(ASSEMBLY);
+  built.mesh.geometry.setAttribute('_part', new BufferAttribute(new Float32Array([0, 0, 0, 1]), 1));
+  return built;
+}
+const colours = (mesh: Mesh) => Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
+const vertexColour = (bytes: number[], vertex: number) => bytes.slice(vertex * 4, vertex * 4 + 3);
+
+describe('an assembly result', () => {
+  it('lists its parts and joints ahead of the study, each carrying what Quick Edit gets and what it tints', () => {
+    const rows = studyRows(assemblyResult().result);
+    expect(rows.slice(0, 2).map(({ id, label, detail, children }: any) => ({ id, label, detail, children: children.map((c: any) => [c.id, c.label, c.detail]) }))).toEqual([
+      { id: 'parts', label: 'Parts', detail: '', children: [
+        ['part:0', 'post', '6061-T6 · holds 1.5×'],
+        ['part:1', 'base', 'Steel · yields'],
+      ] },
+      { id: 'connections', label: 'Connections', detail: '', children: [
+        ['joint:0', 'post ↔ base', 'bonded · 100 mm²'],
+        ['joint:1', 'post ↔ lid', 'not connected · 0.5 mm apart'],
+      ] },
+    ]);
+    const [parts, joints] = rows as any[];
+    expect(parts.children[0]).toMatchObject({ refs: ['#o1.1'], parts: [0], summary: "Part 'post'" });
+    expect(joints.children[0]).toMatchObject({ refs: ['#o1.1', '#o1.2'], faces: ['#o1.1.f1', '#o1.2.f1'], summary: "Bonded joint between 'post' and 'base'" });
+    expect(rows[2]).toMatchObject({ id: 'material' });
+  });
+
+  it('notes a gap that was closed to bond a pair', () => {
+    const { result } = studyResult({ ...ASSEMBLY, connections: [{ ...ASSEMBLY.connections[0], gap_mm: 0.1 }] });
+    expect((studyRows(result)[1] as any).children[0].detail).toBe('bonded · 100 mm² · 0.1 mm gap closed');
+  });
+
+  it('tints a part\'s triangles by _part, and a joint\'s interface faces by _face, and only those', () => {
+    const { mesh, result } = assemblyResult();
+    const stress = result.fields[0];
+    recolorByField(mesh, stress, result.ramp);
+    const plain = colours(mesh);
+    expect(recolorByField(mesh, stress, result.ramp, null, [0])).toBe(true);
+    const part = colours(mesh);
+    for (const v of [0, 1, 2]) expect(vertexColour(part, v)).not.toEqual(vertexColour(plain, v));
+    expect(vertexColour(part, 3)).toEqual(vertexColour(plain, 3));
+    recolorByField(mesh, stress, result.ramp, [1]);
+    const joint = colours(mesh);
+    for (const v of [0, 1, 2]) expect(vertexColour(joint, v)).toEqual(vertexColour(plain, v));
+    expect(vertexColour(joint, 3)).not.toEqual(vertexColour(plain, 3));
+    recolorByField(mesh, stress, result.ramp);
+    expect(colours(mesh)).toEqual(plain);
+  });
+
+  it('names the weakest part on the colour bar, and the assembly as what moves', () => {
+    const { result } = assemblyResult();
+    expect(feaSummaryLine(result, result.fields[0])).toBe('Weakest: post · peak stress 180 MPa · holds 1.4× this load · the assembly moves up to 0.029 mm');
+    expect(feaSummaryLine(result, result.fields[1])).toBe('Moves up to 0.029 mm');
+  });
+
+  it('leaves a single part exactly as it was: no groups, the plain line', () => {
+    const { result } = studyResult();
+    expect(result.parts).toEqual([]);
+    expect(studyRows(result).map((row) => row.id)).toEqual(['material', 'fixed', 'loads', 'mesh']);
+    expect(feaSummaryLine(result, result.fields[0])).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
+  });
+});

@@ -11,7 +11,12 @@
  * the result's `safety_factor` (null when it has none). A result written since
  * the study was recorded also carries the `study` it was solved for (material,
  * fixtures, loads, mesh), `faces` (the occurrence's face refs) and `_FACE`, the
- * index into `faces` of the face each vertex lies on (-1 for none).
+ * index into `faces` of the face each vertex lies on (-1 for none). A bonded
+ * assembly also carries `parts` (name, material, peak stress, safety factor of
+ * each part), `connections` (each detected pair: type, contact area, gap and the
+ * interface faces of both sides), `_PART` (the index into `parts` of the part
+ * each vertex belongs to) and the weakest part's name and peak; a single part has
+ * none of these.
  * GLTFLoader lower-cases custom attribute names and copies extras into
  * `userData`, which is what is read here.
  *
@@ -100,6 +105,28 @@ function readFindings(raw) {
 const text = (value) => (typeof value === "string" ? value : "");
 const faceRefs = (raw) => (Array.isArray(raw) ? raw.filter((ref) => typeof ref === "string" && ref) : []);
 const finiteOrNull = (value) => (Number.isFinite(value) ? Number(value) : null);
+
+/** An assembly's parts in `_PART` order (a malformed entry keeps its place, empty); [] for a single part. */
+function readParts(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((part) => ({
+    ref: text(part?.ref), name: text(part?.name), material: text(part?.material), yieldMPa: finiteOrNull(part?.yield_MPa),
+    peakMPa: finiteOrNull(part?.peak_MPa), safetyFactor: finiteOrNull(part?.safety_factor), maxDisplacementMm: finiteOrNull(part?.max_displacement_mm),
+  }));
+}
+
+/** An assembly's detected pairs: `between` the two part refs, `names` theirs, the interface `faces` of both sides (none for a free pair). */
+function readConnections(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((joint) => joint && Array.isArray(joint.between) && joint.between.length === 2).map((joint) => ({
+    between: joint.between.map(text),
+    names: [0, 1].map((side) => text(joint.names?.[side]) || text(joint.between[side])),
+    type: text(joint.type) || "free",
+    areaMm2: finiteOrNull(joint.area_mm2),
+    gapMm: finiteOrNull(joint.gap_mm),
+    faces: faceRefs(joint.faces),
+  }));
+}
 
 /** The study the result was solved for, as the file records it; null for a result written before it did. */
 function readStudy(raw) {
@@ -214,6 +241,11 @@ export function readFeaResult(root) {
       findings: readFindings(extras.findings),
       study: readStudy(extras.study),
       faces: faceRefs(extras.faces),
+      parts: readParts(extras.parts),
+      connections: readConnections(extras.connections),
+      weakestPart: text(extras.weakest_part),
+      weakestPartPeakMPa: finiteOrNull(extras.weakest_part_peak_MPa),
+      maxDisplacementMm: finiteOrNull(extras.max_displacement_mm),
     };
   });
   return found;
@@ -264,12 +296,19 @@ function vertexFaces(mesh) {
   return attribute?.itemSize === 1 ? attribute.array : null;
 }
 
+/** The part each vertex belongs to (`_PART`), or null for a single part's result. */
+function vertexParts(mesh) {
+  const attribute = mesh.geometry.getAttribute("_part");
+  return attribute?.itemSize === 1 ? attribute.array : null;
+}
+
 /**
  * Rewrite the mesh's vertex colours from one field over `[field.min, field.max]`, with the
- * vertices of the faces in `highlight` (indices into the result's `faces`) tinted.
+ * vertices of the faces in `highlight` (indices into the result's `faces`) and of the parts in
+ * `parts` (indices into its `parts`) tinted.
  * Returns true when the colours changed; false when that field and tint were already shown.
  */
-export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = null) {
+export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = null, parts = null) {
   const color = mesh.geometry.getAttribute("color");
   const values = fieldValues(mesh, field);
   if (!color || !values) {
@@ -278,7 +317,10 @@ export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = nul
   const kept = shown(mesh);
   const faces = vertexFaces(mesh);
   const tinted = faces && highlight?.length ? new Set(highlight) : null;
-  const key = `${field.attribute}|${tinted ? [...tinted].sort((a, b) => a - b).join(",") : ""}`;
+  const partOf = vertexParts(mesh);
+  const tintedParts = partOf && parts?.length ? new Set(parts) : null;
+  const sorted = (set) => (set ? [...set].sort((a, b) => a - b).join(",") : "");
+  const key = `${field.attribute}|${sorted(tinted)}|${sorted(tintedParts)}`;
   if (kept.field === key) {
     return false;
   }
@@ -290,7 +332,7 @@ export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = nul
     const t = span > 0 ? clamp((values[i] - field.min) / span, 0, 1) : 0;
     const entry = Math.round(t * 255) * 3;
     const base = i * stride;
-    const tint = tinted !== null && tinted.has(Math.round(faces[i]));
+    const tint = (tinted !== null && tinted.has(Math.round(faces[i]))) || (tintedParts !== null && tintedParts.has(Math.round(partOf[i])));
     for (let k = 0; k < 3; k += 1) {
       bytes[base + k] = tint ? Math.round(table[entry + k] + (HIGHLIGHT[k] - table[entry + k]) * HIGHLIGHT_BLEND) : table[entry + k];
     }
@@ -373,10 +415,13 @@ export function feaSummaryLine(result, field) {
   const factor = result.safetyFactor;
   // Under 1 the part yields: "holds 0.4×" would read as a pass.
   const holds = factor === null ? "" : factor < 1 ? "yields under this load" : `holds ${flooredFactor(factor)}× this load`;
+  // An assembly leads with its weakest part, whose peak (not the assembly's) and factor these are.
+  const weakest = result.weakestPart && result.weakestPartPeakMPa !== null;
   return [
-    `Peak stress ${plainNumber(stress.max)} ${stress.units}`.trim(),
+    weakest ? `Weakest: ${result.weakestPart}` : "",
+    `${weakest ? "peak stress" : "Peak stress"} ${plainNumber(weakest ? result.weakestPartPeakMPa : stress.max)} ${stress.units}`.trim(),
     holds,
-    moves ? `moves up to ${moves}` : "",
+    moves ? `${weakest ? "the assembly moves" : "moves"} up to ${moves}` : "",
   ].filter(Boolean).join(" · ");
 }
 
@@ -452,8 +497,48 @@ function faceSummary(study, ref) {
   return loads.length ? `Loaded ${facesWords([ref])}` : "";
 }
 
+/** A part's row detail: its material and what it holds ("yields" under a factor of 1, as the colour bar says). */
+function partDetail(part) {
+  const factor = part.safetyFactor;
+  const holds = factor === null ? "" : factor < 1 ? "yields" : `holds ${flooredFactor(factor)}×`;
+  return [part.material, holds].filter(Boolean).join(" · ");
+}
+
+/** A joint's row detail: bonded with its contact area and any gap closed, or not connected and how far apart. */
+function jointDetail(joint) {
+  const gap = joint.gapMm !== null && joint.gapMm > 0 ? `${plainNumber(joint.gapMm)} mm` : "";
+  if (joint.type !== "bonded") return ["not connected", gap ? `${gap} apart` : ""].filter(Boolean).join(" · ");
+  return ["bonded", joint.areaMm2 === null ? "" : `${plainNumber(joint.areaMm2)} mm²`, gap ? `${gap} gap closed` : ""].filter(Boolean).join(" · ");
+}
+
+/** What a prompt calls a joint: "Bonded joint between 'post' and 'base'". */
+function jointSummary(joint) {
+  const [first, second] = joint.names;
+  return joint.type === "bonded" ? `Bonded joint between '${first}' and '${second}'` : `Pair not connected: '${first}' and '${second}'`;
+}
+
 /**
- * Study's rows for a result's study, in order: the material, the fixed faces, the loads (each
+ * An assembly's Parts and Connections groups. A row for a part or a joint is chosen like a face's
+ * and names what it carries into Quick Edit (`refs`, the parts' refs) and what it tints: a part
+ * its triangles (`parts`, indices into the result's `parts`), a joint its interface `faces`.
+ */
+function assemblyRows(result) {
+  const rows = [];
+  const parts = result.parts.map((part, index) => ({
+    id: `part:${index}`, label: part.name || part.ref, detail: partDetail(part), refs: part.ref ? [part.ref] : [], parts: [index],
+    summary: `Part '${part.name || part.ref}'`,
+  }));
+  if (parts.length) rows.push({ id: "parts", label: "Parts", detail: "", children: parts });
+  const joints = result.connections.map((joint, index) => ({
+    id: `joint:${index}`, label: `${joint.names[0]} ↔ ${joint.names[1]}`, detail: jointDetail(joint), refs: joint.between.filter(Boolean),
+    faces: joint.faces, summary: jointSummary(joint),
+  }));
+  if (joints.length) rows.push({ id: "connections", label: "Connections", detail: "", children: joints });
+  return rows;
+}
+
+/**
+ * Study's rows for a result's study, in order: for an assembly its parts and connections, the material, the fixed faces, the loads (each
  * with its faces under it) and the mesh. A row that stands for faces carries them (`faces`, the
  * file's refs) and what a prompt calls them (`summary`); a group row (`children`) carries none.
  * [] for a result written before the study was recorded.
@@ -461,7 +546,7 @@ function faceSummary(study, ref) {
 export function studyRows(result) {
   const study = result.study;
   if (!study) return [];
-  const rows = [];
+  const rows = assemblyRows(result);
   const material = study.material;
   if (material?.name) {
     const yieldText = material.yieldMPa === null ? "" : `yield ${plainNumber(material.yieldMPa)} MPa`;

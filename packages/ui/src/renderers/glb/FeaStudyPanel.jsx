@@ -81,12 +81,14 @@ function StudyFactRow({ row }) {
 
 /**
  * One of Study's rows, the Links tree's: a 16px disclosure column, then its name and detail. A row
- * that stands for faces (a fixed face, a load, a load's face) is a button that chooses them; a
- * group (Fixed, Loads, Result) only opens and closes. `content`: what an open row shows in place
+ * that stands for faces (a fixed face, a load, a load's face) or for parts (an assembly's part or
+ * joint) is a button that chooses them; a group (Parts, Connections, Fixed, Loads, Result) only
+ * opens and closes. `content`: what an open row shows in place
  * of child rows (Result's controls).
  */
 function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, content = null }) {
-  if (!row.faces && !row.children && !content) return <StudyFactRow row={row} />;
+  const choosable = Boolean(row.faces || row.refs);
+  if (!choosable && !row.children && !content) return <StudyFactRow row={row} />;
   const branch = Boolean(row.children?.length || content);
   const open = branch && !collapsed.has(row.id);
   const active = chosen === row.id;
@@ -96,7 +98,7 @@ function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, content = n
       {branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${row.label}`} aria-expanded={open}
         className="grid h-6 w-4 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => toggle(row.id)}><TreeRowChevron expanded={open} /></button> : <span className="w-4 shrink-0" />}
-      {row.faces ? <button type="button" aria-label={`Select ${row.label}`} aria-pressed={active} onClick={() => onChoose(row)}
+      {choosable ? <button type="button" aria-label={`Select ${row.label}`} aria-pressed={active} onClick={() => onChoose(row)}
         className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <RowText row={row} />
       </button> : <span className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"><RowText row={row} /></span>}
@@ -112,7 +114,7 @@ const RESULT_ROW = Object.freeze({ id: "result", label: "Result", detail: "" });
 /**
  * An FEA result's Select panel, **Study**, closable like the Features tree (`tree`), and the
  * **Reference** for a face picked on the result. Study reads the result's study as the tree's rows
- * (`studyRows`: material, fixed faces, loads with their faces, mesh), then Result: the field and
+ * (`studyRows`: an assembly's parts and connections, material, fixed faces, loads with their faces, mesh), then Result: the field and
  * deformation. A result written before its study was recorded has Result alone. Choosing a row
  * that stands for faces is `onChoose(row)`; `chosen` is the row (or picked face) chosen.
  *

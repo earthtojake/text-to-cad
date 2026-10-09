@@ -547,7 +547,10 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
 - **Select, and its Study.** A result's strip is Select alone, and Select's panel is **Study**
   (`glb/FeaStudyPanel.jsx`): the tree of the stack (`tree`, closable like Features, starting
   open, closed on a phone), headed "Study" with its X, in the Links tree's rows. In order:
-  **Material** ("6061-T6 · yield 276 MPa"); **Fixed**, one row per fixed face ("Face 17",
+  for a bonded assembly first **Parts** (one row per part: its name, then its material and "holds
+  1.5×", or "yields" under 1, as the colour bar words it) and **Connections** (one row per joint:
+  "post ↔ base", then "bonded · 100 mm²", with "· 0.1 mm gap closed" when a gap was closed to bond
+  it, or "not connected" and how far apart for a free pair); then **Material** ("6061-T6 · yield 276 MPa"); **Fixed**, one row per fixed face ("Face 17",
   "fixed"); **Loads**, one row per load ("2500 N", its direction in words: "down" and "up" are
   CAD Z, else "along +X" or the unit vector; or "2 MPa pressure"), its faces under it ("Face 22",
   "loaded"); **Mesh** ("1.9 mm elements · refined from 2.8 mm", or "not refined"); and
@@ -568,13 +571,20 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   what the study does to it ("fixed", "2500 N load, down", "free"), with **Copy** (the STEP's
   path and the ref, as a STEP's Copy writes it). Escape, the Reference's X, Quick Edit's clear
   and a press on nothing let go; one choice at a time, a finding or faces.
+- **Choosing a part or a joint** is choosing faces, for an assembly (`_PART`, `parts` and `connections`
+  in the file; a single part's result has none, and looks as ever). A part tints all its triangles and
+  carries its ref into Quick Edit ("Part 'post'"); a joint tints the interface faces of both sides and
+  carries both parts' refs ("Bonded joint between 'post' and 'base'"). A part or a joint has no Reference
+  panel.
 - **A colour bar** floats at bottom-centre on the playbar's line
   (`FLOATING_CHROME_SURFACE_CLASS`, no pointer events): one plain line over the field's range
   and units along the ramp, one playbar's height higher when the result also has routines. Stress: "Peak stress 47 MPa · holds 5.8× this load · moves up to
   0.029 mm", with "holds" left out when the result has no safety factor and "yields under this
   load" in its place when the safety factor is under 1; displacement: "Moves up
   to 0.029 mm". The card is at least 18rem wide and grows to fit the line, up to the viewport less its margins, wrapping
-  to a second line only past that: the line is never truncated. It has no controls. The safety factor is the result's own, the conservative one.
+  to a second line only past that: the line is never truncated. It has no controls. The safety factor is the result's own, the conservative one. An assembly's stress line
+  leads with its weakest part, whose peak and factor these are, and says the displacement is the
+  assembly's: "Weakest: post · peak stress 180 MPa · holds 1.4× this load · the assembly moves up to 0.2 mm".
 - **Findings are the alert card and its icon**, as a board's are (`kit/status/findings.jsx`): the
   result's checks, errors first under "Fix before using", the rest under "Suggestions", each in its
   full sentence. The card is open over the view while something must be fixed; for suggestions alone

@@ -26,7 +26,8 @@ const NO_CHOICE = Object.freeze({ field: null, scale: null });
 const FINDING_HEADINGS = Object.freeze({ fix: "Fix before using", suggestions: "Suggestions" });
 const EMPTY = Object.freeze([]);
 const NO_FINDING = Object.freeze({ findings: null, index: -1 });
-const NO_FACES = Object.freeze({ result: null, id: "", faces: EMPTY, summary: "" });
+// `refs`: what Quick Edit gets when it is not the faces' own (a part's or a joint's parts); `parts`: parts to tint.
+const NO_FACES = Object.freeze({ result: null, id: "", faces: EMPTY, refs: EMPTY, parts: EMPTY, summary: "" });
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
 // Select's own panel, Study, which a person can close; a result opens with it up, except on a phone.
 const STUDY_PANEL = Object.freeze({ id: "tree", label: "Study", startsClosed: false });
@@ -34,7 +35,7 @@ const STUDY_PANEL = Object.freeze({ id: "tree", label: "Study", startsClosed: fa
 /** Study's row for a face, where it has one (a fixed face, a loaded face), so a pick of it marks that row. */
 function faceRow(rows, ref) {
   for (const row of rows) {
-    const found = row.faces?.length === 1 && row.faces[0] === ref && !row.children ? row : row.children ? faceRow(row.children, ref) : null;
+    const found = row.faces?.length === 1 && row.faces[0] === ref && !row.children && !row.refs ? row : row.children ? faceRow(row.children, ref) : null;
     if (found) return found;
   }
   return null;
@@ -90,7 +91,7 @@ function GlbSurface({ view, data }) {
   const finding = findings && chosen.findings === findings ? findings.find((entry) => entry.index === chosen.index) || null : null;
   const faces = fea && chosenFaces.result === fea ? chosenFaces : NO_FACES;
   const rows = useMemo(() => (fea ? studyRows(fea) : EMPTY), [fea]);
-  const chooseFaces = useCallback((row) => { setChosen(NO_FINDING); setChosenFaces({ result: fea, id: row.id, faces: row.faces, summary: row.summary }); }, [fea]);
+  const chooseFaces = useCallback((row) => { setChosen(NO_FINDING); setChosenFaces({ result: fea, id: row.id, faces: row.faces || EMPTY, refs: row.refs || EMPTY, parts: row.parts || EMPTY, summary: row.summary }); }, [fea]);
   // A press on the result picks the face under it, called what Study calls it.
   const pickScene = useMemo(() => (fea ? { pick: (ray) => pickFace(fea, ray) } : null), [fea]);
   const pick = useCallback((hit) => {
@@ -105,6 +106,7 @@ function GlbSurface({ view, data }) {
     if (!source) return [];
     const reference = (selectors, summary) => (selectors.length ? [{ resource: { kind: "workspace-file", path: source },
       target: { kind: "cad-selector", selectors }, ...(summary ? { summary } : {}) }] : []);
+    if (faces.refs.length) return reference(faces.refs.map(findingSelector), faces.summary);
     if (faces.faces.length) return reference(faces.faces.map(findingSelector), faces.summary);
     if (!finding) return [];
     const refs = [...new Set(finding.items.map((item) => item.ref).filter(Boolean).map(findingSelector))];
@@ -122,7 +124,7 @@ function GlbSurface({ view, data }) {
     setEdited({ ...choiceRef.current, ...patch, signature });
     shellRef.current?.scheduleStateSave();
   }, [signature]);
-  const chosenSomething = Boolean(finding) || faces.faces.length > 0;
+  const chosenSomething = Boolean(finding) || faces.faces.length > 0 || faces.refs.length > 0;
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: loaded.revision,
     features: EDGELESS_VIEW_FEATURES, toolModes: GLB_TOOL_MODES, previewable: true, scene,
@@ -136,13 +138,13 @@ function GlbSurface({ view, data }) {
   useDeclinedSelectReference(document);
 
   // The colours and the drawn displacement follow the choice, in place on the loaded geometry, with
-  // the faces chosen in Study (or picked) tinted over the field.
+  // the faces (or a part's triangles) chosen in Study, or picked, tinted over the field.
   const tinted = useMemo(() => (fea ? faceIndices(fea, faces.faces) : EMPTY), [fea, faces]);
   useEffect(() => {
-    if (fea && recolorByField(fea.mesh, activeField, fea.ramp, tinted)) {
+    if (fea && recolorByField(fea.mesh, activeField, fea.ramp, tinted, faces.parts)) {
       requestRenderRef.current?.();
     }
-  }, [fea, activeField, tinted, requestRenderRef]);
+  }, [fea, activeField, tinted, faces.parts, requestRenderRef]);
   useEffect(() => {
     if (fea && applyDeformation(fea.mesh, activeScale, fea.deformationScale)) {
       requestRenderRef.current?.();
@@ -153,7 +155,7 @@ function GlbSurface({ view, data }) {
   const selectActive = Boolean(fea) && !shell.previewing && shell.toolMode === GLB_TOOL.SELECT;
   const tools = fea ? [shell.tools.own({ id: GLB_TOOL.SELECT, label: "Select", icon: SELECT_ICON, panel: STUDY_PANEL })] : [];
   // One face chosen is the Reference's: its ref, what the study does to it, and Copy (the copy key too).
-  const single = faces.faces.length === 1 ? faces.faces[0] : "";
+  const single = faces.faces.length === 1 && !faces.refs.length ? faces.faces[0] : "";
   const copyFace = useCallback(async () => {
     if (!single) return false;
     const selectors = [findingSelector(single)];
