@@ -172,7 +172,10 @@ _WORKER = threading.local()
 
 @contextlib.contextmanager
 def worker_context(root):
-    """An actual worker request's store; never inferred from a subject/env flag."""
+    """The store this thread's kernel work is for: a daemon worker's request, or a
+    model build in whatever process runs it (``generation``), never a door or a
+    server. Under a CPU lease for that store, the artifact work the thread asks for
+    runs here, where the kernel is already loaded (:func:`resolve_artifacts`)."""
     previous = getattr(_WORKER, "root", None)
     _WORKER.root = store_path(root)
     try:
@@ -413,18 +416,27 @@ def _run_transient(request, root, env, endpoint, *, subscriber=None):
 
 
 def submit_artifact(request, *, store_root=None):
-    """Start a typed artifact operation without importing the CAD kernel here."""
+    """Start a typed artifact operation: in this process when it runs kernel work for
+    this store under a CPU lease (:func:`worker_context`), else as a build-pool job,
+    without importing the CAD kernel here."""
     request = normalize_request(request)
     root = store_path(store_root)
-    future = ArtifactFuture()
-    if _can_inline(root):
-        future._begin()
-        try:
-            future._complete(validate_result(request, result_frame(request, execute(request))))
-        except Exception as exc:
-            future._complete(error=exc)
-        return future
+    return _run_inline(request) if _can_inline(root) else _dispatch(request, root)
 
+
+def _run_inline(request):
+    future = ArtifactFuture()
+    future._begin()
+    try:
+        future._complete(validate_result(request, result_frame(request, execute(request))))
+    except Exception as exc:
+        future._complete(error=exc)
+    return future
+
+
+def _dispatch(request, root):
+    """``request`` as a build-pool job, on a thread of its own."""
+    future = ArtifactFuture()
     from cadgen.daemon import client
     from cadgen.daemon.executors import use_daemon
 
@@ -466,10 +478,19 @@ def resolve_artifacts(requests, *, store_root=None):
     """Resolve several operations at once, each on a build-pool worker of its own
     (only identical requests share one), and return their results in order once
     every one has finished. The first failure is raised then, never sooner: what
-    the others stored is kept, and a retry finds it. Called where the caller holds
-    a CPU lease (a build's own work), each runs inline under it, one after another,
-    as :func:`submit_artifact` runs one."""
-    futures = [submit_artifact(request, store_root=store_root) for request in requests]
+    the others stored is kept, and a retry finds it. A caller that runs kernel work
+    for this store under a CPU lease (:func:`worker_context`: a build exporting its
+    own meshes) runs the first in its own process while the rest go to the pool --
+    :func:`deal` gives such a caller a second share only for work that repays
+    starting a worker."""
+    requests = list(requests)
+    root = store_path(store_root)
+    if requests and _can_inline(root):
+        # The pool's shares first, so they run while this process does its own.
+        rest = [_dispatch(normalize_request(request), root) for request in requests[1:]]
+        futures = [submit_artifact(requests[0], store_root=root), *rest]
+    else:
+        futures = [submit_artifact(request, store_root=store_root) for request in requests]
     results, failure = [], None
     for future in futures:
         try:
@@ -487,7 +508,9 @@ def deal(items, *, per_started_worker, parts=None):
     daemon's warm workers share them (at least ``DEAL_PER_JOB`` items a job), and
     one more job is dealt for every ``per_started_worker`` items -- each such job
     starts a worker -- up to ``parts``, by default one per CPU slot
-    (``broker.job_limit``): the most jobs that run at once."""
+    (``broker.job_limit``): the most jobs that run at once. For a build's own work
+    the first list is the build's, done in its process (:func:`resolve_artifacts`),
+    and only the started-worker rule deals more."""
     from cadgen.daemon.executors import use_daemon
     from cadgen.daemon.pool import spare_count
 
@@ -496,7 +519,12 @@ def deal(items, *, per_started_worker, parts=None):
         return []
     warm = spare_count() if use_daemon() else 0
     limit = max(1, int(parts) if parts else broker.job_limit())
-    count = max(min(warm, len(items) // DEAL_PER_JOB), len(items) // max(1, int(per_started_worker)))
+    started = len(items) // max(1, int(per_started_worker))
+    # A build's own work (``worker_context``) does the first share in its own
+    # process, so it shares nothing until the work repays starting a worker. Handing
+    # it to the warm spares as well was measured slower: the build has bound one of
+    # them, and the next share waited on a kernel import.
+    count = started if _can_inline(store_path()) else max(min(warm, len(items) // DEAL_PER_JOB), started)
     count = min(limit, max(1, count))
     return [items[index::count] for index in range(count)]
 
