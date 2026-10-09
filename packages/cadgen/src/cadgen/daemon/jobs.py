@@ -13,7 +13,8 @@ failed one, and nothing else
 
 State comes from the ``{"event": …}`` frames the worker streams (the build
 tree's own transitions: submitted → queued → building [phase, done/total] →
-done | failed) and from the request's exit code. Stdlib only; nothing here
+done | failed) and from the request's exit code; a job whose requester left ends
+cancelled. Stdlib only; nothing here
 imports the kernel — a job's outputs come from ``cadgen.metadata``'s AST parse.
 """
 
@@ -307,15 +308,22 @@ class JobLedger:
             job["updatedAt"] = now
             self._notify(job)
 
-    def finish(self, job: dict[str, Any], exit_code: int, *, error: str | None = None) -> None:
+    def finish(self, job: dict[str, Any], exit_code: int, *, error: str | None = None,
+               cancelled: bool = False) -> None:
         """Close the job. ``error`` is the failure's one-line reason (see
-        :func:`failure_message`), kept so a reader can say WHY, not just that."""
+        :func:`failure_message`), kept so a reader can say WHY, not just that.
+
+        ``cancelled``: the job was stopped because whoever asked for it left. That says
+        nothing about the source, so it ends ``cancelled``, never ``failed``: a reader
+        showing the document builds it again rather than reporting a failure that was
+        only a closed connection.
+        """
         now = self._clock()
         with self._guard:
             if job["state"] in _RUNNING:
-                job["state"] = "done" if exit_code == 0 else "failed"
+                job["state"] = "cancelled" if cancelled else "done" if exit_code == 0 else "failed"
             job["exit"] = int(exit_code)
-            if exit_code != 0 and error:
+            if exit_code != 0 and error and not cancelled:
                 job["error"] = str(error)
             job["finishedAt"] = job["finishedAt"] or now
             job["updatedAt"] = now

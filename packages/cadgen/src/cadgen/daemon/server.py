@@ -399,7 +399,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             finally:
                 _BROKER.detach(inflight)
             if code is None:
-                _JOBS.finish(job, 1, error="client disconnected")
+                _JOBS.finish(job, 1, cancelled=True)
                 return
             if is_artifact and inflight.get("result") is not None:
                 _JOBS.record_artifact_result(job, inflight["result"]["artifactResult"])
@@ -573,7 +573,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             exit_code = 1
             stderr_tail.append("artifact worker completed without an artifact result")
         reason = failure_message("".join(stderr_tail))[0] if exit_code != 0 else None
-        _JOBS.finish(job, exit_code, error=reason or None)
+        _JOBS.finish(job, exit_code, error=reason or None, cancelled=ended == "cancelled" or left.is_set())
         if inflight is not None:
             _BROKER.finish_entry(inflight, exit_code, error=reason or None)
 
