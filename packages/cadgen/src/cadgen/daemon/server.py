@@ -567,8 +567,10 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     finally:
         watchdog_done.set()
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)
-        # A killed worker is not reusable; release() drops it and the pool respawns.
-        _POOL.release(worker, healthy=healthy and worker.alive())
+        # A killed worker is not reusable; release() drops it and the pool respawns. A job
+        # stopped because its caller left is no crash, though its worker is killed.
+        _POOL.release(worker, healthy=healthy and worker.alive(),
+                      cancelled=ended == "cancelled" or left.is_set())
         if is_artifact and exit_code == 0 and inflight.get("result") is None:
             exit_code = 1
             stderr_tail.append("artifact worker completed without an artifact result")

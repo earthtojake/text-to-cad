@@ -312,7 +312,7 @@ class ServerRelaysTheDeath(unittest.TestCase):
         self.assertEqual(died["exitStatus"], -9)
         self.assertIn(pool_mod.describe_exit(-9), died["detail"])  # the worker's own words, as this platform names the signal
         self.assertEqual(conn.frames[-1], {"exit": 1})
-        pool.release.assert_called_once_with(worker, healthy=False)
+        pool.release.assert_called_once_with(worker, healthy=False, cancelled=False)
         self.assertTrue(any("died mid-job" in line for line in logged), logged)
 
     @unittest.skipIf(os.name == "nt", "a Windows worker's exit status is a code, never a signal")
@@ -336,7 +336,23 @@ class ServerRelaysTheDeath(unittest.TestCase):
                                                   "prog": "cadgen step compile"})
                 self.assertEqual(build.finish.call_args.args[1], ended)
                 self.assertEqual(worker_died.call_args_list, [mock.call(status)] if ended == "crashed" else [])
+                # The pool's crash count (`cadgen daemon status`) agrees: a stopped job is no crash.
+                self.assertEqual(pool.release.call_args.kwargs["cancelled"], ended == "cancelled")
                 self.assertEqual(next(frame["workerDied"]["exitStatus"] for frame in conn.frames if "workerDied" in frame), status)
+
+    def test_a_job_whose_caller_left_is_released_as_cancelled_not_crashed(self):
+        class Gone(self._Conn):
+            def send(self, raw: bytes) -> None:
+                raise BrokenPipeError("the client left")
+
+        pool = mock.Mock()
+        worker = self._DyingWorker()
+        pool.acquire.return_value = worker
+        with mock.patch.object(server, "_JOBS", JobLedger()), mock.patch.object(server, "_POOL", pool), \
+                mock.patch.object(server, "_log"), mock.patch.object(server, "CLIENT_LIVENESS_INTERVAL_SECONDS", 60.0):
+            server._handle_request(Gone(), {"tool": "step-compile", "argv": ["x.step"], "cwd": "/w",
+                                            "prog": "cadgen step compile"})
+        pool.release.assert_called_once_with(worker, healthy=False, cancelled=True)
 
 
 class ServerStatusIdentity(unittest.TestCase):

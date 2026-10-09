@@ -35,8 +35,8 @@ _RECORDER = None  # the daemon's, while it serves
 # A command's format, by the daemon tool it runs (``cadgen.cli``); a model script's is what it declares.
 _COMMANDS = {"step-build": "step", "step-compile": "step", "stl-build": "stl", "3mf-build": "3mf", "glb-build": "glb"}
 _MESHES = (".stl", ".3mf", ".glb")
-# What the pool counts from its start (``Pool.snapshot``), by the name a batch gives it. Its own count of
-# crashes takes in workers killed because their client left, so crashes are counted here (``Build.finish``).
+# What the pool counts from its start (``Pool.snapshot``), by the name a batch gives it. Crashes are
+# counted here, as each job ends (``worker_died``), with the job's own evidence.
 _POOL = {"workers": "imports", "recycles": "recycles", "refusals": "memoryRefusals"}
 _MOST = 16  # the most crashes one job's exit frame carries
 
