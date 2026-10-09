@@ -15,6 +15,16 @@ shared edge, so the face meets them; where the clipping adds a point to that bou
 the neighbour's triangle along it is split to take the point too, and the two meshes
 share every vertex (an STL of them welds closed). OCCT computes the normals from the
 surface, as it does for its own triangles.
+
+Those points are spaced for the deflection, and a face narrower than the deflection
+can lie between a curved edge and its chord: the f14d wing's 686 mm slivers, 1.2 mm
+wide on average, whose curved side the skin beside them meshes as one chord. That
+chord passes beyond the sliver's straight side, the boundary crosses itself, and
+OCCT's own boundary check passes it before its triangulation fails. So a boundary
+segment that follows a curve is split at its parameters' midpoint while it crosses
+another or strays from its curve by more than a share of the face's own width, round
+after round; each point a split adds lies on the edge's own curve, and the neighbour
+along it takes the point too.
 """
 
 from __future__ import annotations
@@ -42,6 +52,17 @@ _REFINE_SHARE = 0.25
 # A normal is the surface's only where its size is not lost to rounding: at a pole or a
 # cone's tip, or a hair past it, it is a rounding's direction.
 _NORMAL_FLOOR = 1e-3
+# Rounds of splitting a boundary's crossing segments (each halves a segment: 24 rounds
+# take a kilometre's chord under a tenth of a micron), the points a boundary may grow to
+# meanwhile, and the segment pairs a round may test: past either bound the boundary is
+# left as it is, and the area check decides.
+_UNCROSS_ROUNDS = 24
+_MAX_BOUNDARY_POINTS = 20_000
+_MAX_CROSSING_PAIRS = 2_000_000
+# The most a boundary segment may stray from its curve, as a share of the face's width
+# (twice its area over its perimeter), where that is under the deflection: a chord
+# straying by this share all round the boundary changes the face's area by under 7%.
+_BOUNDARY_SHARE = 0.05
 
 
 def tessellate_face(topods, face, deflection: float, angle: float):
@@ -57,22 +78,27 @@ def tessellate_face(topods, face, deflection: float, angle: float):
     loops = _boundary_loops(topods, face, location, deflection, angle)
     if not loops:
         return None
-    points = np.concatenate([uv for uv, _xyz, _shared in loops])
+    points = np.concatenate([uv for uv, *_rest in loops])
     u0, v0 = points.min(axis=0)
     u1, v1 = points.max(axis=0)
     if not (u1 > u0 and v1 > v0):
         return None
+    loops = _uncrossed(loops, location, (u1 - u0) + (v1 - v0), _boundary_sag(face, deflection))
+    points = np.concatenate([uv for uv, *_rest in loops])
+    u0, v0 = points.min(axis=0)
+    u1, v1 = points.max(axis=0)
     box = (float(u0), float(u1), float(v0), float(v1))
     grid_u = np.linspace(u0, u1, _grid_steps(surface, box, 0, deflection, angle) + 1)
     grid_v = np.linspace(v0, v1, _grid_steps(surface, box, 1, deflection, angle) + 1)
     mesh = _Mesh(*box)
     boundary = set()
-    for uv, xyz, _shared in loops:
+    for uv, xyz, _shared, _sources in loops:
         for (u, v), place in zip(uv, xyz):
             boundary.add(mesh.vertex(u, v, place))
 
-    segments = np.concatenate([np.stack([uv, np.roll(uv, -1, axis=0)], axis=1) for uv, _xyz, _shared in loops])
-    shared = [edge for _uv, _xyz, edges in loops for edge in edges]
+    segments = _segments(loops)
+    shared = [edge for _uv, _xyz, edges, _sources in loops for edge in edges]
+    sources = [source for *_rest, edge_sources in loops for source in edge_sources]
     by_cell = _cells_of_segments(segments, grid_u, grid_v)
     inside = _inside_cells(segments, grid_u, grid_v)
     for i in range(len(grid_u) - 1):
@@ -84,7 +110,7 @@ def tessellate_face(topods, face, deflection: float, angle: float):
             mesh.triangles.extend(((a, b, c), (a, c, d)))
     for i, j in sorted(by_cell):
         cell = (grid_u[i], grid_u[i + 1], grid_v[j], grid_v[j + 1])
-        pieces = [piece for uv, _xyz, _shared in loops if len(piece := _clip_to_cell(uv, *cell)) >= 3]
+        pieces = [piece for uv, *_rest in loops if len(piece := _clip_to_cell(uv, *cell)) >= 3]
         pieces = sorted((piece for piece in pieces if abs(_area(piece)) > mesh.tiny_area), key=lambda piece: -abs(_area(piece)))
         if not pieces:
             continue
@@ -97,7 +123,7 @@ def tessellate_face(topods, face, deflection: float, angle: float):
     mesh.place(surface)
     _refine(mesh, surface, deflection * _REFINE_SHARE, angle, _normal_scale(surface, box))
     mesh.weld()
-    _conform_neighbours(mesh, boundary, segments, shared, by_cell, grid_u, grid_v, location)
+    _conform_neighbours(mesh, boundary, segments, shared, sources, by_cell, grid_u, grid_v)
     return mesh.triangulation(), mesh.area()
 
 
@@ -116,8 +142,11 @@ class _Mesh:
         self.xyz: list[Any] = []
         self.triangles: list[tuple[int, int, int]] = []
 
+    def key(self, u: float, v: float) -> tuple[int, int]:
+        return (round((u - self.u0) / self.weld_u), round((v - self.v0) / self.weld_v))
+
     def vertex(self, u: float, v: float, xyz: Any = None) -> int:
-        key = (round((u - self.u0) / self.weld_u), round((v - self.v0) / self.weld_v))
+        key = self.key(u, v)
         index = self.keys.get(key)
         if index is None:
             index = self.keys[key] = len(self.uv)
@@ -176,9 +205,14 @@ class _Mesh:
 def _boundary_loops(topods, face, location, deflection: float, angle: float) -> list:
     """Each wire of ``face`` as a closed polyline over its parameters: its points (n, 2),
     each one's place in the face's frame where a meshed neighbour fixes it (else None),
-    and per segment the neighbour edge it runs along, as (neighbour face, the node at the
-    segment's start, the node at its end, the neighbour's frame from the face's), or None."""
-    from OCP.BRepAdaptor import BRepAdaptor_Curve2d
+    per segment the neighbour edge it runs along, as (neighbour face, the node at the
+    segment's start, the node at its end, the neighbour's frame from the face's, and the
+    share of the way from the one node to the other the segment starts and ends at), or
+    None, and per segment the curve it follows, as (edge, its curve, its curve on the
+    face, the parameters at the segment's start and end), or None where a split could not
+    move it: a degenerated edge, or a seam, whose two sides must keep the same points."""
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Curve2d
     from OCP.BRepTools import BRepTools_WireExplorer
     from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_REVERSED, TopAbs_WIRE
     from OCP.TopExp import TopExp, TopExp_Explorer
@@ -190,7 +224,7 @@ def _boundary_loops(topods, face, location, deflection: float, angle: float) -> 
     loops = []
     wires = TopExp_Explorer(face, TopAbs_WIRE)
     while wires.More():
-        uv, xyz, shared = [], [], []
+        uv, xyz, shared, sources = [], [], [], []
         walk = BRepTools_WireExplorer(TopoDS.Wire_s(wires.Current()), face)
         while walk.More():
             edge = walk.Current()
@@ -200,18 +234,146 @@ def _boundary_loops(topods, face, location, deflection: float, angle: float) -> 
                 parameters, places = parameters[::-1], places[::-1]
                 if neighbour is not None:
                     neighbour = (neighbour[0], neighbour[1][::-1], neighbour[2])
+            curve = (None if BRep_Tool.Degenerated_s(edge) or BRep_Tool.IsClosed_s(edge, face)
+                     else BRepAdaptor_Curve(edge))
             # The next edge starts where this one ends.
             for k in range(len(parameters) - 1):
                 point = pcurve.Value(parameters[k])
                 uv.append((point.X(), point.Y()))
                 xyz.append(places[k])
                 shared.append(None if neighbour is None
-                              else (neighbour[0], neighbour[1][k], neighbour[1][k + 1], neighbour[2]))
+                              else (neighbour[0], neighbour[1][k], neighbour[1][k + 1], neighbour[2], 0.0, 1.0))
+                sources.append(None if curve is None else (edge, curve, pcurve, parameters[k], parameters[k + 1]))
             walk.Next()
         if len(uv) >= 3:
-            loops.append((np.array(uv, float), xyz, shared))
+            loops.append((np.array(uv, float), xyz, shared, sources))
         wires.Next()
     return loops
+
+
+def _boundary_sag(face, deflection: float) -> float:
+    """How far a boundary segment may stray from its curve: the deflection, or less on a
+    face narrower than it -- ``_BOUNDARY_SHARE`` of twice its area over its perimeter."""
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+
+    area, perimeter = GProp_GProps(), GProp_GProps()
+    BRepGProp.SurfaceProperties_s(face, area)
+    BRepGProp.LinearProperties_s(face, perimeter)
+    width = 2 * abs(area.Mass()) / perimeter.Mass() if perimeter.Mass() > 0 else 0.0
+    return min(deflection, _BOUNDARY_SHARE * width) if width > 0 else deflection
+
+
+def _segments(loops: list) -> np.ndarray:
+    """The loops' segments, (n, 2, 2): each point to the next, the last to the first."""
+    return np.concatenate([np.stack([uv, np.roll(uv, -1, axis=0)], axis=1) for uv, *_rest in loops])
+
+
+def _uncrossed(loops: list, location, span: float, sag: float) -> list:
+    """``loops`` with each segment that follows a curve split at its parameters' midpoint
+    while it crosses another segment or strays from its curve by more than ``sag`` -- round
+    after round, until none does: the added point is the curve's, on the face (its
+    parameters) and in space (where a neighbour shares the edge, which takes the point as
+    well). A split that would not move the segment -- a straight edge -- is not made; nor is
+    any past ``_UNCROSS_ROUNDS``, ``_MAX_BOUNDARY_POINTS`` or ``_MAX_CROSSING_PAIRS``.
+    ``span`` is the size of the loops' parameter box."""
+    from OCP.gp import gp_Pnt
+
+    to_face = location.Transformation().Inverted()
+    still = span * 1e-12
+    strays: dict[tuple, bool] = {}
+
+    def strays_from(source) -> bool:
+        """Whether the segment's chord passes its curve's midpoint by more than ``sag``."""
+        _edge, curve, _pcurve, start, end = source
+        key = (id(curve), start, end)
+        if key not in strays:
+            a, b, m = curve.Value(start), curve.Value(end), curve.Value((start + end) / 2)
+            chord = gp_Pnt((a.X() + b.X()) / 2, (a.Y() + b.Y()) / 2, (a.Z() + b.Z()) / 2)
+            strays[key] = m.Distance(chord) > sag
+        return strays[key]
+
+    for _round in range(_UNCROSS_ROUNDS):
+        crossing = _crossing_segments(_segments(loops))
+        sources = [source for *_rest, loop_sources in loops for source in loop_sources]
+        wanted = {k for k, source in enumerate(sources)
+                  if source is not None and (k in crossing or strays_from(source))}
+        if not wanted or sum(len(uv) for uv, *_rest in loops) + len(wanted) > _MAX_BOUNDARY_POINTS:
+            return loops
+        split, first, result = 0, 0, []
+        for uv, xyz, shared, sources in loops:
+            count = len(uv)
+            points, places, edges, curves = [], [], [], []
+            for k in range(count):
+                points.append(tuple(uv[k]))
+                places.append(xyz[k])
+                source, neighbour = sources[k], shared[k]
+                middle = None
+                if first + k in wanted:
+                    edge, curve, pcurve, start, end = source
+                    halfway = (start + end) / 2
+                    point = pcurve.Value(halfway)
+                    middle = (point.X(), point.Y())
+                    chord = (uv[k] + uv[(k + 1) % count]) / 2
+                    if abs(middle[0] - chord[0]) + abs(middle[1] - chord[1]) <= still:
+                        middle = None
+                if middle is None:
+                    edges.append(neighbour)
+                    curves.append(source)
+                    continue
+                split += 1
+                if neighbour is None:
+                    place, halves = None, (None, None)
+                else:
+                    at = curve.Value(halfway).Transformed(to_face)
+                    place = (at.X(), at.Y(), at.Z())
+                    share = (neighbour[4] + neighbour[5]) / 2
+                    halves = ((*neighbour[:4], neighbour[4], share), (*neighbour[:4], share, neighbour[5]))
+                edges.extend(halves)
+                curves.extend(((edge, curve, pcurve, start, halfway), (edge, curve, pcurve, halfway, end)))
+                points.append(middle)
+                places.append(place)
+            result.append((np.array(points, float), places, edges, curves))
+            first += count
+        if not split:
+            return loops
+        loops = result
+    return loops
+
+
+def _crossing_segments(segments: np.ndarray) -> set[int]:
+    """The segments that cross another one properly, each through the other's inside: two
+    that only meet at an end -- each segment and the next -- do not. The pairs tested are
+    those sharing a cell of a grid as fine as the square root of their count, so a boundary
+    of thousands of points costs as many tests, not their square."""
+    count = len(segments)
+    low, high = segments.min(axis=(0, 1)), segments.max(axis=(0, 1))
+    if count < 4 or not (high > low).all():
+        return set()
+    steps = max(1, math.isqrt(count))
+    by_cell = _cells_of_segments(segments, np.linspace(low[0], high[0], steps + 1),
+                                 np.linspace(low[1], high[1], steps + 1))
+    firsts, seconds, pairs = [], [], 0
+    for members in by_cell.values():
+        if len(members) < 2:
+            continue
+        ordered = np.fromiter(sorted(members), np.int64, len(members))
+        a, b = np.triu_indices(len(ordered), 1)
+        pairs += len(a)
+        if pairs > _MAX_CROSSING_PAIRS:
+            return set()
+        firsts.append(ordered[a])
+        seconds.append(ordered[b])
+    if not firsts:
+        return set()
+    i, j = np.concatenate(firsts), np.concatenate(seconds)
+    p, q, r, s = segments[i, 0], segments[i, 1], segments[j, 0], segments[j, 1]
+
+    def side(o, a, b):
+        return (a[:, 0] - o[:, 0]) * (b[:, 1] - o[:, 1]) - (a[:, 1] - o[:, 1]) * (b[:, 0] - o[:, 0])
+
+    hit = (side(p, q, r) * side(p, q, s) < 0) & (side(r, s, p) * side(r, s, q) < 0)
+    return set(i[hit].tolist()) | set(j[hit].tolist())
 
 
 def _edge_points(edge, face, pcurve, ancestors, location, deflection: float, angle: float):
@@ -539,21 +701,26 @@ def _ear_clip(polygon: list, tiny: float) -> list:
     return triangles
 
 
-def _conform_neighbours(mesh: _Mesh, boundary: set, segments: np.ndarray, shared: list, by_cell: dict,
-                        grid_u: np.ndarray, grid_v: np.ndarray, location) -> None:
+def _conform_neighbours(mesh: _Mesh, boundary: set, segments: np.ndarray, shared: list, sources: list,
+                        by_cell: dict, grid_u: np.ndarray, grid_v: np.ndarray) -> None:
     """Split each meshed neighbour's triangle along a shared edge where this face's boundary
-    took a point the neighbour lacks -- a grid line crossing it -- so the two meshes share
-    every vertex along it. The neighbour's triangulation is grown in place: its own nodes
-    keep their numbers, which its edges' discretizations name."""
+    took a point the neighbour lacks -- a grid line crossing it, or a point ``_uncrossed``
+    put on the edge's curve -- so the two meshes share every vertex along it. The
+    neighbour's triangulation is grown in place: its own nodes keep their numbers, which
+    its edges' discretizations name."""
     from OCP.BRep import BRep_Tool
+    from OCP.BRepAdaptor import BRepAdaptor_Curve2d
     from OCP.gp import gp_Pnt, gp_Pnt2d
     from OCP.Poly import Poly_Triangle
     from OCP.TopLoc import TopLoc_Location
 
     du, dv = grid_u[1] - grid_u[0], grid_v[1] - grid_v[0]
-    used = {index for triangle in mesh.triangles for index in triangle} - boundary
+    used = {index for triangle in mesh.triangles for index in triangle}
+    # Per face segment along a neighbour: the points this face's triangles put on it, as
+    # (the share of the way from the neighbour's one node to its other, the vertex, and the
+    # edge and its parameter where the point is the edge curve's, else None).
     runs: dict[int, list] = {}
-    for index in used:
+    for index in used - boundary:
         u, v = mesh.uv[index]
         i, j = (u - grid_u[0]) / du, (v - grid_v[0]) / dv
         nearby = set()
@@ -568,18 +735,29 @@ def _conform_neighbours(mesh: _Mesh, boundary: set, segments: np.ndarray, shared
             length = float(span @ span)
             t = float(offset @ span) / length if length > 0 else -1.0
             if 1e-9 < t < 1 - 1e-9 and abs(offset[0] * span[1] - offset[1] * span[0]) <= 1e-9 * length:
-                runs.setdefault(segment, []).append((t, index))
+                start, end = shared[segment][4:6]
+                runs.setdefault(segment, []).append((start + t * (end - start), index, None))
                 break
+    for segment, neighbour in enumerate(shared):
+        # A segment ending short of the neighbour's node ends at a point ``_uncrossed`` added.
+        if neighbour is None or neighbour[5] >= 1.0:
+            continue
+        index = mesh.keys.get(mesh.key(*segments[segment][1]))
+        if index is not None and index in used:
+            edge, _curve, _pcurve, _start, end = sources[segment]
+            runs.setdefault(segment, []).append((neighbour[5], index, (edge, end)))
     if not runs:
         return
+    # One neighbour edge may run along several of this face's segments: its points are split
+    # into its triangle together.
     by_neighbour: list = []
     for segment, run in runs.items():
-        neighbour, node_a, node_b, to_face = shared[segment]
+        neighbour, node_a, node_b, to_face = shared[segment][:4]
         entry = next((entry for entry in by_neighbour if entry[0].IsSame(neighbour)), None)
         if entry is None:
-            entry = [neighbour, to_face.Inverted(), []]
+            entry = [neighbour, to_face.Inverted(), {}]
             by_neighbour.append(entry)
-        entry[2].append((node_a, node_b, sorted(run)))
+        entry[2].setdefault((node_a, node_b), []).extend(run)
     for neighbour, to_neighbour, splits in by_neighbour:
         triangulation = BRep_Tool.Triangulation_s(neighbour, TopLoc_Location())
         if triangulation.HasNormals():
@@ -591,19 +769,20 @@ def _conform_neighbours(mesh: _Mesh, boundary: set, segments: np.ndarray, shared
             for first, second in ((p, q), (q, r), (r, p)):
                 owner[(first, second)] = k
         added = []
-        for node_a, node_b, run in splits:
-            numbers = []
-            for t, index in run:
-                x, y, z = mesh.xyz[index]
-                added.append((gp_Pnt(x, y, z).Transformed(to_neighbour), node_a, node_b, t))
-                numbers.append(count + len(added))
+        for (node_a, node_b), run in splits.items():
             forward = owner.get((node_a, node_b))
+            backward = owner.get((node_b, node_a)) if forward is None else None
+            if forward is None and backward is None:
+                continue
+            numbers = []
+            for t, index, on_edge in sorted(run, key=lambda point: point[0]):
+                x, y, z = mesh.xyz[index]
+                added.append((gp_Pnt(x, y, z).Transformed(to_neighbour), node_a, node_b, t, on_edge))
+                numbers.append(count + len(added))
             if forward is not None:
                 chain, k = [node_a, *numbers, node_b], forward
-            elif (backward := owner.get((node_b, node_a))) is not None:
-                chain, k = [node_b, *numbers[::-1], node_a], backward
             else:
-                continue
+                chain, k = [node_b, *numbers[::-1], node_a], backward
             p, q, r = triangles[k]
             third = next(n for n in (p, q, r) if n not in (chain[0], chain[-1]))
             fan = [[c0, c1, third] for c0, c1 in zip(chain, chain[1:])]
@@ -618,11 +797,19 @@ def _conform_neighbours(mesh: _Mesh, boundary: set, segments: np.ndarray, shared
         if not added:
             continue
         triangulation.ResizeNodes(count + len(added), True)
-        for k, (point, node_a, node_b, t) in enumerate(added, count + 1):
+        for k, (point, node_a, node_b, t, on_edge) in enumerate(added, count + 1):
             triangulation.SetNode(k, point)
             if triangulation.HasUVNodes():
-                ua, ub = triangulation.UVNode(node_a), triangulation.UVNode(node_b)
-                triangulation.SetUVNode(k, gp_Pnt2d(ua.X() + t * (ub.X() - ua.X()), ua.Y() + t * (ub.Y() - ua.Y())))
+                if on_edge is not None:
+                    # A point on the edge's curve is where the neighbour's own curve of the
+                    # edge puts its parameter.
+                    edge, parameter = on_edge
+                    triangulation.SetUVNode(k, BRepAdaptor_Curve2d(edge, neighbour).Value(parameter))
+                else:
+                    ua, ub = triangulation.UVNode(node_a), triangulation.UVNode(node_b)
+                    triangulation.SetUVNode(k, gp_Pnt2d(ua.X() + t * (ub.X() - ua.X()), ua.Y() + t * (ub.Y() - ua.Y())))
         triangulation.ResizeTriangles(len(triangles), True)
         for k, (p, q, r) in enumerate(triangles, 1):
             triangulation.SetTriangle(k, Poly_Triangle(p, q, r))
+
+
