@@ -22,12 +22,12 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
     core_js                       core-js
-    web  web_ui  web_client  web_viewer
+    web  web_ui  web_client
     mcp
     api
     skills  light_policy  light_tests  skills_policy  skills_tests  skills_runtime
     docs
-    packaging
+    packaging  web_viewer         packaging, and its steps that drive the bundled viewer
     full
     record                        the artifact name recording what this run tests
 
@@ -257,7 +257,7 @@ RULES: tuple[Rule, ...] = (
     # the payload suite asserts they are current.
     Rule(("packages/ui/src/renderers/robot/__fixtures__/**",), select(cadgen=[f"{CADGEN_SUITE}/test_robot_payload.py"])),
     Rule(("packages/ui/**/*.js",), select(skills=[f"{SKILL_SUITES}/dxf/test_drawing_checks.py"])),
-    Rule(("tests/browser/**", "tests/fixtures/cad/**"), select(flags=["web_viewer"])),
+    Rule(("tests/browser/**", "tests/fixtures/cad/**"), select(flags=["web_viewer", "packaging"])),
 
     # Tests: a test file runs itself.
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
@@ -280,7 +280,8 @@ RULES: tuple[Rule, ...] = (
     Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
     Rule(("scripts/test/test-api.sh",), select(flags=["api"])),
     Rule(("scripts/test/test-docs.sh", "scripts/brand/**"), select(flags=["docs"])),
-    Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"), select(flags=["web_viewer"])),
+    Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"),
+         select(flags=["web_viewer", "packaging"])),
     Rule(("scripts/test/test-installed.sh",), select(flags=["packaging"])),
     Rule(("scripts/test/test.sh",), NOTHING),  # chains the runners for a local run; CI calls them itself
     Rule(("scripts/bench/viewer-memory/**",), select(flags=["core_js"])),
@@ -401,7 +402,7 @@ def outputs(chosen: Select, *, changed: bool = True) -> dict[str, str]:
     result.update({
         "cadgen": bool(cadgen),
         "cadgen_tests": " ".join(cadgen),
-        "web": result["web_ui"] or result["web_client"] or result["web_viewer"],
+        "web": result["web_ui"] or result["web_client"],
         "skills": changed,
         "light_policy": " ".join(light_policy()) if changed else "",
         "light_tests": " ".join(LIGHT_SKILL_TESTS) if changed else "",
