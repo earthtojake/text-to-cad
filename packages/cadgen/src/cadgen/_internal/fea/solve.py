@@ -168,10 +168,12 @@ def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: 
 
     B = _rigid_body_modes(locations[free], component[free])
     # pyamg's default (Jacobi) prolongator smoothing scales by a spectral radius it
-    # estimates from a random vector: on a graded mesh a bad estimate made the solve
-    # 30% slower or, now and then, diverge. Energy smoothing does not need it (and
-    # converges in fewer iterations); still, a run is seeded to repeat, and an attempt
-    # that diverges is stopped early and tried again with another seed.
+    # estimates from numpy's global random generator: on a graded mesh a bad estimate
+    # made the solve 30% slower or, now and then, diverge. Energy smoothing draws no
+    # random numbers (and converges in fewer iterations), so the hierarchy repeats run
+    # to run and numpy's global generator is left alone. Still, an attempt that
+    # diverges is stopped early and tried again from another start: a small random
+    # guess from a generator of the solver's own, seeded by the attempt.
     import numpy as np
 
     class Diverged(Exception):
@@ -179,10 +181,13 @@ def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: 
 
     start = float(np.linalg.norm(ff))
     for seed in range(_AMG_ATTEMPTS):
-        np.random.seed(seed)
         ml = pyamg.smoothed_aggregation_solver(
             Kff, B=B, symmetry="symmetric", strength="symmetric", smooth="energy", max_coarse=500
         )
+        guess = None
+        if seed:
+            guess = np.random.default_rng(seed).standard_normal(len(ff))
+            guess *= 1e-3 * start / max(float(np.linalg.norm(Kff @ guess)), 1e-300)
         count = 0
 
         def watch(x):
@@ -195,7 +200,7 @@ def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: 
 
         residuals: list[float] = []
         try:
-            u = ml.solve(ff, tol=1e-8, accel="cg", maxiter=600, residuals=residuals, callback=watch)
+            u = ml.solve(ff, x0=guess, tol=1e-8, accel="cg", maxiter=600, residuals=residuals, callback=watch)
         except Diverged:
             continue
         relative = residuals[-1] / max(residuals[0], 1e-300) if residuals else 1.0
@@ -211,25 +216,27 @@ def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: 
 def _project_on_elements(scalar, field: "np.ndarray", rows: "np.ndarray") -> "np.ndarray":
     """The L2 projection of a quadrature-point field onto the scalar basis, over the elements ``rows`` only.
 
-    Zero on the DOF no such element uses.
+    The basis is built on those elements alone, so a part's projection costs
+    its own elements, not the whole mesh's. Zero on the DOF no such element uses.
     """
     import numpy as np
     import scipy.sparse.linalg as spla
-    from skfem import BilinearForm, LinearForm, asm
+    from skfem import Basis, BilinearForm, ElementTetP2, LinearForm, asm
 
-    mask = np.repeat(rows[:, None], field.shape[1], axis=1).astype(float)
-    used = np.unique(scalar.element_dofs[:, rows])
+    elements = np.flatnonzero(rows)
+    own = Basis(scalar.mesh, ElementTetP2(), elements=elements, quadrature=scalar.quadrature, dofs=scalar.dofs)
+    used = np.unique(own.element_dofs)
 
     @BilinearForm
     def mass(u, v, w):
-        return w["mask"] * u * v
+        return u * v
 
     @LinearForm
     def moment(v, w):
-        return w["mask"] * w["field"] * v
+        return w["field"] * v
 
-    M = asm(mass, scalar, mask=mask).tocsr()[used][:, used]
-    b = asm(moment, scalar, mask=mask, field=field)[used]
+    M = asm(mass, own).tocsr()[used][:, used]
+    b = asm(moment, own, field=field[elements])[used]
     inverse_diagonal = 1.0 / M.diagonal()
     solution, info = spla.cg(M, b, rtol=1e-10, atol=0.0, M=spla.LinearOperator(M.shape, lambda x: inverse_diagonal * x), maxiter=500)
     if info != 0:

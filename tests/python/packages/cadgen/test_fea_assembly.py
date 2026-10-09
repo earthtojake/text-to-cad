@@ -351,6 +351,13 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertTrue(result.human_lines()[0].endswith(": 3 parts, 1 touching pairs, 1 overlapping"))
         self.assertIn("block ↔ base · overlapping · 100 mm³", result.human_lines())
 
+    def test_a_near_miss_is_not_counted_as_a_touching_pair(self):
+        from cadgen import fea
+
+        with quiet():
+            result = fea.parts(_write_assembly(self.tmp, lift=0.3))
+        self.assertTrue(result.human_lines()[0].endswith(": 2 parts, 0 touching pairs, 1 near miss"), result.human_lines()[0])
+
     def test_a_near_miss_is_listed_as_not_connected(self):
         from cadgen import fea
 

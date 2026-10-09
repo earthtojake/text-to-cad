@@ -722,11 +722,12 @@ class MultigridRetry(unittest.TestCase):
         K = sparse.diags(np.linspace(1.0, 2.0, self.N)).tocsr()
         return K, np.ones(self.N), np.arange(self.N), np.zeros((self.N, 3)), np.arange(self.N) % 3
 
-    def _fake(self, diverges: bool, K, f):
+    def _fake(self, diverges: bool, K, f, starts: list):
         import numpy as np
 
         class Fake:
-            def solve(self, rhs, tol, accel, maxiter, residuals, callback):
+            def solve(self, rhs, tol, accel, maxiter, residuals, callback, x0=None):
+                starts.append(x0)
                 if diverges:
                     for _ in range(50):
                         callback(1e6 * np.ones(len(rhs)))
@@ -742,7 +743,8 @@ class MultigridRetry(unittest.TestCase):
         from cadgen._internal.fea.solve import _solve_system
 
         K, f, free, locations, component = self._system()
-        fakes = iter(self._fake(d, K, f) for d in diverging)
+        self.starts: list = []
+        fakes = iter(self._fake(d, K, f, self.starts) for d in diverging)
         warnings: list[str] = []
         with mock.patch("pyamg.smoothed_aggregation_solver", side_effect=lambda *a, **k: next(fakes)):
             _, how = _solve_system(K, f, free, locations, component, warnings)
@@ -753,10 +755,46 @@ class MultigridRetry(unittest.TestCase):
         self.assertEqual(how, "amg+cg (2 iterations)")
         self.assertEqual(warnings, [])
 
+    def test_a_retry_starts_from_another_guess_than_the_attempt_before(self):
+        import numpy as np
+
+        self._run([True, False])
+        first, second = self.starts
+        self.assertTrue(first is None or not np.any(first))
+        self.assertTrue(np.any(second))
+
+    def test_numpys_global_random_state_is_left_alone(self):
+        import numpy as np
+
+        np.random.seed(1234)
+        before = np.random.get_state()[1].copy()
+        self._run([True, False])
+        self.assertTrue(np.array_equal(np.random.get_state()[1], before))
+
     def test_the_direct_solver_takes_over_when_every_attempt_fails(self):
         how, warnings = self._run([True, True, True])
         self.assertEqual(how, "superlu (after amg)")
         self.assertIn("did not converge in 3 attempts", warnings[0])
+
+
+@unittest.skipUnless(HAVE_FEA, "cadgen[fea] is not installed")
+class PartProjection(unittest.TestCase):
+    """One part's von Mises field: the L2 projection over its own elements, zero on the rest."""
+
+    def test_a_field_the_basis_holds_comes_back_on_the_parts_nodes_and_zero_elsewhere(self):
+        import numpy as np
+        from skfem import Basis, ElementTetP2, MeshTet
+
+        from cadgen._internal.fea.solve import _project_on_elements
+
+        mesh = MeshTet.init_tensor(np.linspace(0, 2, 5), np.linspace(0, 1, 3), np.linspace(0, 1, 3))
+        scalar = Basis(mesh, ElementTetP2())
+        rows = mesh.p[0, mesh.t].mean(axis=0) < 1.0
+        x = np.asarray(scalar.interpolate(scalar.doflocs[0]))  # (elements, quadrature): x itself, quadratic-exact
+        result = _project_on_elements(scalar, 1.0 + x, rows)
+        own = np.unique(scalar.element_dofs[:, rows])
+        np.testing.assert_allclose(result[own], 1.0 + scalar.doflocs[0, own], atol=1e-8)
+        self.assertFalse(np.any(np.delete(result, own)))
 
 
 class HumanLine(unittest.TestCase):

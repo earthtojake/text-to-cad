@@ -472,7 +472,12 @@ class FeaPartsResult:
 
     def human_lines(self) -> list[str]:
         overlapping = sum(1 for pair in self.pairs if pair.type == "overlapping")
-        touching = f"{len(self.pairs) - overlapping} touching pairs" + (f", {overlapping} overlapping" if overlapping else "")
+        near = sum(1 for pair in self.pairs if pair.type == "not_connected")
+        touching = (
+            f"{len(self.pairs) - overlapping - near} touching pairs"
+            + (f", {near} near {'miss' if near == 1 else 'misses'}" if near else "")
+            + (f", {overlapping} overlapping" if overlapping else "")
+        )
         lines = [f"{_display(self.document)}: {len(self.parts)} parts, {touching}"]
         for part in self.parts:
             lines.append(f"  {part.ref:<8} {part.name}  {part.volume_mm3:.4g} mm^3")
