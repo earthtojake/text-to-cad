@@ -211,6 +211,20 @@ test("parts cadgen could not mesh are a warning over the rest of the model, nami
   assert.notEqual(nothing.blocking, false);
 });
 
+test("parts drawn without faces cadgen could not mesh are a warning over the whole model, naming them", () => {
+  const alert = buildViewerMeshAlert(step, true, "", null, { unmeshedParts: ["wing"] });
+  assert.equal(alert.severity, "warning");
+  assert.equal(alert.blocking, false);
+  assert.equal(alert.title, "A part is missing faces");
+  assert.equal(alert.message, "“wing” has faces that couldn’t be meshed, so they’re missing from the view. Everything else is shown.");
+  assert.match(alert.details, /Parts: wing/);
+  const many = buildViewerMeshAlert(step, true, "", null, { unmeshedParts: ["a", "b", "c", "d"] });
+  assert.equal(many.title, "4 parts are missing faces");
+  assert.match(many.message, /^“a”, “b”, “c” and 1 more have faces that couldn’t be meshed/);
+  // Said of the model once it is all there, never over one still arriving.
+  assert.equal(buildViewerMeshAlert(step, true, "", null, { partial: true, unmeshedParts: ["wing"] }), null);
+});
+
 test("progressive geometry is valid while loading but cannot mask a failed first load", () => {
   assert.equal(buildViewerMeshAlert(step, true, "", null, { partial: true }), null);
   const failed = buildViewerMeshAlert(step, true, "Decode failed", null, { partial: true });

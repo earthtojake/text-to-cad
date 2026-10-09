@@ -71,8 +71,10 @@ from __future__ import annotations
 
 import bisect
 import contextlib
+import hashlib
 import json
 import math
+import struct
 from typing import Any, Iterable, Mapping, Sequence
 
 CHANNELS = ("transform", "opacity", "visible", "tube")
@@ -808,6 +810,23 @@ def bake_clip(
                              f"the {10.0 ** -_TIME_DIGITS:g} s a key's time is written to; make it longer")
     times = sample_times(duration, clip.fps)
     frames: list[_Frame] = []
+    # Each distinct transform and tube centerline once, bit for bit: a clip that poses
+    # each part afresh every sample repeats a few thousand values over millions of
+    # entries (radial's explode: 1.5 million transforms, 23,000 values), a tube's rest
+    # is the same at every sample, and the samples are held whole until every track is
+    # reduced -- a large assembly's parent build held a gigabyte of copies.
+    poses: dict[bytes, tuple] = {}
+    centerlines: dict[bytes, dict[str, Any]] = {}
+
+    def centerline(path: dict[str, Any]) -> dict[str, Any]:
+        return centerlines.setdefault(hashlib.sha256(json.dumps(path, sort_keys=True).encode()).digest(), path)
+
+    def shared_tubes(tubes: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        by_spec: dict[int, tuple[dict, dict]] = {}  # one m.get's leaves share a spec: keep sharing it
+        for spec in tubes.values():
+            if id(spec) not in by_spec:
+                by_spec[id(spec)] = (spec, {**spec, "rest": centerline(spec["rest"]), "path": centerline(spec["path"])})
+        return {leaf: by_spec[id(spec)][1] for leaf, spec in tubes.items()}
     for t in times:
         frame = _Frame()
         try:
@@ -816,6 +835,10 @@ def bake_clip(
             raise AnimationError(f"animation clip {clip_id!r} at t={t:g} s: {exc}") from None
         except Exception as exc:
             raise AnimationError(f"animation clip {clip_id!r} at t={t:g} s: {type(exc).__name__}: {exc}") from exc
+        frame.transform = {leaf: poses.setdefault(struct.pack(f"<{len(value)}d", *value), value)
+                           for leaf, value in frame.transform.items()}
+        if frame.tube:
+            frame.tube = shared_tubes(frame.tube)
         frames.append(frame)
 
     diagonal = math.dist(bounds[0], bounds[1])

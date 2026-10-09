@@ -392,7 +392,7 @@ class WhatTheLedgerServes(unittest.TestCase):
         with mock.patch.object(
             step_export_target, "_mesh_package", return_value=(spec, MeshSource("b" * 64, "a" * 64)),
         ), mock.patch.object(
-            step_export_target, "_export_mesh_jobs", return_value=(written, baked)
+            step_export_target, "_export_mesh_jobs", return_value=(written, baked, {})
         ):
             return step_export_target.export_cad_target(
                 self.document, [("glb", self.out)], animation=animation

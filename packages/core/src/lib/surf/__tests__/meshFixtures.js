@@ -65,6 +65,7 @@ export function probeRowFor(bytes) {
     faceCount: facts.faceCount,
     edgeCount: facts.edgeCount,
     edgePointCount: facts.edgePointCount,
+    ...(facts.unmeshedFaceCount ? { unmeshedFaceCount: facts.unmeshedFaceCount } : {}),
   });
 }
 

@@ -5,8 +5,8 @@ next (a watch case's 0.002 mm² slivers did, and with them every component the
 same request covered). Here the component's pass is made to leave one face of a
 bored block empty, as that one did, and the mesher must mesh the component again,
 whole and finer, until that face has triangles (a face meshed alone would part
-from its neighbours), and fail only for a face it cannot mesh that is larger than
-the mesh can resolve.
+from its neighbours); a face no mesher covers that is larger than the mesh can
+resolve is left out and named in the body.
 """
 
 import os
@@ -86,20 +86,25 @@ class EmptyFaces(unittest.TestCase):
         self.assertGreater(self.calls, 1, "the component was meshed again")
         self.assertTrue(all(count > 0 for count in repaired.values()), "every face has triangles")
 
-    def test_a_face_no_pass_meshes_is_left_out_only_below_what_the_mesh_resolves(self):
-        from cadgen._internal.occt_mesh import MeshProductionError, _bounding_diagonal
+    def test_a_face_no_mesher_covers_is_left_out_and_named_unless_below_what_the_mesh_resolves(self):
+        from cadgen._internal import face_fallback
+        from cadgen._internal.occt_mesh import _bounding_diagonal
+        from cadgen.store.meshes import decode_payload
 
         face = self.index["faces"][0]["ord"]
         deflection = CHORD * _bounding_diagonal(self.fresh())
         sliver = {**self.index, "faces": [{**row, "area": deflection * deflection / 4} if row["ord"] == face else row
                                           for row in self.index["faces"]]}
-        self.assertEqual(_faces(self.mesh(face, every_pass=True, index=sliver))[face], 0, "drawn with no triangles")
-        # A face OCCT refuses that the fallback cannot draw either is the component's error.
-        from cadgen._internal import face_fallback
-
-        with mock.patch.object(face_fallback, "tessellate_face", return_value=None), \
-                self.assertRaisesRegex(MeshProductionError, rf"did not mesh 1 face\(s\) of the component: f{face}\b"):
-            self.mesh(face, every_pass=True)
+        with mock.patch.object(face_fallback, "tessellate_face", return_value=None):
+            small = self.mesh(face, every_pass=True, index=sliver)
+            refused = self.mesh(face, every_pass=True)
+        # Under what the mesh resolves, a face may have no triangles, and nothing says so.
+        self.assertEqual((_faces(small)[face], decode_payload(small).unmeshed_faces), (0, []))
+        # A face OCCT refuses that the fallback cannot draw either: the component is meshed
+        # without it, and the body names it for every reader to say so.
+        self.assertEqual(_faces(refused)[face], 0)
+        self.assertTrue(all(count > 0 for ordinal, count in _faces(refused).items() if ordinal != face))
+        self.assertEqual(decode_payload(refused).unmeshed_faces, [face])
 
 
 class ARequestOutlivesOneComponent(unittest.TestCase):

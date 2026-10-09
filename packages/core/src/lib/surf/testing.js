@@ -30,7 +30,7 @@ export function installTestTessellationLadder() {
 /**
  * A synthetic stored-mesh body for `component`, laid out as cadgen writes one: either
  * `{positions, normals, indices, faceRanges: [{ord, color?, indexStart, indexCount}],
- * edges: [{ord, visibilityClass?, polyline}], bounds, scale}` or a decoded component
+ * edges: [{ord, visibilityClass?, polyline}], bounds, scale, unmeshedFaces?}` or a decoded component
  * (`decodeComponentTessellation(...).component`), whose tables it reads back. Its tolerances
  * are `tessellation`'s, else the test ladder's standard rung.
  */
@@ -75,6 +75,7 @@ export function encodeMeshFixture(component, {
     partColor: partColor ?? null,
     faceColors: [...palette.values()].map((entry) => entry.color),
   };
+  if (component.unmeshedFaces?.length) cad.unmeshedFaces = [...component.unmeshedFaces];
   const counts = {
     vertexCount,
     indexCount: component.indices.length,

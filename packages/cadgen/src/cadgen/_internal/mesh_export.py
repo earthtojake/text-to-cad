@@ -104,11 +104,13 @@ def run_mesh_exporter(
     the tree. ``animation_source`` captures the DOCUMENT sidecar's ``animation``
     keyframes, and is required exactly when a job carries an ``animation``: that
     job's clip is resampled at its frame rate into glTF node animation. Returns
-    ``{"ok": True, "files": [{path, format, triangleCount, animation?}, ...]}`` in
-    job order; an animated file's ``animation`` block reports what was baked and,
+    ``{"ok": True, "files": [{path, format, triangleCount, animation?, warnings?}, ...]}``
+    in job order; an animated file's ``animation`` block reports what was baked and,
     under ``warnings``, what the sampling could not carry -- the choices the
     caller made, for its RESULT rather than the log, where ``--json`` would never
-    hear them. Anything worse raises, and a job that raises leaves no file."""
+    hear them. A file's own ``warnings`` name the faces no mesher could cover
+    (``cadgen.store.meshes`` ``unmeshedFaces``), which it leaves open. Anything
+    worse raises, and a job that raises leaves no file."""
     from cadgen.store import meshes
 
     label = "+".join(job.fmt for job in jobs)
@@ -159,6 +161,7 @@ def _export(source: MeshSource, jobs: "list[MeshExportJob]", pairs: list, *, nam
         threemf_bytes,
         total_triangles,
     )
+    from cadgen.store import meshes
 
     descriptor, bodies = stored_meshes(source, sorted(set(pairs)), appearance)
     used = _used_components(descriptor)
@@ -168,6 +171,7 @@ def _export(source: MeshSource, jobs: "list[MeshExportJob]", pairs: list, *, nam
     files: list[dict | None] = [None] * len(jobs)
     for pair in sorted(set(pairs)):
         tessellations = {cid: decode_tessellation(bodies[(cid, pair)]) for cid in used}
+        unmeshed = {cid: faces for cid in used if (faces := meshes.unmeshed_faces(bodies[(cid, pair)]))}
         # Every static job of one pair shares one primitive build. An ANIMATED job
         # builds its own: its nodes are per occurrence, and what its clip drops (an
         # occurrence hidden at start, one faded) changes which primitives exist.
@@ -212,8 +216,23 @@ def _export(source: MeshSource, jobs: "list[MeshExportJob]", pairs: list, *, nam
                 payload = writers[job.fmt](primitives, name=name)
             write_bytes_atomic(job.out, payload)
             files[index] = {"path": str(job.out), "format": job.fmt, "triangleCount": triangles,
-                            **({"animation": summary} if summary is not None else {})}
+                            **({"animation": summary} if summary is not None else {}),
+                            **({"warnings": _unmeshed_warnings(descriptor, unmeshed, job.out.name)}
+                               if unmeshed else {})}
     return {"ok": True, "files": files}
+
+
+def _unmeshed_warnings(descriptor: dict, unmeshed: dict, written: str) -> list[str]:
+    """What a file written from meshes that leave faces out says of each such component:
+    its occurrences, the faces, and that the file is open where they are."""
+    from cadgen.store.meshes import unmeshed_warning
+
+    occurrences = [occurrence for occurrence in descriptor.get("occurrences") or [] if isinstance(occurrence, dict)]
+    name = written.replace("{", "{{").replace("}", "}}")
+    return [unmeshed_warning([(str(occurrence.get("id")), str(occurrence.get("name") or ""))
+                              for occurrence in occurrences if occurrence.get("component") == cid],
+                             faces, name + " has a hole in place of {them}: it is not watertight")
+            for cid, faces in unmeshed.items()]
 
 
 def _skinned_tubes(descriptor: dict, tessellations: dict, clip: Any, default_color: str | None) -> dict:

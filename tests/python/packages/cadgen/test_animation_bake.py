@@ -254,6 +254,46 @@ class BakingTransforms(unittest.TestCase):
         self.assertEqual([0.0], held["times"])
         self.assertEqual([[0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 1.0, *[0.0] * 7]], held["transform"])
 
+    def test_the_samples_hold_each_distinct_pose_and_centerline_once(self) -> None:
+        # A clip that poses each part with a fresh transform makes one per part per
+        # sample, and a tube's rest is the same at every sample; a bake holds every
+        # sample until its tracks are reduced, and a large assembly's parent build held
+        # a gigabyte of copies (radial: 1.5 million transforms, 23,000 values).
+        from unittest import mock
+
+        from cadgen._internal import animation_bake
+
+        leaves = [f"o1.{index}" for index in range(1, 51)]
+        targets = animation_targets({"occurrences": [{"id": leaf} for leaf in leaves],
+                                     "assembly": {"root": {"id": "o1", "name": "rig", "children": [
+                                         {"id": leaf, "name": f"p{leaf}", "children": []} for leaf in leaves]}}})
+
+        def rise(t, m):
+            for leaf in leaves[:-2]:
+                m.get(f"#{leaf}").translate((0, 0, round(t)))
+            for leaf in leaves[-2:]:
+                m.get(f"#{leaf}").deform_tube(rest=_line(0.0), path=_line(float(round(t))))
+
+        sampled = []
+
+        class Recorded(animation_bake._Frame):
+            __slots__ = ()
+
+            def __init__(self) -> None:
+                super().__init__()
+                sampled.append(self)
+
+        with mock.patch.object(animation_bake, "_Frame", Recorded):
+            baked = bake_clip("rise", cadgen.clip(rise, duration=2, fps=10), targets, BOUNDS)
+        self.assertEqual([leaves[:-2], leaves[-2:]], [track["targets"] for track in baked["tracks"]],
+                         "one track moves the parts, one bends the tubes")
+        poses = [pose for frame in sampled for pose in frame.transform.values()]
+        self.assertEqual((len(sampled) * (len(leaves) - 2), 3), (len(poses), len(set(poses))))
+        self.assertEqual(3, len({id(pose) for pose in poses}), "one object per pose, not per part and sample")
+        tubes = [spec for frame in sampled for spec in frame.tube.values()]
+        self.assertEqual(1, len({id(spec["rest"]) for spec in tubes}), "the rest, once")
+        self.assertEqual(3, len({id(spec["path"]) for spec in tubes}), "each path it takes, once")
+
     def test_parts_that_move_alike_but_for_rounding_share_a_track(self) -> None:
         # One turn reached two ways -- through 30 degrees, and through two turns of 15 --
         # is equal to the last bits, and is one track.

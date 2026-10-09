@@ -18,6 +18,8 @@ export interface TessellatedComponent {
   faceColors: number[][];
   bounds: { min: number[]; max: number[] };
   scale: number;
+  /** The faces no mesher could cover: their ranges are empty and the mesh does not draw them. */
+  unmeshedFaces: readonly number[];
 }
 export interface TessellationCacheEntry {
   component: TessellatedComponent;
@@ -40,6 +42,8 @@ export interface TessellationProbe {
   faceCount: number;
   edgeCount: number;
   edgePointCount: number;
+  /** How many faces the mesh leaves undrawn, no mesher having covered them; absent when none. */
+  unmeshedFaceCount?: number;
 }
 export interface TessellationReadOptions {
   signal?: AbortSignal;

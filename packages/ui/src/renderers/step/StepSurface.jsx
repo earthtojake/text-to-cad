@@ -708,7 +708,11 @@ function StepSurfaceBody({ view, data }) {
         !editingBuildActive(editingPreview.state) &&
         ["network", "timeout", "status"].includes(selectedArtifact.failure?.kind)
         ? null : selectedArtifact,
-      { partial: selectedMeshPartial, failedParts: selectedMeshMatches ? meshState?.assemblyFailedParts || [] : [] }
+      {
+        partial: selectedMeshPartial,
+        failedParts: selectedMeshMatches ? meshState?.assemblyFailedParts || [] : [],
+        unmeshedParts: selectedMeshMatches ? meshState?.assemblyUnmeshedParts || [] : [],
+      }
     );
     return meshAlert || viewerRuntimeAlert;
   }, [
@@ -717,6 +721,7 @@ function StepSurfaceBody({ view, data }) {
     error,
     meshState?.assemblyBackgroundError,
     meshState?.assemblyFailedParts,
+    meshState?.assemblyUnmeshedParts,
     selectedAssemblyHydrationFailed,
     selectedEntry,
     selectedArtifact,

@@ -964,7 +964,7 @@ def _produce_declared_mesh_exports(
     from cadgen.step_export_target import _color_hex
 
     jobs = list(pending)
-    run_mesh_exporter(
+    exported = run_mesh_exporter(
         # A mesh-only model's tree is its own geometry, selected by no document.
         MeshSource(tree_hash, document_hash if spec.step_output else None),
         jobs,
@@ -986,6 +986,10 @@ def _produce_declared_mesh_exports(
         # stderr: stdout is the result channel (`outcome document`), and a
         # `[cadgen]`-prefixed line is the logger's voice, not a result.
         print(f"[cadgen] wrote {job.fmt.upper()}: {_display_path(job.out)}", file=sys.stderr)
+    for entry in exported.get("files") or []:
+        # A file open where no mesher could cover a face says so beside the line that wrote it.
+        for warning in (entry or {}).get("warnings") or ():
+            print(f"[cadgen] warning: {warning}", file=sys.stderr)
     return tuple(job.out for job in jobs)
 
 

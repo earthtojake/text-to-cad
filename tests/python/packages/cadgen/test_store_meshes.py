@@ -307,6 +307,48 @@ class MeshStoreContract(unittest.TestCase):
         self.assertIsNone(decoded.cad["partColor"])
         self.assertEqual(js_reader([payload])[0][1], True)
 
+    def test_a_body_that_leaves_a_face_out_names_it_for_every_reader(self):
+        from tests.python.support.tessellation import js_reader
+
+        def encode(unmeshed, second=0):
+            return meshes.encode_payload(
+                surface_input="1" * 64, surface_object="a" * 64, chord=0.0015, angle=0.005,
+                positions=np.array([[0, 0, 0], [2, 0, 0], [0, 3, 0]], np.float32),
+                normals=np.array([[0, 0, 1]] * 3, np.float32), indices=np.array([0, 1, 2], np.uint32),
+                face_ranges=[{"ord": 1, "indexStart": 0, "indexCount": 3 - second},
+                             {"ord": 2, "indexStart": 3 - second, "indexCount": second}],
+                edges=[], bounds={"min": [0, 0, 0], "max": [2, 3, 0]}, scale=1.0, unmeshed_faces=unmeshed,
+            )
+
+        payload = encode([2])
+        self.assertEqual(meshes.decode_payload(payload).unmeshed_faces, [2])
+        self.assertEqual(meshes.unmeshed_faces(payload), [2])
+        record = meshes.write(self.key, payload)
+        self.assertEqual(record["unmeshedFaceCount"], 1)
+        self.assertEqual(meshes.probe(self.key), record)
+        self.assertEqual(meshes.stored_unmeshed_faces(self.key), [2])
+        [[facts, decodes]] = js_reader([payload])
+        self.assertTrue(decodes)
+        self.assertEqual({"schemaVersion": record["schemaVersion"], "object": record["object"], **facts}, record)
+        # A body that leaves nothing out says nothing: no value, no count.
+        whole = encode([])
+        self.assertNotIn("unmeshedFaces", _json(whole)["extras"]["cadgen"])
+        self.assertNotIn("unmeshedFaceCount", meshes.payload_record(self.key, whole))
+        # A named face is one of the table's empty faces, named once, in order.
+        for label, value in (("a face with triangles", [1]), ("an empty list", []), ("out of order", [2, 2]),
+                             ("not a face", [3]), ("not an ordinal", [0])):
+            gltf = _json(payload)
+            gltf["extras"]["cadgen"]["unmeshedFaces"] = value
+            broken = _with_json(payload, gltf)
+            with self.subTest(label=label), self.assertRaises(ValueError):
+                meshes.payload_record(self.key, broken)
+            self.assertEqual(js_reader([broken]), [[None, False]], label)
+        with self.assertRaises(ValueError):
+            encode([2], second=3)
+        forged = {**record, "unmeshedFaceCount": 0}
+        write_entry("mesh", self.key, forged)
+        self.assertIsNone(meshes.probe(self.key), "a record counting no unmeshed face is not one")
+
     def test_the_writer_refuses_a_body_no_reader_would_take(self):
         def encode(**changes):
             arguments = dict(

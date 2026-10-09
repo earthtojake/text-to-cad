@@ -206,7 +206,8 @@ class EmptyFace(unittest.TestCase):
             return result
 
         with mock.patch.object(BRepMesh, "BRepMesh_IncrementalMesh", side_effect=mesher):
-            return _mesh(self.topods)[1]
+            self.body, mesh = _mesh(self.topods)
+        return mesh
 
     def assertBoreMeshed(self, mesh):
         """The bore's range holds triangles, and they lie on the bore: radius 4 about z."""
@@ -234,7 +235,7 @@ class EmptyFace(unittest.TestCase):
 
     def test_a_tessellation_that_misses_the_faces_area_is_not_kept(self):
         from cadgen._internal import face_fallback
-        from cadgen._internal.occt_mesh import MeshProductionError
+        from cadgen.store.meshes import decode_payload
 
         real = face_fallback.tessellate_face
 
@@ -242,9 +243,11 @@ class EmptyFace(unittest.TestCase):
             triangulation, covered = real(*args)
             return triangulation, covered * 2
 
-        with mock.patch.object(face_fallback, "tessellate_face", side_effect=overcounted), \
-                self.assertRaisesRegex(MeshProductionError, rf"did not mesh 1 face\(s\) of the component: f{self.bore}\b"):
-            self.mesh(lambda shape, call: shape.IsSame(self.topods))
+        with mock.patch.object(face_fallback, "tessellate_face", side_effect=overcounted):
+            mesh = self.mesh(lambda shape, call: shape.IsSame(self.topods))
+        bore = next(row for row in mesh.face_ranges if row["ord"] == self.bore)
+        self.assertEqual(bore["indexCount"], 0, "the bore is left out")
+        self.assertEqual(decode_payload(self.body).unmeshed_faces, [self.bore], "and named")
 
 
 def _with_a_stray_degenerated_edge(topods):
@@ -346,6 +349,57 @@ class RefusedFace(unittest.TestCase):
         while BRepAdaptor_Surface(TopoDS.Face_s(explorer.Current())).GetType() != GeomAbs_Cone:
             explorer.Next()
         self.assertDrawn(topods, TopoDS.Face_s(explorer.Current()), np.pi * 4 * np.hypot(4, 6), "a 4 mm cone 6 tall")
+
+
+class NarrowFace(unittest.TestCase):
+    """A face narrower than the deflection: one of the f14d wing's slivers, 686 mm long and
+    1.2 mm wide on average, between a straight side and a curve its neighbour meshes as one
+    chord -- a chord that passes beyond the straight side, so the boundary crosses itself.
+    OCCT refuses it; drawn over its parameters, it covers its own area and meets its
+    neighbours, where it once covered twice its area and failed the component."""
+
+    # The sliver's outline on its plane (mm): its straight side's corners, and points
+    # along its curved side, which a spline through them follows.
+    SIDE = [(5.681, 0.216), (147.532, 5.619), (365.14, 18.003), (690.28, 43.929)]
+    CURVE = [(690.28, 43.929), (604.868, 36.196), (519.411, 28.977), (433.91, 22.306), (348.366, 16.212),
+             (262.78, 10.734), (177.155, 5.915), (91.492, 1.806), (5.797, -1.534)]
+
+    def test_a_sliver_beside_a_coarse_chord_covers_its_own_area_and_meets_its_neighbours(self):
+        from build123d import Box, Line, Polyline, Pos, Spline, Wire, extrude, make_face
+        from OCP import BRepMesh
+        from OCP.BRep import BRep_Builder
+        from OCP.BRepGProp import BRepGProp
+        from OCP.GProp import GProp_GProps
+        from OCP.TopAbs import TopAbs_FACE
+        from OCP.TopExp import TopExp
+        from OCP.TopTools import TopTools_IndexedMapOfShape
+        from OCP.TopoDS import TopoDS, TopoDS_Compound
+
+        outline = Wire([*Polyline(*self.SIDE).edges(), Spline(*self.CURVE), Line(self.CURVE[-1], self.SIDE[0])])
+        plate = extrude(make_face(outline), 2)
+        # A plate in a component as large as the wing, so the deflection is ten times its width.
+        topods = _compound(plate, Pos(8000, 0, 0) * Box(10, 10, 10))
+        faces = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(topods, TopAbs_FACE, faces)
+        slivers = [faces.FindIndex(face.wrapped) for face in plate.faces() if abs(face.normal_at().Z) > 0.99]
+        self.assertEqual(len(slivers), 2)
+        # OCCT meshes everything but the slivers -- which it refuses at this deflection and,
+        # finer, draws with a twentieth of their area.
+        others, builder = TopoDS_Compound(), BRep_Builder()
+        builder.MakeCompound(others)
+        for ordinal in range(1, faces.Extent() + 1):
+            if ordinal not in slivers:
+                builder.Add(others, faces.FindKey(ordinal))
+        real = BRepMesh.BRepMesh_IncrementalMesh
+        with mock.patch.object(BRepMesh, "BRepMesh_IncrementalMesh", side_effect=lambda _shape, *args: real(others, *args)):
+            mesh = _mesh(topods)[1]
+        for ordinal in slivers:
+            exact = GProp_GProps()
+            BRepGProp.SurfaceProperties_s(TopoDS.Face_s(faces.FindKey(ordinal)), exact)
+            self.assertAlmostEqual(_range_area(mesh, ordinal), exact.Mass(), delta=exact.Mass() * 0.02,
+                                   msg=f"f{ordinal} covers its own area")
+        self.assertFalse(np.isnan(mesh.positions).any() or np.isnan(mesh.normals).any())
+        self.assertEqual(_open_edges(mesh), 0, "the slivers share every vertex with the faces around them")
 
 
 class Normals(unittest.TestCase):

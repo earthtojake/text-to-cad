@@ -53,6 +53,10 @@ const CAD_VALUES = Object.freeze([
   "payloadVersion", "tessellatorVersion", "tessellationInput", "surfaceInput", "surfaceObject",
   "quality", "bounds", "scale", "partColor", "faceColors",
 ]);
+// The faces no mesher could cover, which the body leaves undrawn: a value only a body with one
+// has (cadgen/store/meshes.py `unmeshedFaces`), and a count only its record has.
+const UNMESHED = "unmeshedFaces";
+const UNMESHED_COUNT = "unmeshedFaceCount";
 const COUNT_FIELDS = Object.freeze(["vertexCount", "indexCount", "faceCount", "edgeCount", "edgePointCount"]);
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const QUALITY_FIELDS = new Set([
@@ -265,6 +269,13 @@ function validCad(cad) {
     || bounds.min.some((value, index) => value > bounds.max[index])) return false;
   if (!finiteNumber(cad.scale) || cad.scale <= 0) return false;
   if (cad.partColor != null && !finiteTuple(cad.partColor, 4)) return false;
+  if (Object.hasOwn(cad, UNMESHED)) {
+    const unmeshed = cad[UNMESHED];
+    if (!Array.isArray(unmeshed) || !unmeshed.length
+      || unmeshed.some((ord, index) => !Number.isSafeInteger(ord) || ord < 1 || (index && ord <= unmeshed[index - 1]))) {
+      return false;
+    }
+  }
   return Array.isArray(cad.faceColors) && cad.faceColors.every((color) => finiteTuple(color, 4));
 }
 
@@ -384,6 +395,7 @@ function decodeBody(bytes, expected = {}) {
     if (!Object.hasOwn(cad, name)) return null;
     values[name] = cad[name];
   }
+  if (Object.hasOwn(cad, UNMESHED)) values[UNMESHED] = cad[UNMESHED];
   const canonical = canonicalMeshGltf(values, counts);
   if (!sameJson(gltf, canonical) || binLength !== (canonical.buffers?.[0].byteLength ?? 0)) return null;
 
@@ -409,11 +421,20 @@ function decodeBody(bytes, expected = {}) {
     faceColors: cad.faceColors,
     bounds: cad.bounds,
     scale: cad.scale,
+    unmeshedFaces: Object.freeze([...(cad[UNMESHED] || [])]),
   };
   const palette = cad.faceColors.length;
   if (!validTable(component.faceTable, indexCount, (count, color) => count % 3 === 0 && color <= palette)
     || !validTable(component.edgeTable, counts.edgePointCount,
       (count, edgeClass) => count >= 2 && edgeClass < MESH_EDGE_CLASSES.length)) return null;
+  if (component.unmeshedFaces.length) {
+    // Each one is a face of the table, and an empty one.
+    const empty = new Set();
+    for (let row = 0; row < component.faceTable.length; row += MESH_TABLE_COLUMNS) {
+      if (!component.faceTable[row + 2]) empty.add(component.faceTable[row]);
+    }
+    if (!component.unmeshedFaces.every((ord) => empty.has(ord))) return null;
+  }
   return { component, partColor: cad.partColor ?? null, identity, counts };
 }
 
@@ -432,10 +453,11 @@ export function tessellationPayloadFacts(bytes, expected = {}) {
       tessellatorVersion: TESSELLATION_VERSION,
       payloadVersion: MESH_PAYLOAD_VERSION,
       ...body.counts,
+      ...(body.component.unmeshedFaces.length ? { [UNMESHED_COUNT]: body.component.unmeshedFaces.length } : {}),
     });
     for (const field of [
       "byteLength", "decodedBytes", "surfaceInput", "surfaceObject", "tessellationInput",
-      "renderIdentity", "tessellatorVersion", "payloadVersion", ...COUNT_FIELDS,
+      "renderIdentity", "tessellatorVersion", "payloadVersion", ...COUNT_FIELDS, UNMESHED_COUNT,
     ]) {
       if (expected[field] !== undefined && expected[field] !== facts[field]) return null;
     }
@@ -453,9 +475,12 @@ const MESH_RECORD_FIELDS = new Set([
 
 export function validateTessellationProbeRow(value, expected = {}) {
   try {
+    const unmeshed = Object.hasOwn(value || {}, UNMESHED_COUNT);
     if (!value || typeof value !== "object" || Array.isArray(value)
-      || Object.keys(value).length !== MESH_RECORD_FIELDS.size
-      || Object.keys(value).some((key) => !MESH_RECORD_FIELDS.has(key))) return null;
+      || Object.keys(value).length !== MESH_RECORD_FIELDS.size + (unmeshed ? 1 : 0)
+      || Object.keys(value).some((key) => !MESH_RECORD_FIELDS.has(key) && key !== UNMESHED_COUNT)) return null;
+    if (unmeshed && (!Number.isSafeInteger(value[UNMESHED_COUNT]) || value[UNMESHED_COUNT] < 1
+      || value[UNMESHED_COUNT] > value.faceCount)) return null;
     if (value.schemaVersion !== MESH_INDEX_SCHEMA
       || value.tessellatorVersion !== TESSELLATION_VERSION
       || value.payloadVersion !== MESH_PAYLOAD_VERSION) return null;
@@ -491,6 +516,7 @@ export function validateTessellationProbeRow(value, expected = {}) {
       tessellatorVersion: TESSELLATION_VERSION,
       payloadVersion: MESH_PAYLOAD_VERSION,
       ...counts,
+      ...(unmeshed ? { [UNMESHED_COUNT]: value[UNMESHED_COUNT] } : {}),
     });
   } catch {
     return null;
@@ -500,7 +526,8 @@ export function validateTessellationProbeRow(value, expected = {}) {
 /**
  * One stored mesh, decoded: `component` holds its sections viewed in place -- `positions` and
  * `normals` (f32 xyz), `indices` (u16 or u32), `faceTable` and `edgeTable` (u32 rows of
- * MESH_TABLE_COLUMNS), `edgePoints` (f32 xyz) -- with its face colour palette, bounds and scale.
+ * MESH_TABLE_COLUMNS), `edgePoints` (f32 xyz) -- with its face colour palette, bounds and scale,
+ * and `unmeshedFaces`: the faces no mesher could cover, which it does not draw.
  * `meshFaceRanges` and `meshEdgePolylines` read the tables as objects. Null for anything that is
  * not a valid body bound to `expected`: a corrupt entry is a miss, never an error.
  */

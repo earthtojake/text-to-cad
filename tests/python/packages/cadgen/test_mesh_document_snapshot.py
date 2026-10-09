@@ -100,8 +100,8 @@ class MeshDocumentSnapshotTests(unittest.TestCase):
                     mock.patch("cadgen.step_export_target.run_mesh_exporter", side_effect=write_export):
                 note_document_tree(old_hash, "tree-a")
                 note_document_tree(new_hash, "tree-b")
-                written, _ = _export_mesh_jobs(spec, MeshSource("tree-a", old_hash), [job],
-                                               logger=CliLogger("test", verbose=False))
+                written, _baked, _noted = _export_mesh_jobs(spec, MeshSource("tree-a", old_hash), [job],
+                                                            logger=CliLogger("test", verbose=False))
                 self.assertEqual(written, {out})
                 key = mesh_variant_key("glb", None, None)
                 self.assertEqual(document_mesh_sha(old_hash, key), hashlib.sha256(out.read_bytes()).hexdigest())

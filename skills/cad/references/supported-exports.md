@@ -186,6 +186,13 @@ need, and finer settings take minutes per curved face rather than seconds. The
 same bounds apply to `mesh_tolerance=` and `mesh_angular_tolerance=` on a
 decorator, and a value outside them is refused before anything builds.
 
+A face no mesher can cover (typically a sliver a boolean left, narrower than the
+chord tolerance) never fails the export: the part is written without it, and the
+result's `warnings` name it, for example `#o1.2 pin: 1 face (f3) could not be
+meshed, so pin.stl has a hole in place of it: it is not watertight`. Repair the
+face in the model, or export again with a finer `--mesh-tolerance`, before
+handing the file to a slicer.
+
 ## Workflow
 
 1. For maintained outputs, declare the mesh decorators and run the model script.

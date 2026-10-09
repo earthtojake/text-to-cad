@@ -149,5 +149,8 @@ export function buildMeshDataFromSurf(index, component) {
     parts: [part],
     has_source_colors: Boolean(color),
     sourceColor: color || "",
+    // The faces no mesher could cover, which this mesh does not draw: the viewer names the
+    // parts drawn without them.
+    unmeshedFaces: [...(component.unmeshedFaces || [])],
   };
 }

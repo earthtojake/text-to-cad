@@ -173,6 +173,12 @@ exact box placed by the occurrence's transform (rounded to 1e-3), and
 view would draw (meshed in the build pool when the store has none). `--focus` and
 `--hide` narrow the rows the way they narrow a section.
 
+A part whose stored mesh leaves out a face no mesher could cover (its body's
+`unmeshedFaces`, [`STORE.md`](STORE.md) §3) is listed, counted and drawn without
+that face, never refused: the list and the view each add a warning naming the
+part's occurrences and the faces (`cadgen.snapshot_parts.unmeshed_warnings`,
+asked once the page has drawn).
+
 ## Sizes
 
 An output is sized by `--size-profile` (`output.sizeProfile`) — `simple`

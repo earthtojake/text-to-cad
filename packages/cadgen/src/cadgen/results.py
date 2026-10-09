@@ -150,6 +150,8 @@ class MeshExportResult:
     #: stays true — these are choices the caller made — but a file that made them
     #: silently is the failure the animated door exists to avoid, so they are IN
     #: the result rather than only on the log, where ``--json`` never sees them.
+    #: And the faces no mesher could cover, which a written file has a hole in
+    #: place of: it is not watertight there.
     warnings: tuple[str, ...] = ()
 
     def human_lines(self) -> list[str]:
@@ -221,7 +223,8 @@ class SnapshotResult:
     #: Empty for every mode that renders.
     parts: tuple[dict, ...] = ()
     #: Non-fatal notes from the renderer (an unresolved selector, a clamped
-    #: frame budget). ``ok`` stays true.
+    #: frame budget, a part drawn or counted without the faces no mesher could
+    #: cover). ``ok`` stays true.
     warnings: tuple[str, ...] = ()
     timings: SnapshotTimings = field(default_factory=SnapshotTimings)
     #: ``--debug`` only: artifact resolution and measured browser stages,

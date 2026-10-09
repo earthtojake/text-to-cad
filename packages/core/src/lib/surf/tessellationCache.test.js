@@ -450,6 +450,36 @@ test("decode rejects face and edge tables that do not cover their arrays in orde
     "face ordinals rise");
 });
 
+test("a body that leaves a face no mesher covered names it, and its probe row counts it", () => {
+  const leftOut = encodeMeshFixture({
+    ...componentFixture(),
+    faceRanges: [{ ord: 1, indexStart: 0, indexCount: 3 }, { ord: 2, indexStart: 3, indexCount: 0 }],
+    unmeshedFaces: [2],
+  }, { surfaceInput: D, surfaceObject: O, tessellation: Q });
+  const decoded = decodeComponentTessellation(leftOut);
+  assert.ok(decoded);
+  assert.deepEqual([...decoded.component.unmeshedFaces], [2]);
+  assert.deepEqual([...solidComponent().unmeshedFaces], [], "a whole body names none");
+  // The render data carries them, for the viewer to name the part drawn without them.
+  assert.deepEqual(buildMeshDataFromSurf(surfIndexFromCacheEntry(decoded), decoded.component).unmeshedFaces, [2]);
+  const row = probeRowFor(leftOut);
+  assert.equal(row.unmeshedFaceCount, 1);
+  assert.equal(tessellationPayloadFacts(leftOut).unmeshedFaceCount, 1);
+  assert.deepEqual(validateTessellationProbeRow(row), row);
+  assert.equal("unmeshedFaceCount" in probeRowFor(encodedEntry()), false, "a whole body's row counts none");
+  for (const count of [0, 3, 1.5]) {
+    assert.equal(validateTessellationProbeRow({ ...row, unmeshedFaceCount: count }), null, `count ${count}`);
+  }
+  // A named face is one of the table's empty faces, named once, in order.
+  for (const [label, value] of Object.entries({
+    "a face with triangles": [1], "an empty list": [], "out of order": [2, 2], "not a face": [3],
+  })) {
+    assert.equal(decodeComponentTessellation(rewriteJson(leftOut, (gltf) => {
+      gltf.extras.cadgen.unmeshedFaces = value;
+    })), null, label);
+  }
+});
+
 test("batch container preserves aligned zero-copy hits, misses and odd payloads", () => {
   const entry = encodedEntry();
   const odd = new Uint8Array([1, 2, 3]);
