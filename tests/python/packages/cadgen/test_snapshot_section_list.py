@@ -208,12 +208,14 @@ class NoSurfacesTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        from build123d import Compound, Edge, Vertex
+        from build123d import Compound, Edge, Solid, Vertex
         from cadgen.step_export import export_build123d_step_file
 
         cls._roots = ClassCadRoots(prefix="snapshot-no-surfaces-")
         cls.workspace = cls._roots.cad_root
-        write_assembly(cls.workspace / "asm.step")
+        # Not the other classes' assembly: the same bytes in another store share this
+        # process's view of them.
+        export_build123d_step_file(Solid.make_box(3, 2, 1), cls.workspace / "block.step")
         wire = Compound(children=[Edge.make_line((0, 0, 0), (10, 0, 0)), Edge.make_circle(5), Vertex(1, 2, 3)])
         export_build123d_step_file(wire, cls.workspace / "wire.step")
         export_build123d_step_file(Compound([]), cls.workspace / "empty.step")
@@ -235,7 +237,7 @@ class NoSurfacesTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(["this model has no surfaces to draw: it is empty, or only curves and points"],
                                  self.warnings(name))
-        self.assertEqual([], self.warnings("asm.step"))
+        self.assertEqual([], self.warnings("block.step"))
 
 
 class FilterOccurrencesTests(unittest.TestCase):
