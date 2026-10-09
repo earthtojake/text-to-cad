@@ -400,6 +400,23 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertEqual([pair.type for pair in result.pairs], ["not_connected"])
         self.assertIn("post ↔ base · gap 0.3 mm · not connected", result.human_lines())
 
+    def test_it_needs_only_what_contact_detection_needs_not_the_fea_extra(self):
+        import builtins
+        from unittest import mock
+
+        from cadgen import fea
+
+        real = builtins.__import__
+
+        def refuse(name, *args, **kwargs):
+            if name.split(".")[0] in ("netgen", "skfem", "pyamg"):
+                raise ImportError(name)
+            return real(name, *args, **kwargs)
+
+        with mock.patch("builtins.__import__", refuse), quiet():
+            result = fea.parts(_write_assembly(self.tmp))
+        self.assertEqual([pair.type for pair in result.pairs], ["bonded"])
+
     def test_json_output(self):
         from cadgen.cli.fea_parts import main
 

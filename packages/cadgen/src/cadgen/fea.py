@@ -7,8 +7,9 @@ assembly's parts and the pairs that touch, ``solve`` runs one study
 and writes a result GLB the viewer renders (von Mises as vertex colour on the
 deformed shape) beside a JSON sidecar with the numbers.
 
-Requires the ``fea`` extra (``pip install 'cadgen[fea]'``): netgen for the
-mesh, scikit-fem and pyamg for the solve. Import discipline: nothing here may
+``solve`` requires the ``fea`` extra (``pip install 'cadgen[fea]'``): netgen
+for the mesh, scikit-fem and pyamg for the solve; ``faces`` and ``parts`` do
+not. Import discipline: nothing here may
 pull in OCP, build123d or the solver stack at module scope (see
 :mod:`cadgen.step`) -- ``--help`` must stay cheap, and the extra may be absent.
 """

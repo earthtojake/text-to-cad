@@ -69,6 +69,11 @@ dependencies = [
   # (snapshot_core.install_browser), not by the install.
   "playwright==1.63.0",
   "shapely",
+  # `cadgen fea parts` finds the parts that touch with numpy and scipy (a KD-tree of
+  # sampled faces) and no solver, so it runs without the fea extra. build123d brings
+  # both already; they are named here because cadgen imports them itself.
+  "numpy",
+  "scipy",
 ]
 
 # An exception to the "a dependency of every install, not an extra" principle above:

@@ -119,10 +119,9 @@ _NEAR_MISS_MM = 1.0
 
 
 def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verbose: bool = False) -> FeaPartsResult:
+    # Contact detection is OCP, numpy and scipy, all base dependencies: no fea extra needed.
     from cadgen._internal.fea.assembly import detect_contacts, detect_overlaps, display_names, interferences, list_parts
-    from cadgen._internal.fea.mesh import require_fea_stack
 
-    require_fea_stack()
     if not contact_tolerance_mm >= 0:
         raise ValueError("contact_tolerance_mm must be zero or more")
     logger = CliLogger("fea", verbose=verbose)
