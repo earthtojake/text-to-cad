@@ -4,6 +4,18 @@ import { ringPoint } from "./feaResult.js";
 const RING_RADIUS_PX = 14;
 const COLOUR = { error: "#ef4444", warning: "#f59e0b" };
 
+/** Whether `seen` already holds every number of `lists`, in order; it takes them as it finds one that differs, with no array made for the matrices. */
+function unchanged(seen, ...lists) {
+  let same = true;
+  let at = 0;
+  for (const list of lists) {
+    for (let index = 0; index < list.length; index += 1, at += 1) {
+      if (seen[at] !== list[index]) { seen[at] = list[index]; same = false; }
+    }
+  }
+  return same;
+}
+
 /**
  * A ring in screen space round each place the chosen finding names (`targets`: `ringTargets`, in
  * the result mesh's space), drawn over the view on a canvas that takes no pointer. A frame loop
@@ -19,7 +31,8 @@ export default function FindingRings({ runtimeRef, hostRef, mesh, targets, sever
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
     let frameId = 0;
-    let painted = "";
+    const painted = [];
+    let paintedTone = null;
     let paintedTargets = null;
     const paint = () => {
       frameId = window.requestAnimationFrame(paint);
@@ -32,10 +45,10 @@ export default function FindingRings({ runtimeRef, hostRef, mesh, targets, sever
       const dpr = window.devicePixelRatio || 1;
       runtime.camera.updateMatrixWorld();
       shownMesh.updateWorldMatrix(true, false);
-      const key = [width, height, dpr, tone, shownScale, runtime.camera.zoom, runtime.camera.matrixWorld.elements.join(),
-        runtime.camera.projectionMatrix.elements.join(), shownMesh.matrixWorld.elements.join()].join("|");
-      if (key === painted && paintedTargets === shownTargets) return;
-      painted = key;
+      const same = unchanged(painted, [width, height, dpr, shownScale, runtime.camera.zoom], runtime.camera.matrixWorld.elements,
+        runtime.camera.projectionMatrix.elements, shownMesh.matrixWorld.elements);
+      if (same && tone === paintedTone && paintedTargets === shownTargets) return;
+      paintedTone = tone;
       paintedTargets = shownTargets;
       if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
         canvas.width = Math.round(width * dpr);
