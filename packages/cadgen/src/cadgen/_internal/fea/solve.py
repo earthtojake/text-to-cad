@@ -130,6 +130,13 @@ def _rigid_body_modes(locations: "np.ndarray", component: "np.ndarray") -> "np.n
     return B
 
 
+def dof_warning(dofs: int, automatic: bool) -> str:
+    """The slow-solve warning; the automatic finer re-solve chose its own size, so it never blames the person's."""
+    if automatic:
+        return f"the automatic finer check used {dofs} degrees of freedom, so this study took longer"
+    return f"{dofs} degrees of freedom: expect a slow solve; a larger mesh.size_mm is usually enough"
+
+
 def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: "np.ndarray", warnings: list[str]):
     """Displacement on the free DOF: direct for small systems, AMG+CG otherwise."""
     import scipy.sparse.linalg as spla
@@ -162,8 +169,12 @@ def solve_linear_static(
     ordinal_of: dict[str, int],
     *,
     log=None,
+    automatic: bool = False,
 ) -> SolveOutcome:
-    """Solve one study on a meshed occurrence. ``ordinal_of`` maps face refs to ordinals."""
+    """Solve one study on a meshed occurrence. ``ordinal_of`` maps face refs to ordinals.
+
+    ``automatic`` marks the re-solve cadgen chose the size of, which words its warnings accordingly.
+    """
     import numpy as np
     from skfem import Basis, ElementTetP2, ElementVector, LinearForm, asm
     from skfem.models.elasticity import lame_parameters, linear_elasticity
@@ -184,7 +195,7 @@ def solve_linear_static(
             f"(now {volume.max_h:.3g} mm) and run again"
         )
     if basis.N > DOF_WARN:
-        warnings.append(f"{basis.N} degrees of freedom: expect a slow solve; a larger mesh.size_mm is usually enough")
+        warnings.append(dof_warning(basis.N, automatic))
 
     # DOF bookkeeping: skfem numbers scalar DOF vertices first, then edges.
     if not (np.array_equal(scalar.nodal_dofs[0], np.arange(vertices))

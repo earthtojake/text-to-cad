@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-__all__ = ["CONVERGED_WITHIN", "GAUSS_RATIO", "LARGE_DISPLACEMENT", "RESOLVE_BELOW", "Solved", "findings", "needs_finer", "safety_factor"]
+__all__ = ["CONVERGED_WITHIN", "GAUSS_RATIO", "LARGE_DISPLACEMENT", "RESOLVE_BELOW", "Solved", "findings", "needs_finer", "safety_factor", "safety_factor_text"]
 
 #: Re-solve finer only when the safety factor is this close to failing.
 RESOLVE_BELOW = 3.0
@@ -34,7 +34,8 @@ class Solved:
     #: Peak von Mises stress at the Gauss points, before smoothing.
     peak_gauss_MPa: float
     peak_at: tuple[float, float, float]
-    #: The ``#o1.fN`` face the peak sits on, when it sits on one.
+    #: The ``#o1.fN`` face the peak sits on, when it sits on one; the fixed face
+    #: when the peak touches one or lies within half an element of its edge.
     peak_face: str | None
     fixed_faces: tuple[str, ...]
     max_displacement_mm: float
@@ -56,6 +57,16 @@ def safety_factor(solved: Solved) -> float | None:
 def needs_finer(safety_factor: float | None) -> bool:
     """Whether the safety factor is close enough to failing to justify a finer solve."""
     return safety_factor is not None and safety_factor < RESOLVE_BELOW
+
+
+def safety_factor_text(factor: float) -> str:
+    """A safety factor as a person reads it: floored to one decimal under 10, to a whole number from 10.
+
+    Floored, never rounded, so a factor just under a threshold never reads as reaching it.
+    """
+    if factor >= 10:
+        return str(math.floor(factor + 1e-9))
+    return f"{math.floor(factor * 10 + 1e-9) / 10:.1f}"
 
 
 def _number(value: float, extra: int = 0) -> str:
@@ -103,18 +114,25 @@ def findings(solved: Solved) -> list[dict]:
             [],
         )
 
+    # A finer solve that agreed with the first resolved the peak: it is not a singularity.
+    moved = None
+    if solved.coarser_peak_MPa is not None and solved.coarser_peak_MPa > 0:
+        moved = abs(solved.peak_MPa - solved.coarser_peak_MPa) / solved.coarser_peak_MPa
+    resolved = moved is not None and moved <= CONVERGED_WITHIN
+    rising = moved is not None and moved > CONVERGED_WITHIN and solved.peak_MPa > solved.coarser_peak_MPa
+
     # Peak findings matter only while the part is short of its margin.
     on_fixture = solved.peak_face in solved.fixed_faces
     spike = solved.peak_gauss_MPa > GAUSS_RATIO * solved.peak_MPa
     qualifier = ""
     peak_finding = None
-    if factor is not None and factor < solved.margin and (on_fixture or spike):
+    if factor is not None and factor < solved.margin and not resolved and (on_fixture or spike):
         if on_fixture:
             qualifier = " (the peak sits at the fixed face)"
             peak_finding = (
                 "peak_at_fixture",
-                "The peak sits where the part is held, where the model can exaggerate it: "
-                "check the stress a little away from the fixed face before redesigning",
+                "Check the stress a little away from the fixed face before redesigning: "
+                "the model exaggerates peaks where a part is held",
                 f"nodal peak {_number(solved.peak_MPa)} MPa, Gauss-point peak {_number(solved.peak_gauss_MPa)} MPa",
                 [peak],
             )
@@ -127,6 +145,9 @@ def findings(solved: Solved) -> list[dict]:
                 f"nodal peak {_number(solved.peak_MPa)} MPa, Gauss-point peak {_number(solved.peak_gauss_MPa)} MPa",
                 [peak],
             )
+    if rising:
+        # One clause is enough: a peak that kept rising is the mesh's, wherever it sits.
+        qualifier = ", but this peak kept rising on a finer mesh, so the real stress is likely lower"
 
     if factor is not None and factor < 1:
         shown_peak, shown_yield = _distinct(peak_MPa, solved.yield_MPa)
@@ -135,37 +156,34 @@ def findings(solved: Solved) -> list[dict]:
             "yields",
             f"The {solved.part} yields: peak stress {shown_peak} MPa is above "
             f"{solved.material_name}'s {shown_yield} MPa yield strength{qualifier}",
-            f"safety factor {factor:.2f}",
+            f"safety factor {safety_factor_text(factor)}",
             [peak],
         )
     elif factor is not None and factor < solved.margin:
-        floored = math.floor(factor * 10 + 1e-9) / 10  # never reads as equal to the margin
         add(
             "warning",
             "low_margin",
-            f"It holds, but only {floored:.1f}× the load: under the {solved.margin:g}× margin{qualifier}",
-            f"safety factor {factor:.2f}, margin {solved.margin:g}",
+            f"It holds, but only {safety_factor_text(factor)}× the load: under the {solved.margin:g}× margin{qualifier}",
+            f"safety factor {safety_factor_text(factor)}, margin {solved.margin:g}",
             [peak],
         )
 
     if peak_finding is not None:
         add("warning", *peak_finding)
 
-    if solved.coarser_peak_MPa is not None and solved.coarser_peak_MPa > 0:
-        moved = abs(solved.peak_MPa - solved.coarser_peak_MPa) / solved.coarser_peak_MPa
-        if moved > CONVERGED_WITHIN:
-            before, after = _number(solved.coarser_peak_MPa), _number(solved.peak_MPa)
-            if solved.peak_MPa > solved.coarser_peak_MPa:
-                summary = (
-                    f"The peak kept rising on a finer mesh ({before} to {after} MPa), which usually means "
-                    "a sharp corner or the fixed edge: fillet it or judge the stress a little away from it"
-                )
-            else:
-                summary = (
-                    f"The peak changed {moved:.0%} on a finer mesh ({before} to {after} MPa): "
-                    "use a smaller mesh size (mesh.size_mm) before trusting the safety factor"
-                )
-            add("warning", "mesh_not_converged", summary, f"half the mesh size moved the nodal peak {moved:.1%}", [peak])
+    if moved is not None and moved > CONVERGED_WITHIN:
+        before, after = _number(solved.coarser_peak_MPa), _number(solved.peak_MPa)
+        if rising:
+            summary = (
+                f"The peak kept rising on a finer mesh ({before} to {after} MPa), which usually means "
+                "a sharp corner or the fixed edge: fillet it or judge the stress a little away from it"
+            )
+        else:
+            summary = (
+                f"The peak changed {moved:.0%} on a finer mesh ({before} to {after} MPa): "
+                "use a smaller mesh size (mesh.size_mm) before trusting the safety factor"
+            )
+        add("warning", "mesh_not_converged", summary, f"half the mesh size moved the nodal peak {moved:.1%}", [peak])
 
     if solved.bbox_diagonal_mm > 0 and solved.max_displacement_mm > LARGE_DISPLACEMENT * solved.bbox_diagonal_mm:
         share = solved.max_displacement_mm / solved.bbox_diagonal_mm

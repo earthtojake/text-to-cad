@@ -106,15 +106,32 @@ def list_faces(target: Path, *, occurrence: str | None = None, verbose: bool = F
 
 
 def _peak_face(volume, outcome, peak_node: int, fixed_ordinals: set[int]) -> str | None:
-    """The ``#o1.fN`` face whose boundary triangles hold the peak node, or ``None``
-    inside the part. A node on an edge touches two faces; a fixed one wins, since
-    a peak on the fixture's edge is a peak at the fixture."""
+    """The ``#o1.fN`` face the peak sits on, or ``None`` inside the part and away from every fixed face.
+
+    The peak is at a fixture, and names that fixed face, when its node touches a
+    fixed face (a node on an edge touches two) or lies within half an element
+    of a fixed face's boundary nodes: a peak on a clamp's rim is a peak at the
+    clamp, whichever face the mesher gave the rim node. Otherwise the face
+    whose boundary triangles hold the node."""
+    import numpy as np
+
     rows = (outcome.boundary_quadratic == peak_node).any(axis=1)
     ordinals = sorted({int(o) for o in volume.boundary_ordinal[rows]} - {0})
-    if not ordinals:
-        return None
-    fixed = [ordinal for ordinal in ordinals if ordinal in fixed_ordinals]
-    return volume.faces[(fixed or ordinals)[0]].ref
+    touched = [ordinal for ordinal in ordinals if ordinal in fixed_ordinals]
+    if touched:
+        return volume.faces[touched[0]].ref
+    here = outcome.dof_locations[peak_node]
+    nearest: tuple[float, int] | None = None
+    for ordinal in sorted(fixed_ordinals):
+        nodes = np.unique(outcome.boundary_quadratic[volume.boundary_ordinal == ordinal])
+        if len(nodes) == 0:
+            continue
+        gap = float(np.linalg.norm(outcome.dof_locations[nodes] - here, axis=1).min())
+        if gap <= 0.5 * volume.max_h and (nearest is None or gap < nearest[0]):
+            nearest = (gap, ordinal)
+    if nearest is not None:
+        return volume.faces[nearest[1]].ref
+    return volume.faces[ordinals[0]].ref if ordinals else None
 
 
 def _solved(volume, outcome, parsed, ordinal_of: dict[str, int], part: str) -> "Solved":
@@ -219,11 +236,11 @@ def solve_study(
     from cadgen._internal.fea import solve
     from cadgen._internal.fea.outputs import RAMP, auto_deformation_scale, write_glb, write_vtu
 
-    def mesh_and_solve(max_h: float | None):
+    def mesh_and_solve(max_h: float | None, automatic: bool = False):
         logger.debug(f"meshing {occurrence.ref}")
         volume = mesh_occurrence(occurrence, max_h=max_h)
         logger.debug(f"meshed: {len(volume.tets)} tets, {len(volume.nodes)} nodes, size {volume.max_h:.3g} mm in {volume.seconds:.1f}s")
-        outcome = solve.solve_linear_static(volume, parsed.material, parsed.fixtures, parsed.loads, ordinal_of, log=logger.debug)
+        outcome = solve.solve_linear_static(volume, parsed.material, parsed.fixtures, parsed.loads, ordinal_of, log=logger.debug, automatic=automatic)
         return volume, outcome
 
     volume, outcome = mesh_and_solve(mesh_size or parsed.mesh_size)
@@ -247,7 +264,8 @@ def solve_study(
         }
         logger.debug(f"safety factor under {checks.RESOLVE_BELOW:g}: solving again at {finer_size:.3g} mm")
         try:
-            volume, outcome = mesh_and_solve(finer_size)
+            first_outcome = outcome
+            volume, outcome = mesh_and_solve(finer_size, automatic=True)
         except Exception as exc:  # a finer solve is a second opinion; the first answer stands without it
             finer_failure = (
                 f"the finer solve at {refined['size_mm']:g} mm failed ({exc}); "
@@ -260,6 +278,8 @@ def solve_study(
             finer = _solved(volume, outcome, parsed, ordinal_of, document.stem)
             refined["max_von_mises_MPa"] = round(finer.peak_MPa, 4)
             solved = dataclasses.replace(finer, coarser_peak_MPa=solved.peak_MPa)
+            if first_outcome.dofs > solve.DOF_WARN:  # the person's own size was already large
+                outcome.warnings.insert(0, solve.dof_warning(first_outcome.dofs, automatic=False))
     findings = checks.findings(solved)
 
     # The summary is the one place the numbers are rounded; everything else

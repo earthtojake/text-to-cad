@@ -385,13 +385,15 @@ class FeaResult:
     findings: tuple[dict, ...] = ()
 
     def human_lines(self) -> list[str]:
+        from cadgen._internal.fea.checks import safety_factor_text  # stdlib only; kept out of module import time
+
         s = self.summary
         safety = s.get("safety_factor")
         lines = [
             f"solved {self.occurrence} of {_display(self.document)}: {self.mesh.get('elements')} tets, "
             f"{self.mesh.get('dofs')} DOF, {self.mesh.get('size_mm')} mm elements",
             f"max von Mises {s.get('max_von_mises_MPa')} MPa (Gauss {s.get('max_von_mises_gauss_MPa')} MPa), "
-            f"yield {s.get('yield_MPa')} MPa, safety factor {'n/a' if safety is None else safety}",
+            f"yield {s.get('yield_MPa')} MPa, safety factor {'n/a' if safety is None else safety_factor_text(safety)}",
             f"max displacement {s.get('max_displacement_mm')} mm at {s.get('max_displacement_at_mm')}",
             f"applied {s.get('applied_force_N')} N, reactions {s.get('reaction_force_N')} N",
             f"wrote GLB: {_display(self.glb)} (deformation x{s.get('deformation_scale')}), sidecar: {_display(self.sidecar)}"

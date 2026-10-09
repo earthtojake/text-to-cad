@@ -537,10 +537,14 @@ class PeakFace(unittest.TestCase):
         volume = SimpleNamespace(
             boundary_ordinal=np.array([1, 1, 2]),
             faces={ordinal: SimpleNamespace(ref=f"#o1.f{ordinal}") for ordinal in (1, 2)},
+            max_h=1.0,
         )
-        outcome = SimpleNamespace(boundary_quadratic=np.array([
-            [0, 1, 2, 10, 11, 12], [1, 3, 2, 13, 14, 11], [2, 4, 5, 15, 16, 17],
-        ]))
+        outcome = SimpleNamespace(
+            boundary_quadratic=np.array([
+                [0, 1, 2, 10, 11, 12], [1, 3, 2, 13, 14, 11], [2, 4, 5, 15, 16, 17],
+            ]),
+            dof_locations=np.arange(60, dtype=float).reshape(20, 3) * 10.0,
+        )
         return _peak_face(volume, outcome, peak_node, fixed)
 
     def test_an_interior_peak_has_no_face(self):
@@ -552,6 +556,61 @@ class PeakFace(unittest.TestCase):
     def test_a_peak_on_an_edge_names_the_fixed_face(self):
         self.assertEqual(self._peak_face(2, {2}), "#o1.f2")
         self.assertEqual(self._peak_face(2, set()), "#o1.f1")
+
+    def _near_miss(self, distance: float):
+        """A peak node on free face f2, ``distance`` mm (elements of 1 mm) from fixed face f1's nodes."""
+        from types import SimpleNamespace
+
+        import numpy as np
+
+        from cadgen._internal.fea.run import _peak_face
+
+        volume = SimpleNamespace(
+            boundary_ordinal=np.array([1, 2]),
+            faces={ordinal: SimpleNamespace(ref=f"#o1.f{ordinal}") for ordinal in (1, 2)},
+            max_h=1.0,
+        )
+        outcome = SimpleNamespace(
+            boundary_quadratic=np.array([[0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11]]),
+            dof_locations=np.zeros((12, 3)),
+        )
+        outcome.dof_locations[6] = (distance, 0.0, 0.0)  # the peak node; fixed face's nodes sit at the origin
+        return _peak_face(volume, outcome, 6, {1})
+
+    def test_a_peak_within_half_an_element_of_a_fixed_face_is_at_it(self):
+        self.assertEqual(self._near_miss(0.4), "#o1.f1")
+
+    def test_a_peak_two_elements_from_a_fixed_face_is_on_its_own_face(self):
+        self.assertEqual(self._near_miss(2.0), "#o1.f2")
+
+
+class DofWarning(unittest.TestCase):
+    def test_the_automatic_resolve_does_not_blame_the_mesh_size(self):
+        from cadgen._internal.fea.solve import dof_warning
+
+        text = dof_warning(620922, automatic=True)
+        self.assertEqual(text, "the automatic finer check used 620922 degrees of freedom, so this study took longer")
+        self.assertNotIn("mesh.size_mm", text)
+
+    def test_a_large_first_solve_keeps_the_advice(self):
+        from cadgen._internal.fea.solve import dof_warning
+
+        self.assertEqual(
+            dof_warning(500000, automatic=False),
+            "500000 degrees of freedom: expect a slow solve; a larger mesh.size_mm is usually enough",
+        )
+
+
+class HumanLine(unittest.TestCase):
+    def test_the_cli_line_floors_the_safety_factor_like_the_findings(self):
+        from cadgen.results import FeaResult
+
+        result = FeaResult(
+            ok=True, document=Path("p.step"), occurrence="#o1", glb=Path("p.glb"), sidecar=Path("p.json"),
+            summary={"safety_factor": 1.684}, mesh={},
+        )
+        self.assertIn("safety factor 1.6", result.human_lines()[1])
+        self.assertNotIn("1.684", result.human_lines()[1])
 
 
 class MissingExtra(unittest.TestCase):
