@@ -49,6 +49,9 @@ SECTION_SCHEME = "cadgen-brep-section-v2"
 # one entry, and the cut is made with exactly the plane the key names.
 _NORMAL_DECIMALS = 12
 _OFFSET_DECIMALS = 9
+# A normal whose rounded length is this close to 1 is already a unit normal.
+# Rounding to 12 places moves a unit vector's length by about 1e-12, far inside it.
+_UNIT_TOLERANCE = 1e-9
 # The geometry fields a component entry carries in a tree (``validate_geometry_component``).
 _COMPONENT_FIELDS = frozenset({"kind", "codec", "brep", "faceColors", "contentHash", "color", "eagerSurface"})
 
@@ -63,13 +66,24 @@ def _rounded(value: float, decimals: int) -> float:
 
 
 def canonical_plane(normal, offset) -> tuple[tuple[float, float, float], float]:
-    """``(unit normal, offset)`` rounded to the precision every key and cut uses."""
+    """``(unit normal, offset)`` rounded to the precision every key and cut uses.
+
+    Idempotent, exactly: a request's items are canonical when the client keys
+    them and are canonicalized again where they are checked, and the two must
+    name the same plane bit for bit. So a normal is divided by its length only
+    when its rounded form is not already a unit normal -- dividing a rounded
+    normal by its length (1 +- 1e-12) again would move a 1.5 m offset by 1e-9
+    every time -- and what is left is rounding, which rounding does not change.
+    """
     values = [float(component) for component in normal]
     if len(values) != 3 or not all(math.isfinite(value) for value in values):
         raise ValueError("a section plane's normal is three finite numbers")
     length = math.sqrt(sum(value * value for value in values))
     if not length > 1e-12 or not math.isfinite(float(offset)):
         raise ValueError("a section plane needs a nonzero normal and a finite offset")
+    unit = tuple(_rounded(value, _NORMAL_DECIMALS) for value in values)
+    if abs(math.sqrt(sum(value * value for value in unit)) - 1.0) <= _UNIT_TOLERANCE:
+        return unit, _rounded(float(offset), _OFFSET_DECIMALS)
     unit = tuple(_rounded(value / length, _NORMAL_DECIMALS) for value in values)
     return unit, _rounded(float(offset) / length, _OFFSET_DECIMALS)
 

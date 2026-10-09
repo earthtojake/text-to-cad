@@ -208,11 +208,15 @@ def _sheet_cut(sheets, normal, offset: float, deflection: float, diagonal: float
 def section_loops(shape, *, normal: tuple[float, float, float], offset: float) -> dict[str, Any]:
     """The loops the plane ``normal . p == offset`` cuts from ``shape``'s material.
 
-    ``normal`` is a unit vector in the shape's own coordinates. An empty result
+    ``normal`` is in the shape's own coordinates; a canonical one
+    (``cadgen.store.sections.canonical_plane``) is a unit vector to within
+    1e-9, and the plane is scaled to an exact one here. An empty result
     (``{"loops": []}``) is a true answer: the plane cuts no material.
     """
     from OCP.TopAbs import TopAbs_FACE, TopAbs_SOLID
 
+    length = math.sqrt(sum(component * component for component in normal))
+    normal, offset = tuple(component / length for component in normal), offset / length
     box = _box(shape)
     if box is None:
         return {"loops": []}
