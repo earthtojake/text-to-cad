@@ -11,7 +11,8 @@ caller) of this shape::
         {"faces": ["#o1.f3"], "type": "pressure", "pressure_MPa": 0.5}
       ],
       "mesh": {"size_mm": 2.5},                  # optional; default from the bounding box
-      "output": {"deformation_scale": "auto"}    # optional; a number, or "auto"
+      "output": {"deformation_scale": "auto"},   # optional; a number, or "auto"
+      "margin": 2.0                              # optional; the safety factor the part should keep
     }
 
 Face references are the viewer's own selectors (``#o1.f17``, or with the
@@ -63,6 +64,8 @@ class Study:
     mesh_size: float | None = None
     #: A multiplier on the displacement baked into the GLB, or ``None`` for auto.
     deformation_scale: float | None = None
+    #: The safety factor the part should keep above yield; below it is a warning.
+    margin: float = 2.0
     #: The raw document, echoed into the sidecar so a result names its inputs.
     source: dict = field(default_factory=dict, compare=False)
 
@@ -148,9 +151,9 @@ def parse_study(study: str | dict | Path | None) -> Study:
             "the fixed faces and the loads; run `cadgen fea faces IN.step` to list face refs"
         )
     document = _load_document(study)
-    unknown = set(document) - {"material", "fixtures", "loads", "mesh", "output"}
+    unknown = set(document) - {"material", "fixtures", "loads", "mesh", "output", "margin"}
     if unknown:
-        raise ValueError(f"study: unknown keys {sorted(unknown)}; expected material, fixtures, loads, mesh, output")
+        raise ValueError(f"study: unknown keys {sorted(unknown)}; expected material, fixtures, loads, mesh, output, margin")
     if "material" not in document:
         raise ValueError("study: 'material' is required (a table name or {E_MPa, nu, yield_MPa})")
     material = _material(document["material"])
@@ -208,4 +211,6 @@ def parse_study(study: str | dict | Path | None) -> Study:
     scale_in = output.get("deformation_scale", "auto")
     deformation_scale = None if scale_in in (None, "auto") else _number(scale_in, where="output.deformation_scale")
 
-    return Study(material, tuple(fixtures), tuple(loads), mesh_size, deformation_scale, document)
+    margin = _number(document.get("margin", 2.0), where="margin", positive=True)
+
+    return Study(material, tuple(fixtures), tuple(loads), mesh_size, deformation_scale, margin, document)
