@@ -17,8 +17,9 @@ and how:
              carries the cord's shape and motion and a smooth surface.
 
 ``start`` and ``seconds`` cut every track to one window: the keys inside it, and
-one at each end that the track's interpolation puts there; a looping clip repeats
-its keys to fill the window. Times are re-based to zero, so the file opens on its
+one at each end -- the key there, as written, when the end falls on one, else what
+the track's interpolation puts there; a looping clip repeats its keys to fill the
+window. Times are re-based to zero, so the file opens on its
 window's first moment, and each node's own transform is its pose there.
 
 Pure: no filesystem, no kernel. A clip's tracks name document occurrence ids, the
@@ -109,14 +110,19 @@ def resolve_window(request: Mapping[str, Any], clip: Mapping[str, Any]) -> Windo
 def windowed(times: Sequence[float], values: Sequence[Any], window: Window,
              mix: Callable[[Any, Any, float, float], Any]) -> tuple[list[float], list[Any]]:
     """A track's keys over ``window``, re-based to zero: a looping clip's keys
-    repeated, the keys inside the window, and one at each edge that ``mix`` (the
-    track's interpolation, given two keys, the fraction between them and their span
-    in seconds) puts there."""
+    repeated, the keys inside the window, and one at each edge -- the key there as
+    written, or what ``mix`` (the track's interpolation, given two keys, the fraction
+    between them and their span in seconds) puts between two."""
     duration, loop = window.duration, window.loop
     first, last = window.start, window.start + window.seconds
 
     def at(local: float) -> Any:
         k = bisect.bisect_right(times, local) - 1
+        # A moment on a key is that key as written, its tangents too: drawn through
+        # ``mix``, a transform key's rate would lose the part the sidecar's curve uses.
+        for near in (k, k + 1):
+            if 0 <= near < len(times) and abs(times[near] - local) <= TIME_EPSILON:
+                return values[near]
         if k < 0:
             return values[0]
         if k >= len(times) - 1:

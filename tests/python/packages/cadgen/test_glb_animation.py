@@ -27,11 +27,13 @@ add_repo_path("packages/cadgen/src")
 import numpy as np  # noqa: E402
 
 from cadgen._internal import tube_skin, tube_skin_payload  # noqa: E402
+from cadgen._internal.animation_bake import LENGTH_FLOOR, _apply_point, _pose_at  # noqa: E402
 from cadgen._internal.glb_animation import (  # noqa: E402
     _transform_mix,
     Window,
     clip_to_gltf,
     find_clip,
+    gltf_point,
     resolve_window,
     restrict_to_nodes,
     windowed,
@@ -279,6 +281,51 @@ def _matrix(translation, rotation) -> np.ndarray:
     return m
 
 
+def _at(gltf: dict, binary: bytes, sampler: dict, t: float) -> np.ndarray:
+    """A sampler's value at ``t`` as a glTF player draws it: CUBICSPLINE the cubic
+    Hermite curve through each key's value and tangents, LINEAR read at its keys; a
+    rotation normalized."""
+    times = _array(gltf, binary, sampler["input"])[:, 0].astype(np.float64)
+    output = _array(gltf, binary, sampler["output"]).astype(np.float64)
+    k = min(max(int(np.searchsorted(times, t, side="right")) - 1, 0), len(times) - 2)
+    span = times[k + 1] - times[k]
+    u = (t - times[k]) / span
+    if sampler["interpolation"] == "CUBICSPLINE":
+        keys = output.reshape(len(times), 3, -1)  # in-tangent, value, out-tangent
+        value = ((2 * u ** 3 - 3 * u ** 2 + 1) * keys[k, 1] + span * (u ** 3 - 2 * u ** 2 + u) * keys[k, 2]
+                 + (3 * u ** 2 - 2 * u ** 3) * keys[k + 1, 1] + span * (u ** 3 - u ** 2) * keys[k + 1, 0])
+    else:
+        assert u in (0.0, 1.0), "a LINEAR sampler is read at its keys here"
+        value = output[k + int(u)]
+    return value / np.linalg.norm(value) if len(value) == 4 else value
+
+
+def _worlds(gltf: dict, binary: bytes, t: float) -> list[np.ndarray]:
+    """Every node's world matrix at ``t`` of the file's clip."""
+    (clip,) = gltf["animations"]
+    posed: dict[int, dict] = {}
+    for channel in clip["channels"]:
+        posed.setdefault(channel["target"]["node"], {})[channel["target"]["path"]] = _at(
+            gltf, binary, clip["samplers"][channel["sampler"]], t)
+    parents = {child: index for index, node in enumerate(gltf["nodes"]) for child in node.get("children", [])}
+    worlds: dict[int, np.ndarray] = {}
+
+    def world(index: int) -> np.ndarray:
+        if index not in worlds:
+            node, pose = gltf["nodes"][index], posed.get(index, {})
+            local = _matrix(pose.get("translation", node.get("translation", [0.0, 0.0, 0.0])),
+                            pose.get("rotation", node.get("rotation", [0.0, 0.0, 0.0, 1.0])))
+            worlds[index] = world(parents[index]) @ local if index in parents else local
+        return worlds[index]
+
+    return [world(index) for index in range(len(gltf["nodes"]))]
+
+
+def _cad(points: np.ndarray) -> np.ndarray:
+    """glTF Y-up metres back to the document's Z-up millimetres."""
+    return np.column_stack([points[:, 0], -points[:, 2], points[:, 1]]) * 1000.0
+
+
 class ARealDocumentPlaysItsClip(unittest.TestCase):
     """The door end to end: a built document's clip, through the store's meshes, into a GLB."""
 
@@ -323,6 +370,27 @@ class ARealDocumentPlaysItsClip(unittest.TestCase):
             # its in-tangent, value and out-tangent.
             np.testing.assert_allclose([0.0, SQRT_HALF, 0.0, SQRT_HALF],
                                        np.abs(_array(gltf, binary, sampler["output"])[-2]), atol=1e-4)
+
+            # The pivot plays the sidecar's own keys, the window's edge keys with the
+            # tangents written for them: inside the first and the last segment the
+            # lever's far end sits where those keys' curve puts it.
+            sidecar = json.loads((root / "arm.step.json").read_text(encoding="utf-8"))
+            (track,) = find_clip(sidecar["animation"], "turn")["tracks"]
+            times, keys, pivot = track["times"], track["transform"], track["pivot"]
+            off = 0.0
+            for k in sorted({0, len(times) - 2}):
+                span = times[k + 1] - times[k]
+                for u in (0.25, 0.5, 0.75):
+                    d, r = _pose_at(keys[k], keys[k + 1], span, u)
+                    lever = _worlds(gltf, binary, times[k] + u * span)[names["lever"]]
+                    for corner in ((20.0, -1.0, 4.0), (20.0, 1.0, 2.0)):
+                        drawn = _cad((lever @ [*gltf_point(corner), 1.0])[None, :3])[0]
+                        keyed = _apply_point(r, [pivot[n] + d[n] for n in range(3)],
+                                             [corner[n] - pivot[n] for n in range(3)])
+                        off = max(off, math.dist(drawn, keyed))
+            # Bounded by the rounding the keys are written at: re-deriving the first key's
+            # tangent missed by 2.4e-3 mm here, inside this model's bake tolerance.
+            self.assertLess(off, LENGTH_FLOOR, "the GLB's pivot leaves the curve the sidecar's keys describe")
 
             # The cord bends as a skin: its node names the skin, its primitives are bound
             # to the joints, and the joints' keys drive it.
