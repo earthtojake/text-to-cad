@@ -7,6 +7,10 @@ import { InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
 import ToolPanel, { ToolPanelClose, ToolPanelFooterButton } from "../kit/tools/ToolPanel.jsx";
 import { deformationRange, formatValue } from "./feaResult.js";
 
+// The fields in plain words, short enough for the panel's one width; the file's own names (von
+// Mises stress) are the colour bar's.
+const FIELD_WORDS = Object.freeze({ _von_mises: "Stress", _displacement: "Displacement" });
+
 /**
  * Which field the colours show and how much larger than life the displacement is drawn: Study's
  * Result. The file carries every field and the true displacement (feaResult.js), so both are
@@ -24,7 +28,7 @@ function FeaResultControls({ result, field, scale, onFieldChange, onScaleChange 
           ariaLabel="Result field"
           value={field.attribute}
           onValueChange={onFieldChange}
-          options={result.fields.map((entry) => ({ value: entry.attribute, label: entry.name }))}
+          options={result.fields.map((entry) => ({ value: entry.attribute, label: FIELD_WORDS[entry.attribute] || entry.name }))}
         />
       </FileSheetFieldGrid>
       <FileSheetSliderField
@@ -60,12 +64,26 @@ function RowText({ row }) {
 }
 
 /**
+ * A row that only says something (Material, Mesh): its detail wraps between words onto further
+ * lines, as a Reference's values do, so nothing of it is cut off at the panel's one width.
+ */
+function StudyFactRow({ row }) {
+  return <li className="min-w-0">
+    <TreeRowSurface dense className="h-auto min-h-6 items-baseline gap-1.5 py-1 pl-4" style={{ height: "auto" }} data-study-row={row.id}>
+      <span className="shrink-0">{row.label}</span>
+      <span className="min-w-0 flex-1 text-micro text-muted-foreground [overflow-wrap:break-word]" data-study-detail="">{row.detail}</span>
+    </TreeRowSurface>
+  </li>;
+}
+
+/**
  * One of Study's rows, the Links tree's: a 16px disclosure column, then its name and detail. A row
  * that stands for faces (a fixed face, a load, a load's face) is a button that chooses them; a
  * group (Fixed, Loads, Result) only opens and closes. `content`: what an open row shows in place
  * of child rows (Result's controls).
  */
 function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, content = null }) {
+  if (!row.faces && !row.children && !content) return <StudyFactRow row={row} />;
   const branch = Boolean(row.children?.length || content);
   const open = branch && !collapsed.has(row.id);
   const active = chosen === row.id;

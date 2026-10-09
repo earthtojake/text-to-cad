@@ -250,6 +250,14 @@ describe('a result\'s study', () => {
     expect(faceRole(result, '#o1.f9')).toBe('free');
   });
 
+  it('names a face both fixed and loaded for both, in either row', () => {
+    const { result } = studyResult({ study: { ...STUDY, loads: [{ type: 'force', faces: ['#o1.f1'], vector_N: [0, 0, -2500] }] }, faces: ['#o1.f1'] });
+    const rows = studyRows(result);
+    expect(rows[1].children[0].summary).toBe('Fixed and loaded face 1');
+    expect(rows[2].children[0].children[0].summary).toBe('Fixed and loaded face 1');
+    expect(rows[2].children[0].summary).toBe('2500 N load on face 1');
+  });
+
   it('tints the chosen faces\' vertices over the field colours, and only those', () => {
     const { mesh, result } = studyResult();
     const stress = result.fields[0];
@@ -260,6 +268,12 @@ describe('a result\'s study', () => {
     // Vertex 3 is face index 1's; the other three keep their colours.
     expect(tinted.slice(0, 12)).toEqual(plain.slice(0, 12));
     expect(tinted.slice(12, 15)).not.toEqual(plain.slice(12, 15));
+    // Two thirds of the way to magenta: vertex 3's stress colour moves well over half way there.
+    const toward = [255, 64, 242];
+    for (let k = 0; k < 3; k += 1) {
+      const span = toward[k] - plain[12 + k];
+      if (Math.abs(span) > 20) expect((tinted[12 + k] - plain[12 + k]) / span).toBeGreaterThan(0.6);
+    }
     expect(recolorByField(mesh, stress, result.ramp, [1])).toBe(false);
     recolorByField(mesh, stress, result.ramp, null);
     expect(Array.from(mesh.geometry.getAttribute('color').array as Uint8Array)).toEqual(plain);

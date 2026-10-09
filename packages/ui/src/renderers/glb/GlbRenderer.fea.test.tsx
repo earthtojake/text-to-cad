@@ -91,7 +91,8 @@ it('puts the field and deformation in Study, under Select, and a colour bar with
   expect(bar.querySelectorAll('button, input, [role="slider"], [role="combobox"]').length).toBe(0);
   expect(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   const study = studyPanel()!;
-  expect(study.querySelector('[role="combobox"][aria-label="Result field"]')!.textContent).toContain('von Mises stress');
+  // The field in plain words: the file's own name is the colour bar's.
+  expect(study.querySelector('[role="combobox"][aria-label="Result field"]')!.textContent).toBe('Stress');
   expect(study.querySelector('[role="slider"][aria-label="Deformation scale"]')).toBeTruthy();
   // Display is the view's alone: no Analysis section, no second field select.
   openDisplay();
@@ -104,7 +105,7 @@ it('the field switch recolours the mesh and changes the bar\'s line', () => {
   const stress = colourBytes(mesh);
   expect(stress.slice(0, 4)).toEqual([13, 26, 230, 255]);
   act(() => { fireEvent.click(screen.getByRole('combobox', { name: 'Result field' })); });
-  act(() => { fireEvent.click(screen.getByRole('option', { name: 'displacement' })); });
+  act(() => { fireEvent.click(screen.getByRole('option', { name: 'Displacement' })); });
   expect(colourBytes(mesh)).not.toEqual(stress);
   const bar = container.querySelector('[role="group"][aria-label="displacement colour bar"]')!;
   expect(bar.querySelector('[data-fea-summary]')!.textContent).toBe('Moves up to 0.029 mm');
@@ -351,6 +352,19 @@ it('Study lists the material, the fixed faces, each load with its faces and the 
     'Mesh1.9 mm elements · refined from 2.8 mm', 'Result',
   ]);
   expect(study.querySelector('[role="combobox"][aria-label="Result field"]')).toBeTruthy();
+  // Material's and Mesh's details wrap rather than being cut off at the one width.
+  const details = Array.from(study.querySelectorAll('[data-study-detail]'));
+  expect(details.map(detail => detail.textContent)).toEqual(['6061-T6 · yield 276 MPa', '1.9 mm elements · refined from 2.8 mm']);
+  for (const detail of details) expect(detail.className).not.toMatch(/truncate|whitespace-nowrap/);
+  for (const detail of details) expect((detail.closest('[data-study-row]') as HTMLElement).style.height).toBe('auto');
+});
+
+it('a face both fixed and loaded is named for both, chosen from either row or picked', async () => {
+  const copied: string[] = [];
+  const both = { ...STUDY, loads: [{ type: 'force', faces: ['#o1.f1'], vector_N: [0, 0, -2500] }] };
+  mount({ ...STUDIED, study: both }, undefined, { faces: FACES, host: clipboardHost(copied) });
+  act(() => { fireEvent.click(screen.getAllByRole('button', { name: 'Select Face 1' })[0]); });
+  expect(await copiedPrompt(copied)).toBe('move it\n\nFile: /models/part.glb\nReferences:\nFixed and loaded face 1 · /models/part.step#o1.f1');
 });
 
 it('a result written before its study was recorded shows Study with the Result alone', () => {

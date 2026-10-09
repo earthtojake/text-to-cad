@@ -346,7 +346,8 @@ stack.
   a selection still shows its Reference, a panel of its own. While the tree is
   closed, Select's button carries the flyout corner: a small filled triangle in
   its bottom-right corner (the mode badge has the top-right), out of the
-  accessibility tree, with the button described as "Features closed". A press
+  accessibility tree, with the button described as its tree's name and "closed"
+  ("Features closed", "Links closed", "Study closed"). A press
   on Select while it is the tool opens the tree again as it was, and the mark
   goes; from another tool a press only takes Select up, the tree still closed.
   Until a person closes or opens it, the tree starts as the file does: closed
@@ -548,13 +549,17 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   "fixed"); **Loads**, one row per load ("2500 N", its direction in words: "down" and "up" are
   CAD Z, else "along +X" or the unit vector; or "2 MPa pressure"), its faces under it ("Face 22",
   "loaded"); **Mesh** ("1.9 mm elements · refined from 2.8 mm", or "not refined"); and
-  **Result**: a Field select (von Mises stress, displacement) and a Deformation slider with its
+  **Result**: a Field select in plain words (Stress, Displacement; the file's own name, von
+  Mises stress, is the colour bar's) and a Deformation slider with its
   committed number, from 0 to four times the file's own exaggeration. A result written before
-  its study was recorded has Result alone. A GLB that is not a result has no strip at all.
+  its study was recorded has Result alone. Nothing in Study is cut off at the one width: Material's
+  and Mesh's details wrap under their label's row onto a second line, as a Reference's values
+  wrap between words. A GLB that is not a result has no strip at all.
 - **Choosing faces.** A fixed face, a load or a load's face chosen in Study tints its triangles
-  (half way to magenta, which no colour of the ramp is, so the stress still reads) and carries
+  (two thirds of the way to magenta, which no colour of the ramp is, so it reads at either end
+  of the ramp while the stress still shows through) and carries
   them into Quick Edit by the STEP the result was solved from, with what they are: "Fixed face
-  17", "2500 N load on face 22". A press on the result under Select picks the face under the
+  17", "2500 N load on face 22", and a face that is both "Fixed and loaded face 17". A press on the result under Select picks the face under the
   pointer the same way, called what Study calls it ("Face 3" for a face the study does nothing
   to), and one face chosen shows the **Reference** under Study: headed "Face 17", its ref and
   what the study does to it ("fixed", "2500 N load, down", "free"), with **Copy** (the STEP's

@@ -14,7 +14,7 @@ import FindingRings from "./FindingRings.jsx";
 import FeaStudyPanel from "./FeaStudyPanel.jsx";
 import FeaColourBar from "./FeaColourBar.jsx";
 import {
-  applyDeformation, deformationRange, faceIndices, faceLabel, faceRole, findingSelector, pickFace, readFeaResult, recolorByField, resultSourcePath,
+  applyDeformation, deformationRange, faceIndices, faceLabel, facePromptSummary, faceRole, findingSelector, pickFace, readFeaResult, recolorByField, resultSourcePath,
   ringTargets, studyRows
 } from "./feaResult.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
@@ -31,7 +31,7 @@ const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidde
 // Select's own panel, Study, which a person can close; a result opens with it up, except on a phone.
 const STUDY_PANEL = Object.freeze({ id: "tree", label: "Study", startsClosed: false });
 
-/** Study's row for a face, where it has one (a fixed face, a loaded face), for what a pick of it is called. */
+/** Study's row for a face, where it has one (a fixed face, a loaded face), so a pick of it marks that row. */
 function faceRow(rows, ref) {
   for (const row of rows) {
     const found = row.faces?.length === 1 && row.faces[0] === ref && !row.children ? row : row.children ? faceRow(row.children, ref) : null;
@@ -96,8 +96,8 @@ function GlbSurface({ view, data }) {
   const pick = useCallback((hit) => {
     if (!hit) { clearChoice(); return; }
     const row = faceRow(rows, hit.ref);
-    chooseFaces({ id: row?.id || hit.ref, faces: [hit.ref], summary: row?.summary || faceLabel(hit.ref) });
-  }, [rows, chooseFaces, clearChoice]);
+    chooseFaces({ id: row?.id || hit.ref, faces: [hit.ref], summary: facePromptSummary(fea, hit.ref) });
+  }, [fea, rows, chooseFaces, clearChoice]);
   // The part the result was solved from, the file a choice's references name.
   const source = useMemo(() => (fea ? resultSourcePath(view.file.path, fea.document) : ""), [fea, view.file.path]);
   const references = useMemo(() => {

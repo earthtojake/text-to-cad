@@ -253,8 +253,10 @@ export function fieldValues(mesh, field) {
   return out;
 }
 
-// What a chosen face is tinted toward, half way: no colour of the ramp, so a tinted face still shows its stress.
+// What a chosen face is tinted toward: no colour of the ramp, two thirds of the way, so a chosen face
+// reads at the ramp's blue end and its red end alike while its stress still shows through.
 const HIGHLIGHT = Object.freeze([255, 64, 242]);
+const HIGHLIGHT_BLEND = 0.68;
 
 /** The face each vertex lies on (`_FACE`), or null for a result that does not say. */
 function vertexFaces(mesh) {
@@ -290,7 +292,7 @@ export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = nul
     const base = i * stride;
     const tint = tinted !== null && tinted.has(Math.round(faces[i]));
     for (let k = 0; k < 3; k += 1) {
-      bytes[base + k] = tint ? Math.round((table[entry + k] + HIGHLIGHT[k]) / 2) : table[entry + k];
+      bytes[base + k] = tint ? Math.round(table[entry + k] + (HIGHLIGHT[k] - table[entry + k]) * HIGHLIGHT_BLEND) : table[entry + k];
     }
     if (stride > 3) bytes[base + 3] = 255;
   }
@@ -438,6 +440,19 @@ function loadSummary(words, refs) {
 const capitalised = (word) => word.charAt(0).toUpperCase() + word.slice(1);
 
 /**
+ * What a prompt calls one face, by everything the study does to it: "Fixed face 17", "2500 N load
+ * on face 22", and for a face both fixed and loaded, "Fixed and loaded face 17". "" for a free face.
+ */
+function faceSummary(study, ref) {
+  const fixture = study.fixtures.find((entry) => entry.faces.includes(ref));
+  const loads = study.loads.filter((entry) => entry.faces.includes(ref));
+  if (fixture && loads.length) return `${capitalised(fixture.type)} and loaded ${facesWords([ref])}`;
+  if (fixture) return `${capitalised(fixture.type)} ${facesWords([ref])}`;
+  if (loads.length === 1) return loadSummary(loadWords(loads[0]), [ref]);
+  return loads.length ? `Loaded ${facesWords([ref])}` : "";
+}
+
+/**
  * Study's rows for a result's study, in order: the material, the fixed faces, the loads (each
  * with its faces under it) and the mesh. A row that stands for faces carries them (`faces`, the
  * file's refs) and what a prompt calls them (`summary`); a group row (`children`) carries none.
@@ -453,8 +468,7 @@ export function studyRows(result) {
     rows.push({ id: "material", label: "Material", detail: [material.name, yieldText].filter(Boolean).join(" · ") });
   }
   const fixed = study.fixtures.flatMap((fixture, index) => fixture.faces.map((ref) => ({
-    id: `fixed:${index}:${ref}`, label: faceLabel(ref), detail: fixture.type, faces: [ref],
-    summary: `${capitalised(fixture.type)} ${facesWords([ref])}`,
+    id: `fixed:${index}:${ref}`, label: faceLabel(ref), detail: fixture.type, faces: [ref], summary: faceSummary(study, ref),
   })));
   if (fixed.length) rows.push({ id: "fixed", label: "Fixed", detail: "", children: fixed });
   const loads = study.loads.filter((load) => load.faces.length).map((load, index) => {
@@ -462,7 +476,7 @@ export function studyRows(result) {
     return {
       id: `load:${index}`, label: words.amount, detail: words.direction, faces: load.faces, summary: loadSummary(words, load.faces),
       children: load.faces.map((ref) => ({ id: `load:${index}:${ref}`, label: faceLabel(ref), detail: "loaded", faces: [ref],
-        summary: loadSummary(words, [ref]) })),
+        summary: study.fixtures.some((fixture) => fixture.faces.includes(ref)) ? faceSummary(study, ref) : loadSummary(words, [ref]) })),
     };
   });
   if (loads.length) rows.push({ id: "loads", label: "Loads", detail: "", children: loads });
@@ -472,6 +486,11 @@ export function studyRows(result) {
     rows.push({ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements · ${refined}` });
   }
   return rows;
+}
+
+/** What a prompt calls a face, by what the study does to it; "Face 17" for a face it does nothing to. */
+export function facePromptSummary(result, ref) {
+  return (result.study && faceSummary(result.study, ref)) || faceLabel(ref);
 }
 
 /** What the study does to a face, in words: "fixed", "2500 N load, down", "2 MPa pressure", or "free". */

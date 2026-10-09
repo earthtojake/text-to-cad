@@ -370,16 +370,18 @@ STEP renderer does not match `.glb`.
   flag, or the grey a STEP export stamps on uncoloured parts) takes the viewer's
   surface colour in Inspect.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
-- **Tools**: none. The renderer hands the shell no tools of its own (`tools={[]}`), so
-  there is no tool strip: a GLB picks nothing, so there is no Select, no filter menu,
-  no copy-references action and no viewport context menu.
+- **Tools**: none, except an FEA result's Select (see `settings-ui.md`, An FEA result).
+  Any other GLB hands the shell no tools of its own (`tools={[]}`), so there is no tool
+  strip: it picks nothing, so there is no Select, no filter menu, no copy-references
+  action and no viewport context menu.
 - **Animation** (`glb/useGlbAnimation.js`): clips play in preview alone, through the
   playbar under the model and its menus (`RendererShell.jsx`).
   The file OPENS AT REST — one `AnimationMixer` on the native scene, built by the
   first play, scrub or clip choice and alive only while a routine owns the pose;
   leaving preview calls the runtime's `onRelease`, which stops it and puts the model
   back at rest, keeping the clip, speed and loop.
-- **Panels**: none, so a GLB opens with no panel open. Preview is the shell's, as for
+- **Panels**: none, except an FEA result's Study (Select's panel) and the Reference for a
+  face picked on it (see `settings-ui.md`, An FEA result); any other GLB opens with no panel open. Preview is the shell's, as for
   every 3D file, with the Animation settings when the file has clips.
 - **Host commands**: the base live commands; `select` and `clearSelection` are
   declined with a sentence, and a `selectReference` host request is consumed and
