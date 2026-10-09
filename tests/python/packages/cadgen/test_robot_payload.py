@@ -468,6 +468,32 @@ class Refusals(_Workspace):
         self.assertEqual(visual["placement"][0], 0.001, "the mesh scale is in the placement")
         self.assertEqual(payload["links"][0]["visuals"][0]["path"], visual["mesh"]["path"])
 
+    def test_a_mesh_lands_in_metres_as_its_format_defines_it(self) -> None:
+        # One 0.05 x 0.22 x 0.05 m box, written as each format holds it: an STL in metres with no
+        # scale, an STL and a 3MF in millimetres with scale 0.001, and a GLB, which glTF defines in
+        # metres, with none. The page decodes a GLB into millimetres and an STL or a 3MF as written
+        # (packages/core glbMeshData), so the placement times what the page decodes is where the
+        # box's corner is drawn: the same point for every one, through either door.
+        decoded = {"stl": 1.0, "3mf": 1.0, "glb": 1000.0}
+        corner = (0.025, 0.11, 0.025)
+        cases = [("metres.stl", "", 1.0), ("millimetres.stl", "0.001 0.001 0.001", 1000.0),
+                 ("millimetres.3mf", "0.001 0.001 0.001", 1000.0), ("metres.glb", "", 1.0)]
+        for name, _scale, _unit in cases:
+            (self.root / name).write_bytes(b"solid a\nendsolid a\n")
+        for name, scale, unit in cases:
+            urdf_scale = f' scale="{scale}"' if scale else ""
+            sdf_scale = f"<scale>{scale}</scale>" if scale else ""
+            urdf = (f'<robot name="r"><link name="arm"><visual><origin xyz="0 0 0.11"/><geometry><mesh filename="{name}"{urdf_scale}/>'
+                    '</geometry></visual></link></robot>')
+            sdf = (f'<sdf version="1.9"><model name="r"><link name="arm"><visual name="v"><pose>0 0 0.11 0 0 0</pose><geometry><mesh>'
+                   f'<uri>{name}</uri>{sdf_scale}</mesh></geometry></visual></link></model></sdf>')
+            for door, text in (("urdf", urdf), ("sdf", sdf)):
+                with self.subTest(mesh=name, door=door):
+                    visual = read_robot_description(self.write(f"r.{door}", text))["visuals"][0]
+                    placement = [visual["placement"][row * 4:row * 4 + 4] for row in range(4)]
+                    drawn = transform(placement, [decoded[visual["mesh"]["format"]] * unit * value for value in corner])
+                    self.assertEqual(drawn, [0.025, 0.11, 0.135])
+
     def test_every_undrawable_sdf_visual_is_named_at_once(self) -> None:
         # A plane is valid SDF the page has no mesh for; a shape the validator does not know is its finding.
         sdf = """<sdf version="1.9"><model name="rig">

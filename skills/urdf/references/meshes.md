@@ -23,6 +23,8 @@ Checklist after export, before authoring:
 
 - URDF lengths are meters. Mesh files are frequently millimeters, and STL carries no unit metadata at all.
 - Express the conversion explicitly with `scale` on every mesh reference: `scale="0.001 0.001 0.001"` for mm sources. Omit `scale` only when the mesh is genuinely authored in meters.
+- STL and 3MF are read as the numbers they hold (a 3MF's `unit` attribute is not applied), so `scale` alone converts them: `cadgen` writes both in millimeters, which take `scale="0.001 0.001 0.001"`.
+- A GLB is meters by the glTF specification (`cadgen` writes GLB in meters), so a GLB link mesh takes no `scale`; give one only to resize the asset itself.
 - One convention per robot: do not mix mm and m assets in the same file without a ledger entry per exception.
 - A robot rendering ~1000× too large or too small in the viewer is a scale-attribute bug; fix the scale, not the joint origins.
 

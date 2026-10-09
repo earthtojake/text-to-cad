@@ -49,7 +49,11 @@ The payload::
   for a box, cylinder, sphere or capsule, a GLB cadgen meshed at the standard rung of the
   display ladder and stored as an object (``_internal.primitive_mesh``). The payload names
   a file by its absolute path (``path``) and a primitive by its object hash (``object``);
-  the host that serves it mints each one's ``url`` (:func:`locate_robot_payload`).
+  the host that serves it mints each one's ``url`` (:func:`locate_robot_payload`). A mesh
+  lands in the robot's metres as its format defines it: a GLB is metres by the glTF spec,
+  so one authored in metres needs no mesh scale, while an STL or a 3MF is drawn as the
+  numbers it holds, which the mesh scale converts (``0.001`` for millimetres). The placement
+  carries the conversion from the page's decoded unit (a GLB decodes into millimetres).
 - Refusals are the validators' (``cadgen.urdf_source``, ``cadgen.sdf_validation``,
   ``cadgen.srdf_validation``) plus what the page cannot draw: a mesh in a format it has no
   decoder for, a shape it has no mesh for, a mesh it cannot reach. Every refusal is a
@@ -98,8 +102,19 @@ ROBOT_SUFFIXES = (".urdf", ".srdf", ".sdf")
 DRAWABLE_MESH_FORMATS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb"}
 #: The shapes cadgen meshes for a visual (``_internal.primitive_mesh``).
 DRAWABLE_SHAPES = ("box", "capsule", "cylinder", "sphere")
-# The page draws a GLB in millimetres; a primitive is meshed in metres.
-_PRIMITIVE_SCALE = 0.001
+# What a visual's placement multiplies a decoded mesh by, by format, so the mesh lands in the
+# robot's metres. glTF is metres by its spec and the page decodes a GLB into millimetres (the
+# CAD Viewer's scene unit), so every GLB -- a link's mesh file and a primitive cadgen meshed
+# alike -- carries 0.001. An STL has no unit and the page does not read a 3MF's: both are
+# drawn as the numbers they hold, which the description's mesh scale converts to metres.
+_DECODED_TO_METRES = {"glb": 0.001, "stl": 1.0, "3mf": 1.0}
+
+
+def _mesh_scale(fmt: str, scale: list[float] | None = None) -> list[list[float]]:
+    """The scale a visual's placement ends in: the description's mesh scale, if any, on the
+    decoded mesh's own unit conversion to metres."""
+    unit = _DECODED_TO_METRES[fmt]
+    return _scale(*(unit * value for value in (scale or [1.0, 1.0, 1.0])))
 _IDENTITY = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
 _SDF_MODEL_FRAME = "__model__"
 _SDF_WORLD_FRAME = "world"
@@ -444,7 +459,7 @@ def _read_urdf(path: Path, *, package_map: dict[str, Path] | None = None) -> _De
                     scale = _numbers(mesh_element.attrib.get("scale"), 3, where=f"{where} mesh scale", default=[1.0, 1.0, 1.0])
                     facts["path"] = mesh["path"]
                     label = PurePosixPath(filename).name or "mesh"
-                    local = _multiply(local, _scale(*scale))
+                    local = _multiply(local, _mesh_scale(mesh["format"], scale))
                 else:
                     shape = facts["type"]
                     if shape not in DRAWABLE_SHAPES:
@@ -452,7 +467,7 @@ def _read_urdf(path: Path, *, package_map: dict[str, Path] | None = None) -> _De
                     dimensions = {key: facts[key] for key in ("size", "radius", "length") if facts.get(key) is not None}
                     mesh = _primitive_mesh(shape, dimensions)
                     label = shape
-                    local = _multiply(local, _scale(_PRIMITIVE_SCALE, _PRIMITIVE_SCALE, _PRIMITIVE_SCALE))
+                    local = _multiply(local, _mesh_scale(mesh["format"]))
             except RobotReadError as exc:
                 undrawable.append(str(exc))
                 continue
@@ -802,7 +817,7 @@ def _read_sdf(path: Path) -> _Description:
                     facts["path"] = mesh["path"]
                     scale = _numbers(_sdf_text(_sdf_first(_sdf_first(visual_element, "geometry"), "mesh"), "scale"), 3,
                                      where=f"{where} mesh scale", default=[1.0, 1.0, 1.0])
-                    local = _multiply(local, _scale(*scale))
+                    local = _multiply(local, _mesh_scale(mesh["format"], scale))
                     label = PurePosixPath(uri).name or "mesh"
                 elif kind in DRAWABLE_SHAPES:
                     dimensions = {key: facts[key] for key in ("size", "radius", "length") if facts.get(key) is not None}
@@ -810,7 +825,7 @@ def _read_sdf(path: Path) -> _Description:
                             or (kind in ("cylinder", "capsule") and "length" not in dimensions):
                         raise RobotReadError(f"{where} is a <{kind}> with missing or non-positive dimensions; give it positive dimensions")
                     mesh = _primitive_mesh(kind, dimensions)
-                    local = _multiply(local, _scale(_PRIMITIVE_SCALE, _PRIMITIVE_SCALE, _PRIMITIVE_SCALE))
+                    local = _multiply(local, _mesh_scale(mesh["format"]))
                     label = kind
                 else:
                     what = "has no <geometry>" if kind == "missing" else f"uses <{kind}> geometry, which the viewer cannot draw"

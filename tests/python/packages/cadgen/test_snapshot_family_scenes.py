@@ -9,6 +9,7 @@ for the things a second, flattened path got wrong and the shared builder gets ri
   still is framed on that shape (the flattened copy was the straight, unskinned bar);
 * Render keeps a GLB's authored finish, while Solid wears the viewer's surface over it;
 * a robot description's colour wins over the colours its link mesh brings;
+* a GLB link mesh is drawn at its size in metres (glTF's unit), beside a box cadgen meshes;
 * an SRDF opens at its `home` group state, exactly as the viewer opens it;
 * one decode drawn by two jobs, and one job drawn twice, come out the same.
 
@@ -182,8 +183,17 @@ ARM_SRDF = """<?xml version="1.0"?>
 # A link whose mesh brings its own RED and whose description says GREEN.
 PAINTED_URDF = f"""<?xml version="1.0"?>
 <robot name="painted">
-  <link name="base"><visual><geometry><mesh filename="red_box.glb" scale="0.001 0.001 0.001"/></geometry>
+  <link name="base"><visual><geometry><mesh filename="red_box.glb"/></geometry>
     <material name="green"><color rgba="0.1 0.8 0.1 1"/></material></visual></link>
+</robot>
+"""
+# The same 1 m cube twice, 1 m apart: a GLB link mesh (glTF is metres, so no scale) and a box
+# cadgen meshes. Seen from the front they are one row three cubes wide and one tall.
+SIZED_URDF = """<?xml version="1.0"?>
+<robot name="sized">
+  <link name="glb"><visual><geometry><mesh filename="red_box.glb"/></geometry></visual></link>
+  <link name="box"><visual><geometry><box size="1 1 1"/></geometry></visual></link>
+  <joint name="beside" type="fixed"><parent link="glb"/><child link="box"/><origin xyz="2 0 0"/></joint>
 </robot>
 """
 
@@ -237,6 +247,7 @@ class SnapshotFamilySceneTests(unittest.TestCase):
         (workspace / "arm.urdf").write_text(ARM_URDF, encoding="utf-8")
         (workspace / "arm.srdf").write_text(ARM_SRDF, encoding="utf-8")
         (workspace / "painted.urdf").write_text(PAINTED_URDF, encoding="utf-8")
+        (workspace / "sized.urdf").write_text(SIZED_URDF, encoding="utf-8")
         (workspace / "red_box.glb").write_bytes(box_glb(color=(0.85, 0.05, 0.05), metallic=0, roughness=0.6))
 
         # No guides: a silhouette is then everything that is not the backdrop.
@@ -258,6 +269,7 @@ class SnapshotFamilySceneTests(unittest.TestCase):
             job("mirror-render", "mirror.glb", {"mode": "render"}),
             job("matte-render", "matte.glb", {"mode": "render"}),
             job("painted", "painted.urdf"),
+            job("sized", "sized.urdf", camera="front"),
             job("srdf", "arm.srdf"),
             job("urdf-home", "arm.urdf", jointValues={"shoulder": home_degrees}),
             job("urdf-rest", "arm.urdf"),
@@ -284,7 +296,7 @@ class SnapshotFamilySceneTests(unittest.TestCase):
 
     def test_every_output_was_written_at_its_size(self) -> None:
         self.assertTrue(self.result.ok)
-        self.assertEqual(15, len(self.names), self.names)
+        self.assertEqual(16, len(self.names), self.names)
         for name, image in self.images.items():
             with self.subTest(output=name):
                 self.assertEqual(SIZE, (image.width, image.height))
@@ -310,6 +322,10 @@ class SnapshotFamilySceneTests(unittest.TestCase):
         red = sum(1 for r, g, b in pixels if r > g + 40)
         self.assertGreater(green, 200, f"green {green}, red {red}")
         self.assertEqual(0, red, "the mesh's own red never shows through the description's green")
+
+    def test_a_glb_link_mesh_is_drawn_at_its_size_in_metres(self) -> None:
+        self.assertAlmostEqual(aspect(self.images["sized"]), 3.0, delta=0.3,
+                               msg="the GLB cube is the size of the 1 m box beside it, not a thousand times it")
 
     def test_an_srdf_opens_at_its_home_state_as_the_viewer_opens_it(self) -> None:
         self.assertEqual(self.bytes["srdf.png"], self.bytes["urdf-home.png"])

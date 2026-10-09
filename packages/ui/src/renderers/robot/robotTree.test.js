@@ -158,7 +158,7 @@ test("the facts of a resolved robot: cadgen's host path for a mesh file, an SRDF
   assert.deepEqual(carriage.childJoints.map(child => `${child.childLink}:${child.name}`), ["finger_left:grip", "finger_right:grip_mirror"]);
   assert.deepEqual(robotLinkFacts(planned, "finger_right").parentJoint.mimic, { joint: "grip", multiplier: -1, offset: 0 });
   const head = robotLinkFacts(planned, "head");
-  assert.deepEqual([head.visuals[0].filename, head.visuals[0].path, head.visuals[0].scale], ["meshes/head.glb", "/models/meshes/head.glb", [0.001, 0.001, 0.001]]);
+  assert.deepEqual([head.visuals[0].filename, head.visuals[0].path, head.visuals[0].scale], ["meshes/head.glb", "/models/meshes/head.glb", null]);
   assert.deepEqual([head.groups, head.endEffectors, head.mass, head.collisions], [[], [], null, []]);
   const base = robotLinkFacts(planned, "base");
   assert.deepEqual([base.isRoot, base.parentJoint.name, base.parentJoint.parentLink, base.visuals[0].type, base.visuals[0].color], [false, "footprint", "base_footprint", "box", "#4d4d59"]);
