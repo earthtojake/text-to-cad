@@ -367,19 +367,19 @@ assert view and all('surfaceObject' not in entry for entry in view['components']
 
     def test_invalid_optional_hint_is_replaced_without_losing_geometry(self):
         from cadgen.store.index import read_entry, write_entry
-        from cadgen.store.records import note_document_tree
+        from cadgen.store.records import document_key, note_document_tree
         from cadgen.store.view import descriptor_for_view
         digest = "c" * 64
         note_document_tree(digest, self.tree)
-        entry = read_entry("document", digest)
+        entry = read_entry("document", document_key(digest))
         entry["surfaceProducer"] = {"ocp": "broken"}
-        write_entry("document", digest, entry)
+        write_entry("document", document_key(digest), entry)
         with mock.patch("cadgen.daemon.artifacts.resolve_artifact", return_value=self.producer) as job, \
              mock.patch.object(surfaces, "producer_identity", side_effect=AssertionError("kernel forbidden")):
             descriptor = descriptor_for_view(self.tree, document_hash=digest)
         self.assertEqual(descriptor["viewId"], self.view["viewId"])
         self.assertEqual(job.call_args.args[0], {"kind": "producer"})
-        self.assertEqual(read_entry("document", digest)["surfaceProducer"], self.producer)
+        self.assertEqual(read_entry("document", document_key(digest))["surfaceProducer"], self.producer)
 
     def test_static_export_replaces_an_unavailable_producer_as_a_complete_view(self):
         from cadgen.daemon.artifacts import ArtifactJobError

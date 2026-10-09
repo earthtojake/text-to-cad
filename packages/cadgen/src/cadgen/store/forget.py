@@ -5,16 +5,17 @@ The store has three resets. ``--force`` on a run rebuilds one model.
 drop the index entries for one model or one document so the next run, open or
 door call does its work again, and touch nothing else.
 
-- A **model script** argument drops its record (``index/model/<sha(script)>``).
+- A **model script** argument drops its record (``index/model/<sha(script::fn)>-v<schema>``).
   The next run rebuilds it; its children are untouched, and its parents see a
   moved pin only after that rebuild — exactly as after any edit.
 - A **document** argument (a ``.step``/``.dxf``/mesh path) drops the
-  ``index/document/<sha256(bytes)>`` entry, so the next open or door call
+  ``index/document/<sha256(bytes)>-v<schema>`` entry, so the next open or door call
   compiles the file from its bytes again; when a record lists that path as an
   output, the record and its ``index/output`` note go too.
 
-Objects are never deleted here — that is ``gc``. Nothing is refused: a target
-the store never heard of is "nothing to forget".
+Objects are never deleted here — that is ``gc``, which also retires the entries
+another cadgen version keeps (``forget`` drops this version's alone). Nothing is
+refused: a target the store never heard of is "nothing to forget".
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from cadgen.store.index import model_ref, path_key, read_entry, remove_entry, split_model_ref
-from cadgen.store.records import read_record, records_for_script, remove_record
+from cadgen.store.records import document_key, read_record, records_for_script, remove_record
 
 
 def _resolved(target: str | Path) -> Path:
@@ -76,11 +77,11 @@ def forget(target: str | Path, *, dry_run: bool = False) -> dict[str, Any]:
 
     digest = _sha256(resolved) if resolved.is_file() else None
     if digest:
-        entry = read_entry("document", digest)
+        entry = read_entry("document", document_key(digest))
         if entry:
             forgot.append({"kind": "document", "sha256": digest, "tree": entry.get("tree")})
             if not dry_run:
-                remove_entry("document", digest)
+                remove_entry("document", document_key(digest))
 
     output_entry = read_entry("output", path_key(resolved)) or {}
     recorded_model = str(output_entry.get("model") or "").strip()

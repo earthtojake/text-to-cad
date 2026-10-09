@@ -408,6 +408,66 @@ class NewerCadgen(StoreSweepCase):
         self.assertTrue(all(path.is_file() for path in foreign), "files that are not cadgen's are never touched")
 
 
+class AnotherSchemaVersion(StoreSweepCase):
+    """A record or document entry at a key this cadgen does not own is another
+    cadgen version's: one sharing the store may still use it, and a read never
+    writes, so a pass keeps it and what its tree reaches until it was last
+    written a week ago, then retires it like an obsolete entry."""
+
+    def test_another_versions_entries_keep_their_trees_for_a_week_then_go(self) -> None:
+        from cadgen.store import gc
+        from cadgen.store.index import model_key
+        from cadgen.store.objects import has_object
+        from cadgen.store.records import RECORD_SCHEMA_VERSION, document_key, record_key
+        from cadgen.store.trees import get_tree
+        from tests.python.support.store_fixtures import seed_result
+
+        tree, brep = self.seed_document()
+        other = self.root / "other.step"
+        other.write_bytes(b"a document another cadgen compiled")
+        other_tree = seed_result(other, components=("a", "b"))
+        only_other = {other_tree} | {c["brep"] for c in get_tree(other_tree)["components"].values()} - {brep}
+        # Its entries, as the other versions wrote them: cadgen 0.7.19's document
+        # entry (schema 4, at the unversioned key), and an older record schema's record.
+        index = self.store / "index"
+        digest = hashlib.sha256(other.read_bytes()).hexdigest()
+        theirs = []
+        for ours_at, theirs_at, schema in (
+                (index / "document" / document_key(digest), index / "document" / digest, 4),
+                (index / "model" / record_key(other), index / "model" / f"{model_key(other)}-v{RECORD_SCHEMA_VERSION - 1}",
+                 RECORD_SCHEMA_VERSION - 1)):
+            theirs_at.write_text(json.dumps({**json.loads(ours_at.read_text(encoding="utf-8")), "schemaVersion": schema}),
+                                 encoding="utf-8")
+            ours_at.unlink()
+            theirs.append(theirs_at)
+        week = gc.OBSOLETE_RETIRE_AFTER_SECONDS
+        for path in theirs:
+            self.old(path, week - DAY)
+        for shard in (self.store / "objects").iterdir():
+            for path in shard.iterdir():
+                self.old(path)
+        garbage = self.old_object(b"nothing reaches me")
+        ours = [index / "document" / document_key(hashlib.sha256(b"fixture document").hexdigest()),
+                index / "model" / record_key(self.root / "part.step")]
+        before = {path: path.read_bytes() for path in ours + theirs}
+
+        report = gc.collect()
+        self.assertFalse(has_object(garbage), "the pass swept")
+        self.assertEqual(report.obsolete, {})
+        self.assertTrue(all(has_object(digest) for digest in only_other), "a younger one's tree stays reachable")
+        self.assertEqual({path: path.read_bytes() for path in ours + theirs}, before)
+
+        for path in theirs:
+            self.old(path, week + HOUR)
+        self.assertEqual(gc.collect(retired_only=True).obsolete, {"document": 1, "model": 1},
+                         "a week after its last write it goes, by the daemon's retiring pass too")
+        self.assertFalse(any(path.exists() for path in theirs))
+        gc.collect()
+        self.assertFalse(any(has_object(digest) for digest in only_other), "and its tree with it")
+        self.assertTrue(has_object(tree) and has_object(brep))
+        self.assertEqual({path: path.read_bytes() for path in ours}, {path: before[path] for path in ours})
+
+
 class LeastRecentlyWritten(StoreSweepCase):
     def test_eviction_takes_the_oldest_derived_entries_and_never_a_record_or_document(self) -> None:
         from cadgen.store import gc

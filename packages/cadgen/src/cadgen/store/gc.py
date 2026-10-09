@@ -9,15 +9,18 @@ three kinds of thing:
   an older extractor, table scheme or mesher of cadgen's wrote, which no
   reader of this cadgen asks for again (``surfaces.obsolete_entry``,
   ``selectors.obsolete_key``, ``meshes.obsolete_key``, and a mesh or table
-  keyed by such a surface's input), once last written
-  ``OBSOLETE_RETIRE_AFTER_SECONDS`` ago (a week): an older cadgen sharing the
-  store may still read them, and a read never writes.
+  keyed by such a surface's input), and the records and document entries at
+  keys this cadgen does not own (another schema version's, ``owned_key``),
+  once last written ``OBSOLETE_RETIRE_AFTER_SECONDS`` ago (a week): another
+  cadgen sharing the store may still read them, and a read never writes. Until
+  then the trees such a record or document entry names stay reachable.
 - **Evicted entries**, only under a cap: derived entries (``DERIVED_KINDS``),
   least recently written first, until the store fits ``LOW_WATERMARK`` of the
   cap. A record, a document entry or an output entry is never evicted.
 - **Unreachable objects**: not in the closure of a current record's or
-  document entry's tree, not named by a surviving derived entry, and not
-  written or claimed within the grace window (default 1 h).
+  document entry's tree (or a week-young one's at a key this cadgen does not
+  own), not named by a surviving derived entry, and not written or claimed
+  within the grace window (default 1 h).
 
 A store a newer cadgen writes to is left alone. A record, document entry or
 tree in a newer format than this cadgen's, or an ``index/`` folder it does not
@@ -53,7 +56,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from cadgen.store.index import entry_path, read_entry
+from cadgen.store.index import entry_path, key_version, read_entry
 from cadgen._internal.atomic_replace import move_atomic
 from cadgen.store.objects import delete_unclaimed, is_object_hash, object_path, swept_address
 from cadgen.store.paths import DERIVED_KINDS, INDEX_KINDS, RETIRED_KINDS, store_root
@@ -61,9 +64,10 @@ from cadgen.store.paths import DERIVED_KINDS, INDEX_KINDS, RETIRED_KINDS, store_
 DEFAULT_GRACE_SECONDS = 3600.0
 # How long a newer cadgen's last write keeps this one's passes off the store.
 NEWER_CADGEN_SECONDS = 30 * 24 * 3600.0
-# How old an obsolete entry is before a pass retires it. An older cadgen still in
-# use on the store derives what it reads again at most once a week per entry, and
-# an upgrade's leftovers go within about a week.
+# How old an obsolete entry, or a record or document entry at a key this cadgen
+# does not own, is before a pass retires it. Another cadgen still in use on the
+# store derives what it reads again at most once a week per entry, and an
+# upgrade's leftovers go within about a week.
 OBSOLETE_RETIRE_AFTER_SECONDS = 7 * 24 * 3600.0
 # A pass over the cap brings the store down to this fraction of it, so the
 # next one waits for a fifth of the cap of growth rather than the next build.
@@ -254,20 +258,45 @@ def _defer_if_recent(newer: dict[str, float], since: float) -> None:
         raise _Deferred({"evidence": sorted(recent), "lastWritten": max(recent.values())})
 
 
-def _read_roots(found: Scan, should_stop: Callable[[], bool], newer_since: float | None) -> list[object]:
-    """The protected trees: every current-format record's ``tree`` and
-    ``documentTree``, and every current-format document entry's tree.
+def _schema_versions() -> dict[str, int]:
+    from cadgen.store.records import DOCUMENT_SCHEMA_VERSION, RECORD_SCHEMA_VERSION
+
+    return {"model": RECORD_SCHEMA_VERSION, "document": DOCUMENT_SCHEMA_VERSION}
+
+
+def owned_key(kind: str, key: str) -> bool:
+    """Whether this cadgen reads and writes the record or document entry at
+    ``key``: one keyed by its own schema version (``index.versioned_key``).
+    Any other key is another cadgen's, which nothing here reads."""
+    return key_version(key) == _schema_versions()[kind]
+
+
+def _unowned(found: Scan, retire_before: float) -> list[_Entry]:
+    """The records and document entries at keys this cadgen does not own, last
+    written by ``retire_before``: a pass retires them. Told by name and mtime;
+    the objects their trees reach are left to the sweep."""
+    return [_Entry(kind, key, size, mtime, (), obsolete=True)
+            for kind in ("model", "document")
+            for key, (size, mtime) in found.entries[kind].items()
+            if mtime <= retire_before and not owned_key(kind, key)]
+
+
+def _read_roots(found: Scan, should_stop: Callable[[], bool], newer_since: float | None,
+                retire_before: float | None = None) -> list[object]:
+    """The protected trees: every ``tree`` and ``documentTree`` of this cadgen's
+    own records, and every tree of its own document entries; and those of the
+    records and document entries at keys it does not own, written after
+    ``retire_before`` (all of them, without it) -- another cadgen may still use
+    them, and a pass retires them only once they are older.
 
     With ``newer_since``, a store a newer cadgen wrote to after it raises
     :class:`_Deferred` instead: an ``index/`` folder this cadgen does not know,
     or a record or document entry in a newer format than this cadgen reads.
     """
-    from cadgen.store.records import DOCUMENT_SCHEMA_VERSION, RECORD_SCHEMA_VERSION
-
     newer = {f"index/{name}, a folder this cadgen does not know": mtime for name, mtime in found.unknown.items()}
     roots: list[object] = []
-    for kind, current, fields in (("model", RECORD_SCHEMA_VERSION, ("tree", "documentTree")),
-                                  ("document", DOCUMENT_SCHEMA_VERSION, ("tree",))):
+    for kind, fields in (("model", ("tree", "documentTree")), ("document", ("tree",))):
+        current = _schema_versions()[kind]
         for count, (key, (_size, mtime)) in enumerate(found.entries[kind].items()):
             if count % _STOP_EVERY == 0 and should_stop():
                 raise _Stopped
@@ -275,9 +304,10 @@ def _read_roots(found: Scan, should_stop: Callable[[], bool], newer_since: float
             if not entry:
                 continue
             version = entry.get("schemaVersion")
-            if version == current:
+            if (version == current if owned_key(kind, key)
+                    else retire_before is None or mtime > retire_before):
                 roots.extend(entry.get(name) for name in fields)
-            elif _newer(version, current):
+            if _newer(version, current):
                 what = f"index/{kind} entries in format {version} (this cadgen reads {current})"
                 newer[what] = max(mtime, newer.get(what, mtime))
     if newer_since is not None:
@@ -310,8 +340,9 @@ def newer_cadgen(found: Scan | None = None) -> dict | None:
 
 
 def protected_objects(found: Scan, *, should_stop: Callable[[], bool] = lambda: False,
-                      newer_since: float | None = None) -> set[str]:
-    """Every object a current record's or document entry's tree reaches.
+                      newer_since: float | None = None, retire_before: float | None = None) -> set[str]:
+    """Every object a current record's or document entry's tree reaches, and
+    one's at a key this cadgen does not own written after ``retire_before``.
 
     These are what eviction may never free: the result trees, saved-document
     trees and the components they place, each tree read and verified once.
@@ -321,7 +352,7 @@ def protected_objects(found: Scan, *, should_stop: Callable[[], bool] = lambda: 
     """
     from cadgen.store.trees import TREE_SCHEMA, get_tree
 
-    roots = _read_roots(found, should_stop, newer_since)
+    roots = _read_roots(found, should_stop, newer_since, retire_before)
     marked: set[str] = set()
     pending = [root for root in roots if isinstance(root, str) and root in found.objects]
     visited = 0
@@ -506,15 +537,18 @@ def collect(
     found: Scan | None = None,
 ) -> GcReport:
     """One pass. ``max_bytes`` adds eviction, when the store is over that cap,
-    down to :func:`eviction_target`. ``retired_only`` retires ``RETIRED_KINDS``
-    and the obsolete entries a week old, and sweeps only the objects their entries
-    named -- the daemon's automatic retirement, which collects nothing else. ``should_stop`` is polled
+    down to :func:`eviction_target`. ``retired_only`` retires ``RETIRED_KINDS``,
+    the obsolete entries a week old and the records and document entries at keys
+    this cadgen does not own a week old, and sweeps only the objects the retired
+    and obsolete derived entries named -- the daemon's automatic retirement, which
+    collects nothing else. ``should_stop`` is polled
     throughout; stopping early leaves a consistent store, as every step does.
     ``found`` is a scan the caller just took. A store a newer cadgen writes to
     is left alone: nothing is removed, and ``deferred`` says why."""
     stop = should_stop or (lambda: False)
     report = GcReport(dry_run=dry_run, cap=max_bytes)
     now = time.time()
+    retire_before = now - OBSOLETE_RETIRE_AFTER_SECONDS
     grace = max(0.0, float(grace_seconds))
     # No window keeps nothing back, however recent: Windows' time.time() can trail a file's mtime
     # by a clock step (~16 ms), and ``now - 0`` would keep what was written a moment ago.
@@ -522,15 +556,18 @@ def collect(
     found = scan() if found is None else found
     report.records = len(found.entries["model"])
     report.bytes_before = report.bytes_after = found.total
-    if retired_only and not found.retired and not (found.entries["surface"] or found.entries["selector"] or found.entries["mesh"]):
+    unowned = _unowned(found, retire_before)
+    if (retired_only and not found.retired and not unowned
+            and not (found.entries["surface"] or found.entries["selector"] or found.entries["mesh"])):
         return report
     try:
         if stop():
             raise _Stopped
-        protected = protected_objects(found, should_stop=stop, newer_since=now - NEWER_CADGEN_SECONDS)
+        protected = protected_objects(found, should_stop=stop, newer_since=now - NEWER_CADGEN_SECONDS,
+                                      retire_before=retire_before)
         report.protected_bytes = sum(found.objects[d][0] for d in protected)
-        derived, obsolete = _split_obsolete(_read_entries(found, DERIVED_KINDS, stop), now - OBSOLETE_RETIRE_AFTER_SECONDS)
-        retired = _read_entries(found, found.retired, stop) + obsolete
+        derived, obsolete = _split_obsolete(_read_entries(found, DERIVED_KINDS, stop), retire_before)
+        retired = _read_entries(found, found.retired, stop) + obsolete + unowned
         fresh = {digest for digest, (_, mtime) in found.objects.items() if mtime > cutoff}
 
         victims: list[_Entry] = []
@@ -671,9 +708,10 @@ def reachable_objects() -> set[str]:
     """What a sweep keeps regardless of age: the protected trees' closures and
     every object a derived entry no pass retires yet names."""
     found = scan()
-    live = protected_objects(found)
+    retire_before = time.time() - OBSOLETE_RETIRE_AFTER_SECONDS
+    live = protected_objects(found, retire_before=retire_before)
     rows = _read_entries(found, DERIVED_KINDS, lambda: False)
-    for row in _split_obsolete(rows, time.time() - OBSOLETE_RETIRE_AFTER_SECONDS)[0]:
+    for row in _split_obsolete(rows, retire_before)[0]:
         live.update(row.named)
     return live
 

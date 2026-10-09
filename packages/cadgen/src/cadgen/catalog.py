@@ -400,7 +400,7 @@ def result_snapshot_for(entry_path: Path) -> tuple[str, str] | None:
 def result_tree_for(entry_path: Path) -> str | None:
     """The tree behind a CAD artifact on disk, or None — found by the file's BYTES.
 
-    ``index/document/<sha256(bytes)>`` → tree (STORE.md §2, the law): a reader
+    ``index/document/<sha256(bytes)>-v<schema>`` → tree (STORE.md §2, the law): a reader
     never opens a record to find an artifact. The same file copied anywhere
     resolves to the same tree; a file the store has no tree for answers None
     (a door then compiles it: ``cadgen._internal.doors.document_tree``). The

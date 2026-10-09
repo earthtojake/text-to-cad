@@ -450,7 +450,7 @@ class GeometryInputs(unittest.TestCase):
         from build123d import Box, Cylinder, Compound, Location
         from cadgen.store.gc import reachable_objects
         from cadgen.store.index import iter_entries, remove_entry
-        from cadgen.store.records import note_document_tree
+        from cadgen.store.records import document_key, note_document_tree
         from cadgen.store.trees import tree_complete
         shape = Compound(children=[Box(2, 3, 4), Cylinder(1, 4).moved(Location((8, 0, 0)))])
         digest, tree, _ = build_tree_from_compound(shape, root_name="root")
@@ -465,7 +465,7 @@ class GeometryInputs(unittest.TestCase):
         self.assertIn(entries[1]["brep"], live)
         self.assertFalse(tree_complete(digest))
         self.assertTrue(all(row["object"] in live for row in resolved.values()))
-        remove_entry("document", "a" * 64)
+        remove_entry("document", document_key("a" * 64))
         live = reachable_objects()
         self.assertNotIn(digest, live)
         self.assertNotIn(entries[1]["brep"], live)

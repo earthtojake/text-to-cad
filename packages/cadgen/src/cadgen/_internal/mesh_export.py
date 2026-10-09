@@ -449,7 +449,7 @@ def mesh_variant_key(
     appearance_key: str | None = None,
 ) -> str:
     """One mesh variant of a document — format × serializer × chord × angle × clip — the key
-    of the ARTIFACT-side ledger (``index/document/<sha256(bytes)>.meshes``).
+    of the ARTIFACT-side ledger (the ``meshes`` of ``index/document/<sha256(bytes)>-v<schema>``).
 
     Every format carries its own serializer revision (``SERIALIZATION_VERSIONS``).
     An ANIMATED GLB appends the clip request folded with the embedded animation

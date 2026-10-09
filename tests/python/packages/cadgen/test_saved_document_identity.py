@@ -210,6 +210,7 @@ class SavedDocumentIdentityTest(unittest.TestCase):
         from cadgen._internal.mesh_export import mesh_variant_key
         from cadgen._internal.source_sidecar import appearance_digest, write_source_sidecar
         from cadgen.store.index import read_entry
+        from cadgen.store.records import document_key
         from cadgen.step_export_target import export_cad_target
 
         rough_glb = rough_step.with_suffix(".glb")
@@ -249,7 +250,7 @@ class SavedDocumentIdentityTest(unittest.TestCase):
 
         rough_key = appearance_digest(read_source_sidecar(rough_step)["appearance"])
         polished_key = appearance_digest(read_source_sidecar(polished_step)["appearance"])
-        document_entry = read_entry("document", rough_sidecar["documentHash"])
+        document_entry = read_entry("document", document_key(rough_sidecar["documentHash"]))
         variants = set((document_entry.get("meshes") or {}))
         self.assertIn(mesh_variant_key("glb", None, None, appearance_key=rough_key), variants)
         self.assertIn(mesh_variant_key("glb", None, None, appearance_key=polished_key), variants)
