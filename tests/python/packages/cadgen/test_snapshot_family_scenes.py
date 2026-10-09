@@ -10,6 +10,7 @@ for the things a second, flattened path got wrong and the shared builder gets ri
 * Render keeps a GLB's authored finish, while Solid wears the viewer's surface over it;
 * a robot description's colour wins over the colours its link mesh brings;
 * a GLB link mesh is drawn at its size in metres (glTF's unit), beside a box cadgen meshes;
+* an SDF model nested in the model is drawn with it;
 * an SRDF opens at its `home` group state, exactly as the viewer opens it;
 * one decode drawn by two jobs, and one job drawn twice, come out the same.
 
@@ -196,6 +197,16 @@ SIZED_URDF = """<?xml version="1.0"?>
   <joint name="beside" type="fixed"><parent link="glb"/><child link="box"/><origin xyz="2 0 0"/></joint>
 </robot>
 """
+# A 1 m cube in an SDF model and another in the model nested in it, posed 2 m along: one row
+# three cubes wide from the front, as the sized URDF's.
+NESTED_SDF = """<?xml version="1.0"?>
+<sdf version="1.9"><model name="pair">
+  <link name="left"><visual name="v"><geometry><box><size>1 1 1</size></box></geometry></visual></link>
+  <model name="beside"><pose>2 0 0 0 0 0</pose>
+    <link name="right"><visual name="v"><geometry><box><size>1 1 1</size></box></geometry></visual></link>
+  </model>
+</model></sdf>
+"""
 
 # --- pixel helpers -------------------------------------------------------------------------
 
@@ -248,6 +259,7 @@ class SnapshotFamilySceneTests(unittest.TestCase):
         (workspace / "arm.srdf").write_text(ARM_SRDF, encoding="utf-8")
         (workspace / "painted.urdf").write_text(PAINTED_URDF, encoding="utf-8")
         (workspace / "sized.urdf").write_text(SIZED_URDF, encoding="utf-8")
+        (workspace / "nested.sdf").write_text(NESTED_SDF, encoding="utf-8")
         (workspace / "red_box.glb").write_bytes(box_glb(color=(0.85, 0.05, 0.05), metallic=0, roughness=0.6))
 
         # No guides: a silhouette is then everything that is not the backdrop.
@@ -270,6 +282,7 @@ class SnapshotFamilySceneTests(unittest.TestCase):
             job("matte-render", "matte.glb", {"mode": "render"}),
             job("painted", "painted.urdf"),
             job("sized", "sized.urdf", camera="front"),
+            job("nested", "nested.sdf", camera="front"),
             job("srdf", "arm.srdf"),
             job("urdf-home", "arm.urdf", jointValues={"shoulder": home_degrees}),
             job("urdf-rest", "arm.urdf"),
@@ -296,7 +309,7 @@ class SnapshotFamilySceneTests(unittest.TestCase):
 
     def test_every_output_was_written_at_its_size(self) -> None:
         self.assertTrue(self.result.ok)
-        self.assertEqual(16, len(self.names), self.names)
+        self.assertEqual(17, len(self.names), self.names)
         for name, image in self.images.items():
             with self.subTest(output=name):
                 self.assertEqual(SIZE, (image.width, image.height))
@@ -326,6 +339,9 @@ class SnapshotFamilySceneTests(unittest.TestCase):
     def test_a_glb_link_mesh_is_drawn_at_its_size_in_metres(self) -> None:
         self.assertAlmostEqual(aspect(self.images["sized"]), 3.0, delta=0.3,
                                msg="the GLB cube is the size of the 1 m box beside it, not a thousand times it")
+
+    def test_an_sdf_model_nested_in_the_model_is_drawn(self) -> None:
+        self.assertAlmostEqual(aspect(self.images["nested"]), 3.0, delta=0.3, msg="both cubes: the nested model's link is drawn too")
 
     def test_an_srdf_opens_at_its_home_state_as_the_viewer_opens_it(self) -> None:
         self.assertEqual(self.bytes["srdf.png"], self.bytes["urdf-home.png"])

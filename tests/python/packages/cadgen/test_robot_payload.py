@@ -95,6 +95,29 @@ SWING_SDF = """<?xml version="1.0"?>
 </model></world></sdf>
 """
 
+# A model nested in the model, and one nested in that: arm stands on the base, its elbow posed on its
+# upper link and its lower link on the elbow, a wrist frame on the lower link, the hand on that frame;
+# the rig's shoulder attaches arm by its scoped link name.
+NESTED_SDF = """<?xml version="1.0"?>
+<sdf version="1.9"><model name="rig">
+  <link name="base"><visual name="v"><geometry><box><size>0.4 0.4 0.02</size></box></geometry></visual></link>
+  <model name="arm">
+    <pose relative_to="base">0.1 0 0.05 0 0 0</pose>
+    <link name="upper"><pose>0 0 0.05 0 0 0</pose><visual name="v"><geometry><box><size>0.02 0.02 0.1</size></box></geometry></visual></link>
+    <link name="lower"><pose relative_to="elbow">0 0 0.05 0 0 0</pose><visual name="v"><geometry><cylinder><radius>0.01</radius><length>0.1</length></cylinder></geometry></visual></link>
+    <frame name="wrist" attached_to="lower"><pose>0 0 0.05 0 0 0</pose></frame>
+    <joint name="elbow" type="revolute"><pose relative_to="upper">0 0 0.05 0 0 0</pose><parent>upper</parent><child>lower</child>
+      <axis><xyz expressed_in="__model__">0 1 0</xyz><limit><lower>-1.6</lower><upper>1.6</upper></limit></axis></joint>
+    <model name="hand">
+      <pose relative_to="wrist">0 0 0.01 0 0 0</pose>
+      <link name="palm"><visual name="v"><geometry><sphere><radius>0.02</radius></sphere></geometry></visual></link>
+    </model>
+    <joint name="wrist_mount" type="fixed"><parent>wrist</parent><child>hand::palm</child></joint>
+  </model>
+  <joint name="shoulder" type="revolute"><parent>base</parent><child>arm::upper</child><axis><xyz>0 0 1</xyz></axis></joint>
+</model></sdf>
+"""
+
 
 # A crank-rocker four-bar (the browser fixture, `packages/ui/src/renderers/robot/__fixtures__/linkage.urdf`):
 # the ground runs 0.2 m along +x from the crank's pivot to the rocker's; the rocker (0.08 m, the driver)
@@ -433,6 +456,48 @@ class SdfArticulation(_Workspace):
         self.assertEqual((two_roots["root"], two_roots["sdf"]["rootLinks"]), ("", ["post", "loose"]), "two free links: no single root")
         self.assertEqual(articulation["controls"][0]["min"], None, "an SDF joint with no <limit> is unbounded")
         self.assertEqual([visual["label"] for visual in payload["visuals"]], ["capsule", "box"])
+
+
+class SdfNestedModels(_Workspace):
+    """A model nested in the model (SDFormat 1.6+) is part of the robot: its links, frames and
+    joints resolve in its own namespace under scoped names (``arm::elbow``), its pose in the model
+    it is nested in, and a joint outside it attaches to its links by scoped name."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.payload = read_robot_description(self.write("rig.sdf", NESTED_SDF))
+
+    def test_every_nested_link_and_joint_is_placed_in_rest_space(self) -> None:
+        placed = {link["name"]: [round(v, 6) + 0.0 for v in link["placement"][3::4][:3]] for link in self.payload["links"]}
+        self.assertEqual(placed, {"base": [0.0, 0.0, 0.0], "arm::upper": [0.1, 0.0, 0.1], "arm::lower": [0.1, 0.0, 0.2],
+                                  "arm::hand::palm": [0.1, 0.0, 0.26]},
+                         "arm sits on the base, its links in arm's frame, hand on arm's wrist frame")
+        self.assertEqual([visual["id"] for visual in self.payload["visuals"]], ["base:v1", "arm::upper:v1", "arm::lower:v1", "arm::hand::palm:v1"])
+        articulation = self.payload["articulation"]
+        joints = {joint["id"]: joint for joint in articulation["joints"]}
+        self.assertEqual(list(joints), ["shoulder", "arm::elbow", "arm::wrist_mount"], "parents first, across the namespaces")
+        self.assertEqual((joints["arm::elbow"]["origin"], joints["arm::elbow"]["axis"], joints["arm::elbow"]["parent"]),
+                         ([0.1, 0.0, 0.15], [0.0, 1.0, 0.0], "shoulder"))
+        self.assertEqual(joints["arm::wrist_mount"]["parent"], "arm::elbow", "a joint on a frame rides the frame's link")
+        self.assertEqual(articulation["carries"], {"shoulder": ["arm::upper"], "arm::elbow": ["arm::lower"], "arm::wrist_mount": ["arm::hand::palm"]})
+        self.assertEqual((self.payload["root"], self.payload["sdf"]["linkCount"], self.payload["sdf"]["jointCount"], self.payload["sdf"]["frameCount"]),
+                         ("base", 4, 3, 1))
+        # A quarter turn of the elbow about +Y swings the hand 0.11 m above it out along +X.
+        delta = joint_matrices(articulation, {"arm::elbow": 90})["arm::wrist_mount"]
+        self.assertEqual(transform(delta, (0.1, 0, 0.26)), [0.21, 0.0, 0.15])
+
+    def test_a_scoped_name_is_what_a_job_sets_and_what_a_refusal_says(self) -> None:
+        self.assertEqual([control["id"] for control in self.payload["articulation"]["controls"]], ["shoulder", "arm::elbow"])
+        self.assertEqual(robot_control_values(self.payload, {"arm::elbow": 30}), {"shoulder": 0.0, "arm::elbow": 30.0})
+        with self.assertRaisesRegex(RobotReadError, "jointValues\\[arm::wrist_mount\\]: joint 'arm::wrist_mount' is fixed"):
+            robot_control_values(self.payload, {"arm::wrist_mount": 1})
+        with self.assertRaisesRegex(RobotReadError, "Unknown joint\\(s\\): elbow. This SDF declares: arm::elbow, shoulder"):
+            robot_control_values(self.payload, {"elbow": 30})
+        with self.assertRaisesRegex(RobotReadError, "SDF model 'rig' refers to frame 'arm::nope', which it does not declare"):
+            read_robot_description(self.write("nope.sdf", NESTED_SDF.replace("<child>arm::upper</child>", "<child>arm::nope</child>")))
+        with self.assertRaisesRegex(RobotReadError, "placed.sdf model 'arm' is placed by its placement_frame, which the viewer does not place by; "
+                                                    "drop placement_frame and pose the model's own frame"):
+            read_robot_description(self.write("placed.sdf", NESTED_SDF.replace('<model name="arm">', '<model name="arm" placement_frame="upper">')))
 
 
 class SrdfArticulation(_Workspace):

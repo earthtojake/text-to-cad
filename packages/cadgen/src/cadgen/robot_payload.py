@@ -31,6 +31,11 @@ The payload::
   (``articulation.joint_matrices``) moves them. A visual's ``id`` is ``<link>:v<n>`` and its
   ``label`` what a row calls it: the ``name`` the description gave it, else its geometry (the
   mesh file's name, or ``box``, ``cylinder``, ``sphere``, ``capsule``).
+- An SDF model's nested models (SDFormat 1.6+) are part of the robot: their links, frames
+  and joints are named by scope (``arm::elbow``, ``arm::hand::palm``), a name written in a
+  nested model resolves in that model's namespace, a nested model is posed in the model it is
+  nested in and attached to its ``canonical_link`` (else its first link), and a joint outside
+  it names its links by scoped name. A model placed by ``placement_frame`` is refused.
 - A control is a joint a person or a job sets: revolute and continuous joints in DEGREES,
   prismatic joints in METRES, each at its declared limits (a continuous joint has none). A
   mimic follower is not a control: its row is its leader's, scaled and offset, so one value
@@ -97,6 +102,10 @@ __all__ = [
 ]
 
 ROBOT_PAYLOAD_SCHEMA_VERSION = 2
+# Raised when the same description resolves to a different payload of the same shape (2: a
+# GLB link mesh in metres, an SDF's nested models), so a payload the store cached before is
+# never read again (``robot_payload_scheme``).
+_RESOLUTION_REVISION = 2
 ROBOT_SUFFIXES = (".urdf", ".srdf", ".sdf")
 #: The mesh files the page decodes, by suffix: what a link mesh may be.
 DRAWABLE_MESH_FORMATS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb"}
@@ -578,34 +587,50 @@ def _sdf_pose(element: ET.Element, *, where: str) -> tuple[bool, str, list[float
     return True, str(pose.attrib.get("relative_to") or "").strip(), values, _pose(values[:3], values[3:])
 
 
+class _SdfScope:
+    """One model's namespace in the frame graph: the top-level model's (no prefix, its frame
+    ``__model__``) or a nested model's (``arm::``, its frame the node ``arm``)."""
+
+    __slots__ = ("name", "prefix", "frame")
+
+    def __init__(self, name: str, prefix: str, frame: str) -> None:
+        self.name, self.prefix, self.frame = name, prefix, frame
+
+    def key(self, name: object, default: str) -> str:
+        """The graph key a name written in this model means: its own frame for ``__model__`` or
+        its own name, ``world`` for the world, else the name in this model's namespace -- a
+        scoped name (``hand::palm``) reaching into a model nested in it."""
+        text = str(name or "").strip()
+        if not text:
+            return default
+        if text == _SDF_WORLD_FRAME:
+            return _SDF_WORLD_FRAME
+        if text in (self.name, _SDF_MODEL_FRAME):
+            return self.frame
+        return self.prefix + text
+
+
 class _SdfFrames:
-    """The model's frame graph: links, frames and joints to their rest transforms in the
-    model's world, by the SDFormat 1.7+ rules (``relative_to``, ``attached_to``, a joint's
-    pose relative to its child, a frame's to what it is attached to)."""
+    """The model's frame graph: its links, frames, joints and nested models, and theirs, keyed
+    by scoped name (``arm::elbow``), to their rest transforms in the model's world by the
+    SDFormat rules (``relative_to``, ``attached_to``, a joint's pose relative to its child, a
+    frame's to what it is attached to, a nested model's to the model it is nested in). Every
+    node's ``relative_to`` is a key, resolved in its own model's namespace when it was added."""
 
     def __init__(self, model_name: str, model_world: list[list[float]]) -> None:
         self.model_name = model_name
         self.nodes: dict[str, dict] = {
             _SDF_WORLD_FRAME: {"kind": "world", "world": _IDENTITY},
-            _SDF_MODEL_FRAME: {"kind": "model", "world": model_world},
+            _SDF_MODEL_FRAME: {"kind": "model", "world": model_world, "canonical": ""},
         }
         self.links: set[str] = set()
 
-    def normalize(self, name: str, default: str) -> str:
-        text = str(name or "").strip()
-        if not text:
-            return default
-        if text in (self.model_name, _SDF_MODEL_FRAME):
-            return _SDF_MODEL_FRAME
-        return text
+    def add(self, key: str, node: dict) -> None:
+        if key in self.nodes:
+            raise RobotReadError(f"SDF model {self.model_name!r} names {key!r} twice: links, frames, joints and nested models share one namespace")
+        self.nodes[key] = node
 
-    def add(self, name: str, node: dict) -> None:
-        if name in self.nodes:
-            raise RobotReadError(f"SDF model {self.model_name!r} names {name!r} twice: links, frames and joints share one namespace")
-        self.nodes[name] = node
-
-    def world(self, name: str, default: str = _SDF_MODEL_FRAME, resolving: tuple[str, ...] = ()) -> list[list[float]]:
-        key = self.normalize(name, default)
+    def world(self, key: str, resolving: tuple[str, ...] = ()) -> list[list[float]]:
         node = self.nodes.get(key)
         if node is None:
             raise RobotReadError(f"SDF model {self.model_name!r} refers to frame {key!r}, which it does not declare")
@@ -613,15 +638,14 @@ class _SdfFrames:
             return node["world"]
         if key in resolving:
             raise RobotReadError(f"SDF model {self.model_name!r} frame graph cycles at {key!r}")
-        relative = self.normalize(node["relative_to"], node["default"])
-        node["world"] = _multiply(self.world(relative, _SDF_MODEL_FRAME, (*resolving, key)), node["pose"])
+        node["world"] = _multiply(self.world(node["relative_to"], (*resolving, key)), node["pose"])
         return node["world"]
 
-    def attached_link(self, name: str, resolving: tuple[str, ...] = ()) -> str:
-        key = self.normalize(name, _SDF_MODEL_FRAME)
+    def attached_link(self, key: str, resolving: tuple[str, ...] = ()) -> str:
+        """The link a frame moves with: a nested model's frame is attached to its canonical link."""
         if key in self.links:
             return key
-        if key in (_SDF_MODEL_FRAME, _SDF_WORLD_FRAME):
+        if key == _SDF_WORLD_FRAME:
             return ""
         node = self.nodes.get(key)
         if node is None:
@@ -632,6 +656,8 @@ class _SdfFrames:
             return self.attached_link(node["attached"], (*resolving, key))
         if node["kind"] == "joint":
             return self.attached_link(node["child"], (*resolving, key))
+        if node["kind"] == "model" and node["canonical"]:
+            return self.attached_link(node["canonical"], (*resolving, key))
         return ""
 
 
@@ -756,48 +782,73 @@ def _read_sdf(path: Path) -> _Description:
         raise RobotReadError(f"{display} model {model_name!r} pose is relative_to {relative_to!r}; the viewer places a model in the world")
     frames = _SdfFrames(model_name, model_world)
 
-    link_elements = children(model, "link")
-    for link_element in link_elements:
-        name = str(link_element.attrib.get("name") or "").strip()
-        _declared, relative_to, _values, transform = _sdf_pose(link_element, where=f"{display} link {name!r}")
-        frames.links.add(name)
-        frames.add(name, {"kind": "link", "pose": transform, "relative_to": relative_to, "default": _SDF_MODEL_FRAME})
-    frame_elements = children(model, "frame")
-    for frame_element in frame_elements:
-        name = str(frame_element.attrib.get("name") or "").strip()
-        attached = frames.normalize(frame_element.attrib.get("attached_to"), _SDF_MODEL_FRAME)
-        _declared, relative_to, _values, transform = _sdf_pose(frame_element, where=f"{display} frame {name!r}")
-        frames.add(name, {"kind": "frame", "pose": transform, "relative_to": relative_to, "default": attached, "attached": attached})
-    joint_elements = children(model, "joint")
+    # The model and every model nested in it (SDFormat 1.6+), as one frame graph: each nested
+    # model's links, frames and joints under its scoped name (``arm::elbow``), each nested
+    # model's frame posed in the model it is nested in and attached to its canonical link.
+    link_elements: list[tuple[str, ET.Element, _SdfScope]] = []
+    frame_count = 0
     raw_joints: list[dict] = []
-    for joint_element in joint_elements:
-        name = str(joint_element.attrib.get("name") or "").strip()
-        joint_type = str(joint_element.attrib.get("type") or "").strip().lower()
-        if joint_type not in (*_MOVING, "fixed"):
-            raise RobotReadError(f"{display} joint {name!r} is a {joint_type!r} joint; the viewer poses fixed, revolute, continuous and prismatic joints")
-        parent_frame = frames.normalize(_sdf_text(joint_element, "parent"), "")
-        child_frame = frames.normalize(_sdf_text(joint_element, "child"), "")
-        _declared, relative_to, values, transform = _sdf_pose(joint_element, where=f"{display} joint {name!r}")
-        frames.add(name, {"kind": "joint", "pose": transform, "relative_to": relative_to, "default": child_frame, "child": child_frame})
-        axis_element = _sdf_first(joint_element, "axis")
-        xyz_element = _sdf_first(axis_element, "xyz") if axis_element is not None else None
-        axis = _numbers(xyz_element.text if xyz_element is not None else None, 3, where=f"{display} joint {name!r} axis", default=[0.0, 0.0, 1.0])
-        expressed_in = str((xyz_element.attrib.get("expressed_in") if xyz_element is not None else None)
-                           or (axis_element.attrib.get("expressed_in") if axis_element is not None else None) or "").strip()
-        limit_element = _sdf_first(axis_element, "limit") if axis_element is not None else None
-        limit: dict = {}
-        for key in ("lower", "upper", "effort", "velocity"):
-            value = _optional_numbers(_sdf_text(limit_element, key), 1) if limit_element is not None else None
-            if value is not None:
-                limit[key] = value[0]
-        raw_joints.append({"name": name, "type": joint_type, "parent": parent_frame, "child": child_frame, "axis": axis,
-                           "expressed_in": expressed_in, "limit": limit, "declared_limit": limit_element is not None,
-                           "pose": values})
+
+    def collect(element: ET.Element, scope: _SdfScope) -> None:
+        nonlocal frame_count
+        where_model = f"{display} model {(scope.prefix[:-2] or model_name)!r}"
+        if str(element.attrib.get("placement_frame") or "").strip():
+            raise RobotReadError(f"{where_model} is placed by its placement_frame, which the viewer does not place by; "
+                                 "drop placement_frame and pose the model's own frame")
+        for link_element in children(element, "link"):
+            key = scope.key(link_element.attrib.get("name"), "")
+            _declared, relative_to, _values, transform = _sdf_pose(link_element, where=f"{display} link {key!r}")
+            frames.links.add(key)
+            frames.add(key, {"kind": "link", "pose": transform, "relative_to": scope.key(relative_to, scope.frame)})
+            link_elements.append((key, link_element, scope))
+        for frame_element in children(element, "frame"):
+            key = scope.key(frame_element.attrib.get("name"), "")
+            attached = scope.key(frame_element.attrib.get("attached_to"), scope.frame)
+            _declared, relative_to, _values, transform = _sdf_pose(frame_element, where=f"{display} frame {key!r}")
+            frames.add(key, {"kind": "frame", "pose": transform, "relative_to": scope.key(relative_to, attached), "attached": attached})
+            frame_count += 1
+        for nested in children(element, "model"):
+            key = scope.key(nested.attrib.get("name"), "")
+            _declared, relative_to, _values, transform = _sdf_pose(nested, where=f"{display} model {key!r}")
+            inner = _SdfScope(str(nested.attrib.get("name") or "").strip(), f"{key}::", key)
+            canonical = str(nested.attrib.get("canonical_link") or "").strip()
+            first = _sdf_first(nested, "link") if not canonical else None
+            first_model = _sdf_first(nested, "model") if not canonical and first is None else None
+            canonical_key = (inner.key(canonical, "") if canonical
+                             else inner.key(first.attrib.get("name"), "") if first is not None
+                             else inner.key(first_model.attrib.get("name"), "") if first_model is not None else "")
+            frames.add(key, {"kind": "model", "pose": transform, "relative_to": scope.key(relative_to, scope.frame), "canonical": canonical_key})
+            collect(nested, inner)
+        for joint_element in children(element, "joint"):
+            key = scope.key(joint_element.attrib.get("name"), "")
+            joint_type = str(joint_element.attrib.get("type") or "").strip().lower()
+            if joint_type not in (*_MOVING, "fixed"):
+                raise RobotReadError(f"{display} joint {key!r} is a {joint_type!r} joint; the viewer poses fixed, revolute, continuous and prismatic joints")
+            parent_frame = scope.key(_sdf_text(joint_element, "parent"), "")
+            child_frame = scope.key(_sdf_text(joint_element, "child"), "")
+            _declared, relative_to, values, transform = _sdf_pose(joint_element, where=f"{display} joint {key!r}")
+            frames.add(key, {"kind": "joint", "pose": transform, "relative_to": scope.key(relative_to, child_frame), "child": child_frame})
+            axis_element = _sdf_first(joint_element, "axis")
+            xyz_element = _sdf_first(axis_element, "xyz") if axis_element is not None else None
+            axis = _numbers(xyz_element.text if xyz_element is not None else None, 3, where=f"{display} joint {key!r} axis", default=[0.0, 0.0, 1.0])
+            expressed_in = ((xyz_element.attrib.get("expressed_in") if xyz_element is not None else None)
+                            or (axis_element.attrib.get("expressed_in") if axis_element is not None else None))
+            limit_element = _sdf_first(axis_element, "limit") if axis_element is not None else None
+            limit: dict = {}
+            for name in ("lower", "upper", "effort", "velocity"):
+                value = _optional_numbers(_sdf_text(limit_element, name), 1) if limit_element is not None else None
+                if value is not None:
+                    limit[name] = value[0]
+            raw_joints.append({"name": key, "type": joint_type, "parent": parent_frame, "child": child_frame, "axis": axis,
+                               "expressed_in": scope.key(expressed_in, key), "limit": limit, "declared_limit": limit_element is not None,
+                               "pose": values})
+
+    collect(model, _SdfScope(model_name, "", _SDF_MODEL_FRAME))
 
     links: dict[str, _Link] = {}
     undrawable: list[str] = []  # every visual the page cannot draw, named together
-    for link_element in link_elements:
-        link = _Link(str(link_element.attrib.get("name") or "").strip())
+    for link_key, link_element, scope in link_elements:
+        link = _Link(link_key)
         link.placement = frames.world(link.name)
         inverse = _invert_rigid(link.placement)
         for index, visual_element in enumerate(children(link_element, "visual"), start=1):
@@ -806,7 +857,7 @@ def _read_sdf(path: Path) -> _Description:
             color = _sdf_color(visual_element)
             facts["color"], facts["materialName"] = color, ""
             _declared, relative_to, _values, pose = _sdf_pose(visual_element, where=where)
-            local = _multiply(inverse, _multiply(frames.world(relative_to, link.name), pose))
+            local = _multiply(inverse, _multiply(frames.world(scope.key(relative_to, link.name)), pose))
             kind = facts["type"]
             try:
                 if kind == "mesh":
@@ -856,7 +907,7 @@ def _read_sdf(path: Path) -> _Description:
         joint = _Joint(raw["name"], raw["type"], parent_link, child_link)
         joint.frame = frames.world(raw["name"])
         if joint.type != "fixed":
-            axis_frame = frames.world(raw["expressed_in"], raw["name"])
+            axis_frame = frames.world(raw["expressed_in"])
             joint.axis = _unit(_rotate(axis_frame, raw["axis"]))
             if joint.axis is None:
                 raise RobotReadError(f"{display} joint {raw['name']!r} axis must be nonzero")
@@ -880,9 +931,9 @@ def _read_sdf(path: Path) -> _Description:
         "modelName": model_name,
         "rootLink": description.root,
         "rootLinks": roots,
-        "frameCount": len(frame_elements),
+        "frameCount": frame_count,
         "linkCount": len(link_elements),
-        "jointCount": len(joint_elements),
+        "jointCount": len(raw_joints),
         "staticMetadata": _sdf_metadata(root),
     }
     return description
@@ -1413,8 +1464,9 @@ def read_robot_description(path: Path | str, *, package_map: dict[str, Path] | N
 
 
 def robot_payload_scheme() -> str:
-    """What the payload's shape and its primitive meshes depend on, hashed into the index key."""
-    return f"robot-payload-{ROBOT_PAYLOAD_SCHEMA_VERSION}-articulation-{ARTICULATION_SCHEMA_VERSION}-" \
+    """What the payload's shape, its resolution and its primitive meshes depend on, hashed into
+    the index key."""
+    return f"robot-payload-{ROBOT_PAYLOAD_SCHEMA_VERSION}-resolution-{_RESOLUTION_REVISION}-articulation-{ARTICULATION_SCHEMA_VERSION}-" \
            + json.dumps(DEFAULT_TESSELLATION, sort_keys=True)
 
 
