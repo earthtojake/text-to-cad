@@ -108,6 +108,9 @@ const token = (value, name, limit = 64) =>
 const oneOf = (value, allowed, name) => (allowed.has(value) ? value : fail(`${name} is not one of ${[...allowed].join(', ')}`));
 const count = (value, name) => (Number.isInteger(value) && value >= 0 && value <= MAX_COUNT ? value : fail(`${name} is not a count`));
 const some = (value, name) => (count(value, name) > 0 ? value : fail(`${name} counts nothing`));
+// A process's exit status: an exit code or a signal (-N), or on Windows the exception code a fault ended it
+// with (an NTSTATUS error, 0xC0000000 and up).
+const exitStatus = value => Number.isInteger(value) && (Math.abs(value) < 512 || (value >= 0xC0000000 && value <= 0xFFFFFFFF));
 const matches = (value, pattern, name) => (typeof value === 'string' && pattern.test(value) ? value : fail(`${name} is not one`));
 const frameOf = (frame, name) => {
   if (!frame || typeof frame !== 'object' || Array.isArray(frame)) fail(`${name} is not a frame`);
@@ -215,7 +218,7 @@ const READERS = {
       ...(event.tool === undefined ? {} : { tool: matches(event.tool, TOOL, `${at}.tool`) }),
       type: matches(event.type, TYPE, `${at}.type`),
       handled: event.handled,
-      ...(event.status === undefined ? {} : { status: Number.isInteger(event.status) && Math.abs(event.status) < 512 ? event.status : fail(`${at}.status is not an exit status`) }),
+      ...(event.status === undefined ? {} : { status: exitStatus(event.status) ? event.status : fail(`${at}.status is not an exit status`) }),
       frames: event.frames.map((frame, index) => frameOf(frame, `${at}.frames[${index}]`)),
       count: some(event.count, `${at}.count`),
     };

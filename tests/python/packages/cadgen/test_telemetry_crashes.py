@@ -175,6 +175,14 @@ class SignatureTest(unittest.TestCase):
                             "chunk_id": "0de4d024-c159-4f6d-b15a-cc4ef7a6856d"}]}
         self.assertTrue(analytics.valid_signature(good))
         self.assertTrue(analytics.valid_signature(analytics.died(-11)))
+        # Windows ends a faulted process with its exception code (STATUS_ACCESS_VIOLATION): that is its exit
+        # status, and the crash says it as a signal's would.
+        self.assertEqual(analytics.died(0xC0000005)["status"], 0xC0000005)
+        self.assertTrue(analytics.valid_signature(analytics.died(0xC0000005)))
+        for status in (70000, -0xC0000005, 0x100000000):
+            with self.subTest(status=status):
+                self.assertNotIn("status", analytics.died(status))
+                self.assertFalse(analytics.valid_signature({**analytics.died(-11), "status": status}))
         for bad in (
             {**good, "message": "Cannot read properties of undefined (reading 'secret')"},
             {**good, "frames": [{"file": "/Users/someone/secret.js", "function": "f", "line": 1}]},

@@ -52,6 +52,9 @@ export function settingsOf(env) {
     projectId: env.POSTHOG_PROJECT_ID };
 }
 
+/** An exit status as its platform writes it: a Windows exception code in hex (0xC0000005), anything else as is. */
+const statusOf = status => (status >= 0xC0000000 ? `0x${status.toString(16).toUpperCase()}` : `${status}`);
+
 /**
  * A crash as PostHog's error tracking reads one (`$exception_list`): its type, a value that is only ever
  * a dead worker's exit status, whether the process went on, and its frames, oldest first -- Python's,
@@ -67,7 +70,7 @@ export function exceptionOf(row) {
     in_app: page ? !NOT_OURS.has(frame.file) : frame.file.startsWith('cadgen/'),
   }));
   return [{
-    type: row.type, value: row.status === undefined ? '' : `exit status ${row.status}`,
+    type: row.type, value: row.status === undefined ? '' : `exit status ${statusOf(row.status)}`,
     mechanism: { type: 'generic', handled: row.handled, synthetic: false },
     ...(frames.length ? { stacktrace: { type: 'raw', frames } } : {}),
   }];

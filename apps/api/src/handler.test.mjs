@@ -88,6 +88,12 @@ test("the build daemon's counts are rows of their own, under the process that sa
 test('a crash is one row, its frames checked one by one, and nothing it said', async () => {
   const store = memory();
   const worker = { name: 'exception', where: 'build', type: 'WorkerDied', handled: false, status: -11, frames: [], count: 1 };
+  // Windows ends a faulted process with its exception code (STATUS_ACCESS_VIOLATION): an exit status too.
+  const fault = { ...worker, status: 0xC0000005 };
+  assert.equal((await send(memory(), 'POST', '/v1/events', { ...DAEMON, events: [fault] })).status, 204);
+  for (const status of [70000, -0xC0000005, 0x100000000, 1.5]) {
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...DAEMON, events: [{ ...worker, status }] })).status, 400, status);
+  }
   const page = { name: 'exception', where: 'page', type: 'TypeError', handled: false, count: 1,
     frames: [{ file: 'assets/index-Bx3k2.js', function: 'Kt', line: 1, column: 48213, chunk_id: '0de4d024-c159-4f6d-b15a-cc4ef7a6856d' }] };
   assert.equal((await send(store, 'POST', '/v1/events', { ...DAEMON, events: [CRASH, worker, page] })).status, 204);

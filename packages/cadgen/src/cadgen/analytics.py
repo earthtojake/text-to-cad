@@ -848,11 +848,17 @@ def snapshot_failure(error: BaseException, otherwise: str = "other") -> str:
         return "other"
 
 
+def _exit_status(status: Any) -> bool:
+    """Whether ``status`` reads as a process's exit status: an exit code or a signal (``-N``), or on
+    Windows the exception code a fault ended it with (an NTSTATUS error, ``0xC0000000`` and up)."""
+    return type(status) is int and (-512 < status < 512 or 0xC0000000 <= status <= 0xFFFFFFFF)
+
+
 def died(status: Any) -> dict[str, Any]:
     """A build worker that died under a job (a native crash, or killed for memory): a crash with no
     frames to show, its exit status what there is to tell."""
     found = {"where": "build", "type": "WorkerDied", "handled": False, "frames": []}
-    if isinstance(status, int) and not isinstance(status, bool) and -512 < status < 512:
+    if _exit_status(status):
         found["status"] = status
     return found
 
@@ -869,7 +875,7 @@ def valid_signature(found: Any) -> bool:
         return False
     if "tool" in found and not (isinstance(found["tool"], str) and _TOOL.fullmatch(found["tool"])):
         return False
-    if "status" in found and not (type(found["status"]) is int and -512 < found["status"] < 512):
+    if "status" in found and not _exit_status(found["status"]):
         return False
     for frame in frames:
         if not isinstance(frame, dict) or not set(frame) <= {"file", "function", "line", "column", "chunk_id"}:
