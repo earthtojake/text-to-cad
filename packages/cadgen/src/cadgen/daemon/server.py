@@ -654,6 +654,14 @@ def _bind(address: str, *, wait: float = 0.0) -> transport.Server | None:
             return None
         time.sleep(LOCK_POLL_SECONDS)
     _DAEMON_LOCK = lock  # held while this daemon serves the address
+    try:
+        # A socket moved out of a deep state directory needs a folder no one else owns.
+        transport.claim_folder(address, create=True)
+    except transport.AddressUnusable as exc:
+        _log(f"cannot bind {address}: {exc}")
+        lock.release()
+        _DAEMON_LOCK = None
+        return None
     if transport.address_is_stale(address):
         transport.clear_address(address)
     while True:

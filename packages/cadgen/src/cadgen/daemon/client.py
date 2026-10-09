@@ -152,10 +152,12 @@ def log_path(address: str | None = None) -> Path:
     """Where the daemon's lifecycle and OCP noise go.
 
     Derived from the identity rather than from the address: a pipe name is not a path, so
-    there is nothing to hang a sibling .log off on Windows.
+    there is nothing to hang a sibling .log off on Windows. On POSIX it is the socket's
+    sibling, kept in the state directory when the socket had to move out of it
+    (``transport.beside``).
     """
     if address and os.name != "nt":
-        return Path(address).with_suffix(".log")
+        return transport.beside(address, Path(address).with_suffix(".log").name)
     return transport.state_dir() / f"cadgen-daemon-{daemon_identity()}.log"
 
 
@@ -248,7 +250,15 @@ def run_via_daemon(
     from cadgen.daemon.executors import emit_event
 
     payload = _request_payload(tool, argv, cwd, prog, root_id=os.environ.get("CADGEN_ROOT_ID"))
-    return _run_with_retry(payload, on_event=emit_event)
+    try:
+        return _run_with_retry(payload, on_event=emit_event)
+    except KeyboardInterrupt:
+        # Ctrl-C while this process only waits on the daemon: the build service stops the
+        # job when its caller leaves, so there is nothing here to unwind, and a traceback
+        # through the transport's wait would say only where this process was waiting.
+        sys.stderr.write(f"\n{prog or f'cadgen {tool}'}: interrupted\n")
+        sys.stderr.flush()
+        raise SystemExit(130) from None
 
 
 def run_nested(
@@ -334,6 +344,14 @@ def _run_with_retry(payload: dict, *, on_stream=None, on_event=None,
             # No request was submitted: preserve the ordinary source/CLI
             # fallback, without spawning repeatedly over a live listener.
             return None
+        except transport.AddressUnusable as error:
+            # No daemon can listen there and none was asked: say why, once, and fall back.
+            if strict:
+                if on_stream is not None:
+                    on_stream(f"{error}\n")
+            else:
+                print(f"cadgen-daemon: {error} Running this in this process.", file=sys.stderr, flush=True)
+            return None
         if conn is None:
             return None
         try:
@@ -395,10 +413,15 @@ def _connect(address: str) -> transport.Channel:
         raise
 
 
+# Connect failures no spawn can fix: a live peer that rejects the key, or an address no
+# daemon could listen at. The rest mean "nothing is listening yet".
+_FINAL = (transport.AuthenticationError, transport.AddressUnusable)
+
+
 def _connect_or_spawn(address: str) -> transport.Channel | None:
     try:
         return _connect(address)
-    except transport.AuthenticationError:
+    except _FINAL:
         raise
     except OSError:
         pass
@@ -416,7 +439,7 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
             # released it. If the daemon answers now, there is nothing to spawn.
             try:
                 return _connect(address)
-            except transport.AuthenticationError:
+            except _FINAL:
                 raise
             except OSError:
                 pass
@@ -428,7 +451,7 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
         while time.monotonic() < deadline:
             try:
                 return _connect(address)
-            except transport.AuthenticationError:
+            except _FINAL:
                 raise
             except OSError:
                 if process is not None and process.poll() is not None:
@@ -436,7 +459,7 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
                     # already bound. One more connect tells the two apart.
                     try:
                         return _connect(address)
-                    except transport.AuthenticationError:
+                    except _FINAL:
                         raise
                     except OSError:
                         return None
@@ -623,6 +646,14 @@ def worker_died_message(payload: dict, death: dict, *, falling_back: bool = Fals
     )
 
 
+def daemon_lost_message(payload: dict, reason: str) -> str:
+    """What the user reads when the build service itself goes away mid-request (it was
+    killed, or crashed) and the job is about to run again, cold, in this process."""
+    prog, args, _cold = _job_words(payload)
+    return (f"cadgen-daemon: lost the build service running `{' '.join([prog, *args])}` (it {reason}). "
+            "Running it cold now, in this process; what follows is that run.\n")
+
+
 def _run_request(
     channel: transport.Channel, payload: dict, *, on_stream=None, on_event=None,
     on_artifact_result=None, strict: bool = False, cancelled=None,
@@ -634,8 +665,14 @@ def _run_request(
     given (a nested child build captures them); ``event`` frames — the build
     tree's model transitions — go to ``on_event``."""
     def protocol_failure(reason):
-        if strict and on_stream is not None:
-            on_stream(f"The geometry service {reason}.\n")
+        if strict:
+            if on_stream is not None:
+                on_stream(f"The geometry service {reason}.\n")
+        elif pending_death is None:
+            # The ordinary fallback runs this job again, cold, in this process: say so,
+            # or a rerun from the start reads as a slow build. A worker's death says it
+            # itself (``settled``).
+            emit(daemon_lost_message(payload, reason))
         return None
 
     def emit(text: str) -> None:

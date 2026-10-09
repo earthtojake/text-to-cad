@@ -92,17 +92,24 @@ _EMIT_LOCK = threading.Lock()
 HEARTBEAT_INTERVAL_SECONDS = 10.0
 # The phase the running job last announced about itself; its heartbeat carries it.
 _PHASE: list[str | None] = [None]
+# The frame channel: a descriptor of its own on the pipe the pool reads, opened by
+# ``serve``. Not fd 1 itself, which a job may point elsewhere for a while -- a STEP read
+# sends the kernel's diagnostics to stderr by moving fd 1
+# (``step_scene_loader.kernel_messages_on_stderr``) -- and a frame written meanwhile, a
+# heartbeat, went to the daemon's log instead of the supervisor.
+_FRAMES: list = [None]
 
 
 def _emit(frame: dict) -> None:
-    """One JSON line on the real stdout. Never the redirected one."""
+    """One JSON line on the frame channel. Never the redirected stdout."""
     line = json.dumps(frame, separators=(",", ":")) + "\n"
     event = frame.get("event")
     if isinstance(event, dict) and event.get("phase") and event.get("job") == os.environ.get("CADGEN_JOB_ID"):
         _PHASE[0] = str(event["phase"])
     with _EMIT_LOCK:
-        sys.__stdout__.write(line)
-        sys.__stdout__.flush()
+        channel = _FRAMES[0] or sys.__stdout__
+        channel.write(line)
+        channel.flush()
 
 
 def _beat() -> None:
@@ -127,6 +134,12 @@ def _heartbeat():
     Joined before the job's exit frame is written, so no heartbeat ever follows
     ``exit`` or lands in the next job; a daemon thread, so it dies with the process.
     Not progress: nothing relays it to the client or folds it into the job ledger.
+
+    A beat nobody reads ends the worker. The frame channel's reader is the supervisor,
+    so it is gone (killed, or crashed), and with it everyone waiting on this job: its
+    client is already running the job again without the daemon, and a body that ran on
+    would only build the same model alongside that rerun. Between jobs, stdin's EOF does
+    the same. What the job leaves behind is swept by pid (``_internal.temp_leftovers``).
     """
     _PHASE[0] = None
     stop = threading.Event()
@@ -136,7 +149,7 @@ def _heartbeat():
             try:
                 _beat()
             except (OSError, ValueError):
-                return  # the frame channel is gone; stdin's EOF ends the worker
+                os._exit(1)  # the supervisor is gone: see above
 
     _beat()
     thread = threading.Thread(target=run, name="cadgen-worker-heartbeat", daemon=True)
@@ -357,6 +370,11 @@ def serve() -> int:
         if reconfigure is not None:
             with contextlib.suppress(OSError, ValueError):
                 reconfigure(encoding="utf-8", errors="backslashreplace")
+    # Frames go out on a descriptor of their own (``_FRAMES``), which nothing a job does
+    # to fd 1 can move: the same pipe, each frame flushed whole, no newline translation.
+    sys.stdout.flush()
+    _FRAMES[0] = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8",
+                           errors="backslashreplace", newline="\n")
     # Child-build events from this worker's jobs ride the frame channel; the
     # supervisor relays them to the requesting client verbatim.
     from cadgen.daemon import executors

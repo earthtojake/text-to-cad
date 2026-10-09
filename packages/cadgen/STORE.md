@@ -1437,7 +1437,9 @@ file-trace log (`cadgen-trace-<pid>-*.log`) and the private copy of a STEP
 document it parses (`cadgen-step-import-<pid>-*`) in the system temp folder and
 removes them as it ends; a killed one cannot, a view copies every component
 it shows and an import copy the whole document. A job whose caller left ends
-by its worker being killed, so this is routine. A worker sweeps them as it starts, on a thread of its own: the
+by its worker being killed, so this is routine. A worker sweeps them as it starts, on a thread of its own,
+and the daemon sweeps again once it has reaped a worker that died or was killed
+(no starting worker sees one that dies after it started): the
 scratch of every pid no process holds, and scratch an older cadgen named
 without a pid once it is a day old. A live process's is never touched, a pid it
 cannot judge counts as live, and nothing in the store is involved
@@ -1468,6 +1470,14 @@ burst of starts, spreads over minutes, so it is waited for while its CPU clock
 moves and killed only after 120 s with neither its announcement nor CPU
 progress. Meanwhile the job it is for is listed `queued`, detail `Starting a
 geometry kernel`: nothing the job runs can say so before its worker exists.
+Frames leave a worker on a descriptor of their own, never fd 1 itself: a job may
+point fd 1 at stderr for a while (a STEP read sends the kernel's diagnostics
+there), and a beat written then went to the daemon's log, so a long read was
+killed as hung. A beat no one reads ends the worker at once: its supervisor is
+gone, and its client is already running the job again in its own process, as
+it says (`lost the build service … Running it cold now`). A job whose caller
+left is cancelled, not a crash, in the job ledger and in `cadgen daemon
+status` alike, though its worker is killed.
 
 **One daemon per address, by lock.** The daemon takes an exclusive lock keyed
 by its socket address (`cadgen.daemon.transport.SingletonLock`: `flock` on
@@ -1485,6 +1495,20 @@ linked temp file and republishes its in-memory key if an external cleanup
 replaces the file. This is the one lock cadgen keeps — a singleton for
 the daemon, never a build lock (§7): twenty clients starting at once used to
 start twenty daemons that unlinked each other's live sockets.
+
+**The address always binds.** On POSIX the address is a socket in the
+daemon's state directory (`CADGEN_DAEMON_STATE_DIR`, else `cadgen-daemon/` in
+the system temp folder), which holds its key, its locks and its log. A Unix
+socket path has a ceiling (104 bytes on macOS), so when the state directory is
+too deep for it the socket alone goes in `/tmp/cadgen-<uid>/`, named by a hash
+of the path it would have had: every client of that state directory finds the
+same one, whatever its own `TMPDIR`. Anyone can predict that folder's name in a
+`/tmp` every user shares, so the daemon makes it mode 0700 and uses it only
+while it is a folder of this user's own; one another user made first is never
+used, and every door says so and names the remedy (a shorter
+`CADGEN_DAEMON_STATE_DIR`). The key stays in the state directory, so a socket
+planted in the short folder could not answer the handshake either. On Windows
+the address is a pipe name, which has no path to outgrow.
 
 **A client that never answers holds up no one.** Each connection proves the
 authkey, and the daemon proves it back, on a thread of its own
