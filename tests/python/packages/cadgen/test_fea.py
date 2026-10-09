@@ -279,6 +279,14 @@ class Cantilever(unittest.TestCase):
         sidecar = json.loads(self.result.sidecar.read_text(encoding="utf-8"))
         self.assertEqual(sidecar["document"], str(self.step))
 
+    def test_the_glb_names_its_step_absolutely_when_no_relative_path_exists(self):
+        from unittest import mock
+
+        from cadgen._internal.fea.run import _document_ref
+
+        with mock.patch("os.path.relpath", side_effect=ValueError("path is on mount 'C:', start on mount 'D:'")):
+            self.assertEqual(_document_ref(self.step, self.out), self.step.resolve().as_posix())
+
     def test_the_glb_is_a_valid_binary_gltf_with_colours_and_the_value_attribute(self):
         import struct
 
@@ -479,6 +487,14 @@ class FinerMeshSize(unittest.TestCase):
         finer = finer_mesh_size(2.0, 679_000)  # a real L-bracket at its default size
         self.assertLess(finer, 2.0)
         self.assertLess(self.estimate(2.0, finer, 679_000), DOF_LIMIT)
+
+    def test_a_first_solve_just_under_the_warn_threshold_falls_back_to_the_limit_budget(self):
+        from cadgen._internal.fea.run import finer_mesh_size
+        from cadgen._internal.fea.solve import DOF_LIMIT
+
+        finer = finer_mesh_size(2.0, 350_000)  # the WARN budget would give a ratio under 1.1
+        self.assertLess(finer, 1.9)
+        self.assertLess(self.estimate(2.0, finer, 350_000), DOF_LIMIT)
 
     def test_no_finer_solve_when_there_is_no_room_for_one(self):
         from cadgen._internal.fea.run import finer_mesh_size

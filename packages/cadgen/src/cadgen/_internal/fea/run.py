@@ -150,19 +150,29 @@ def _solved(volume, outcome, parsed, ordinal_of: dict[str, int], part: str) -> "
     )
 
 
+def _document_ref(document: Path, glb_path: Path) -> str:
+    """The STEP relative to the GLB's folder; absolute when they share no root (another Windows drive)."""
+    try:
+        return Path(os.path.relpath(document.resolve(), glb_path.resolve().parent)).as_posix()
+    except ValueError:
+        return document.resolve().as_posix()
+
+
 def finer_mesh_size(size_mm: float, dofs: int) -> float | None:
     """The element size of the automatic re-solve: half, unless that passes the DOF budget.
 
     The DOF count grows with the cube of the size ratio, so the budget is
-    spent from the first solve's: under ``DOF_WARN`` when it fits, otherwise
-    under ``DOF_LIMIT`` (with a tenth of headroom for the estimate's error).
-    ``None`` when the budget leaves no meaningfully finer mesh.
+    spent from the first solve's: under ``DOF_WARN`` when that leaves a
+    meaningfully finer mesh, otherwise under ``DOF_LIMIT`` (with a tenth of
+    headroom for the estimate's error). ``None`` when even that leaves none.
     """
     from cadgen._internal.fea.solve import DOF_LIMIT, DOF_WARN
 
-    budget = DOF_WARN if dofs < DOF_WARN else 0.9 * DOF_LIMIT
-    ratio = min(2.0, (budget / dofs) ** (1 / 3))
-    return size_mm / ratio if ratio >= 1.1 else None
+    for budget in (DOF_WARN, 0.9 * DOF_LIMIT):
+        ratio = min(2.0, (budget / dofs) ** (1 / 3))
+        if ratio >= 1.1:
+            return size_mm / ratio
+    return None
 
 
 def solve_study(
@@ -225,8 +235,8 @@ def solve_study(
         finer_size = finer_mesh_size(volume.max_h, outcome.dofs)
         if finer_size is None:
             finer_failure = (
-                f"the part is already near the {solve.DOF_LIMIT:,} degree-of-freedom limit at {volume.max_h:g} mm, "
-                "so there was no room for a finer solve; its convergence is unchecked"
+                f"the part's {outcome.dofs:,} degrees of freedom at {volume.max_h:g} mm leave no room under the "
+                f"{solve.DOF_LIMIT:,} limit for a finer solve; its convergence is unchecked"
             )
     if finer_size is not None:
         refined = {
@@ -287,7 +297,7 @@ def solve_study(
         "name": f"{document.stem} von Mises",
         "generator": "cadgen fea",
         # Where the STEP is from the GLB's own folder, so a viewer can find it.
-        "document": Path(os.path.relpath(document.resolve(), glb_path.resolve().parent)).as_posix(),
+        "document": _document_ref(document, glb_path),
         "occurrence": occurrence.ref,
         "deformation_scale": scale,
         # The summary's safety factor, for the viewer's plain line; null when there is none.
