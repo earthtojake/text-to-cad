@@ -66,6 +66,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # study names; `solve` runs one linear static study and writes the result
     # GLB (a von Mises colour map on the deformed shape) with its JSON sidecar.
     "fea faces": ("cadgen.cli.fea_faces", "list a part's faces with their #o1.fN selectors"),
+    "fea parts": ("cadgen.cli.fea_parts", "list an assembly's parts and the pairs that touch"),
     "fea solve": ("cadgen.cli.fea_solve", "run a linear static stress study on a STEP part"),
     # Generic / services
     "doctor": ("cadgen.cli.doctor", "print installed cadgen and verify a skill's pin"),

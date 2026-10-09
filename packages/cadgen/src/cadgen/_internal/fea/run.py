@@ -10,13 +10,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cadgen.cli_logging import CliLogger
-from cadgen.results import FeaFace, FeaFacesResult, FeaResult
+from cadgen.results import FeaFace, FeaFacesResult, FeaPair, FeaPart, FeaPartsResult, FeaResult
 
 if TYPE_CHECKING:
     from cadgen._internal.fea.checks import Solved
     from cadgen.step_scene import Occurrence, Selection, StepScene
 
-__all__ = ["list_faces", "solve_study"]
+__all__ = ["list_assembly_parts", "list_faces", "solve_study"]
 
 _AXES = {"X": (1.0, 0.0, 0.0), "Y": (0.0, 1.0, 0.0), "Z": (0.0, 0.0, 1.0)}
 
@@ -103,6 +103,42 @@ def list_faces(target: Path, *, occurrence: str | None = None, verbose: bool = F
         for face in faces
     ]
     return FeaFacesResult(ok=True, document=Path(target), occurrence=owner.ref, faces=tuple(faces))
+
+
+# `fea parts` also lists pairs this far apart that the tolerance leaves unbonded,
+# so a near miss is something the agent reads rather than something that is missing.
+_NEAR_MISS_MM = 1.0
+
+
+def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verbose: bool = False) -> FeaPartsResult:
+    from cadgen._internal.fea.assembly import detect_contacts, list_parts
+    from cadgen._internal.fea.mesh import require_fea_stack
+
+    require_fea_stack()
+    if not contact_tolerance_mm >= 0:
+        raise ValueError("contact_tolerance_mm must be zero or more")
+    logger = CliLogger("fea", verbose=verbose)
+    scene = _open(Path(target))
+    parts = list_parts(scene)
+    logger.debug(f"{len(parts)} parts; looking for pairs within {max(contact_tolerance_mm, _NEAR_MISS_MM)} mm")
+    name = {part.ref: part.name for part in parts}
+    pairs = [
+        FeaPair(
+            between=(name[c.a], name[c.b]),
+            refs=(c.a, c.b),
+            area_mm2=round(c.area_mm2, 4),
+            gap_mm=round(c.gap_mm, 6),
+            type="bonded" if c.gap_mm <= contact_tolerance_mm * (1 + 1e-6) else "not_connected",
+        )
+        for c in detect_contacts(parts, max(contact_tolerance_mm, _NEAR_MISS_MM))
+    ]
+    return FeaPartsResult(
+        ok=True,
+        document=Path(target),
+        contact_tolerance_mm=contact_tolerance_mm,
+        parts=tuple(FeaPart(ref=p.ref, name=p.name, volume_mm3=round(p.volume_mm3, 4)) for p in parts),
+        pairs=tuple(pairs),
+    )
 
 
 def _peak_face(volume, outcome, peak_node: int, fixed_ordinals: set[int]) -> str | None:

@@ -21,6 +21,9 @@ __all__ = [
     "CompileResult",
     "FeaFace",
     "FeaFacesResult",
+    "FeaPair",
+    "FeaPart",
+    "FeaPartsResult",
     "FeaResult",
     "MeshExportFile",
     "MeshExportResult",
@@ -401,4 +404,53 @@ class FeaResult:
         ]
         lines += [f"{finding['severity']}: {finding['summary']}" for finding in self.findings]
         lines += [f"warning: {warning}" for warning in self.warnings]
+        return lines
+
+
+@dataclass(frozen=True)
+class FeaPart:
+    """One part of an assembly, as ``cadgen fea parts`` lists it."""
+
+    #: The occurrence selector (``#o1.2``), what a study's faces are scoped by.
+    ref: str
+    name: str
+    volume_mm3: float
+
+
+@dataclass(frozen=True)
+class FeaPair:
+    """Two parts that touch or nearly touch, and what a study does with them by default."""
+
+    #: The part names, the smaller part (the one attached) first.
+    between: tuple[str, str]
+    refs: tuple[str, str]
+    #: The area the two faces share, mm^2.
+    area_mm2: float
+    #: The gap between the faces, mm (0 = touching).
+    gap_mm: float
+    #: ``bonded`` (glued into one body) or ``not_connected`` (too far apart to bond).
+    type: str
+
+
+@dataclass(frozen=True)
+class FeaPartsResult:
+    """The outcome of ``cadgen fea parts``: the parts of an assembly and its touching pairs."""
+
+    ok: bool
+    document: Path
+    contact_tolerance_mm: float
+    parts: tuple[FeaPart, ...] = ()
+    pairs: tuple[FeaPair, ...] = ()
+
+    def human_lines(self) -> list[str]:
+        lines = [f"{_display(self.document)}: {len(self.parts)} parts, {len(self.pairs)} touching pairs"]
+        for part in self.parts:
+            lines.append(f"  {part.ref:<8} {part.name}  {part.volume_mm3:.4g} mm^3")
+        for pair in self.pairs:
+            a, b = pair.between
+            if pair.type == "bonded":
+                gap = f" · gap {pair.gap_mm:.3g} mm" if pair.gap_mm else ""
+                lines.append(f"{a} ↔ {b} · {pair.area_mm2:.4g} mm²{gap} · bonded")
+            else:
+                lines.append(f"{a} ↔ {b} · gap {pair.gap_mm:.3g} mm · not connected")
         return lines

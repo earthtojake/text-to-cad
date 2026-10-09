@@ -1,8 +1,9 @@
 """The public ``fea`` namespace: linear static stress on a STEP part.
 
-Two verbs, each mirrored by a generated CLI (``cadgen fea faces``,
-``cadgen fea solve``; design/format-doors.md): ``faces`` lists a part's faces
-with the ``#o1.fN`` selectors a study names them by, ``solve`` runs one study
+Three verbs, each mirrored by a generated CLI (``cadgen fea faces``,
+``cadgen fea parts``, ``cadgen fea solve``; design/format-doors.md): ``faces`` lists a part's faces
+with the ``#o1.fN`` selectors a study names them by, ``parts`` lists an
+assembly's parts and the pairs that touch, ``solve`` runs one study
 and writes a result GLB the viewer renders (von Mises as vertex colour on the
 deformed shape) beside a JSON sidecar with the numbers.
 
@@ -16,9 +17,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cadgen.results import FeaFacesResult, FeaResult
+from cadgen.results import FeaFacesResult, FeaPartsResult, FeaResult
 
-__all__ = ["faces", "solve"]
+__all__ = ["faces", "parts", "solve"]
 
 
 def faces(target: Path, *, occurrence: str | None = None, verbose: bool = False) -> FeaFacesResult:
@@ -32,6 +33,19 @@ def faces(target: Path, *, occurrence: str | None = None, verbose: bool = False)
     from cadgen._internal.fea.run import list_faces
 
     return list_faces(target, occurrence=occurrence, verbose=verbose)
+
+
+def parts(target: Path, *, contact_tolerance_mm: float = 0.1, verbose: bool = False) -> FeaPartsResult:
+    """List an assembly's parts and the pairs that touch, before writing a study.
+
+    target: the STEP/STP document.
+    contact_tolerance_mm: faces this close (or closer) count as touching and are
+        bonded by default; a pair a little farther apart is listed as not connected.
+    verbose: show progress on stderr.
+    """
+    from cadgen._internal.fea.run import list_assembly_parts
+
+    return list_assembly_parts(target, contact_tolerance_mm=contact_tolerance_mm, verbose=verbose)
 
 
 def solve(
