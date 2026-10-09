@@ -13,11 +13,13 @@ Coordinates are the plane's own, y up: ``XY`` draws (X, Y), ``XZ`` draws
 as cubic Beziers of its exact centre and radius (four to a full turn), lines as
 lines, and any other curve as the polyline its cut was sampled to.
 
-What is drawn, in order: each occurrence's closed loops filled (even-odd, so a
-hole is a hole), hatched at 45 degrees, red dash-dot centre lines through the
-cut's box, and every loop's outline. The hatch pitch and the dash lengths are
-stated in output pixels and converted with the scale the page will fit the
-drawing at, so they look the same at every model size.
+What is drawn, in order: each occurrence's solid material filled (its
+``filled`` loops, even-odd, so a hole is a hole), hatched at 45 degrees, red
+dash-dot centre lines through the cut's box, and every loop's outline -- a
+sheet's cut curves too, which bound no material and are never filled. The
+hatch pitch and the dash lengths are stated in output pixels and converted with
+the scale the page will fit the drawing at, so they look the same at every
+model size.
 """
 
 from __future__ import annotations
@@ -166,6 +168,7 @@ class _Loop:
     commands: list  # path commands, unrounded
     polyline: list  # sampled points, for the hatch
     closed: bool
+    filled: bool  # bounds a solid's material: filled and hatched
 
 
 def _loop_2d(placement: _Placement, loop: Mapping[str, Any]) -> _Loop:
@@ -209,20 +212,20 @@ def _loop_2d(placement: _Placement, loop: Mapping[str, Any]) -> _Loop:
     closed = bool(loop.get("closed"))
     if closed and commands:
         commands.append(["Z"])
-    return _Loop(commands, polyline, closed)
+    return _Loop(commands, polyline, closed, closed and bool(loop.get("filled")))
 
 
 def _hatch(loops: Sequence[_Loop], pitch: float) -> list[list[float]]:
     """45-degree hatch segments inside ``loops`` (even-odd), ``pitch`` model units apart.
 
     A scanline in the hatch's own frame: ``a`` runs along a hatch line (+x+y),
-    ``b`` across them. Every edge of every closed loop's polyline is crossed with
+    ``b`` across them. Every edge of every filled loop's polyline is crossed with
     each line ``b = k * pitch``; the crossings, sorted along the line, pair into
     the inside spans.
     """
     import numpy as np
 
-    rings = [np.asarray(loop.polyline, dtype=float) for loop in loops if loop.closed and len(loop.polyline) >= 3]
+    rings = [np.asarray(loop.polyline, dtype=float) for loop in loops if loop.filled and len(loop.polyline) >= 3]
     if not rings or not pitch > 0:
         return []
     root = math.sqrt(0.5)
@@ -382,7 +385,7 @@ def section_drawing(
         "primitives": [],
     }
     if not points:
-        warnings.append(f"SECTION {label} does not intersect the model; the section is empty")
+        warnings.append(f"SECTION {label} cuts no material; the section is empty")
         return SectionDrawing(payload, _svg(payload, size), label, warnings)
 
     xs, ys = [x for x, _ in points], [y for _, y in points]
@@ -404,10 +407,10 @@ def section_drawing(
         layer_counts[primitive["layer"]] = layer_counts.get(primitive["layer"], 0) + 1
 
     for loops in shapes:
-        closed = [loop for loop in loops if loop.closed]
-        if closed:
+        filled = [loop for loop in loops if loop.filled]
+        if filled:
             add({"type": "filled-paths", "layer": "section-fill", "color": FILL_COLOR, "opacity": FILL_OPACITY,
-                 "geometry": [_rounded_commands(loop.commands) for loop in closed]})
+                 "geometry": [_rounded_commands(loop.commands) for loop in filled]})
     hatch = [segment for loops in shapes for segment in _hatch(loops, HATCH_PITCH_PX * math.sqrt(0.5) * pixel)]
     if hatch:
         add({"type": "lines", "layer": "section-hatch", "color": HATCH_COLOR, "opacity": HATCH_OPACITY,

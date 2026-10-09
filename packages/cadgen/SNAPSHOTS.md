@@ -130,21 +130,26 @@ cadgen step snapshot part.step cut.svg --mode section --section XZ:12.5
 ```
 
 Those are the only two keys, a `section` outside section mode is refused, and a
-plane that misses the model returns an empty drawing with a warning.
+plane that cuts no material returns an empty drawing with a warning.
 
 The cut is exact. cadgen sections each part's BREP with the plane, in the part's
 own coordinates (`cadgen.store.sections`, a build-pool job cached by part and
 plane in the store's `section` index), so a cylinder cut across its axis is a
-circle of its true radius, never the chords of a tessellation. `--focus` and
-`--hide` pick the parts that are cut. The loops are drawn as a 2D drawing
-payload (`cadgen.section_drawing`): each part's closed loops filled even-odd and
-hatched at 45 degrees, dash-dot centre lines through the cut's box, and the
-outlines in the appearance's foreground (or `display.edges.color`). A `.png` is
-that payload painted by the snapshot page with the same drawing code a DXF is,
-with a cut locator in the corner and, with `--view-labels`, the plane's label; a
-`.svg` is written by cadgen itself, y up as drawn, and a job whose outputs are
-all `.svg` starts no browser. Section mode is for STEP/STP inputs; a mesh or a
-robot description has no solids to section.
+circle of its true radius, never the chords of a tessellation. A section is the
+material the plane cuts, and only a solid has any: a solid's cut is the region
+of the plane inside it (a face of it lying in the plane included), a plane that
+only touches a solid (tangent to a torus's top) cuts nothing, a sheet body's cut
+is its curves, and a wire or edge is no part of a section even lying in the
+plane. `--focus` and `--hide` pick the parts that are cut. The cut is drawn as a
+2D drawing payload (`cadgen.section_drawing`): each part's solid material filled
+even-odd and hatched at 45 degrees, dash-dot centre lines through the cut's box,
+and every outline, a sheet's curves included, in the appearance's foreground
+(or `display.edges.color`). A `.png` is that payload painted by the snapshot
+page with the same drawing code a DXF is, with a cut locator in the corner and,
+with `--view-labels`, the plane's label; a `.svg` is written by cadgen itself, y
+up as drawn, and a job whose outputs are all `.svg` starts no browser.
+Section mode is for STEP/STP inputs; a mesh or a robot description has no
+solids to section.
 
 ## Listing a STEP model's parts
 

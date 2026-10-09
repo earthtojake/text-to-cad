@@ -83,7 +83,7 @@ class SnapshotSectionTests(unittest.TestCase):
         self.assertEqual(["cut.png", "cut.svg", "miss.png"], sorted(file.path.name for file in self.result.files))
         self.assertEqual({"png", "svg"}, {file.kind for file in self.result.files})
         self.assertEqual(SIZE, (self.image.width, self.image.height))
-        self.assertEqual(["SECTION XY @ Z=50.000 does not intersect the model; the section is empty"],
+        self.assertEqual(["SECTION XY @ Z=50.000 cuts no material; the section is empty"],
                          list(self.result.warnings))
 
     def test_the_png_is_the_exact_cut_where_the_old_framing_put_it(self) -> None:
@@ -119,8 +119,11 @@ class SnapshotSectionTests(unittest.TestCase):
                                         focus=("#o1.1",))
         self.assertTrue(result.ok)
         svg = out.read_text(encoding="utf-8")
-        self.assertIn("M 0 0 L 20 0 L 20 10 L 0 10 L 0 0 Z", svg.replace("M 0 10 L 0 0 L 20 0 L 20 10 L 0 10 Z",
-                                                                         "M 0 0 L 20 0 L 20 10 L 0 10 L 0 0 Z"))
+        # The plate's outline: its four corners, one closed loop, whichever corner it starts at.
+        [outline] = re.findall(r'<path d="([^"]+)"[^>]*stroke-width="3"', svg)
+        self.assertRegex(outline, r"^M [-\d. ]+( L [-\d. ]+){4} Z$")
+        corners = {tuple(map(float, point.split())) for point in re.findall(r"[ML] ([-\d.]+ [-\d.]+)", outline)}
+        self.assertEqual({(0.0, 0.0), (20.0, 0.0), (20.0, 10.0), (0.0, 10.0)}, corners)
         self.assertNotIn(" C ", svg, "the focused plate has no curve; the pin was cut too")
 
 

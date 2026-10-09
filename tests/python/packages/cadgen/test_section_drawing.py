@@ -23,11 +23,12 @@ from cadgen.store import sections  # noqa: E402
 
 IDENTITY = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 COMPONENT = {"kind": "native", "codec": "bintools-v4", "contentHash": "c" * 64, "faceColors": {}, "brepObject": "b" * 64}
-# A disc of radius 10 about the local origin, in the local XY plane, and a 20 x 10 rectangle.
-DISC = {"loops": [{"closed": True, "edges": [{"arc": {
+# A disc of radius 10 about the local origin, in the local XY plane, and a 20 x 10 rectangle:
+# each a solid's cut, so each bounds material.
+DISC = {"loops": [{"closed": True, "filled": True, "edges": [{"arc": {
     "center": [0.0, 0.0, 0.0], "axis": [0.0, 0.0, 1.0], "radius": 10.0, "start": [10.0, 0.0, 0.0],
     "sweep": 2 * math.pi}}]}]}
-SQUARE = {"loops": [{"closed": True, "edges": [
+SQUARE = {"loops": [{"closed": True, "filled": True, "edges": [
     {"line": [[0.0, 0.0, 0.0], [20.0, 0.0, 0.0]]}, {"line": [[20.0, 0.0, 0.0], [20.0, 10.0, 0.0]]},
     {"line": [[20.0, 10.0, 0.0], [0.0, 10.0, 0.0]]}, {"line": [[0.0, 10.0, 0.0], [0.0, 0.0, 0.0]]}]}]}
 
@@ -127,11 +128,22 @@ class SectionDrawingTests(unittest.TestCase):
         layers = [primitive["layer"] for primitive in section.payload["primitives"]]
         self.assertEqual(["section-fill", "section-hatch", "section-centerline", "section-outline"], layers)
 
+    def test_a_closed_loop_that_bounds_no_material_is_outlined_never_filled(self) -> None:
+        # A sheet's cut can close on itself (a capless tube cut across is a circle), and there
+        # is nothing inside it to fill or hatch.
+        ring = {"loops": [{**DISC["loops"][0], "filled": False}]}
+        section = self.draw([self.place(ring, translated())])
+        layers = [primitive["layer"] for primitive in section.payload["primitives"]]
+        self.assertEqual(["section-centerline", "section-outline"], layers)
+        [outline] = [p for p in section.payload["primitives"] if p["layer"] == "section-outline"]
+        self.assertEqual(["Z"], outline["geometry"][-1])
+        self.assertNotIn('fill-rule="evenodd"', section.svg)
+
     def test_a_plane_that_misses_is_said_and_draws_nothing(self) -> None:
         section = self.draw([self.place({"loops": []}, translated(), offset=50.0)], offset=50.0)
         self.assertIsNone(section.payload["bounds"])
         self.assertEqual([], section.payload["primitives"])
-        self.assertEqual(["SECTION XY @ Z=50.000 does not intersect the model; the section is empty"],
+        self.assertEqual(["SECTION XY @ Z=50.000 cuts no material; the section is empty"],
                          section.warnings)
 
     def test_the_svg_is_the_payload_drawn_y_up(self) -> None:

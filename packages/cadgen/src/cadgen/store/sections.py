@@ -3,7 +3,8 @@
 An input-addressed derivation like ``mesh`` and ``drawing`` (``STORE.md`` §2):
 the key hashes this module's scheme, the component's encoded BREP (its codec
 and object hash) and the plane, in the component's own coordinates; the entry
-points at the object holding the cut's loops as JSON
+points at the object holding the cut's loops as JSON -- the material the plane
+cuts from the BREP's solids, and the curves it cuts from its sheets
 (``cadgen._internal.brep_section``). The same BREP cut by the same plane
 anywhere -- every occurrence of a part placed so the plane meets it the same
 way -- is one entry, and a scheme change lands on new keys instead of
@@ -42,7 +43,7 @@ INDEX_KIND = "section"
 SECTION_ENTRY_SCHEMA_VERSION = 1
 # What the cut IS: the loops' JSON shape and how they are made. Hashed into
 # every key, so a change here retires every entry by never asking for it again.
-SECTION_SCHEME = "cadgen-brep-section-v1"
+SECTION_SCHEME = "cadgen-brep-section-v2"
 # Planes are rounded before they key or cut anything, so the same plane reached
 # through two placements (one exact, one carrying 1e-16 of rotation noise) is
 # one entry, and the cut is made with exactly the plane the key names.

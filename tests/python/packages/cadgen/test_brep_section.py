@@ -1,9 +1,10 @@
 """A section is OCCT's cut of the exact BREP: circles are circles, lines are lines.
 
 ``cadgen._internal.brep_section`` cuts one component; these cut tiny build123d
-solids whose sections are known in closed form and compare the records to the
+shapes whose sections are known in closed form and compare the records to the
 analytic answer -- a radius, a centre, a sweep, a rectangle's corners -- rather
-than to a picture.
+than to a picture. Only a solid has material to fill: a plane that merely
+touches one, a sheet's cut and a curve lying in the plane fill nothing.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from build123d import Solid  # noqa: E402
+from build123d import Compound, Edge, GeomType, Shell, Solid, Wire  # noqa: E402
 
 from cadgen._internal.brep_section import section_loops  # noqa: E402
 
@@ -34,7 +35,7 @@ class BrepSectionTests(unittest.TestCase):
     def test_a_cut_across_the_axis_is_one_exact_circle(self) -> None:
         loops = cut(self.cylinder, (0.0, 0.0, 1.0), 10.0)
         self.assertEqual(1, len(loops))
-        self.assertTrue(loops[0]["closed"])
+        self.assertTrue(loops[0]["closed"] and loops[0]["filled"])
         [edge] = loops[0]["edges"]
         arc = edge["arc"]
         self.assertAlmostEqual(10.0, arc["radius"], delta=TOLERANCE)
@@ -78,6 +79,44 @@ class BrepSectionTests(unittest.TestCase):
 
     def test_a_plane_that_misses_cuts_nothing(self) -> None:
         self.assertEqual([], cut(self.cylinder, (0.0, 0.0, 1.0), 31.0))
+
+
+class SectionMaterialTests(unittest.TestCase):
+    """A section is the material the plane cuts: only a solid's cut is filled."""
+
+    def test_a_solids_cut_is_its_material_and_a_tangent_touch_cuts_none(self) -> None:
+        # A ring of major radius 10 and minor radius 3 about Z: its mid-plane cuts the annulus
+        # between radii 7 and 13; the plane Z=3 only touches its top along the circle r=10,
+        # where there is no material to fill (the disc inside that circle is the ring's hole).
+        ring = Solid.make_torus(10, 3)
+        loops = cut(ring, (0.0, 0.0, 1.0), 0.0)
+        self.assertEqual([True, True], [loop["filled"] and loop["closed"] for loop in loops])
+        radii = sorted(edge["arc"]["radius"] for loop in loops for edge in loop["edges"])
+        self.assertEqual(2, len(radii), loops)
+        self.assertAlmostEqual(7.0, radii[0], delta=TOLERANCE)
+        self.assertAlmostEqual(13.0, radii[1], delta=TOLERANCE)
+        self.assertEqual([], cut(ring, (0.0, 0.0, 1.0), 3.0))
+        # The same along a cylinder's side: the plane x=10 touches it along a line.
+        self.assertEqual([], cut(Solid.make_cylinder(10, 30), (1.0, 0.0, 0.0), 10.0))
+
+    def test_a_face_lying_in_the_plane_is_material_in_the_plane(self) -> None:
+        # A box standing on Z=0, cut at its floor: the closed solid meets the plane in its whole
+        # bottom face, which is what the section shows.
+        [loop] = cut(Solid.make_box(20, 10, 5), (0.0, 0.0, 1.0), 0.0)
+        self.assertTrue(loop["filled"])
+        corners = {tuple(round(value, 9) + 0.0 for value in edge["line"][0]) for edge in loop["edges"]}
+        self.assertEqual({(0.0, 0.0, 0.0), (20.0, 0.0, 0.0), (20.0, 10.0, 0.0), (0.0, 10.0, 0.0)}, corners)
+
+    def test_a_sheet_is_cut_along_curves_that_are_never_filled(self) -> None:
+        # A tube's side alone, no caps and no solid: cut across, a closed circle with nothing in it.
+        [side] = [face for face in Solid.make_cylinder(10, 30).faces() if face.geom_type == GeomType.CYLINDER]
+        [loop] = cut(Shell([side]), (0.0, 0.0, 1.0), 10.0)
+        self.assertEqual((True, False), (loop["closed"], loop["filled"]))
+        self.assertAlmostEqual(10.0, loop["edges"][0]["arc"]["radius"], delta=TOLERANCE)
+
+    def test_curves_are_no_material_even_lying_in_the_plane(self) -> None:
+        curves = Compound([Wire.make_circle(5), Edge.make_line((0, 0, 0), (10, 0, 0))])
+        self.assertEqual([], cut(curves, (0.0, 0.0, 1.0), 0.0))
 
 
 if __name__ == "__main__":
