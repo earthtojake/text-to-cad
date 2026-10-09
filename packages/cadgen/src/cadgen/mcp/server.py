@@ -622,11 +622,21 @@ class Server:
         launch = self._launch(model)
         if isinstance(view, SidebarView):
             if view.model != model:
-                self.sidebar_views.post(view.id, {"type": "show", "launch": launch})
+                self._leave(lambda: self.sidebar_views.post(view.id, {"type": "show", "launch": launch}))
             return _text(f"Showing {model} in the CAD sidebar, which shows each rebuild by itself.",
                          {"delivered": 1, "view": view.id, "sidebar": True})
         self.views.post([view.id], {"type": "show", "launch": launch})
         return _text(f"Showing {model} in CAD.", {"delivered": 1, "view": view.id})
+
+    @staticmethod
+    def _leave(request):
+        """A request left for the CAD sidebar (``sidebar_views.py``): a file this machine's disk may refuse,
+        which is the agent's to read, not this server's crash."""
+        try:
+            return request()
+        except OSError as error:
+            raise ToolFailed(f"The CAD sidebar could not be reached: this computer's disk refused the request "
+                             f"({error.strerror or type(error).__name__}).", "other") from error
 
     def _show_in_browser(self, model: str) -> dict[str, Any]:
         """The model's link in the CAD Viewer this machine runs, started if none is."""
@@ -703,7 +713,7 @@ class Server:
             raise ToolFailed("No CAD viewer with a model is open in this thread. Open one with cad_open, "
                              "or render headless with `cadgen snapshot`.", "no_view")
         if isinstance(view, SidebarView):
-            reply = self.sidebar_views.ask(view.id, timeout=max(1.0, deadline - time.monotonic()))
+            reply = self._leave(lambda: self.sidebar_views.ask(view.id, timeout=max(1.0, deadline - time.monotonic())))
             if reply is None:
                 raise ToolFailed("The CAD sidebar did not answer in time: it may be closed or out of sight. Ask the person to "
                                  "open it, then capture again.", "timeout")
