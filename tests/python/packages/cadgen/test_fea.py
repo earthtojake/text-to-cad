@@ -681,7 +681,7 @@ class DofWarning(unittest.TestCase):
         from cadgen._internal.fea.solve import dof_warning
 
         text = dof_warning(755373, automatic=False, small_feature_mm=0.4)
-        self.assertIn("small fillets and chamfers set the mesh here", text)
+        self.assertIn("small features (thin walls, fillets, chamfers) set the mesh here", text)
         self.assertIn("elements down to 0.4 mm", text)
         self.assertIn("a larger mesh.size_mm won't help much", text)
 

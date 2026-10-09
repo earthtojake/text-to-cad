@@ -126,8 +126,9 @@ def small_feature_mm(volume: "VolumeMesh") -> float | None:
     """The shortest element edge (mm) when small features, not ``max_h``, set the mesh; else ``None``.
 
     An element of a mesh that max_h governs has edges near max_h. Where the mean
-    element's edge is under half of it, fillets and chamfers forced the
-    refinement, and a larger ``mesh.size_mm`` will not coarsen it much.
+    element's edge is under half of it, small features (thin walls, fillets,
+    chamfers) forced the refinement, and a larger ``mesh.size_mm`` will not
+    coarsen it much.
     """
     import numpy as np
 

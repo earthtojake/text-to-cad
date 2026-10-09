@@ -150,7 +150,7 @@ def dof_warning(dofs: int, automatic: bool, small_feature_mm: float | None = Non
         return f"the automatic finer check used {dofs} degrees of freedom, so this study took longer"
     if small_feature_mm is not None:
         return (
-            f"{dofs} degrees of freedom: expect a slow solve; small fillets and chamfers set the mesh here "
+            f"{dofs} degrees of freedom: expect a slow solve; small features (thin walls, fillets, chamfers) set the mesh here "
             f"(elements down to {small_feature_mm:.2g} mm), so a larger mesh.size_mm won't help much"
         )
     return f"{dofs} degrees of freedom: expect a slow solve; a larger mesh.size_mm is usually enough"

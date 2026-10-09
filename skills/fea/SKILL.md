@@ -89,7 +89,10 @@ stress. Restate every load in those units before you write it down.
 
    A `force` is the total force over its faces; a `pressure` is in MPa and
    pushes into the surface. Leave `mesh` out on the first run; the default
-   element size is a fortieth of the part's bounding diagonal. `margin` is
+   element size is a fortieth of the part's bounding diagonal, and small
+   features (thin walls, fillets, chamfers, small holes) make the elements
+   finer where they are, so they, not only the bounding box, can set the
+   element count. `margin` is
    the safety factor the part should keep (default 2, at least 1): set it
    higher for a polymer, a fatigue load or a part that must not fail, lower
    only when the user says the load is known exactly.
@@ -115,7 +118,9 @@ stress. Restate every load in those units before you write it down.
    sizes and peaks. The finer size is capped to keep the solve under the
    degrees-of-freedom budget, so a part near the limit takes longer (minutes)
    and may get a smaller refinement than half. `--vtu` adds a ParaView file. `--json` prints the result as one JSON line
-   for scripting. `--verbose` shows mesh and solve progress on stderr. A study
+   for scripting. Progress lines (`[fea] reading the parts`, `[fea] meshing
+   the glued shape at 6.01 mm`) print to stderr, never into the result on
+   stdout; `--verbose` adds mesh and solve detail there. A study
    with no fixture, a face that is not on the part, or an out-of-range
    selector is refused with a message naming the field.
 
