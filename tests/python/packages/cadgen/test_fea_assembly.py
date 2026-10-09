@@ -189,6 +189,39 @@ class MeshAssemblyTest(unittest.TestCase):
         base, post = refs
         self.assertEqual(volume.interface_faces, {_face_at(scene, base, 10.0), _face_at(scene, post, 10.0)})
 
+    def test_the_joint_is_not_a_boundary_of_either_part(self):
+        import numpy as np
+
+        scene, refs, volume = self._glued()
+        base, post = refs
+        positions = list(volume.faces)
+
+        def area(triangles):
+            c = volume.nodes[triangles[:, :3]]
+            return float(np.linalg.norm(np.cross(c[:, 1] - c[:, 0], c[:, 2] - c[:, 0]), axis=1).sum() / 2)
+
+        top = volume.boundary[volume.boundary_ordinal == positions.index(_face_at(scene, base, 10.0)) + 1]
+        self.assertAlmostEqual(area(top), 40 * 20 - 100, places=3)
+        self.assertEqual((volume.boundary_ordinal == positions.index(_face_at(scene, post, 10.0)) + 1).sum(), 0)
+        corners = volume.nodes[volume.boundary[:, :3]]
+        inside = (
+            (abs(corners[..., 2] - 10) < 1e-6).all(axis=1)
+            & ((corners[..., 0] > 15 + 1e-6) & (corners[..., 0] < 25 - 1e-6) & (corners[..., 1] > 5 + 1e-6) & (corners[..., 1] < 15 - 1e-6)).all(axis=1)
+        )
+        self.assertFalse(inside.any())
+        self.assertEqual(list(volume.interface_triangles), [(0, 1)])
+        self.assertAlmostEqual(area(volume.interface_triangles[(0, 1)]), 100.0, places=3)
+
+    def test_a_swapped_domain_mapping_is_caught(self):
+        from cadgen._internal.fea.assembly import list_parts
+        from cadgen._internal.fea.mesh import check_domains
+
+        scene, refs, volume = self._glued()
+        parts = list_parts(scene)
+        check_domains(volume.nodes, volume.tets, volume.domain, parts)
+        with self.assertRaisesRegex(RuntimeError, "do not follow the parts"):
+            check_domains(volume.nodes, volume.tets, 1 - volume.domain, parts)
+
     def test_a_gap_within_the_tolerance_is_closed_to_glue_the_parts(self):
         import numpy as np
 

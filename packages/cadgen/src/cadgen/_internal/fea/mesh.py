@@ -86,6 +86,10 @@ class VolumeMesh:
     domain: "np.ndarray | None" = None
     #: For an assembly, the refs of faces that are (partly) a bonded joint.
     interface_faces: set[str] = field(default_factory=set)
+    #: For an assembly, the triangles of each bonded joint, keyed by the two part
+    #: indices (low, high): (T, 6) node ids like ``boundary``. They are interior,
+    #: so they are in no face's ``boundary`` rows.
+    interface_triangles: "dict[tuple[int, int], np.ndarray]" = field(default_factory=dict)
     #: For an assembly, the fuzzy value the glue closed gaps with (0 = none).
     fuzzy_mm: float = 0.0
 
@@ -247,6 +251,40 @@ def _bbox_diagonal(shape) -> float:
     return float(((xmax - xmin) ** 2 + (ymax - ymin) ** 2 + (zmax - zmin) ** 2) ** 0.5)
 
 
+def check_domains(nodes, tets, domain, parts) -> None:
+    """Raise unless each domain is the part it is taken to be.
+
+    The mesher's volume numbers follow the solids' order in the glued shape; a
+    mapping that drifted would give every element another part's material. Each
+    domain's volume (summed over corner nodes) must match its part's within 5%,
+    and where two parts' volumes are that close, its centroid must also lie in
+    its part's bounding box.
+    """
+    import numpy as np
+
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRepBndLib import BRepBndLib
+
+    corners = nodes[tets[:, :4]]
+    edges = corners[:, 1:] - corners[:, :1]
+    volumes = np.abs(np.einsum("ij,ij->i", edges[:, 0], np.cross(edges[:, 1], edges[:, 2]))) / 6.0
+    for index, part in enumerate(parts):
+        rows = domain == index
+        meshed = float(volumes[rows].sum())
+        if abs(meshed - part.volume_mm3) > 0.05 * part.volume_mm3:
+            raise RuntimeError(
+                f"the mesh's volume {index} holds {meshed:.4g} mm^3 but part {part.ref} is {part.volume_mm3:.4g} mm^3; "
+                "the mesher's volumes do not follow the parts"
+            )
+        if any(j != index and abs(other.volume_mm3 - part.volume_mm3) <= 0.05 * part.volume_mm3 for j, other in enumerate(parts)):
+            box = Bnd_Box()
+            BRepBndLib.Add_s(part.shape, box)
+            low, high = np.array(box.Get()[:3]), np.array(box.Get()[3:])
+            centroid = (corners[rows].mean(axis=1) * volumes[rows, None]).sum(axis=0) / volumes[rows].sum()
+            if ((centroid < low - 1e-6) | (centroid > high + 1e-6)).any():
+                raise RuntimeError(f"the mesh's volume {index} lies outside part {part.ref}; the mesher's volumes do not follow the parts")
+
+
 def mesh_assembly(
     scene: "StepScene",
     part_refs: list[str],
@@ -343,24 +381,46 @@ def mesh_assembly(
         raise RuntimeError(f"the mesher made {domains} volumes from {len(glued.solid_part)} solids")
     _require_ten_node_tets(e3)
 
-    # A face of the glued shape the mesher keeps as a boundary belongs to one
-    # part's face (the interface faces it drops are interior).
-    position_of_glued = np.zeros(int(e2["index"].max()) + 1, dtype=np.int64)
-    for index, glued_index in mapping.items():
-        if index + 1 < len(position_of_glued) and sources.get(glued_index):
-            position_of_glued[index + 1] = sources[glued_index][0]
     solid_part = np.array(glued.solid_part, dtype=np.int64)
+    domain = solid_part[e3["index"].astype(np.int64) - 1]
+    tets = np.ascontiguousarray(e3["nodes"][:, :10].astype(np.int64) - 1)
+    check_domains(coordinates, tets, domain, parts)
+
+    # netgen keeps the faces where parts are glued as surface elements, but they
+    # are interior: they go to ``interface_triangles`` under the parts they join,
+    # and every other triangle belongs to one part's face.
+    size = int(e2["index"].max()) + 1
+    position_of_glued = np.zeros(size, dtype=np.int64)
+    joint_of_glued: dict[int, tuple[int, int]] = {}
+    for index, glued_index in mapping.items():
+        if index + 1 >= size or not sources.get(glued_index):
+            continue
+        owners = parts_on[glued_index]
+        if len(owners) > 1:
+            joint_of_glued[index + 1] = (min(owners), max(owners))
+        else:
+            position_of_glued[index + 1] = sources[glued_index][0]
+    surface = np.ascontiguousarray(e2["nodes"][:, :6].astype(np.int64) - 1)
+    surface_index = e2["index"].astype(np.int64)
+    outer = np.isin(surface_index, list(joint_of_glued), invert=True)
+    interface_triangles: dict[tuple[int, int], np.ndarray] = {}
+    for netgen_index, joint in joint_of_glued.items():
+        rows = surface[surface_index == netgen_index]
+        # A joint face can be listed once per side; keep one triangle each.
+        _, first = np.unique(np.sort(rows[:, :3], axis=1), axis=0, return_index=True)
+        interface_triangles[joint] = np.concatenate([interface_triangles[joint], rows[first]]) if joint in interface_triangles else rows[first]
 
     return VolumeMesh(
         nodes=coordinates,
-        tets=np.ascontiguousarray(e3["nodes"][:, :10].astype(np.int64) - 1),
-        boundary=np.ascontiguousarray(e2["nodes"][:, :6].astype(np.int64) - 1),
-        boundary_ordinal=position_of_glued[e2["index"].astype(np.int64)],
+        tets=tets,
+        boundary=np.ascontiguousarray(surface[outer]),
+        boundary_ordinal=position_of_glued[surface_index[outer]],
         faces=faces,
         max_h=h,
         bbox_diagonal=diagonal,
         seconds=time.perf_counter() - started,
-        domain=solid_part[e3["index"].astype(np.int64) - 1],
+        domain=domain,
         interface_faces=interface_faces,
+        interface_triangles=interface_triangles,
         fuzzy_mm=glued.fuzzy_mm,
     )
