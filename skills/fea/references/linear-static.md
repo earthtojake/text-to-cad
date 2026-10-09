@@ -16,8 +16,12 @@ and how to tell a good answer from a bad one.
   support.
 - Loads are static and do not follow the deformation. No inertia, no
   fatigue, no thermal strain, no preload.
-- One part. An assembly is solved one occurrence at a time; every face in a
-  study must be on the same occurrence.
+- An assembly's parts are bonded where they touch (within 0.1 mm): the glued
+  faces carry load as if welded, with no slip, no clearance, no preload and no
+  bolt stiffness. A bonded joint is stiffer than a real bolted one and
+  exaggerates the stress at its edge. Bolts, pins and contact are not yet
+  modelled, and a part resting on another without being bonded carries
+  nothing.
 
 ## Choosing faces
 

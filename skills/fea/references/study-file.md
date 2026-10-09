@@ -2,6 +2,9 @@
 
 One JSON object, passed as `--study study.json` (or inline: `--study '{...}'`).
 Every key other than `material`, `fixtures` and `loads` is optional.
+The assembly keys (`parts`, `connections`, `contact_tolerance_mm`) are in
+[Assemblies](#assemblies); a study without them on a one-part document is
+unchanged.
 
 ```json
 {
@@ -55,12 +58,50 @@ Face references are the Viewer's selectors: `#o1.f17` is face 17 of
 occurrence 1. A reference the user selected arrives with its document prefix
 (`part.step#o1.f17`); both forms are accepted, and the prefix must match the
 document being solved. `cadgen fea faces part.step` prints every face with
-its area, centre, surface type and a hint. Every face in one study must
-belong to the same part occurrence.
+its area, centre, surface type and a hint. In a one-part study every face must
+belong to the same part occurrence (an assembly's may be on any part).
 
 Selectors are positions in the saved document. When the model is edited and
 the STEP re-written, a face's number can change; list the faces again before
 re-running a study on a new revision.
+
+## Assemblies
+
+A document of several parts is solved as an assembly, bonded where parts touch.
+Run `cadgen fea parts assembly.step` first to see the parts and the pairs.
+
+```json
+{
+  "material": "aluminum-6061-t6",
+  "parts": {
+    "post": {"material": "steel"},
+    "#o1.3": {"material": {"name": "custom", "E_MPa": 70000, "nu": 0.33, "yield_MPa": 240}}
+  },
+  "connections": [{"between": ["post", "base"], "type": "free"}],
+  "contact_tolerance_mm": 0.1,
+  "fixtures": [{"faces": ["#o1.1.f9"], "type": "fixed"}],
+  "loads": [{"faces": ["#o1.2.f6"], "type": "force", "vector_N": [1000, 0, 0]}]
+}
+```
+
+- `parts`: a material per part, keyed by occurrence ref (`#o1.2`) or by name;
+  same forms as `material`. A part left out gets the default `material` and a
+  `default_material` finding. A name that two parts share is refused: use a
+  ref. A part named twice is refused.
+- `connections`: optional overrides, `{"between": [A, B], "type": ...}` with
+  `bonded` or `free`. Without it every pair that touches within the tolerance
+  is bonded. `bonded` needs the pair to touch within the tolerance; `free`
+  leaves them unjoined (their faces stay separate and may not pass load). A
+  `free` pair that is still joined through other bonded parts is refused.
+  `bolt` and `contact` are refused with "not yet".
+- `contact_tolerance_mm`: default 0.1. Faces this close are touching; a gap
+  within it is closed to bond the pair (a `gap_closed` finding says so).
+- Faces: `#o1.4.f23` is face 23 of occurrence `#o1.4`; faces may be on any
+  part, but not on a bonded joint (refused before the solve). At least one
+  part must be fixed, and every part must reach it through bonded neighbours
+  (`not_connected` error otherwise).
+- `--occurrence REF` on the command line solves that one part alone; `parts`
+  and `connections` are then ignored, with a warning.
 
 ## `mesh`
 
@@ -95,9 +136,14 @@ path you give (which must end in `.glb`) plus its `.json` twin:
   deformation scale.
 - `part.fea.json` — the study as given, the material, the resolved faces,
   the summary (max von Mises nodal and Gauss-point, safety factor, max
-  displacement and its location, applied and reaction forces), per-fixture
+  displacement and its location, applied and reaction forces; for an assembly
+  also `parts`, one entry per part with its material, peak stress, safety
+  factor and displacement, and the weakest part's name and peak), per-fixture
   reactions, mesh statistics, timings and warnings, the `findings` (also in
   the GLB's mesh `extras`) and `refined`: the first and the finer solve's
   element size and peak when the run solved twice, else `null`.
+- for an assembly the sidecar also records `connections` (each joint: parts,
+  type, area, gap, interface faces), and the GLB carries `parts`,
+  `connections` and a per-vertex `_PART` index beside `_FACE`.
 - `part.fea.vtu` with `--vtu` — the volume mesh with displacement and von
   Mises point data, for ParaView.

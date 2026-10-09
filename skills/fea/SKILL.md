@@ -1,29 +1,31 @@
 ---
 name: fea
-description: Run a linear static stress study on a STEP part with cadgen — fix faces, apply forces or pressures, choose a material — and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Use when the user asks whether a part is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part.
+description: Run a linear static stress study on a STEP part, or a bonded assembly of parts, with cadgen — fix faces, apply forces or pressures, choose a material — and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Use when the user asks whether a part or an assembly is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part.
 license: MIT
 ---
 
-# FEA: linear static stress on a part
+# FEA: linear static stress on a part or a bonded assembly
 
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth; the
 repository link is only for provenance and release review.
 
-Use this skill to answer "will it hold, and by how much" for one part under
-static loads. It meshes the saved STEP with quadratic tetrahedra, solves
+Use this skill to answer "will it hold, and by how much" for one part, or an
+assembly of parts bonded where they touch, under static loads. It meshes the saved STEP with quadratic tetrahedra, solves
 isotropic linear elasticity, and writes a result the Viewer renders. It is a
 first-pass engineering check, not a certification: it assumes small
 displacements, a linear material below yield, perfectly rigid fixtures and
-loads that do not move. Say so when you report.
+loads that do not move. In an assembly every joint is also perfectly rigid
+(bonded): bolts, pins and contact are not modelled yet. Say so when you report.
 
 ## Start with the task
 
 | Task | First action | Reference |
 | --- | --- | --- |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
+| **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`part.step#o1.f17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |
-| **Write or edit a study** | One JSON object: material, fixtures, loads, mesh. | [Study file](references/study-file.md) |
+| **Write or edit a study** | One JSON object: material, fixtures, loads, mesh; for an assembly also parts and connections. | [Study file](references/study-file.md) |
 | **Choose a material** | Use the table by name, or give E, ν and yield explicitly. | [Materials](references/materials.md) |
 | **Judge the answer** | Compare with a hand estimate, refine once, read the peak away from the fixture. | [Validation](references/linear-static.md#judging-the-answer) |
 
@@ -33,7 +35,7 @@ the user sees the colour map.
 
 ## Setup
 
-Run cadgen through [uv](https://docs.astral.sh/uv/). `cadgen fea faces` shares
+Run cadgen through [uv](https://docs.astral.sh/uv/). `cadgen fea faces` and `cadgen fea parts` share
 one installation with the `$cad` skill and the CAD app's server; `cadgen fea
 solve` needs the `fea` extra, so it runs from its own installation, made the
 first time it is needed (below):
@@ -42,7 +44,7 @@ first time it is needed (below):
 - `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.17 python`
 
 Solving needs cadgen's opt-in `fea` extra, which brings the mesher (netgen) and
-the solver (scikit-fem, pyamg). `cadgen fea faces` works without it. The first
+the solver (scikit-fem, pyamg). `cadgen fea faces` and `cadgen fea parts` work without it. The first
 time a study runs, `cadgen fea solve` fails with "cadgen's fea extra is not
 installed"; that is a missing install, not a modelling error. Its `pip install`
 hint does not apply under uv: run the same command again with the extra in the
@@ -69,8 +71,8 @@ stress. Restate every load in those units before you write it down.
    as `plane, normal -Z, largest`. Use the hint and the centre to match the
    user's words ("the mounting face", "the top of the upright") to a selector.
    A document with several parts refuses with the occurrences it holds; pass
-   the one to study, `cadgen fea faces assembly.step --occurrence #o2`, and
-   every face the study names must be on that part.
+   the one to list, `cadgen fea faces assembly.step --occurrence #o2`. For a
+   whole assembly, follow [Assemblies](#assemblies) below.
    When two faces fit equally, ask, quoting both selectors. A face the user
    selected in the Viewer arrives as `part.step#o1.f17` and needs no lookup.
 
@@ -127,6 +129,67 @@ stress. Restate every load in those units before you write it down.
    element count. Then say what the model assumes. Open the GLB in the Viewer
    for the user; the deformation is exaggerated by the `deformation_scale`
    the sidecar records, so say that too.
+
+## Assemblies
+
+A document of several parts is solved as one assembly: the parts that touch
+are bonded into one conforming mesh, each part keeps its own material, and the
+result reports each part's stress against its own yield. Every part must be
+joined, through bonded neighbours, to a part that is fixed.
+
+1. **List the parts and joints first.**
+
+   ```bash
+   cadgen fea parts assembly.step
+   ```
+
+   It prints each part (ref, name, volume), then each touching pair with its
+   contact area and gap and what it will be: `bonded`, or `not connected` for
+   a near miss (up to 1 mm apart, beyond `contact_tolerance_mm`). Read it
+   against what you know of the design: is each detected joint a real joint,
+   and is a joint you expect missing (a gap, or parts that overlap instead of
+   touching)? `--contact-tolerance-mm` tries another tolerance; `--json`
+   prints the same for scripting. Names can repeat (two parts called `bar`):
+   use the ref (`#o1.2.1`) whenever a name is ambiguous.
+
+2. **Write the study** (schema in [study-file.md](references/study-file.md)).
+   `material` stays the default; give `parts` a material for each part whose
+   material you know from the user or the model, by name or ref, and leave the
+   rest to the default. Do not guess a material to silence a finding: the
+   default is reported, and asking the user is better. Add `connections` only
+   to override a detection (`free` for a pair that must not be glued, such as
+   a part that only sits near another); touching pairs are bonded without it.
+   Fixtures and loads name faces on any part (`#o1.4.f23`), but never a face
+   that is a bonded joint.
+
+3. **Solve** exactly as for a part. The summary leads with the weakest part
+   (lowest safety factor), then lists every part's peak stress, safety factor
+   and displacement. `--occurrence REF` solves one part alone through the
+   single-part path instead, ignoring the study's `parts` and `connections`
+   (it says so), and every face named must be on that part.
+
+4. **Read the findings by part.** Each finding names its part ("The post
+   yields: ..."). Fix the named part, not the assembly in general: a thicker
+   section, a fillet, a different material in `parts`, a larger joint area
+   (the joint's `area_mm2` is in the sidecar's `connections`). The Viewer's
+   Study lists Parts and Connections; a part or joint the user selected there
+   reaches you with its ref or refs.
+
+Findings an assembly adds:
+
+| Finding | Severity | What it means | What to do |
+| --- | --- | --- | --- |
+| `not_connected` | error | A part (or group of parts) has no bonded chain to a fixed part; the solve did not run. The message names the nearest part and its distance. | Fix the model so the parts touch, fix a face on the group, raise `contact_tolerance_mm` if the gap is within what you would call touching (it closes the gap), or set the study right: a part that is meant to be loose is not part of this model. |
+| `default_material` | warning | A part got the study's default material because `parts` does not name it. | Ask the user or read the model's own material, then name it in `parts`; if the default is right, say so in the report. |
+| `gap_closed` | warning | Two parts a little apart (within the tolerance) were bonded anyway, moving geometry up to the gap. | Check the gap is a modelling clearance and not a real one the joint should have; the stress at that joint is the model's closing, not the part's. |
+| `bonded_edge_peak` | warning | The peak sits on the edge of a bonded joint, where a rigid bond exaggerates stress. Appears only under the study's `margin`. | Read the stress a little away from the joint before redesigning; a bolted or welded joint is softer than this model. |
+
+A `fixture` or `load` on a joint face is refused before the solve with an
+error naming the face: move it to the part's free face. `bolt` and `contact`
+connection types are refused ("not yet"); a pair set `free` inside a group
+that is glued through other parts is refused too. When the weakest part's
+safety factor is under 3 the run meshes again at half the size, as for one
+part.
 
 ## What the result means
 
