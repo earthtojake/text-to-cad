@@ -147,7 +147,11 @@ and every outline, a sheet's curves included, in the appearance's foreground
 (or `display.edges.color`). A `.png` is that payload painted by the snapshot
 page with the same drawing code a DXF is, with a cut locator in the corner and,
 with `--view-labels`, the plane's label; a `.svg` is written by cadgen itself, y
-up as drawn, and a job whose outputs are all `.svg` starts no browser.
+up as drawn, and a job whose outputs are all `.svg` starts no browser. Both are
+drawn in model units from the model point the SVG's root names in
+`data-origin`: `0 0` unless the cut lies far from the origin (more than fifty
+times its own size), where a round point beside it keeps every coordinate
+within a renderer's 32-bit floats. The plane's label is always the model's.
 Section mode is for STEP/STP inputs; a mesh or a robot description has no
 solids to section.
 

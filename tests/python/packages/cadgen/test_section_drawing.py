@@ -31,6 +31,19 @@ DISC = {"loops": [{"closed": True, "filled": True, "edges": [{"arc": {
 SQUARE = {"loops": [{"closed": True, "filled": True, "edges": [
     {"line": [[0.0, 0.0, 0.0], [20.0, 0.0, 0.0]]}, {"line": [[20.0, 0.0, 0.0], [20.0, 10.0, 0.0]]},
     {"line": [[20.0, 10.0, 0.0], [0.0, 10.0, 0.0]]}, {"line": [[0.0, 10.0, 0.0], [0.0, 0.0, 0.0]]}]}]}
+# The rectangle with a radius-3 hole through its middle.
+HOLED = {"loops": [SQUARE["loops"][0], {"closed": True, "filled": True, "edges": [{"arc": {
+    "center": [10.0, 5.0, 0.0], "axis": [0.0, 0.0, 1.0], "radius": 3.0, "start": [13.0, 5.0, 0.0],
+    "sweep": 2 * math.pi}}]}]}
+
+
+def numbers(value):
+    """Every number in a payload's bounds and geometry, however deeply nested."""
+    if isinstance(value, dict):
+        return numbers(value.get("bounds")) + numbers([primitive["geometry"] for primitive in value["primitives"]])
+    if isinstance(value, list):
+        return [number for item in value for number in numbers(item)]
+    return [value] if isinstance(value, (int, float)) else []
 
 
 def translated(x=0.0, y=0.0, z=0.0, *, mirror_x=False):
@@ -127,6 +140,33 @@ class SectionDrawingTests(unittest.TestCase):
         self.assertAlmostEqual(5.0, (min_y + max_y) / 2, places=3)
         layers = [primitive["layer"] for primitive in section.payload["primitives"]]
         self.assertEqual(["section-fill", "section-hatch", "section-centerline", "section-outline"], layers)
+
+    def test_a_cut_far_from_the_origin_is_drawn_about_a_round_point_beside_it(self) -> None:
+        # Renderers hold coordinates as 32-bit floats: a kilometre out, a 10 mm hole drawn in
+        # model coordinates came out jagged and lost its strokes. The drawing is measured from a
+        # round point beside the cut instead: the drawing made at the origin, moved.
+        near = self.draw([self.place(HOLED, translated())])
+        far = self.draw([self.place(HOLED, translated(1e6, 1e6, 1e6), offset=1e6)], offset=1e6)
+        self.assertEqual((0.0, 0.0), near.origin)
+        self.assertEqual((1e6, 1e6), far.origin)
+        self.assertEqual(near.payload, far.payload)
+        self.assertIn('data-origin="1000000 1000000"', far.svg)
+        self.assertEqual(near.svg.replace('data-origin="0 0"', 'data-origin="1000000 1000000"'), far.svg)
+        # What the picture says in numbers stays the model's.
+        self.assertEqual("XY @ Z=1000000.000", far.label)
+
+        # Anywhere at all, every coordinate stays within a few hundred of the cut's sizes of
+        # zero, and the outline is the model's own less the origin.
+        odd = self.draw([self.place(HOLED, translated(1234567.25, -7654321.5))])
+        self.assertEqual((1230000.0, -7650000.0), odd.origin)
+        self.assertLess(max(abs(value) for value in numbers(odd.payload)), 500 * 20)
+        [outline] = [p for p in odd.payload["primitives"] if p["layer"] == "section-outline"]
+        [near_outline] = [p for p in near.payload["primitives"] if p["layer"] == "section-outline"]
+        self.assertEqual([command[0] for command in near_outline["geometry"]],
+                         [command[0] for command in outline["geometry"]])
+        for got, want in zip(outline["geometry"], near_outline["geometry"]):
+            for index, (value, expected) in enumerate(zip(got[1:], want[1:])):
+                self.assertAlmostEqual(expected + (4567.25 if index % 2 == 0 else -4321.5), value, places=4)
 
     def test_a_closed_loop_that_bounds_no_material_is_outlined_never_filled(self) -> None:
         # A sheet's cut can close on itself (a capless tube cut across is a circle), and there

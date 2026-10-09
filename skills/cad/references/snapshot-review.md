@@ -214,8 +214,9 @@ the parts that are cut. Each solid's cut is filled and hatched (a face lying in
 the plane counts), outlined in the appearance's foreground (or
 `display.edges.color`), with dash-dot centre lines and a cut locator;
 `--view-labels` adds the plane's label. A surface (sheet) body's cut is drawn as
-lines and never filled. A `.svg` is the same drawing, y up, and a job whose
-outputs are all `.svg` needs no browser.
+lines and never filled. A `.svg` is the same drawing, y up, in model units
+measured from the point its root's `data-origin` names: `0 0`, unless the cut
+lies far from the origin. A job whose outputs are all `.svg` needs no browser.
 
 `--mode list` writes no image: it prints one row per placed part — its `ref`
 (what `--focus`, `--hide` and `scene.resolve(ref)` accept), its `name`, its exact
