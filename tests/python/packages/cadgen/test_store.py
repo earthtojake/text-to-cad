@@ -1117,13 +1117,15 @@ class ChildrenByResult(StoreCase):
         (self.root / "STEP").mkdir()
         pin, arm = src / "link_pin.py", src / "link_arm.py"
 
+        # Only the builds are runs: a run that finds its model current takes exactly the
+        # gate's verdict (`stale`), which is asked directly, without a cold interpreter.
         self.assertEqual(self.run_model(arm), "built")
-        self.assertEqual(self.run_model(arm), "current")
-        self.assertEqual(self.run_model(pin), "current", "the child was built inline and recorded")
+        self.assertIsNone(self.stale_clause(arm))
+        self.assertIsNone(self.stale_clause(pin), "the child was built inline and recorded")
 
         pin.write_text(pin.read_text(encoding="utf-8").replace("height=12.0", "height=12.0 * 1.0"), encoding="utf-8")
         self.assertEqual(self.run_model(pin), "built", "a semantic edit rebuilds the child")
-        self.assertEqual(self.run_model(arm), "current", "identical geometry: the parent's pin still holds")
+        self.assertIsNone(self.stale_clause(arm), "identical geometry: the parent's pin still holds")
 
         # A publish claims everything its record names -- reused components and
         # a pinned child's tree alike -- so a sweep already running keeps it all

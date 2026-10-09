@@ -78,6 +78,17 @@ class MeshExportEngineDeterminismTest(unittest.TestCase):
         self._run(["-c", f"from cadgen.cli.{module} import main; raise SystemExit(main())", *args],
                   cwd=cwd, store=store)
 
+    def _doors(self, *, cwd: Path, store: Path) -> None:
+        """Every door's export of the document, `out.<format>`, one after another in ONE
+        process, as a warm worker serves them: each reads the store the ones before it
+        filled, exactly as separate runs on that store would."""
+        calls = "".join(
+            f"code = __import__('cadgen.cli.{module}', fromlist=['main']).main(['fixture.step', 'out.{fmt}'])\n"
+            "if code:\n    raise SystemExit(code)\n"
+            for fmt, module in DOOR_MODULES.items()
+        )
+        self._run(["-c", calls], cwd=cwd, store=store)
+
     def _document(self, name: str) -> Path:
         """A fresh directory holding ONLY the written document (law 1)."""
         directory = self.root / name
@@ -104,11 +115,11 @@ class MeshExportEngineDeterminismTest(unittest.TestCase):
         self._cli("step_snapshot", "fixture.step", "shot.png", "--width", "200", "--height", "150",
                   cwd=warm_dir, store=warm_store)
 
-        for fmt, module in DOOR_MODULES.items():
+        self._doors(cwd=cold_dir, store=cold_store)
+        self._doors(cwd=warm_dir, store=warm_store)
+        for fmt in DOOR_MODULES:
             with self.subTest(format=fmt):
                 out = f"out.{fmt}"
-                self._cli(module, "fixture.step", out, cwd=cold_dir, store=cold_store)
-                self._cli(module, "fixture.step", out, cwd=warm_dir, store=warm_store)
                 cold_bytes = (cold_dir / out).read_bytes()
                 warm_bytes = (warm_dir / out).read_bytes()
                 self.assertEqual(

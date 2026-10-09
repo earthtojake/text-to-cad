@@ -32,22 +32,24 @@ add_repo_path("packages/cadgen/src")
 REPO = Path(__file__).resolve().parents[4]
 PYTHON = sys.executable
 
-# The issue's part: 40 x 20 x 2.4 mm, one M3 clearance hole. The hole's POSITION
-# mattered — x=10 was broken while x=20 was clean — so both are built.
-MODEL = textwrap.dedent("""\
+# Every part is a model of ONE script, and one run builds them all: each @stl model is
+# meshed and written by that run exactly as a script of its own would be, and the run
+# pays the interpreter and the kernel import once instead of once per part.
+HEADER = textwrap.dedent("""\
     from cadgen import build123d as bd
     from cadgen import stl
+    """)
+
+# The issue's part: 40 x 20 x 2.4 mm, one M3 clearance hole. The hole's POSITION
+# mattered — x=10 was broken while x=20 was clean — so both are built.
+PLATE = textwrap.dedent("""\
 
 
     @stl(out="{out}"{options})
-    def plate():
+    def {name}():
         align = (bd.Align.MIN,) * 3
         body = bd.Box(40, 20, 2.4, align=align)
         return body - bd.Pos({x}, 10.0, 0) * bd.Cylinder(1.7, 7.2)
-
-
-    if __name__ == "__main__":
-        plate()
     """)
 
 
@@ -56,23 +58,26 @@ MODEL = textwrap.dedent("""\
 # CURVED face is the difference from the plate above; on 0.6.6 it wrote one
 # triangle twice and ~20 zero-area slivers around the rim.
 CURVED_WALL = textwrap.dedent("""\
-    from cadgen import build123d as bd
-    from cadgen import stl
-
-    R, T = {radius}, 2.2
-    L, W = 130.0, 40.0
 
 
-    @stl(out="{out}"{options})
-    def strip():
+    @stl(out="{out}")
+    def {name}():
+        R, T = {radius}, 2.2
+        L, W = 130.0, 40.0
         ring = bd.Cylinder(R, 2 * W, rotation=(90, 0, 0)) - bd.Cylinder(R - T, 2 * W, rotation=(90, 0, 0))
         body = ring & bd.Pos(0, 0, R / 2) * bd.Box(L, W, R)
         return body - bd.Pos(0, 0, R) * bd.Cylinder(1.65, 10)
-
-
-    if __name__ == "__main__":
-        strip()
     """)
+
+# Each part's model, by name; its STL is STL/<name>.stl.
+PARTS = {
+    "plate_10": PLATE.format(name="plate_10", out="STL/plate_10.stl", options="", x=10.0),
+    "plate_20": PLATE.format(name="plate_20", out="STL/plate_20.stl", options="", x=20.0),
+    "plate_coarse": PLATE.format(name="plate_coarse", out="STL/plate_coarse.stl",
+                                 options=", mesh_tolerance=1e-2", x=10.0),
+    "strip_90": CURVED_WALL.format(name="strip_90", out="STL/strip_90.stl", radius=90.0),
+    "strip_200": CURVED_WALL.format(name="strip_200", out="STL/strip_200.stl", radius=200.0),
+}
 
 
 def read_binary_stl(path: Path) -> list[tuple[tuple[float, float, float], ...]]:
@@ -96,30 +101,37 @@ def twice_area(corners) -> float:
 
 
 class MeshExportManifoldTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory(prefix="mesh-export-manifold-")
-        self.addCleanup(self._tmp.cleanup)
-        self.project = Path(self._tmp.name).resolve()
-        self.env = dict(os.environ)
-        self.env.update({
+    # The parts' STLs are a fixture the tests only READ: written once, by one run.
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory(prefix="mesh-export-manifold-")
+        cls.project = Path(cls._tmp.name).resolve()
+        env = dict(os.environ)
+        env.update({
             "CADGEN_DAEMON": "0",
             "CADGEN_COMPONENT_WORKERS": "1",
             # Its own store, so a stale tessellation cannot stand in for the run.
-            "CADGEN_CACHE_DIR": str(self.project / "store"),
+            "CADGEN_CACHE_DIR": str(cls.project / "store"),
             "PYTHONPATH": str(REPO / "packages/cadgen/src"),
         })
-
-    def _export(self, name: str, *, x: float = 0.0, options: str = "", model: str = MODEL, **fields) -> Path:
-        out = f"STL/{name}.stl"
-        script = self.project / f"{name}.py"
-        script.write_text(model.format(out=out, x=x, options=options, **fields), encoding="utf-8")
+        script = cls.project / "parts.py"
+        calls = "".join(f"    {name}()\n" for name in PARTS)
+        script.write_text(f'{HEADER}{"".join(PARTS.values())}\n\nif __name__ == "__main__":\n{calls}', encoding="utf-8")
         proc = subprocess.run(
-            [PYTHON, script.name], cwd=str(self.project), env=self.env,
+            [PYTHON, script.name], cwd=str(cls.project), env=env,
             capture_output=True, text=True, timeout=600,
         )
-        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        written = self.project / out
-        self.assertTrue(written.is_file(), out)
+        if proc.returncode != 0:
+            cls._tmp.cleanup()
+            raise RuntimeError(f"the parts did not build:\n{proc.stdout}{proc.stderr}")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def _export(self, name: str) -> Path:
+        written = self.project / "STL" / f"{name}.stl"
+        self.assertTrue(written.is_file(), written)
         return written
 
     def assertManifold(self, path: Path, label: str) -> None:
@@ -153,12 +165,12 @@ class MeshExportManifoldTest(unittest.TestCase):
         # rim's vertices happened to land.
         for x in (10.0, 20.0):
             with self.subTest(x=x):
-                self.assertManifold(self._export(f"plate_{int(x)}", x=x), f"hole at x={x}")
+                self.assertManifold(self._export(f"plate_{int(x)}"), f"hole at x={x}")
 
     def test_plate_with_one_hole_survives_a_coarse_tolerance(self) -> None:
         # The weld used to be density-dependent, so it held at the default
         # spacing and failed once the rim's triangles grew past its epsilon.
-        path = self._export("plate_coarse", x=10.0, options=", mesh_tolerance=1e-2")
+        path = self._export("plate_coarse")
         self.assertManifold(path, "hole at x=10, mesh_tolerance=1e-2")
 
     def test_hole_through_a_curved_wall_exports_a_manifold_mesh(self) -> None:
@@ -167,7 +179,7 @@ class MeshExportManifoldTest(unittest.TestCase):
         # ring never duplicated a triangle.
         for radius in (90.0, 200.0):
             with self.subTest(radius=radius):
-                path = self._export(f"strip_{int(radius)}", model=CURVED_WALL, radius=radius)
+                path = self._export(f"strip_{int(radius)}")
                 self.assertManifold(path, f"hole through a {radius} mm wall")
 
 

@@ -1057,23 +1057,24 @@ class ReachEndToEnd(unittest.TestCase):
         from cadgen.store.gate import stale
         from cadgen.store.records import read_record
 
+        # Only the builds are runs: a run that finds its model current takes exactly the
+        # gate's verdict (`stale`), which is asked directly, without a cold interpreter.
         self.assertEqual(self.run_model(), "built")
         record = read_record(self.model)
         self.assertEqual(record["closure"]["names"], {"lib/__init__.py": ["geo"], "lib/geo.py": ["SIZE", "size"]})
         self.assertTrue(record["closure"]["shas"]["lib/geo.py"].startswith("slice4:"))
         self.assertEqual(set(record["closure"]["wholes"]), {"lib/__init__.py", "lib/geo.py"})
-        self.assertEqual(self.run_model(), "current")
+        self.assertFalse(stale(self.model).stale, stale(self.model).reason())
 
         self.edit("return 1", "return 2")
         self.assertFalse(stale(self.model).stale, "an unreached helper edit")
-        self.assertEqual(self.run_model(), "current")
 
         self.edit("SIZE = 10.0", "SIZE = 12.0")
         verdict = stale(self.model)
         self.assertTrue(verdict.stale)
         self.assertEqual(verdict.reason(), "closure changed: lib/geo.py")
         self.assertEqual(self.run_model(), "built", "a reached constant edit")
-        self.assertEqual(self.run_model(), "current")
+        self.assertFalse(stale(self.model).stale, stale(self.model).reason())
 
     def test_a_model_that_lists_its_own_folder_is_current_after_its_first_build(self):
         """Issue #564: the folder is listed before the build publishes the STEP,
@@ -1110,7 +1111,6 @@ class ReachEndToEnd(unittest.TestCase):
         self.assertEqual(sorted(os.listdir(folder)), ["a.profile", "part.py", "part.step", "part.step.json", "part.stl"])
         self.assertFalse(stale(self.model).stale, stale(self.model).reason())
         self.assertEqual(read_record(self.model)["closure"]["own"], {"./": ["part.step", "part.step.json", "part.stl"]})
-        self.assertEqual(self.run_model(), "current")
 
         self.model.write_text(self.model.read_text(encoding="utf-8").replace("#112233", "#445566"), encoding="utf-8")
         self.assertEqual(self.run_model(), "built")
@@ -1121,7 +1121,7 @@ class ReachEndToEnd(unittest.TestCase):
         self.assertEqual(stale(self.model).reason(), "closure changed: ./")
         self.assertEqual(self.run_model(), "built")
         self.assertIn("body ran", self.output)
-        self.assertEqual(self.run_model(), "current")
+        self.assertFalse(stale(self.model).stale, stale(self.model).reason())
 
     def test_store_why_prints_the_reached_names(self):
         import subprocess

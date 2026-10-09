@@ -263,19 +263,17 @@ class MeshExportProductionTest(unittest.TestCase):
         )
 
         # --force re-exports past the ledger but does NOT rebuild the model:
-        # the bytes are the same because the geometry is.
+        # the bytes are the same because the geometry is. And a door writes ONLY
+        # its own format: nothing here touches the .step or the sibling
+        # declarations of the other two formats.
         sibling_path = self.project / "STEP" / "widget.stl"
         before = sibling_path.read_bytes()
+        glb_before = (self.project / "STEP" / "widget.glb").read_bytes()
+        step_before = (self.project / "STEP" / "widget.step").read_bytes()
         forced = self._run("-c", door, "STEP/widget.step", "--force", "--verbose")
         self.assertIn("wrote STL", forced.stdout)
         self.assertNotIn("run step model", forced.stderr)
         self.assertEqual(before, sibling_path.read_bytes())
-
-        # A door writes ONLY its own format: nothing here touches the .step or
-        # the sibling declarations of the other two formats.
-        glb_before = (self.project / "STEP" / "widget.glb").read_bytes()
-        step_before = (self.project / "STEP" / "widget.step").read_bytes()
-        self._run("-c", door, "STEP/widget.step", "--force")
         self.assertEqual(glb_before, (self.project / "STEP" / "widget.glb").read_bytes())
         self.assertEqual(step_before, (self.project / "STEP" / "widget.step").read_bytes())
 
