@@ -43,20 +43,14 @@ class Solved:
     #: The study's required safety factor.
     margin: float
     #: The first, coarser solve's nodal peak, when the written solve is a finer
-    #: re-solve; ``None`` when the part was solved once.
+    #: re-solve; ``None`` when the part was solved once. Only convergence reads it.
     coarser_peak_MPa: float | None
     part: str
 
 
-def _peak(solved: Solved) -> float:
-    """The higher of the two solved peaks: whichever mesh finds more stress counts."""
-    return max(solved.peak_MPa, solved.coarser_peak_MPa or 0.0)
-
-
 def safety_factor(solved: Solved) -> float | None:
-    """Yield over the higher peak stress, or ``None`` when no load reaches the part."""
-    peak = _peak(solved)
-    return solved.yield_MPa / peak if peak > 0 else None
+    """Yield over the written solve's peak stress, or ``None`` when no load reaches the part."""
+    return solved.yield_MPa / solved.peak_MPa if solved.peak_MPa > 0 else None
 
 
 def needs_finer(safety_factor: float | None) -> bool:
@@ -86,7 +80,7 @@ def findings(solved: Solved) -> list[dict]:
     found: list[dict] = []
     peak = _item("the peak stress", solved.peak_face, solved.peak_at)
     factor = safety_factor(solved)
-    peak_MPa = _peak(solved)
+    peak_MPa = solved.peak_MPa
 
     def add(severity: str, kind: str, summary: str, description: str, items: list[dict]) -> None:
         found.append(
@@ -116,7 +110,7 @@ def findings(solved: Solved) -> list[dict]:
     peak_finding = None
     if factor is not None and factor < solved.margin and (on_fixture or spike):
         if on_fixture:
-            qualifier = " (the peak sits at the fixed face, see below)"
+            qualifier = " (the peak sits at the fixed face)"
             peak_finding = (
                 "peak_at_fixture",
                 "The peak sits where the part is held, where the model can exaggerate it: "
@@ -125,7 +119,7 @@ def findings(solved: Solved) -> list[dict]:
                 [peak],
             )
         else:
-            qualifier = " (the peak is a local spike, see below)"
+            qualifier = " (the peak is a local spike)"
             peak_finding = (
                 "peak_concentration",
                 "The peak is a sharp local spike the mesh can't resolve (a sharp corner or a concentrated load): "

@@ -8,7 +8,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from cadgen._internal.fea.checks import Solved, findings, needs_finer  # noqa: E402
+from cadgen._internal.fea.checks import Solved, findings, needs_finer, safety_factor  # noqa: E402
 
 
 def solved(**changes):
@@ -52,12 +52,12 @@ class ChecksTest(unittest.TestCase):
     def test_yields_is_qualified_when_the_peak_is_at_the_fixture(self):
         (f, g) = findings(solved(peak_MPa=310.0, peak_gauss_MPa=320.0, peak_face="#o1.f3"))
         self.assertEqual((f["type"], g["type"]), ("yields", "peak_at_fixture"))
-        self.assertEqual(f["summary"], "The bracket yields: peak stress 310 MPa is above 6061-T6's 276 MPa yield strength (the peak sits at the fixed face, see below)")
+        self.assertEqual(f["summary"], "The bracket yields: peak stress 310 MPa is above 6061-T6's 276 MPa yield strength (the peak sits at the fixed face)")
 
     def test_peak_on_a_fixed_face(self):
         (low, f) = findings(solved(peak_MPa=150.0, peak_gauss_MPa=160.0, peak_face="#o1.f3"))
         self.assertEqual((low["type"], f["type"]), ("low_margin", "peak_at_fixture"))
-        self.assertTrue(low["summary"].endswith("(the peak sits at the fixed face, see below)"))
+        self.assertTrue(low["summary"].endswith("(the peak sits at the fixed face)"))
         self.assertEqual(f["summary"], "The peak sits where the part is held, where the model can exaggerate it: check the stress a little away from the fixed face before redesigning")
 
     def test_peak_findings_wait_until_the_margin_is_missed(self):
@@ -66,7 +66,7 @@ class ChecksTest(unittest.TestCase):
     def test_gauss_spike(self):
         (low, f) = findings(solved(peak_MPa=150.0, peak_gauss_MPa=230.0))  # > 1.5 x 150
         self.assertEqual((low["type"], f["type"]), ("low_margin", "peak_concentration"))
-        self.assertTrue(low["summary"].endswith("(the peak is a local spike, see below)"))
+        self.assertTrue(low["summary"].endswith("(the peak is a local spike)"))
         self.assertEqual(f["summary"], "The peak is a sharp local spike the mesh can't resolve (a sharp corner or a concentrated load): a fillet or a finer mesh there would show the real value")
 
     def test_exactly_the_gauss_ratio_is_not_a_spike(self):
@@ -87,8 +87,11 @@ class ChecksTest(unittest.TestCase):
         (f,) = findings(solved(peak_MPa=39.0, coarser_peak_MPa=47.3))
         self.assertEqual(f["summary"], "The peak changed 18% on a finer mesh (47.3 to 39 MPa): use a smaller mesh size (mesh.size_mm) before trusting the safety factor")
 
-    def test_the_safety_factor_uses_the_higher_peak(self):
-        (f, _) = findings(solved(coarser_peak_MPa=300.0))
+    def test_the_safety_factor_uses_the_written_peak_and_the_coarser_peak_only_checks_convergence(self):
+        (f,) = findings(solved(coarser_peak_MPa=300.0))  # written peak 47.3: SF 5.8
+        self.assertEqual(f["type"], "mesh_not_converged")
+        self.assertEqual(safety_factor(solved(coarser_peak_MPa=300.0)), 276.0 / 47.3)
+        (f, _) = findings(solved(peak_MPa=300.0, coarser_peak_MPa=40.0))
         self.assertEqual(f["type"], "yields")
         self.assertIn("peak stress 300 MPa", f["summary"])
 

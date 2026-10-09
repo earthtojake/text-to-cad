@@ -109,7 +109,9 @@ stress. Restate every load in those units before you write it down.
    When the safety factor comes out under 3 the run meshes again at half the
    element size and solves again, by itself; the finer result is the one
    written and reported, and the sidecar's `refined` block records both
-   sizes and peaks. `--vtu` adds a ParaView file. `--json` prints the result as one JSON line
+   sizes and peaks. The finer size is capped to keep the solve under the
+   degrees-of-freedom budget, so a part near the limit takes longer (minutes)
+   and may get a smaller refinement than half. `--vtu` adds a ParaView file. `--json` prints the result as one JSON line
    for scripting. `--verbose` shows mesh and solve progress on stderr. A study
    with no fixture, a face that is not on the part, or an out-of-range
    selector is refused with a message naming the field.
@@ -135,7 +137,8 @@ stress. Restate every load in those units before you write it down.
 - A clamped face is stiffer than any real bolt or weld, and the stress at its
   edge is a singularity: it grows with every refinement and never converges.
   Read the peak away from the fixture when the fixture edge is the maximum.
-- Safety factor = yield / max nodal von Mises. Below 1 the part yields in
+- Safety factor = yield / max nodal von Mises of the solve that is written (the
+  finer one when the run solved twice). Below 1 the part yields in
   this model; under the study's `margin` (default 2) is marginal for a first
   pass; above it is a comfortable first answer for a static load on a ductile
   metal. Polymers and fatigue need more margin than that. Do not certify a

@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -149,6 +150,21 @@ def _solved(volume, outcome, parsed, ordinal_of: dict[str, int], part: str) -> "
     )
 
 
+def finer_mesh_size(size_mm: float, dofs: int) -> float | None:
+    """The element size of the automatic re-solve: half, unless that passes the DOF budget.
+
+    The DOF count grows with the cube of the size ratio, so the budget is
+    spent from the first solve's: under ``DOF_WARN`` when it fits, otherwise
+    under ``DOF_LIMIT`` (with a tenth of headroom for the estimate's error).
+    ``None`` when the budget leaves no meaningfully finer mesh.
+    """
+    from cadgen._internal.fea.solve import DOF_LIMIT, DOF_WARN
+
+    budget = DOF_WARN if dofs < DOF_WARN else 0.9 * DOF_LIMIT
+    ratio = min(2.0, (budget / dofs) ** (1 / 3))
+    return size_mm / ratio if ratio >= 1.1 else None
+
+
 def solve_study(
     target: Path,
     out: Path | None,
@@ -161,10 +177,11 @@ def solve_study(
     """Mesh, solve and check one study, then write its GLB and sidecar.
 
     When the safety factor is close to failing (:func:`checks.needs_finer`) the
-    part is meshed again at half the element size and solved again. The finer
-    solve is the more trustworthy one, so when it succeeds its numbers are the
-    ones written, reported and checked; the checks compare its peak with the
-    first's for convergence, and the safety factor takes the higher of the two.
+    part is meshed again at half the element size (:func:`finer_mesh_size`
+    keeps that under the DOF budget) and solved again. The finer solve is the
+    more trustworthy one, so when it succeeds its numbers are the ones
+    written, reported and checked; the checks compare its peak with the
+    first's for convergence only.
     When it fails the written GLB stays the first solve's, the result carries
     one warning saying why, and no convergence finding is made.
     """
@@ -203,16 +220,24 @@ def solve_study(
     solved = _solved(volume, outcome, parsed, ordinal_of, document.stem)
     refined = None
     finer_failure = None
+    finer_size = None
     if checks.needs_finer(checks.safety_factor(solved)):
+        finer_size = finer_mesh_size(volume.max_h, outcome.dofs)
+        if finer_size is None:
+            finer_failure = (
+                f"the part is already near the {solve.DOF_LIMIT:,} degree-of-freedom limit at {volume.max_h:g} mm, "
+                "so there was no room for a finer solve; its convergence is unchecked"
+            )
+    if finer_size is not None:
         refined = {
             "from_size_mm": round(volume.max_h, 4),
             "from_max_von_mises_MPa": round(solved.peak_MPa, 4),
-            "size_mm": round(volume.max_h / 2, 4),
+            "size_mm": round(finer_size, 4),
             "max_von_mises_MPa": None,
         }
-        logger.debug(f"safety factor under {checks.RESOLVE_BELOW:g}: solving again at {volume.max_h / 2:.3g} mm")
+        logger.debug(f"safety factor under {checks.RESOLVE_BELOW:g}: solving again at {finer_size:.3g} mm")
         try:
-            volume, outcome = mesh_and_solve(volume.max_h / 2)
+            volume, outcome = mesh_and_solve(finer_size)
         except Exception as exc:  # a finer solve is a second opinion; the first answer stands without it
             finer_failure = (
                 f"the finer solve at {refined['size_mm']:g} mm failed ({exc}); "
@@ -247,9 +272,9 @@ def solve_study(
         "deformation_scale": scale,
     }
     max_vm = summary["max_von_mises_MPa"]
-    # The checks' factor: against the higher peak of the two solves, when there were two.
+    # Floored, so a factor just under a threshold is never shown as reaching it.
     factor = checks.safety_factor(solved)
-    summary["safety_factor"] = None if factor is None else round(factor, 3)
+    summary["safety_factor"] = None if factor is None else math.floor(factor * 1000) / 1000
 
     warnings = list(outcome.warnings)
     if finer_failure:
@@ -261,10 +286,11 @@ def solve_study(
     extras = {
         "name": f"{document.stem} von Mises",
         "generator": "cadgen fea",
-        "document": document.name,
+        # Where the STEP is from the GLB's own folder, so a viewer can find it.
+        "document": Path(os.path.relpath(document.resolve(), glb_path.resolve().parent)).as_posix(),
         "occurrence": occurrence.ref,
         "deformation_scale": scale,
-        # The summary's (conservative) safety factor, for the viewer's plain line; null when there is none.
+        # The summary's safety factor, for the viewer's plain line; null when there is none.
         "safety_factor": summary["safety_factor"],
         # One entry per raw attribute the GLB carries, for a viewer's field
         # switch. `attribute_scale` turns the stored value into the units named:

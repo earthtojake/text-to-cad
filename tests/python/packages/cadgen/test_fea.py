@@ -274,6 +274,11 @@ class Cantilever(unittest.TestCase):
         self.assertEqual(sidecar["fields"][0]["max"], self.result.summary["max_von_mises_MPa"])
         self.assertEqual(sidecar["mesh"]["order"], 2)
 
+    def test_the_glb_names_its_step_relative_to_its_own_folder(self):
+        self.assertEqual(_glb_extras(self.result.glb)["document"], f"../{self.step.name}")
+        sidecar = json.loads(self.result.sidecar.read_text(encoding="utf-8"))
+        self.assertEqual(sidecar["document"], str(self.step))
+
     def test_the_glb_is_a_valid_binary_gltf_with_colours_and_the_value_attribute(self):
         import struct
 
@@ -393,7 +398,13 @@ class Yielding(unittest.TestCase):
         for got, want in zip(_glb_peak_at(self.result.glb), yields["items"][0]["at"]):
             self.assertAlmostEqual(got, want, delta=1e-3)
 
-    def test_the_summary_safety_factor_is_the_checks_when_the_finer_peak_is_lower(self):
+    def test_the_safety_factor_is_floored_never_rounded_up(self):
+        import math
+
+        sf = self.result.summary["safety_factor"]
+        self.assertEqual(sf, math.floor(sf * 1000) / 1000)
+
+    def test_the_summary_safety_factor_is_yield_over_the_written_peak_when_the_finer_peak_is_lower(self):
         import dataclasses
         from unittest import mock
 
@@ -409,8 +420,8 @@ class Yielding(unittest.TestCase):
             result = fea.solve(self.step, Path(self._tmp.name) / "lower.glb", study=self.study)
         refined = json.loads(result.sidecar.read_text(encoding="utf-8"))["refined"]
         self.assertLess(refined["max_von_mises_MPa"], refined["from_max_von_mises_MPa"])
-        self.assertAlmostEqual(result.summary["safety_factor"], 250.0 / refined["from_max_von_mises_MPa"], places=3)
-        self.assertNotAlmostEqual(result.summary["safety_factor"], 250.0 / result.summary["max_von_mises_MPa"], places=2)
+        self.assertAlmostEqual(result.summary["safety_factor"], 250.0 / result.summary["max_von_mises_MPa"], places=2)
+        self.assertNotAlmostEqual(result.summary["safety_factor"], 250.0 / refined["from_max_von_mises_MPa"], places=2)
         (moved,) = [f for f in result.findings if f["type"] == "mesh_not_converged"]
         self.assertTrue(moved["summary"].startswith("The peak changed "), moved["summary"])
 
@@ -441,6 +452,40 @@ class Yielding(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class FinerMeshSize(unittest.TestCase):
+    """The automatic re-solve halves the element size unless that would pass the DOF budget."""
+
+    @staticmethod
+    def estimate(size, finer, dofs):
+        return dofs * (size / finer) ** 3
+
+    def test_a_small_part_halves(self):
+        from cadgen._internal.fea.run import finer_mesh_size
+
+        self.assertEqual(finer_mesh_size(2.0, 20_000), 1.0)
+
+    def test_a_larger_part_is_capped_under_the_warn_threshold(self):
+        from cadgen._internal.fea.run import finer_mesh_size
+        from cadgen._internal.fea.solve import DOF_WARN
+
+        finer = finer_mesh_size(2.0, 100_000)
+        self.assertTrue(1.0 < finer < 2.0)
+        self.assertAlmostEqual(self.estimate(2.0, finer, 100_000), DOF_WARN, delta=DOF_WARN * 1e-6)
+
+    def test_a_part_already_past_the_warn_threshold_stays_under_the_limit(self):
+        from cadgen._internal.fea.run import finer_mesh_size
+        from cadgen._internal.fea.solve import DOF_LIMIT
+
+        finer = finer_mesh_size(2.0, 679_000)  # a real L-bracket at its default size
+        self.assertLess(finer, 2.0)
+        self.assertLess(self.estimate(2.0, finer, 679_000), DOF_LIMIT)
+
+    def test_no_finer_solve_when_there_is_no_room_for_one(self):
+        from cadgen._internal.fea.run import finer_mesh_size
+
+        self.assertIsNone(finer_mesh_size(2.0, 1_400_000))
+
+
 class MeshOrderGuard(unittest.TestCase):
     def _elements(self, second_order: bool):
         import netgen.occ as ngocc
