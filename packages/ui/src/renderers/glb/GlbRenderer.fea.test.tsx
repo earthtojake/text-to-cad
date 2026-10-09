@@ -128,6 +128,17 @@ it('takes the stored choice back for the same result, and not for a re-solved on
   expect(resolved.container.querySelector('[role="group"][aria-label="von Mises stress colour bar"]')).toBeTruthy();
 });
 
+it('the colour bar shows its whole line: it is never truncated, and the card grows to fit it', () => {
+  const { container } = mount({ ...RESULT });
+  const summary = container.querySelector('[data-fea-summary]') as HTMLElement;
+  expect(summary.textContent).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
+  expect(summary.className).not.toMatch(/truncate|ellipsis|overflow-hidden|whitespace-nowrap/);
+  const card = container.querySelector('[aria-label$="colour bar"]') as HTMLElement;
+  expect(card.className).toContain('w-max');
+  expect(card.className).toContain('max-w-full');
+  expect(card.className).not.toMatch(/(^|\s)w-72(\s|$)/);
+});
+
 it('a GLB that is not a result has no colour bar, no Analysis section and its colours untouched', () => {
   const { mesh, container } = mount(null);
   expect(container.querySelector('[aria-label$="colour bar"]')).toBeNull();

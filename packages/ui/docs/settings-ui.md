@@ -554,7 +554,8 @@ and what the colours mean is on the view; there is no panel, tool or mode of its
   and units along the ramp, one playbar's height higher when the result also has routines. Stress: "Peak stress 47 MPa · holds 5.8× this load · moves up to
   0.029 mm", with "holds" left out when the result has no safety factor and "yields under this
   load" in its place when the safety factor is under 1; displacement: "Moves up
-  to 0.029 mm". It has no controls. The safety factor is the result's own, the conservative one.
+  to 0.029 mm". The card is at least 18rem wide and grows to fit the line, up to the viewport less its margins, wrapping
+  to a second line only past that: the line is never truncated. It has no controls. The safety factor is the result's own, the conservative one.
 - **Findings are the alert card and its icon**, as a board's are (`kit/status/findings.jsx`): the
   result's checks, errors first under "Fix before using", the rest under "Suggestions", each in its
   full sentence. The card is open over the view while something must be fixed; for suggestions alone

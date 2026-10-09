@@ -8,7 +8,8 @@ const PLAYBAR_CLEARANCE = "3rem";
 
 /**
  * What the colours of a GLB with an FEA result mean, over the bottom of its viewport: the
- * field's range and units along the ramp, and one plain line about the result. It is only
+ * field's range and units along the ramp, and one plain line about the result. The card grows to fit that line, up to the viewport's width less
+ * its margins, and the line wraps only past that; it is never cut short. It is only
  * a reading: the field and the deformation are chosen in Display (`FeaAnalysisSection.jsx`).
  *
  * Bottom-centre, on the line the playbar uses, or one playbar's height above it when the file has routines (`raised`). The card takes no pointer events, so
@@ -19,11 +20,11 @@ export default function FeaColourBar({ result, field, raised = false }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3" style={{ bottom: raised ? `calc(${VIEWPORT_BOTTOM_CENTER} + ${PLAYBAR_CLEARANCE})` : VIEWPORT_BOTTOM_CENTER }}>
       <div
-        className={cn("flex w-72 max-w-full flex-col gap-1 rounded-md px-2 py-1.5 text-tiny", FLOATING_CHROME_SURFACE_CLASS)}
+        className={cn("flex w-max min-w-[min(18rem,100%)] max-w-full flex-col gap-1 rounded-md px-2 py-1.5 text-tiny", FLOATING_CHROME_SURFACE_CLASS)}
         role="group"
         aria-label={`${field.name} colour bar`}
       >
-        {line ? <div className="truncate text-foreground" data-fea-summary="">{line}</div> : null}
+        {line ? <div className="text-foreground" data-fea-summary="">{line}</div> : null}
         <div className="flex items-center gap-2 text-micro tabular-nums text-muted-foreground">
           <span data-fea-min="">{formatValue(field.min)}</span>
           <div
