@@ -8,7 +8,10 @@ import base64
 import http.server
 import io
 import json
+import os
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import tempfile
@@ -17,6 +20,7 @@ from pathlib import Path
 from unittest import mock
 
 from cadgen import cli
+from cadgen._internal import channel as install_channel
 from cadgen.analytics import (KEPT, NOTICE_ENV, NOTICE_TEXT, PRIVACY_URL, Recorder, _post, choose, forget_pending,
                               notify, status)
 from cadgen.cli import telemetry as telemetry_cli
@@ -474,6 +478,100 @@ class ServerCountsTest(_Tmp):
         server.analytics.flush()
         self.assertEqual(sent, [])
         self.assertNotIn("id", json.loads(self.path.read_text(encoding="utf-8"))["telemetry"])
+
+
+class InstallChannelTest(_Tmp):
+    """Where the install came from (`cadgen/_internal/channel.py`): only the CAD server is told, by its plugin; it
+    writes the channel down for its installation, and every other process of it -- the build daemon, the Viewer a
+    skill opens -- reports that, unless it was told one itself."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.record = self.tmp / install_channel.RECORD  # beside the settings, where a recorder given them reads it
+        # Not a source tree: a checkout is a development install, whatever the record says.
+        for patched in (mock.patch("cadgen._internal.channel._source_tree", return_value=False),
+                        mock.patch.object(install_channel, "_record_path", return_value=self.record)):
+            patched.start()
+            self.addCleanup(patched.stop)
+        choose(True, by="cli", path=self.path)
+
+    def started(self, process: str, channel: str = "") -> tuple[Recorder, list[dict]]:
+        sent: list[dict] = []
+        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
+            recorder = Recorder(process=process, path=self.path, send=lambda payload: sent.append(payload) or True)
+        return recorder, sent
+
+    def channel_of(self, recorder: Recorder, sent: list[dict]) -> str:
+        recorder.called("cad_show", True)
+        self.assertTrue(recorder.flush())
+        return sent[-1]["channel"]
+
+    def server_starts(self, channel: str) -> str | None:
+        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
+            return install_channel.remember(path=self.record)
+
+    def test_every_process_of_the_installation_reports_the_channel_its_plugins_server_wrote_down(self) -> None:
+        daemon, from_daemon = self.started("daemon")
+        viewer, from_viewer = self.started("viewer")
+        app, from_app = self.started("app")
+        told, from_told = self.started("viewer", "codex-github")  # a Viewer the CAD server started: told its own
+        # A skills-only install: no plugin's server ever ran from it.
+        self.assertEqual([self.channel_of(*started) for started in ((daemon, from_daemon), (viewer, from_viewer))],
+                         ["unknown", "unknown"])
+        self.assertEqual(self.server_starts("claude-github"), "claude-github")
+        self.assertEqual(json.loads(self.record.read_text(encoding="utf-8")),
+                         {install_channel.installation(): "claude-github"})
+        # Read again for each batch: the daemon and the Viewer were running before the server started.
+        self.assertEqual(self.channel_of(daemon, from_daemon), "claude-github")
+        self.assertEqual(self.channel_of(viewer, from_viewer), "claude-github")
+        self.assertEqual(self.channel_of(told, from_told), "codex-github")  # what a process was told comes first
+        # A CAD server no plugin named is configured by hand: it never takes another's channel.
+        self.assertEqual(self.channel_of(app, from_app), "unknown")
+        # Two plugins pinning one release share its installation: the server that started last is written down.
+        self.server_starts("agent-plugins")
+        self.assertEqual(self.channel_of(daemon, from_daemon), "agent-plugins")
+
+    def test_the_record_holds_closed_tokens_for_the_newest_installations_and_never_fails_anything(self) -> None:
+        self.assertIsNone(self.server_starts(""))  # nothing named, nothing written
+        self.assertFalse(self.record.exists())
+        self.record.write_text("not json", encoding="utf-8")
+        self.assertIsNone(install_channel.recorded(path=self.record))
+        self.assertIsNone(self.server_starts("Not A Channel!"))
+        self.assertEqual(self.server_starts("claude-github"), "claude-github")  # a broken record is written afresh
+        with mock.patch("cadgen._internal.atomic_replace.write_bytes_atomic") as write:
+            self.assertEqual(self.server_starts("claude-github"), "claude-github")
+        write.assert_not_called()  # what the record holds already is not written again
+        for index in range(install_channel.KEPT_INSTALLATIONS + 3):
+            with mock.patch.object(install_channel, "installation", return_value=f"install-{index}"):
+                self.server_starts("codex-github")
+        kept = json.loads(self.record.read_text(encoding="utf-8"))
+        self.assertEqual(list(kept), [f"install-{index}" for index in range(3, install_channel.KEPT_INSTALLATIONS + 3)])
+        # A value no plugin could name is no channel, whatever wrote it.
+        self.record.write_text(json.dumps({install_channel.installation(): "unknown"}), encoding="utf-8")
+        self.assertIsNone(install_channel.recorded(path=self.record))
+        with mock.patch("cadgen._internal.channel._load", side_effect=PermissionError):
+            self.assertIsNone(install_channel.recorded(path=self.record))
+            self.assertIsNone(self.server_starts("claude-github"))
+
+    def test_a_development_install_stays_one(self) -> None:
+        # A development install's own server writes `dev` down for its installation, so its daemon, which takes no
+        # channel from whoever started it, still sends nothing by default.
+        self.path.write_text(json.dumps({"telemetry": {"notifiedAt": time.time(), "notice": 1}}), encoding="utf-8")
+        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": ""}):
+            self.assertEqual(status(path=self.path)["reason"], "default")
+            self.server_starts("dev")
+            self.assertEqual(install_channel.channel(), "dev")
+            self.assertEqual(install_channel.channel(recorded_too=False), "unknown")
+            self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
+
+    def test_the_cad_server_writes_its_channel_down_as_it_starts(self) -> None:
+        environment = {**os.environ, "CADGEN_INSTALL_CHANNEL": "claude-github", "CADGEN_STATE_DIR": str(self.tmp),
+                       "DO_NOT_TRACK": "1", "CADGEN_UPDATE_CHECK": "0", "CADGEN_DAEMON": "0"}
+        # A host that starts a server only to list its tools, and closes it at once.
+        subprocess.run([sys.executable, "-m", "cadgen.cli", "mcp"], stdin=subprocess.DEVNULL, capture_output=True,
+                       env=environment, timeout=120, check=True)
+        self.assertEqual(json.loads(self.record.read_text(encoding="utf-8")),
+                         {install_channel.installation(): "claude-github"})
 
 
 class BeforeTelemetryTest(_Tmp):

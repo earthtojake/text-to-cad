@@ -921,6 +921,7 @@ class Recorder:
         self._session = str(uuid.uuid4())
         self._context: dict[str, Any] = {"process": process if process in PROCESSES else "app", "version": "unknown",
                                          "channel": "unknown", "platform": "other"}
+        self._named: str | None = None  # the channel this process was told itself (``_channel``)
         self._tally = _Tally()
         self._day = ""
         self._shown: set[str] = set()  # the files a view showed today, by absolute path: never leaves this process
@@ -933,10 +934,21 @@ class Recorder:
     @_guarded(lambda: None)
     def _describe(self) -> None:
         from cadgen import __version__
-        from cadgen._internal.channel import channel
+        from cadgen._internal.channel import named
 
-        self._context.update(version=_token(__version__, 32) or "unknown", channel=channel(),
+        self._named = named()
+        self._context.update(version=_token(__version__, 32) or "unknown", channel=self._channel(),
                              platform=_platform_name(), arch=_token(_platform.machine().lower(), 16))
+
+    def _channel(self) -> str:
+        """Where this install came from: what this process was told itself, else the channel its plugin's server wrote
+        down for its installation -- read again for each batch, as the daemon and the viewer outlive the server that
+        wrote it -- but never for the CAD server, which only its own plugin names (``cadgen/_internal/channel.py``)."""
+        from cadgen._internal.channel import RECORD, UNKNOWN, recorded
+
+        if self._named is not None or self._context["process"] == "app":
+            return self._named or UNKNOWN
+        return recorded(path=self.path.with_name(RECORD) if self.path else None) or UNKNOWN  # beside the settings
 
     @_guarded(lambda: None)
     def _decision(self) -> Any:
@@ -1138,10 +1150,11 @@ class Recorder:
                 return None
         found = dict(UNAVAILABLE) if self._off else status(path=self.path, probe=False)
         decided = _answer((_read(settings) or {}) if found["sharing"] else {})  # which answer is in force (``_answer``)
+        where = self._channel()
         with self._lock:
             tally, basis, choices = self._tally, self._basis, self._choices
             self._tally, self._basis = _Tally(), decided
-            context = dict(self._context)
+            context = {**self._context, "channel": where}
             # Noted under an earlier answer -- before a yes given in another process (this one's own clears
             # what it noted), before the person was told, or under one never read: never sent. Which answer,
             # not whether it came later: Windows' clock moves in 16 ms steps, so a yes and the batch it lands

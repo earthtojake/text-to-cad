@@ -820,9 +820,18 @@ def serve(argv: list[str] | None = None) -> int:
     """Serve MCP on this process's standard streams until the host closes them."""
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cadgen mcp: %(message)s")
     protocol_out = claim_stdout()
+    import threading
+
     from cadgen import updates
+    from cadgen._internal.channel import remember
     from cadgen.analytics import Recorder, collect_crashes
 
+    # The channel this server's plugin named, written down for the processes of its installation no plugin
+    # names one to -- the build daemon, a skill's commands and the Viewer they open. In the background, so no
+    # start waits on the state directory; an exit waits a moment for it, as a host may start a server only to
+    # list its tools.
+    remembering = threading.Thread(target=remember, name="cadgen-channel", daemon=True)
+    remembering.start()
     analytics = Recorder()
     analytics.start()
     collect_crashes(analytics.crashed)  # what fails in this process, wherever it is caught, is this recorder's
@@ -833,4 +842,5 @@ def serve(argv: list[str] | None = None) -> int:
         connection.serve()
     finally:
         analytics.close()
+        remembering.join(1)
     return 0

@@ -151,10 +151,12 @@ class ResidentProcessLifecycle(unittest.TestCase):
         self.assertEqual(popen.call_args.kwargs["cwd"], tempfile.gettempdir())
         ensure.assert_not_called()
 
-    def test_the_daemon_takes_no_telemetry_switch_from_the_client_that_started_it(self):
-        # It serves every client; each client's switch travels with its own builds instead.
+    def test_the_daemon_takes_no_telemetry_switch_or_channel_from_the_client_that_started_it(self):
+        # It serves every client; each client's switch travels with its own builds instead, and the channel it
+        # reports is the one its installation's plugin wrote down (`cadgen/_internal/channel.py`).
         spawned = mock.Mock(pid=1234)
-        started_from = {"PATH": "/bin", "DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "0"}
+        started_from = {"PATH": "/bin", "DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "0",
+                        "CADGEN_INSTALL_CHANNEL": "claude-github"}
         with tempfile.TemporaryDirectory(prefix="cadgen-daemon-launch-") as tmp, \
                 mock.patch.object(client.transport, "ensure_authkey"), \
                 mock.patch.object(client, "daemon_identity", return_value="test"), \
@@ -167,7 +169,7 @@ class ResidentProcessLifecycle(unittest.TestCase):
 
         env = popen.call_args.kwargs["env"]
         self.assertEqual(env["PATH"], "/bin")
-        for name in ("DO_NOT_TRACK", "CADGEN_TELEMETRY"):
+        for name in ("DO_NOT_TRACK", "CADGEN_TELEMETRY", "CADGEN_INSTALL_CHANNEL"):
             self.assertNotIn(name, env)
 
     def test_replaced_key_is_retried_only_after_the_live_owner_republishes(self):

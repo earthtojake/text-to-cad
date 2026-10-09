@@ -42,7 +42,9 @@ export default function PrivacyPolicyPage() {
               </li>
               <li>
                 which of them sent it, the cadgen version, where it was installed from (a plugin
-                directory, the Cursor Marketplace, GitHub, or a development install), your operating
+                directory, the Cursor Marketplace, GitHub, or a development install, as the plugin’s
+                CAD app names it and notes on your computer for the viewer and the build daemon to
+                report too), your operating
                 system and processor type, and the name and version of your agent app and how it shows
                 CAD (or that it is the browser viewer);
               </li>
