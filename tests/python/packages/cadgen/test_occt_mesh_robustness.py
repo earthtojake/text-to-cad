@@ -122,28 +122,36 @@ class DegenerateComponents(unittest.TestCase):
         self.assertEqual(stored, [True, True, True])
 
 
-class StlAtSingularPoints(unittest.TestCase):
-    def test_an_stl_of_poles_and_apexes_is_manifold_and_watertight(self):
+class ExportAtSingularPoints(unittest.TestCase):
+    def test_an_export_of_poles_and_apexes_is_manifold_and_watertight_in_every_format(self):
         import trimesh
         from build123d import Box, Cone, Pos, Sphere, fillet
 
-        from cadgen._internal.mesh_formats import build_primitives, stl_bytes
+        from cadgen._internal.mesh_formats import build_primitives, glb_bytes, stl_bytes, threemf_bytes
 
         parts = {
             "fully filleted box": fillet(Box(20, 20, 20).edges(), 3),
             "sphere beside a cone": _compound(Sphere(6), Pos(20, 0, 0) * Cone(5, 0, 10)),
         }
         descriptor = {"components": {"c": {}}, "occurrences": [{"id": "o1", "component": "c", "transform": IDENTITY}]}
-        with generated_cad_directory(prefix="occt-mesh-stl-") as temporary:
+        with generated_cad_directory(prefix="occt-mesh-export-") as temporary:
             for label, shape in parts.items():
-                with self.subTest(label):
-                    _body, mesh = _mesh(shape)
-                    # The case is still the case: OCCT's mesh, as stored, has them.
-                    self.assertTrue(_collapsed(_corners(mesh)).any(), "the stored mesh has collapsed triangles")
-                    path = Path(temporary) / f"{label}.stl"
-                    path.write_bytes(stl_bytes(build_primitives(descriptor, {"c": mesh})))
-                    exported.MeshExportManifoldTest.assertManifold(self, path, label)
-                    self.assertTrue(trimesh.load(path).is_watertight)
+                _body, mesh = _mesh(shape)
+                # The case is still the case: OCCT's mesh, as stored, has them.
+                self.assertTrue(_collapsed(_corners(mesh)).any(), "the stored mesh has collapsed triangles")
+                primitives = build_primitives(descriptor, {"c": mesh})
+                for fmt, write in (("stl", stl_bytes), ("glb", glb_bytes), ("3mf", threemf_bytes)):
+                    with self.subTest(label, format=fmt):
+                        path = Path(temporary) / f"{label}.{fmt}"
+                        path.write_bytes(write(primitives))
+                        if fmt == "stl":
+                            exported.MeshExportManifoldTest.assertManifold(self, path, label)
+                        # Read as the file says, then welded by exact position, as a slicer welds.
+                        read = trimesh.load(path, force="mesh", process=False)
+                        corners = np.asarray(read.vertices)[np.asarray(read.faces)]
+                        self.assertFalse(_collapsed(corners).any(), f"{fmt} carries triangles that cover nothing")
+                        read.merge_vertices(merge_tex=True, merge_norm=True)
+                        self.assertTrue(read.is_watertight)
 
 
 def _range_area(mesh, ordinal: int) -> float:

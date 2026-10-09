@@ -36,8 +36,10 @@ from cadgen._internal.mesh_animation import AnimationSnapshot
 # misses without touching geometry or the store's meshes. Not the glTF container
 # version and not a tessellation-cache salt. GLB 4, STL 1 and 3MF 1: OCCT's stored
 # meshes and this package's writers replaced the JavaScript tessellator and
-# serializers, so no file either wrote is reported current.
-SERIALIZATION_VERSIONS = {"glb": 4, "stl": 1, "3mf": 1}
+# serializers, so no file either wrote is reported current. GLB 5 and 3MF 2: an
+# uncoloured occurrence no longer takes a sibling's colour, and a GLB no longer
+# carries triangles that cover nothing.
+SERIALIZATION_VERSIONS = {"glb": 5, "stl": 1, "3mf": 2}
 GLB_SERIALIZATION_VERSION = SERIALIZATION_VERSIONS["glb"]
 
 # Declarable formats, and the decorator that declares each (the digit rule
