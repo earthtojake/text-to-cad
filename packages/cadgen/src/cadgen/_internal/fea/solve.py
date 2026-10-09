@@ -18,6 +18,7 @@ them is itself a signal of a singularity or an under-resolved region.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -64,6 +65,10 @@ class SolveOutcome:
     #: Total applied force in N, summed over the loads.
     applied: tuple[float, float, float]
     dofs: int
+    #: (T, 10) the scalar DOF ids of each element's ten nodes, for reading a part's share of the fields.
+    element_dofs: "np.ndarray"
+    #: (T,) the largest von Mises at each element's quadrature points, MPa.
+    element_von_mises_gauss: "np.ndarray"
     timings: dict[str, float] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     solver: str = ""
@@ -163,7 +168,7 @@ def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: 
 
 def solve_linear_static(
     volume: "VolumeMesh",
-    material: "Material",
+    material: "Material | Sequence[Material]",
     fixtures: "tuple[Fixture, ...]",
     loads: "tuple[Load, ...]",
     ordinal_of: dict[str, int],
@@ -174,9 +179,12 @@ def solve_linear_static(
     """Solve one study on a meshed occurrence. ``ordinal_of`` maps face refs to ordinals.
 
     ``automatic`` marks the re-solve cadgen chose the size of, which words its warnings accordingly.
+    For an assembly (``volume.domain`` set) ``material`` is one material per part, indexed by
+    domain, and E and nu vary from element to element.
     """
     import numpy as np
-    from skfem import Basis, ElementTetP2, ElementVector, LinearForm, asm
+    from skfem import Basis, BilinearForm, ElementTetP2, ElementVector, LinearForm, asm
+    from skfem.helpers import ddot, sym_grad, trace
     from skfem.models.elasticity import lame_parameters, linear_elasticity
 
     timings: dict[str, float] = {}
@@ -224,8 +232,22 @@ def solve_linear_static(
 
     # Stiffness
     started = time.perf_counter()
-    lam, mu = lame_parameters(material.E, material.nu)
-    K = asm(linear_elasticity(lam, mu), basis)
+    if volume.domain is None:
+        lam, mu = lame_parameters(material.E, material.nu)
+        K = asm(linear_elasticity(lam, mu), basis)
+    else:
+        # One E and nu per element, the same at each of its quadrature points.
+        per_part = [lame_parameters(m.E, m.nu) for m in material]
+        domain = np.asarray(volume.domain)
+        quadrature = basis.X.shape[1]
+        lam = np.repeat(np.array([p[0] for p in per_part])[domain][:, None], quadrature, axis=1)
+        mu = np.repeat(np.array([p[1] for p in per_part])[domain][:, None], quadrature, axis=1)
+
+        @BilinearForm
+        def stiffness(u, v, w):
+            return 2.0 * w["mu"] * ddot(sym_grad(u), sym_grad(v)) + w["lam"] * trace(sym_grad(u)) * trace(sym_grad(v))
+
+        K = asm(stiffness, basis, lam=lam, mu=mu)
     timings["assemble_s"] = time.perf_counter() - started
 
     # Loads
@@ -298,6 +320,8 @@ def solve_linear_static(
         reactions=reactions,
         applied=applied,
         dofs=int(basis.N),
+        element_dofs=np.ascontiguousarray(scalar.element_dofs.T),
+        element_von_mises_gauss=von_mises_q.max(axis=1),
         timings=timings,
         warnings=warnings,
         solver=solver,

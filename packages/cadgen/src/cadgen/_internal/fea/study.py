@@ -12,7 +12,10 @@ caller) of this shape::
       ],
       "mesh": {"size_mm": 2.5},                  # optional; default from the bounding box
       "output": {"deformation_scale": "auto"},   # optional; a number, or "auto"
-      "margin": 2.0                              # optional; the safety factor (>= 1) the part should keep
+      "margin": 2.0,                             # optional; the safety factor (>= 1) the part should keep
+      "parts": {"post": {"material": "steel"}},   # assemblies: a material per part, by name or ref
+      "connections": [{"between": ["post", "base"], "type": "free"}],  # assemblies: overrides of the bonded default
+      "contact_tolerance_mm": 0.1                # assemblies: faces this close are bonded
     }
 
 Face references are the viewer's own selectors (``#o1.f17``, or with the
@@ -33,10 +36,12 @@ from typing import Any
 
 from cadgen._internal.fea.materials import Material, lookup_material
 
-__all__ = ["Fixture", "Load", "Study", "parse_study"]
+__all__ = ["Connection", "Fixture", "Load", "Study", "parse_study"]
 
 FIXTURE_TYPES = ("fixed",)
 LOAD_TYPES = ("force", "pressure")
+CONNECTION_TYPES = ("bonded", "free")
+UNSUPPORTED_CONNECTION_TYPES = ("bolt", "contact")
 
 
 @dataclass(frozen=True)
@@ -56,6 +61,15 @@ class Load:
 
 
 @dataclass(frozen=True)
+class Connection:
+    """An override of how two parts are joined: by default every touching pair is bonded."""
+
+    #: The two parts, each as the study named it (an occurrence ref or its name).
+    between: tuple[str, str]
+    type: str
+
+
+@dataclass(frozen=True)
 class Study:
     material: Material
     fixtures: tuple[Fixture, ...]
@@ -68,6 +82,12 @@ class Study:
     margin: float = 2.0
     #: The raw document, echoed into the sidecar so a result names its inputs.
     source: dict = field(default_factory=dict, compare=False)
+    #: Assemblies: the material of each part named in the study, as it named the part.
+    parts: dict[str, Material] = field(default_factory=dict)
+    #: Assemblies: overrides of the bonded default.
+    connections: tuple[Connection, ...] = ()
+    #: Assemblies: faces this close (or closer) count as touching.
+    contact_tolerance_mm: float = 0.1
 
     @property
     def face_refs(self) -> tuple[str, ...]:
@@ -143,6 +163,44 @@ def _material(spec: Any) -> Material:
     return Material(str(spec.get("name", base.name if base else "custom")), E, nu, yield_strength, density)
 
 
+def _parts(entries: Any) -> dict[str, Material]:
+    if entries is None:
+        return {}
+    if not isinstance(entries, dict):
+        raise ValueError('study.parts: expected an object like {"post": {"material": "steel"}}')
+    parts = {}
+    for name, entry in entries.items():
+        if not isinstance(entry, dict) or "material" not in entry:
+            raise ValueError(f"parts[{name!r}]: expected an object with a 'material'")
+        parts[str(name)] = _material(entry["material"])
+    return parts
+
+
+def _connections(entries: Any) -> tuple[Connection, ...]:
+    if entries is None:
+        return ()
+    if not isinstance(entries, list):
+        raise ValueError('study.connections: expected a list like [{"between": ["post", "base"], "type": "free"}]')
+    connections = []
+    for index, entry in enumerate(entries):
+        where = f"connections[{index}]"
+        if not isinstance(entry, dict):
+            raise ValueError(f"{where}: expected an object")
+        between = entry.get("between")
+        if (
+            not isinstance(between, list) or len(between) != 2
+            or not all(isinstance(name, str) and name.strip() for name in between)
+        ):
+            raise ValueError(f'{where}.between: name the two parts, like ["post", "base"]')
+        kind = entry.get("type")
+        if kind in UNSUPPORTED_CONNECTION_TYPES:
+            raise ValueError(f"{where}.type: {kind!r} connections are not yet supported; use bonded or free")
+        if kind not in CONNECTION_TYPES:
+            raise ValueError(f"{where}.type: {kind!r} is not one of {CONNECTION_TYPES}")
+        connections.append(Connection((between[0].strip(), between[1].strip()), kind))
+    return tuple(connections)
+
+
 def parse_study(study: str | dict | Path | None) -> Study:
     """Validate a study document and return the typed :class:`Study`."""
     if study is None:
@@ -151,9 +209,14 @@ def parse_study(study: str | dict | Path | None) -> Study:
             "the fixed faces and the loads; run `cadgen fea faces IN.step` to list face refs"
         )
     document = _load_document(study)
-    unknown = set(document) - {"material", "fixtures", "loads", "mesh", "output", "margin"}
+    unknown = set(document) - {
+        "material", "fixtures", "loads", "mesh", "output", "margin", "parts", "connections", "contact_tolerance_mm"
+    }
     if unknown:
-        raise ValueError(f"study: unknown keys {sorted(unknown)}; expected material, fixtures, loads, mesh, output, margin")
+        raise ValueError(
+            f"study: unknown keys {sorted(unknown)}; expected material, fixtures, loads, mesh, output, margin, "
+            "parts, connections, contact_tolerance_mm"
+        )
     if "material" not in document:
         raise ValueError("study: 'material' is required (a table name or {E_MPa, nu, yield_MPa})")
     material = _material(document["material"])
@@ -215,4 +278,13 @@ def parse_study(study: str | dict | Path | None) -> Study:
     if margin < 1:
         raise ValueError(f"margin: a safety factor below 1 means the part yields; must be >= 1, got {margin:g}")
 
-    return Study(material, tuple(fixtures), tuple(loads), mesh_size, deformation_scale, margin, document)
+    parts = _parts(document.get("parts"))
+    connections = _connections(document.get("connections"))
+    tolerance = _number(document.get("contact_tolerance_mm", 0.1), where="contact_tolerance_mm")
+    if tolerance < 0:
+        raise ValueError(f"contact_tolerance_mm: must be zero or more, got {tolerance:g}")
+
+    return Study(
+        material, tuple(fixtures), tuple(loads), mesh_size, deformation_scale, margin, document,
+        parts=parts, connections=connections, contact_tolerance_mm=tolerance,
+    )

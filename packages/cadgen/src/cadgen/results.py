@@ -378,8 +378,9 @@ class FeaResult:
     ok: bool
     document: Path
     occurrence: str
-    glb: Path
-    sidecar: Path
+    #: ``None`` when the study stopped before the solve (``ok`` is false; ``findings`` say why).
+    glb: Path | None
+    sidecar: Path | None
     vtu: Path | None = None
     summary: dict = field(default_factory=dict)
     mesh: dict = field(default_factory=dict)
@@ -390,6 +391,8 @@ class FeaResult:
     def human_lines(self) -> list[str]:
         from cadgen._internal.fea.checks import safety_factor_text  # stdlib only; kept out of module import time
 
+        if not self.ok:
+            return [f"not solved: {_display(self.document)}"] + [f"{finding['severity']}: {finding['summary']}" for finding in self.findings]
         s = self.summary
         safety = s.get("safety_factor")
         lines = [
@@ -399,6 +402,7 @@ class FeaResult:
             f"yield {s.get('yield_MPa')} MPa, safety factor {'n/a' if safety is None else safety_factor_text(safety)}",
             f"max displacement {s.get('max_displacement_mm')} mm at {s.get('max_displacement_at_mm')}",
             f"applied {s.get('applied_force_N')} N, reactions {s.get('reaction_force_N')} N",
+            *([f"weakest part: {s['weakest_part']}"] if s.get("weakest_part") else []),
             f"wrote GLB: {_display(self.glb)} (deformation x{s.get('deformation_scale')}), sidecar: {_display(self.sidecar)}"
             + (f", VTU: {_display(self.vtu)}" if self.vtu else ""),
         ]

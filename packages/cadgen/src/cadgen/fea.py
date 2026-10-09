@@ -65,7 +65,9 @@ def solve(
     study: the study: a JSON file path, inline JSON, or (library callers) a
         dict. It names the material, the fixed faces and the loads; see the
         fea skill for the schema. Face refs are the ones ``cadgen fea faces``
-        prints.
+        prints. A document of several parts is solved as one bonded assembly:
+        ``parts`` gives each its material, ``connections`` overrides which
+        touching pairs are bonded (``cadgen fea parts`` lists them).
     mesh_size: target element size in mm, overriding the study's mesh.size_mm.
         Omitted, a fortieth of the part's bounding diagonal.
     vtu: also write a ``.vtu`` of the result for ParaView.

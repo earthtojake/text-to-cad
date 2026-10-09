@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from cadgen.step_scene import StepScene
 
-__all__ = ["Contact", "Glued", "Part", "detect_contacts", "glue", "list_parts", "part_faces"]
+__all__ = ["Contact", "Glued", "Part", "detect_contacts", "glue", "list_parts", "part_centre", "part_faces", "part_gap"]
 
 # OpenCascade's own confusion distance: a gap below it is touching.
 _TOUCHING_MM = 1e-7
@@ -110,6 +110,18 @@ def _distance(a, b):
     extrema = BRepExtrema_DistShapeShape(a, b)
     extrema.Perform()
     return extrema if extrema.IsDone() and extrema.NbSolution() > 0 else None
+
+
+def part_gap(first: Part, second: Part) -> float | None:
+    """The distance between two parts in mm (0 = touching), or ``None`` when the kernel finds none."""
+    extrema = _distance(first.shape, second.shape)
+    return None if extrema is None else float(extrema.Value())
+
+
+def part_centre(part: Part) -> tuple[float, float, float]:
+    """The centre of a part's bounding box, mm."""
+    xmin, ymin, zmin, xmax, ymax, zmax = _box(part.shape, 0.0).Get()
+    return ((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
 
 
 def _overlap_area(face_a, face_b, extrema) -> float:

@@ -28,8 +28,8 @@ def _open(target: Path) -> "StepScene":
     return read_scene(document_target(target, suffixes=STEP_SUFFIXES))
 
 
-def _single_occurrence(scene: "StepScene", refs: "tuple[str, ...]") -> tuple["Occurrence", dict[str, "Selection"]]:
-    """The one leaf occurrence every face ref belongs to, and each ref resolved."""
+def _resolve_faces(scene: "StepScene", refs: "tuple[str, ...]") -> tuple[dict[str, "Selection"], set[str]]:
+    """Each face ref resolved, and the occurrences they belong to."""
     resolved: dict[str, Selection] = {}
     owners: set[str] = set()
     for ref in refs:
@@ -38,6 +38,13 @@ def _single_occurrence(scene: "StepScene", refs: "tuple[str, ...]") -> tuple["Oc
             raise ValueError(f"{ref} is a {selection.kind} reference; fixtures and loads take faces (#o1.f17)")
         resolved[ref] = selection
         owners.add(selection.occurrence_ref)
+    return resolved, owners
+
+
+def _single_occurrence(
+    scene: "StepScene", resolved: dict[str, "Selection"], owners: set[str]
+) -> tuple["Occurrence", dict[str, "Selection"]]:
+    """The one leaf occurrence every face ref belongs to, and each ref resolved."""
     if len(owners) > 1:
         raise ValueError(
             f"the study's faces span {len(owners)} occurrences ({', '.join(sorted(owners))}); "
@@ -141,18 +148,170 @@ def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verb
     )
 
 
-def _peak_face(volume, outcome, peak_node: int, fixed_ordinals: set[int]) -> str | None:
+@dataclasses.dataclass
+class _Plan:
+    """What an assembly study asks for, once its parts and connections are resolved."""
+
+    parts: list
+    #: Per part, the occurrence's name (its ref when it has none).
+    names: list[str]
+    materials: list
+    #: Indices of the parts the study gave no material of their own.
+    defaulted: list[int]
+    #: Every pair in contact within the tolerance, and the ones that get bonded.
+    contacts: list
+    bonded: list
+    #: Per part, the group of parts bonded to it (directly or through others).
+    group_of: list[int]
+
+
+def _find_part(parts: list, names: list[str], key: str, where: str) -> int:
+    """The part a study names by occurrence ref or by name."""
+    for index, part in enumerate(parts):
+        if key in (part.ref, f"#{key}"):
+            return index
+    named = [index for index, name in enumerate(names) if name == key]
+    if len(named) > 1:
+        raise ValueError(f"{where}: {key!r} names {len(named)} parts ({', '.join(parts[i].ref for i in named)}); use a ref")
+    if not named:
+        raise ValueError(f"{where}: no part named {key!r}; the parts are {', '.join(repr(name) for name in names)}")
+    return named[0]
+
+
+def _plan_assembly(scene: "StepScene", parsed) -> _Plan:
+    from cadgen._internal.fea.assembly import _groups, detect_contacts, list_parts
+
+    parts = list_parts(scene)
+    names = [part.name for part in parts]
+    index_of = {part.ref: i for i, part in enumerate(parts)}
+
+    materials = [parsed.material] * len(parts)
+    given: set[int] = set()
+    for key, material in parsed.parts.items():
+        index = _find_part(parts, names, key, f"parts[{key!r}]")
+        if index in given:
+            raise ValueError(f"parts[{key!r}]: '{names[index]}' is named twice in 'parts'")
+        given.add(index)
+        materials[index] = material
+
+    contacts = detect_contacts(parts, parsed.contact_tolerance_mm)
+    pair_of = {frozenset((index_of[c.a], index_of[c.b])) for c in contacts}
+    freed: set[frozenset[int]] = set()
+    seen: set[frozenset[int]] = set()
+    for n, connection in enumerate(parsed.connections):
+        where = f"connections[{n}]"
+        i, j = (_find_part(parts, names, key, f"{where}.between") for key in connection.between)
+        pair = frozenset((i, j))
+        if i == j:
+            raise ValueError(f"{where}.between: both names are '{names[i]}'")
+        if pair in seen:
+            raise ValueError(f"{where}: '{names[i]}' and '{names[j]}' are connected twice")
+        seen.add(pair)
+        if connection.type == "bonded" and pair not in pair_of:
+            raise ValueError(
+                f"{where}: '{names[i]}' and '{names[j]}' don't touch within {parsed.contact_tolerance_mm:g} mm, "
+                "so they can't be bonded; raise contact_tolerance_mm or move them together"
+            )
+        if connection.type == "free" and pair in pair_of:
+            freed.add(pair)
+
+    bonded = [c for c in contacts if frozenset((index_of[c.a], index_of[c.b])) not in freed]
+    group_of = [0] * len(parts)
+    for number, group in enumerate(_groups(len(parts), [(index_of[c.a], index_of[c.b]) for c in bonded])):
+        for index in group:
+            group_of[index] = number
+    for pair in freed:
+        i, j = sorted(pair)
+        if group_of[i] == group_of[j]:
+            raise ValueError(
+                f"connections: '{names[i]}' and '{names[j]}' are also joined through other bonded parts, so one joint "
+                "between them can't be freed on its own (not yet supported); free the parts' other connections too"
+            )
+    return _Plan(parts, names, materials, sorted(set(range(len(parts))) - given), contacts, bonded, group_of)
+
+
+def _not_connected(plan: _Plan, unheld: list[list[int]]) -> list[dict]:
+    """One error per group of parts nothing holds: which parts, and the nearest part that is not among them."""
+    from cadgen._internal.fea.assembly import part_centre, part_gap
+
+    found = []
+    for group in unheld:
+        members = ", ".join(f"'{plan.names[i]}'" for i in group)
+        nearest = None
+        for other in range(len(plan.parts)):
+            if other in group:
+                continue
+            for i in group:
+                gap = part_gap(plan.parts[i], plan.parts[other])
+                if gap is not None and (nearest is None or gap < nearest[0]):
+                    nearest = (gap, other)
+        if nearest is None:
+            where = ""
+        elif nearest[0] <= 1e-6:
+            where = f": it touches '{plan.names[nearest[1]]}' but isn't bonded to it"
+        else:
+            where = f": nearest part '{plan.names[nearest[1]]}' is {nearest[0]:.3g} mm away"
+        found.append({
+            "check": "fea",
+            "severity": "error",
+            "type": "not_connected",
+            "summary": f"{members} {'isn' if len(group) == 1 else 'aren'}'t connected to anything that is held{where}",
+            "description": "no chain of bonded parts joins it to a fixed face, so the solve was not run",
+            "items": [
+                {"text": f"'{plan.names[i]}'", "ref": plan.parts[i].ref,
+                 "at": [round(c, 3) for c in part_centre(plan.parts[i])]}
+                for i in group
+            ],
+        })
+    return found
+
+
+def _unheld_groups(plan: _Plan, held_parts: set[int]) -> list[list[int]]:
+    """The bonded groups none of whose parts is in ``held_parts``, each as its part indices."""
+    groups: dict[int, list[int]] = {}
+    for index, number in enumerate(plan.group_of):
+        groups.setdefault(number, []).append(index)
+    return [group for group in groups.values() if not held_parts & set(group)]
+
+
+def _unheld_after_meshing(volume, held_ordinals: set[int], count: int) -> list[list[int]]:
+    """The parts the mesh leaves apart from every fixed face (the glue did not join them), each as its own group."""
+    import numpy as np
+    import scipy.sparse as sparse
+    from scipy.sparse.csgraph import connected_components
+
+    corners = volume.tets[:, :4]
+    rows = np.concatenate([corners[:, a] for a in (0, 0, 0, 1, 1, 2)])
+    cols = np.concatenate([corners[:, b] for b in (1, 2, 3, 2, 3, 3)])
+    nodes = len(volume.nodes)
+    graph = sparse.coo_matrix((np.ones(len(rows)), (rows, cols)), shape=(nodes, nodes))
+    _, label = connected_components(graph, directed=False)
+    fixed = volume.boundary[np.isin(volume.boundary_ordinal, list(held_ordinals))][:, :3]
+    held = set(np.unique(label[fixed]).tolist())
+    return [
+        [index] for index in range(count)
+        if not held & set(np.unique(label[corners[volume.domain == index]]).tolist())
+    ]
+
+
+def _peak_face(
+    volume, outcome, peak_node: int, fixed_ordinals: set[int], own: set[int] | None = None
+) -> str | None:
     """The ``#o1.fN`` face the peak sits on, or ``None`` inside the part and away from every fixed face.
 
     The peak is at a fixture, and names that fixed face, when its node touches a
     fixed face (a node on an edge touches two) or lies within half an element
     of a fixed face's boundary nodes: a peak on a clamp's rim is a peak at the
     clamp, whichever face the mesher gave the rim node. Otherwise the face
-    whose boundary triangles hold the node."""
+    whose boundary triangles hold the node. In an assembly ``own`` limits the
+    faces to the part the peak is in: a node on a joint is on both parts' faces."""
     import numpy as np
 
     rows = (outcome.boundary_quadratic == peak_node).any(axis=1)
     ordinals = sorted({int(o) for o in volume.boundary_ordinal[rows]} - {0})
+    if own is not None:
+        ordinals = [ordinal for ordinal in ordinals if ordinal in own]
+        fixed_ordinals = fixed_ordinals & own
     touched = [ordinal for ordinal in ordinals if ordinal in fixed_ordinals]
     if touched:
         return volume.faces[touched[0]].ref
@@ -202,6 +361,115 @@ def _solved(volume, outcome, parsed, ordinal_of: dict[str, int], part: str) -> "
         part=part,
         dofs=outcome.dofs,
     )
+
+
+def _solved_part(volume, outcome, parsed, plan: _Plan, index: int, ordinal_of: dict[str, int]) -> "Solved":
+    """One part of a solved assembly, as the checks read it: its own peak, yield and displacement.
+
+    The part's elements pick its share of the fields; faces are those of the part alone.
+    """
+    import numpy as np
+
+    from cadgen._internal.fea.checks import Solved
+
+    part, material = plan.parts[index], plan.materials[index]
+    rows = volume.domain == index
+    dofs = np.unique(outcome.element_dofs[rows])
+    own = {position for position, fp in volume.faces.items() if fp.ref.startswith(f"{part.ref}.f")}
+    fixed_ordinals = {ordinal_of[ref] for fixture in parsed.fixtures for ref in fixture.faces} & own
+    magnitude = np.linalg.norm(outcome.displacement[dofs], axis=1)
+    peak_node = int(dofs[outcome.von_mises[dofs].argmax()])
+    moved_node = int(dofs[magnitude.argmax()])
+    corners = volume.nodes[np.unique(volume.tets[rows][:, :4])]
+    here = outcome.dof_locations[peak_node]
+    joint_with, nearest = None, 0.5 * volume.max_h
+    rim = np.unique(volume.boundary)
+    for pair, triangles in volume.interface_triangles.items():
+        if index not in pair:
+            continue
+        edge = np.intersect1d(np.unique(triangles), rim)
+        if len(edge) == 0:
+            continue
+        gap = float(np.linalg.norm(volume.nodes[edge] - here, axis=1).min())
+        if gap <= nearest:
+            joint_with, nearest = plan.names[pair[1] if pair[0] == index else pair[0]], gap
+    return Solved(
+        material_name=material.name,
+        yield_MPa=material.yield_strength,
+        peak_MPa=float(outcome.von_mises[peak_node]),
+        peak_gauss_MPa=float(outcome.element_von_mises_gauss[rows].max()),
+        peak_at=tuple(float(c) for c in here),
+        peak_face=_peak_face(volume, outcome, peak_node, fixed_ordinals, own),
+        fixed_faces=tuple(volume.faces[ordinal].ref for ordinal in sorted(fixed_ordinals)),
+        max_displacement_mm=float(magnitude.max()),
+        displacement_at=tuple(float(c) for c in outcome.dof_locations[moved_node]),
+        bbox_diagonal_mm=float(np.linalg.norm(corners.max(axis=0) - corners.min(axis=0))),
+        margin=parsed.margin,
+        coarser_peak_MPa=None,
+        part=plan.names[index],
+        dofs=outcome.dofs,
+        assembly=True,
+        joint_with=joint_with,
+    )
+
+
+def _connections(plan: _Plan) -> list[dict]:
+    """The detected pairs and what the study did with each, for the sidecar."""
+    name_of = {part.ref: plan.names[i] for i, part in enumerate(plan.parts)}
+    bonded = {(c.a, c.b) for c in plan.bonded}
+    return [
+        {
+            "between": [name_of[c.a], name_of[c.b]],
+            "refs": [c.a, c.b],
+            "type": "bonded" if (c.a, c.b) in bonded else "free",
+            "area_mm2": round(c.area_mm2, 4),
+            "gap_mm": round(c.gap_mm, 6),
+        }
+        for c in plan.contacts
+    ]
+
+
+class _NotConnected(Exception):
+    """The mesh left parts apart from every fixed face; ``groups`` are the parts, each as its own group."""
+
+    def __init__(self, groups: list[list[int]]):
+        super().__init__("parts not connected to a fixed face")
+        self.groups = groups
+
+
+def _unsolved(document: Path, occurrence_ref: str, findings: list[dict]) -> FeaResult:
+    """The result of a study that was stopped before the solve, by errors a person fixes in the study."""
+    return FeaResult(ok=False, document=document, occurrence=occurrence_ref, glb=None, sidecar=None, findings=tuple(findings))
+
+
+def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_of: dict[str, int], max_h: float | None):
+    """The glued, meshed assembly with its faces numbered by position, and the study's checks on it.
+
+    Raises ``ValueError`` for a fixture or load on a bonded joint, and :class:`_NotConnected`
+    when the glue left a part apart from every fixed face.
+    """
+    volume = mesh_assembly(scene, [part.ref for part in plan.parts], plan.bonded, parsed.contact_tolerance_mm, max_h)
+    # Boundary triangles carry a face's 1-based position; `faces` is keyed by it, as for one occurrence.
+    position = {ref: n for n, ref in enumerate(volume.faces, 1)}
+    volume = dataclasses.replace(volume, faces={position[ref]: fp for ref, fp in volume.faces.items()})
+    ordinal_of.update({ref: position[selection.ref] for ref, selection in resolved.items()})
+    index_of = {part.ref: i for i, part in enumerate(plan.parts)}
+    for ref, selection in resolved.items():
+        if selection.ref in volume.interface_faces:
+            owner = index_of[selection.occurrence_ref]
+            partners = sorted({
+                plan.names[index_of[c.b if index_of[c.a] == owner else c.a]]
+                for c in plan.bonded if owner in (index_of[c.a], index_of[c.b])
+            })
+            joined = " and ".join(f"'{name}'" for name in partners)
+            raise ValueError(
+                f"{ref} is where '{plan.names[owner]}' is bonded to {joined}: "
+                "a fixture or load can't sit on a joint; choose a face on the outside of the part"
+            )
+    held = {ordinal_of[ref] for fixture in parsed.fixtures for ref in fixture.faces}
+    if unheld := _unheld_after_meshing(volume, held, len(plan.parts)):
+        raise _NotConnected(unheld)
+    return volume
 
 
 def _document_ref(document: Path, glb_path: Path) -> str:
@@ -261,12 +529,25 @@ def solve_study(
     vtu_path = glb_path.with_suffix(".vtu") if vtu else None
 
     from cadgen._internal.fea import checks
-    from cadgen._internal.fea.mesh import mesh_occurrence, require_fea_stack
+    from cadgen._internal.fea.mesh import mesh_assembly, mesh_occurrence, require_fea_stack
 
     require_fea_stack()
     scene = _open(document)
-    occurrence, resolved = _single_occurrence(scene, parsed.face_refs)
-    ordinal_of = {ref: int(selection._ordinal) for ref, selection in resolved.items()}
+    resolved, owners = _resolve_faces(scene, parsed.face_refs)
+    # A document of several parts is an assembly, whichever faces the study names; one part's study keeps the one-part path.
+    plan = _plan_assembly(scene, parsed) if len(list(scene.leaves())) > 1 or parsed.parts or parsed.connections else None
+    ordinal_of: dict[str, int] = {}
+    if plan is None:
+        occurrence, resolved = _single_occurrence(scene, resolved, owners)
+        occurrence_ref = occurrence.ref
+        ordinal_of.update({ref: int(selection._ordinal) for ref, selection in resolved.items()})
+    else:
+        roots = scene.roots
+        occurrence_ref = roots[0].ref if len(roots) == 1 else ", ".join(part.ref for part in plan.parts)
+        part_index = {part.ref: i for i, part in enumerate(plan.parts)}
+        held = {part_index[resolved[ref].occurrence_ref] for fixture in parsed.fixtures for ref in fixture.faces}
+        if unheld := _unheld_groups(plan, held):
+            return _unsolved(document, occurrence_ref, _not_connected(plan, unheld))
 
     import numpy as np
 
@@ -274,14 +555,31 @@ def solve_study(
     from cadgen._internal.fea.outputs import RAMP, auto_deformation_scale, write_glb, write_vtu
 
     def mesh_and_solve(max_h: float | None, automatic: bool = False):
-        logger.debug(f"meshing {occurrence.ref}")
-        volume = mesh_occurrence(occurrence, max_h=max_h)
+        logger.debug(f"meshing {occurrence_ref}")
+        if plan is None:
+            volume = mesh_occurrence(occurrence, max_h=max_h)
+            materials = parsed.material
+        else:
+            volume = _mesh_assembly(mesh_assembly, scene, plan, parsed, resolved, ordinal_of, max_h)
+            materials = plan.materials
         logger.debug(f"meshed: {len(volume.tets)} tets, {len(volume.nodes)} nodes, size {volume.max_h:.3g} mm in {volume.seconds:.1f}s")
-        outcome = solve.solve_linear_static(volume, parsed.material, parsed.fixtures, parsed.loads, ordinal_of, log=logger.debug, automatic=automatic)
+        outcome = solve.solve_linear_static(volume, materials, parsed.fixtures, parsed.loads, ordinal_of, log=logger.debug, automatic=automatic)
         return volume, outcome
 
-    volume, outcome = mesh_and_solve(mesh_size or parsed.mesh_size)
-    solved = _solved(volume, outcome, parsed, ordinal_of, document.stem)
+    def solved_of(volume, outcome) -> "list[Solved]":
+        if plan is None:
+            return [_solved(volume, outcome, parsed, ordinal_of, document.stem)]
+        return [_solved_part(volume, outcome, parsed, plan, index, ordinal_of) for index in range(len(plan.parts))]
+
+    def weakest(parts: "list[Solved]") -> "Solved":
+        return min(parts, key=lambda part: math.inf if checks.safety_factor(part) is None else checks.safety_factor(part))
+
+    try:
+        volume, outcome = mesh_and_solve(mesh_size or parsed.mesh_size)
+    except _NotConnected as exc:
+        return _unsolved(document, occurrence_ref, _not_connected(plan, exc.groups))
+    all_solved = solved_of(volume, outcome)
+    solved = weakest(all_solved)
     refined = None
     finer_failure = None
     finer_size = None
@@ -312,12 +610,23 @@ def solve_study(
             # The checks describe the solve that is written, so every number a
             # finding quotes and every point it names is on the GLB shown; the
             # first solve's peak rides along for convergence.
-            finer = _solved(volume, outcome, parsed, ordinal_of, document.stem)
-            refined["max_von_mises_MPa"] = round(finer.peak_MPa, 4)
-            solved = dataclasses.replace(finer, coarser_peak_MPa=solved.peak_MPa, coarser_dofs=first_outcome.dofs)
+            finer_parts = solved_of(volume, outcome)
+            refined["max_von_mises_MPa"] = round(weakest(finer_parts).peak_MPa, 4)
+            all_solved = [
+                dataclasses.replace(finer, coarser_peak_MPa=coarse.peak_MPa, coarser_dofs=first_outcome.dofs)
+                for finer, coarse in zip(finer_parts, all_solved)
+            ]
+            solved = weakest(all_solved)
             if first_outcome.dofs > solve.DOF_WARN:  # the person's own size was already large
                 outcome.warnings.insert(0, solve.dof_warning(first_outcome.dofs, automatic=False))
-    findings = checks.findings(solved)
+    if plan is None:
+        findings = checks.findings(solved)
+    else:
+        name_of = {part.ref: plan.names[i] for i, part in enumerate(plan.parts)}
+        findings = checks.assembly_findings(all_solved)
+        findings += [checks.default_material(plan.names[i], plan.materials[i].name) for i in plan.defaulted]
+        findings += [checks.gap_closed(name_of[c.a], name_of[c.b], c.gap_mm) for c in plan.bonded if c.gap_mm > 0]
+        findings.sort(key=lambda finding: finding["severity"] != "error")
 
     # The summary is the one place the numbers are rounded; everything else
     # (the GLB's extras, the sidecar) is derived from it.
@@ -342,6 +651,24 @@ def solve_study(
     # Floored, so a factor just under a threshold is never shown as reaching it.
     factor = checks.safety_factor(solved)
     summary["safety_factor"] = None if factor is None else math.floor(factor * 1000) / 1000
+    if plan is not None:
+        # The headline is the weakest part: its yield and safety factor; the peak and the colours span the assembly.
+        summary["yield_MPa"] = solved.yield_MPa
+        summary["weakest_part"] = solved.part
+        summary["parts"] = [
+            {
+                "ref": plan.parts[i].ref,
+                "name": part.part,
+                "material": part.material_name,
+                "yield_MPa": part.yield_MPa,
+                "peak_MPa": round(part.peak_MPa, 4),
+                "peak_gauss_MPa": round(part.peak_gauss_MPa, 4),
+                "peak_at_mm": [round(c, 3) for c in part.peak_at],
+                "safety_factor": None if (f := checks.safety_factor(part)) is None else math.floor(f * 1000) / 1000,
+                "max_displacement_mm": round(part.max_displacement_mm, 6),
+            }
+            for i, part in enumerate(all_solved)
+        ]
 
     warnings = list(outcome.warnings)
     if finer_failure:
@@ -355,7 +682,7 @@ def solve_study(
         "generator": "cadgen fea",
         # Where the STEP is from the GLB's own folder, so a viewer can find it.
         "document": _document_ref(document, glb_path),
-        "occurrence": occurrence.ref,
+        "occurrence": occurrence_ref,
         "deformation_scale": scale,
         # The summary's safety factor, for the viewer's plain line; null when there is none.
         "safety_factor": summary["safety_factor"],
@@ -436,7 +763,7 @@ def solve_study(
     sidecar = {
         "generator": "cadgen fea",
         "document": str(document),
-        "occurrence": occurrence.ref,
+        "occurrence": occurrence_ref,
         "study": parsed.source,
         "material": material.as_dict(),
         "faces": {ref: dataclasses.asdict(volume.faces[ordinal]) for ref, ordinal in ordinal_of.items()},
@@ -450,6 +777,8 @@ def solve_study(
         "timings": timings,
         "warnings": warnings,
         "findings": findings,
+        # An assembly: how its parts are joined (the parts' own results are in the summary).
+        **({} if plan is None else {"connections": _connections(plan)}),
         # The first and the finer solve's size and peak, when the part was solved twice.
         "refined": refined,
         "files": {"glb": glb_path.name, "vtu": vtu_path.name if vtu_path else None},
@@ -459,7 +788,7 @@ def solve_study(
     return FeaResult(
         ok=True,
         document=document,
-        occurrence=occurrence.ref,
+        occurrence=occurrence_ref,
         glb=glb_path,
         sidecar=sidecar_path,
         vtu=vtu_path,

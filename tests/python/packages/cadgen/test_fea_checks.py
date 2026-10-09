@@ -8,7 +8,9 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from cadgen._internal.fea.checks import Solved, findings, needs_finer, safety_factor, safety_factor_text  # noqa: E402
+from cadgen._internal.fea.checks import (  # noqa: E402
+    Solved, assembly_findings, default_material, findings, gap_closed, needs_finer, safety_factor, safety_factor_text,
+)
 
 
 def solved(**changes):
@@ -197,6 +199,56 @@ class ChecksTest(unittest.TestCase):
     def test_errors_first(self):
         types = [f["type"] for f in findings(solved(peak_MPa=310.0, peak_gauss_MPa=600.0, max_displacement_mm=2.0))]
         self.assertEqual(types[0], "yields")
+
+
+class AssemblyChecksTest(unittest.TestCase):
+    def test_default_material_asks_whether_the_default_is_right(self):
+        f = default_material("post", "6061-T6")
+        self.assertEqual((f["check"], f["severity"], f["type"]), ("fea", "warning", "default_material"))
+        self.assertEqual(f["summary"], "'post' uses the default material (6061-T6): is that right?")
+
+    def test_gap_closed_names_the_gap_and_the_parts(self):
+        f = gap_closed("post", "base", 0.08)
+        self.assertEqual((f["severity"], f["type"]), ("warning", "gap_closed"))
+        self.assertEqual(f["summary"], "Closed a 0.08 mm gap between 'post' and 'base' to bond them")
+
+    def test_yields_names_the_part_as_it_always_does(self):
+        (f,) = findings(solved(part="post", assembly=True, peak_MPa=310.0, peak_gauss_MPa=320.0))
+        self.assertEqual(f["summary"], "The post yields: peak stress 310 MPa is above the 276 MPa yield strength of 6061-T6")
+        self.assertEqual(f["items"][0]["text"], "the peak stress in 'post'")
+
+    def test_the_other_sentences_of_an_assembly_name_the_part(self):
+        (f,) = findings(solved(part="post", assembly=True, peak_MPa=197.0, peak_gauss_MPa=200.0))
+        self.assertEqual(f["summary"], "'post' holds, but only 1.4× the load: under the 2× margin")
+        (low, g) = findings(solved(part="post", assembly=True, peak_MPa=150.0, peak_gauss_MPa=160.0, peak_face="#o1.f3"))
+        self.assertTrue(g["summary"].startswith("In 'post': check the stress a little away from the fixed face"))
+        (h,) = findings(solved(part="post", assembly=True, max_displacement_mm=2.0))
+        self.assertTrue(h["summary"].startswith("'post' moves 2 mm, about 2% of its size"))
+
+    def test_a_peak_on_the_edge_of_a_joint_is_said_once_the_margin_is_missed(self):
+        (low, f) = findings(solved(part="post", assembly=True, peak_MPa=150.0, peak_gauss_MPa=160.0, joint_with="base"))
+        self.assertEqual((low["type"], f["type"]), ("low_margin", "bonded_edge_peak"))
+        self.assertEqual(f["severity"], "warning")
+        self.assertTrue(f["summary"].startswith("In 'post': the peak sits on the edge of the bonded joint with 'base'"))
+        self.assertEqual(findings(solved(part="post", assembly=True, joint_with="base")), [])
+
+    def test_a_peak_that_a_finer_mesh_confirmed_is_not_blamed_on_the_joint(self):
+        got = findings(solved(part="post", assembly=True, peak_MPa=150.0, peak_gauss_MPa=160.0, joint_with="base", coarser_peak_MPa=148.0))
+        self.assertEqual([f["type"] for f in got], ["low_margin"])
+
+    def test_one_part_without_a_load_is_nothing_to_report(self):
+        loaded = solved(part="post", assembly=True)
+        unloaded = solved(part="base", assembly=True, peak_MPa=0.0, peak_gauss_MPa=0.0)
+        self.assertEqual(assembly_findings([loaded, unloaded]), [])
+        (f,) = assembly_findings([unloaded, solved(part="post", assembly=True, peak_MPa=0.0, peak_gauss_MPa=0.0)])
+        self.assertEqual(f["type"], "no_load")
+
+    def test_errors_come_first_across_parts(self):
+        found = assembly_findings([
+            solved(part="base", assembly=True, peak_MPa=197.0, peak_gauss_MPa=200.0),
+            solved(part="post", assembly=True, peak_MPa=310.0, peak_gauss_MPa=320.0),
+        ])
+        self.assertEqual([f["type"] for f in found], ["yields", "low_margin"])
 
 
 if __name__ == "__main__":
