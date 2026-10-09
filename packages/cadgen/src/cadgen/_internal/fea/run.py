@@ -336,12 +336,43 @@ def solve_study(
         # What an engineer would say about the result (checks.py), errors first.
         "findings": findings,
     }
+    # Every boundary face of the occurrence in ordinal order; `_FACE` indexes it.
+    face_ordinals = sorted(volume.faces)
+    face_index = {ordinal: index for index, ordinal in enumerate(face_ordinals)}
+    face_of_triangle = np.array([face_index.get(int(o), -1) for o in volume.boundary_ordinal], dtype=np.int64)
+
+    def bare(refs):  # the scene's own `#o1.fN`, whatever form the study named them in
+        return [volume.faces[ordinal_of[ref]].ref for ref in refs]
+
+    extras["faces"] = [volume.faces[ordinal].ref for ordinal in face_ordinals]
+    extras["study"] = {
+        "material": {
+            "name": material.name,
+            "yield_MPa": material.yield_strength,
+            "youngs_GPa": round(material.E / 1000.0, 6),
+            "poisson": material.nu,
+        },
+        "fixtures": [{"type": fixture.type, "faces": bare(fixture.faces)} for fixture in parsed.fixtures],
+        "loads": [
+            {"type": load.type, "faces": bare(load.faces),
+             **({"vector_N": [float(c) for c in load.vector]} if load.type == "force" else {"pressure_MPa": load.pressure})}
+            for load in parsed.loads
+        ],
+        "mesh": {
+            "size_mm": round(volume.max_h, 4),
+            "order": 2,
+            "elements": int(len(volume.tets)),
+            "refined_from_mm": refined["from_size_mm"] if refined and refined["max_von_mises_MPa"] is not None else None,
+        },
+        "margin": parsed.margin,
+    }
     write_glb(
         glb_path,
         positions=outcome.dof_locations,
         displacement=outcome.displacement,
         values=outcome.von_mises,
         triangles6=outcome.boundary_quadratic,
+        face_of_triangle=face_of_triangle,
         scale=scale,
         value_range=(0.0, max_vm),
         extras=extras,

@@ -7,7 +7,11 @@ knows them: ``_VON_MISES`` (float, MPa) and ``_DISPLACEMENT`` (vec3, in glTF
 units and axes -- metres, Y up -- unscaled), so the FEA overlay can recolour
 by either field and change the deformation scale from the same file. The
 mesh carries ``extras`` with the fields, the deformation scale and the ramp
-stops -- a legend's inputs -- and the study's ``findings`` (checks.py). Written by hand (glTF 2.0 is a JSON header and
+stops -- a legend's inputs -- the study's ``findings`` (checks.py), the
+``study`` itself and ``faces``, the occurrence's face refs. ``_FACE`` (float, an
+index into ``faces``, -1 when the mesher matched no face) says which source face
+each surface triangle came from; a vertex shared by two faces is written once
+per face so every triangle's three vertices agree. Written by hand (glTF 2.0 is a JSON header and
 one binary buffer) so the result path adds no dependency the solver did not
 already need.
 
@@ -37,6 +41,9 @@ RAMP = ((0.0, (0.05, 0.10, 0.90)), (0.25, (0.05, 0.85, 0.95)), (0.5, (0.10, 0.85
 # netgen's 6-node triangle lists the three corners, then the mid-edge nodes of
 # edges (1,2) (0,2) (0,1), in that order.
 _TRIG6_MID_OF_EDGE = {(1, 2): 3, (0, 2): 4, (0, 1): 5}
+
+# Face indices share one int64 key with the node id: room for 2**20 faces, offset by one so -1 fits.
+_FACE_SLOTS = 1 << 20
 
 
 def ramp(t: "np.ndarray") -> "np.ndarray":
@@ -118,6 +125,7 @@ def write_glb(
     displacement: "np.ndarray",
     values: "np.ndarray",
     triangles6: "np.ndarray",
+    face_of_triangle: "np.ndarray",
     scale: float,
     value_range: tuple[float, float],
     extras: dict,
@@ -127,14 +135,21 @@ def write_glb(
     ``positions``, ``displacement`` and ``values`` are per node (corner and
     mid-edge alike); ``triangles6`` are the mesher's boundary triangles in
     those node ids, wound consistently, which is kept -- flipped as a whole
-    only when the surface encloses negative volume.
+    only when the surface encloses negative volume. ``face_of_triangle`` is the
+    index into ``extras["faces"]`` of the face each of those triangles lies on
+    (-1 for none): it becomes ``_FACE``, one value per vertex.
     """
     import numpy as np
 
     triangles = _split_quadratic(triangles6)
+    face_of = np.tile(np.asarray(face_of_triangle, dtype=np.int64), 4)  # _split_quadratic's four blocks
     if _signed_volume(positions, triangles) < 0:
         triangles = triangles[:, [0, 2, 1]]
-    used, compact = np.unique(triangles, return_inverse=True)
+    # One vertex per (node, face): a node on an edge between faces is written once for each.
+    pairs = triangles.astype(np.int64) * _FACE_SLOTS + (face_of[:, None] + 1)
+    unique_pairs, compact = np.unique(pairs, return_inverse=True)
+    used = unique_pairs // _FACE_SLOTS
+    face = ((unique_pairs % _FACE_SLOTS) - 1).astype(np.float32)
     tris = compact.reshape(triangles.shape).astype(np.uint32)
     pos = _gltf_space(positions[used] + scale * displacement[used])
     vals = values[used].astype(np.float32)
@@ -180,6 +195,8 @@ def write_glb(
                     "COLOR_0": add(rgba, target=ARRAY, kind="VEC4", component=UBYTE, normalized=True),
                     "_VON_MISES": add(vals.reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT),
                     "_DISPLACEMENT": add(disp, target=ARRAY, kind="VEC3", component=FLOAT),
+                    # Float: a 2-byte scalar would need padding to the 4-byte vertex alignment glTF asks of attributes.
+                    "_FACE": add(face.reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT),
                 },
                 "indices": add(tris.reshape(-1, 1), target=ELEMENT, kind="SCALAR", component=UINT),
                 "material": 0,

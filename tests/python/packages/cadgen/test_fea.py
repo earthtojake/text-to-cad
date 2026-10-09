@@ -77,6 +77,35 @@ def _glb_extras(path: Path) -> dict:
     return json.loads(raw[20:20 + json_length])["meshes"][0]["extras"]
 
 
+def _glb_attribute(path: Path, name: str, width: int) -> "np.ndarray":
+    """One vertex attribute of the result GLB, (count, width) floats."""
+    import struct
+
+    import numpy as np
+
+    raw = path.read_bytes()
+    json_length, _ = struct.unpack_from("<II", raw, 12)
+    gltf = json.loads(raw[20:20 + json_length])
+    binary = raw[20 + json_length + 8:]
+    accessor = gltf["accessors"][gltf["meshes"][0]["primitives"][0]["attributes"][name]]
+    view = gltf["bufferViews"][accessor["bufferView"]]
+    data = np.frombuffer(binary, np.float32, accessor["count"] * width, view["byteOffset"])
+    return data.reshape(-1, width).astype(float)
+
+
+def _glb_indices(path: Path) -> "np.ndarray":
+    import struct
+
+    import numpy as np
+
+    raw = path.read_bytes()
+    json_length, _ = struct.unpack_from("<II", raw, 12)
+    gltf = json.loads(raw[20:20 + json_length])
+    accessor = gltf["accessors"][gltf["meshes"][0]["primitives"][0]["indices"]]
+    view = gltf["bufferViews"][accessor["bufferView"]]
+    return np.frombuffer(raw[20 + json_length + 8:], np.uint32, accessor["count"], view["byteOffset"])
+
+
 class _CountingSolve:
     """Wraps the solver to count its calls; ``fail_after`` makes later calls
     raise, ``later`` rewrites the outcome of every call after the first."""
@@ -297,7 +326,7 @@ class Cantilever(unittest.TestCase):
         self.assertEqual(json_type, 0x4E4F534A)
         gltf = json.loads(raw[20:20 + json_length])
         attributes = gltf["meshes"][0]["primitives"][0]["attributes"]
-        self.assertEqual(set(attributes), {"POSITION", "NORMAL", "COLOR_0", "_VON_MISES", "_DISPLACEMENT"})
+        self.assertEqual(set(attributes), {"POSITION", "NORMAL", "COLOR_0", "_VON_MISES", "_DISPLACEMENT", "_FACE"})
         extras = gltf["meshes"][0]["extras"]
         self.assertEqual(extras["deformation_scale"], self.result.summary["deformation_scale"])
         self.assertEqual([f["attribute"] for f in extras["fields"]], ["_VON_MISES", "_DISPLACEMENT"])
@@ -312,6 +341,37 @@ class Cantilever(unittest.TestCase):
         # glTF space is metres, Y up: the deformed tip dips below the undeformed bottom face (CAD -Z -> glTF -Y).
         self.assertLess(position["min"][1], -HEIGHT / 2 / 1000.0)
         self.assertAlmostEqual(position["max"][0], LENGTH / 1000.0, places=2)  # the scaled deformation stretches the tip a little
+
+    def test_the_glb_records_its_study_with_bare_face_refs(self):
+        study = _glb_extras(self.result.glb)["study"]
+        self.assertEqual(study["material"]["name"], "Steel (structural, generic)")
+        self.assertEqual(set(study["material"]), {"name", "yield_MPa", "youngs_GPa", "poisson"})
+        self.assertAlmostEqual(study["material"]["youngs_GPa"], 200.0, delta=15)
+        self.assertEqual(study["fixtures"], [{"type": "fixed", "faces": [self.fixed_ref]}])
+        self.assertTrue(self.fixed_ref.startswith("#o"))
+        self.assertEqual(study["loads"], [{"type": "force", "faces": [self.load_ref], "vector_N": [0, 0, -FORCE]}])
+        self.assertEqual(study["mesh"]["size_mm"], self.result.mesh["size_mm"])
+        self.assertEqual((study["mesh"]["order"], study["mesh"]["elements"], study["mesh"]["refined_from_mm"]),
+                         (2, self.result.mesh["elements"], None))
+        self.assertEqual(study["margin"], 2.0)
+
+    def test_every_surface_triangle_traces_to_a_source_face(self):
+        import numpy as np
+
+        extras = _glb_extras(self.result.glb)
+        self.assertEqual(extras["faces"], [face.ref for face in self.listing.faces])
+        face = _glb_attribute(self.result.glb, "_FACE", 1)[:, 0].astype(int)
+        indices = _glb_indices(self.result.glb).reshape(-1, 3)
+        self.assertTrue(((face >= 0) & (face < len(extras["faces"]))).all())
+        # a triangle's three vertices lie on one face
+        self.assertTrue((face[indices[:, 0]] == face[indices[:, 1]]).all() and (face[indices[:, 0]] == face[indices[:, 2]]).all())
+        undeformed = _glb_attribute(self.result.glb, "POSITION", 3) - extras["deformation_scale"] * _glb_attribute(self.result.glb, "_DISPLACEMENT", 3)
+        x_mm = undeformed[:, 0] * 1000.0
+        fixed = face == extras["faces"].index(self.fixed_ref)
+        load = face == extras["faces"].index(self.load_ref)
+        self.assertTrue(fixed.any() and load.any())
+        np.testing.assert_allclose(x_mm[fixed], 0.0, atol=1e-3)
+        np.testing.assert_allclose(x_mm[load], LENGTH, atol=1e-3)
 
     def test_the_cli_reports_the_same_numbers_as_json(self):
         from cadgen import cli
@@ -399,6 +459,8 @@ class Yielding(unittest.TestCase):
         self.assertEqual((refined["from_size_mm"], refined["size_mm"]), (self.SIZE, self.SIZE / 2))
         self.assertEqual(refined["max_von_mises_MPa"], self.result.summary["max_von_mises_MPa"])
         self.assertEqual(_glb_extras(self.result.glb)["fields"][0]["max"], self.result.summary["max_von_mises_MPa"])
+        mesh = _glb_extras(self.result.glb)["study"]["mesh"]
+        self.assertEqual((mesh["size_mm"], mesh["refined_from_mm"]), (self.SIZE / 2, self.SIZE))
 
     def test_the_findings_point_at_the_written_glbs_peak(self):
         yields = self.sidecar["findings"][0]
