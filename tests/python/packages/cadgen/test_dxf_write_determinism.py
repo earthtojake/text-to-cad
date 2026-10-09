@@ -1,6 +1,6 @@
 """Written DXF bytes are a function of drawing content, not traversal order.
 
-The engine owns DXF serialization (design/dxf-build123d.md): a ``@dxf``
+The engine owns DXF serialization: a ``@dxf``
 function returns build123d 2D geometry and :mod:`cadgen._internal.dxf_emit`
 writes it. Two things could make identical geometry write different bytes:
 

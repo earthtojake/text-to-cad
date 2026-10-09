@@ -1,4 +1,5 @@
-"""The public verb surface, and the CLIs that mirror it (design/format-doors.md).
+"""The public verb surface, and the CLIs that mirror it (packages/cadgen/README.md,
+law 6).
 
 Three properties that only hold if something checks them:
 

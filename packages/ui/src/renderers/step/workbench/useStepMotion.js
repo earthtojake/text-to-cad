@@ -289,7 +289,7 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
 
   const clipList = useMemo(() => animationClipList(clips), [clips]);
   const activeClip = useMemo(() => findAnimationClip(clips, animationState.activeClipId), [clips, animationState.activeClipId]);
-  // Progressive publish (design/viewer-memory.md §6): a STEP package paints
+  // Progressive publish (packages/ui/docs/lod.md, section 4): a STEP package paints
   // while it loads, and the partial states carry assemblyInteractionReady=false.
   // Animation attaches on the FIRST publish and stays live: a track names
   // occurrence ids, so it drives the ones present and the rest as they arrive.

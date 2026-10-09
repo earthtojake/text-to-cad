@@ -2,8 +2,8 @@
 // useCadAssets so it unit-tests in Node (the hook's other imports are
 // Vite-resolved; same pattern as scene/partPicking.js).
 //
-// THE INVARIANT this module exists to hold (viewport LOD, design/
-// unified-tessellation.md Phase 5): the display mesh and the selector runtime
+// THE INVARIANT this module exists to hold (viewport LOD, packages/ui/docs/lod.md):
+// the display mesh and the selector runtime
 // must always come from ONE tessellation of each component. A selector
 // bundle's faceRuns are triangle ranges of a SPECIFIC tessellation, so a
 // level-N mesh read through level-M runs mislabels triangles — the user sees

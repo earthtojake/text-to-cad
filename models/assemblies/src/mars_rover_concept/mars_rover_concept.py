@@ -1043,7 +1043,7 @@ def power_rtg() -> bd.Compound:
 
 
 # ---------------------------------------------------------------------------
-# Kinematics: typed mates (design/pose-animation-split.md).
+# Kinematics: typed mates.
 #
 # ZERO IS THE ARTIFACT AS WRITTEN. The rover is modeled in its display pose —
 # suspension neutral, arm in a sampling hover, mast level, wings deployed at

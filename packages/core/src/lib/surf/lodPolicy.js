@@ -1,4 +1,4 @@
-// Viewport LOD policy (design/unified-tessellation.md Phase 5).
+// Viewport LOD policy (packages/ui/docs/lod.md, section 2).
 //
 // Pure math, no three.js, no DOM: given a camera sample and a component's
 // bounds, decide which chord-tolerance level the component SHOULD render at,

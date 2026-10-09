@@ -747,7 +747,7 @@ function StepSurfaceBody({ view, data }) {
   // This is the displayed render revision, so same-file saves cannot inherit
   // a predecessor's scheduler or benchmark milestones.
   const viewportQualityModelKey = `${selectedEntry?.file || ""}:${selectedMeshHash || selectedEntry?.hash || ""}`;
-  // Viewport LOD (design/unified-tessellation.md Phase 5): camera-settle
+  // Viewport LOD (packages/ui/docs/lod.md): camera-settle
   // driven re-tessellation of the components that project the worst error.
   // The viewport's own seams, filled in when it mounts: the live WebGL runtime, the layers'
   // published selector runtime, and "what reference is under this point" for the menu.

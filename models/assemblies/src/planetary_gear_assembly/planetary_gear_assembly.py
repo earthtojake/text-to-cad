@@ -232,7 +232,7 @@ def _planet_center(index: int) -> tuple[float, float]:
 
 
 # ---------------------------------------------------------------------------
-# Kinematics (typed mates; design/pose-animation-split.md). The gear train is
+# Kinematics (typed mates). The gear train is
 # exact fixed-ring planetary ratios expressed as one "drive" coupling over the
 # mate DOFs; 3.5 sun revolutions (1260 deg) returns the carrier to 360 deg and
 # every gear to an equivalent tooth phase. Presentation (cutaway styles,

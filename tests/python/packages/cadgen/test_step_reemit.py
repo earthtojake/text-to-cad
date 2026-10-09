@@ -4,8 +4,8 @@ The verb re-emits an existing STEP through cadgen's own pipeline — OCCT read -
 content-keyed package -> the canonical XCAF writer — so OUT's bytes are
 deterministic whichever kernel wrote IN, and optionally ANNOTATES it with
 kinematics and materials that land in OUT's sidecar. That is the door for a
-document with no model script (design/pose-animation-split.md, CLI/doors
-follow-on); animation is a model script's (``@step(animation=...)``).
+document with no model script (packages/cadgen/README.md, law 7); animation is a
+model script's (``@step(animation=...)``).
 
 What is pinned here is the contract a caller depends on: OUT is required and
 never IN, the annotation resolves against real geometry, and freshness splits in

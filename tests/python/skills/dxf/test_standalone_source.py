@@ -74,7 +74,7 @@ class StandaloneDxfSourceTests(unittest.TestCase):
             self.assertEqual(script_path, sources[0].script_path)
 
     def test_generate_dxf_targets_always_writes_the_sibling(self) -> None:
-        # The .dxf IS the product (design/standalone-viewer.md Phase A): every run
+        # The .dxf IS the product: every run
         # writes it, no package exists, and only the output record remains — in
         # the store's records/ tier — to make an unchanged source a no-op.
         with temporary_directory(prefix="dxf-skill") as root:

@@ -1,5 +1,5 @@
-// Progressive publish of a component package (design/viewer-memory.md §6,
-// lever C), split out of useCadAssets so it unit-tests in Node (the hook's
+// Progressive publish of a component package (packages/ui/docs/lod.md,
+// section 4), split out of useCadAssets so it unit-tests in Node (the hook's
 // other imports are Vite-resolved; same pattern as packageReferenceComposition.js).
 //
 // The hook used to fetch every component, compose once and publish once, so a
@@ -177,8 +177,8 @@ export function shouldRetainCompleteSameFileMesh(current, entry, targetMeshHash)
     meshStateIsComplete(current);
 }
 
-// Readable memory accounting for the headless harness (design/viewer-memory.md
-// §7), following the window.__cadModelPlacement / __CAD_VIEWER_LOD__ precedent:
+// Readable memory accounting for the headless harness, following the
+// window.__cadModelPlacement / __CAD_VIEWER_LOD__ precedent:
 // written on EVERY progressive publish, nulled on cancel, never React state.
 // Harmless without a window (Node tests).
 function meshCostAccounting({ meshData, componentMeshDataByCid, loaded, total, publishCount, final, meshRevision = "" }) {

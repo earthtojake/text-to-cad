@@ -326,7 +326,7 @@ export function useCadAssets({
   const referenceComposerRef = useRef(null);
   if (!referenceComposerRef.current) referenceComposerRef.current = { key: "", composer: createPackageReferenceComposer() };
 
-  // --- viewport LOD (design/unified-tessellation.md Phase 5) -----------------
+  // --- viewport LOD (packages/ui/docs/lod.md) -----------------
   // The composed package's ingredients, kept so a level swap can re-compose ONE
   // component at a finer tessellation without reloading anything else. Ref +
   // state pair: the ref is the mutable working set, the state is the reactive
@@ -821,7 +821,7 @@ export function useCadAssets({
         ? applyOccurrenceDisplay(storedPackageDescriptor, entry?.display)
         : null;
       if (packageDescriptor && packageDescriptor.kind === "assembly-package") {
-        // Progressive publish (design/viewer-memory.md §6): components are
+        // Progressive publish (packages/ui/docs/lod.md, section 4): components are
         // fetched with bounded concurrency and the ones loaded so far are
         // re-composed and published per batch (packageProgressiveLoad.js owns
         // the batch policy), so the model paints while it loads and a cancel

@@ -1,4 +1,4 @@
-// Level-keyed stored meshes (design/unified-tessellation.md Phase 5): the same
+// Level-keyed stored meshes (packages/ui/docs/lod.md, section 1): the same
 // component at different chord tolerances reads distinct stored meshes (a
 // finer level -> more triangles), repeat requests at a level are RAM hits
 // (one read per level), and every surf entry is LRU-bounded.
