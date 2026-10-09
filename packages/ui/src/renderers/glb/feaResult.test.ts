@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh, Ray, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import {
-  applyDeformation, deformationRange, faceLabel, faceRole, feaRamp, feaSummaryLine, fieldValues, forceDirection, formatValue, pickFace, readFeaResult,
+  applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaRamp, feaSummaryLine, fieldValues, forceDirection, formatValue, pickFace, readFeaResult,
   recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows
 } from './feaResult.js';
 
@@ -295,8 +295,8 @@ const ASSEMBLY = {
   faces: ['#o1.1.f1', '#o1.2.f1'],
   weakest_part: 'post', weakest_part_peak_MPa: 180, safety_factor: 1.46, max_displacement_mm: 0.2,
   parts: [
-    { ref: '#o1.1', name: 'post', material: '6061-T6', yield_MPa: 276, peak_MPa: 180, safety_factor: 1.53, max_displacement_mm: 0.2 },
-    { ref: '#o1.2', name: 'base', material: 'Steel', yield_MPa: 250, peak_MPa: 40, safety_factor: 0.8, max_displacement_mm: 0.01 },
+    { ref: '#o1.1', name: 'post', material: '6061-T6', yield_MPa: 276, peak_MPa: 180, safety_factor: 1.46, max_displacement_mm: 0.2 },
+    { ref: '#o1.2', name: 'base', material: 'Steel', yield_MPa: 250, peak_MPa: 40, safety_factor: 2.5, max_displacement_mm: 0.01 },
   ],
   connections: [
     { between: ['#o1.1', '#o1.2'], names: ['post', 'base'], type: 'bonded', area_mm2: 100, gap_mm: 0, faces: ['#o1.1.f1', '#o1.2.f1'] },
@@ -316,8 +316,8 @@ describe('an assembly result', () => {
     const rows = studyRows(assemblyResult().result);
     expect(rows.slice(0, 2).map(({ id, label, detail, children }: any) => ({ id, label, detail, children: children.map((c: any) => [c.id, c.label, c.detail]) }))).toEqual([
       { id: 'parts', label: 'Parts', detail: '', children: [
-        ['part:0', 'post', '6061-T6 · holds 1.5×'],
-        ['part:1', 'base', 'Steel · yields'],
+        ['part:0', 'post', '6061-T6 · holds 1.4×'],
+        ['part:1', 'base', 'Steel · holds 2.5×'],
       ] },
       { id: 'connections', label: 'Connections', detail: '', children: [
         ['joint:0', 'post ↔ base', 'bonded · 100 mm²'],
@@ -326,8 +326,19 @@ describe('an assembly result', () => {
     ]);
     const [parts, joints] = rows as any[];
     expect(parts.children[0]).toMatchObject({ refs: ['#o1.1'], parts: [0], summary: "Part 'post'" });
-    expect(joints.children[0]).toMatchObject({ refs: ['#o1.1', '#o1.2'], faces: ['#o1.1.f1', '#o1.2.f1'], summary: "Bonded joint between 'post' and 'base'" });
+    expect(joints.children[0]).toMatchObject({ faces: ['#o1.1.f1', '#o1.2.f1'], summary: "Bonded joint between 'post' and 'base'" });
+    expect(joints.children[0].refs).toBeUndefined();
+    // A free pair has no faces: both parts' refs go instead.
+    expect(joints.children[1]).toMatchObject({ refs: ['#o1.1', '#o1.3'], summary: "'post' and 'lid' aren't connected" });
+    expect(joints.children[1].faces).toBeUndefined();
     expect(rows[2]).toMatchObject({ id: 'material' });
+  });
+
+  it('says a part that yields, and names a picked face\'s part', () => {
+    const { result } = studyResult({ ...ASSEMBLY, parts: [{ ...ASSEMBLY.parts[0], safety_factor: 0.8 }, ASSEMBLY.parts[1]] });
+    expect((studyRows(result)[0] as any).children[0].detail).toBe('6061-T6 · yields');
+    expect(faceTitle(result, '#o1.1.f1')).toBe('post · face 1');
+    expect(faceTitle(studyResult().result, '#o1.f1')).toBe('Face 1');
   });
 
   it('notes a gap that was closed to bond a pair', () => {

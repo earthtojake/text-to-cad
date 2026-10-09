@@ -437,9 +437,9 @@ def _connections(plan: _Plan, volume) -> list[dict]:
 
 
 def _face_key(ref: str) -> tuple:
-    """Sorts ``#o1.2.f10`` after ``#o1.2.f9``, parts in order."""
+    """Sorts ``#o1.2.f10`` after ``#o1.2.f9`` and ``#o1.10`` after ``#o1.2``, parts in order."""
     owner, _, face = ref.rpartition(".f")
-    return owner, int(face)
+    return tuple(int(part) for part in owner.removeprefix("#o").split(".")), int(face)
 
 
 class _NotConnected(Exception):
@@ -556,8 +556,14 @@ def solve_study(
     if occurrence is None and (len(list(scene.leaves())) > 1 or parsed.parts or parsed.connections):
         plan = _plan_assembly(scene, parsed)
     ordinal_of: dict[str, int] = {}
+    ignored_note = None
     if plan is None:
         if occurrence is not None:
+            if parsed.parts or parsed.connections:
+                ignored_note = (
+                    f"--occurrence {occurrence} solves that part alone: the study's "
+                    f"{' and '.join(k for k, v in (('parts', parsed.parts), ('connections', parsed.connections)) if v)} are ignored"
+                )
             chosen = scene.resolve(occurrence)
             if chosen.kind != "occurrence" or chosen.ref not in {leaf.ref for leaf in scene.leaves()}:
                 raise ValueError(f"{occurrence} is not a part occurrence of {document.name}")
@@ -704,6 +710,8 @@ def solve_study(
         ]
 
     warnings = list(outcome.warnings)
+    if ignored_note:
+        warnings.insert(0, ignored_note)
     if finer_failure:
         warnings.append(finer_failure)
     balance = max(abs(a + r) for a, r in zip(outcome.applied, reaction_total))

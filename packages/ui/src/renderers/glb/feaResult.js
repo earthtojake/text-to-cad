@@ -514,24 +514,25 @@ function jointDetail(joint) {
 /** What a prompt calls a joint: "Bonded joint between 'post' and 'base'". */
 function jointSummary(joint) {
   const [first, second] = joint.names;
-  return joint.type === "bonded" ? `Bonded joint between '${first}' and '${second}'` : `Pair not connected: '${first}' and '${second}'`;
+  return joint.type === "bonded" ? `Bonded joint between '${first}' and '${second}'` : `'${first}' and '${second}' aren't connected`;
 }
 
 /**
  * An assembly's Parts and Connections groups. A row for a part or a joint is chosen like a face's
- * and names what it carries into Quick Edit (`refs`, the parts' refs) and what it tints: a part
- * its triangles (`parts`, indices into the result's `parts`), a joint its interface `faces`.
+ * and carries into Quick Edit and tints: a part its ref (`refs`) and its triangles (`parts`, indices
+ * into the result's `parts`); a joint its interface `faces`, or for a free pair (no faces) both
+ * parts' refs. Their details wrap (`wrap`) rather than truncate.
  */
 function assemblyRows(result) {
   const rows = [];
   const parts = result.parts.map((part, index) => ({
-    id: `part:${index}`, label: part.name || part.ref, detail: partDetail(part), refs: part.ref ? [part.ref] : [], parts: [index],
+    id: `part:${index}`, label: part.name || part.ref, detail: partDetail(part), wrap: true, refs: part.ref ? [part.ref] : [], parts: [index],
     summary: `Part '${part.name || part.ref}'`,
   }));
   if (parts.length) rows.push({ id: "parts", label: "Parts", detail: "", children: parts });
   const joints = result.connections.map((joint, index) => ({
-    id: `joint:${index}`, label: `${joint.names[0]} ↔ ${joint.names[1]}`, detail: jointDetail(joint), refs: joint.between.filter(Boolean),
-    faces: joint.faces, summary: jointSummary(joint),
+    id: `joint:${index}`, label: `${joint.names[0]} ↔ ${joint.names[1]}`, detail: jointDetail(joint), wrap: true,
+    ...(joint.faces.length ? { faces: joint.faces } : { refs: joint.between.filter(Boolean) }), summary: jointSummary(joint),
   }));
   if (joints.length) rows.push({ id: "connections", label: "Connections", detail: "", children: joints });
   return rows;
@@ -571,6 +572,12 @@ export function studyRows(result) {
     rows.push({ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements · ${refined}` });
   }
   return rows;
+}
+
+/** A picked face's heading: "Face 17", and in an assembly "post · face 17", the part it is on. */
+export function faceTitle(result, ref) {
+  const part = result.parts.find((entry) => entry.ref && String(ref).startsWith(`${entry.ref}.`));
+  return part?.name ? `${part.name} · ${faceLabel(ref).toLowerCase()}` : faceLabel(ref);
 }
 
 /** What a prompt calls a face, by what the study does to it; "Face 17" for a face it does nothing to. */

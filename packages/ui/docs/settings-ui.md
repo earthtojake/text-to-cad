@@ -550,7 +550,8 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   for a bonded assembly first **Parts** (one row per part: its name, then its material and "holds
   1.5×", or "yields" under 1, as the colour bar words it) and **Connections** (one row per joint:
   "post ↔ base", then "bonded · 100 mm²", with "· 0.1 mm gap closed" when a gap was closed to bond
-  it, or "not connected" and how far apart for a free pair); then **Material** ("6061-T6 · yield 276 MPa"); **Fixed**, one row per fixed face ("Face 17",
+  it, or "not connected" and how far apart for a free pair); their details and a long part name wrap
+  between words like Material's, never cut off; then **Material** ("6061-T6 · yield 276 MPa"); **Fixed**, one row per fixed face ("Face 17",
   "fixed"); **Loads**, one row per load ("2500 N", its direction in words: "down" and "up" are
   CAD Z, else "along +X" or the unit vector; or "2 MPa pressure"), its faces under it ("Face 22",
   "loaded"); **Mesh** ("1.9 mm elements · refined from 2.8 mm", or "not refined"); and
@@ -574,8 +575,9 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
 - **Choosing a part or a joint** is choosing faces, for an assembly (`_PART`, `parts` and `connections`
   in the file; a single part's result has none, and looks as ever). A part tints all its triangles and
   carries its ref into Quick Edit ("Part 'post'"); a joint tints the interface faces of both sides and
-  carries both parts' refs ("Bonded joint between 'post' and 'base'"). A part or a joint has no Reference
-  panel.
+  carries them ("Bonded joint between 'post' and 'base'"); a free pair has no faces, so it carries
+  both parts' refs ("'post' and 'lid' aren't connected"). A part or a joint has no Reference panel, and
+  in an assembly a picked face's Reference is headed with its part ("post · face 1").
 - **A colour bar** floats at bottom-centre on the playbar's line
   (`FLOATING_CHROME_SURFACE_CLASS`, no pointer events): one plain line over the field's range
   and units along the ramp, one playbar's height higher when the result also has routines. Stress: "Peak stress 47 MPa · holds 5.8× this load · moves up to

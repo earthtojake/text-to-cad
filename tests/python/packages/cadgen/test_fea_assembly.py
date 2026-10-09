@@ -475,6 +475,24 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertEqual([p["name"] for p in extras["parts"]], ["base", "post"])
         self.assertEqual(extras["parts"][1]["ref"], self.refs["post"])
 
+    def test_every_vertexs_face_belongs_to_its_part(self):
+        from tests.python.packages.cadgen.test_fea import _glb_attribute, _glb_extras
+
+        extras = _glb_extras(self.mixed.glb)
+        part = _glb_attribute(self.mixed.glb, "_PART", 1)[:, 0].astype(int)
+        face = _glb_attribute(self.mixed.glb, "_FACE", 1)[:, 0].astype(int)
+        for part_index, face_index in set(zip(part.tolist(), face.tolist())):
+            self.assertTrue(
+                extras["faces"][face_index].startswith(extras["parts"][part_index]["ref"] + ".f"),
+                (extras["faces"][face_index], extras["parts"][part_index]["ref"]),
+            )
+
+    def test_face_refs_sort_by_their_owners_numbers(self):
+        from cadgen._internal.fea.run import _face_key
+
+        refs = ["#o1.10.f2", "#o1.2.f10", "#o1.2.f9", "#o1.1.f30"]
+        self.assertEqual(sorted(refs, key=_face_key), ["#o1.1.f30", "#o1.2.f9", "#o1.2.f10", "#o1.10.f2"])
+
     def test_the_glb_parts_match_the_sidecar(self):
         from tests.python.packages.cadgen.test_fea import _glb_extras
 
@@ -532,6 +550,21 @@ class SolveAssemblyTest(unittest.TestCase):
             fea.solve(self.step, self.tmp / "stray.glb", study=self.study(None), occurrence=self.refs["post"])
         with self.assertRaisesRegex(ValueError, "unknown occurrence"):
             fea.solve(self.step, self.tmp / "nope.glb", study=study, occurrence="#o9")
+
+    def test_occurrence_says_the_studys_parts_and_connections_are_ignored(self):
+        from cadgen import fea
+
+        study = {
+            "material": "steel",
+            "parts": {"post": {"material": "6061"}},
+            "fixtures": [{"faces": [_face_at(self.scene, self.refs["post"], 10.0)]}],
+            "loads": [{"faces": [self.load], "type": "force", "vector_N": [1000, 0, 0]}],
+            "mesh": {"size_mm": 4.0},
+        }
+        result = fea.solve(self.step, self.tmp / "ignored.glb", study=study, occurrence=self.refs["post"])
+        self.assertTrue(any("ignored" in w and "parts" in w for w in result.warnings), result.warnings)
+        plain = fea.solve(self.step, self.tmp / "plain.glb", study={k: v for k, v in study.items() if k != "parts"}, occurrence=self.refs["post"])
+        self.assertFalse(any("ignored" in w for w in plain.warnings))
 
     def test_the_cli_takes_occurrence(self):
         from cadgen.cli.fea_solve import main

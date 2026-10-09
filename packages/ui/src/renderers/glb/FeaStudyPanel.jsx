@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { clamp } from "@text-to-cad/core/common/numbers.js";
+import { cn } from "@text-to-cad/ui/utils";
 import { Slider } from "@text-to-cad/ui/primitives/slider";
 import { TREE_INDENT_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@text-to-cad/ui/primitives/tree-row";
 import { FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetFieldGrid, FileSheetSelectRow, FileSheetSliderField, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
@@ -66,6 +67,14 @@ function RowText({ row }) {
 /** Text that wraps between words alone: a hyphenated name ("6061-T6") and a number and its unit ("276 MPa") never part. */
 const unbroken = (text) => String(text).replace(/(\S)-(?=\S)/g, "$1\u2011").replace(/(\d) (?=[A-Za-zµ°%])/g, "$1\u00a0");
 
+/** A row's name and detail that wrap between words (a long part name, a detail that will not fit the line) instead of being cut off. */
+function WrappedRowText({ row }) {
+  return <>
+    <span className="min-w-0 [overflow-wrap:anywhere]">{row.label}</span>
+    {row.detail ? <span className="min-w-0 text-micro text-muted-foreground [overflow-wrap:break-word]" data-study-detail="">{unbroken(row.detail)}</span> : null}
+  </>;
+}
+
 /**
  * A row that only says something (Material, Mesh): its detail wraps between words onto further
  * lines, as a Reference's values do, so nothing of it is cut off at the panel's one width.
@@ -93,14 +102,16 @@ function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, content = n
   const open = branch && !collapsed.has(row.id);
   const active = chosen === row.id;
   return <li className="min-w-0">
-    <TreeRowSurface dense active={active} className="gap-0 pr-0" style={{ paddingLeft: depth * TREE_INDENT_PX }} data-study-row={row.id}>
+    <TreeRowSurface dense active={active} className={cn("gap-0 pr-0", row.wrap && "h-auto min-h-6")}
+      style={{ paddingLeft: depth * TREE_INDENT_PX, ...(row.wrap ? { height: "auto" } : {}) }} data-study-row={row.id}>
       <TreeRowGuides depth={depth} column={16} />
       {branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${row.label}`} aria-expanded={open}
         className="grid h-6 w-4 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => toggle(row.id)}><TreeRowChevron expanded={open} /></button> : <span className="w-4 shrink-0" />}
       {choosable ? <button type="button" aria-label={`Select ${row.label}`} aria-pressed={active} onClick={() => onChoose(row)}
-        className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <RowText row={row} />
+        className={cn("flex min-w-0 flex-1 gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          row.wrap ? "flex-wrap items-baseline py-1" : "h-full items-center")}>
+        {row.wrap ? <WrappedRowText row={row} /> : <RowText row={row} />}
       </button> : <span className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"><RowText row={row} /></span>}
     </TreeRowSurface>
     {open && row.children ? <ul>{row.children.map((child) => <StudyRow key={child.id} row={child} depth={depth + 1}

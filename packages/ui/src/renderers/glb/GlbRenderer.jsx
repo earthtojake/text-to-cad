@@ -14,7 +14,7 @@ import FindingRings from "./FindingRings.jsx";
 import FeaStudyPanel from "./FeaStudyPanel.jsx";
 import FeaColourBar from "./FeaColourBar.jsx";
 import {
-  applyDeformation, deformationRange, faceIndices, faceLabel, facePromptSummary, faceRole, findingSelector, pickFace, readFeaResult, recolorByField, resultSourcePath,
+  applyDeformation, deformationRange, faceIndices, faceTitle, facePromptSummary, faceRole, findingSelector, pickFace, readFeaResult, recolorByField, resultSourcePath,
   ringTargets, studyRows
 } from "./feaResult.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
@@ -35,7 +35,7 @@ const STUDY_PANEL = Object.freeze({ id: "tree", label: "Study", startsClosed: fa
 /** Study's row for a face, where it has one (a fixed face, a loaded face), so a pick of it marks that row. */
 function faceRow(rows, ref) {
   for (const row of rows) {
-    const found = row.faces?.length === 1 && row.faces[0] === ref && !row.children && !row.refs ? row : row.children ? faceRow(row.children, ref) : null;
+    const found = row.faces?.length === 1 && row.faces[0] === ref && !row.children ? row : row.children ? faceRow(row.children, ref) : null;
     if (found) return found;
   }
   return null;
@@ -165,7 +165,7 @@ function GlbSurface({ view, data }) {
   const copySelection = selectActive && single ? copyFace : null;
   const toolPanels = fea ? <FeaStudyPanel active={selectActive} result={fea} rows={rows} chosen={faces.id} onChoose={chooseFaces}
     field={activeField} scale={activeScale} onFieldChange={(attribute) => choose({ field: attribute })} onScaleChange={(scale) => choose({ scale })}
-    reference={single ? { title: faceLabel(single), ref: single, role: faceRole(fea, single) } : null} onClearSelection={clearChoice}
+    reference={single ? { title: faceTitle(fea, single), ref: single, role: faceRole(fea, single) } : null} onClearSelection={clearChoice}
     copy={single ? { label: "Copy", shortcut: shell.frame.copyShortcut, onCopy: copyFace } : null} /> : null;
 
   const showingFindings = Boolean(card) && shell.frame.viewerAlert === card;

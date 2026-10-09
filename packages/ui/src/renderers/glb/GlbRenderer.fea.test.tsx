@@ -437,7 +437,7 @@ it('a press on the result with Select picks the face under it into a Reference w
 const ASSEMBLED = {
   ...STUDIED, faces: ['#o1.1.f1', '#o1.2.f1', '#o1.1.f9'], weakest_part: 'post', weakest_part_peak_MPa: 180, safety_factor: 1.46, max_displacement_mm: 0.2,
   parts: [
-    { ref: '#o1.1', name: 'post', material: '6061-T6', yield_MPa: 276, peak_MPa: 180, safety_factor: 1.53, max_displacement_mm: 0.2 },
+    { ref: '#o1.1', name: 'post', material: '6061-T6', yield_MPa: 276, peak_MPa: 180, safety_factor: 1.46, max_displacement_mm: 0.2 },
     { ref: '#o1.2', name: 'base', material: 'Steel', yield_MPa: 250, peak_MPa: 40, safety_factor: 2.5, max_displacement_mm: 0.01 },
   ],
   connections: [{ between: ['#o1.1', '#o1.2'], names: ['post', 'base'], type: 'bonded', area_mm2: 100, gap_mm: 0, faces: ['#o1.1.f1', '#o1.2.f1'] }],
@@ -451,9 +451,11 @@ function mountAssembly(copied: string[]) {
 it('an assembly\'s Study lists Parts and Connections rows and the colour bar names the weakest part', () => {
   mountAssembly([]);
   expect(document.querySelector('[data-study-row="part:0"]')!.textContent).toContain('post');
-  expect(document.querySelector('[data-study-row="part:0"]')!.textContent).toContain('6061-T6 · holds 1.5×');
+  expect(document.querySelector('[data-study-row="part:0"]')!.textContent!.replace(/\u2011/g, '-')).toContain('6061-T6 · holds 1.4×');
+  // The detail wraps between words rather than being cut off.
+  expect(document.querySelector('[data-study-row="part:0"] [data-study-detail]')!.className).not.toMatch(/truncate|ellipsis|overflow-hidden|whitespace-nowrap/);
   expect(document.querySelector('[data-study-row="joint:0"]')!.textContent).toContain('post ↔ base');
-  expect(document.querySelector('[data-study-row="joint:0"]')!.textContent).toContain('bonded · 100 mm²');
+  expect(document.querySelector('[data-study-row="joint:0"]')!.textContent!.replace(/\u00a0/g, ' ')).toContain('bonded · 100 mm²');
   expect(document.querySelector('[data-fea-summary]')!.textContent).toBe('Weakest: post · peak stress 180 MPa · holds 1.4× this load · the assembly moves up to 0.029 mm');
 });
 
@@ -477,5 +479,5 @@ it('choosing a joint tints both sides\' interface faces and carries both parts i
   // Vertex 2 lies on a face that is no interface; the others (and the base's vertex 3) are tinted.
   expect(joint.slice(8, 11)).toEqual(plain.slice(8, 11));
   for (const vertex of [0, 1, 3]) expect(joint.slice(vertex * 4, vertex * 4 + 3)).not.toEqual(plain.slice(vertex * 4, vertex * 4 + 3));
-  expect(await copiedPrompt(copied)).toBe("move it\n\nFile: /models/part.glb\nReferences:\nBonded joint between 'post' and 'base' · /models/part.step#o1.1,o1.2");
+  expect(await copiedPrompt(copied)).toBe("move it\n\nFile: /models/part.glb\nReferences:\nBonded joint between 'post' and 'base' · /models/part.step#o1.1.f1,o1.2.f1");
 });
