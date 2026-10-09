@@ -23,6 +23,11 @@ defaults to perspective; other presets use orthographic projection. Opacity is
 0 for transparent and 1 for opaque, including partially transparent PNG
 backgrounds. Unknown keys and retired modes are refused.
 
+A STEP model with no surfaces -- empty, or only curves and points -- has nothing a
+view draws. Its snapshot is still written, with a warning that says the model has
+no surfaces, decided from the parts' SURF face counts before any browser starts
+(`snapshot_parts.has_surfaces`).
+
 `edges`, `clip`, `exploded`, the `xray`, `hidden-line` and `wireframe` presets and
 the `hidden` and `off` surface styles describe a CAD model: its topology edges,
 its parts and its solids. They apply to STEP/STP inputs only. A mesh or a robot

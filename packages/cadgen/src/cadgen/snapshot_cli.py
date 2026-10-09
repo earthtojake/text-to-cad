@@ -1124,6 +1124,11 @@ def resolve_step_render_job(
         if normalized_selection is not None:
             resolved_job["selection"] = normalized_selection
         return resolved_job
+    from cadgen.snapshot_parts import has_surfaces
+
+    if not has_surfaces(descriptor, package_dir):
+        # A true answer, and one nobody would guess from a blank PNG.
+        resolved["warnings"] = ["this model has no surfaces to draw: it is empty, or only curves and points"]
     # This is the renderer's private descriptor loaded from the selected view,
     # never the immutable tree object.
     descriptor["documentHash"] = document_hash

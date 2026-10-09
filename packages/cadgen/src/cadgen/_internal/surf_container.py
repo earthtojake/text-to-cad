@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import struct
 
-__all__ = ["SURF_MAGIC", "read_surf"]
+__all__ = ["SURF_MAGIC", "read_surf", "read_surf_index"]
 
 SURF_MAGIC = b"SURF"
 
@@ -25,3 +25,14 @@ def read_surf(data: bytes) -> tuple[dict, memoryview]:
     _version, json_len = struct.unpack_from("<II", data, 4)
     index = json.loads(data[12:12 + json_len].decode("utf-8"))
     return index, memoryview(data)[12 + json_len:]
+
+
+def read_surf_index(path) -> dict:
+    """The JSON index of the SURF container at ``path``, its payload left unread;
+    ``ValueError`` for anything but a SURF container, ``OSError`` for no file."""
+    with open(path, "rb") as stream:
+        head = stream.read(12)
+        if len(head) < 12 or head[:4] != SURF_MAGIC:
+            raise ValueError("not a SURF container")
+        _version, json_len = struct.unpack_from("<II", head, 4)
+        return json.loads(stream.read(json_len).decode("utf-8"))

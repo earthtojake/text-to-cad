@@ -25,6 +25,10 @@ When skipping, report the reason and the deterministic evidence that still ran.
 
 Do not loop on snapshots. Rerender only when a source repair changed visible geometry or when a specific visual finding needs confirmation.
 
+A STEP model with no surfaces (empty, or only curves and points) has nothing a
+view can draw: the snapshot still writes its image and warns that the model has
+no surfaces. Treat that warning as a finding about the model, not the camera.
+
 ## Packet sizing
 
 Choose views that expose the features being checked. One may be enough;
