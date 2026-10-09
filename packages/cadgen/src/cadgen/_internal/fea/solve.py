@@ -167,9 +167,11 @@ def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: 
     import pyamg
 
     B = _rigid_body_modes(locations[free], component[free])
-    # pyamg estimates the smoother's spectral radius from a random vector, and on a
-    # stiff graded mesh a bad estimate now and then made the iteration diverge. Seeded,
-    # a run repeats; a diverging attempt is stopped early and tried again with another seed.
+    # pyamg's default (Jacobi) prolongator smoothing scales by a spectral radius it
+    # estimates from a random vector: on a graded mesh a bad estimate made the solve
+    # 30% slower or, now and then, diverge. Energy smoothing does not need it (and
+    # converges in fewer iterations); still, a run is seeded to repeat, and an attempt
+    # that diverges is stopped early and tried again with another seed.
     import numpy as np
 
     class Diverged(Exception):
@@ -178,7 +180,9 @@ def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: 
     start = float(np.linalg.norm(ff))
     for seed in range(_AMG_ATTEMPTS):
         np.random.seed(seed)
-        ml = pyamg.smoothed_aggregation_solver(Kff, B=B, symmetry="symmetric", strength="symmetric", max_coarse=500)
+        ml = pyamg.smoothed_aggregation_solver(
+            Kff, B=B, symmetry="symmetric", strength="symmetric", smooth="energy", max_coarse=500
+        )
         count = 0
 
         def watch(x):
