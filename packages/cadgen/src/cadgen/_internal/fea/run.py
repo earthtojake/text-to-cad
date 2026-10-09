@@ -164,6 +164,7 @@ def _solved(volume, outcome, parsed, ordinal_of: dict[str, int], part: str) -> "
         margin=parsed.margin,
         coarser_peak_MPa=None,
         part=part,
+        dofs=outcome.dofs,
     )
 
 
@@ -277,7 +278,7 @@ def solve_study(
             # first solve's peak rides along for convergence.
             finer = _solved(volume, outcome, parsed, ordinal_of, document.stem)
             refined["max_von_mises_MPa"] = round(finer.peak_MPa, 4)
-            solved = dataclasses.replace(finer, coarser_peak_MPa=solved.peak_MPa)
+            solved = dataclasses.replace(finer, coarser_peak_MPa=solved.peak_MPa, coarser_dofs=first_outcome.dofs)
             if first_outcome.dofs > solve.DOF_WARN:  # the person's own size was already large
                 outcome.warnings.insert(0, solve.dof_warning(first_outcome.dofs, automatic=False))
     findings = checks.findings(solved)

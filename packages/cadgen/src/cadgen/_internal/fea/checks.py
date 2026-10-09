@@ -11,12 +11,15 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-__all__ = ["CONVERGED_WITHIN", "GAUSS_RATIO", "LARGE_DISPLACEMENT", "RESOLVE_BELOW", "Solved", "findings", "needs_finer", "safety_factor", "safety_factor_text"]
+__all__ = ["CONVERGED_WITHIN", "GAUSS_RATIO", "MATERIALLY_FINER", "LARGE_DISPLACEMENT", "RESOLVE_BELOW", "Solved", "findings", "needs_finer", "safety_factor", "safety_factor_text"]
 
 #: Re-solve finer only when the safety factor is this close to failing.
 RESOLVE_BELOW = 3.0
 #: A finer mesh moving the peak more than this share: not converged.
 CONVERGED_WITHIN = 0.10
+#: A re-solve counts as finer only with this many times the first solve's degrees
+#: of freedom: the mesher's size is an upper bound, so "half the size" can be +3%.
+MATERIALLY_FINER = 1.3
 #: Displacement over this share of the part's size is a large displacement.
 LARGE_DISPLACEMENT = 0.01
 #: A Gauss-point peak over the nodal peak by this factor: an unresolved concentration.
@@ -47,6 +50,10 @@ class Solved:
     #: re-solve; ``None`` when the part was solved once. Only convergence reads it.
     coarser_peak_MPa: float | None
     part: str
+    #: Degrees of freedom of the written solve and of the first, coarser one;
+    #: only whether the re-solve was materially finer reads them.
+    dofs: int = 0
+    coarser_dofs: int | None = None
 
 
 def safety_factor(solved: Solved) -> float | None:
@@ -114,11 +121,12 @@ def findings(solved: Solved) -> list[dict]:
             [],
         )
 
-    # A finer solve that agreed with the first resolved the peak: it is not a singularity.
+    # A materially finer solve that agreed with the first resolved the peak: it is not a singularity.
     moved = None
     if solved.coarser_peak_MPa is not None and solved.coarser_peak_MPa > 0:
         moved = abs(solved.peak_MPa - solved.coarser_peak_MPa) / solved.coarser_peak_MPa
-    resolved = moved is not None and moved <= CONVERGED_WITHIN
+    finer = solved.coarser_dofs is not None and solved.dofs >= MATERIALLY_FINER * solved.coarser_dofs
+    resolved = moved is not None and moved <= CONVERGED_WITHIN and finer
     rising = moved is not None and moved > CONVERGED_WITHIN and solved.peak_MPa > solved.coarser_peak_MPa
 
     # Peak findings matter only while the part is short of its margin.
@@ -145,8 +153,8 @@ def findings(solved: Solved) -> list[dict]:
                 f"nodal peak {_number(solved.peak_MPa)} MPa, Gauss-point peak {_number(solved.peak_gauss_MPa)} MPa",
                 [peak],
             )
-    if rising:
-        # One clause is enough: a peak that kept rising is the mesh's, wherever it sits.
+    if rising and (on_fixture or spike):
+        # One clause is enough. A rising peak at a smooth spot is a real concentration: no "lower" claim.
         qualifier = ", but this peak kept rising on a finer mesh, so the real stress is likely lower"
 
     if factor is not None and factor < 1:
@@ -155,7 +163,7 @@ def findings(solved: Solved) -> list[dict]:
             "error",
             "yields",
             f"The {solved.part} yields: peak stress {shown_peak} MPa is above "
-            f"{solved.material_name}'s {shown_yield} MPa yield strength{qualifier}",
+            f"the {shown_yield} MPa yield strength of {solved.material_name}{qualifier}",
             f"safety factor {safety_factor_text(factor)}",
             [peak],
         )

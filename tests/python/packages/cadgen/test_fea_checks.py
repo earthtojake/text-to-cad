@@ -28,6 +28,9 @@ def solved(**changes):
         part="bracket",
     )
     base.update(changes)
+    if base["coarser_peak_MPa"] is not None:  # a re-solve is materially finer unless a test says otherwise
+        base.setdefault("dofs", 200_000)
+        base.setdefault("coarser_dofs", 100_000)
     return Solved(**base)
 
 
@@ -38,7 +41,7 @@ class ChecksTest(unittest.TestCase):
     def test_yields(self):
         (f,) = findings(solved(peak_MPa=310.0, peak_gauss_MPa=320.0))
         self.assertEqual((f["severity"], f["type"]), ("error", "yields"))
-        self.assertEqual(f["summary"], "The bracket yields: peak stress 310 MPa is above 6061-T6's 276 MPa yield strength")
+        self.assertEqual(f["summary"], "The bracket yields: peak stress 310 MPa is above the 276 MPa yield strength of 6061-T6")
         self.assertEqual(f["items"][0]["ref"], "#o1.f12")
 
     def test_low_margin(self):
@@ -52,7 +55,7 @@ class ChecksTest(unittest.TestCase):
     def test_yields_is_qualified_when_the_peak_is_at_the_fixture(self):
         (f, g) = findings(solved(peak_MPa=310.0, peak_gauss_MPa=320.0, peak_face="#o1.f3"))
         self.assertEqual((f["type"], g["type"]), ("yields", "peak_at_fixture"))
-        self.assertEqual(f["summary"], "The bracket yields: peak stress 310 MPa is above 6061-T6's 276 MPa yield strength (the peak sits at the fixed face)")
+        self.assertEqual(f["summary"], "The bracket yields: peak stress 310 MPa is above the 276 MPa yield strength of 6061-T6 (the peak sits at the fixed face)")
 
     def test_peak_on_a_fixed_face(self):
         (low, f) = findings(solved(peak_MPa=150.0, peak_gauss_MPa=160.0, peak_face="#o1.f3"))
@@ -104,6 +107,28 @@ class ChecksTest(unittest.TestCase):
         self.assertEqual(low["type"], "low_margin")
         self.assertNotIn("local spike", low["summary"])
 
+    def test_a_resolve_barely_bigger_than_the_first_does_not_resolve_the_peak(self):
+        # The plate: 603k then 621k DOF (+3%), 209 then 208 MPa: weak evidence.
+        types = [f["type"] for f in findings(solved(
+            peak_MPa=208.0, peak_gauss_MPa=216.0, peak_face="#o1.f3", coarser_peak_MPa=209.0,
+            dofs=620922, coarser_dofs=603483,
+        ))]
+        self.assertEqual(types, ["low_margin", "peak_at_fixture"])
+        (low,) = findings(solved(
+            peak_MPa=208.0, peak_gauss_MPa=216.0, peak_face="#o1.f3", coarser_peak_MPa=209.0,
+            dofs=130_000, coarser_dofs=100_000,  # exactly 1.3x counts as finer
+        ))
+        self.assertEqual(low["type"], "low_margin")
+
+    def test_a_rising_peak_at_a_smooth_spot_gets_no_likely_lower_clause(self):
+        (low, moved) = findings(solved(peak_MPa=150.0, peak_gauss_MPa=160.0, peak_face="#o1.f12", coarser_peak_MPa=100.0))
+        self.assertEqual((low["type"], moved["type"]), ("low_margin", "mesh_not_converged"))
+        self.assertEqual(low["summary"], "It holds, but only 1.8× the load: under the 2× margin")
+
+    def test_a_rising_spike_gets_the_clause(self):
+        (low, *_rest) = findings(solved(peak_MPa=150.0, peak_gauss_MPa=300.0, peak_face="#o1.f12", coarser_peak_MPa=100.0))
+        self.assertIn("kept rising on a finer mesh, so the real stress is likely lower", low["summary"])
+
     def test_an_unresolved_peak_at_the_fixture_still_raises_it(self):
         types = [f["type"] for f in findings(solved(peak_MPa=150.0, peak_gauss_MPa=160.0, peak_face="#o1.f3", coarser_peak_MPa=100.0))]
         self.assertEqual(types, ["low_margin", "peak_at_fixture", "mesh_not_converged"])
@@ -118,7 +143,7 @@ class ChecksTest(unittest.TestCase):
         self.assertEqual(f["severity"], "error")
         self.assertEqual(
             f["summary"],
-            "The shaft yields: peak stress 337 MPa is above steel's 250 MPa yield strength, "
+            "The shaft yields: peak stress 337 MPa is above the 250 MPa yield strength of steel, "
             "but this peak kept rising on a finer mesh, so the real stress is likely lower",
         )
         self.assertNotIn("fixed face)", f["summary"])
@@ -162,7 +187,7 @@ class ChecksTest(unittest.TestCase):
 
     def test_yields_prints_more_decimals_when_the_numbers_would_tie(self):
         (f,) = findings(solved(peak_MPa=276.4, peak_gauss_MPa=276.4))
-        self.assertEqual(f["summary"], "The bracket yields: peak stress 276.4 MPa is above 6061-T6's 276.0 MPa yield strength")
+        self.assertEqual(f["summary"], "The bracket yields: peak stress 276.4 MPa is above the 276.0 MPa yield strength of 6061-T6")
 
     def test_finer_only_when_close(self):
         self.assertTrue(needs_finer(2.99))
