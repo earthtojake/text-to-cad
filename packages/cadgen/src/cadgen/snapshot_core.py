@@ -275,9 +275,22 @@ async def launch_with_browser(launch: Any, fix: Any = install_browser) -> Any:
         except Exception as error:  # noqa: BLE001 - Playwright raises its own Error for both cases
             problem = browser_problem(str(error))
             if problem is None or problem in fixed:
-                raise
+                raise _browser_failed(error)
             fixed.add(problem)
-            fix(problem)
+            try:
+                fix(problem)
+            except Exception as unfixed:
+                raise _browser_failed(unfixed)
+
+
+def _browser_failed(error: BaseException) -> BaseException:
+    """``error``, named for telemetry as the browser that did not start (``cadgen.analytics.because``)."""
+    try:
+        from cadgen.analytics import because
+
+        return because(error, "browser")
+    except Exception:  # noqa: BLE001 - a reason never fails the failure it names
+        return error
 
 
 class RouteFileError(SnapshotError):

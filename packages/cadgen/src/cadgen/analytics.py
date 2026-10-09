@@ -7,9 +7,10 @@ it hands what it counted (a snapshot, a drawing, a crash) to a running daemon, a
 is sent (``notify``).
 
 What is sent, at most every five minutes while there is something new and once more as a process
-exits, each batch stamped with the time it arrives:
+exits, each batch under an id of its own and stamped with the time it was made:
 
-- who, by random ids only: an install id made on this machine, and an id for the sending process;
+- who, by random ids only: an install id made on this machine, an id for the sending process, and one
+  for the batch, so a batch sent again is never counted twice;
 - what runs: which process (``app``, ``viewer`` or ``daemon``), cadgen's version, where it was
   installed from (its channel, ``cadgen/_internal/channel.py``: a plugin directory, the Cursor
   Marketplace, GitHub, a development install, or ``unknown``), the operating system and processor,
@@ -26,8 +27,13 @@ exits, each batch stamped with the time it arrives:
 - ``build`` (the daemon): for each format and who asked (``VIAS``), how many builds, how each
   ended (``OUTCOMES``: failed, lost its worker, or stopped: whoever asked left, or someone stopped its
   worker), how many the store answered without building, and how long they took;
+- ``build_failure`` (the daemon): how many of those builds failed for each reason (``BUILD_FAILURES``),
+  one word decided where the build failed (``build_failure``), from what the error is and whose code
+  raised it -- the model's, the CAD kernel's under it, cadgen's -- never from its message;
 - ``snapshot`` (the daemon, told by the command that rendered it): for each format, how many
   renders, how many failed, and how long they took;
+- ``snapshot_failure``: how many of those failed for each reason (``SNAPSHOT_FAILURES``), decided as
+  the snapshot failed (``snapshot_failure``);
 - ``feature``: how many builds made an assembly or declared mesh exports, snapshots posed joints or
   played an animation, engineering drawings were made, and CAD views' Quick Edits were sent
   (``FEATURES``);
@@ -97,7 +103,9 @@ Telemetry never gets in the way of CAD:
   its last batch is kept beside the settings as it exits (``close``), and the next process that
   sends sends it, in the background, soon after it starts.
 - A batch the receiver did not take (offline, a slow or broken receiver, or none answering
-  there yet) is kept for the next one; it is never an error. One the receiver read and refused
+  there yet) is kept whole, its id and all, and sent again before anything newer, which waits for a
+  later batch; it is never an error. The receiver may have taken it and its answer been lost: the id
+  makes a second copy the first one, never more counts. One the receiver read and refused
   (``REFUSED``) is dropped: it would be refused again, and take everything after it down with it.
 
 The answer is changed only under the settings lock (``settings.update_section``), so the processes
@@ -134,11 +142,14 @@ from cadgen.settings import LOCK, read_section, settings_path, update_section
 LOG = logging.getLogger("cadgen.analytics")
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
-# 4: why tool calls failed; 3: the build daemon's counts, and files as numbers; 2: the install's channel replaced `source`
-SCHEMA = 4
+# 5: why builds and snapshots failed, and each batch's id and time; 4: why tool calls failed; 3: the build
+# daemon's counts, and files as numbers; 2: the install's channel replaced `source`
+SCHEMA = 5
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
-# the answer: it lives in the person's state directory, not the install.
+# the answer: it lives in the person's state directory, not the install. Neither schema 4 nor 5 raised it
+# (nor ``NOTICE``): each says more of what was told already -- why a counted call, build or snapshot failed,
+# in a word of ours -- and a batch's random id and time link nothing its process's id did not.
 DISCLOSURE = 1
 # What the notice told (``notify``): what is sent by default, without a yes. Raise it when that grows,
 # and the next ``cadgen`` command says it again; nothing is sent by default until it has.
@@ -189,6 +200,24 @@ OUTCOMES = frozenset({"ok", "failed", "crashed", "cancelled"})
 # ``other``: a failure that named none of these.
 FAILURES = frozenset({"no_path", "relative_path", "no_file", "not_cad", "no_view", "wrong_view", "bad_request",
                       "timeout", "view_error", "too_large", "no_viewer", "bug", "other"})
+# Why a build failed (``build_failure``), decided where it failed, never read from its message. The model's: its
+# own code raised (``model_error``), or the CAD kernel or library it called refused what it asked (``kernel_error``:
+# a fillet or a boolean that failed); cadgen refused what the model declared or returned, or what a command was
+# given (``refused``: raised on purpose in cadgen's code); the script did not compile (``script_error``); its
+# arguments were refused (``arguments``); a model it composes failed (``child_failed``). The machine's: a module
+# that is not installed (``missing_module``), a file that is not there (``missing_file``), another file error -- a
+# file locked or unwritable, a full disk (``io_error``) -- or out of time (``timeout``) or memory (``memory``).
+# cadgen's: the kernel failed under cadgen's own code, writing or meshing what the model made (``export_error``),
+# or a mistake in cadgen's code (``bug``, reported as an ``exception`` too). ``other``: none of these.
+BUILD_FAILURES = frozenset({"model_error", "kernel_error", "refused", "script_error", "arguments", "child_failed",
+                            "missing_module", "missing_file", "io_error", "timeout", "memory", "export_error", "bug",
+                            "other"})
+# Why a snapshot failed (``snapshot_failure``), decided as it failed: its request was refused (``bad_request``), a
+# file it names is not there (``no_file``), its input could not be read or built (``input_error``), the headless
+# browser did not start (``browser``), out of time (``timeout``) or memory (``memory``), the page did not render it
+# (``render_error``), a mistake in cadgen's code (``bug``), or none of these (``other``).
+SNAPSHOT_FAILURES = frozenset({"bad_request", "no_file", "input_error", "browser", "timeout", "memory", "render_error",
+                               "bug", "other"})
 # What a person used: a model with children, a model declaring mesh exports (``@stl``, ``@glb``, ``@threemf``),
 # a snapshot that posed joints or played an animation, an engineering drawing (``@eng_drawing``), and a CAD
 # view's Quick Edit sending its prompt.
@@ -204,7 +233,9 @@ EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "view": ((), ("calls",)),
     "files": (("kind",), ("count",)),
     "build": (("kind", "via"), ("count", "failed", "crashed", "cancelled", "cached", "seconds", "longest")),
+    "build_failure": (("kind", "via", "reason"), ("count",)),
     "snapshot": (("kind",), ("count", "failed", "seconds")),
+    "snapshot_failure": (("kind", "reason"), ("count",)),
     "feature": (("feature",), ("count",)),
     "health": ((), HEALTH),
 }
@@ -636,11 +667,11 @@ def _places() -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
     return tuple(sorted(set(places), key=lambda place: len(place[0]), reverse=True)), ours
 
 
-def _file_of(path: str) -> str | None:
-    """A frame's file as a crash names it: its path inside cadgen, the standard library or one of
-    cadgen's dependencies -- or ``None``, for the person's own code, or anything else."""
+def _located(path: str) -> tuple[str, str] | None:
+    """Where a frame's file lives -- ``cadgen``, ``site`` (one of cadgen's dependencies) or ``stdlib`` -- and
+    its path inside that, as a crash names it; or ``None``, for the person's own code, or anything else."""
     if path.startswith("<frozen "):
-        return "<frozen>"
+        return "stdlib", "<frozen>"
     resolved = os.path.realpath(path)
     places, ours = _places()
     for root, kind in places:
@@ -653,8 +684,15 @@ def _file_of(path: str) -> str | None:
             return None
         elif kind == "stdlib" and ("site-packages/" in inside or "dist-packages/" in inside):
             return None  # a folder of installed packages the longest-first order did not name
-        return inside if _FILE.fullmatch(inside) else "<?>"
+        return kind, inside if _FILE.fullmatch(inside) else "<?>"
     return None
+
+
+def _file_of(path: str) -> str | None:
+    """A frame's file as a crash names it: its path inside cadgen, the standard library or one of
+    cadgen's dependencies -- or ``None``, for the person's own code, or anything else."""
+    found = _located(path)
+    return found[1] if found else None
 
 
 def _type_of(error: BaseException) -> str:
@@ -696,7 +734,7 @@ def signature(error: BaseException, where: str, *, tool: str | None = None, hand
             continue
         function = frame.f_code.co_qualname
         frames.append({"file": file, "function": function if _FUNCTION.fullmatch(function) else "<?>", "line": int(line or 0)})
-    if bugs_only and (decisive is None or decisive[0] is None or _RAISED.search(linecache.getline(decisive[1], decisive[2]))):
+    if bugs_only and not (decisive is not None and decisive[0] is not None and _mistake(error, decisive[1], decisive[2])):
         return None
     frames = frames[-MAX_FRAMES:]
     if isinstance(error, RecursionError) and any(frame["file"] == USER for frame in frames):  # the person's recursion
@@ -705,6 +743,109 @@ def signature(error: BaseException, where: str, *, tool: str | None = None, hand
     if tool is not None and _TOOL.fullmatch(str(tool)):
         found["tool"] = tool
     return found
+
+
+def _mistake(error: BaseException, filename: str, line: int) -> bool:
+    """Whether ``error``, last in cadgen's code at ``filename``'s ``line``, is a mistake there: one of ``BUGS``,
+    and never at a ``raise`` (``_RAISED``), where cadgen says what it was given in those words on purpose."""
+    return isinstance(error, BUGS) and not _RAISED.search(linecache.getline(filename, line))
+
+
+# Why a failure failed, where cadgen named it (``because``): a word of ``BUILD_FAILURES`` or ``SNAPSHOT_FAILURES``.
+_BECAUSE = "__cadgen_failure__"
+# Errors that say why by what they are, whoever raised them, by the first of their classes named here (a class
+# by its module and name: importing it would import what defines it, the CAD kernel among them).
+_BUILD_ERRORS: tuple[tuple[type[BaseException] | str, str], ...] = (
+    (SyntaxError, "script_error"), (ImportError, "missing_module"), (FileNotFoundError, "missing_file"),
+    ("cadgen.assets.AssetMissing", "missing_file"), ("cadgen.store.lazy.ChildBuildError", "child_failed"),
+    (TimeoutError, "timeout"), (MemoryError, "memory"), (OSError, "io_error"))
+
+
+def because(error: BaseException, reason: str) -> BaseException:
+    """Name why ``error`` failed (a word of ``BUILD_FAILURES`` or ``SNAPSHOT_FAILURES``) where cadgen raises or
+    first catches it: the innermost name stands. ``error``, for ``raise because(...)``. Never raises."""
+    with contextlib.suppress(Exception):
+        if not isinstance(getattr(error, _BECAUSE, None), str):
+            setattr(error, _BECAUSE, reason)
+    return error
+
+
+def _named(error: BaseException, vocabulary: frozenset[str]) -> str | None:
+    reason = getattr(error, _BECAUSE, None)
+    return reason if reason in vocabulary else None
+
+
+def _is(error: BaseException, kind: type[BaseException] | str) -> bool:
+    if not isinstance(kind, str):
+        return isinstance(error, kind)
+    return any(f"{cls.__module__}.{cls.__qualname__}" == kind for cls in type(error).__mro__)
+
+
+def _whose(error: BaseException) -> tuple[str | None, tuple[str, str, int] | None]:
+    """Whose code ``error`` came from: where its innermost frame lives (``cadgen``, ``site``, ``stdlib``, or
+    ``user``: the person's), and its innermost frame of cadgen's or the person's -- whose, its file, its line."""
+    innermost, decisive = None, None
+    for frame, line in traceback.walk_tb(error.__traceback__):
+        found = _located(frame.f_code.co_filename)
+        innermost = found[0] if found else "user"
+        if innermost in ("cadgen", "user"):
+            decisive = (innermost, frame.f_code.co_filename, int(line or 0))
+    return innermost, decisive
+
+
+def _bug(error: BaseException, decisive: tuple[str, str, int] | None) -> bool:
+    """A mistake in cadgen's own code: what ``signature(bugs_only=True)`` reports as a crash."""
+    return decisive is not None and decisive[0] == "cadgen" and _mistake(error, decisive[1], decisive[2])
+
+
+def build_failure(error: BaseException) -> str:
+    """Why a build failed (one of ``BUILD_FAILURES``), from what ``error`` is and whose code raised it, never
+    from what it says: cadgen's mistake (``bug``, as ``signature`` finds one); a reason cadgen named where it
+    raised it (``because``); one its class says (``_BUILD_ERRORS``); else whose code was last -- the person's
+    (``model_error``, or ``kernel_error`` when the CAD kernel or a library under it raised), or cadgen's (on
+    purpose, ``refused``, or ``export_error`` when the kernel raised under it). Never raises."""
+    try:
+        innermost, decisive = _whose(error)
+        if _bug(error, decisive):
+            return "bug"
+        named = _named(error, BUILD_FAILURES)
+        if named:
+            return named
+        for kind, reason in _BUILD_ERRORS:
+            if _is(error, kind):
+                return reason
+        if decisive is None:
+            return "other"
+        if decisive[0] == "user":
+            return "kernel_error" if innermost == "site" else "model_error"
+        return "export_error" if innermost == "site" else "refused"
+    except Exception:  # noqa: BLE001 - a reason never fails the failure it names
+        LOG.debug("could not tell why a build failed", exc_info=True)
+        return "other"
+
+
+def snapshot_failure(error: BaseException, otherwise: str = "other") -> str:
+    """Why a snapshot failed (one of ``SNAPSHOT_FAILURES``), from what ``error`` is, never what it says:
+    cadgen's mistake (``bug``), a reason cadgen named where it raised it (``because``: the browser that did not
+    start), a file not there, time or memory run out -- else ``otherwise``, what the snapshot was doing when it
+    failed (``cadgen.snapshot_cli``). Never raises."""
+    try:
+        if _bug(error, _whose(error)[1]):
+            return "bug"
+        named = _named(error, SNAPSHOT_FAILURES)
+        if named:
+            return named
+        if isinstance(error, FileNotFoundError) or (_is(error, "cadgen.snapshot_core.RouteFileError")
+                                                    and getattr(error, "status", None) == 404):
+            return "no_file"
+        if isinstance(error, TimeoutError) or type(error).__name__ == "TimeoutError":  # the browser's own
+            return "timeout"
+        if isinstance(error, MemoryError):
+            return "memory"
+        return otherwise if otherwise in SNAPSHOT_FAILURES else "other"
+    except Exception:  # noqa: BLE001 - a reason never fails the failure it names
+        LOG.debug("could not tell why a snapshot failed", exc_info=True)
+        return "other"
 
 
 def died(status: Any) -> dict[str, Any]:
@@ -891,7 +1032,7 @@ class _Tally:
             row[index] = max(row[index], value) if name == "longest" else row[index] + value
 
     def merge(self, other: _Tally) -> None:
-        """Add ``other``'s counts to these: a batch the receiver did not take, kept for the next."""
+        """Add ``other``'s counts to these: what a batch had no room for, kept for the next."""
         for key, values in other.rows.items():
             self._add(key, values)
         for found, count in other.crashes.values():
@@ -936,6 +1077,9 @@ class Recorder:
                                          "channel": "unknown", "platform": "other"}
         self._named: str | None = None  # the channel this process was told itself (``_channel``)
         self._tally = _Tally()
+        # The batch the receiver did not take, whole, and the answer it was made under: sent again, as it is,
+        # before anything newer (``flush``). One at most: what is noted meanwhile waits in the tally.
+        self._unsent: tuple[dict[str, Any], Any] | None = None
         self._day = ""
         self._shown: set[str] = set()  # the files a view showed today, by absolute path: never leaves this process
         self._basis: Any = _UNREAD  # the answer in force when what is noted now began to be noted
@@ -999,7 +1143,7 @@ class Recorder:
         chosen = choose(share, by=by, path=self.path)  # forget=None: the id waits as pending
         decision = self._decision()
         with self._lock:  # nothing noted before a choice is sent after it
-            self._tally = _Tally()
+            self._tally, self._unsent = _Tally(), None
             self._basis = decision
             self._choices += 1
         if not share:
@@ -1050,21 +1194,28 @@ class Recorder:
             self._tally.note("files", (kind,), {"count": 1})
 
     @_guarded(lambda: None)
-    def built(self, kind: str, via: str, outcome: str, seconds: float = 0.0, *, cached: bool = False) -> None:
+    def built(self, kind: str, via: str, outcome: str, seconds: float = 0.0, *, cached: bool = False,
+              reason: str | None = None) -> None:
         """The daemon answered a build of a ``kind`` of model asked for ``via`` one of ``VIAS``, ended as one
-        of ``OUTCOMES`` after ``seconds``; ``cached``: the store had it, and nothing was built."""
+        of ``OUTCOMES`` after ``seconds``; ``cached``: the store had it, and nothing was built. A failed one
+        failed for ``reason`` (one of ``BUILD_FAILURES``; anything else is ``other``)."""
         if kind not in KINDS or via not in VIAS or outcome not in OUTCOMES:
             return
         took = _seconds(seconds)
         self._note("build", (kind, via), {"count": 1, "failed": outcome == "failed", "crashed": outcome == "crashed",
                                           "cancelled": outcome == "cancelled", "cached": bool(cached) and outcome == "ok",
                                           "seconds": took, "longest": took})
+        if outcome == "failed":
+            self._note("build_failure", (kind, via, reason if reason in BUILD_FAILURES else "other"), {"count": 1})
 
     @_guarded(lambda: None)
-    def rendered(self, kind: str, ok: bool, seconds: float = 0.0) -> None:
-        """A snapshot of a ``kind`` of file was rendered, or failed to be."""
+    def rendered(self, kind: str, ok: bool, seconds: float = 0.0, reason: str | None = None) -> None:
+        """A snapshot of a ``kind`` of file was rendered, or failed to be, for ``reason`` (one of
+        ``SNAPSHOT_FAILURES``; anything else is ``other``)."""
         if kind in KINDS:
             self._note("snapshot", (kind,), {"count": 1, "failed": not ok, "seconds": _seconds(seconds)})
+            if not ok:
+                self._note("snapshot_failure", (kind, reason if reason in SNAPSHOT_FAILURES else "other"), {"count": 1})
 
     @_guarded(lambda: None)
     def used(self, feature: str) -> None:
@@ -1106,10 +1257,10 @@ class Recorder:
         for build in each("builds"):
             if isinstance(build, dict):
                 self.built(build.get("kind"), build.get("via"), build.get("outcome"), build.get("seconds"),
-                           cached=build.get("cached") is True)
+                           cached=build.get("cached") is True, reason=build.get("reason"))
         for snapshot in each("snapshots"):
             if isinstance(snapshot, dict) and isinstance(snapshot.get("ok"), bool):
-                self.rendered(snapshot.get("format"), snapshot["ok"], snapshot.get("seconds"))
+                self.rendered(snapshot.get("format"), snapshot["ok"], snapshot.get("seconds"), snapshot.get("reason"))
         for feature in each("features"):
             self.used(feature)
         for crash in each("crashes"):
@@ -1131,32 +1282,58 @@ class Recorder:
     @_guarded(lambda: False)
     def flush(self) -> bool:
         """Send what was used since the last batch, if sharing is on; drop it if not. A deletion still owed
-        is asked for first, then the batches exiting processes kept (``send_kept``). A batch with no use in
-        it is not sent. It waits on the network: only the background sender calls it."""
+        is asked for first, then the batches exiting processes kept (``send_kept``), then the batch this one
+        could not send (``_resend``): while that is still owed, what came since waits for a later batch. A
+        batch with no use in it is not sent. It waits on the network: only the background sender calls it."""
         if self._collect is not None:
             self._collect(self)
         self._drain()
         settings = self.path or settings_path()
         forget_pending(path=settings)
         self.send_kept()
+        if not self._resend(settings):
+            return False
         taken = self._batch(settings)
         if taken is None:
             return False
-        payload, sending, choices = taken
+        payload, answer, choices = taken
         outcome = _outcome(self._send(payload))
-        if outcome == "failed":  # kept for the next batch, added to whatever came since -- unless a choice
-            with self._lock:     # made here while it was on its way cleared it (two answers can share a tick)
+        if outcome == "failed":  # kept whole, its id and all, to be sent again -- unless a choice made here
+            with self._lock:     # while it was on its way cleared it (two answers can share a tick)
                 if self._choices == choices:
-                    self._tally.merge(sending)
+                    self._unsent = (payload, answer)
         # refused: dropped, or it would be refused again with everything after it
         if outcome == "ok":
             self._owe_deletion_if_gone(settings, payload["install"])
         return outcome == "ok"
 
-    def _batch(self, settings: Path) -> tuple[dict[str, Any], _Tally, int] | None:
-        """The batch of what this process noted since its last, taken from it: its payload, what it counts,
-        and the choices made here when it was taken -- or ``None``, with nothing to send under the answer in
-        force, which drops what was noted under another. Reads the settings, never the network."""
+    def _resend(self, settings: Path) -> bool:
+        """Send again, byte for byte, the batch the receiver did not take: the receiver may have taken it after
+        all and its answer been lost, and its id (``batch``) tells it so. Only under the answer it was made
+        under, as a kept batch is (``send_kept``): under another it is dropped. ``True`` when nothing is owed
+        any more -- sent, refused or dropped -- and a new batch may go. It waits on the network."""
+        with self._lock:
+            unsent, choices = self._unsent, self._choices
+        if unsent is None:
+            return True
+        payload, answer = unsent
+        sharing = not self._off and status(path=self.path, probe=False)["sharing"]
+        outcome = (_outcome(self._send(payload)) if sharing and _answer(_read(settings) or {}) == answer
+                   else "dropped")
+        with self._lock:
+            if outcome == "failed" and self._choices == choices:
+                return False  # still owed: offline, or the receiver is down
+            if self._unsent is unsent:
+                self._unsent = None
+        if outcome == "ok":
+            self._owe_deletion_if_gone(settings, payload["install"])
+        return True
+
+    def _batch(self, settings: Path) -> tuple[dict[str, Any], Any, int] | None:
+        """The batch of what this process noted since its last, taken from it: its payload -- under an id of
+        its own, stamped with the time it was made -- the answer it was made under, and the choices made here
+        when it was taken; or ``None``, with nothing to send under the answer in force, which drops what was
+        noted under another. Reads the settings, never the network."""
         with self._lock:
             if not self._tally:  # nothing to send, nor an answer to read: the next use reads its own
                 self._basis = _UNREAD
@@ -1179,8 +1356,8 @@ class Recorder:
         events = sending.events()
         if not events:
             return None
-        return ({"schema": SCHEMA, "install": found["id"], "session": self._session, **context, "events": events},
-                sending, choices)
+        return ({"schema": SCHEMA, "batch": str(uuid.uuid4()), "at": int(time.time()), "install": found["id"],
+                 "session": self._session, **context, "events": events}, decided, choices)
 
     @_guarded(lambda: None)
     def send_kept(self) -> None:
@@ -1236,17 +1413,23 @@ class Recorder:
 
     @_guarded(lambda: None)
     def close(self) -> None:
-        """As the process exits: what it noted since its last batch is kept beside the settings, whole
-        (``KEPT``), for the next process that sends (``send_kept``) -- never sent from here, so an exit
-        waits on nothing but a local file."""
+        """As the process exits: the batch it could not send, and what it noted since, are kept beside the
+        settings, each whole and in that order (``KEPT``), for the next process that sends (``send_kept``) --
+        never sent from here, so an exit waits on nothing but a local file. Only under the answer each was made
+        under, and only while that is still in force."""
         if self._timer is not None:
             self._timer.set()
         if self._collect is not None:
             self._collect(self)
         settings = self.path or settings_path()
+        with self._lock:
+            unsent, self._unsent = self._unsent, None
+        if unsent is not None and not self._off and status(path=self.path, probe=False)["sharing"] \
+                and _answer(_read(settings) or {}) == unsent[1]:
+            _keep(settings, KEPT, {"answer": list(unsent[1]), "batch": unsent[0]})
         taken = self._batch(settings)
         if taken is not None:
-            _keep(settings, KEPT, {"answer": list(_answer(_read(settings) or {})), "batch": taken[0]})
+            _keep(settings, KEPT, {"answer": list(taken[1]), "batch": taken[0]})
 
     def _background(self, work: Callable[[], Any]) -> threading.Thread:
         def run() -> None:

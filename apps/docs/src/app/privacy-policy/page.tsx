@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 8, 2026">
+    <LegalPage title="Privacy Policy" updated="October 9, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -37,8 +37,9 @@ export default function PrivacyPolicyPage() {
             each stops:
             <ul>
               <li>
-                a random install ID created on your computer, and a random ID for each time one of
-                them starts;
+                a random install ID created on your computer, a random ID for each time one of them
+                starts, and a random ID for each batch, with the time it was made by your computer’s
+                clock, so that a batch sent again after a failed send is counted once;
               </li>
               <li>
                 which of them sent it, the cadgen version, where it was installed from (a plugin
@@ -59,10 +60,14 @@ export default function PrivacyPolicyPage() {
                 whether a model script or a <code>cadgen</code> command asked, how they ended
                 (finished, failed, crashed or stopped), how many came from cadgen’s cache, and how long
                 they took; how many snapshots were rendered, of which format, how many failed and how
-                long they took; how many times assemblies, mesh exports, posed joints, animations,
-                engineering drawings and Quick Edit were used; and how many of the build daemon’s
-                workers started, crashed or were replaced, and how many builds it turned away for want
-                of memory;
+                long they took; why each build or snapshot failed, again as one of a fixed set of words
+                cadgen chooses from the kind of error and whose code raised it (such as an error in
+                your model’s code, a CAD operation the geometry kernel could not do, a module or file
+                that is not there, the snapshot browser not starting, or a bug in cadgen) -- never the
+                error’s message, your code or the path; how many times assemblies, mesh exports, posed
+                joints, animations, engineering drawings and Quick Edit were used; and how many of the
+                build daemon’s workers started, crashed or were replaced, and how many builds it turned
+                away for want of memory;
               </li>
               <li>
                 crash reports, when cadgen’s own code fails unexpectedly: the error’s type (such as
@@ -74,7 +79,8 @@ export default function PrivacyPolicyPage() {
                 values, your files, or file or folder names.
               </li>
             </ul>
-            We record the time each batch arrives, and our server adds the country each request comes
+            We record each batch at the time it was made, or at the time it arrives when your
+            computer’s clock is far from ours, and our server adds the country each request comes
             from, which it works out from your IP address; it keeps neither the address nor anything
             finer than the country. Nothing is sent while cadgen sits unused. Telemetry never includes
             your files, models, file or folder names, prompts, tool arguments or anything you type. A{" "}

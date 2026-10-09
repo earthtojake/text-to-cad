@@ -25,6 +25,13 @@ def _user_calls(target, filename: str = "/home/someone/secret_bracket.py"):
     return namespace["make_secret_bracket"]
 
 
+def _raises(error: BaseException):
+    """The person's model, raising ``error`` in their own code."""
+    def model() -> None:
+        raise error
+    return _user_calls(model)
+
+
 def _caught(call) -> BaseException:
     try:
         call()
@@ -188,6 +195,88 @@ class SignatureTest(unittest.TestCase):
         ):
             with self.subTest(bad=bad):
                 self.assertFalse(analytics.valid_signature(bad))
+
+
+class FailureReasonTest(unittest.TestCase):
+    """Why a build or a snapshot failed (``build_failure``, ``snapshot_failure``): a word of a closed vocabulary,
+    from what the error is and whose code raised it, never from what it says."""
+
+    def setUp(self) -> None:
+        # A module of cadgen's, as the frames place it: one that calls into a dependency, one that refuses what it
+        # was given at a raise, and one with a mistake in it.
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        source = folder / "export.py"
+        source.write_text("def export(write):\n    return write()\n\n"
+                          "def refuse():\n    raise TypeError(\n        '@step returned a dict')\n\n"
+                          "def broke():\n    return {}['tree']\n", encoding="utf-8")
+        self.cadgen: dict = {}
+        exec(compile(source.read_text(encoding="utf-8"), str(source), "exec"), self.cadgen)  # noqa: S102
+        located, ours = analytics._located, os.path.realpath(source)
+        placed = mock.patch.object(analytics, "_located", lambda path: ("cadgen", "cadgen/_internal/export.py")
+                                   if os.path.realpath(path) == ours else located(path))
+        placed.start()
+        self.addCleanup(placed.stop)
+
+    def test_a_builds_failure_is_named_by_what_failed_and_whose_code_raised_it(self) -> None:
+        import functools
+        import importlib
+
+        from PIL import Image
+
+        kernel = functools.partial(Image.new, "NOT A MODE", (1, 1))  # a library refusing what it was asked
+        child = type("ChildBuildError", (RuntimeError,), {"__module__": "cadgen.store.lazy"})
+        raises = _raises
+        cases = {
+            "model_error": raises(ValueError("No module named secret: a message is never read")),
+            "kernel_error": _user_calls(kernel),
+            "refused": _user_calls(self.cadgen["refuse"]),
+            "export_error": lambda: self.cadgen["export"](kernel),
+            "bug": _user_calls(self.cadgen["broke"]),
+            "script_error": lambda: compile("def (", "/work/secret_model.py", "exec"),
+            "missing_module": _user_calls(lambda: importlib.import_module("secret_missing_module")),
+            "missing_file": _user_calls(lambda: open("/nonexistent/secret.step", encoding="utf-8")),
+            "io_error": raises(PermissionError("locked")),
+            "timeout": raises(TimeoutError()),
+            "memory": raises(MemoryError()),
+            "child_failed": raises(child("child model secret_arm failed")),
+        }
+        for reason, call in cases.items():
+            with self.subTest(reason=reason):
+                error = _caught(call)
+                self.assertEqual(analytics.build_failure(error), reason)
+                # The same as a crash report finds: a bug, and only a bug, is cadgen's own mistake.
+                self.assertEqual(analytics.signature(error, "build", bugs_only=True) is not None, reason == "bug")
+        self.assertLessEqual(set(cases), analytics.BUILD_FAILURES)
+
+    def test_a_reason_cadgen_names_where_it_raises_stands_but_never_over_a_bug(self) -> None:
+        named = _caught(_raises(analytics.because(ValueError(), "export_error")))  # the person's frames say model_error
+        self.assertEqual(analytics.build_failure(named), "export_error")
+        error = _caught(_user_calls(self.cadgen["broke"]))
+        analytics.because(error, "missing_file")
+        self.assertEqual(analytics.build_failure(error), "bug")
+        # The innermost name stands; one outside the vocabulary names nothing.
+        twice = analytics.because(analytics.because(ValueError(), "timeout"), "memory")
+        self.assertEqual(analytics.build_failure(twice), "timeout")
+        self.assertEqual(analytics.build_failure(analytics.because(ValueError(), "Secret words")), "other")
+        self.assertEqual(analytics.build_failure(ValueError()), "other", "no frames: whose code is unknown")
+
+    def test_a_snapshots_failure_is_what_it_was_doing_unless_the_error_says_more(self) -> None:
+        playwright_timeout = type("TimeoutError", (Exception,), {"__module__": "playwright._impl._errors"})
+        route = type("RouteFileError", (RuntimeError,), {"__module__": "cadgen.snapshot_core", "status": 404})
+        for error, otherwise, reason in (
+            (_caught(_user_calls(self.cadgen["broke"])), "input_error", "bug"),
+            (analytics.because(RuntimeError(), "browser"), "render_error", "browser"),
+            (FileNotFoundError("/w/secret.step"), "input_error", "no_file"),
+            (route("no such file"), "bad_request", "no_file"),
+            (playwright_timeout(), "render_error", "timeout"),
+            (MemoryError(), "render_error", "memory"),
+            (ValueError("bad camera"), "bad_request", "bad_request"),
+            (ValueError("bad camera"), "a word of tomorrow", "other"),
+        ):
+            with self.subTest(error=type(error).__name__, otherwise=otherwise):
+                self.assertEqual(analytics.snapshot_failure(error, otherwise), reason)
+                self.assertIn(reason, analytics.SNAPSHOT_FAILURES)
 
 
 class _Recording(unittest.TestCase):

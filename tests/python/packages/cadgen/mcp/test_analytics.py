@@ -16,6 +16,7 @@ import threading
 import time
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from unittest import mock
 
@@ -281,7 +282,11 @@ class ServerCountsTest(_Tmp):
             {"name": "view", "calls": 1},
         ])
         self.assertEqual((payload["schema"], payload["process"], payload["channel"], payload["presentation"],
-                          payload["client"]["name"]), (4, "app", "claude-directory", "tabs", "codex-mcp-client"))
+                          payload["client"]["name"]), (5, "app", "claude-directory", "tabs", "codex-mcp-client"))
+        # Under an id of its own, stamped with the time it was made: a random id, and a whole second.
+        self.assertEqual(str(uuid.UUID(payload["batch"], version=4)), payload["batch"])
+        self.assertIsInstance(payload["at"], int)
+        self.assertLessEqual(abs(payload["at"] - time.time()), 60)
         self.assertNotIn("secret", json.dumps(payload))
         self.assertNotIn(str(self.tmp), json.dumps(payload))
         # A batch with no use is not sent.
@@ -302,25 +307,61 @@ class ServerCountsTest(_Tmp):
         server.analytics.close()
         self.assertEqual(sent, [])
 
-    def test_a_batch_the_receiver_did_not_take_waits_for_the_next(self) -> None:
-        answers: list = [False, True, "refused", True]
-        sent: list[dict] = []
+    def test_a_batch_the_receiver_did_not_take_is_sent_again_whole_before_anything_newer(self) -> None:
+        # Offline twice, then back: the receiver may have taken a batch whose answer was lost, so the batch goes
+        # again byte for byte, its id and all, and what came since goes in a later batch of its own.
+        answers: list = [False, False, True, True, "refused", True]
+        sent: list[str] = []
         choose(True, by="cli", path=self.path)
-        recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or answers.pop(0))
+        recorder = Recorder(path=self.path, send=lambda payload: sent.append(json.dumps(payload)) or answers.pop(0))
         recorder.called("cad_show", True)
         recorder.opened("/work/a.step")
-        self.assertFalse(recorder.flush())  # offline: kept
+        self.assertFalse(recorder.flush())  # offline: kept whole
         recorder.called("cad_show", False, "no_file")
+        self.assertFalse(recorder.flush())  # still offline: the kept one is all that is tried
+        self.assertEqual(sent, [sent[0]] * 2)
+        recorder.called("cad_view", True)
         self.assertTrue(recorder.flush())
-        self.assertEqual(sent[1]["events"], [{"name": "files", "kind": "step", "count": 1},
-                                             {"name": "tool", "tool": "cad_show", "calls": 2, "errors": 1},
-                                             {"name": "tool_failure", "tool": "cad_show", "reason": "no_file", "count": 1}])
+        self.assertEqual(sent[:3], [sent[0]] * 3)
+        first, later = json.loads(sent[0]), json.loads(sent[3])
+        self.assertEqual(first["events"], [{"name": "files", "kind": "step", "count": 1},
+                                           {"name": "tool", "tool": "cad_show", "calls": 1, "errors": 0}])
+        self.assertNotEqual(later["batch"], first["batch"])
+        self.assertEqual(later["events"], [{"name": "tool", "tool": "cad_show", "calls": 1, "errors": 1},
+                                           {"name": "tool", "tool": "cad_view", "calls": 1, "errors": 0},
+                                           {"name": "tool_failure", "tool": "cad_show", "reason": "no_file", "count": 1}])
         # One the receiver refused (a 4xx) is dropped: sent again, it would take what comes next down with it.
         recorder.called("cad_view", True)
         self.assertFalse(recorder.flush())
         recorder.called("cad_show", True)
         self.assertTrue(recorder.flush())
-        self.assertEqual([event["tool"] for event in sent[3]["events"]], ["cad_show"])
+        self.assertEqual([event["tool"] for event in json.loads(sent[5])["events"]], ["cad_show"])
+        self.assertEqual(len(sent), 6)
+
+    def test_a_batch_not_taken_is_kept_whole_at_exit_and_dropped_by_a_no(self) -> None:
+        sent: list[str] = []
+        answers: list = [False]
+        choose(True, by="cli", path=self.path)
+        recorder = Recorder(path=self.path, send=lambda payload: sent.append(json.dumps(payload)) or answers.pop(0))
+        recorder.called("cad_show", True)
+        self.assertFalse(recorder.flush())
+        recorder.called("cad_view", True)
+        recorder.close()  # the batch owed, then what came since: each whole, in that order
+        following: list[str] = []
+        Recorder(path=self.path, send=lambda payload: following.append(json.dumps(payload)) or True).send_kept()
+        self.assertEqual(following[0], sent[0])
+        self.assertEqual([event["tool"] for event in json.loads(following[1])["events"]], ["cad_view"])
+        self.assertEqual(len(following), 2)
+        # A no said elsewhere while a batch is owed: never sent, nor kept.
+        answers.append(False)
+        recorder = Recorder(path=self.path, send=lambda payload: sent.append(json.dumps(payload)) or answers.pop(0))
+        recorder.called("cad_show", True)
+        self.assertFalse(recorder.flush())
+        choose(False, by="cli", path=self.path, forget=lambda id: True)
+        self.assertFalse(recorder.flush())
+        recorder.close()
+        self.assertEqual(len(sent), 2)
+        self.assertFalse((self.tmp / KEPT).exists())
 
     def test_a_failed_call_says_why_by_a_word_chosen_where_it_failed_never_what_it_said(self) -> None:
         server, sent = self.serve("claude-directory")

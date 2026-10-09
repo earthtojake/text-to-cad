@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { rowsOf } from './events.mjs';
+import { rowsOf, uuidV5 } from './events.mjs';
 import { EVENTS, missingSettings, posthogStore, SETTINGS, settingsOf } from './posthog.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
@@ -28,13 +28,13 @@ const DAEMON = {
 const SETTINGS_EU = { region: 'eu', projectKey: 'phc_project', personalKey: 'phx_personal', projectId: '1234' };
 
 // PostHog over a fetch that keeps what it was asked and answers `status`.
-function posthog(status = 200) {
+function posthog(status = 200, now = undefined) {
   const asked = [];
   const fetch = async (url, init) => {
     asked.push({ url, method: init.method ?? 'GET', headers: init.headers, body: init.body === undefined ? undefined : JSON.parse(init.body) });
     return new Response('{}', { status });
   };
-  return { asked, store: posthogStore(SETTINGS_EU, { fetch }) };
+  return { asked, store: posthogStore(SETTINGS_EU, { fetch, ...(now ? { now } : {}) }) };
 }
 
 test("each of a batch's rows is one PostHog event, under the install id, with the country and no location lookup", async () => {
@@ -62,8 +62,56 @@ test("the build daemon's counts are PostHog events of their own, each a window's
     channel: 'claude-directory', platform: 'linux', arch: 'x86_64', country: 'NZ' };
   const countsOf = event => Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'name'));
   assert.deepEqual(batch.map(event => event.properties), DAEMON.events.map(event => ({ ...context, ...countsOf(event) })));
-  assert.deepEqual(Object.keys(EVENTS).sort(),
-    ['build', 'exception', 'feature', 'files', 'health', 'snapshot', 'tool', 'tool_failure', 'view']);
+  assert.deepEqual(Object.keys(EVENTS).sort(), ['build', 'build_failure', 'exception', 'feature', 'files', 'health', 'snapshot',
+    'snapshot_failure', 'tool', 'tool_failure', 'view']);
+  // Schemas before 5 name no batch: PostHog makes up each event's uuid and stamps it as it arrives, as ever.
+  assert.ok(batch.every(event => !('uuid' in event) && !('timestamp' in event)));
+});
+
+// Schema 5: a named batch, made a minute before the receiver's clock (`NOW`).
+const NOW = Date.UTC(2026, 9, 9, 12, 0, 0);
+const NAMED = {
+  ...DAEMON, schema: 5, batch: '5d0f3c2e-8b1a-4c6e-9f2d-7a3b1e4c5d6f', at: NOW / 1000 - 60,
+  events: [
+    { name: 'build_failure', kind: 'dxf', via: 'script', reason: 'io_error', count: 2 },
+    { name: 'snapshot_failure', kind: 'step', reason: 'browser', count: 1 },
+    ...DAEMON.events,
+  ],
+};
+const at = (batch, now = NOW) => {
+  const { asked, store } = posthog(200, () => now);
+  return store.insert(rowsOf(batch)).then(() => asked[0].body.batch);
+};
+
+test("why builds and snapshots failed are PostHog's build_failed and snapshot_failed, by format and reason", async () => {
+  const [build, snapshot] = await at(NAMED);
+  assert.deepEqual([build.event, build.properties.kind, build.properties.via, build.properties.reason, build.properties.count],
+    ['build_failed', 'dxf', 'script', 'io_error', 2]);
+  assert.deepEqual([snapshot.event, snapshot.properties.kind, snapshot.properties.reason, snapshot.properties.count],
+    ['snapshot_failed', 'step', 'browser', 1]);
+  assert.ok(!('id' in build.properties) && !('at' in build.properties) && !('batch' in build.properties));
+});
+
+test('a batch sent again is the same PostHog events, uuid and time alike, so PostHog counts it once', async () => {
+  const first = await at(NAMED);
+  const again = await at(NAMED, NOW + 3 * 3600 * 1000); // its answer was lost; sent again hours later
+  assert.deepEqual(again, first);
+  assert.ok(first.every(event => event.timestamp === '2026-10-09T11:59:00.000Z'));
+  assert.equal(new Set(first.map(event => event.uuid)).size, first.length, 'one uuid per event of a batch');
+  // Another batch's events are their own, though they count the same.
+  const other = await at({ ...NAMED, batch: 'f1e2d3c4-b5a6-4978-8a1b-2c3d4e5f6a7b' });
+  assert.ok(other.every((event, index) => event.uuid !== first[index].uuid));
+  // A clock far off is not trusted with the time: the event is stamped as it arrives. Its uuid still holds.
+  for (const offset of [-8 * 24 * 3600, 2 * 3600]) {
+    const skewed = await at({ ...NAMED, at: NOW / 1000 + offset });
+    assert.ok(skewed.every(event => !('timestamp' in event)));
+    assert.deepEqual(skewed.map(event => event.uuid), first.map(event => event.uuid));
+  }
+});
+
+test('a row id is a UUIDv5, as RFC 9562 makes one', () => {
+  // Python's uuid.uuid5(uuid.NAMESPACE_DNS, 'python.org').
+  assert.equal(uuidV5('python.org', '6ba7b810-9dad-11d1-80b4-00c04fd430c8'), '886313e1-3b8a-5372-9b90-0c9aee199e5d');
 });
 
 test("why a tool's calls failed is PostHog's tool_failed, by tool and reason, to break down and add up", async () => {

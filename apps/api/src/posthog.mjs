@@ -22,7 +22,13 @@ import { FIELDS } from './events.mjs';
 export const EVENTS = {
   tool: 'tool_used', view: 'view_used', files: 'files_shown', build: 'models_built', snapshot: 'snapshots_rendered',
   feature: 'feature_used', health: 'daemon_health', exception: '$exception', tool_failure: 'tool_failed',
+  build_failure: 'build_failed', snapshot_failure: 'snapshot_failed',
 };
+// How far a batch's own time may be from the receiver's for an event to take it: PostHog keeps an event's
+// `timestamp` as given, so a sender's clock that is off would misplace its counts. Outside this, the event is
+// stamped as it arrives, as every event before schema 5 is.
+const AT_BEFORE_MS = 7 * 24 * 3600 * 1000; // a batch kept as its process exited, sent by the next one days later
+const AT_AFTER_MS = 3600 * 1000; // a clock a little fast
 // Frames that name no file of ours: never in the app, whatever the code around them.
 const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);
 // What a row says beside its own fields, from the batch it came in.
@@ -81,10 +87,25 @@ export function propertiesOf(row, country) {
 }
 
 /**
- * @param {{ region: string, projectKey: string, personalKey: string, projectId: string }} settings
- * @param {{ fetch?: typeof fetch }} [options]
+ * A row as one PostHog event. A row with an id (schema 5's, `events.mjs`: `idOf`) is sent under it as the event's
+ * `uuid`, and at its batch's time: PostHog takes events with the same uuid, event, distinct id and timestamp as
+ * one (they are de-duplicated as its tables merge), so a batch sent again -- its sender never heard it was taken
+ * -- is the same events again, not more counts. Its time is the batch's only near the receiver's clock (`now`);
+ * otherwise, and for every earlier schema's row, PostHog stamps it as it arrives.
  */
-export function posthogStore({ region, projectKey, personalKey, projectId }, { fetch: send = fetch } = {}) {
+export function eventOf(row, country, now = Date.now()) {
+  const event = { event: EVENTS[row.event], properties: propertiesOf(row, country) };
+  if (row.id) event.uuid = row.id;
+  const at = Number.isInteger(row.at) ? row.at * 1000 : null;
+  if (at !== null && at >= now - AT_BEFORE_MS && at <= now + AT_AFTER_MS) event.timestamp = new Date(at).toISOString();
+  return event;
+}
+
+/**
+ * @param {{ region: string, projectKey: string, personalKey: string, projectId: string }} settings
+ * @param {{ fetch?: typeof fetch, now?: () => number }} [options]
+ */
+export function posthogStore({ region, projectKey, personalKey, projectId }, { fetch: send = fetch, now = Date.now } = {}) {
   const capture = `https://${region}.i.posthog.com`;
   const api = `https://${region}.posthog.com/api/projects/${projectId}`;
   // Anything but a 2xx is the receiver's failure, never the client's: a 5xx tells it to keep its batch, or
@@ -98,7 +119,8 @@ export function posthogStore({ region, projectKey, personalKey, projectId }, { f
   return {
     /** @param {object[]} rows @param {{ country?: string | null }} [context] */
     async insert(rows, { country = null } = {}) {
-      const batch = rows.map(row => ({ event: EVENTS[row.event], properties: propertiesOf(row, country) }));
+      const time = now();
+      const batch = rows.map(row => eventOf(row, country, time));
       await call(`${capture}/batch/`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ api_key: projectKey, batch }),
       });
