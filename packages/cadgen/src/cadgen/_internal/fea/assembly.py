@@ -8,12 +8,15 @@ the tolerance), the boxes of each pair's faces, a lower bound on the distance
 from sampled tessellations, then ``BRepExtrema_DistShapeShape`` for the gap,
 then the common area of the two faces (the second moved across the gap first)
 so that parts meeting only along an edge or at a point are not in contact.
+Two solids that share volume overlap; an overlap no thicker than the contact
+tolerance is an interference (a press fit, or a modelling slip) and is
+contact too: the glue closes it as it closes a gap.
 
 Gluing is OpenCascade's general fuse (``BOPAlgo_Builder``): parts that share a
 face come out sharing ONE face, so netgen meshes them with shared nodes there
 and the mesh is conforming without any tie constraints. Only bonded parts are
-glued together; a group with a gap is glued with a fuzzy value of the
-tolerance, which closes the gap by moving geometry up to that far.
+glued together; a group with a gap or an interference is glued with a fuzzy
+value of the tolerance, which closes it by moving geometry up to that far.
 """
 
 from __future__ import annotations
@@ -24,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from cadgen.step_scene import StepScene
 
-__all__ = ["Contact", "Glued", "Overlap", "Part", "detect_contacts", "detect_overlaps", "display_names", "glue", "list_parts", "part_centre", "part_faces", "part_gap"]
+__all__ = ["Contact", "Glued", "Overlap", "Part", "detect_contacts", "detect_overlaps", "display_names", "glue", "interferences", "list_parts", "part_centre", "part_faces", "part_gap"]
 
 # OpenCascade's own confusion distance: a gap below it is touching.
 _TOUCHING_MM = 1e-7
@@ -66,6 +69,8 @@ class Contact:
     b: str
     area_mm2: float
     gap_mm: float
+    #: How deep the solids overlap, mm, when the contact is an interference (0 = none).
+    interference_mm: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -78,6 +83,11 @@ class Overlap:
     a: str
     b: str
     volume_mm3: float
+    #: The shared solid's thickness, mm: twice its volume over its surface area,
+    #: which is a thin slab's own thickness.
+    thickness_mm: float = 0.0
+    #: Half the shared solid's surface area, mm^2: a thin slab's footprint.
+    area_mm2: float = 0.0
 
 
 @dataclass
@@ -293,10 +303,29 @@ def detect_overlaps(parts: list[Part], *, log=None) -> list[Overlap]:
             continue
         props = GProp_GProps()
         BRepGProp.VolumeProperties_s(common.Shape(), props)
-        if props.Mass() > _MIN_VOLUME_MM3:
+        volume = float(props.Mass())
+        if volume > _MIN_VOLUME_MM3:
+            surface = GProp_GProps()
+            BRepGProp.SurfaceProperties_s(common.Shape(), surface)
+            area = float(surface.Mass())
             a, b = sorted((parts[i], parts[j]), key=lambda part: part.volume_mm3)
-            overlaps.append(Overlap(a=a.ref, b=b.ref, volume_mm3=float(props.Mass())))
+            overlaps.append(Overlap(a=a.ref, b=b.ref, volume_mm3=volume, thickness_mm=2 * volume / area, area_mm2=area / 2))
     return overlaps
+
+
+def interferences(overlaps: list[Overlap], tolerance_mm: float) -> tuple[list[Contact], list[Overlap]]:
+    """The overlaps no thicker than ``tolerance_mm``, as contacts to bond, and the overlaps left.
+
+    A shared solid that thin is two faces pressed a little into each other, a
+    contact the glue closes like a gap; a thicker one is parts in each other's
+    space, which the model may have wrong.
+    """
+    reach = tolerance_mm * (1 + 1e-6)
+    contacts = [
+        Contact(a=o.a, b=o.b, area_mm2=o.area_mm2, gap_mm=0.0, interference_mm=o.thickness_mm)
+        for o in overlaps if o.thickness_mm <= reach
+    ]
+    return contacts, [o for o in overlaps if o.thickness_mm > reach]
 
 
 def detect_contacts(parts: list[Part], tolerance_mm: float, *, skip: "set[frozenset[str]]" = frozenset(), log=None) -> list[Contact]:
@@ -367,7 +396,8 @@ def glue(shapes: list, bonded: list[tuple[int, int, float]], tolerance_mm: float
     """Glue the shapes joined by ``bonded`` (``(part, part, gap_mm)``) into one compound.
 
     Each group of parts bonded to each other is fused on its own (fuzzy at the
-    tolerance when a pair in it has a gap); parts in different groups only sit
+    tolerance when a pair in it has a gap; an interference's depth counts as
+    one); parts in different groups only sit
     side by side in the compound and share nothing.
     """
     from OCP.BOPAlgo import BOPAlgo_Builder

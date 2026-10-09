@@ -212,6 +212,12 @@ class AssemblyChecksTest(unittest.TestCase):
         self.assertEqual((f["severity"], f["type"]), ("warning", "gap_closed"))
         self.assertEqual(f["summary"], "Closed a 0.08 mm gap between 'post' and 'base' to bond them")
 
+    def test_an_interference_closed_to_bond_is_called_one(self):
+        f = gap_closed("post", "base", 0.01, interference=True)
+        self.assertEqual((f["severity"], f["type"]), ("warning", "gap_closed"))
+        self.assertEqual(f["summary"], "Closed a 0.01 mm interference between 'post' and 'base' to bond them")
+        self.assertEqual(f["description"], "the parts overlapped by 0.01 mm, within the contact tolerance")
+
     def test_yields_names_the_part_as_it_always_does(self):
         (f,) = findings(solved(part="post", assembly=True, peak_MPa=310.0, peak_gauss_MPa=320.0))
         self.assertEqual(f["summary"], "The post yields: peak stress 310 MPa is above the 276 MPa yield strength of 6061-T6")

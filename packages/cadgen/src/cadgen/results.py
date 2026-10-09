@@ -458,6 +458,8 @@ class FeaPair:
     type: str
     #: The volume the two solids share, mm^3 (``overlapping`` only).
     overlap_mm3: float = 0.0
+    #: How deep the solids overlap, mm, for an interference within the tolerance: ``bonded``, the glue closes it.
+    interference_mm: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -487,6 +489,7 @@ class FeaPartsResult:
                 lines.append(f"{a} ↔ {b} · overlapping · {pair.overlap_mm3:.4g} mm³")
             elif pair.type == "bonded":
                 gap = f" · gap {pair.gap_mm:.3g} mm" if pair.gap_mm else ""
+                gap += f" · interference {pair.interference_mm:.2g} mm" if pair.interference_mm else ""
                 lines.append(f"{a} ↔ {b} · {pair.area_mm2:.4g} mm²{gap} · bonded")
             else:
                 lines.append(f"{a} ↔ {b} · gap {pair.gap_mm:.3g} mm · not connected")

@@ -166,6 +166,30 @@ class DetectContactsTest(unittest.TestCase):
         skip = {frozenset((overlap.a, overlap.b))}
         self.assertEqual([c for c in detect_contacts(parts, TOLERANCE, skip=skip) if refs["block"] in (c.a, c.b)], [])
 
+    def test_an_overlap_no_thicker_than_the_tolerance_is_an_interference_to_bond(self):
+        from cadgen._internal.fea.assembly import detect_overlaps, interferences, list_parts
+        from cadgen.step_scene import read_scene
+
+        parts = list_parts(read_scene(_write_assembly(self.tmp, lift=-0.01, name="pressed")))
+        refs = _refs_of(parts)
+        (overlap,) = detect_overlaps(parts)
+        self.assertAlmostEqual(overlap.thickness_mm, 0.01, delta=1e-4)
+        (contact,), left = interferences([overlap], TOLERANCE)
+        self.assertEqual(left, [])
+        self.assertEqual((contact.a, contact.b), (refs["post"], refs["base"]))
+        self.assertEqual(contact.gap_mm, 0.0)
+        self.assertAlmostEqual(contact.interference_mm, 0.01, delta=1e-4)
+        self.assertAlmostEqual(contact.area_mm2, 100.0, delta=1.0)
+
+    def test_an_overlap_thicker_than_the_tolerance_stays_an_overlap(self):
+        from cadgen._internal.fea.assembly import detect_overlaps, interferences, list_parts
+        from cadgen.step_scene import read_scene
+
+        parts = list_parts(read_scene(_write_assembly(self.tmp, overlap_block=True, name="sunk")))
+        (overlap,) = detect_overlaps(parts)
+        self.assertAlmostEqual(overlap.thickness_mm, 2 * 100.0 / 240.0, places=6)  # 1 x 10 x 10 mm: 2 V / A
+        self.assertEqual(interferences([overlap], TOLERANCE), ([], [overlap]))
+
     def test_parts_that_only_touch_do_not_overlap(self):
         from cadgen._internal.fea.assembly import detect_overlaps
 
@@ -350,6 +374,17 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertAlmostEqual(result.pairs[1].overlap_mm3, 100.0, places=3)
         self.assertTrue(result.human_lines()[0].endswith(": 3 parts, 1 touching pairs, 1 overlapping"))
         self.assertIn("block ↔ base · overlapping · 100 mm³", result.human_lines())
+
+    def test_an_interference_within_the_tolerance_is_listed_as_bonded(self):
+        from cadgen import fea
+
+        with quiet():
+            result = fea.parts(_write_assembly(self.tmp, lift=-0.01))
+        (pair,) = result.pairs
+        self.assertEqual((pair.type, pair.between, pair.gap_mm), ("bonded", ("post", "base"), 0.0))
+        self.assertAlmostEqual(pair.interference_mm, 0.01, delta=1e-4)
+        self.assertTrue(result.human_lines()[0].endswith(": 2 parts, 1 touching pairs"))
+        self.assertTrue(any(line.startswith("post ↔ base · ") and line.endswith(" · interference 0.01 mm · bonded") for line in result.human_lines()))
 
     def test_a_near_miss_is_not_counted_as_a_touching_pair(self):
         from cadgen import fea
@@ -856,6 +891,30 @@ class SolveAssemblyTest(unittest.TestCase):
         (finding,) = [f for f in result.findings if f["type"] == "gap_closed"]
         self.assertEqual(finding["summary"], "Closed a 0.08 mm gap between 'post' and 'base' to bond them")
         self.assertAlmostEqual(result.summary["reaction_force_N"][0], -1000.0, delta=0.5)
+
+    def test_an_interference_that_is_closed_to_bond_is_said(self):
+        from cadgen import fea
+        from cadgen.step_scene import read_scene
+
+        step = _write_assembly(self.tmp, lift=-0.01, name="pressed")
+        scene = read_scene(step)
+        refs = _refs(scene)
+        study = {
+            "material": "6061",
+            "parts": {"base": {"material": "6061"}, "post": {"material": "steel"}},
+            "fixtures": [{"faces": [_face_at(scene, refs["base"], 0.0)]}],
+            "loads": [{"faces": [_face_at(scene, refs["post"], 39.99)], "type": "force", "vector_N": [1000, 0, 0]}],
+            "mesh": {"size_mm": 4.0},
+        }
+        with quiet():
+            result = fea.solve(step, self.tmp / "pressed.glb", study=study)
+        self.assertTrue(result.ok)
+        self.assertNotIn("overlapping_parts", self._types(result))
+        (finding,) = [f for f in result.findings if f["type"] == "gap_closed"]
+        self.assertEqual(finding["summary"], "Closed a 0.01 mm interference between 'post' and 'base' to bond them")
+        self.assertAlmostEqual(result.summary["reaction_force_N"][0], -1000.0, delta=0.5)
+        (joint,) = json.loads(result.sidecar.read_text(encoding="utf-8"))["connections"]
+        self.assertEqual(joint["type"], "bonded")
 
     def _not_solved(self, step, study):
         from unittest import mock

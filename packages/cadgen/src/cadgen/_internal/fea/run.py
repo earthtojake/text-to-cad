@@ -119,7 +119,7 @@ _NEAR_MISS_MM = 1.0
 
 
 def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verbose: bool = False) -> FeaPartsResult:
-    from cadgen._internal.fea.assembly import detect_contacts, detect_overlaps, display_names, list_parts
+    from cadgen._internal.fea.assembly import detect_contacts, detect_overlaps, display_names, interferences, list_parts
     from cadgen._internal.fea.mesh import require_fea_stack
 
     require_fea_stack()
@@ -131,12 +131,14 @@ def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verb
     parts = list_parts(scene)
     logger.info(f"read {len(parts)} parts; looking for pairs within {max(contact_tolerance_mm, _NEAR_MISS_MM)} mm")
     name = dict(zip((part.ref for part in parts), display_names(parts)))
-    overlaps = detect_overlaps(parts, log=logger.info)
-    logger.info(f"found {len(overlaps)} overlapping pairs")
+    shared = detect_overlaps(parts, log=logger.info)
+    pressed, overlaps = interferences(shared, contact_tolerance_mm)
+    logger.info(f"found {len(overlaps)} overlapping pairs" + (f" and {len(pressed)} interferences within the tolerance" if pressed else ""))
     found = detect_contacts(
-        parts, max(contact_tolerance_mm, _NEAR_MISS_MM), skip={frozenset((o.a, o.b)) for o in overlaps}, log=logger.info
+        parts, max(contact_tolerance_mm, _NEAR_MISS_MM), skip={frozenset((o.a, o.b)) for o in shared}, log=logger.info
     )
     logger.info(f"found {len(found)} touching or near pairs")
+    order = {part.ref: i for i, part in enumerate(parts)}
     pairs = [
         FeaPair(
             between=(name[c.a], name[c.b]),
@@ -144,8 +146,9 @@ def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verb
             area_mm2=round(c.area_mm2, 4),
             gap_mm=round(c.gap_mm, 6),
             type="bonded" if c.gap_mm <= contact_tolerance_mm * (1 + 1e-6) else "not_connected",
+            interference_mm=round(c.interference_mm, 6),
         )
-        for c in found
+        for c in sorted(found + pressed, key=lambda c: sorted((order[c.a], order[c.b])))
     ] + [
         FeaPair(between=(name[o.a], name[o.b]), refs=(o.a, o.b), area_mm2=0.0, gap_mm=0.0, type="overlapping",
                 overlap_mm3=round(o.volume_mm3, 4))
@@ -194,7 +197,7 @@ def _find_part(parts: list, names: list[str], key: str, where: str) -> int:
 
 
 def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
-    from cadgen._internal.fea.assembly import _groups, detect_contacts, detect_overlaps, display_names, list_parts
+    from cadgen._internal.fea.assembly import _groups, detect_contacts, detect_overlaps, display_names, interferences, list_parts
 
     logger.info("reading the parts")
     parts = list_parts(scene)
@@ -211,12 +214,15 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
         given.add(index)
         materials[index] = material
 
-    overlaps = detect_overlaps(parts, log=logger.info)
-    logger.info(f"found {len(overlaps)} overlapping pairs")
+    shared = detect_overlaps(parts, log=logger.info)
+    # An overlap no thicker than the tolerance is an interference: contact, bonded like a gap.
+    pressed, overlaps = interferences(shared, parsed.contact_tolerance_mm)
+    logger.info(f"found {len(overlaps)} overlapping pairs" + (f" and {len(pressed)} interferences within the tolerance" if pressed else ""))
     overlap_of = {frozenset((index_of[o.a], index_of[o.b])): o for o in overlaps}
     contacts = detect_contacts(
-        parts, parsed.contact_tolerance_mm, skip={frozenset((o.a, o.b)) for o in overlaps}, log=logger.info
+        parts, parsed.contact_tolerance_mm, skip={frozenset((o.a, o.b)) for o in shared}, log=logger.info
     )
+    contacts = sorted(contacts + pressed, key=lambda c: sorted((index_of[c.a], index_of[c.b])))
     logger.info(f"found {len(contacts)} touching pairs")
     pair_of = {frozenset((index_of[c.a], index_of[c.b])) for c in contacts}
     freed: set[frozenset[int]] = set()
@@ -511,6 +517,7 @@ def _connections(plan: _Plan, volume) -> list[dict]:
             "type": "bonded" if (c.a, c.b) in bonded else "free",
             "area_mm2": round(c.area_mm2, 4),
             "gap_mm": round(c.gap_mm, 6),
+            "interference_mm": round(c.interference_mm, 6),
             "faces": sorted(volume.joint_faces.get(tuple(sorted((index_of[c.a], index_of[c.b]))), ()), key=_face_key),
         }
         for c in plan.contacts
@@ -746,6 +753,10 @@ def solve_study(
         findings = checks.assembly_findings(all_solved)
         findings += [checks.default_material(plan.names[i], plan.materials[i].name) for i in plan.defaulted]
         findings += [checks.gap_closed(name_of[c.a], name_of[c.b], c.gap_mm) for c in plan.bonded if c.gap_mm > 0]
+        findings += [
+            checks.gap_closed(name_of[c.a], name_of[c.b], c.interference_mm, interference=True)
+            for c in plan.bonded if c.interference_mm > 0
+        ]
         index_of = {part.ref: i for i, part in enumerate(plan.parts)}
         findings += [
             checks.overlapping_parts(name_of[o.a], name_of[o.b], o.volume_mm3)

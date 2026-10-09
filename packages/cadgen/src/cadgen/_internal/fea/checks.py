@@ -128,8 +128,18 @@ def default_material(part: str, material_name: str) -> dict:
     )
 
 
-def gap_closed(first: str, second: str, gap_mm: float) -> dict:
-    """Two parts a little apart that were bonded anyway, by moving geometry up to the gap."""
+def gap_closed(first: str, second: str, gap_mm: float, *, interference: bool = False) -> dict:
+    """Two parts a little apart, or a little into each other (``interference``), that were bonded
+    anyway by moving geometry up to that far."""
+    if interference:
+        # Two figures: the depth is estimated from the shared solid's volume and area, not measured.
+        return _finding(
+            "warning",
+            "gap_closed",
+            f"Closed a {gap_mm:.2g} mm interference between {quoted(first)} and {quoted(second)} to bond them",
+            f"the parts overlapped by {gap_mm:.4g} mm, within the contact tolerance",
+            [],
+        )
     return _finding(
         "warning",
         "gap_closed",

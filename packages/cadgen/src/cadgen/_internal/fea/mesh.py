@@ -379,7 +379,7 @@ def mesh_assembly(
         log(f"gluing {len(bonded)} bonded pairs of {len(parts)} parts")
     glued = glue(
         [part.shape for part in parts],
-        [(index_of[c.a], index_of[c.b], c.gap_mm) for c in bonded if c.a in index_of and c.b in index_of],
+        [(index_of[c.a], index_of[c.b], max(c.gap_mm, c.interference_mm)) for c in bonded if c.a in index_of and c.b in index_of],
         tolerance_mm,
     )
     diagonal = _bbox_diagonal(glued.shape)
