@@ -105,6 +105,10 @@ export function ToolPanelClose({ className }) {
  * beside the chevron, and has no grip while folded: there is no height to set. Which panels are
  * folded is the person's (`ToolStack.jsx`), by `id`, across files.
  *
+ * `fitContent`: a resizable panel that opens at its content's height rather than its id's default cap
+ * (Study, short, its controls at its foot): it still gives way as its `fit` says when the stack is
+ * short, and a cap the person drags is kept as any other.
+ *
  * `closable`: the tree's. Its X (`ToolPanelClose`) puts the panel away — `hidden`, kept mounted —
  * and the tool it belongs to brings it back; whether it is closed is the person's too, by `id`,
  * starting closed on a phone and wherever the tool it belongs to says the file starts it closed
@@ -116,14 +120,14 @@ export function ToolPanelClose({ className }) {
  * @param {{ id: string, title?: import("react").ReactNode, name?: string, label: string, summary?: import("react").ReactNode,
  *   actions?: import("react").ReactNode,
  *   header?: import("react").ReactNode, footer?: import("react").ReactNode, collapsible?: boolean, closable?: boolean, onClose?: (() => void) | null, closeLabel?: string,
- *   fit?: "fixed" | "tree" | "details", resizable?: boolean, hidden?: boolean, defaultCollapsed?: boolean,
+ *   fit?: "fixed" | "tree" | "details", resizable?: boolean, fitContent?: boolean, hidden?: boolean, defaultCollapsed?: boolean,
  *   children?: import("react").ReactNode }} props
  *   `label` names the panel for assistive technology ("Clip controls"), with a heading or
  *   without; the chevron, the X and the grip take their names from it, unless the X says
  *   what it does itself (`closeLabel`, "Clear selection").
  */
 export default function ToolPanel({ id, title = null, name = "", label, summary = null, actions = null, header = null, footer = null, collapsible = true, closable = false, onClose = null, closeLabel = "",
-  fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, children }) {
+  fit = "fixed", resizable = false, fitContent = false, hidden = false, defaultCollapsed = false, children }) {
   const stack = useContext(ToolStackContext);
   const kept = Boolean(stack && id);
   // Folded: the person's, kept by the stack across files; a panel drawn alone keeps its own.
@@ -150,7 +154,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const clampWidth = value => clampToolPanelWidth(value, stack?.viewerWidth || window.innerWidth);
   const clampHeight = value => clampToolPanelHeight(value, stack?.room() || Infinity);
   const width = size.width ? clampWidth(size.width) : TOOL_PANEL_WIDTH;
-  const cap = sized ? size.height ?? stack?.defaultHeight(id) ?? null : null;
+  const cap = sized ? size.height ?? (fitContent ? null : stack?.defaultHeight(id)) ?? null : null;
   // One gesture's outcome, written once: a width, a cap, or both.
   const settle = change => {
     setDraft(null);

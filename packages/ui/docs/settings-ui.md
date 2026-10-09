@@ -316,7 +316,9 @@ stack.
   Reference opens shorter, capped at 144px on both (`TOOL_PANEL_REFERENCE_HEIGHT`:
   its heading, its Copy and four compact rows between them — a reference's key
   measurements, an arc's four the most; a longer one, a robot link's facts,
-  scrolls, or a drag of its corner shows it).
+  scrolls, or a drag of its corner shows it). An FEA result's Study is short and ends in
+  controls, so it opens at its content's height, uncapped (`fitContent`), giving way as the
+  tree does only when the stack is short; a cap the person drags holds as for any panel.
   A cap is never a floor. Setting one panel's cap changes no other's.
 - **One grip, on a resizable panel only.** A resizable panel is sized from its
   bottom-right corner alone, by the grip Quick Edit's box has
@@ -554,7 +556,8 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   committed number, from 0 to four times the file's own exaggeration. A result written before
   its study was recorded has Result alone. Nothing in Study is cut off at the one width: Material's
   and Mesh's details wrap under their label's row onto a second line, as a Reference's values
-  wrap between words. A GLB that is not a result has no strip at all.
+  wrap, between words only (a hyphenated name, "6061‑T6", and a number with its unit, "276 MPa",
+  never part). It opens at its content's height (see Heights), so Result's slider is in view. A GLB that is not a result has no strip at all.
 - **Choosing faces.** A fixed face, a load or a load's face chosen in Study tints its triangles
   (two thirds of the way to magenta, which no colour of the ramp is, so it reads at either end
   of the ramp while the stress still shows through) and carries

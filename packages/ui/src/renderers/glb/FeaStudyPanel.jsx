@@ -63,6 +63,9 @@ function RowText({ row }) {
   </>;
 }
 
+/** Text that wraps between words alone: a hyphenated name ("6061-T6") and a number and its unit ("276 MPa") never part. */
+const unbroken = (text) => String(text).replace(/(\S)-(?=\S)/g, "$1\u2011").replace(/(\d) (?=[A-Za-zµ°%])/g, "$1\u00a0");
+
 /**
  * A row that only says something (Material, Mesh): its detail wraps between words onto further
  * lines, as a Reference's values do, so nothing of it is cut off at the panel's one width.
@@ -71,7 +74,7 @@ function StudyFactRow({ row }) {
   return <li className="min-w-0">
     <TreeRowSurface dense className="h-auto min-h-6 items-baseline gap-1.5 py-1 pl-4" style={{ height: "auto" }} data-study-row={row.id}>
       <span className="shrink-0">{row.label}</span>
-      <span className="min-w-0 flex-1 text-micro text-muted-foreground [overflow-wrap:break-word]" data-study-detail="">{row.detail}</span>
+      <span className="min-w-0 flex-1 text-micro text-muted-foreground [overflow-wrap:break-word]" data-study-detail="">{unbroken(row.detail)}</span>
     </TreeRowSurface>
   </li>;
 }
@@ -129,7 +132,7 @@ export default function FeaStudyPanel({ active, result, rows, chosen, onChoose, 
   const shared = { depth: 0, chosen, collapsed, toggle, onChoose };
   return <>
     {/* Headed "Study"; its X closes it, and Select, pressed while it is the tool, opens it again. */}
-    <ToolPanel id="tree" title="Study" label="Study" actions={<ToolPanelClose />} fit="tree" resizable closable collapsible={false} hidden={!active}>
+    <ToolPanel id="tree" title="Study" label="Study" actions={<ToolPanelClose />} fit="tree" resizable fitContent closable collapsible={false} hidden={!active}>
       <ul className="flex flex-col px-1 pb-1 text-tiny" aria-label="Study">
         {rows.map((row) => <StudyRow key={row.id} row={row} {...shared} />)}
         <StudyRow row={RESULT_ROW} {...shared} content={<FeaResultControls result={result} field={field} scale={scale}

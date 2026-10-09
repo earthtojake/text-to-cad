@@ -59,7 +59,7 @@ function ViewerElement({ children }: { children: React.ReactNode }) {
 }
 const colourBytes = (mesh: Mesh) => Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
 
-function mount(extras: Record<string, unknown> | null, state?: unknown, { actions = () => {}, host = testHost(), faces = null }: { actions?: (actions: readonly any[]) => void, host?: any, faces?: number[] | null } = {}) {
+function mount(extras: Record<string, unknown> | null, state?: unknown, { actions = () => {}, host = testHost(), faces = null, settings = { toolStack: { panels: {}, collapsed: {} } } }: { actions?: (actions: readonly any[]) => void, host?: any, faces?: number[] | null, settings?: any } = {}) {
   const built = resultRoot(extras, faces);
   loaded.root = built.root;
   // One scene per file, as the hook holds it: a render is not a new result.
@@ -68,7 +68,6 @@ function mount(extras: Record<string, unknown> | null, state?: unknown, { action
   slot.setAttribute('data-test-navbar', '');
   document.body.append(slot);
   const save = vi.fn();
-  const settings = { toolStack: { panels: {}, collapsed: {} } };
   const preferences = { getSnapshot: () => settings, subscribe: () => () => {}, update() {} };
   const catalog = { entries: [], error: null };
   const client = { resources: {}, subscribe: () => () => {}, getSnapshot: () => catalog };
@@ -348,15 +347,21 @@ it('Study lists the material, the fixed faces, each load with its faces and the 
   expect(study.querySelector('h3')!.textContent).toBe('Study');
   expect(study.querySelector('button[aria-label="Close study"]')).toBeTruthy();
   expect(rowTexts(study)).toEqual([
-    'Material6061-T6 · yield 276 MPa', 'Fixed', 'Face 1fixed', 'Loads', '2500 Ndown', 'Face 2loaded',
-    'Mesh1.9 mm elements · refined from 2.8 mm', 'Result',
+    'Material6061\u2011T6 · yield 276\u00a0MPa', 'Fixed', 'Face 1fixed', 'Loads', '2500 Ndown', 'Face 2loaded',
+    'Mesh1.9\u00a0mm elements · refined from 2.8\u00a0mm', 'Result',
   ]);
   expect(study.querySelector('[role="combobox"][aria-label="Result field"]')).toBeTruthy();
   // Material's and Mesh's details wrap rather than being cut off at the one width.
   const details = Array.from(study.querySelectorAll('[data-study-detail]'));
-  expect(details.map(detail => detail.textContent)).toEqual(['6061-T6 · yield 276 MPa', '1.9 mm elements · refined from 2.8 mm']);
+  // ... between words only: a hyphenated name and a number with its unit never part.
+  expect(details.map(detail => detail.textContent)).toEqual(['6061\u2011T6 · yield 276\u00a0MPa', '1.9\u00a0mm elements · refined from 2.8\u00a0mm']);
   for (const detail of details) expect(detail.className).not.toMatch(/truncate|whitespace-nowrap/);
   for (const detail of details) expect((detail.closest('[data-study-row]') as HTMLElement).style.height).toBe('auto');
+  // It opens at its content's height, so Result's slider is not under its foot; a person's own cap still holds.
+  expect(study.style.maxHeight).toBe('');
+  cleanup();
+  mount(STUDIED, undefined, { faces: FACES, settings: { toolStack: { panels: { tree: { height: 200 } }, collapsed: {} } } });
+  expect(studyPanel()!.style.maxHeight).toBe('200px');
 });
 
 it('a face both fixed and loaded is named for both, chosen from either row or picked', async () => {
