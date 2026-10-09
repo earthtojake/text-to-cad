@@ -486,6 +486,13 @@ class BakingStyles(unittest.TestCase):
         self.assertRegex(str(caught.exception),
                          r"^animation clip 'kink' part o1\.2\.1 at t=[0-9.]+ s: tube deformation: path is not "
                          r"tangent-continuous before segment 1$")
+        # The same broken path held still for the whole clip has no changing interval to
+        # be compiled in, and fails all the same.
+        with self.assertRaises(AnimationError) as caught:
+            _bake("held", lambda t, m: kink(1.0, m), duration=1, fps=10)
+        self.assertRegex(str(caught.exception),
+                         r"^animation clip 'held' part o1\.2\.1 at t=0 s: tube deformation: path is not "
+                         r"tangent-continuous before segment 1$")
 
 
 class ResolvingTargets(unittest.TestCase):

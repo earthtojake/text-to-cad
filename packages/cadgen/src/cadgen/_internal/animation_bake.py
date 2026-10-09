@@ -958,6 +958,14 @@ def _refine_tube_keys(keep: list[int], written: list[Any], times: list[float], r
         if moved > tolerance or turned > TUBE_TURN_TOLERANCE_DEG:
             kept.add(m)
             stack += [(i, m), (m, j)]
+    # Every path the skin keeps is one a renderer draws, so each is compiled once: a
+    # centerline that never moves has no interval above to compile it in, and a corner
+    # or gap in it fails here like any other.
+    previous = None
+    for k in sorted(kept):
+        if previous is None or written[k] != written[previous]:
+            joints(k)
+        previous = k
     return sorted(kept)
 
 
