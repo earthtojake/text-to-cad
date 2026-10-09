@@ -103,6 +103,8 @@ was last written a week ago (`gc.OBSOLETE_RETIRE_AFTER_SECONDS`), and an
 obsolete surface with its meshes and table, once the youngest is (§8): an older cadgen
 still in use derives each again at most once a week, and an upgrade's
 leftovers go within about a week. A newer cadgen's derived entry is never obsolete.
+Kernel versions are not ordered here: an entry of another build123d or OCP is
+left to the cap.
 
 Records and document entries carry their schema version in their key,
 `<key>-v<schema>` (`index.versioned_key`; `RECORD_SCHEMA_VERSION` and
@@ -116,8 +118,6 @@ migrates another version's entry. Any key this cadgen does not own --
 another schema version's, or the unversioned key a cadgen before this rule
 wrote -- is obsolete here, retired a week after its last write like the others
 (§8), and until then the trees it names stay reachable.
-Kernel versions are not ordered here: an entry of another build123d or OCP is
-left to the cap.
 
 `index/bounds` holds bounding boxes of stored geometry (`store/bounds.py`).
 A key names what was measured and how: a component's BREP object hash or a
