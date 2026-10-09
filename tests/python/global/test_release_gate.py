@@ -147,7 +147,7 @@ class PublishGate(unittest.TestCase):
 
     def test_installers_get_the_version_only_once_pypi_serves_it(self):
         # The upload, then PyPI's index -- what uv resolves a pin through -- listing it, both in the
-        # publish job, which the branches job needs. The docs feed and the tag follow the branches.
+        # publish job, which the branches job needs. The docs deploy and the tag follow the branches.
         publish = JOBS["publish"]
         self.assertLess(publish.index("pypa/gh-action-pypi-publish"), publish.index("https://pypi.org/simple/cadgen/"))
         branches = condition("branches")

@@ -16,13 +16,16 @@ exits, each batch stamped with the time it arrives:
   and from the apps the agent app's name and version and how that app shows CAD (tabs, inline or
   text) -- or, from the browser viewer, ``cadgen-viewer`` and ``browser``;
 - ``tool`` (the CAD app): how many times each CAD tool was called, and how many of those failed;
+- ``tool_failure`` (the CAD app): how many of a tool's calls failed for each reason (``FAILURES``): one
+  word cadgen chose where the call failed -- the caller named no file, or no view; a view that did not
+  answer; the CAD Viewer that did not start; cadgen's own bug -- never the failure's message;
 - ``view`` (the apps): how many times a CAD view was touched by a person or switched models --
   time spent looking at a model calls no tool, and is use all the same;
 - ``files`` (the apps): how many distinct files of each format (``step``, ``stl``, ...) a CAD view
   showed for the first time that day -- told apart here, by path, and sent as a number;
 - ``build`` (the daemon): for each format and who asked (``VIAS``), how many builds, how each
-  ended (``OUTCOMES``: failed, lost its worker, or stopped when whoever asked left), how many the
-  store answered without building, and how long they took;
+  ended (``OUTCOMES``: failed, lost its worker, or stopped: whoever asked left, or someone stopped its
+  worker), how many the store answered without building, and how long they took;
 - ``snapshot`` (the daemon, told by the command that rendered it): for each format, how many
   renders, how many failed, and how long they took;
 - ``feature``: how many builds made an assembly or declared mesh exports, snapshots posed joints or
@@ -131,7 +134,8 @@ from cadgen.settings import LOCK, read_section, settings_path, update_section
 LOG = logging.getLogger("cadgen.analytics")
 
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
-SCHEMA = 3  # 3: the build daemon's counts, and files as numbers; 2: the install's channel replaced `source`
+# 4: why tool calls failed; 3: the build daemon's counts, and files as numbers; 2: the install's channel replaced `source`
+SCHEMA = 4
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and a yes
 # to less counts as no answer again; a no stays a no. Restarts and updates that send nothing new keep
 # the answer: it lives in the person's state directory, not the install.
@@ -172,8 +176,19 @@ PROCESSES = frozenset({"app", "viewer", "daemon"})
 # Who asked for a build: a model script (``python model.py``) or a ``cadgen`` command (``cadgen step build``, ...).
 VIAS = frozenset({"script", "command"})
 # How a build ended: built; failed (the model raised, or its command refused what it was given); crashed (its
-# worker died under it); or cancelled (whoever asked left before it ended, and it was stopped).
+# worker died under it); or cancelled (whoever asked left before it ended, and it was stopped, or someone
+# stopped its worker: ``cadgen.daemon.pool.stopped``).
 OUTCOMES = frozenset({"ok", "failed", "crashed", "cancelled"})
+# Why a CAD tool's call failed, named where it failed (``cadgen.mcp.server.ToolFailed``), never read from its
+# message. The caller's: it named no file (``no_path``), one by a relative path (``relative_path``), a path with
+# no file (``no_file``) or a file CAD does not open (``not_cad``); no view, or one that is gone or shows no model
+# (``no_view``); a view that shows its host's file alone (``wrong_view``); arguments the tool could not read
+# (``bad_request``). The view's: it did not answer in time (``timeout``), answered with an error or without
+# an image (``view_error``), or with one too large for the host (``too_large``). The machine's: the CAD Viewer
+# did not start (``no_viewer``). cadgen's: anything else it raised (``bug``, reported as an ``exception`` too).
+# ``other``: a failure that named none of these.
+FAILURES = frozenset({"no_path", "relative_path", "no_file", "not_cad", "no_view", "wrong_view", "bad_request",
+                      "timeout", "view_error", "too_large", "no_viewer", "bug", "other"})
 # What a person used: a model with children, a model declaring mesh exports (``@stl``, ``@glb``, ``@threemf``),
 # a snapshot that posed joints or played an animation, an engineering drawing (``@eng_drawing``), and a CAD
 # view's Quick Edit sending its prompt.
@@ -185,6 +200,7 @@ HEALTH = ("workers", "crashes", "recycles", "refusals")
 # names, its counts added up over the window -- ``longest`` is the longest.
 EVENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "tool": (("tool",), ("calls", "errors")),
+    "tool_failure": (("tool", "reason"), ("count",)),
     "view": ((), ("calls",)),
     "files": (("kind",), ("count",)),
     "build": (("kind", "via"), ("count", "failed", "crashed", "cancelled", "cached", "seconds", "longest")),
@@ -204,7 +220,9 @@ CRASHES_PENDING = 16  # past this many different crashes waiting, a process coun
 # given (a model that failed, a file that is not there, an argument it cannot take). Where cadgen reports a
 # failure to the person anyway -- a build's, a command's -- only these are crashes, and only where Python
 # raised them in cadgen's own code: never at a ``raise`` (``_RAISED``), where cadgen says the person's
-# mistake in these words too ("@step returned a dict" is a TypeError).
+# mistake in these words too ("@step returned a dict" is a TypeError). So cadgen code that takes what the
+# person gave it -- a value, a name to forward (``cadgen.build123d``) -- checks it and says so at a raise:
+# Python's error from using it unchecked would read as cadgen's own mistake.
 BUGS = (AttributeError, LookupError, TypeError, NameError, AssertionError, ZeroDivisionError, RecursionError,
         NotImplementedError)
 _RAISED = re.compile(r"(?:^|:)\s*raise\b")
@@ -974,10 +992,12 @@ class Recorder:
             self._context["presentation"] = presentation
 
     @_guarded(lambda: None)
-    def called(self, tool: str, ok: bool) -> None:
-        """The CAD app ran one of its tools: ``ok`` false when it failed."""
+    def called(self, tool: str, ok: bool, reason: str | None = None) -> None:
+        """The CAD app ran one of its tools: ``ok`` false when it failed, for ``reason`` (one of ``FAILURES``)."""
         if isinstance(tool, str) and tool not in UNCOUNTED:
             self._note("tool", (tool,), {"calls": 1, "errors": 0 if ok else 1})
+            if not ok:
+                self._note("tool_failure", (tool, reason if reason in FAILURES else "other"), {"count": 1})
 
     @_guarded(lambda: None)
     def viewed(self) -> None:

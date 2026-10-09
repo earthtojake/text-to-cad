@@ -48,7 +48,10 @@ export default function PrivacyPolicyPage() {
               </li>
               <li>
                 counts, added up over those five minutes: how many times each CAD tool was called and
-                failed; how many times you touched a CAD view; how many different files of each format
+                failed, and why each failure happened, as one of a fixed set of words cadgen chooses
+                (such as no file at the path the agent gave, no view open, a view that did not answer
+                in time, or a bug in cadgen) -- never the error’s message or the path; how many times
+                you touched a CAD view; how many different files of each format
                 (such as STEP or STL) a CAD view showed for the first time that day, told apart on your
                 computer and sent only as a number; how many models were built, of which format,
                 whether a model script or a <code>cadgen</code> command asked, how they ended
@@ -64,7 +67,7 @@ export default function PrivacyPolicyPage() {
                 “KeyError”), whether the program carried on, and where in code it failed -- file paths
                 inside cadgen, Python’s standard library, cadgen’s own open-source dependencies or the
                 CAD app’s and viewer’s page scripts, with function names and line numbers -- or, for a
-                build worker that stopped, its exit status. Any part of the failure in your own code is
+                build worker that crashed, its exit status. Any part of the failure in your own code is
                 replaced by a placeholder, and a crash report never includes the error’s message, any
                 values, your files, or file or folder names.
               </li>
@@ -163,7 +166,9 @@ export default function PrivacyPolicyPage() {
             Telemetry is kept by PostHog for as long as our plan with it keeps events, currently one
             year, then deleted. We do not store IP addresses with it. Your install ID travels in the
             body of each request, which our host’s request logs do not record, and we never combine
-            telemetry with those logs. Turning telemetry off deletes everything stored under your
+            telemetry with those logs. The one exception is a batch our server refuses as malformed:
+            its logs then keep the name of the rule it broke and the cadgen version that sent it,
+            never your install ID or any other value from it. Turning telemetry off deletes everything stored under your
             install ID; PostHog carries the deletion out in the background, which can take some days.
             If our server cannot be reached at that moment, cadgen asks again until it can.
           </li>

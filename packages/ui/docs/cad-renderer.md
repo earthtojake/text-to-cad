@@ -1492,9 +1492,11 @@ panel. Links is always present: it is the description's kinematic tree, not an
 inventory of mesh names. `robot/robotTree.js` builds it as plain data.
 Links are the rows, carrying no icon; a child link sits under its parent link
 and shows the joint between them as muted text (`shoulder_pan · revolute`); the
-named objects inside a link's meshes (`robotComponents` in core's `lib/urdf/robotParts.js`) are leaves under that
-link, after its child links. Built-in primitives and unnamed mesh objects
-contribute no leaves. Every link appears once: a cycle, a second parent or a
+visual components (`robotComponents` in core's `lib/urdf/robotParts.js`) are leaves under that
+link, after its child links. Every visual contributes a component, including STL
+meshes and built-in primitives, named by its URDF `name` or, without one, by its
+geometry (`bucket.stl`, `box`). A mesh with named objects still splits into
+those objects; an unsliceable mesh stays whole as one selectable component. Every link appears once: a cycle, a second parent or a
 missing parent cannot hang the builder or drop a link, and orphans become
 roots. A root that is only a frame — no geometry, no mass, and one child
 attached by a fixed joint (`base_footprint`) — gets no row of its own; its
@@ -1515,15 +1517,29 @@ at the tree's own left edge. Selecting a hit opens its owners at once and
 scrolls to it when the search ends.
 
 Selection is the scene graph's. A link is hovered and selected in the viewport
-as the meshes of its group, and a viewport pick of a surface that is not a named
-object walks up to its link; a named object still selects itself. Any number of
-links, or of named objects, can be selected, never both (Shift in the viewport,
+as the meshes of its group, and a viewport pick selects the visual component
+(or named mesh object) under the pointer. Any number of
+links, or of components, can be selected, never both (Shift in the viewport,
 Shift/Ctrl/Cmd on a row add); the Reference then names them by what they are
-(`Links`, `Mesh objects`) and lists them. A link with no geometry selects its row
+(`Links`, `Components`) and lists them. A link with no geometry selects its row
 and details only. As for STEP, a robot selection exists only while Select is the
 tool: a pick under another tool returns to Select, leaving Select clears it, and
 Escape clears it. A click acts at once, as a STEP's does; a
 robot has no double-click at all.
+
+Each link or component row has the Hide/Reveal eye of an assembly row
+(`settings-ui.md`), also in search results.
+A link hides its own visuals, leaving child links visible and all joints active.
+A partially hidden link hides its remaining visuals; a fully hidden one reveals
+all of them. Hidden geometry is excluded from rendering, picking and selection
+highlights. The scene retains its meshes for reveal without rebuilding them.
+Hidden component ids are saved with the file view against its revision; a live
+reload retains only ids still present.
+
+The `tcad:four_bar` extension is a nonlinear mimic in core's URDF parser and
+kinematics solver. Its dependent joint has no Position slider or joint handle;
+the Reference panel names its four-bar driver instead of an affine mimic formula.
+The authoring contract specifies the namespace, geometry and range constraints.
 
 The Reference panel, headed by the link's name, reads back what the description says
 about the link, in sections: its SRDF planning groups (the payload's `srdf.groupsByLink`) and end effectors;

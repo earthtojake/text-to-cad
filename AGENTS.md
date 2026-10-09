@@ -49,8 +49,8 @@ pass: the merge is the release.
   waits until PyPI's index lists it. Only then does it commit the plugin alone
   onto the branches installers follow (`scripts/release/plugin_branch.py`):
   `latest`, which every install command names, and `claude-plugin`, which
-  claude.ai's directory tracks. After them it deploys the docs site, which moves
-  the version feed, and tags (`v<VERSION>`; releases before 0.5.0 are bare
+  claude.ai's directory tracks. After them it deploys the docs site and tags
+  (`v<VERSION>`; releases before 0.5.0 are bare
   `0.4.x` tags) and GitHub-Releases the release commit, with the wheel and sdist
   that went to PyPI attached as release assets, plus the plugin ZIP that a
   person uploads to OpenAI's plugin portal, which has no API.
@@ -99,7 +99,8 @@ path, the rehearsal, and local/manual fallbacks.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
   the skill CLI parsers, the CAD Viewer backend + client, and the browser
   runtime it executes.
-- `apps/docs/`: documentation site, and `api.texttocad.dev` (cadgen's version feed and the CAD app's consented analytics).
+- `apps/docs/`: documentation site.
+- `apps/api/`: `api.texttocad.dev`, its own Vercel project: cadgen's version feed (read from PyPI) and the CAD app's consented analytics.
 - `tests/`: root-owned test suites for skills, packages, viewer services, and
   repo-wide policy.
 - `scripts/`: durable repo commands grouped by purpose.
@@ -108,7 +109,7 @@ path, the rehearsal, and local/manual fallbacks.
 
 - Boundaries and design laws live in each package's README: read
   `packages/cadgen/README.md` (the laws), `packages/core/README.md`, `packages/ui/README.md`,
-  `apps/web/README.md`, and `apps/docs/README.md` before changing
+  `apps/web/README.md`, `apps/docs/README.md` and `apps/api/README.md` before changing
   generation, rendering, storage, layout, or public interfaces.
 - A README holds the laws; the mechanism each law constrains lives one link
   away, and the README names the link. Read the README, then follow the one
@@ -249,8 +250,8 @@ path, the rehearsal, and local/manual fallbacks.
 Run the smallest path-targeted check that covers the change. Use broad wrappers
 when touching shared surfaces or before handoff:
 
-- Code tests: `scripts/test/test.sh` (JS, then Python, then policy).
-- Focused runners: `scripts/test/test-js.sh`, `scripts/test/test-docs.sh`,
+- Code tests: `scripts/test/test.sh` (JS, API, Python, then policy).
+- Focused runners: `scripts/test/test-js.sh`, `scripts/test/test-api.sh`, `scripts/test/test-docs.sh`,
   `scripts/test/test-python.sh`, `scripts/test/test-global.sh`.
   `test-python.sh` takes `--select cadgen|viewer|skills|all` and
   `--print-weights`; `test-js.sh` takes `--select core|ui|web|mcp|all`. See
@@ -271,6 +272,7 @@ when touching shared surfaces or before handoff:
   backend's suite is `tests/python/packages/cadgen/viewer`, run by
   `scripts/test/test-python.sh`. Touching `cadgen/viewer/` means running that.
 - Docs site: `npm --prefix apps/docs run check`
+- API (`api.texttocad.dev`): `npm --prefix apps/api test`
 - Targeted Python tests: `./.venv/bin/python -m unittest <changed test paths>`
 
 When a task changes what the bundlers consume, run `scripts/bundle/bundle.sh`

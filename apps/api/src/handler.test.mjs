@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import { handle } from './handler.mjs';
-import { versions } from './versions.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
 const SESSION = '0b1e6f1a-6a52-4c39-9d43-2f5e0f0b9d11';
@@ -101,6 +99,25 @@ test('a crash is one row, its frames checked one by one, and nothing it said', a
   }
 });
 
+test("schema 4 says why a tool's calls failed, one row per tool and reason, by a word cadgen chose", async () => {
+  const store = memory();
+  const failures = [{ name: 'tool_failure', tool: 'cad_show', reason: 'no_file', count: 1 }];
+  assert.equal((await send(store, 'POST', '/v1/events', { ...BATCH, schema: 4, events: [...BATCH.events, ...failures] })).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).at(-1), { event: 'tool_failure', tool: 'cad_show', reason: 'no_file', count: 1 });
+  // Schema 3, as cadgen 0.7.16 and 0.7.17 send it, is read as ever.
+  assert.equal((await send(store, 'POST', '/v1/events', BATCH)).status, 204);
+  for (const bad of [
+    { ...BATCH, events: failures }, // schema 3 never sent one
+    { ...BATCH, schema: 4, events: [{ ...failures[0], reason: 'No file at /Users/someone/secret.step.' }] }, // never a message
+    { ...BATCH, schema: 4, events: [{ ...failures[0], reason: 'disk_full' }] }, // a word outside the vocabulary
+    { ...BATCH, schema: 4, events: [{ ...failures[0], tool: '/Users/someone/secret.step' }] },
+    { ...BATCH, schema: 4, events: [{ ...failures[0], count: 0 }] },
+    { ...BATCH, schema: 4, events: [{ ...failures[0], count: undefined }] },
+    { ...BATCH, schema: 4, events: [{ ...failures[0], path: 'secret.step' }] },
+    { ...BATCH, schema: 4, events: [failures[0], failures[0]] }, // one tool and reason, counted once
+  ]) assert.equal((await send(memory(), 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
+});
+
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', SCHEMA_1)).status, 204);
@@ -196,7 +213,7 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...SCHEMA_2, events: [CRASH] }, // crashes are schema 3's
     { ...BATCH, channel: 'store' },
     { ...BATCH, channel: 'github' }, // a channel no plugin names any more
-    { ...BATCH, schema: 4 }, // a schema no release sends
+    { ...BATCH, schema: 5 }, // a schema no release sends
     { ...BATCH, schema: '3' },
     { ...SCHEMA_2, process: 'app' }, // each schema's own fields, and only those
     { ...SCHEMA_1, channel: 'claude-github' },
@@ -205,6 +222,79 @@ test('anything outside the contract is refused and stores nothing', async () => 
   assert.equal((await send(store, 'POST', '/v1/events', '{')).status, 400);
   assert.equal((await send(store, 'POST', '/v1/events', 'x'.repeat(20_000))).status, 400);
   assert.deepEqual([store.rows, store.countries], [[], []]);
+});
+
+// What a handler logs while a request runs, by level.
+async function logged(run) {
+  const lines = { warn: [], error: [] };
+  const warn = mock.method(console, 'warn', (...args) => lines.warn.push(args.join(' ')));
+  const error = mock.method(console, 'error', (...args) => lines.error.push(args.join(' ')));
+  try { await run(); } finally { warn.mock.restore(); error.mock.restore(); }
+  return lines;
+}
+
+test('a refused request is logged by the rule it broke and the release that sent it: never a value it carried', async () => {
+  const store = memory();
+  const lines = await logged(async () => {
+    await send(store, 'POST', '/v1/events', { ...BATCH, events: [BATCH.events[0], { name: 'view', calls: 0 }] });
+    await send(store, 'POST', '/v1/events', { ...BATCH, version: '0.9.1', next_thing: 1 }); // a newer release's field
+    await send(store, 'POST', '/v1/events', '{');
+    await send(store, 'POST', '/v1/forget', { install: 'someone@example.com' });
+    await send(store, 'POST', '/v1/events', BATCH, { origin: 'https://example.com' });
+    await send(store, 'POST', '/v1/events', BATCH); // taken: nothing to say
+  });
+  assert.deepEqual(lines.warn, [
+    'telemetry /v1/events refused 400: events[1].calls counts nothing (schema 3, cadgen 0.8.0)',
+    'telemetry /v1/events refused 400: unknown field next_thing (schema 3, cadgen 0.9.1)',
+    'telemetry /v1/events refused 400: the body is not JSON',
+    'telemetry /v1/forget refused 400: not an install id',
+    'telemetry /v1/events refused 403: not from a browser',
+  ]);
+  assert.deepEqual(lines.error, []);
+});
+
+test('what a refusal logs carries nothing of the request\'s choosing: no key, value, version or path', async () => {
+  const secrets = ['/Users/someone/secret.step', 'someone@example.com', '8c347ec3-1342-4db5-a19a-491cbc8c5900', 'secret bracket'];
+  const store = memory();
+  const lines = await logged(async () => {
+    for (const secret of secrets) {
+      for (const bad of [
+        { ...BATCH, [secret]: 1 }, // an unknown key is the caller's to name
+        { ...BATCH, version: secret },
+        { ...BATCH, platform: secret },
+        { ...BATCH, channel: secret },
+        { ...BATCH, events: [{ name: 'tool', tool: secret, calls: 1 }] },
+        { ...BATCH, events: [{ name: 'tool', tool: 'cad_show', calls: 1, [secret]: 1 }] },
+        { ...BATCH, events: [{ ...CRASH, frames: [{ file: secret, function: 'make' }] }] },
+        { ...BATCH, events: [{ ...CRASH, frames: [{ ...CRASH.frames[0], [secret]: 1 }] }] },
+        { ...BATCH, client: { [secret]: 1 } },
+        { ...BATCH, schema: secret },
+        { ...BATCH, install: secret },
+      ]) await send(store, 'POST', '/v1/events', bad);
+      await send(store, 'POST', '/v1/events', BATCH, { origin: secret });
+      await send(store, 'POST', `/v1/${secret}`, BATCH, { 'content-type': secret }); // refused on its type, at a path of its own
+    }
+  });
+  assert.ok(lines.warn.length > 40);
+  for (const line of lines.warn) for (const secret of secrets) assert.ok(!line.includes(secret), line);
+  assert.ok(lines.warn.includes('telemetry request refused 415: the body must be application/json'));
+});
+
+test('a failed request is logged by its name or code, never a number or a message', async () => {
+  const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+  assert.equal(timeout.code, 23); // the legacy number a DOMException carries, which says nothing
+  const cases = [
+    [timeout, 'TimeoutError'],
+    [Object.assign(new Error('PostHog answered 503 for 8c347ec3-1342-4db5-a19a-491cbc8c59be'), { code: 'posthog_503' }), 'posthog_503'],
+    [new TypeError('fetch failed for someone@example.com'), 'TypeError'],
+  ];
+  for (const [failure, name] of cases) {
+    const store = { ...memory(), async forget() { throw failure; } };
+    const lines = await logged(async () => {
+      assert.equal((await send(store, 'POST', '/v1/forget', { install: INSTALL })).status, 500);
+    });
+    assert.deepEqual(lines.error, [`telemetry request failed: ${name}`]);
+  }
 });
 
 test('a browser cannot post: a request with an Origin header, or a body that is not JSON, stores nothing', async () => {
@@ -240,11 +330,10 @@ test('health fails without a setting, or with keys the service refuses, naming n
 test('the version feed is the same for everyone, kept at the edge, and answers without the telemetry service', async () => {
   const feed = { latest: '0.9.0' };
   const down = { ...memory(), async ready() { throw new Error('unreachable'); } };
-  const reply = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: feed, missing: ['POSTHOG_REGION'] });
-  assert.deepEqual([reply.status, await reply.json()], [200, feed]);
-  assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=86400');
-});
-
-test("this release's feed names it, and nothing else", () => {
-  assert.deepEqual(versions, { latest: readFileSync(new URL('../../../../../VERSION', import.meta.url), 'utf8').trim() });
+  const reply = await handle(new Request('https://api.texttocad.dev/v1/versions/'), down, { versions: async () => feed, missing: ['POSTHOG_REGION'] });
+  assert.deepEqual([reply.status, reply.headers.get('content-type'), await reply.json()], [200, 'application/json', feed]);
+  assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=604800');
+  // No feed to give: an error the edge keeps nowhere, which a released cadgen takes as a check that failed.
+  const none = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: async () => null });
+  assert.deepEqual([none.status, none.headers.get('cache-control')], [503, 'no-store']);
 });

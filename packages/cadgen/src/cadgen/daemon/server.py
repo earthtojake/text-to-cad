@@ -423,7 +423,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # retry here would bypass the daemon's aggregate admission policy.
         _JOBS.waiting(job, None)
         _log(f"{tool}: could not start a worker: {exc}")
-        if isinstance(exc, pool_mod.WorkerGone):
+        if isinstance(exc, pool_mod.WorkerGone) and not pool_mod.stopped(exc.exit_status):
             telemetry.worker_died(exc.exit_status)  # a worker that could not start
         _JOBS.finish(job, 1, error=str(exc))
         if inflight is not None:
@@ -544,7 +544,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # evidence. Note the log line too -- `cadgen daemon status` cannot show a
         # worker that is gone.
         healthy = False
-        ended = "cancelled" if left.is_set() else "crashed"
+        # Stopped, not crashed: whoever asked left, or someone stopped the worker (``pool.stopped``).
+        ended = "cancelled" if left.is_set() or pool_mod.stopped(exc.exit_status) else "crashed"
         if ended == "crashed":
             telemetry.worker_died(exc.exit_status)
         # Record the same death evidence in the ledger without relaying a stderr chunk.

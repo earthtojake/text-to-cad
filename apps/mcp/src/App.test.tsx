@@ -139,6 +139,31 @@ it("the host's file handler keeps the file it opened: a show sent to it changes 
     .toEqual(['/work/a.step', undefined, undefined, undefined]);
 });
 
+it("a capture the agent asks with its show is of the model it showed, once that is loaded and drawn: never the one it left, never a refusal while it loads", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const replies: ((reply: { events: unknown[] }) => void)[] = [];
+  server.sync = vi.fn(() => new Promise(resolve => { replies.push(resolve); }));
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 5, page: 'viewer', model: '/work/a.step' }} />);
+  // A renderer's live controller for `path`, as the shared viewer binds it.
+  const bound = (path: string, loading: boolean) => {
+    const state = { loading, active: true, resource: { kind: 'workspace-file', path } };
+    const unbind = viewer.props!.live!.binding.bind({ readState: () => state, capture: async () => new Blob([path]), thumbnail: async () => new Blob() } as any);
+    return { loaded: () => { state.loading = false; }, unbind };
+  };
+  const a = bound('/work/a.step', false);
+  await act(async () => { replies.shift()!({ events: [
+    { seq: 1, type: 'show', launch: { protocol: 5, page: 'viewer', model: '/work/b.step' } },
+    { seq: 2, type: 'capture', requestId: 'c1' },
+  ] }); });
+  expect(viewer.props!.file).toBe('/work/b.step');
+  a.unbind();
+  const b = bound('/work/b.step', true);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 250)); });
+  expect(server.reply).not.toHaveBeenCalled();
+  b.loaded();
+  await vi.waitFor(() => expect(server.reply).toHaveBeenCalledWith('c1', { png: btoa('/work/b.step') }));
+});
+
 it('an inline host gets the whole viewer in a card of a height it is told, with Full size in its navbar, which goes full size in place', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"

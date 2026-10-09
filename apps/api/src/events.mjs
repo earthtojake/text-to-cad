@@ -10,6 +10,9 @@
  * daemon (`daemon`) -- saw since its last batch (`FIELDS`):
  *
  *   tool      a CAD tool's calls, and how many of them failed
+ *   tool_failure
+ *             a CAD tool's failed calls for one reason (`FAILURES`), a word cadgen chose where the call
+ *             failed: never what the failure said
  *   view      times a person touched a CAD view, or it switched models
  *   files     distinct files of one format a view showed for the first time that day
  *   build     builds of one format, by who asked: how they ended, how many the store answered, how long
@@ -24,6 +27,7 @@
  *
  * cadgen 0.7.7 to 0.7.15 (schemas 1 and 2) send `tool`, `view` and `file`: one distinct file, once a day,
  * by a salted code. Its code goes no further: a batch's are read as `files`, one of each format they name.
+ * Schema 4 adds `tool_failure`. A receiver that reads a new schema is deployed before any release sends it.
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -54,10 +58,15 @@ const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf'
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
 const WHERE = new Set(['tool', 'route', 'request', 'build', 'command', 'page']);
+// Why a CAD tool's call failed (`cadgen/analytics.py`: `FAILURES`): the caller's, the view's, the machine's or
+// cadgen's own, as cadgen named it where the call failed.
+const FAILURES = new Set(['no_path', 'relative_path', 'no_file', 'not_cad', 'no_view', 'wrong_view', 'bad_request',
+  'timeout', 'view_error', 'too_large', 'no_viewer', 'bug', 'other']);
 
 /** Each event as a row carries it: the names it is told apart by, then what it counts. */
 export const FIELDS = {
   tool: ['tool', 'calls', 'errors'],
+  tool_failure: ['tool', 'reason', 'count'],
   view: ['calls'],
   files: ['kind', 'count'],
   build: ['kind', 'via', 'count', 'failed', 'crashed', 'cancelled', 'cached', 'seconds', 'longest'],
@@ -109,6 +118,12 @@ const READERS = {
     const errors = event.errors === undefined ? 0 : count(event.errors, `${at}.errors`);
     if (errors > calls) fail(`${at} counts more errors than calls`);
     return { key: `tool ${tool}`, fields: { tool, calls, errors } };
+  },
+  tool_failure(event, at) {
+    exactly(event, FIELDS.tool_failure, at);
+    const tool = matches(event.tool, TOOL, `${at}.tool`);
+    const reason = oneOf(event.reason, FAILURES, `${at}.reason`);
+    return { key: `tool_failure ${tool} ${reason}`, fields: { tool, reason, count: some(event.count, `${at}.count`) } };
   },
   view(event, at) {
     only(event, ['name', 'calls'], at);
@@ -176,6 +191,10 @@ const READERS = {
 // Before schema 3 only the apps sent, and the browser viewer said so by how it shows CAD.
 const appOf = batch => (batch.presentation === 'browser' ? 'viewer' : 'app');
 const BEFORE_DAEMON = new Set(['tool', 'view', 'file']);
+const WITH_DAEMON = ['tool', 'view', 'files', 'build', 'snapshot', 'feature', 'health', 'exception'];
+const byProcess = batch => ({
+  channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: oneOf(batch.process, PROCESSES, 'process'),
+});
 // What each schema says beside the shared fields -- where the install came from, and which process sent
 // it -- and the events it sends. A new schema adds a reader here and keeps the old ones.
 const SCHEMAS = new Map([
@@ -186,8 +205,9 @@ const SCHEMAS = new Map([
   [2, { fields: ['channel'], events: BEFORE_DAEMON,
     origin: batch => ({ channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: appOf(batch) }) }],
   // The build daemon joins the apps: each batch names its process, and counts files rather than naming them.
-  [3, { fields: ['channel', 'process'], events: new Set(['tool', 'view', 'files', 'build', 'snapshot', 'feature', 'health', 'exception']),
-    origin: batch => ({ channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: oneOf(batch.process, PROCESSES, 'process') }) }],
+  [3, { fields: ['channel', 'process'], events: new Set(WITH_DAEMON), origin: byProcess }],
+  // Why tool calls failed, beside how many did.
+  [4, { fields: ['channel', 'process'], events: new Set([...WITH_DAEMON, 'tool_failure']), origin: byProcess }],
 ]);
 
 export function isUuid(value) {

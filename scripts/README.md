@@ -41,7 +41,7 @@ where those files ship, so these scripts are what produces them.
 
 `test/` — test runners.
 
-- `test.sh` — `test-js.sh`, then `test-python.sh`, then `test-global.sh`: the
+- `test.sh` — `test-js.sh`, `test-api.sh`, `test-python.sh`, then `test-global.sh`: the
   whole tree on one machine, for a local run; `test.yml` calls the focused
   runners per job instead.
 - `test-js.sh [--select core|ui|web|mcp|all]` — builds the required shared exports,
@@ -74,6 +74,9 @@ where those files ship, so these scripts are what produces them.
   missing file.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, then the animated brand
   marks' tests. Called by `test.yml`.
+- `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
+  telemetry receiver's tests, which need no install. Called by `test.yml` and
+  `deploy-api.yml`.
 - `test-installed.sh` — builds the wheel (or accepts `--wheel PATH` to test
   the exact artifact already built), installs it into a scratch venv and
   exercises cadgen from outside the repo, including `cadgen mcp` serving the

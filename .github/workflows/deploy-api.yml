@@ -1,0 +1,67 @@
+name: Deploy API
+
+# Deploys api.texttocad.dev -- cadgen's version feed and its telemetry receiver (apps/api) -- to its
+# own Vercel project, whenever main changes it. Nothing about it is tied to a release: the feed reads
+# PyPI, so it names a release the moment PyPI has it, and the receiver reads every schema any release
+# sends. A dispatch redeploys the ref it runs on.
+#
+# The project's Root Directory is apps/api, which has no dependencies and no build: Vercel bundles
+# api/v1.js with what it imports, and serves nothing else but public/. Its PostHog settings live in the Vercel
+# project only, so the deploy checks /v1/health, which answers 503 while one is missing or PostHog
+# refuses its keys, and /v1/versions, which answers 503 while PyPI cannot be read.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - apps/api/**
+      - .github/workflows/deploy-api.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy API
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Run the API tests
+        run: scripts/test/test-api.sh
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@50.28.0
+
+      - name: Deploy the API to Vercel production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_API_PROJECT_ID: ${{ secrets.VERCEL_API_PROJECT_ID }}
+        run: |
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_API_PROJECT_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing GitHub Actions secret: $name" >&2
+              exit 1
+            fi
+          done
+          scripts/github-workflows/deploy-vercel-app.sh \
+            --label "API" \
+            --project-id "$VERCEL_API_PROJECT_ID" \
+            --public-urls "https://api.texttocad.dev/v1/health https://api.texttocad.dev/v1/versions"

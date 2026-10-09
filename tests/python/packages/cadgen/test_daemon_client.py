@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -267,8 +268,9 @@ class ServerRelaysTheDeath(unittest.TestCase):
         pid = 777
         extra = False
 
-        def __init__(self) -> None:
+        def __init__(self, exit_status: int = -9) -> None:
             self.sent: list[dict] = []
+            self.exit_status = exit_status
 
         def send(self, request: dict) -> None:
             self.sent.append(request)
@@ -276,7 +278,7 @@ class ServerRelaysTheDeath(unittest.TestCase):
         def frames(self, **_kwargs):
             yield {"stream": "stdout", "data": "partial "}
             raise pool_mod.WorkerGone(
-                "worker 777 was killed by SIGKILL (signal 9)", exit_status=-9
+                f"worker 777 {pool_mod.describe_exit(self.exit_status)}", exit_status=self.exit_status
             )
 
         def alive(self) -> bool:
@@ -308,10 +310,33 @@ class ServerRelaysTheDeath(unittest.TestCase):
         self.assertEqual(jobs.snapshot()[0]["error"], died["detail"])
         self.assertEqual(died["pid"], 777)
         self.assertEqual(died["exitStatus"], -9)
-        self.assertIn("SIGKILL", died["detail"])
+        self.assertIn(pool_mod.describe_exit(-9), died["detail"])  # the worker's own words, as this platform names the signal
         self.assertEqual(conn.frames[-1], {"exit": 1})
         pool.release.assert_called_once_with(worker, healthy=False)
         self.assertTrue(any("died mid-job" in line for line in logged), logged)
+
+    @unittest.skipIf(os.name == "nt", "a Windows worker's exit status is a code, never a signal")
+    def test_a_worker_someone_stopped_is_no_crash_and_one_that_faulted_still_is(self):
+        import signal
+
+        # SIGTERM is someone stopping it (a person, a logout, a shutdown): the build was stopped, and the
+        # client still hears how its worker went. A fault, or the kernel's kill for memory, is a crash.
+        for status, ended in ((-signal.SIGTERM, "cancelled"), (-signal.SIGINT, "cancelled"), (-signal.SIGHUP, "cancelled"),
+                              (-signal.SIGSEGV, "crashed"), (-signal.SIGKILL, "crashed"), (-signal.SIGABRT, "crashed")):
+            with self.subTest(status=status):
+                pool = mock.Mock()
+                pool.acquire.return_value = self._DyingWorker(status)
+                conn = self._Conn()
+                build = mock.Mock()
+                with mock.patch.object(server, "_JOBS", JobLedger()), mock.patch.object(server, "_POOL", pool), \
+                        mock.patch.object(server, "_log"), mock.patch.object(server, "CLIENT_LIVENESS_INTERVAL_SECONDS", 60.0), \
+                        mock.patch.object(server.telemetry, "build", return_value=build), \
+                        mock.patch.object(server.telemetry, "worker_died") as worker_died:
+                    server._handle_request(conn, {"tool": "step-compile", "argv": ["x.step"], "cwd": "/w",
+                                                  "prog": "cadgen step compile"})
+                self.assertEqual(build.finish.call_args.args[1], ended)
+                self.assertEqual(worker_died.call_args_list, [mock.call(status)] if ended == "crashed" else [])
+                self.assertEqual(next(frame["workerDied"]["exitStatus"] for frame in conn.frames if "workerDied" in frame), status)
 
 
 class ServerStatusIdentity(unittest.TestCase):

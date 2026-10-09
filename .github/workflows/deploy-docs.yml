@@ -78,19 +78,7 @@ jobs:
               exit 1
             fi
           done
-          urls="https://www.texttocad.dev https://texttocad.dev"
-          # A ref with the telemetry API (apps/docs/src/app/v1) is checked through api.texttocad.dev's
-          # health too: a 503 while the project's PostHog settings are missing (they live in the Vercel
-          # project, never here) or PostHog refuses its keys fails the deploy. An older ref -- a past
-          # release redeployed -- has no API, and deploys as it always did.
-          if [ -d apps/docs/src/app/v1 ]; then
-            urls="$urls https://api.texttocad.dev/v1/health"
-          fi
-          # cadgen's version feed, on refs that serve it.
-          if [ -f apps/docs/src/lib/api/versions.mjs ]; then
-            urls="$urls https://api.texttocad.dev/v1/versions"
-          fi
           scripts/github-workflows/deploy-vercel-app.sh \
             --label "Docs app" \
             --project-id "$VERCEL_DOCS_PROJECT_ID" \
-            --public-urls "$urls"
+            --public-urls "https://www.texttocad.dev https://texttocad.dev"

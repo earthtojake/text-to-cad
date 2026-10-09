@@ -1,6 +1,6 @@
 {
   "name": "cad-skills-docs",
-  "version": "0.7.17",
+  "version": "0.7.19",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -8,8 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/api/*.test.mjs",
-    "check": "node scripts/check-hero-step-assets.mjs && npm test && npm run lint && npm run build && npm run icon:verify",
+    "check": "node scripts/check-hero-step-assets.mjs && npm run lint && npm run build && npm run icon:verify",
     "predev": "npm run icon:generate",
     "prebuild": "npm run icon:generate",
     "icon:generate": "node scripts/icon/export.mjs",

@@ -11,7 +11,7 @@
  * background, so what "deleted" means is "queued for deletion". Retention is PostHog's: events go after the
  * period its plan keeps them.
  *
- * Its settings are the host's (route.ts): the project's API key, which captures; a personal API key with
+ * Its settings are the host's (api/v1.js): the project's API key, which captures; a personal API key with
  * `person:write`, which deletes, and `project:read`, which checks the project is there; the project's id; and
  * its region, `us` or `eu`. `fetch` is handed in, so the tests need no network.
  */
@@ -21,7 +21,7 @@ import { FIELDS } from './events.mjs';
 // PostHog's name for each kind of row, as a product reads them.
 export const EVENTS = {
   tool: 'tool_used', view: 'view_used', files: 'files_shown', build: 'models_built', snapshot: 'snapshots_rendered',
-  feature: 'feature_used', health: 'daemon_health', exception: '$exception',
+  feature: 'feature_used', health: 'daemon_health', exception: '$exception', tool_failure: 'tool_failed',
 };
 // Frames that name no file of ours: never in the app, whatever the code around them.
 const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);
@@ -69,7 +69,10 @@ export function exceptionOf(row) {
 
 /** A row as PostHog properties: its context, its own fields, and where it came from; nothing unset. */
 export function propertiesOf(row, country) {
-  const properties = { distinct_id: row.install_id, session: row.session_id, $geoip_disable: true };
+  // The session twice: `session`, which the counts are read by, and PostHog's own `$session_id`, which error
+  // tracking counts an issue's sessions by. A process's id is a UUIDv4, not the v7 PostHog's sessions table
+  // wants, so it sits out that table's aggregations; nothing else reads it.
+  const properties = { distinct_id: row.install_id, session: row.session_id, $session_id: row.session_id, $geoip_disable: true };
   const fields = row.event === 'exception' ? ['where', 'tool', 'count'] : FIELDS[row.event];
   for (const key of [...CONTEXT, ...fields]) if (row[key] !== null && row[key] !== undefined) properties[key] = row[key];
   if (row.event === 'exception') properties.$exception_list = exceptionOf(row);

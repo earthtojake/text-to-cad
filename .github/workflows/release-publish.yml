@@ -11,8 +11,9 @@ name: Publish Release
 # the wheel and sdist -- installs and exercises the wheel, uploads it to PyPI, and waits until
 # PyPI's index lists the version. Only then does anything that installers follow name it: the
 # `latest` branch and claude.ai's `claude-plugin` get the plugin alone
-# (scripts/release/plugin_branch.py); after them, the docs deploy moves the version feed
-# and the update notice, and the tag and the GitHub Release go out. main has the new pins from
+# (scripts/release/plugin_branch.py); after them, the docs deploy moves the site's header
+# version, and the tag and the GitHub Release go out. The version feed cadgen's update notice
+# reads (apps/api) asks PyPI itself, so it names the release from the moment PyPI lists it. main has the new pins from
 # the merge on, so only an install of main itself -- a command that names no branch -- can see
 # a version minutes before PyPI has it.
 #
@@ -448,9 +449,8 @@ jobs:
           git push --atomic "$remote" "$latest:refs/heads/latest" "$directory:refs/heads/claude-plugin"
 
   # The docs site is built from the release commit itself: main is the source tree, and
-  # apps/docs/package.json carries the stamped version the header reads. Deploying it moves the
-  # version feed, which is what tells installs a release is out -- so it follows the branches
-  # those installs update from.
+  # apps/docs/package.json carries the stamped version the header reads -- so it follows the
+  # branches the install commands it shows name.
   deploy-docs:
     name: Deploy Docs
     needs:

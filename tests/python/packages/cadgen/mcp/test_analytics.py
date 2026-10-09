@@ -277,7 +277,7 @@ class ServerCountsTest(_Tmp):
             {"name": "view", "calls": 1},
         ])
         self.assertEqual((payload["schema"], payload["process"], payload["channel"], payload["presentation"],
-                          payload["client"]["name"]), (3, "app", "claude-directory", "tabs", "codex-mcp-client"))
+                          payload["client"]["name"]), (4, "app", "claude-directory", "tabs", "codex-mcp-client"))
         self.assertNotIn("secret", json.dumps(payload))
         self.assertNotIn(str(self.tmp), json.dumps(payload))
         # A batch with no use is not sent.
@@ -306,16 +306,61 @@ class ServerCountsTest(_Tmp):
         recorder.called("cad_show", True)
         recorder.opened("/work/a.step")
         self.assertFalse(recorder.flush())  # offline: kept
-        recorder.called("cad_show", False)
+        recorder.called("cad_show", False, "no_file")
         self.assertTrue(recorder.flush())
         self.assertEqual(sent[1]["events"], [{"name": "files", "kind": "step", "count": 1},
-                                             {"name": "tool", "tool": "cad_show", "calls": 2, "errors": 1}])
+                                             {"name": "tool", "tool": "cad_show", "calls": 2, "errors": 1},
+                                             {"name": "tool_failure", "tool": "cad_show", "reason": "no_file", "count": 1}])
         # One the receiver refused (a 4xx) is dropped: sent again, it would take what comes next down with it.
         recorder.called("cad_view", True)
         self.assertFalse(recorder.flush())
         recorder.called("cad_show", True)
         self.assertTrue(recorder.flush())
         self.assertEqual([event["tool"] for event in sent[3]["events"]], ["cad_show"])
+
+    def test_a_failed_call_says_why_by_a_word_chosen_where_it_failed_never_what_it_said(self) -> None:
+        server, sent = self.serve("claude-directory")
+        self.consent(server, True)
+        notes = self.tmp / "secret-notes.txt"
+        notes.write_text("not CAD", encoding="utf-8")
+        for arguments in ({}, {"path": "secret.step"}, {"path": str(self.tmp / "secret-missing.step")}, {"path": str(notes)}):
+            self.assertTrue(self.call(server, "cad_open", arguments)["isError"])
+        self.assertTrue(self.call(server, "cad_screenshot", {"view": "cad-1-gone"})["isError"])  # no viewer in this thread
+        with mock.patch.object(Server, "_tool_cad_view", side_effect=KeyError("secret")), self.assertRaises(KeyError):
+            self.call(server, "cad_view", {"view": "v"})  # cadgen's own bug: a crash, and a reason
+        self.assertTrue(server.analytics.flush())
+        [payload] = sent
+        failures = {(event["tool"], event["reason"]): event["count"] for event in payload["events"] if event["name"] == "tool_failure"}
+        self.assertEqual(failures, {("cad_open", "no_path"): 1, ("cad_open", "relative_path"): 1, ("cad_open", "no_file"): 1,
+                                    ("cad_open", "not_cad"): 1, ("cad_screenshot", "no_view"): 1, ("cad_view", "bug"): 1})
+        tools = {event["tool"]: event["errors"] for event in payload["events"] if event["name"] == "tool"}
+        self.assertEqual(tools, {"cad_open": 4, "cad_screenshot": 1, "cad_view": 1})
+        self.assertEqual([event["type"] for event in payload["events"] if event["name"] == "exception"], ["KeyError"])
+        self.assertNotIn("secret", json.dumps(payload))
+        # A reason outside the vocabulary is no reason: counted as ``other``, never sent as given.
+        server.analytics.called("cad_show", False, "No file at /Users/someone/secret.step")
+        server.analytics.flush()
+        self.assertIn({"name": "tool_failure", "tool": "cad_show", "reason": "other", "count": 1}, sent[-1]["events"])
+
+    def test_every_failure_names_its_reason_where_it_is_raised_from_the_vocabulary(self) -> None:
+        import ast
+        import inspect
+
+        from cadgen import analytics
+        from cadgen.mcp import server as server_module, views
+
+        # Each ToolFailed and NoAnswer names its reason as a word where it is raised, never a message.
+        named = set()
+        for module in (server_module, views):
+            for node in ast.walk(ast.parse(inspect.getsource(module))):
+                if isinstance(node, ast.Call) and getattr(node.func, "id", None) in ("ToolFailed", "NoAnswer"):
+                    self.assertEqual(len(node.args), 2, ast.unparse(node))
+                    reason = node.args[1]
+                    if isinstance(reason, ast.Constant):
+                        named.add(reason.value)
+                    else:  # a NoAnswer's, passed on
+                        self.assertEqual(ast.unparse(reason), "failure.reason")
+        self.assertLessEqual(named | {"bug"}, analytics.FAILURES)
 
     def test_a_batch_that_failed_while_the_person_chose_is_not_kept_past_the_choice(self) -> None:
         sent: list[dict] = []

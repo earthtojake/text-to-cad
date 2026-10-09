@@ -386,7 +386,11 @@ def encode_video(
     )
     try:
         for command in commands:
-            completed = subprocess.run(command, capture_output=True, text=True, check=False)
+            # ffmpeg logs utf-8 (paths included); the locale's code page would lose
+            # the very stderr this reports.
+            completed = subprocess.run(
+                command, capture_output=True, text=True, encoding="utf-8", errors="backslashreplace", check=False,
+            )
             if completed.returncode != 0:
                 # ffmpeg says what it could not do on stderr and says it LAST; the
                 # head is banner and stream description nobody needs.

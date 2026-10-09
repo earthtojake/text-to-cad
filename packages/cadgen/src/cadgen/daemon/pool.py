@@ -120,6 +120,19 @@ _NTSTATUS_NAMES = {
 }
 
 
+def stopped(status: int | None) -> bool:
+    """Whether a worker's exit status says it was asked to stop -- SIGTERM, SIGINT or SIGHUP, from a
+    person quitting it, a logout or a shutdown -- rather than that it died: a native fault (SIGSEGV,
+    SIGBUS, SIGABRT) or the kernel's kill for memory (SIGKILL) is a crash. None of cadgen's own stops
+    signals a worker mid-job: its client leaving is a cancel, and the pool stops only idle workers
+    until the daemon's own telemetry has closed (``server.serve``)."""
+    if not isinstance(status, int) or status >= 0:
+        return False  # an exit code, or Windows (no signals: TerminateProcess is exit code 1)
+    import signal
+
+    return -status in {getattr(signal, name) for name in ("SIGTERM", "SIGINT", "SIGHUP") if hasattr(signal, name)}
+
+
 def describe_exit(status: int | None) -> str:
     """A worker's death in words: the signal that killed it, or its exit code."""
     if status is None:

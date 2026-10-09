@@ -43,7 +43,7 @@ test("each of a batch's rows is one PostHog event, under the install id, with th
   const [{ url, method, body }] = asked;
   assert.deepEqual([url, method, body.api_key], ['https://eu.i.posthog.com/batch/', 'POST', 'phc_project']);
   assert.deepEqual(body.batch.map(event => event.event), ['tool_used', 'view_used', 'files_shown']);
-  const context = { distinct_id: INSTALL, session: SESSION, $geoip_disable: true, process: 'app', version: '0.8.0',
+  const context = { distinct_id: INSTALL, session: SESSION, $session_id: SESSION, $geoip_disable: true, process: 'app', version: '0.8.0',
     channel: 'claude-directory', platform: 'darwin', arch: 'arm64', client: 'codex-mcp-client', client_version: '0.159.0',
     presentation: 'tabs', country: 'DE' };
   assert.deepEqual(body.batch.map(event => event.properties), [
@@ -58,11 +58,22 @@ test("the build daemon's counts are PostHog events of their own, each a window's
   await store.insert(rowsOf(DAEMON), { country: 'NZ' });
   const { batch } = asked[0].body;
   assert.deepEqual(batch.map(event => event.event), ['models_built', 'snapshots_rendered', 'feature_used', 'daemon_health']);
-  const context = { distinct_id: INSTALL, session: SESSION, $geoip_disable: true, process: 'daemon', version: '0.8.0',
+  const context = { distinct_id: INSTALL, session: SESSION, $session_id: SESSION, $geoip_disable: true, process: 'daemon', version: '0.8.0',
     channel: 'claude-directory', platform: 'linux', arch: 'x86_64', country: 'NZ' };
   const countsOf = event => Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'name'));
   assert.deepEqual(batch.map(event => event.properties), DAEMON.events.map(event => ({ ...context, ...countsOf(event) })));
-  assert.deepEqual(Object.keys(EVENTS).sort(), ['build', 'exception', 'feature', 'files', 'health', 'snapshot', 'tool', 'view']);
+  assert.deepEqual(Object.keys(EVENTS).sort(),
+    ['build', 'exception', 'feature', 'files', 'health', 'snapshot', 'tool', 'tool_failure', 'view']);
+});
+
+test("why a tool's calls failed is PostHog's tool_failed, by tool and reason, to break down and add up", async () => {
+  const { asked, store } = posthog();
+  const failure = { name: 'tool_failure', tool: 'cad_screenshot', reason: 'timeout', count: 2 };
+  await store.insert(rowsOf({ ...BATCH, schema: 4, events: [failure] }));
+  const [event] = asked[0].body.batch;
+  assert.equal(event.event, 'tool_failed');
+  assert.deepEqual([event.properties.tool, event.properties.reason, event.properties.count, event.properties.process],
+    ['cad_screenshot', 'timeout', 2, 'app']);
 });
 
 test("a crash is PostHog's $exception: its type and frames, only cadgen's in the app, and no message", async () => {
@@ -103,7 +114,7 @@ test('where the host could not tell, an event names no country; what a schema le
     channel: undefined, arch: undefined, client: undefined, presentation: undefined,
     events: [BATCH.events[1], { name: 'file', file: '3f9a1c0be47d2a55', kind: 'step' }] }));
   await store.insert(rowsOf(schema1), { country: null });
-  const context = { distinct_id: INSTALL, session: SESSION, $geoip_disable: true, process: 'app', version: '0.7.11', channel: 'unknown',
+  const context = { distinct_id: INSTALL, session: SESSION, $session_id: SESSION, $geoip_disable: true, process: 'app', version: '0.7.11', channel: 'unknown',
     source: 'store', platform: 'darwin' };
   assert.deepEqual(asked[0].body.batch, [
     { event: 'view_used', properties: { ...context, calls: 7 } },
