@@ -453,8 +453,11 @@ class FeaPair:
     area_mm2: float
     #: The gap between the faces, mm (0 = touching).
     gap_mm: float
-    #: ``bonded`` (glued into one body) or ``not_connected`` (too far apart to bond).
+    #: ``bonded`` (glued into one body), ``not_connected`` (too far apart to bond) or
+    #: ``overlapping`` (the solids share volume, so the pair is not bonded).
     type: str
+    #: The volume the two solids share, mm^3 (``overlapping`` only).
+    overlap_mm3: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -468,12 +471,16 @@ class FeaPartsResult:
     pairs: tuple[FeaPair, ...] = ()
 
     def human_lines(self) -> list[str]:
-        lines = [f"{_display(self.document)}: {len(self.parts)} parts, {len(self.pairs)} touching pairs"]
+        overlapping = sum(1 for pair in self.pairs if pair.type == "overlapping")
+        touching = f"{len(self.pairs) - overlapping} touching pairs" + (f", {overlapping} overlapping" if overlapping else "")
+        lines = [f"{_display(self.document)}: {len(self.parts)} parts, {touching}"]
         for part in self.parts:
             lines.append(f"  {part.ref:<8} {part.name}  {part.volume_mm3:.4g} mm^3")
         for pair in self.pairs:
             a, b = pair.between
-            if pair.type == "bonded":
+            if pair.type == "overlapping":
+                lines.append(f"{a} ↔ {b} · overlapping · {pair.overlap_mm3:.4g} mm³")
+            elif pair.type == "bonded":
                 gap = f" · gap {pair.gap_mm:.3g} mm" if pair.gap_mm else ""
                 lines.append(f"{a} ↔ {b} · {pair.area_mm2:.4g} mm²{gap} · bonded")
             else:

@@ -118,7 +118,7 @@ _NEAR_MISS_MM = 1.0
 
 
 def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verbose: bool = False) -> FeaPartsResult:
-    from cadgen._internal.fea.assembly import detect_contacts, list_parts
+    from cadgen._internal.fea.assembly import detect_contacts, detect_overlaps, list_parts
     from cadgen._internal.fea.mesh import require_fea_stack
 
     require_fea_stack()
@@ -130,7 +130,11 @@ def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verb
     parts = list_parts(scene)
     logger.info(f"read {len(parts)} parts; looking for pairs within {max(contact_tolerance_mm, _NEAR_MISS_MM)} mm")
     name = {part.ref: part.name for part in parts}
-    found = detect_contacts(parts, max(contact_tolerance_mm, _NEAR_MISS_MM), log=logger.info)
+    overlaps = detect_overlaps(parts, log=logger.info)
+    logger.info(f"found {len(overlaps)} overlapping pairs")
+    found = detect_contacts(
+        parts, max(contact_tolerance_mm, _NEAR_MISS_MM), skip={frozenset((o.a, o.b)) for o in overlaps}, log=logger.info
+    )
     logger.info(f"found {len(found)} touching or near pairs")
     pairs = [
         FeaPair(
@@ -141,6 +145,10 @@ def list_assembly_parts(target: Path, *, contact_tolerance_mm: float = 0.1, verb
             type="bonded" if c.gap_mm <= contact_tolerance_mm * (1 + 1e-6) else "not_connected",
         )
         for c in found
+    ] + [
+        FeaPair(between=(name[o.a], name[o.b]), refs=(o.a, o.b), area_mm2=0.0, gap_mm=0.0, type="overlapping",
+                overlap_mm3=round(o.volume_mm3, 4))
+        for o in overlaps
     ]
     return FeaPartsResult(
         ok=True,
@@ -164,6 +172,9 @@ class _Plan:
     #: Every pair in contact within the tolerance, and the ones that get bonded.
     contacts: list
     bonded: list
+    #: Every pair of parts whose solids overlap (never bonded), and the ones the study marks free.
+    overlaps: list
+    freed_overlaps: set
     #: Per part, the group of parts bonded to it (directly or through others).
     group_of: list[int]
 
@@ -182,7 +193,7 @@ def _find_part(parts: list, names: list[str], key: str, where: str) -> int:
 
 
 def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
-    from cadgen._internal.fea.assembly import _groups, detect_contacts, list_parts
+    from cadgen._internal.fea.assembly import _groups, detect_contacts, detect_overlaps, list_parts
 
     logger.info("reading the parts")
     parts = list_parts(scene)
@@ -199,10 +210,16 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
         given.add(index)
         materials[index] = material
 
-    contacts = detect_contacts(parts, parsed.contact_tolerance_mm, log=logger.info)
+    overlaps = detect_overlaps(parts, log=logger.info)
+    logger.info(f"found {len(overlaps)} overlapping pairs")
+    overlap_of = {frozenset((index_of[o.a], index_of[o.b])): o for o in overlaps}
+    contacts = detect_contacts(
+        parts, parsed.contact_tolerance_mm, skip={frozenset((o.a, o.b)) for o in overlaps}, log=logger.info
+    )
     logger.info(f"found {len(contacts)} touching pairs")
     pair_of = {frozenset((index_of[c.a], index_of[c.b])) for c in contacts}
     freed: set[frozenset[int]] = set()
+    freed_overlaps: set[frozenset[int]] = set()
     seen: set[frozenset[int]] = set()
     for n, connection in enumerate(parsed.connections):
         where = f"connections[{n}]"
@@ -213,6 +230,11 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
         if pair in seen:
             raise ValueError(f"{where}: '{names[i]}' and '{names[j]}' are connected twice")
         seen.add(pair)
+        if connection.type == "bonded" and pair in overlap_of:
+            raise ValueError(
+                f"{where}: '{names[i]}' and '{names[j]}' overlap by {overlap_of[pair].volume_mm3:.3g} mm³, "
+                "so they can't be bonded; fix the geometry"
+            )
         if connection.type == "bonded" and pair not in pair_of:
             raise ValueError(
                 f"{where}: '{names[i]}' and '{names[j]}' don't touch within {parsed.contact_tolerance_mm:g} mm, "
@@ -220,6 +242,8 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
             )
         if connection.type == "free" and pair in pair_of:
             freed.add(pair)
+        if connection.type == "free" and pair in overlap_of:
+            freed_overlaps.add(pair)
 
     bonded = [c for c in contacts if frozenset((index_of[c.a], index_of[c.b])) not in freed]
     group_of = [0] * len(parts)
@@ -233,7 +257,7 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
                 f"connections: '{names[i]}' and '{names[j]}' are also joined through other bonded parts, so one joint "
                 "between them can't be freed on its own (not yet supported); free the parts' other connections too"
             )
-    return _Plan(parts, names, materials, sorted(set(range(len(parts))) - given), contacts, bonded, group_of)
+    return _Plan(parts, names, materials, sorted(set(range(len(parts))) - given), contacts, bonded, overlaps, freed_overlaps, group_of)
 
 
 def _not_connected(plan: _Plan, unheld: list[list[int]]) -> list[dict]:
@@ -251,7 +275,18 @@ def _not_connected(plan: _Plan, unheld: list[list[int]]) -> list[dict]:
                 gap = part_gap(plan.parts[i], plan.parts[other])
                 if gap is not None and (nearest is None or gap < nearest[0]):
                     nearest = (gap, other)
-        if nearest is None:
+        refs = {plan.parts[i].ref for i in group}
+        index_of = {part.ref: i for i, part in enumerate(plan.parts)}
+        overlapped = max(
+            (o for o in plan.overlaps if (o.a in refs) != (o.b in refs)), key=lambda o: o.volume_mm3, default=None
+        )
+        if overlapped is not None:
+            other = overlapped.b if overlapped.a in refs else overlapped.a
+            where = (
+                f": it overlaps '{plan.names[index_of[other]]}' by {overlapped.volume_mm3:.3g} mm³ instead of touching it, "
+                "so it isn't bonded to it; fix the geometry or move them apart"
+            )
+        elif nearest is None:
             where = ""
         elif nearest[0] <= 1e-6:
             where = f": it touches '{plan.names[nearest[1]]}' but isn't bonded to it"
@@ -669,6 +704,11 @@ def solve_study(
         findings = checks.assembly_findings(all_solved)
         findings += [checks.default_material(plan.names[i], plan.materials[i].name) for i in plan.defaulted]
         findings += [checks.gap_closed(name_of[c.a], name_of[c.b], c.gap_mm) for c in plan.bonded if c.gap_mm > 0]
+        index_of = {part.ref: i for i, part in enumerate(plan.parts)}
+        findings += [
+            checks.overlapping_parts(name_of[o.a], name_of[o.b], o.volume_mm3)
+            for o in plan.overlaps if frozenset((index_of[o.a], index_of[o.b])) not in plan.freed_overlaps
+        ]
         findings.sort(key=lambda finding: finding["severity"] != "error")
 
     # The summary is the one place the numbers are rounded; everything else
@@ -850,6 +890,11 @@ def solve_study(
         "findings": findings,
         # An assembly: how its parts are joined (the parts' own results are in the summary).
         **({} if plan is None else {"connections": _connections(plan, volume)}),
+        # An assembly: the pairs of parts whose solids overlap (never bonded).
+        **({} if plan is None else {"overlaps": [
+            {"between": [name_of[o.a], name_of[o.b]], "refs": [o.a, o.b], "volume_mm3": round(o.volume_mm3, 4)}
+            for o in plan.overlaps
+        ]}),
         # The first and the finer solve's size and peak, when the part was solved twice.
         "refined": refined,
         "files": {"glb": glb_path.name, "vtu": vtu_path.name if vtu_path else None},

@@ -145,10 +145,11 @@ joined, through bonded neighbours, to a part that is fixed.
 
    It prints each part (ref, name, volume), then each touching pair with its
    contact area and gap and what it will be: `bonded`, or `not connected` for
-   a near miss (up to 1 mm apart, beyond `contact_tolerance_mm`). Read it
-   against what you know of the design: is each detected joint a real joint,
-   and is a joint you expect missing (a gap, or parts that overlap instead of
-   touching)? `--contact-tolerance-mm` tries another tolerance; `--json`
+   a near miss (up to 1 mm apart, beyond `contact_tolerance_mm`), or
+   `overlapping · N mm³` when the solids share volume (an interference: such
+   parts are never bonded). Read it against what you know of the design: is
+   each detected joint a real joint, and is a joint you expect missing (a gap,
+   or an overlap where the parts should touch)? `--contact-tolerance-mm` tries another tolerance; `--json`
    prints the same for scripting. Names can repeat (two parts called `bar`):
    use the ref (`#o1.2.1`) whenever a name is ambiguous.
 
@@ -181,6 +182,7 @@ Findings an assembly adds:
 | --- | --- | --- | --- |
 | `not_connected` | error | A part (or group of parts) has no bonded chain to a fixed part; the solve did not run. The message names the nearest part and its distance. | Fix the model so the parts touch, fix a face on the group, raise `contact_tolerance_mm` if the gap is within what you would call touching (it closes the gap), or set the study right: a part that is meant to be loose is not part of this model. |
 | `default_material` | warning | A part got the study's default material because `parts` does not name it. | Ask the user or read the model's own material, then name it in `parts`; if the default is right, say so in the report. |
+| `overlapping_parts` | warning | Two parts' solids overlap. They are not bonded, and real parts can't overlap. | Fix the geometry so they touch, or mark the pair `free` in `connections` if the overlap is an accepted modelling shortcut (it silences this). A part held only through the overlap is reported `not_connected`. |
 | `gap_closed` | warning | Two parts a little apart (within the tolerance) were bonded anyway, moving geometry up to the gap. | Check the gap is a modelling clearance and not a real one the joint should have; the stress at that joint is the model's closing, not the part's. |
 | `bonded_edge_peak` | warning | The peak sits on the edge of a bonded joint, where a rigid bond exaggerates stress. Appears only under the study's `margin`. | Read the stress a little away from the joint before redesigning; a bolted or welded joint is softer than this model. |
 

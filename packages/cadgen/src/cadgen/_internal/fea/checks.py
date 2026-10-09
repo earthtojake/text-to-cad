@@ -132,6 +132,18 @@ def gap_closed(first: str, second: str, gap_mm: float) -> dict:
     )
 
 
+def overlapping_parts(first: str, second: str, volume_mm3: float) -> dict:
+    """Two parts whose solids overlap: not bonded, and real parts can't overlap."""
+    return _finding(
+        "warning",
+        "overlapping_parts",
+        f"'{first}' and '{second}' overlap by {_number(volume_mm3)} mm³: real parts can't, "
+        "so the model may be wrong; fix the geometry or mark them free",
+        "overlapping parts are not bonded to each other, so no load passes between them",
+        [],
+    )
+
+
 def findings(solved: Solved) -> list[dict]:
     """The findings for one solved study, errors first."""
     found: list[dict] = []

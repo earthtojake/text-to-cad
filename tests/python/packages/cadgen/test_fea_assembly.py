@@ -32,12 +32,13 @@ TOLERANCE = 0.1
 
 def _write_assembly(
     directory: Path, *, lift: float = 0.0, edge_block: bool = False, far_block: float | None = None,
-    cap: bool = False, name: str = "assembly",
+    cap: bool = False, overlap_block: bool = False, name: str = "assembly",
 ) -> Path:
     """Base at the origin, post centred on its top and lifted by ``lift``; with
     ``edge_block``, a block that meets the base only along its +X/+Y edge; with
     ``far_block``, a block that far (mm) beyond the base's +X end; with ``cap``,
-    a plate on the post's top."""
+    a plate on the post's top; with ``overlap_block``, a block sunk 1 mm into the base's
+    +X end (they share 100 mm^3)."""
     from build123d import Align, Box, Compound, Pos, export_step
 
     base = Box(40, 20, 10, align=Align.MIN)
@@ -53,6 +54,10 @@ def _write_assembly(
         block = Pos(40 + far_block, 0, 0) * Box(10, 10, 10, align=Align.MIN)
         block.label = "block"
         children.append(block)
+    if overlap_block:
+        block = Pos(39, 5, 0) * Box(10, 10, 10, align=Align.MIN)
+        block.label = "block"
+        children.append(block)
     if cap:
         plate = Pos(12, 2, 40 + lift) * Box(16, 16, 5, align=Align.MIN)
         plate.label = "cap"
@@ -64,6 +69,10 @@ def _write_assembly(
 
 def _refs(scene) -> dict[str, str]:
     return {leaf.label: leaf.ref for leaf in scene.leaves()}
+
+
+def _refs_of(parts) -> dict[str, str]:
+    return {part.name: part.ref for part in parts}
 
 
 def _face_at(scene, part_ref: str, z: float) -> str:
@@ -135,6 +144,26 @@ class DetectContactsTest(unittest.TestCase):
         block = next(part.ref for part in parts if part.name == "block")
         self.assertEqual([c for c in contacts if block in (c.a, c.b)], [])
         self.assertEqual(len(contacts), 1)
+
+    def test_two_boxes_that_overlap_by_a_millimetre_share_a_hundred_cubic_millimetres(self):
+        from cadgen._internal.fea.assembly import detect_contacts, detect_overlaps, list_parts
+        from cadgen.step_scene import read_scene
+
+        parts = list_parts(read_scene(_write_assembly(self.tmp, overlap_block=True, name="sunk")))
+        (overlap,) = detect_overlaps(parts)
+        refs = _refs_of(parts)
+        self.assertEqual({overlap.a, overlap.b}, {refs["base"], refs["block"]})
+        self.assertAlmostEqual(overlap.volume_mm3, 100.0, places=3)
+        self.assertEqual(overlap.a, refs["block"])  # the smaller part first
+        # The overlapping pair is for the caller to leave out of contacts.
+        skip = {frozenset((overlap.a, overlap.b))}
+        self.assertEqual([c for c in detect_contacts(parts, TOLERANCE, skip=skip) if refs["block"] in (c.a, c.b)], [])
+
+    def test_parts_that_only_touch_do_not_overlap(self):
+        from cadgen._internal.fea.assembly import detect_overlaps
+
+        parts, _ = self._contacts()
+        self.assertEqual(detect_overlaps(parts), [])
 
     def test_a_row_of_parts_is_checked_only_between_neighbours(self):
         from build123d import Align, Box, Compound, Pos, export_step
@@ -305,6 +334,15 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertTrue(any("read 2 parts" in line for line in lines), lines)
         self.assertTrue(any("checking 1 close part pairs" in line for line in lines), lines)
         self.assertTrue(any("found 1 touching or near pairs" in line for line in lines), lines)
+
+    def test_an_overlap_is_listed_with_its_volume_and_is_not_a_touching_pair(self):
+        from cadgen import fea
+
+        result = fea.parts(_write_assembly(self.tmp, overlap_block=True))
+        self.assertEqual([(pair.type, pair.between) for pair in result.pairs], [("bonded", ("post", "base")), ("overlapping", ("block", "base"))])
+        self.assertAlmostEqual(result.pairs[1].overlap_mm3, 100.0, places=3)
+        self.assertTrue(result.human_lines()[0].endswith(": 3 parts, 1 touching pairs, 1 overlapping"))
+        self.assertIn("block ↔ base · overlapping · 100 mm³", result.human_lines())
 
     def test_a_near_miss_is_listed_as_not_connected(self):
         from cadgen import fea
@@ -749,6 +787,63 @@ class SolveAssemblyTest(unittest.TestCase):
         )
         self.assertEqual(finding["items"][0]["ref"], refs["block"])
         self.assertIn("error: 'block' isn't connected", result.human_lines()[1])
+
+    def _with_sunk_block(self, held_block: bool, **extra):
+        from cadgen.step_scene import read_scene
+
+        step = _write_assembly(self.tmp, overlap_block=True, name=f"sunk{held_block}")
+        scene = read_scene(step)
+        refs = _refs(scene)
+        fixed = [_face_at(scene, refs["base"], 0.0)] + ([_face_at(scene, refs["block"], 0.0)] if held_block else [])
+        study = {
+            "material": "6061",
+            "fixtures": [{"faces": fixed}],
+            "loads": [{"faces": [_face_at(scene, refs["post"], 40.0)], "type": "force", "vector_N": [1000, 0, 0]}],
+            "mesh": {"size_mm": 4.0},
+            **extra,
+        }
+        return step, study
+
+    def test_overlapping_parts_are_not_bonded_and_the_study_suggests_fixing_them(self):
+        from cadgen import fea
+
+        step, study = self._with_sunk_block(held_block=True)
+        result = fea.solve(step, self.tmp / "sunk.glb", study=study)
+        (finding,) = [f for f in result.findings if f["type"] == "overlapping_parts"]
+        self.assertEqual(finding["severity"], "warning")
+        self.assertEqual(
+            finding["summary"],
+            "'block' and 'base' overlap by 100 mm³: real parts can't, so the model may be wrong; fix the geometry or mark them free",
+        )
+        sidecar = json.loads(result.sidecar.read_text(encoding="utf-8"))
+        self.assertEqual([c["between"] for c in sidecar["connections"]], [["post", "base"]])
+        self.assertEqual([o["between"] for o in sidecar["overlaps"]], [["block", "base"]])
+
+    def test_marking_an_overlapping_pair_free_silences_the_suggestion(self):
+        from cadgen import fea
+
+        step, study = self._with_sunk_block(held_block=True, connections=[{"between": ["block", "base"], "type": "free"}])
+        result = fea.solve(step, self.tmp / "sunk-free.glb", study=study)
+        self.assertNotIn("overlapping_parts", [f["type"] for f in result.findings])
+
+    def test_an_overlap_cannot_be_bonded(self):
+        from cadgen import fea
+
+        step, study = self._with_sunk_block(
+            held_block=True, connections=[{"between": ["block", "base"], "type": "bonded"}]
+        )
+        with self.assertRaisesRegex(ValueError, r"overlap by 100 mm³, so they can't be bonded"):
+            fea.solve(step, self.tmp / "sunk-bonded.glb", study=study)
+
+    def test_a_part_an_overlap_leaves_unheld_says_so(self):
+        result = self._not_solved(*self._with_sunk_block(held_block=False))
+        (finding,) = result.findings
+        self.assertEqual(finding["type"], "not_connected")
+        self.assertEqual(
+            finding["summary"],
+            "'block' isn't connected to anything that is held: it overlaps 'base' by 100 mm³ instead of touching it, "
+            "so it isn't bonded to it; fix the geometry or move them apart",
+        )
 
     def test_a_part_set_free_of_the_only_held_part_is_not_connected(self):
         study = self.study({"base": "6061", "post": "steel"}, connections=[{"between": ["post", "base"], "type": "free"}])

@@ -24,10 +24,12 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from cadgen.step_scene import StepScene
 
-__all__ = ["Contact", "Glued", "Part", "detect_contacts", "glue", "list_parts", "part_centre", "part_faces", "part_gap"]
+__all__ = ["Contact", "Glued", "Overlap", "Part", "detect_contacts", "detect_overlaps", "glue", "list_parts", "part_centre", "part_faces", "part_gap"]
 
 # OpenCascade's own confusion distance: a gap below it is touching.
 _TOUCHING_MM = 1e-7
+# Shared volume below this is rounding along a face, not an overlap.
+_MIN_VOLUME_MM3 = 1e-3
 # Overlap below this is an edge or a point, not a face in contact.
 _MIN_AREA_MM2 = 1e-6
 # The tessellation behind the faces' distance bound: its deviation from the
@@ -64,6 +66,18 @@ class Contact:
     b: str
     area_mm2: float
     gap_mm: float
+
+
+@dataclass(frozen=True)
+class Overlap:
+    """Two parts whose solids share volume: real parts can't, so the model may be wrong.
+
+    ``a`` is the smaller part (by volume), like :class:`Contact`'s.
+    """
+
+    a: str
+    b: str
+    volume_mm3: float
 
 
 @dataclass
@@ -252,16 +266,45 @@ def _overlap_area(face_a, face_b, extrema) -> float:
     return float(props.Mass())
 
 
-def detect_contacts(parts: list[Part], tolerance_mm: float, *, log=None) -> list[Contact]:
+def detect_overlaps(parts: list[Part], *, log=None) -> list[Overlap]:
+    """Every pair of parts whose solids share volume, in part order.
+
+    Only parts whose boxes meet are intersected (:func:`_close_pairs`).
+    """
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+
+    candidates = _close_pairs([_box(part.shape, 0.0) for part in parts])
+    if log:
+        log(f"checking {len(candidates)} part pairs whose boxes meet for overlap")
+    overlaps = []
+    for i, j in candidates:
+        common = BRepAlgoAPI_Common(parts[i].shape, parts[j].shape)
+        if not common.IsDone():
+            continue
+        props = GProp_GProps()
+        BRepGProp.VolumeProperties_s(common.Shape(), props)
+        if props.Mass() > _MIN_VOLUME_MM3:
+            a, b = sorted((parts[i], parts[j]), key=lambda part: part.volume_mm3)
+            overlaps.append(Overlap(a=a.ref, b=b.ref, volume_mm3=float(props.Mass())))
+    return overlaps
+
+
+def detect_contacts(parts: list[Part], tolerance_mm: float, *, skip: "set[frozenset[str]]" = frozenset(), log=None) -> list[Contact]:
     """Every pair of parts in face contact within ``tolerance_mm``, in part order.
 
     The gap is the smallest gap between faces in contact; the area is the sum
     of their common areas. Boxes first (a sweep, :func:`_close_pairs`), then each
     face pair's box and sampled bound, and only the faces left get the exact
-    distance and area. ``log`` is told how many close pairs there are to check.
+    distance and area. Pairs of refs in ``skip`` (the overlapping ones) are not
+    looked at. ``log`` is told how many close pairs there are to check.
     """
     reach = tolerance_mm * (1 + 1e-6) + _TOUCHING_MM
-    candidates = _close_pairs([_box(part.shape, reach) for part in parts])
+    candidates = [
+        (i, j) for i, j in _close_pairs([_box(part.shape, reach) for part in parts])
+        if frozenset((parts[i].ref, parts[j].ref)) not in skip
+    ]
     if log:
         log(f"checking {len(candidates)} close part pairs for touching faces")
     faces: dict[int, _Faces] = {}
