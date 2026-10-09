@@ -16,7 +16,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from build123d import Compound, Edge, GeomType, Shell, Solid, Wire  # noqa: E402
+from build123d import Compound, Edge, Face, GeomType, Shell, Solid, Wire  # noqa: E402
 
 from cadgen._internal.brep_section import section_loops  # noqa: E402
 
@@ -79,6 +79,18 @@ class BrepSectionTests(unittest.TestCase):
 
     def test_a_plane_that_misses_cuts_nothing(self) -> None:
         self.assertEqual([], cut(self.cylinder, (0.0, 0.0, 1.0), 31.0))
+
+    def test_a_curve_is_sampled_by_its_turn_as_well_as_its_sag(self) -> None:
+        # An S-curve's midpoint lies on its chord, which satisfied a sag-only sampler with the
+        # curve's two ends: the S drew as a straight line, and a coil spring's cut collapsed to a
+        # loop with no area. A plate whose edge is an S, cut across, keeps its S.
+        s = Edge.make_spline([(0, 0), (5, 4), (10, 0), (15, -4), (20, 0)])
+        profile = Wire([s, Edge.make_line((20, 0), (20, -10)), Edge.make_line((20, -10), (0, -10)),
+                        Edge.make_line((0, -10), (0, 0))])
+        [loop] = cut(Solid.extrude(Face(profile), (0, 0, 10)), (0.0, 0.0, 1.0), 5.0)
+        [curve] = [edge["points"] for edge in loop["edges"] if "points" in edge]
+        self.assertGreater(max(y for _x, y, _z in curve), 3.9)
+        self.assertLess(min(y for _x, y, _z in curve), -3.9)
 
 
 class SectionMaterialTests(unittest.TestCase):

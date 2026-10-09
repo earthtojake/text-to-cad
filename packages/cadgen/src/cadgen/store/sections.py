@@ -43,7 +43,7 @@ INDEX_KIND = "section"
 SECTION_ENTRY_SCHEMA_VERSION = 1
 # What the cut IS: the loops' JSON shape and how they are made. Hashed into
 # every key, so a change here retires every entry by never asking for it again.
-SECTION_SCHEME = "cadgen-brep-section-v2"
+SECTION_SCHEME = "cadgen-brep-section-v3"
 # Planes are rounded before they key or cut anything, so the same plane reached
 # through two placements (one exact, one carrying 1e-16 of rotation noise) is
 # one entry, and the cut is made with exactly the plane the key names.

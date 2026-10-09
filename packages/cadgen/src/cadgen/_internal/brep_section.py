@@ -30,7 +30,7 @@ component's own coordinates:
   arc, ``sweep`` radians about ``axis`` from ``start`` (2*pi for a whole
   circle; negative when the edge runs against the circle's own axis);
 - ``{"points": [...]}`` -- any other curve (an ellipse, a B-spline), sampled
-  at ``deflection`` model units, ends included.
+  to ``deflection`` model units and 5 degrees of turn, ends included.
 
 The result is ``{"loops": [{"closed": bool, "filled": bool, "edges": [...]},
 ...]}``: ``filled`` loops bound a solid's cut and are always closed; the rest
@@ -48,6 +48,9 @@ from typing import Any
 # Relative to the component's bounding diagonal, floored for a degenerate one.
 _CONNECT_TOLERANCE = 1e-7
 _SCALE_FLOOR = 1e-9
+# A sampled curve turns at most this far between samples (and sags at most the
+# deflection): smooth at any size the drawing is framed at.
+_ANGULAR_DEFLECTION = math.radians(5.0)
 
 
 def _point(value) -> list[float]:
@@ -69,7 +72,7 @@ def _box(shape):
 
 def _edge_record(edge, deflection: float) -> dict[str, Any]:
     from OCP.BRepAdaptor import BRepAdaptor_Curve
-    from OCP.GCPnts import GCPnts_QuasiUniformDeflection
+    from OCP.GCPnts import GCPnts_TangentialDeflection
     from OCP.GeomAbs import GeomAbs_Circle, GeomAbs_Line
     from OCP.TopAbs import TopAbs_REVERSED
 
@@ -92,8 +95,11 @@ def _edge_record(edge, deflection: float) -> dict[str, Any]:
                 "sweep": float(-sweep if reversed_ else sweep),
             }
         }
-    sampler = GCPnts_QuasiUniformDeflection(curve, deflection, first, last)
-    if not sampler.IsDone() or sampler.NbPoints() < 2:
+    # Bounded by the turn of the tangent as well as the sag: a deflection-only
+    # sampler can be satisfied by a curve's two ends (a symmetric B-spline whose
+    # midpoint lies on its chord), and a closed cut drawn so has no area at all.
+    sampler = GCPnts_TangentialDeflection(curve, first, last, _ANGULAR_DEFLECTION, deflection)
+    if sampler.NbPoints() < 2:
         points = [_point(curve.Value(first)), _point(curve.Value(last))]
     else:
         points = [_point(sampler.Value(index)) for index in range(1, sampler.NbPoints() + 1)]
