@@ -160,8 +160,9 @@ joined, through bonded neighbours, to a part that is fixed.
    default is reported, and asking the user is better. Add `connections` only
    to override a detection (`free` for a pair that must not be glued, such as
    a part that only sits near another); touching pairs are bonded without it.
-   Fixtures and loads name faces on any part (`#o1.4.f23`), but never a face
-   that is a bonded joint.
+   Fixtures and loads name faces on any part (`#o1.4.f23`), but not a face
+   that is wholly a bonded joint (a face another part only partly covers is
+   fine: it holds or loads the area left uncovered).
 
 3. **Solve** exactly as for a part. The summary leads with the weakest part
    (lowest safety factor), then lists every part's peak stress, safety factor
@@ -186,8 +187,10 @@ Findings an assembly adds:
 | `gap_closed` | warning | Two parts a little apart (within the tolerance) were bonded anyway, moving geometry up to the gap. | Check the gap is a modelling clearance and not a real one the joint should have; the stress at that joint is the model's closing, not the part's. |
 | `bonded_edge_peak` | warning | The peak sits on the edge of a bonded joint, where a rigid bond exaggerates stress. Appears only under the study's `margin`. | Read the stress a little away from the joint before redesigning; a bolted or welded joint is softer than this model. |
 
-A `fixture` or `load` on a joint face is refused before the solve with an
-error naming the face: move it to the part's free face. `bolt` and `contact`
+A `fixture` or `load` on a face that is wholly a joint (the foot of a post)
+is refused before the solve with an error naming the face: move it to a face
+that is not covered. On a face only partly covered it applies to the exposed
+area alone. `bolt` and `contact`
 connection types are refused ("not yet"); a pair set `free` inside a group
 that is glued through other parts is refused too. When the weakest part's
 safety factor is under 3 the run meshes again at half the size, as for one

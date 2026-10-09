@@ -539,7 +539,7 @@ def _unsolved(document: Path, occurrence_ref: str, findings: list[dict]) -> FeaR
 def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_of: dict[str, int], max_h: float | None, log):
     """The glued, meshed assembly with its faces numbered by position, and the study's checks on it.
 
-    Raises ``ValueError`` for a fixture or load on a bonded joint, and :class:`_NotConnected`
+    Raises ``ValueError`` for a fixture or load on a face that is wholly a bonded joint, and :class:`_NotConnected`
     when the glue left a part apart from every fixed face.
     """
     volume = mesh_assembly(scene, [part.ref for part in plan.parts], plan.bonded, parsed.contact_tolerance_mm, max_h, log)
@@ -549,7 +549,9 @@ def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_
     ordinal_of.update({ref: position[selection.ref] for ref, selection in resolved.items()})
     index_of = {part.ref: i for i, part in enumerate(plan.parts)}
     for ref, selection in resolved.items():
-        if selection.ref in volume.interface_faces:
+        # A face only partly covered by a joint has outer triangles: it holds or loads its exposed area.
+        exposed = (volume.boundary_ordinal == position[selection.ref]).any()
+        if selection.ref in volume.interface_faces and not exposed:
             owner = index_of[selection.occurrence_ref]
             partners = sorted({
                 plan.names[index_of[c.b if index_of[c.a] == owner else c.a]]
@@ -558,7 +560,7 @@ def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_
             joined = " and ".join(quoted(name) for name in partners)
             raise ValueError(
                 f"{ref} is where {quoted(plan.names[owner])} is bonded to {joined}: "
-                "a fixture or load can't sit on a joint; choose a face on the outside of the part"
+                "a fixture or load can't sit on a joint; choose a face, or part of one, that is not covered by another part"
             )
     held = {ordinal_of[ref] for fixture in parsed.fixtures for ref in fixture.faces}
     if unheld := _unheld_after_meshing(volume, held, len(plan.parts)):

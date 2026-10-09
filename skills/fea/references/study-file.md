@@ -97,7 +97,9 @@ Run `cadgen fea parts assembly.step` first to see the parts and the pairs.
 - `contact_tolerance_mm`: default 0.1. Faces this close are touching; a gap
   within it is closed to bond the pair (a `gap_closed` finding says so).
 - Faces: `#o1.4.f23` is face 23 of occurrence `#o1.4`; faces may be on any
-  part, but not on a bonded joint (refused before the solve). At least one
+  part. A face that another part only partly covers (a plate's top with a post
+  standing on it) holds or loads its exposed area; a face wholly covered by a
+  bonded joint is refused before the solve. At least one
   part must be fixed, and every part must reach it through bonded neighbours
   (`not_connected` error otherwise).
 - `--occurrence REF` on the command line solves that one part alone; `parts`

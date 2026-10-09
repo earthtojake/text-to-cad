@@ -948,14 +948,24 @@ class SolveAssemblyTest(unittest.TestCase):
             finding["summary"], "'post' isn't connected to anything that is held: it touches 'base' but isn't bonded to it"
         )
 
-    def test_a_fixture_or_load_on_a_joint_is_a_study_error(self):
+    def test_a_fixture_or_load_on_a_face_wholly_a_joint_is_a_study_error(self):
         from cadgen import fea
 
-        joint = _face_at(self.scene, self.refs["base"], 10.0)
+        joint = _face_at(self.scene, self.refs["post"], 10.0)
         study = self.study(None)
         study["loads"] = [{"faces": [joint], "type": "force", "vector_N": [0, 0, -1]}]
-        with self.assertRaisesRegex(ValueError, rf"{joint} is where 'base' is bonded to 'post'"):
+        with self.assertRaisesRegex(ValueError, rf"{joint} is where 'post' is bonded to 'base'"), quiet():
             fea.solve(self.step, self.tmp / "joint.glb", study=study)
+
+    def test_a_face_partly_covered_by_a_joint_loads_its_exposed_area(self):
+        from cadgen import fea
+
+        study = self.study(None)
+        study["loads"] = [{"faces": [_face_at(self.scene, self.refs["base"], 10.0)], "type": "force", "vector_N": [0, 0, -100]}]
+        with quiet():
+            result = fea.solve(self.step, self.tmp / "exposed.glb", study=study)
+        self.assertEqual(result.summary["applied_force_N"], [0.0, 0.0, -100.0])
+        self.assertAlmostEqual(result.summary["reaction_force_N"][2], 100.0, delta=0.1)
 
     def test_bolt_is_not_yet(self):
         from cadgen import fea
