@@ -427,13 +427,19 @@ class AnotherSchemaVersion(StoreSweepCase):
         other.write_bytes(b"a document another cadgen compiled")
         other_tree = seed_result(other, components=("a", "b"))
         only_other = {other_tree} | {c["brep"] for c in get_tree(other_tree)["components"].values()} - {brep}
-        # Its entries, moved to the keys the other version owns: cadgen 0.7.19's
-        # unversioned document key, and an older record schema's key.
+        # Its entries, as the other versions wrote them: cadgen 0.7.19's document
+        # entry (schema 4, at the unversioned key), and an older record schema's record.
         index = self.store / "index"
         digest = hashlib.sha256(other.read_bytes()).hexdigest()
-        theirs = [(index / "document" / document_key(digest)).rename(index / "document" / digest),
-                  (index / "model" / record_key(other)).rename(
-                      index / "model" / f"{model_key(other)}-v{RECORD_SCHEMA_VERSION - 1}")]
+        theirs = []
+        for ours_at, theirs_at, schema in (
+                (index / "document" / document_key(digest), index / "document" / digest, 4),
+                (index / "model" / record_key(other), index / "model" / f"{model_key(other)}-v{RECORD_SCHEMA_VERSION - 1}",
+                 RECORD_SCHEMA_VERSION - 1)):
+            theirs_at.write_text(json.dumps({**json.loads(ours_at.read_text(encoding="utf-8")), "schemaVersion": schema}),
+                                 encoding="utf-8")
+            ours_at.unlink()
+            theirs.append(theirs_at)
         week = gc.OBSOLETE_RETIRE_AFTER_SECONDS
         for path in theirs:
             self.old(path, week - DAY)
