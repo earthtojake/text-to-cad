@@ -319,6 +319,34 @@ class ServerRelaysTheDeath(unittest.TestCase):
                 self.assertEqual(next(frame["workerDied"]["exitStatus"] for frame in conn.frames if "workerDied" in frame), status)
 
 
+class AWorkerThatCouldNotStart(unittest.TestCase):
+    """A worker that could not start is a crash, unless the daemon's installation was removed under it:
+    then no worker can start, and the daemon retires so its clients start the next from their own."""
+
+    def handle(self, gone: bool):
+        pool = mock.Mock()
+        pool.acquire.side_effect = pool_mod.WorkerGone("worker 777 exited with code 106 before announcing itself",
+                                                       exit_status=106)
+        conn = ServerRelaysTheDeath._Conn()
+        self.addCleanup(server._INSTALLATION_GONE.clear)
+        with mock.patch.object(server, "_JOBS", JobLedger()), mock.patch.object(server, "_POOL", pool), \
+                mock.patch.object(server, "_log"), \
+                mock.patch.object(server.pool_mod, "installation_gone", return_value=gone), \
+                mock.patch.object(server.telemetry, "worker_died") as worker_died:
+            server._handle_request(conn, {"tool": "step-compile", "argv": ["x.step"], "cwd": "/w",
+                                          "prog": "cadgen step compile"})
+        self.assertEqual(conn.frames[-1], {"exit": 1})
+        return worker_died
+
+    def test_a_start_that_failed_is_a_crash(self):
+        self.assertEqual(self.handle(gone=False).call_args_list, [mock.call(106)])
+        self.assertFalse(server._INSTALLATION_GONE.is_set())
+
+    def test_a_start_the_removed_installation_failed_is_none_and_retires_the_daemon(self):
+        self.assertEqual(self.handle(gone=True).call_args_list, [])
+        self.assertTrue(server._INSTALLATION_GONE.is_set())
+
+
 class ServerStatusIdentity(unittest.TestCase):
     def test_status_keeps_the_loaded_startup_token_when_disk_code_changes(self):
         pool = mock.Mock()
