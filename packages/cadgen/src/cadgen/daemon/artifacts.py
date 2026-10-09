@@ -36,8 +36,10 @@ SECTION_ITEMS_MAX = 256
 DEAL_PER_JOB = 4
 SURFACES_PER_STARTED_WORKER = 32
 MESHES_PER_STARTED_WORKER = 96
-# A cut is milliseconds a component, so only a large assembly repays starting a worker for it.
-SECTIONS_PER_STARTED_WORKER = 256
+# A cut is the common of a component's solids with the plane: about 60 ms a component
+# (hypercar: 222 crossing cuts, 13 s in one job), so some 40 cuts repay a worker's start.
+# Measured on hypercar at fresh planes, one per 256 cuts: 8.6-14.1 s; one per 32: 7.5-9.8 s.
+SECTIONS_PER_STARTED_WORKER = 32
 
 
 class ArtifactJobError(RuntimeError):
