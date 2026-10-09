@@ -33,8 +33,10 @@ the user sees the colour map.
 
 ## Setup
 
-Run cadgen through [uv](https://docs.astral.sh/uv/), so this skill's commands share
-one installation with the `$cad` skill and the CAD app's server:
+Run cadgen through [uv](https://docs.astral.sh/uv/). `cadgen fea faces` shares
+one installation with the `$cad` skill and the CAD app's server; `cadgen fea
+solve` needs the `fea` extra, so it runs from its own installation, made the
+first time it is needed (below):
 
 - `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.17 cadgen`
 - `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.17 python`
@@ -66,6 +68,9 @@ stress. Restate every load in those units before you write it down.
    Each line is one face: selector, area, centre, surface type and a hint such
    as `plane, normal -Z, largest`. Use the hint and the centre to match the
    user's words ("the mounting face", "the top of the upright") to a selector.
+   A document with several parts refuses with the occurrences it holds; pass
+   the one to study, `cadgen fea faces assembly.step --occurrence #o2`, and
+   every face the study names must be on that part.
    When two faces fit equally, ask, quoting both selectors. A face the user
    selected in the Viewer arrives as `part.step#o1.f17` and needs no lookup.
 
@@ -82,7 +87,10 @@ stress. Restate every load in those units before you write it down.
 
    A `force` is the total force over its faces; a `pressure` is in MPa and
    pushes into the surface. Leave `mesh` out on the first run; the default
-   element size is a fortieth of the part's bounding diagonal.
+   element size is a fortieth of the part's bounding diagonal. `margin` is
+   the safety factor the part should keep (default 2, at least 1): set it
+   higher for a polymer, a fatigue load or a part that must not fail, lower
+   only when the user says the load is known exactly.
 
 3. **Solve.**
 
@@ -98,12 +106,20 @@ stress. Restate every load in those units before you write it down.
    cadgen fea solve part.step FEA/part.bracket-load.glb --study study.json --vtu
    ```
 
-   `--vtu` adds a ParaView file. `--json` prints the result as one JSON line
+   When the safety factor comes out under 3 the run meshes again at half the
+   element size and solves again, by itself; the finer result is the one
+   written and reported, and the sidecar's `refined` block records both
+   sizes and peaks. `--vtu` adds a ParaView file. `--json` prints the result as one JSON line
    for scripting. `--verbose` shows mesh and solve progress on stderr. A study
    with no fixture, a face that is not on the part, or an out-of-range
    selector is refused with a message naming the field.
 
-4. **Report.** Quote, in this order: max von Mises (MPa) and where it is,
+4. **Read the findings.** Every solve prints them after the numbers, one
+   line each, `error:` or `warning:` and then what is wrong and what to do
+   (`findings` in `--json` and the sidecar). Read them before reporting; see
+   [Read the findings](#read-the-findings).
+
+5. **Report.** Quote, in this order: max von Mises (MPa) and where it is,
    safety factor against yield, max displacement (mm) and where, the applied
    load and the reaction (they balance, or the run warns), the mesh size and
    element count. Then say what the model assumes. Open the GLB in the Viewer
@@ -115,13 +131,37 @@ stress. Restate every load in those units before you write it down.
 - **Nodal von Mises** is the reported peak. **Gauss-point von Mises** is the
   raw element value and is always higher; a gap of more than 50 % means a
   stress concentration the mesh has not resolved, usually at a fixed edge or
-  a sharp inside corner. The run warns when that happens.
+  a sharp inside corner. A finding says so when it matters.
 - A clamped face is stiffer than any real bolt or weld, and the stress at its
   edge is a singularity: it grows with every refinement and never converges.
   Read the peak away from the fixture when the fixture edge is the maximum.
 - Safety factor = yield / max nodal von Mises. Below 1 the part yields in
-  this model; 1 to 2 is marginal for a first pass; above 2 is a comfortable
-  first answer for a static load on a ductile metal. Polymers and fatigue
-  need more margin than that. Do not certify a design from one run.
+  this model; under the study's `margin` (default 2) is marginal for a first
+  pass; above it is a comfortable first answer for a static load on a ductile
+  metal. Polymers and fatigue need more margin than that. Do not certify a
+  design from one run.
 - Displacement is what the part moves, before any scale. The GLB positions
   carry `deformation_scale` times that; the sidecar has the true number.
+
+## Read the findings
+
+Every solve checks its own result as an engineer would and lists findings,
+errors first. An **error** makes the part unfit to use: fix it before you call
+the part done. A **warning** is a suggestion: weigh it as an engineer would,
+act on it or tell the user why not. A clean part has no findings. Each finding
+names the face it sits on (`#o1.f12`, the original part's selector) and where,
+in the part's mm.
+
+| Finding | What it means | What to do |
+| --- | --- | --- |
+| `yields` (error) | The peak stress is above the material's yield strength. | Make the part stronger where the peak is (thicker, deeper, a fillet or rib there), choose a stronger material, or confirm the load with the user; solve again. If a `peak_at_fixture` or `peak_concentration` finding sits beside it, read that first: the peak may be the model's, not the part's. |
+| `low_margin` | It holds, but under the study's `margin`. | Strengthen it as for `yields`, or tell the user the margin it has and let them decide; never lower `margin` just to clear the finding. |
+| `peak_at_fixture` | The peak sits on a fixed face, where a perfectly rigid clamp exaggerates stress. | Read the stress a little away from the fixed face (the GLB's colours, or a probe in the VTU) before redesigning; if that is still high, the finding beside it stands. |
+| `peak_concentration` | The Gauss-point peak is well above the nodal one: a sharp corner or concentrated load the mesh cannot resolve. | Fillet the corner, spread the load over a larger face, or set a smaller `mesh.size_mm` and compare. |
+| `mesh_not_converged` | The automatic finer solve moved the peak by more than 10 %. | A peak that kept rising sits on a singularity (a sharp corner, the fixed edge): fillet it or judge the stress away from it. Otherwise set a smaller `mesh.size_mm` and solve again before trusting the safety factor. |
+| `large_displacement` | It moves more than 1 % of its size. | The small-displacement model is stretched: check the fit against mating parts and whether the deflection is acceptable; stiffen the part if not. |
+| `no_load` | The peak stress is zero: no load reaches the part. | Check that the loaded faces are on the part and connected to the fixed ones, and that the force is not zero. |
+
+A `warning:` line that is not a finding (a slow solve, reactions that do not
+balance, a finer solve that failed) is about the run itself: read it, and
+mention it when it bears on the answer.

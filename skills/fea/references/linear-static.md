@@ -52,8 +52,11 @@ and how to tell a good answer from a bad one.
 - First run at the default size (a fortieth of the bounding diagonal).
 - The run reports both the nodal and the Gauss-point von Mises peak. When the
   Gauss-point value is more than 50 % above the nodal one, the peak is not
-  resolved; the run warns. Halve `mesh.size_mm` once (`--mesh-size` on the
-  command line) and compare the peaks.
+  resolved; when that matters the run lists a `peak_concentration` finding.
+  When the safety factor is under 3 the run halves the element size and
+  solves again by itself, and lists `mesh_not_converged` when the peak moved
+  more than 10 %. Otherwise halve `mesh.size_mm` yourself (`--mesh-size` on
+  the command line) and compare the peaks.
 - A peak that moves less than about 10 % between the two runs is converged
   enough for a first answer. A peak that keeps growing sits on a singularity:
   a clamped edge, a sharp inside corner, a point load. Report the value a

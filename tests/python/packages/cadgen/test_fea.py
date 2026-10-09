@@ -35,7 +35,8 @@ except RuntimeError:
     HAVE_FEA = False
 
 # The cantilever: length along +X, fixed at x = 0, loaded at x = L in -Z.
-LENGTH, WIDTH, HEIGHT, FORCE = 60.0, 6.0, 6.0, 100.0
+# Light enough that steel keeps a safety factor above 3, so it solves once.
+LENGTH, WIDTH, HEIGHT, FORCE = 60.0, 6.0, 6.0, 20.0
 STEEL = lookup_material("steel")
 
 
@@ -51,12 +52,46 @@ def _bending_stress(x: float) -> float:
     return 6.0 * FORCE * (LENGTH - x) / (WIDTH * HEIGHT ** 2)
 
 
-def _write_cantilever(directory: Path) -> Path:
+def _write_cantilever(directory: Path, length: float = LENGTH, side: float = WIDTH) -> Path:
     from build123d import Align, Box, export_step
 
     path = directory / "cantilever.step"
-    export_step(Box(LENGTH, WIDTH, HEIGHT, align=(Align.MIN, Align.CENTER, Align.CENTER)), str(path))
+    export_step(Box(length, side, side, align=(Align.MIN, Align.CENTER, Align.CENTER)), str(path))
     return path
+
+
+def _end_faces(listing) -> tuple[str, str]:
+    """The refs of the faces at x = 0 and at the far end."""
+    by_x = {}
+    for face in listing.faces:
+        if face.surface == "plane" and face.normal is not None and abs(abs(face.normal[0]) - 1) < 1e-6:
+            by_x[face.center_mm[0]] = face.ref
+    return by_x[min(by_x)], by_x[max(by_x)]
+
+
+def _glb_extras(path: Path) -> dict:
+    import struct
+
+    raw = path.read_bytes()
+    json_length, _ = struct.unpack_from("<II", raw, 12)
+    return json.loads(raw[20:20 + json_length])["meshes"][0]["extras"]
+
+
+class _CountingSolve:
+    """Wraps the solver to count its calls; ``fail_after`` makes later calls raise."""
+
+    def __init__(self, fail_after: int | None = None):
+        from cadgen._internal.fea import solve
+
+        self.real = solve.solve_linear_static
+        self.calls = 0
+        self.fail_after = fail_after
+
+    def __call__(self, *args, **kwargs):
+        self.calls += 1
+        if self.fail_after is not None and self.calls > self.fail_after:
+            raise RuntimeError("the mesher gave up at this size")
+        return self.real(*args, **kwargs)
 
 
 class StudyFile(unittest.TestCase):
@@ -131,14 +166,12 @@ class Cantilever(unittest.TestCase):
         cls._tmp = tempfile.TemporaryDirectory()
         directory = Path(cls._tmp.name)
         cls.step = _write_cantilever(directory)
+        from unittest import mock
+
         from cadgen import fea
 
         listing = fea.faces(cls.step)
-        by_x = {}
-        for face in listing.faces:
-            if face.surface == "plane" and face.normal is not None and abs(abs(face.normal[0]) - 1) < 1e-6:
-                by_x[round(face.center_mm[0])] = face.ref
-        cls.fixed_ref, cls.load_ref = by_x[0], by_x[round(LENGTH)]
+        cls.fixed_ref, cls.load_ref = _end_faces(listing)
         cls.listing = listing
         cls.study = {
             "material": "steel",
@@ -147,7 +180,9 @@ class Cantilever(unittest.TestCase):
             "mesh": {"size_mm": 2.0},
         }
         cls.out = directory / "results" / "cantilever.glb"
-        cls.result = fea.solve(cls.step, cls.out, study=cls.study, vtu=True)
+        cls.solver = _CountingSolve()
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", cls.solver):
+            cls.result = fea.solve(cls.step, cls.out, study=cls.study, vtu=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -248,6 +283,16 @@ class Cantilever(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["summary"]["max_displacement_mm"], self.result.summary["max_displacement_mm"])
         self.assertEqual(payload["mesh"]["dofs"], self.result.mesh["dofs"])
+        self.assertEqual(payload["findings"], [])
+
+    def test_a_comfortable_part_solves_once_and_has_nothing_to_say(self):
+        self.assertEqual(self.solver.calls, 1)
+        self.assertEqual(self.result.findings, ())
+        sidecar = json.loads(self.result.sidecar.read_text(encoding="utf-8"))
+        self.assertEqual(sidecar["findings"], [])
+        self.assertIsNone(sidecar["refined"])
+        self.assertEqual(_glb_extras(self.result.glb)["findings"], [])
+        self.assertEqual(self.result.mesh["size_mm"], 2.0)
 
     def test_a_face_on_a_different_part_or_a_non_face_is_refused(self):
         from cadgen import fea
@@ -264,6 +309,80 @@ class Cantilever(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             fea.solve(self.step, self.out.with_suffix(".vtu"), study=self.study)
         self.assertIn(".glb", str(caught.exception))
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class Yielding(unittest.TestCase):
+    """A 3 mm square steel bar, 40 mm long, under 100 N: about 900 MPa at the root."""
+
+    SIZE = 1.0
+
+    @classmethod
+    def setUpClass(cls):
+        from unittest import mock
+
+        from cadgen import fea
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        directory = Path(cls._tmp.name)
+        cls.step = _write_cantilever(directory, length=40.0, side=3.0)
+        cls.fixed_ref, cls.load_ref = _end_faces(fea.faces(cls.step))
+        # The fixture names its face with the document prefix, as the viewer copies it.
+        cls.study = {
+            "material": "steel",
+            "fixtures": [{"faces": [f"{cls.step.name}{cls.fixed_ref}"], "type": "fixed"}],
+            "loads": [{"faces": [cls.load_ref], "type": "force", "vector_N": [0, 0, -100.0]}],
+            "mesh": {"size_mm": cls.SIZE},
+        }
+        cls.solver = _CountingSolve()
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", cls.solver):
+            cls.result = fea.solve(cls.step, directory / "bar.glb", study=cls.study)
+        cls.sidecar = json.loads(cls.result.sidecar.read_text(encoding="utf-8"))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_it_yields_as_an_error_in_the_sidecar_the_glb_and_the_cli(self):
+        first = self.sidecar["findings"][0]
+        self.assertEqual((first["check"], first["severity"], first["type"]), ("fea", "error", "yields"))
+        self.assertIn("The cantilever yields", first["summary"])
+        self.assertEqual(_glb_extras(self.result.glb)["findings"], self.sidecar["findings"])
+        self.assertEqual(list(self.result.findings), self.sidecar["findings"])
+        self.assertIn(f"error: {first['summary']}", self.result.human_lines())
+
+    def test_a_close_call_is_solved_again_finer_and_the_finer_result_is_written(self):
+        self.assertEqual(self.solver.calls, 2)
+        self.assertEqual(self.result.mesh["size_mm"], self.SIZE / 2)
+        refined = self.sidecar["refined"]
+        self.assertEqual((refined["from_size_mm"], refined["size_mm"]), (self.SIZE, self.SIZE / 2))
+        self.assertEqual(refined["max_von_mises_MPa"], self.result.summary["max_von_mises_MPa"])
+        self.assertEqual(_glb_extras(self.result.glb)["fields"][0]["max"], self.result.summary["max_von_mises_MPa"])
+
+    def test_a_peak_on_a_prefixed_fixture_is_at_the_fixture(self):
+        at_fixture = [f for f in self.sidecar["findings"] if f["type"] == "peak_at_fixture"]
+        self.assertEqual(len(at_fixture), 1)
+        self.assertEqual(at_fixture[0]["items"][0]["ref"], self.fixed_ref)
+        self.assertNotIn(".step", at_fixture[0]["items"][0]["ref"])
+
+    def test_a_failed_finer_solve_keeps_the_first_result(self):
+        from unittest import mock
+
+        from cadgen import fea
+
+        solver = _CountingSolve(fail_after=1)
+        out = Path(self._tmp.name) / "failed-resolve.glb"
+        with mock.patch("cadgen._internal.fea.solve.solve_linear_static", solver):
+            result = fea.solve(self.step, out, study=self.study)
+        self.assertEqual(solver.calls, 2)
+        self.assertEqual(result.mesh["size_mm"], self.SIZE)
+        types = [finding["type"] for finding in result.findings]
+        self.assertEqual(types[0], "yields")
+        self.assertNotIn("mesh_not_converged", types)
+        (why,) = [warning for warning in result.warnings if "finer" in warning]
+        self.assertIn("the mesher gave up at this size", why)
+        sidecar = json.loads(result.sidecar.read_text(encoding="utf-8"))
+        self.assertIsNone(sidecar["refined"]["max_von_mises_MPa"])
 
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")

@@ -12,6 +12,7 @@ from cadgen.cli_logging import CliLogger
 from cadgen.results import FeaFace, FeaFacesResult, FeaResult
 
 if TYPE_CHECKING:
+    from cadgen._internal.fea.checks import Solved
     from cadgen.step_scene import Occurrence, Selection, StepScene
 
 __all__ = ["list_faces", "solve_study"]
@@ -103,6 +104,51 @@ def list_faces(target: Path, *, occurrence: str | None = None, verbose: bool = F
     return FeaFacesResult(ok=True, document=Path(target), occurrence=owner.ref, faces=tuple(faces))
 
 
+def _peak_face(volume, outcome, peak_node: int, fixed_ordinals: set[int]) -> str | None:
+    """The ``#o1.fN`` face whose boundary triangles hold the peak node, or ``None``
+    inside the part. A node on an edge touches two faces; a fixed one wins, since
+    a peak on the fixture's edge is a peak at the fixture."""
+    rows = (outcome.boundary_quadratic == peak_node).any(axis=1)
+    ordinals = sorted({int(o) for o in volume.boundary_ordinal[rows]} - {0})
+    if not ordinals:
+        return None
+    fixed = [ordinal for ordinal in ordinals if ordinal in fixed_ordinals]
+    return volume.faces[(fixed or ordinals)[0]].ref
+
+
+def _solved(volume, outcome, parsed, ordinal_of: dict[str, int], part: str) -> "Solved":
+    """The numbers of one solve the checks read, faces as bare ``#o1.fN`` refs.
+
+    The study may name a face with a document prefix (``part.step#o1.f17``) or a
+    label; both go through the ordinal to the scene's own ref, so a fixture and
+    the peak's face compare as the same string.
+    """
+    import numpy as np
+
+    from cadgen._internal.fea.checks import Solved
+
+    fixed_ordinals = {ordinal_of[ref] for fixture in parsed.fixtures for ref in fixture.faces}
+    magnitude = np.linalg.norm(outcome.displacement, axis=1)
+    peak_node = int(outcome.von_mises.argmax())
+    moved_node = int(magnitude.argmax())
+    extent = volume.nodes.max(axis=0) - volume.nodes.min(axis=0)
+    return Solved(
+        material_name=parsed.material.name,
+        yield_MPa=parsed.material.yield_strength,
+        peak_MPa=float(outcome.von_mises[peak_node]),
+        peak_gauss_MPa=outcome.von_mises_gauss_max,
+        peak_at=tuple(float(c) for c in outcome.dof_locations[peak_node]),
+        peak_face=_peak_face(volume, outcome, peak_node, fixed_ordinals),
+        fixed_faces=tuple(volume.faces[ordinal].ref for ordinal in sorted(fixed_ordinals)),
+        max_displacement_mm=float(magnitude[moved_node]),
+        displacement_at=tuple(float(c) for c in outcome.dof_locations[moved_node]),
+        bbox_diagonal_mm=float(np.linalg.norm(extent)),
+        margin=parsed.margin,
+        finer_peak_MPa=None,
+        part=part,
+    )
+
+
 def solve_study(
     target: Path,
     out: Path | None,
@@ -112,6 +158,15 @@ def solve_study(
     vtu: bool = False,
     verbose: bool = False,
 ) -> FeaResult:
+    """Mesh, solve and check one study, then write its GLB and sidecar.
+
+    When the safety factor is close to failing (:func:`checks.needs_finer`) the
+    part is meshed again at half the element size and solved again. The finer
+    solve is the more trustworthy one, so when it succeeds its numbers are the
+    ones written and reported; the checks compare its peak with the first's for
+    convergence. When it fails the written GLB stays the first solve's, the
+    result carries one warning saying why, and no convergence finding is made.
+    """
     from cadgen._internal.fea.study import parse_study
 
     parsed = parse_study(study)  # stdlib, before any heavy import
@@ -123,22 +178,56 @@ def solve_study(
     sidecar_path = glb_path.with_suffix(".json")
     vtu_path = glb_path.with_suffix(".vtu") if vtu else None
 
+    from cadgen._internal.fea import checks
     from cadgen._internal.fea.mesh import mesh_occurrence, require_fea_stack
 
     require_fea_stack()
     scene = _open(document)
     occurrence, resolved = _single_occurrence(scene, parsed.face_refs)
     ordinal_of = {ref: int(selection._ordinal) for ref, selection in resolved.items()}
-    logger.debug(f"meshing {occurrence.ref}")
-    volume = mesh_occurrence(occurrence, max_h=mesh_size or parsed.mesh_size)
-    logger.debug(f"meshed: {len(volume.tets)} tets, {len(volume.nodes)} nodes, size {volume.max_h:.3g} mm in {volume.seconds:.1f}s")
 
     import numpy as np
 
+    from cadgen._internal.fea import solve
     from cadgen._internal.fea.outputs import RAMP, auto_deformation_scale, write_glb, write_vtu
-    from cadgen._internal.fea.solve import solve_linear_static
 
-    outcome = solve_linear_static(volume, parsed.material, parsed.fixtures, parsed.loads, ordinal_of, log=logger.debug)
+    def mesh_and_solve(max_h: float | None):
+        logger.debug(f"meshing {occurrence.ref}")
+        volume = mesh_occurrence(occurrence, max_h=max_h)
+        logger.debug(f"meshed: {len(volume.tets)} tets, {len(volume.nodes)} nodes, size {volume.max_h:.3g} mm in {volume.seconds:.1f}s")
+        outcome = solve.solve_linear_static(volume, parsed.material, parsed.fixtures, parsed.loads, ordinal_of, log=logger.debug)
+        return volume, outcome
+
+    volume, outcome = mesh_and_solve(mesh_size or parsed.mesh_size)
+    solved = _solved(volume, outcome, parsed, ordinal_of, document.stem)
+    refined = None
+    finer_failure = None
+    if checks.needs_finer(checks.safety_factor(solved)):
+        refined = {
+            "from_size_mm": round(volume.max_h, 4),
+            "from_max_von_mises_MPa": round(solved.peak_MPa, 4),
+            "size_mm": round(volume.max_h / 2, 4),
+            "max_von_mises_MPa": None,
+        }
+        logger.debug(f"safety factor under {checks.RESOLVE_BELOW:g}: solving again at {volume.max_h / 2:.3g} mm")
+        try:
+            volume, outcome = mesh_and_solve(volume.max_h / 2)
+        except Exception as exc:  # a finer solve is a second opinion; the first answer stands without it
+            finer_failure = (
+                f"the finer solve at {refined['size_mm']:g} mm failed ({exc}); "
+                "the result is the first solve's, and its convergence is unchecked"
+            )
+        else:
+            # Where things are comes from the finer solve, the one written, so a
+            # finding points at the GLB the viewer shows; the peaks stay the
+            # first solve's, so the convergence and spike checks compare like
+            # with like.
+            finer = _solved(volume, outcome, parsed, ordinal_of, document.stem)
+            refined["max_von_mises_MPa"] = round(finer.peak_MPa, 4)
+            solved = dataclasses.replace(
+                finer, peak_MPa=solved.peak_MPa, peak_gauss_MPa=solved.peak_gauss_MPa, finer_peak_MPa=finer.peak_MPa
+            )
+    findings = checks.findings(solved)
 
     # The summary is the one place the numbers are rounded; everything else
     # (the GLB's extras, the sidecar) is derived from it.
@@ -163,12 +252,8 @@ def solve_study(
     summary["safety_factor"] = round(material.yield_strength / max_vm, 3) if max_vm > 0 else None
 
     warnings = list(outcome.warnings)
-    if outcome.von_mises_gauss_max > 1.5 * max_vm > 0:
-        warnings.append(
-            f"the Gauss-point peak ({outcome.von_mises_gauss_max:.1f} MPa) is well above the nodal peak "
-            f"({max_vm:.1f} MPa): a stress concentration at a fixed edge or sharp corner is not resolved; "
-            "refine mesh.size_mm once and compare, and read the peak away from the fixture"
-        )
+    if finer_failure:
+        warnings.append(finer_failure)
     balance = max(abs(a + r) for a, r in zip(outcome.applied, reaction_total))
     if balance > 1e-3 * max(1.0, max(abs(a) for a in outcome.applied)):
         warnings.append(f"reactions do not balance the applied load (mismatch {balance:.3g} N)")
@@ -189,6 +274,8 @@ def solve_study(
              "max": summary["max_displacement_mm"], "attribute_scale": 1000.0},
         ],
         "ramp": [[stop, list(colour)] for stop, colour in RAMP],
+        # What an engineer would say about the result (checks.py), errors first.
+        "findings": findings,
     }
     write_glb(
         glb_path,
@@ -236,6 +323,9 @@ def solve_study(
         "mesh": mesh_info,
         "timings": timings,
         "warnings": warnings,
+        "findings": findings,
+        # The first and the finer solve's size and peak, when the part was solved twice.
+        "refined": refined,
         "files": {"glb": glb_path.name, "vtu": vtu_path.name if vtu_path else None},
     }
     sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
@@ -251,4 +341,5 @@ def solve_study(
         mesh=mesh_info,
         timings=timings,
         warnings=tuple(warnings),
+        findings=tuple(findings),
     )

@@ -7,7 +7,7 @@ knows them: ``_VON_MISES`` (float, MPa) and ``_DISPLACEMENT`` (vec3, in glTF
 units and axes -- metres, Y up -- unscaled), so the FEA overlay can recolour
 by either field and change the deformation scale from the same file. The
 mesh carries ``extras`` with the fields, the deformation scale and the ramp
-stops -- a legend's inputs. Written by hand (glTF 2.0 is a JSON header and
+stops -- a legend's inputs -- and the study's ``findings`` (checks.py). Written by hand (glTF 2.0 is a JSON header and
 one binary buffer) so the result path adds no dependency the solver did not
 already need.
 

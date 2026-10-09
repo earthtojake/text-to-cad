@@ -366,8 +366,10 @@ class FeaResult:
 
     ``summary`` carries the answer an engineer asks for first: max von Mises
     (nodal and Gauss-point), safety factor against yield, max displacement,
-    and the applied-versus-reaction balance. The GLB is what the viewer shows;
-    the JSON sidecar holds this whole result plus the study it came from.
+    and the applied-versus-reaction balance. ``findings`` is what an engineer
+    would say about it, errors first, in the KiCad findings' shape. The GLB is
+    what the viewer shows; the JSON sidecar holds this whole result plus the
+    study it came from.
     """
 
     ok: bool
@@ -380,6 +382,7 @@ class FeaResult:
     mesh: dict = field(default_factory=dict)
     timings: dict = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
+    findings: tuple[dict, ...] = ()
 
     def human_lines(self) -> list[str]:
         s = self.summary
@@ -394,5 +397,6 @@ class FeaResult:
             f"wrote GLB: {_display(self.glb)} (deformation x{s.get('deformation_scale')}), sidecar: {_display(self.sidecar)}"
             + (f", VTU: {_display(self.vtu)}" if self.vtu else ""),
         ]
+        lines += [f"{finding['severity']}: {finding['summary']}" for finding in self.findings]
         lines += [f"warning: {warning}" for warning in self.warnings]
         return lines

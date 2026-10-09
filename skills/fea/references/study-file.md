@@ -14,7 +14,8 @@ Every key other than `material`, `fixtures` and `loads` is optional.
     {"faces": ["#o1.f3", "#o1.f4"], "type": "pressure", "pressure_MPa": 0.8}
   ],
   "mesh": {"size_mm": 2.5},
-  "output": {"deformation_scale": "auto"}
+  "output": {"deformation_scale": "auto"},
+  "margin": 2
 }
 ```
 
@@ -76,6 +77,13 @@ small deflection is visible. `"auto"` shows the largest displacement as 5 % of
 the part's size; a number fixes it (`1` shows the true deformed shape). The
 sidecar records the scale used.
 
+## `margin`
+
+The safety factor against yield the part should keep. Omitted, 2. Below 1 is
+refused (a part that yields has no margin). A result under it, but above 1,
+is a `low_margin` warning; below 1 is a `yields` error. Raise it for polymers,
+fatigue or a part whose failure hurts someone.
+
 ## What comes out
 
 `cadgen fea solve part.step` writes two files beside the part, or at the `OUT`
@@ -88,6 +96,8 @@ path you give (which must end in `.glb`) plus its `.json` twin:
 - `part.fea.json` — the study as given, the material, the resolved faces,
   the summary (max von Mises nodal and Gauss-point, safety factor, max
   displacement and its location, applied and reaction forces), per-fixture
-  reactions, mesh statistics, timings and warnings.
+  reactions, mesh statistics, timings and warnings, the `findings` (also in
+  the GLB's mesh `extras`) and `refined`: the first and the finer solve's
+  element size and peak when the run solved twice, else `null`.
 - `part.fea.vtu` with `--vtu` — the volume mesh with displacement and von
   Mises point data, for ParaView.
