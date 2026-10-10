@@ -2,7 +2,7 @@
 
 No decorator, for the reason :mod:`cadgen.urdf` gives: a world or model
 description is authored, not generated. ``cadgen sdf validate`` is a generated
-MIRROR of :func:`validate` (design/format-doors.md).
+MIRROR of :func:`validate` (README law 6).
 """
 
 from __future__ import annotations

@@ -2,6 +2,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { Eye, EyeOff, Focus } from 'lucide-react';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { cn } from '@text-to-cad/ui/utils';
+import { treeRowActionsClass } from '@text-to-cad/ui/primitives/tree-row';
 
 // A row's actions show on hover (or keyboard focus) and stay shown while they are ON: an
 // isolated row keeps its lit Isolate, a hidden row its crossed-out eye, so what is isolated
@@ -22,14 +23,6 @@ export function rowActionsLayout(node, controls) {
   return { shown: Boolean(node.selectionId) && (focused || hidden), width: canIsolate ? '2.5rem' : '1.5rem' };
 }
 
-// The name's fade under the actions: full strength up to half a rem before them, gone where they
-// begin, so the row's own colour shows through, hover or not. `--row-actions` is the actions'
-// width. Spelled out in full: Tailwind generates only class names it finds written whole.
-export const ROW_NAME_UNDER_ACTIONS = {
-  hover: 'group-hover/row:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))] group-focus-within/row:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))]',
-  shown: '[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))]',
-};
-
 export default function ModelPartActions({ node, controls, disabled }) {
   const {focusedNodeIds=[], onTogglePartVisibility, onFocusTreeNode, onUnfocusTreeNode, isAssemblyView} = controls;
   const focused = focusedNodeIds.includes(node.selectionId);
@@ -40,9 +33,7 @@ export default function ModelPartActions({ node, controls, disabled }) {
   // row's full width and fades out under them (`ROW_NAME_UNDER_ACTIONS`), with nothing drawn behind
   // the buttons, so the row reads in its own (hover) colour throughout.
   const persistent = focused || hidden;
-  return <div data-row-actions="" className={cn(
-    "absolute inset-y-0 right-0 flex items-center pl-0.5 pr-1 transition-opacity",
-    persistent ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 focus-within:opacity-100")}>
+  return <div data-row-actions="" className={treeRowActionsClass(persistent)}>
     {canIsolate && <TooltipHint content={focused ? "Exit isolate" : "Isolate"}><Button variant="ghost" size="icon-xs" disabled={disabled || hidden} aria-label={isolateLabel} aria-pressed={focused}
       className={cn('h-5 w-4', focused ? 'text-foreground' : cn('text-muted-foreground', REVEAL_ON_HOVER))}
       onClick={() => focused ? onUnfocusTreeNode?.(node.selectionId) : onFocusTreeNode(node.selectionId)}>

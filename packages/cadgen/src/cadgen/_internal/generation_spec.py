@@ -55,9 +55,8 @@ class EntrySpec:
 
     @property
     def entry_path(self) -> Path | None:
-        # The on-disk file the tree is keyed by. Library-first models
-        # (design/library-first-generation.md) key by the ARTIFACT: the tree
-        # must ride beside the .step wherever out= routed it,
+        # The on-disk file the tree is keyed by. Library-first models key by the
+        # ARTIFACT: the tree must ride beside the .step wherever out= routed it,
         # so the viewer (artifacts-only catalog) finds it, and so provenance —
         # not filenames — links artifact to source. Imported STEP entries and
         # DXF drawings keep their own keying.

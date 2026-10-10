@@ -1,4 +1,4 @@
-"""Lazy, transparent re-export of build123d (design/library-first-generation.md).
+"""Lazy, transparent re-export of build123d.
 
 The canonical model-script import is::
 
@@ -46,7 +46,14 @@ def __getattr__(name: str) -> Any:
         # Dunders reaching module __getattr__ are introspection probes
         # (__path__, __all__, ...); never trigger the heavy import for them.
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    value = getattr(_real_module(), name)
+    real = _real_module()
+    try:
+        value = getattr(real, name)
+    except AttributeError:
+        # A name build123d does not have is the model's mistake, said at a raise as cadgen says
+        # every mistake of the person's (``cadgen.analytics``: no crash of cadgen's). ``name`` and
+        # ``obj`` keep Python's "Did you mean" suggestion, from build123d's own names.
+        raise AttributeError(f"module 'build123d' has no attribute {name!r}", name=name, obj=real) from None
     globals()[name] = value  # steady state: ordinary attribute access
     return value
 

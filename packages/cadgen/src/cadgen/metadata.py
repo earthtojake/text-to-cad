@@ -27,8 +27,8 @@ class GeneratorMetadata:
     format: str
     mesh_tolerance: float | None
     mesh_angular_tolerance: float | None
-    # Library-first fields (design/library-first-generation.md): the @step/@dxf
-    # decorated entry function and its statically-declared output target.
+    # Library-first fields: the @step/@dxf decorated entry function and its
+    # statically-declared output target.
     entry_function: str | None = None
     out_target: str | None = None
     is_decorated: bool = False

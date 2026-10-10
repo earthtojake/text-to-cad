@@ -275,9 +275,22 @@ async def launch_with_browser(launch: Any, fix: Any = install_browser) -> Any:
         except Exception as error:  # noqa: BLE001 - Playwright raises its own Error for both cases
             problem = browser_problem(str(error))
             if problem is None or problem in fixed:
-                raise
+                raise _browser_failed(error)
             fixed.add(problem)
-            fix(problem)
+            try:
+                fix(problem)
+            except Exception as unfixed:
+                raise _browser_failed(unfixed)
+
+
+def _browser_failed(error: BaseException) -> BaseException:
+    """``error``, named for telemetry as the browser that did not start (``cadgen.analytics.because``)."""
+    try:
+        from cadgen.analytics import because
+
+        return because(error, "browser")
+    except Exception:  # noqa: BLE001 - a reason never fails the failure it names
+        return error
 
 
 class RouteFileError(SnapshotError):
@@ -1369,7 +1382,7 @@ def route_file(pathname: str, prefix: str, root: Path) -> Path:
     if not path_is_inside_or_equal(file_path, root):
         raise RouteFileError(f"forbidden route path: {pathname}", status=403)
     return file_path
-# --- shared component-tessellation cache (design/unified-tessellation.md) ----
+# --- shared component-tessellation cache -------------------------------------------
 #
 # The snapshot page resolves component tessellations through the SAME disk
 # cache the mesh-export CLI uses (immutable objects plus index/mesh; codec and
@@ -2202,7 +2215,7 @@ def write_render_outputs(result: Mapping[str, object]) -> None:
 # one in the browser reaches stdout by default. A SnapshotResult cannot carry a
 # payload at all, because it has no field for one -- and `--json` becomes
 # `dataclasses.asdict`, the same serialization every other cadgen verb uses
-# (design/format-doors.md).
+# (cadgen.results).
 
 
 def _output_kind(output: Mapping[str, object], path: Path) -> str:

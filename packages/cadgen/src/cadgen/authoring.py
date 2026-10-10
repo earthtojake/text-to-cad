@@ -1,5 +1,4 @@
-"""The library-first authoring surface: ``@step`` and ``@dxf``
-(design/library-first-generation.md).
+"""The library-first authoring surface: ``@step`` and ``@dxf``.
 
 A CAD model is a plain Python script; the decorator declares the model and
 ``__main__`` builds it by calling it::

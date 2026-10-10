@@ -460,8 +460,8 @@ class CadApp:
             finally:
                 with self._request_lock:
                     self._busy_requests -= 1
-        except (BrokenPipeError, ConnectionResetError):
-            raise  # the page left: no crash of ours
+        except ConnectionError:
+            raise  # the page left mid-request (a Response's own writes never raise it): no crash of ours
         except Exception as error:
             # Past every route's own answer: a crash of this server's, answered as each front end answers
             # one (a 500), and counted by telemetry (``cadgen/analytics.py``).

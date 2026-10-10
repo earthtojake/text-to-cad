@@ -4,7 +4,7 @@ Every subcommand is also reachable as ``python -m cadgen.<module>``; this is the
 front door, not a second implementation. A subcommand's parser lives in its own module and
 owns its arguments, so the console and module entry points cannot drift.
 
-Commands in the ``<format> <verb>`` grammar (design/format-doors.md) go one step further:
+Commands in the ``<format> <verb>`` grammar (README law 6) go one step further:
 their module names only the public verb function, and the parser is DERIVED from that
 function's signature (``cadgen._internal.cli_from_function``). A flag and a parameter
 cannot drift, because there is only one of them.
@@ -31,8 +31,8 @@ import sys
 # argv[0:2] before argv[0], so the two-word form wins where it exists and one-word
 # commands like `daemon` still work.
 #
-# Generation has NO CLI (design/library-first-generation.md): a model script runs
-# itself — `python <model>.py` through the @step/@dxf decorators.
+# Generation has NO CLI (README law 7): a model script runs itself —
+# `python <model>.py` through the @step/@dxf decorators.
 _COMMANDS: dict[str, tuple[str, str]] = {
     # STEP. `build` writes a NEW document (IN OUT); `compile` only makes an
     # existing document's tree current and is INTERNAL — every door
@@ -247,6 +247,40 @@ def _harden_std_stream_errors() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        code = _main(argv)
+        if sys.stdout is not None:
+            sys.stdout.flush()  # here, not as Python exits, where a closed pipe could only be complained about
+        return code
+    except BrokenPipeError:
+        from cadgen.analytics import stdout_closed
+
+        if not stdout_closed():
+            raise  # another pipe it wrote to (a child's stdin): a failure like any other
+        return _output_closed()
+
+
+def _output_closed() -> int:
+    """Whatever read this command's output closed it (``cadgen ... | head``): stop quietly, as a CLI does
+    on SIGPIPE -- no traceback, no crash report (``cadgen.analytics.stdout_closed``), nothing more written. Both
+    streams go to the null device first: Python flushes them again as it exits, and would print that
+    flush's own BrokenPipeError."""
+    try:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+    except OSError:
+        return 1
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            os.dup2(devnull, stream.fileno())
+        except (AttributeError, OSError, ValueError):  # not a real file: nothing of the process's to quiet
+            pass
+    os.close(devnull)
+    import signal
+
+    return 128 + signal.SIGPIPE if hasattr(signal, "SIGPIPE") else 1  # what a shell reports for `yes | head`
+
+
+def _main(argv: list[str] | None) -> int:
     _harden_std_stream_errors()
     argv = list(sys.argv[1:] if argv is None else argv)
 
@@ -296,6 +330,12 @@ def main(argv: list[str] | None = None) -> int:
         _tell()
     try:
         return _run(command, entry[0], rest)
+    except BrokenPipeError as error:
+        from cadgen.analytics import stdout_closed
+
+        if not stdout_closed():  # its output's reader left: `main` stops quietly; any other pipe is a failure
+            _report(error)
+        raise
     except Exception as error:
         _report(error)
         raise

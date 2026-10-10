@@ -1,5 +1,4 @@
-"""B-rep surface extraction: the `.surf` component artifact (R1,
-design/surface-rendering.md).
+"""B-rep surface extraction: the `.surf` component artifact.
 
 A `.surf` describes one component's EXACT geometry for client-side GPU
 tessellation: per-face parametric surfaces (analytic where possible, NURBS

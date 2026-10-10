@@ -423,7 +423,13 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # retry here would bypass the daemon's aggregate admission policy.
         _JOBS.waiting(job, None)
         _log(f"{tool}: could not start a worker: {exc}")
-        if isinstance(exc, pool_mod.WorkerGone):
+        if isinstance(exc, pool_mod.WorkerGone) and pool_mod.installation_gone():
+            # Not a worker's crash: this daemon's installation was removed under it. It takes no
+            # more builds, so the next starts a daemon from its client's installation, and it lets
+            # go of the files the removal could not take (``serve``).
+            _log("this daemon's installation is gone; it stops taking builds")
+            _INSTALLATION_GONE.set()
+        elif isinstance(exc, pool_mod.WorkerGone) and not pool_mod.stopped(exc.exit_status):
             telemetry.worker_died(exc.exit_status)  # a worker that could not start
         _JOBS.finish(job, 1, error=str(exc))
         if inflight is not None:
@@ -544,7 +550,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # evidence. Note the log line too -- `cadgen daemon status` cannot show a
         # worker that is gone.
         healthy = False
-        ended = "cancelled" if left.is_set() else "crashed"
+        # Stopped, not crashed: whoever asked left, or someone stopped the worker (``pool.stopped``).
+        ended = "cancelled" if left.is_set() or pool_mod.stopped(exc.exit_status) else "crashed"
         if ended == "crashed":
             telemetry.worker_died(exc.exit_status)
         # Record the same death evidence in the ledger without relaying a stderr chunk.
@@ -589,6 +596,9 @@ _INFLIGHT: set[threading.Thread] = set()
 _JOBS = JobLedger()
 _STARTED_AT = time.time()
 _REQUESTS_SERVED = [0]
+# Set when a worker could not start because this daemon's installation was removed under it
+# (``pool.installation_gone``): the daemon then retires as it does for a changed version token.
+_INSTALLATION_GONE = threading.Event()
 # Idle-time store housekeeping (STORE.md §8): retire old index kinds, evict to
 # the cap. It never starts, or continues, while a request is in flight.
 _HOUSEKEEPER = Housekeeper(active=lambda: bool(_active_requests()), log=lambda message: _log(message))
@@ -768,7 +778,11 @@ def serve() -> int:
                         with contextlib.suppress(OSError):
                             _send(conn, {"status": _status_payload(token)})
                     continue
-                token_changed = request.get("token") != token
+                # A daemon whose installation is gone retires as a stale one does: its clients
+                # start the next from their own installation.
+                gone = _INSTALLATION_GONE.is_set()
+                why = "installation gone" if gone else "version token changed"
+                token_changed = request.get("token") != token or gone
                 dependency_finishing_old_work = bool(
                     request.get("dependency") and (state["draining"] or _active_requests())
                 )
@@ -786,7 +800,7 @@ def serve() -> int:
                         # ask again until the successor binds). Closing the listener here
                         # deadlocked a long job against its own final artifact request.
                         state["draining"] = True
-                        _log(f"version token changed; finishing {len(active)} job(s) in flight before exiting")
+                        _log(f"{why}; finishing {len(active)} job(s) in flight before exiting")
                         with contextlib.suppress(OSError):
                             _send(conn, {"restart": True})
                         continue
@@ -799,7 +813,7 @@ def serve() -> int:
                         _send(conn, {"restart": True})
                     conn.close()
                     conn = None
-                    _log("version token changed; exiting")
+                    _log(f"{why}; exiting")
                     return 0
                 if token_changed:
                     state["draining"] = True

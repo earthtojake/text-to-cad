@@ -9,10 +9,10 @@ that land in ``OUT``'s sidecar.
 This is deliberately the SAME pipeline a model script runs. The scene is loaded
 from ``IN``, re-pathed to ``OUT``, and handed to ``_generate_part_outputs`` as a
 preloaded scene; everything downstream — package build, axis-ref resolution,
-bake, canonical emit, store publish, sidecar write — is the one implementation
-(design/pose-animation-split.md, CLI/doors follow-on). Two scene fields mark the
-re-emit so the sidecar writer records ``sourceKind: "step"`` with the INPUT's
-content hash as its closure instead of a Python provenance block.
+bake, canonical emit, store publish, sidecar write — is the one implementation.
+Two scene fields mark the re-emit so the sidecar writer records
+``sourceKind: "step"`` with the INPUT's content hash as its closure instead of
+a Python provenance block.
 
 Freshness has two independent halves, which is what makes a kinematics-only
 edit cheap:

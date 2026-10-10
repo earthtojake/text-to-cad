@@ -50,9 +50,9 @@ PHASE_PARSE = "parse"
 PHASE_MESH = "mesh"
 PHASE_WRITE = "write"
 
-# A generated drawing: the product is the `.dxf` file itself (design/
-# standalone-viewer.md Phase A — the viewer parses it directly; no package, no
-# Node child). The phases are just the Python generator run and the file write.
+# A generated drawing: the product is the `.dxf` file itself (the viewer parses
+# it directly; no package, no Node child). The phases are just the Python
+# generator run and the file write.
 DRAWING_PACKAGE = ArtifactKind(
     name="drawing-package",
     phases=(PHASE_GENERATE, PHASE_WRITE, PHASE_FINALIZE),

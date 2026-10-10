@@ -338,7 +338,11 @@ def run_node_builder(
         # a failure that named no cause. Echoing keeps the live CLI behaviour; capturing is
         # what lets the raised error carry the reason to the UI.
         stderr=subprocess.PIPE,
+        # Node reads and writes utf-8 on a pipe; `text=True` alone would use the ANSI code
+        # page on Windows. `replace` keeps a stray byte from breaking a JSON line.
         text=True,
+        encoding="utf-8",
+        errors="replace",
         bufsize=1,
     )
 

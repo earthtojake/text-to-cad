@@ -143,20 +143,29 @@ test("a colour the description gives a visual wins over the colours its mesh bro
   assert.notEqual(mesh("arm").geometry, mesh("tool").geometry, "one mesh, two geometries: only one of them carries colours");
 });
 
-test("picking walks up the graph to the link; a named object is itself", () => {
+test("picking selects the visual under the ray, on its link; a named object is itself; a hidden visual is not there", () => {
   const robot = robotOf(parseArmUrdf());
   // The tool's box as a named object of its mesh, as a GLB link's objects are.
   const parts = robot.parts.map(part => (part.id === "tool:v1" ? { ...part, id: "tool:v1/object/0", componentName: "flange" } : part));
   const scene = createRobotScene(THREE, { description: robot.description, parts });
   const down = (x, y) => new THREE.Ray(new THREE.Vector3(x, y, 10), new THREE.Vector3(0, 0, -1));
-  const arm = scene.pick(down(0.5 * Math.cos(0.3), 0.5 * Math.sin(0.3)));
-  assert.deepEqual([arm.kind, arm.linkName, arm.id], ["link", "arm", "link:arm"]);
+  const overArm = down(0.5 * Math.cos(0.3), 0.5 * Math.sin(0.3));
+  const arm = scene.pick(overArm);
+  // Every visual is a component: the arm's box is its own visual, still on the arm link.
+  assert.deepEqual([arm.kind, arm.linkName, arm.componentId, arm.id], ["component", "arm", "arm:v1", "arm:v1"]);
   assert.ok(Math.abs(arm.point.z - 1.2) < 1e-6, "the surface the ray met first");
   assert.equal(scene.pick(down(5, 5)), null);
   // Just past the arm's end, where only the tool's box is under the ray.
   const flange = scene.pick(down(1.03 * Math.cos(0.3), 1.03 * Math.sin(0.3)));
   assert.deepEqual([flange.kind, flange.linkName, flange.componentId, flange.id], ["component", "tool", "tool:v1/object/0", "tool:v1/object/0"]);
   assert.equal(scene.hasComponent("tool:v1/object/0"), true);
+  // Hidden, the arm's visual is out of the render and the pick, and its link still carries the tool.
+  scene.setHiddenPartIds(["arm:v1"]);
+  assert.notEqual(scene.pick(overArm)?.componentId, "arm:v1");
+  assert.equal(scene.links.get("arm").children.some(child => child.isMesh), false);
+  assert.equal(scene.pick(down(1.03 * Math.cos(0.3), 1.03 * Math.sin(0.3)))?.componentId, "tool:v1/object/0");
+  scene.setHiddenPartIds([]);
+  assert.deepEqual(scene.pick(overArm)?.componentId, "arm:v1");
   // Posed, the pick follows: the arm is no longer under the ray it was under.
   scene.setJointValues({ yaw: 90 });
   assert.equal(scene.pick(down(0.5 * Math.cos(0.3), 0.5 * Math.sin(0.3)))?.linkName ?? "base", "base");

@@ -1,8 +1,7 @@
 """Typed mates: the model's kinematics, declared as pure data.
 
 The ``kinematics=`` kwarg on ``@step``/``@stl``/``@glb``/``@threemf`` takes ONE
-dict whose shape mirrors the sidecar's kinematics section exactly
-(design/pose-animation-split.md)::
+dict whose shape mirrors the sidecar's kinematics section exactly::
 
     KINEMATICS = {
         "mates": [

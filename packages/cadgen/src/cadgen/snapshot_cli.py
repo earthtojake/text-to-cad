@@ -368,7 +368,7 @@ def read_job_file(raw_job: str, *, cwd: Path) -> object:
         )
     job_path = (cwd / Path(raw_job).expanduser()).resolve()
     if not job_path.exists():
-        raise SnapshotError(f"--job file does not exist: {raw_job}")
+        raise _missing(f"--job file does not exist: {raw_job}")
     if job_path.is_dir():
         raise SnapshotError(f"--job names a directory, not a render-job JSON file: {raw_job}")
     try:
@@ -475,7 +475,7 @@ def resolve_input_path(raw_input: object, *, cwd: Path) -> Path:
     raw_path = Path(input_text).expanduser()
     selected = raw_path.resolve() if raw_path.is_absolute() else (cwd / raw_path).resolve()
     if not selected.exists():
-        raise SnapshotError(f"Render input does not exist: {input_text}")
+        raise _missing(f"Render input does not exist: {input_text}")
     return selected
 
 
@@ -1568,7 +1568,7 @@ def drawing_payload_file(source: Path) -> Path:
     if not source.name.lower().endswith(".dxf"):
         raise SnapshotError(f"snapshot input must be a .dxf document: {source}")
     if not source.is_file():
-        raise SnapshotError(f"snapshot input does not exist: {source}")
+        raise _missing(f"snapshot input does not exist: {source}")
     try:
         data = drawing_payload_bytes(source)
     except DrawingReadError as error:
@@ -1841,26 +1841,28 @@ async def run_snapshot_async(
     options object. Nothing here prints, so the two cannot report differently.
     """
     enabled = enabled_kinds(kinds)
-    raw_payload = load_job_from_options(options, cwd=cwd)
-    # Accept the whole request FIRST. A refused request -- an unknown key, a
-    # setting this input cannot take, options that conflict -- was never going to
-    # write anything, so it must leave an existing OUT exactly as it found it.
-    single, prepared = prepare_render_job_packet(raw_payload, cwd=cwd, kinds=enabled)
-    # Then clear the declared outputs, BEFORE resolution, which is where a bad
-    # input actually fails. The path a caller names is the path it gets, and that
-    # is only safe to promise if a run that never renders leaves nothing behind for
-    # the caller to read as though it had.
-    clear_render_output_targets(
-        normalize_snapshot_job_packet(raw_payload)[1], resolved_cwd=cwd or Path.cwd()
-    )
+    with _failing_as("bad_request"):
+        raw_payload = load_job_from_options(options, cwd=cwd)
+        # Accept the whole request FIRST. A refused request -- an unknown key, a
+        # setting this input cannot take, options that conflict -- was never going to
+        # write anything, so it must leave an existing OUT exactly as it found it.
+        single, prepared = prepare_render_job_packet(raw_payload, cwd=cwd, kinds=enabled)
+        # Then clear the declared outputs, BEFORE resolution, which is where a bad
+        # input actually fails. The path a caller names is the path it gets, and that
+        # is only safe to promise if a run that never renders leaves nothing behind for
+        # the caller to read as though it had.
+        clear_render_output_targets(
+            normalize_snapshot_job_packet(raw_payload)[1], resolved_cwd=cwd or Path.cwd()
+        )
     # Resolution is where a STEP tree gets compiled, and on a cold model that is
     # the SLOWEST part of a snapshot -- longer than the render. It is deliberately NOT
     # wrapped in a phase of ours: that build reports its own phases through artifact_build,
     # and a second painter on the same terminal would both interleave with it and replace
     # its detail with the single word "resolving".
-    packet = resolve_prepared_job_packet(single, prepared)
+    with _failing_as("input_error"):
+        packet = resolve_prepared_job_packet(single, prepared)
     logger = CliLogger("snapshot", verbose=False)
-    with cli_progress_line(
+    with _failing_as("render_error"), cli_progress_line(
         snapshot_progress_label(packet), logger=logger, fallback="Rendering..."
     ) as sink:
         progress = ProgressReporter(
@@ -1887,20 +1889,58 @@ def run_snapshot(
     cwd: Path | None = None,
 ) -> SnapshotResult:
     """:func:`run_snapshot_async` for a synchronous caller (the CLI, the verbs)."""
-    started, result = time.perf_counter(), None
+    started, result, error = time.perf_counter(), None, None
     try:
         result = asyncio.run(run_snapshot_async(options, kinds=kinds, runtime_dir=runtime_dir, cwd=cwd))
         return result
+    except BaseException as failure:
+        error = failure
+        raise
     finally:
-        _count_snapshot(options, result, time.perf_counter() - started)
+        _count_snapshot(options, result, time.perf_counter() - started, error)
 
 
-def _count_snapshot(options: SnapshotOptions, result: SnapshotResult | None, seconds: float) -> None:
-    """Count this run for telemetry (``cadgen/analytics.py``): each document's format, whether it rendered and
-    how long that took, and the features it used -- handed to a running build daemon to send with its own, and
-    never waited on past a moment (``cadgen.daemon.client.hand_over``). Never raises."""
+def _missing(message: str) -> SnapshotError:
+    """The refusal of a file the request names that is not there: ``no_file`` to telemetry (``_failing_as``)."""
+    error = SnapshotError(message)
     try:
-        from cadgen.analytics import FILE_KINDS
+        from cadgen.analytics import because
+
+        because(error, "no_file")
+    except Exception:  # noqa: BLE001 - a reason never fails the failure it names
+        pass
+    return error
+
+
+class _failing_as:
+    """Name why a snapshot failed, by what it was doing when it failed -- unless what failed says so itself
+    (``cadgen.analytics.snapshot_failure``): decided here, as the failure leaves that step, for its count."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, kind, error, trace) -> bool:
+        if isinstance(error, Exception):
+            try:
+                from cadgen.analytics import because, snapshot_failure
+
+                because(error, snapshot_failure(error, self.reason))
+            except Exception:  # noqa: BLE001 - a reason never fails the snapshot it names
+                pass
+        return False
+
+
+def _count_snapshot(options: SnapshotOptions, result: SnapshotResult | None, seconds: float,
+                    error: BaseException | None = None) -> None:
+    """Count this run for telemetry (``cadgen/analytics.py``): each document's format, whether it rendered and
+    how long that took, why it did not (``snapshot_failure``: what ``error`` was, or a render that said it
+    failed), and the features it used -- handed to a running build daemon to send with its own, and never
+    waited on past a moment (``cadgen.daemon.client.hand_over``). Never raises."""
+    try:
+        from cadgen.analytics import FILE_KINDS, snapshot_failure
         from cadgen.daemon.client import hand_over
 
         inputs = {file.input for file in result.files if file.input} if result is not None else set()
@@ -1909,11 +1949,12 @@ def _count_snapshot(options: SnapshotOptions, result: SnapshotResult | None, sec
         if not formats:
             return
         ok = result is not None and result.ok
+        reason = {} if ok else {"reason": snapshot_failure(error) if error is not None else "render_error"}
         features = [feature for feature, used in (
             ("kinematics", options.kinematics_specified or options.joint_values_specified),
             ("animation", options.animation_specified or options.video_specified),
         ) if used]
-        hand_over({"snapshots": [{"format": kind, "ok": ok, "seconds": round(seconds / len(formats), 3)}
+        hand_over({"snapshots": [{"format": kind, "ok": ok, "seconds": round(seconds / len(formats), 3), **reason}
                                  for kind in formats], "features": features})
     except Exception:  # noqa: BLE001 - a count never fails the snapshot it counts
         pass

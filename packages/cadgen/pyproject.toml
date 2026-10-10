@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cadgen"
-version = "0.7.17"
+version = "0.7.20"
 description = "STEP-first CAD artifact generation runtime: build123d STEP/GLB/topology generation, validation, and inspection for CAD agent skills."
 readme = "README.md"
 license = "MIT"
@@ -27,7 +27,7 @@ classifiers = [
 # dependency regardless of who else happens to pull it in.
 #
 # ezdxf stopped being a WRITING dependency when @dxf moved to build123d geometry
-# (design/dxf-build123d.md) -- the engine writes through build123d's ExportDXF
+# (cadgen._internal.dxf_emit) -- the engine writes through build123d's ExportDXF
 # and no author-facing contract mentions ezdxf. It remains a READING one, which
 # is not going away: cadgen.drawing_payload flattens a .dxf to draw it (for the
 # Viewer's pane and for `cadgen dxf snapshot` alike), and cadgen.drawing_checks

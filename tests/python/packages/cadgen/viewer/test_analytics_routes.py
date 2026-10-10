@@ -4,6 +4,7 @@ page did -- and the update notice the CAD app shows too."""
 from __future__ import annotations
 
 import http.client
+import io
 import json
 import os
 import shutil
@@ -20,6 +21,34 @@ from cadgen.viewer import handler as handler_module
 from cadgen.viewer.http_app import create_cad_app
 
 STL = b"solid t\nendsolid t\n"
+
+
+class _ClientThatLeft:
+    """A connection whose page cancelled its fetch: its request arrived, and its ``fails_at``-th write
+    onto the socket (the first is the status line and headers) finds it gone, as Windows says it
+    (WinError 10053, a ``ConnectionAbortedError``)."""
+
+    def __init__(self, request: bytes, fails_at: int = 1) -> None:
+        self._request = io.BytesIO(request)
+        self._fails_at = fails_at
+        self.writes = 0
+
+    def makefile(self, *_args, **_kwargs):
+        return self._request
+
+    def sendall(self, data: bytes) -> None:
+        self.writes += 1
+        if self.writes >= self._fails_at:
+            raise ConnectionAbortedError(10053, "An established connection was aborted by the software in your host machine")
+
+    def settimeout(self, _seconds) -> None:
+        pass
+
+    def shutdown(self, _how) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
 
 
 class ViewerAnalyticsTest(unittest.TestCase):
@@ -120,6 +149,20 @@ class ViewerAnalyticsTest(unittest.TestCase):
         crashes = [(event["where"], event["type"]) for event in events if event["name"] == "exception"]
         self.assertEqual(crashes, [("page", "TypeError"), ("route", "KeyError")])
         self.assertNotIn("secret", json.dumps(self.sent))
+
+    def test_a_page_that_leaves_mid_answer_is_no_crash_and_a_route_that_breaks_still_is(self) -> None:
+        self.request("POST", "/__cad/analytics", {"share": True})
+        handler_class = handler_module.make_handler_class(self.app)
+        for path, fails_at in (("/__cad/server", 1), ("/__cad/server", 2), ("/__cad/recents", 1)):
+            with self.subTest(path=path, fails_at=fails_at), \
+                    mock.patch.object(type(self.app), "_recents_payload", side_effect=KeyError("secret")):
+                client = _ClientThatLeft(f"GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".encode(), fails_at)
+                handler_class(client, ("127.0.0.1", 50000), None)  # the server's own path: raises nothing
+                # The answer stopped where the page left: the broken route's 400 is not tried after it.
+                self.assertEqual(client.writes, fails_at)
+        self.assertTrue(self.app.analytics.flush())
+        crashes = [(event["where"], event["type"]) for event in self.sent[-1]["events"] if event["name"] == "exception"]
+        self.assertEqual(crashes, [("route", "KeyError")], "the route's own mistake, once; never the page leaving")
 
     def test_told_before_it_started_the_viewer_counts_by_default(self) -> None:
         # A `cadgen` command said it before this viewer started (``cadgen/analytics.py``: ``notify``).

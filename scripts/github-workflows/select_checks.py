@@ -24,6 +24,7 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
     core_js                       core-js
     web  web_ui  web_client  web_viewer
     mcp
+    api
     skills  light_policy  light_tests  skills_policy  skills_tests  skills_runtime
     docs
     packaging
@@ -58,7 +59,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages/cadgen"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "docs", "packaging", "kicad", "harness")
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "harness")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -266,6 +267,7 @@ RULES: tuple[Rule, ...] = (
     Rule(("packages/ui/**",), select(flags=["web_ui", "web_client", "web_viewer", "mcp", "packaging"])),
     Rule(("apps/web/**",), select(flags=["web_client", "web_viewer", "packaging"])),
     Rule(("apps/mcp/**",), select(flags=["mcp", "packaging"])),
+    Rule(("apps/api/**",), select(flags=["api"])),
     Rule(("apps/docs/**",), select(flags=["docs"])),
     # check-dependencies.mjs walks every app's source and runs in core-js, the cheapest job
     # that has it.
@@ -299,6 +301,7 @@ RULES: tuple[Rule, ...] = (
     Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
     Rule(("scripts/test/test-global.sh",), select(policy=[POLICY_SUITE])),
     Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
+    Rule(("scripts/test/test-api.sh",), select(flags=["api"])),
     Rule(("scripts/test/test-docs.sh", "scripts/brand/**"), select(flags=["docs"])),
     Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"), select(flags=["web_viewer"])),
     Rule(("scripts/test/test-installed.sh",), select(flags=["packaging"])),
@@ -321,7 +324,7 @@ RULES: tuple[Rule, ...] = (
         "scripts/release/**", "scripts/install/**", "scripts/github-workflows/deploy-vercel-app.sh",
         "scripts/git-hooks/**", "scripts/bench/cadgen-performance/**", "scripts/README.md",
         ".github/workflows/release-publish.yml", ".github/workflows/release-prepare.yml",
-        ".github/workflows/deploy-docs.yml",
+        ".github/workflows/deploy-docs.yml", ".github/workflows/deploy-api.yml",
         ".github/dependabot.yml", ".github/release.yml", ".githooks/**",
         ".claude-plugin/**", ".codex-plugin/**", ".cursor-plugin/**", "gemini-extension.json",
         "*.mcp.json", "plugin.json", "mcp.json", "skills.sh.json",

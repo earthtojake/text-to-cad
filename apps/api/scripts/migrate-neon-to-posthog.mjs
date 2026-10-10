@@ -1,4 +1,4 @@
-// ONE-OFF. Delete this file and its test (src/lib/api/neon-migration.test.mjs) once the migration has run.
+// ONE-OFF. Delete this file and its test (src/neon-migration.test.mjs) once the migration has run.
 //
 // Copies the usage analytics cadgen 0.7.7 to 0.7.15 sent before telemetry -- kept in Postgres on Neon by
 // the receiver this site ran from 2026-10-02 until api.texttocad.dev forwarded to PostHog -- into
@@ -6,7 +6,7 @@
 //
 // What moves. Each row of Neon's `events` table, as the receiver maps an old batch now: the stored rows of
 // one batch are put back into the batch cadgen sent (schema 1 or 2) and read by the receiver's own
-// `rowsOf` and `propertiesOf` (src/lib/api/events.mjs, posthog.mjs). So a tool's calls are `tool_used`, a
+// `rowsOf` and `propertiesOf` (src/events.mjs, posthog.mjs). So a tool's calls are `tool_used`, a
 // view's touches `view_used`, and files shown `files_shown`, a count by format. Each event keeps the time
 // its batch arrived and its install id, so an opt-out deletes it like any other event. It is marked
 // `migrated: neon`, and gets an id made from what it is, so a rerun sends the same events and PostHog
@@ -26,7 +26,7 @@
 //
 //   export NEON_DATABASE_URL='postgres://...'   # texttocad.dev's DATABASE_URL, from the Neon console
 //   export POSTHOG_REGION=us POSTHOG_PROJECT_KEY=phc_... POSTHOG_PROJECT_ID=... POSTHOG_PERSONAL_KEY=phx_...
-//   M=apps/docs/scripts/migrate-neon-to-posthog.mjs
+//   M=apps/api/scripts/migrate-neon-to-posthog.mjs
 //
 //   1. The copy, just before Deploy Docs:
 //        psql "$NEON_DATABASE_URL" -At -c "$(node $M sql events)" > neon-events.jsonl
@@ -47,8 +47,8 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-import { Invalid, isUuid, rowsOf } from '../src/lib/api/events.mjs';
-import { EVENTS, posthogStore, propertiesOf, settingsOf } from '../src/lib/api/posthog.mjs';
+import { Invalid, isUuid, rowsOf } from '../src/events.mjs';
+import { EVENTS, posthogStore, propertiesOf, settingsOf } from '../src/posthog.mjs';
 
 // What the export reads of each row: every column but `file`, the per-file code, which never leaves Neon.
 export const COLUMNS = ['id', 'received_at', 'install_id', 'session_id', 'event', 'tool', 'kind', 'calls', 'errors',

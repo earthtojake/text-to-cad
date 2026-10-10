@@ -4,7 +4,7 @@ Every mesh serialization (STL/3MF/GLB) — a `@stl`/`@glb`/`@threemf`
 declaration produced by a model-script run, or an ad-hoc `cadgen stl|3mf|glb
 build` — funnels through :func:`run_mesh_exporter`, so the front doors cannot
 drift: one Node invocation, one tessellation per distinct tolerance pair,
-formats serialized from it (design/unified-tessellation.md).
+formats serialized from it.
 
 Freshness rides content-keyed records in the store's ``index/mesh`` tier: a
 record is keyed by the
@@ -132,7 +132,13 @@ def run_mesh_exporter(
             # the mutable document sibling is never read again by this export.
             argv += ["--animation-source", str(module_path)]
         with logger.timed(f"tessellate + write {label}"):
-            proc = subprocess.run(argv, capture_output=True, text=True)
+            # Node writes utf-8 to a pipe whatever the console says, and the payload
+            # carries paths and part names. `text=True` alone decodes the ANSI code
+            # page on Windows, where a byte it cannot map kills subprocess's reader
+            # thread silently and leaves stdout None. `replace`, not
+            # `backslashreplace`: U+FFFD is legal inside a JSON string and `\xNN` is
+            # not, so no decode can cost us the payload line.
+            proc = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
     payload: dict = {}
     for line in reversed(proc.stdout.splitlines()):
         stripped = line.strip()

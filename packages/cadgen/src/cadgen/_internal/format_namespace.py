@@ -10,8 +10,7 @@ model script.
 Rebinding the module's ``__class__`` to a callable ``ModuleType`` subclass
 resolves that with no ambiguity anywhere: ``@step`` decorates, ``step.build()``
 operates, ``import cadgen.step`` and ``from cadgen import step`` return the
-same object either way. design/format-doors.md defers the *callable format
-object* as sugar; the naming makes this much of it structural.
+same object either way.
 
 The decorator itself is imported lazily so the namespace module stays inside
 the pre-gate import budget.

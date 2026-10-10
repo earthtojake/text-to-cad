@@ -256,6 +256,25 @@ setTimeout(() => {}, 600000);
         self.assertFalse(self.alive(pid), "the Node child survived an exception in the parent")
 
 
+class EncodingTest(NodeRuntimeTestCase):
+    def test_the_pipes_are_utf8_whatever_the_locale(self):
+        # Node reads and writes utf-8 on a pipe. Under a cp1252 locale (Windows' ANSI code
+        # page) `text=True` alone could not encode "Ł" for stdin nor decode its C5 81 back.
+        # `_text_encoding` is subprocess's default-encoding choice, patched whatever mode
+        # this interpreter runs in.
+        script = self.script(
+            """
+import { readFileSync } from "node:fs";
+const input = readFileSync(0, "utf8");
+process.stderr.write("warn: Łódź\\n");
+reportResult({ ok: true, echoed: input });
+"""
+        )
+        with mock.patch("subprocess._text_encoding", return_value="cp1252"):
+            payload = run_node_builder(script, run=Recorder(), stdin_text="Łódź")
+        self.assertEqual({"ok": True, "echoed": "Łódź"}, payload)
+
+
 class DiscoveryTest(NodeRuntimeTestCase):
     def test_env_override_wins_over_path(self):
         with mock.patch.dict(os.environ, {"CADGEN_NODE": _NODE}, clear=False):

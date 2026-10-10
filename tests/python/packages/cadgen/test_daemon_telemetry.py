@@ -5,6 +5,7 @@ send out (``cadgen/analytics.py``)."""
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
@@ -57,7 +58,13 @@ class DaemonTelemetryTest(unittest.TestCase):
         assembly = telemetry.build(RUN, {"id": "e:job-3", "outputs": ["/w/arm.step"]})
         assembly.observe({"model": "/w/link.py", "state": "current", "job": "e:job-3", "parent": "/w/arm.py"})
         assembly.observe({"model": "/w/arm.py", "state": "building", "job": "e:job-3"})
+        telemetry.exited({"exit": 1, "failure": "kernel_error"}, assembly)  # why, as its worker decided
         assembly.finish(1, None, 4.0)
+        # A failure its worker named nothing for, or named outside the vocabulary: ``other``.
+        telemetry.build(RUN, {"id": "e:job-8", "outputs": ["/w/plate.step"]}).finish(1, None, 0.5)
+        unnamed = telemetry.build(RUN, {"id": "e:job-9", "outputs": ["/w/plate.step"]})
+        telemetry.exited({"exit": 1, "failure": "No module named secret_lib"}, unnamed)
+        unnamed.finish(1, None, 0.5)
         telemetry.build(RUN, {"id": "e:job-4", "outputs": ["/w/plate.step"]}).finish(1, "crashed", 1.0)
         telemetry.worker_died(-11)  # what ended that build: a crash, with its exit status
         telemetry.build(RUN, {"id": "e:job-5", "outputs": ["/w/plate.step"]}).finish(1, "cancelled", 1.0)
@@ -70,10 +77,13 @@ class DaemonTelemetryTest(unittest.TestCase):
         self.assertEqual(self.events(), [
             {"name": "build", "kind": "dxf", "via": "script", "count": 1, "failed": 0, "crashed": 0, "cancelled": 0, "cached": 1,
              "seconds": 0.5, "longest": 0.5},
-            {"name": "build", "kind": "step", "via": "script", "count": 5, "failed": 1, "crashed": 1, "cancelled": 1, "cached": 1,
-             "seconds": 9.0, "longest": 4.0},
+            {"name": "build", "kind": "step", "via": "script", "count": 7, "failed": 3, "crashed": 1, "cancelled": 1, "cached": 1,
+             "seconds": 10.0, "longest": 4.0},
             {"name": "build", "kind": "stl", "via": "command", "count": 1, "failed": 0, "crashed": 0, "cancelled": 0, "cached": 0,
              "seconds": 0.5, "longest": 0.5},
+            # Every failed build once, by why: the reasons add up to ``failed``.
+            {"name": "build_failure", "kind": "step", "via": "script", "reason": "kernel_error", "count": 1},
+            {"name": "build_failure", "kind": "step", "via": "script", "reason": "other", "count": 2},
             {"name": "feature", "feature": "assembly", "count": 1},
             {"name": "feature", "feature": "declared_mesh", "count": 1},
             {"name": "health", "workers": 0, "crashes": 2, "recycles": 0, "refusals": 0},
@@ -82,6 +92,7 @@ class DaemonTelemetryTest(unittest.TestCase):
         ])
         self.assertEqual(self.sent[-1]["process"], "daemon")
         self.assertNotIn("/w/", json.dumps(self.sent))
+        self.assertNotIn("secret", json.dumps(self.sent))
 
     def test_a_board_or_a_harness_script_is_counted_as_its_format(self) -> None:
         # Told apart by the document the script declares, as a drawing is.
@@ -177,6 +188,7 @@ class DaemonTelemetryTest(unittest.TestCase):
             {"name": "feature", "feature": "kinematics", "count": 1},
             {"name": "snapshot", "kind": "step", "count": 1, "failed": 0, "seconds": 1.5},
             {"name": "snapshot", "kind": "stl", "count": 1, "failed": 1, "seconds": 0.5},
+            {"name": "snapshot_failure", "kind": "stl", "reason": "other", "count": 1},  # an older command's: no reason
         ])
 
     def test_a_hand_over_never_starts_a_daemon_nor_waits_on_one(self) -> None:
@@ -270,6 +282,82 @@ class DaemonTelemetryTest(unittest.TestCase):
                           for event in builds],
                          [("dxf", "script", 1, 1, 0, 0), ("step", "script", 2, 0, 1, 0), ("stl", "command", 1, 0, 0, 1)])
 
+    def test_why_a_build_failed_is_decided_where_it_failed_with_a_daemon_or_without(self) -> None:
+        from cadgen._internal.cli_from_function import report_failure
+
+        def model() -> None:
+            raise ValueError("the secret part did not fit")
+
+        def failing() -> int:  # a model script's run: its failure ends in the one failure envelope
+            try:
+                exec(compile("model()", "/home/someone/secret_plate.py", "exec"), {"model": model})  # noqa: S102
+            except ValueError as error:
+                return report_failure(error, prog="python secret_plate.py", as_json=True, stdout=io.StringIO())
+            return 0
+
+        # In a build worker: decided there, it rides the job's exit frame, and the daemon counts it.
+        frames = []
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_CHILD": "1"}):
+            for run in (failing, lambda: 2, lambda: 1):  # its own failure; arguments refused; one nothing named
+                telemetry.job_started()
+                telemetry.job_ended(run())
+                frames.append(telemetry.job_finished())
+        self.assertEqual(frames, [{"failure": "model_error"}, {"failure": "arguments"}, {}])
+        for index, frame in enumerate(frames):
+            build = telemetry.build(RUN, {"id": f"e:job-{index}", "outputs": ["/w/plate.step"]})
+            telemetry.exited({"exit": 1, **frame}, build)
+            build.finish(1, None, 1.0)
+        # With none: decided where it ran, and handed over with the build.
+        handed: list[dict] = []
+
+        def escaped() -> int:
+            raise RuntimeError("past every report")
+
+        with mock.patch.object(client, "hand_over", side_effect=handed.append):
+            telemetry.cold_build("step", "script", failing)
+            telemetry.cold_build("stl", "command", lambda: 2)
+            with self.assertRaises(RuntimeError):
+                telemetry.cold_build("stl", "command", escaped)
+            telemetry.cold_build("dxf", "script", lambda: 1)
+            telemetry.cold_build("dxf", "script", lambda: 0)
+        self.assertEqual([build.get("reason") for counts in handed for build in counts["builds"]],
+                         ["model_error", "arguments", "bug", "other", None])
+        for counts in handed:
+            telemetry.counted(counts)
+        failures = {(event["kind"], event["via"], event["reason"]): event["count"] for event in self.events()
+                    if event["name"] == "build_failure"}
+        self.assertEqual(failures, {("step", "script", "model_error"): 2, ("step", "script", "arguments"): 1,
+                                    ("step", "script", "other"): 1, ("stl", "command", "arguments"): 1,
+                                    ("stl", "command", "bug"): 1, ("dxf", "script", "other"): 1})
+        self.assertNotIn("secret", json.dumps(self.sent))
+
+    def test_why_a_snapshot_failed_is_decided_as_it_failed(self) -> None:
+        import asyncio
+
+        from cadgen.snapshot_cli import run_snapshot
+        from cadgen.snapshot_core import launch_with_browser
+
+        handed: list[dict] = []
+        options = SnapshotOptions(input=str(self.tmp / "secret.step"), output=str(self.tmp / "a.png"))
+        with mock.patch.object(client, "hand_over", side_effect=handed.append):
+            for kinds in (("step",), ("step",), ("stl",)):  # not there; not STEP; a door that takes no STEP
+                with self.assertRaises(Exception):
+                    run_snapshot(options, kinds=kinds)
+                (self.tmp / "secret.step").write_text("not STEP at all", encoding="utf-8")
+        self.assertEqual([counts["snapshots"][0]["reason"] for counts in handed], ["no_file", "input_error", "bad_request"])
+        self.assertNotIn("secret", json.dumps(handed))
+
+        # A browser that will not start, even once fixed: named where it is launched, whatever it says.
+        async def launch() -> None:
+            raise RuntimeError("Executable doesn't exist at /secret")
+
+        error = None
+        try:
+            asyncio.run(launch_with_browser(launch, fix=lambda problem: None))
+        except RuntimeError as failed:
+            error = failed
+        self.assertEqual(analytics.snapshot_failure(error, "render_error"), "browser")
+
     def test_a_snapshot_counts_each_documents_format_and_the_features_it_used(self) -> None:
         handed: list[dict] = []
         options = SnapshotOptions(input="/w/arm.step", output="/w/arm.png", joint_values_specified=True)
@@ -277,14 +365,17 @@ class DaemonTelemetryTest(unittest.TestCase):
                       for index, name in enumerate(("/w/arm.step", "/w/arm.step", "/w/base.STL")))
         with mock.patch.object(client, "hand_over", side_effect=handed.append):
             _count_snapshot(options, SnapshotResult(ok=True, files=files), 3.0)
-            _count_snapshot(options, None, 1.0)  # it raised: what it was asked to render, failed
+            # It raised: what it was asked to render failed, for why the error says.
+            _count_snapshot(options, None, 1.0, FileNotFoundError("/w/arm.step"))
+            _count_snapshot(options, SnapshotResult(ok=False, files=()), 1.0)  # rendered, and said it failed
             _count_snapshot(SnapshotOptions(job="/w/job.json"), None, 1.0)  # a packet it never read names nothing
             with mock.patch.object(client, "hand_over", side_effect=RuntimeError("broken")):
                 _count_snapshot(options, None, 1.0)  # never fails the snapshot it counts
         self.assertEqual([sorted(snapshot["format"] for snapshot in counts["snapshots"]) for counts in handed],
-                         [["step", "stl"], ["step"]])
+                         [["step", "stl"], ["step"], ["step"]])
         self.assertEqual([(snapshot["ok"], snapshot["seconds"]) for snapshot in handed[0]["snapshots"]], [(True, 1.5), (True, 1.5)])
-        self.assertEqual(handed[1]["snapshots"], [{"format": "step", "ok": False, "seconds": 1.0}])
+        self.assertEqual(handed[1]["snapshots"], [{"format": "step", "ok": False, "seconds": 1.0, "reason": "no_file"}])
+        self.assertEqual(handed[2]["snapshots"], [{"format": "step", "ok": False, "seconds": 1.0, "reason": "render_error"}])
         self.assertEqual(handed[0]["features"], ["kinematics"])
         self.assertNotIn("/w/", json.dumps(handed))
 
