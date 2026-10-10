@@ -97,6 +97,23 @@ stress. Restate every load in those units before you write it down.
    higher for a polymer, a fatigue load or a part that must not fail, lower
    only when the user says the load is known exactly.
 
+   Add a `view` when the user's question is better answered by a control
+   than by the default field and deformation sliders: it names the sliders
+   and selects the Viewer's Study panel shows for the result, in the user's
+   words ([The result's controls](references/study-file.md#view)):
+
+   - "How much can it take?", "what if it's twice as heavy?": a `load_scale`
+     control labelled with the load as the user says it ("Rider weight"),
+     its range around the loads they care about. Dragging it rescales the
+     colours, the safety factor and each part's "holds" at once, without a
+     second solve (the study is linear).
+   - Named load cases ("landing", "half load"): `presets`, each setting the
+     controls to that case.
+   - "Where is it over the limit?": a `threshold` on `von_mises` at the
+     limit (half yield, an allowable), so only the regions over it carry
+     colour.
+   - A study about deflection: a `field` control opening on `displacement`.
+
 3. **Solve.**
 
    ```bash
@@ -134,7 +151,9 @@ stress. Restate every load in those units before you write it down.
    load and the reaction (they balance, or the run warns), the mesh size and
    element count. Then say what the model assumes. Open the GLB in the Viewer
    for the user; the deformation is exaggerated by the `deformation_scale`
-   the sidecar records, so say that too.
+   the sidecar records, so say that too. The Viewer draws the loads as
+   arrows and the fixed faces as cones on the model; a person can check
+   them against what they meant before trusting the numbers.
 
 ## Assemblies
 

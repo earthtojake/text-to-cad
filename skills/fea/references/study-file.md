@@ -18,7 +18,8 @@ unchanged.
   ],
   "mesh": {"size_mm": 2.5},
   "output": {"deformation_scale": "auto"},
-  "margin": 2
+  "margin": 2,
+  "view": {"controls": [{"drives": "load_scale", "label": "Rider weight", "min": 0.5, "max": 3}]}
 }
 ```
 
@@ -128,6 +129,59 @@ The safety factor against yield the part should keep. Omitted, 2. Below 1 is
 refused (a part that yields has no margin). A result under it, but above 1,
 is a `low_margin` warning; below 1 is a `yields` error. Raise it for polymers,
 fatigue or a part whose failure hurts someone.
+
+## `view`
+
+What the Viewer offers for the result: the controls in its Study panel's
+Result group, named presets of them, and whether the loads and fixtures are
+drawn. Optional; without it the Viewer shows a field select over every field,
+opening on stress, and a deformation slider. cadgen checks it with the rest
+of the study and copies it into the GLB (`extras.view`) and the sidecar
+(`view`).
+
+```json
+"view": {
+  "controls": [
+    {"drives": "field", "type": "enum", "label": "Show", "options": ["von_mises", "displacement"], "default": "von_mises"},
+    {"drives": "deformation", "type": "number", "label": "Exaggerate", "min": 0, "max": 50, "default": 12},
+    {"drives": "load_scale", "type": "number", "label": "Rider weight", "min": 0.5, "max": 3, "default": 1, "unit": "×"},
+    {"drives": "threshold", "type": "number", "label": "Over half yield", "field": "von_mises", "min": 0, "max": 300, "default": 138, "unit": "MPa"}
+  ],
+  "presets": [{"label": "Landing (3×)", "load_scale": 3}],
+  "show": {"loads": true, "fixtures": true}
+}
+```
+
+`controls` are listed in the order the panel shows them, at most one per
+`drives`. The agent picks the words (`label`, `unit`) and ranges; the Viewer
+decides what dragging one does:
+
+| `drives` | `type` | what it moves | keys |
+| --- | --- | --- | --- |
+| `field` | `enum` | which field the colours show | `options` (fields the result writes: `von_mises`, `displacement`; default both), `default` (default the first option) |
+| `deformation` | `number` | how many times the displacement is drawn | `min` (default 0), `max` (required), `default` (default `min`) |
+| `load_scale` | `number` | the load as a multiple of the solved one: stress, displacement and deformation times it, safety factors divided by it | as above; `default` defaults to 1 where the range holds it |
+| `threshold` | `number` | values of `field` under it are drawn grey, so only the regions over it carry colour | `field` (required), as above, in that field's units |
+
+`type` may be left out; given, it must be the one above. `min` is zero or
+more and below `max`, and `default` lies between them. The findings stay
+those of the solved load whatever `load_scale` is set to.
+
+- Use `load_scale` when the user asks how much the part can take, or what
+  happens at a heavier load, labelled with the load in their words.
+- Use `presets` for named load cases: `{"label": ..., <drives>: value}`,
+  each key the `drives` of a declared control, each value in its range (an
+  option for `field`). A preset is a full state: controls it does not name go
+  back to their defaults.
+- Use `threshold` to show only the regions over a limit: half yield, an
+  allowable stress, a deflection limit on `displacement`.
+- `show`: `loads` and `fixtures`, `true` or `false` (default both true): whether
+  the arrows on the loaded faces and the cones on the fixed faces are drawn
+  when the result opens. The person can still turn them on in Display.
+
+An unknown key, an unknown `drives`, a field the result does not write, a
+range out of order or a preset naming no control is refused with a sentence
+naming the key, like every other study error.
 
 ## What comes out
 

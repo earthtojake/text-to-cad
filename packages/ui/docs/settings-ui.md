@@ -477,6 +477,10 @@ Escape closes the innermost popup first, the dropdown only on a later press.
 | Background | Color and opacity |
 | Floor | Color/opacity; position and finish side by side |
 
+A renderer may add gates of its own after Surfaces (`useRendererShell`'s `displaySections`), for
+what it draws of the file beyond its surfaces: an FEA result's Loads and fixtures. Their state is
+the renderer's slice of the file's view, and Display's Reset leaves it alone.
+
 Display holds the file's view alone: the person's settings are the [app menu](#settings)'s.
 Display and Surfaces are always open. Every other section is a feature gate
 with plus/minus: expanded means enabled, collapsed means disabled. Grid / Axes
@@ -568,10 +572,21 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     face ("Face 17", "fixed"; in an assembly "post · face 17", wrapping); **Loads**, one row per
     load ("2500 N", its direction in words: "down" and "up" are CAD Z, else "along +X" or the unit
     vector; or "2 MPa pressure"), its faces under it ("Face 22", "loaded"); **Mesh** ("1.9 mm
-    elements · refined from 2.8 mm", or "not refined"); and **Result**: a Field select in plain
-    words (Stress, Displacement; the file's own name, von Mises stress, is the colour bar's),
-    listing only the fields the file carries, and a Deformation slider with its committed number,
-    from 0 to four times the file's own exaggeration. Each group shows only where the file records
+    elements · refined from 2.8 mm", or "not refined"); and **Result**: the controls the study's
+    `view` chose (`feaControls` in `glb/feaResult.js`), in its order, with its labels, ranges and
+    units, each a generic parameter row drawn by the same `parameterRow` as Position's joints
+    (`kit/inspector/parameterRow.jsx`), a sentence-long label running over its value field
+    (`wideLabel`). What each moves is the viewer's, from a closed set (`drives`): **field** (a select
+    of the fields the file carries, in plain words: Stress, Displacement; the file's own name, von
+    Mises stress, is the colour bar's), **deformation** (how many times the displacement is drawn,
+    "×12.0"), **load_scale** (the load as a multiple of the solved one, "×1.50") and **threshold**
+    (values of its field under it drawn neutral grey, "138 MPa"). A control whose `drives` or type
+    the viewer does not know is skipped. With no `view`, Result is as it always was: a Field select
+    with no visible label over every field, opening on stress, and a Deformation slider with its
+    committed number, from 0 to four times the file's own exaggeration. When the view names
+    `presets`, a **Preset** row leads Result, the Position panel's Pose row (`KinematicsPoseRow`)
+    labelled "Preset": Default, each preset (a full state: every control at its default but what
+    the preset sets), and Custom once any control moves. Each group shows only where the file records
     something for it (`STUDY_GROUPS` in `glb/feaResult.js`: a result kind with more to say adds a
     group there, touching no other), so a result written before its study was recorded has Result
     alone. Nothing in Study is cut off at the one width: Material's and Mesh's details wrap under
@@ -598,7 +613,7 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   in an assembly a picked face's Reference is headed with its part ("post · face 1").
 - **A colour bar** floats at bottom-centre on the playbar's line
   (`FLOATING_CHROME_SURFACE_CLASS`, no pointer events): one plain line over the field's range
-  and units along the ramp, one playbar's height higher when the result also has routines. Stress: "Peak stress 47 MPa · holds 5.8× this load · moves up to
+  and units along the ramp, one playbar's height higher while the playbar is under the model (in preview). Stress: "Peak stress 47 MPa · holds 5.8× this load · moves up to
   0.029 mm", with "holds" left out when the result has no safety factor and "yields under this
   load" in its place when the safety factor is under 1; displacement: "Moves up
   to 0.029 mm". The card is at least 18rem wide and grows to fit the line, up to the viewport less its margins, wrapping
@@ -613,9 +628,32 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   orbited and as the deformation moves it) and carries its sentence and the part's faces into Quick
   Edit, when the result names the STEP it was solved from. Escape, Quick Edit's clear and bringing
   the card back let go of the choice.
-- **The field and the exaggeration are the file's view**: one renderer slice
-  (`fea`), written against the result's fields and scale, so a re-solved result opens at its own
-  defaults.
+- **A load other than the solved one** (`load_scale` k; the study is linear, so it scales exactly):
+  the colour bar's range and its line are k times the solved ones ("at 1.5× the load" ends the
+  line when k ≠ 1), the safety factor and every part's "holds" in Parts are divided by k, so a part
+  can turn to "yields", and the displacement is drawn k times further. The colours keep their place
+  on the bar, which reads k times higher. A threshold compares its field at the load shown. **The
+  findings card stays as solved, at 1×**: its sentences are the checks cadgen made, not a reading of
+  the slider.
+- **Load ramp.** Every result has one routine of the viewer's own, "Load ramp" (`useGlbAnimation`'s
+  own clips): in preview the playbar plays the load going on, from none to the load chosen, over
+  two seconds, the colours climbing under the bar of that load and the deformation and markers
+  following, looping as its Loop says. Nothing is baked into the file: the viewer deforms from the
+  displacement field it carries. The colour bar steps up above the playbar while it is there.
+- **Loads and fixtures on the model** (`glb/feaMarkers.js`), from the study the file records: on
+  each loaded face one to five arrows (more on a bigger face), spread over it, each 8% of the
+  model's diagonal long whatever the load, pointing along the force with its tip on the face (a
+  pulling force stands on the face by its tail); a pressure's arrows run along the inward normal;
+  a label beside each load's arrows, past their tails, says its amount at the load shown ("300 N",
+  "2 MPa"). On each fixed face, small cones point into it. They stand on the deformed shape as it is
+  drawn and over the surface (no depth test). The theme has no colour to spare (every saturated hue
+  is the ramp's or the chosen faces' magenta): loads are the ink, fixtures a muted grey, and a
+  chosen load row's arrows, or a chosen fixed row's cones, take the chosen magenta. Display has one
+  gate for them, **Loads and fixtures**, after Surfaces, on unless the study's `view.show` turns
+  both off (it then draws both when turned on); `view.show` leaving one kind off keeps it off.
+- **The choices are the file's view**: one renderer slice (`fea`: the field, the deformation, the
+  load, the threshold, the preset and the markers' gate), written against the result's fields,
+  scale and view, so a re-solved result opens at its own defaults.
 
 ## Position and references
 
