@@ -10,12 +10,12 @@ import QuickEdit from "../kit/tools/quick-edit/QuickEdit.jsx";
 import { normalizeToolStack } from "../kit/tools/toolStackLayout.js";
 import { findingCopyText } from "./board/boardFacts.js";
 import { BOARD_TOOL, useBoardInspector } from "./board/useBoardInspector.js";
-import { useBoardDrawing } from "./board/useBoardDrawing.js";
+import { usePlaneDrawing } from "../kit/plane/usePlaneDrawing.js";
 import { useCrossProbe } from "./board/useCrossProbe.js";
 import { Pencil } from "lucide-react";
 import DrawingOverlay from "../kit/tools/draw/DrawingOverlay.jsx";
-import ToolPanel, { ToolPanelFooterButton } from "../kit/tools/ToolPanel.jsx";
-import { DRAWING_TOOLBAR_TOOLS, DrawingToolbar } from "../../drawing/toolbar.jsx";
+import DrawingPanel from "../kit/tools/draw/DrawingPanel.jsx";
+import { DRAWING_TOOLBAR_TOOLS } from "../../drawing/toolbar.jsx";
 import { BoardMeasurePanel, BoardReferencePanel, BoardTreePanel } from "./board/BoardPanels.jsx";
 import FindingsList, { findingBlocks, findingsLabel } from "./board/FindingsList.jsx";
 import { BoardMeasureIcon, BoardSelectIcon } from "./board/boardModes.jsx";
@@ -138,8 +138,7 @@ function PlotSurface({ view, data }) {
   useCrossProbe({ port: host.crossProbe, path: view.file.path, inspector, view: plotView, canvasRef,
     layout: payload.plot?.layout ?? null, mirrored: shownDisplay?.side === "bottom" });
   const drawing = inspector.available && inspector.tool === BOARD_TOOL.DRAW;
-  const boardDrawing = useBoardDrawing({ active: drawing, transformRef: plotView.transformRef, setView: plotView.setView, paintNow: plotView.paintNow,
-    settle: plotView.settle, canvasRef });
+  const boardDrawing = usePlaneDrawing({ active: drawing, plane: plotView, noun: "board" });
 
   // ---- host chrome -----------------------------------------------------------
   useEffect(() => { onReady?.(true); }, [onReady]);
@@ -383,10 +382,7 @@ function PlotSurface({ view, data }) {
         </DisplayPopover>, view.navbarSlot) : null}
         {boardChrome ? <ToolColumn tools={tools} layout={toolStack} onLayoutChange={changeToolStack} mobile={mobile}>
           {/* Draw's controls lead the stack while it is up, and once there is ink, Copy Drawing at their foot. */}
-          {drawing ? <ToolPanel id="drawing" label="Drawing controls" collapsible={false}
-            footer={boardDrawing.drawing.hasContent ? <ToolPanelFooterButton label="Copy Drawing" shortcut={mobile ? "" : copyShortcut} onClick={copyDrawing} /> : null}>
-            <DrawingToolbar drawing={boardDrawing.drawing} layout="panel" className="p-1" />
-          </ToolPanel> : null}
+          {drawing ? <DrawingPanel drawing={boardDrawing.drawing} onCopy={copyDrawing} copyShortcut={mobile ? "" : copyShortcut} /> : null}
           <BoardTreePanel index={inspector.index} documentKind={inspector.document} selection={inspector.selection}
             selectMode={inspector.selectMode} onSelectMode={inspector.setSelectMode} select={inspector.select} clear={inspector.clear}
             active={inspector.tool === BOARD_TOOL.SELECT} />

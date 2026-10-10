@@ -12,8 +12,7 @@ import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { VIEWER_RENDER_PROFILE, renderProfileKeepsPixelRatio, sceneForRenderProfile } from "../viewport/renderProfile.js";
 import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
 import DisplayPopover from "./DisplayPopover.jsx";
-import { DrawingToolbar } from "../../../drawing/toolbar.jsx";
-import ToolPanel, { ToolPanelFooterButton } from "../tools/ToolPanel.jsx";
+import DrawingPanel from "../tools/draw/DrawingPanel.jsx";
 import PlaybackMenu, { OrbitMenu, RoutineMenu } from "../tools/PlaybackMenu.jsx";
 import { ViewportAnimationBar, animationControlsHaveContent } from "../tools/playbar/ViewportAnimationBar.js";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
@@ -156,13 +155,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // The shell's own tool's panel leads the stack while its tool is up: Draw's tools, color and
   // history. The renderer's follow.
   // Draw's controls, and once there is ink, Copy Drawing (the view with its ink) at their foot.
-  const shellPanels = <>
-    {frame.drawToolActive ? <ToolPanel id="drawing" label="Drawing controls" collapsible={false}
-      footer={frame.drawing.hasContent ? <ToolPanelFooterButton label="Copy Drawing" shortcut={mobile ? "" : frame.copyShortcut}
-        disabled={viewerLoading || !scene} onClick={frame.copyDrawing} /> : null}>
-      <DrawingToolbar drawing={frame.drawing} layout="panel" className="p-1" />
-    </ToolPanel> : null}
-  </>;
+  const shellPanels = frame.drawToolActive ? <DrawingPanel drawing={frame.drawing} onCopy={frame.copyDrawing}
+    copyShortcut={mobile ? "" : frame.copyShortcut} disabled={viewerLoading || !scene} /> : null;
 
   const hasContent = Boolean(scene) && !viewerLoading;
   // A load the model did not survive: an alert that cannot be put away (a failed update that

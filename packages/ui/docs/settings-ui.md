@@ -340,7 +340,7 @@ plot without one is the picture alone.
   it was.
 - **Draw** is the shared drawing editor laid over the board, its Drawing panel and Copy Drawing
   as a STEP's. While it is up the editor pans and zooms and the board follows it
-  (`board/boardViewLock.js`), so ink stays on what it was drawn over — through a change of the
+  (`kit/tools/draw/planeViewLock.js`), so ink stays on what it was drawn over — through a change of the
   pane's size too; the sketch goes with a Quick Edit as the view with its ink. A host's or the
   agent's selection while it is up shows under the ink and leaves the sketch alone, and a
   capture never carries the hover.
