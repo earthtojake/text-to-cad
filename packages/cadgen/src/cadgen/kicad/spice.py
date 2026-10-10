@@ -39,7 +39,7 @@ import re
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 from cadgen.kicad import sexpr
 from cadgen.kicad.design import DesignError, Part, Pin
@@ -55,6 +55,7 @@ __all__ = [
     "part_model",
     "sim_fields",
     "spice_number",
+    "to_number",
 ]
 
 #: KiCad's simulation fields; any other ``Sim.*`` property on a part is a typo.
@@ -177,6 +178,24 @@ def param_number(text: str) -> float | None:
         return None
     number = _decimal(match.group("mantissa"), match.group("exponent"), match.group("prefix"))
     return -number if match.group("sign") == "-" else number
+
+
+def to_number(value: Any, *, what: str) -> float:
+    """A number given as a float, an int or SPICE-style text (``'1m'``, ``'4.7k'``; ``M`` is mega)."""
+    if isinstance(value, bool):
+        raise DesignError(f"{what} is a number, got {value!r}")
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str):
+        parsed = param_number(value.strip())
+        if parsed is None:
+            raise DesignError(f"{what} is a number such as 5, 1e-3 or '1m', got {value!r}")
+        number = parsed
+    else:
+        raise DesignError(f"{what} is a number, got {value!r}")
+    if not math.isfinite(number):
+        raise DesignError(f"{what} must be finite, got {value!r}")
+    return number
 
 
 def _param_text(value: str, *, ref: str, key: str) -> str:

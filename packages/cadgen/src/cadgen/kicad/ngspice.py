@@ -32,13 +32,14 @@ import ctypes
 import ctypes.util
 import locale
 import os
+import re
 import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
-__all__ = ["NgspiceFailure", "Plot", "library_candidates", "simulate"]
+__all__ = ["NgspiceFailure", "Plot", "error_hints", "library_candidates", "simulate"]
 
 
 class NgspiceFailure(RuntimeError):
@@ -103,6 +104,48 @@ _ERROR_MARKERS = (
     "unknown subckt",
     "unknown model",
 )
+
+
+def error_hints(errors: Sequence[str], described: Mapping[str, str]) -> tuple[list[str], list[str]]:
+    """ngspice's error lines, each once, and what they mean for a person: ``described`` names a
+    node or an element (lowercased, as ngspice prints them) as the circuit's author knows it."""
+    seen: list[str] = []
+    for line in errors:
+        text = line[len("stderr ") :] if line.startswith("stderr ") else line
+        if text not in seen:
+            seen.append(text)
+    hints: list[str] = []
+    for text in seen:
+        lowered = text.lower()
+        match = re.search(r"singular matrix:\s*check node (\S+)", lowered)
+        if match:
+            node = match.group(1)
+            if node.endswith("#branch"):
+                owner = described.get(node[: -len("#branch")], node[: -len("#branch")])
+                hint = f"{owner} is in a loop of voltage sources or inductors with nothing between them"
+            else:
+                owner = described.get(node, f"node {node}")
+                hint = (
+                    f"{owner} has no DC path to ground: every net needs one (a capacitor alone does not "
+                    "conduct at DC, an unconnected pin floats); connect it, or give it a bleeder such as "
+                    "tb.load(net, ohms=1e9)"
+                )
+        elif "timestep too small" in lowered:
+            hint = (
+                "the simulation could not converge: give sources finite rise and fall times, add the "
+                "series resistance real parts have, or check for a source shorted by a part"
+            )
+        elif "unknown subckt" in lowered or ("model" in lowered and ("find" in lowered or "valid" in lowered or "unknown" in lowered)):
+            hint = "a model the netlist names is not defined: check Sim.Name against the model file"
+        elif "unrecognized parameter" in lowered or "unknown parameter" in lowered:
+            hint = "a parameter is not one that model has: check Sim.Params against the model's parameters"
+        else:
+            continue
+        if hint not in hints:
+            hints.append(hint)
+    if any("no DC path" in hint or "loop of voltage sources" in hint for hint in hints):
+        hints = [hint for hint in hints if not hint.startswith("the simulation could not converge")]  # a consequence
+    return seen, hints
 
 
 def library_candidates() -> list[str]:
