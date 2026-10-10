@@ -17,6 +17,7 @@ covers all three.
 
     scripts/install/dev_install.py claude              # Claude Code (and so Cursor and Grok Build)
     scripts/install/dev_install.py codex [--restart]   # the Codex app, CLI and IDE extension
+    scripts/install/dev_install.py qoder               # Qoder IDE and CLI
     scripts/install/dev_install.py cursor              # Cursor, without Claude Code
     scripts/install/dev_install.py grok                # Grok Build, without Claude Code
     scripts/install/dev_install.py gemini              # Gemini CLI
@@ -32,6 +33,7 @@ keeps the code it started with.
 Environment:
     CADGEN_PYTHON           the interpreter that runs the server (default: the checkout's .venv)
     CODEX_CLI               the codex CLI (default: the newer of `codex` on PATH and the Codex app's)
+    QODER_CLI               the Qoder CLI (default: `qodercli`, then a compatible `qoder` on PATH)
     GEMINI_CLI              the gemini CLI (default: `gemini` on PATH)
     CLAUDE_DESKTOP_CONFIG   Claude Desktop's config file (default: its own, per platform)
 """
@@ -53,7 +55,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # not import cadgen, whose floor is newer; test_dev_install holds the two equal.
 LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", "3.13", "--from")
 MARKETPLACE = "earthtojake-dev"
-PLUGIN_HOSTS = ("claude", "codex", "cursor", "grok", "gemini")
+PLUGIN_HOSTS = ("claude", "codex", "qoder", "cursor", "grok", "gemini")
 HOSTS = (*PLUGIN_HOSTS, "claude-desktop")
 DESKTOP_SERVER = "cad-dev"
 CURSOR_PLUGINS = Path.home() / ".cursor" / "plugins" / "local"
@@ -121,8 +123,9 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
         manifest["mcpServers"] = {"cad": server}
         write_json(plugin_dir / "gemini-extension.json", manifest)
         return manifest
-    manifest_dir = {"codex": ".codex-plugin", "cursor": ".cursor-plugin"}.get(host, ".claude-plugin")
-    servers_file = "codex.mcp.json" if host == "codex" else "claude.mcp.json"
+    manifest_dir = {"codex": ".codex-plugin", "qoder": ".qoder-plugin",
+                    "cursor": ".cursor-plugin"}.get(host, ".claude-plugin")
+    servers_file = {"codex": "codex.mcp.json", "qoder": "qoder.mcp.json"}.get(host, "claude.mcp.json")
     manifest = json.loads((root / manifest_dir / "plugin.json").read_text(encoding="utf-8"))
     manifest["version"] = version
     manifest["mcpServers"] = f"./{servers_file}"
@@ -162,6 +165,7 @@ def skill_folders(host: str) -> list[Path]:
         # Cursor and Grok Build load Claude Code's plugins, so a Claude Code install reaches theirs too.
         "claude": [claude / "skills", home / ".cursor" / "skills", home / ".grok" / "skills"],
         "codex": [Path(os.environ.get("CODEX_HOME") or home / ".codex") / "skills"],
+        "qoder": [Path(os.environ.get("QODER_CONFIG_DIR") or home / ".qoder") / "skills"],
         "cursor": [home / ".cursor" / "skills"],
         "grok": [home / ".grok" / "skills", claude / "skills"],
         "gemini": [home / ".gemini" / "skills", home / ".agents" / "skills"],
@@ -215,6 +219,18 @@ def codex_cli() -> str:
     if not versions:
         raise Refused("No working codex CLI; install Codex or set CODEX_CLI.")
     return max(versions, key=versions.get)
+
+
+def qoder_cli() -> str:
+    """QODER_CLI, else qodercli or a `qoder` that exposes plugin commands."""
+    candidates = [os.environ["QODER_CLI"]] if os.environ.get("QODER_CLI") else [
+        path for path in (shutil.which("qodercli"), shutil.which("qoder")) if path
+    ]
+    for path in candidates:
+        result = subprocess.run([path, "plugins", "--help"], capture_output=True, text=True)
+        if result.returncode == 0 and "Manage plugins" in result.stdout:
+            return path
+    raise Refused("No working Qoder CLI; install @qoder-ai/qodercli or set QODER_CLI.")
 
 
 def interpreter() -> str:
@@ -437,6 +453,36 @@ def install_claude(args: argparse.Namespace) -> str:
             "restart one already running to pick up a new build.")
 
 
+def install_qoder(args: argparse.Namespace) -> str:
+    qoder = qoder_cli()
+    name = plugin_name()
+    dev_id = f"{name}@local"
+    root = dev_root("qoder")
+    plugin_dir = root / "plugins" / name
+
+    def installed() -> list[str]:
+        plugins = json.loads(run(qoder, "plugins", "list", "--json", capture=True) or "[]")
+        return [plugin.get("id", "") for plugin in plugins if plugin.get("name") == name]
+
+    if args.uninstall:
+        if dev_id in installed():
+            run(qoder, "plugins", "uninstall", name)
+        shutil.rmtree(root, ignore_errors=True)
+        return f"Removed {name} from Qoder."
+    others = [plugin_id for plugin_id in installed() if plugin_id != dev_id]
+    if others:
+        raise Refused(f"Qoder already has {name} from {', '.join(others)}; uninstall it first: "
+                      "two copies means every skill twice.")
+    refuse_other_copies("qoder")
+    version = dev_version()
+    server, commands, _ = runtime("qoder", args, version)
+    assemble("qoder", plugin_dir, version, server, commands=commands)
+    if dev_id in installed():
+        run(qoder, "plugins", "uninstall", name)
+    run(qoder, "plugins", "install", str(plugin_dir))
+    return f"Installed {name} {version} in Qoder; start a new task to load it."
+
+
 def install_cursor(args: argparse.Namespace) -> str:
     name = plugin_name()
     target = CURSOR_PLUGINS / f"{name}-dev"
@@ -547,7 +593,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.restart and args.host != "codex":
         parser.error("--restart is for codex")
-    install = {"claude": install_claude, "codex": install_codex, "cursor": install_cursor, "grok": install_grok,
+    install = {"claude": install_claude, "codex": install_codex, "qoder": install_qoder,
+               "cursor": install_cursor, "grok": install_grok,
                "gemini": install_gemini, "claude-desktop": install_claude_desktop}[args.host]
     try:
         print(install(args))

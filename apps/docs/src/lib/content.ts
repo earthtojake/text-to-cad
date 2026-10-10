@@ -13,7 +13,7 @@ export const pluginDescription =
 export const support = {
   before: "It is supported by all popular agents that support plugins or the",
   link: { text: "skills", href: "https://skills.sh" },
-  after: "framework, including Claude Code, Codex, Cursor, Gemini and Grok.",
+  after: "framework, including Claude Code, Codex, Cursor, Gemini, Grok and Qoder.",
 };
 
 // The install: a message for the agent, which finds the install for its own app in the repository
@@ -62,6 +62,15 @@ export const installs = [
       "codex plugin marketplace add earthtojake/text-to-cad --ref latest\ncodex plugin add text-to-cad@earthtojake",
     update: "codex plugin marketplace upgrade earthtojake",
     remove: "codex plugin remove text-to-cad@earthtojake\ncodex plugin marketplace remove earthtojake",
+  },
+  {
+    id: "qoder",
+    agent: "Qoder",
+    command:
+      "qoder plugins marketplace add earthtojake/text-to-cad#latest\nqoder plugins install text-to-cad@earthtojake",
+    update:
+      "qoder plugins marketplace update earthtojake\nqoder plugins update text-to-cad@earthtojake",
+    remove: "qoder plugins uninstall text-to-cad\nqoder plugins marketplace remove earthtojake",
   },
   {
     id: "cursor",

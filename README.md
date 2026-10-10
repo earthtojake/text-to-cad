@@ -29,7 +29,7 @@ and CNC fabrication services.
 
 It is supported by all popular agents that support plugins or the
 [skills](https://skills.sh) framework, including Claude Code, Codex, Cursor,
-Gemini and Grok.
+Gemini, Grok and Qoder.
 
 ## 💻 Install
 
@@ -157,6 +157,29 @@ The marketplace was renamed from `text-to-cad` to `earthtojake`; if you added it
 before, remove the old one first (`codex plugin marketplace remove text-to-cad`).
 
 </details>
+
+### Qoder
+
+```bash
+qoder plugins marketplace add earthtojake/text-to-cad#latest
+qoder plugins install text-to-cad@earthtojake
+```
+
+The plugin starts CAD's server and installs the canonical skills. Qoder shows
+tool results as text, so asking it to show a model gives you a CAD Viewer link.
+To update, run these, then restart Qoder:
+
+```bash
+qoder plugins marketplace update earthtojake
+qoder plugins update text-to-cad@earthtojake
+```
+
+To reinstall, remove it with these, then run the install commands again:
+
+```bash
+qoder plugins uninstall text-to-cad
+qoder plugins marketplace remove earthtojake
+```
 
 ### Cursor
 

@@ -14,6 +14,7 @@ export const jsonTargets = [
   { path: "package-lock.json", fields: [["version"], ["packages", "", "version"], ...["apps/docs", "apps/web", "apps/mcp", "packages/core", "packages/ui"].map(name => ["packages", name, "version"])] },
   { path: ".claude-plugin/plugin.json", fields: [["version"]] },
   { path: ".codex-plugin/plugin.json", fields: [["version"]] },
+  { path: ".qoder-plugin/plugin.json", fields: [["version"]] },
   { path: ".cursor-plugin/plugin.json", fields: [["version"]] },
   { path: "gemini-extension.json", fields: [["version"]] },
   { path: "plugin.json", fields: [["version"]] },
@@ -45,6 +46,7 @@ function skillLaunchTargets() {
 // extension carries both); its pin is stamped on top of that change, not over it.
 export const pinTargets = [
   "codex.mcp.json",
+  "qoder.mcp.json",
   "claude.mcp.json",
   "cursor.mcp.json",
   "mcp.json",
