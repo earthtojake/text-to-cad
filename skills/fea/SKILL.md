@@ -1,6 +1,6 @@
 ---
 name: fea
-description: Run finite element studies on a STEP part, or a bonded assembly of parts, with cadgen. Fix faces, apply forces, pressures, gravity or a steady acceleration, choose a material, and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Strength (linear static), vibration, buckling, heat (steady, over time and the stress it causes), shock from a response spectrum, fatigue life from a static load and a drop estimate solve today; shaking, drop impact, flow, permanent bending and contact are planned, and the skill maps each question to its analysis and says which are not available yet. Use when the user asks whether a part or an assembly is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part, or asks about its vibration, buckling, heat, fatigue life, drop, flow or contact.
+description: Run finite element studies on a STEP part, or a bonded assembly of parts, with cadgen. Fix faces, apply forces, pressures, gravity or a steady acceleration, choose a material, and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Strength (linear static), vibration, buckling, heat (steady, over time and the stress it causes), shock from a response spectrum, fatigue life from a static load, a drop estimate and a drop impact simulated through time (lite) solve today; shaking, flow, permanent bending and contact are planned, and the skill maps each question to its analysis and says which are not available yet. Use when the user asks whether a part or an assembly is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part, or asks about its vibration, buckling, heat, fatigue life, drop, flow or contact.
 license: MIT
 ---
 
@@ -15,7 +15,7 @@ of parts bonded where they touch, by simulation. It meshes the saved STEP,
 solves, and writes a result the Viewer renders.
 
 **What runs today is strength (the `static` analysis), fatigue life from a
-repeated static load (`fatigue`), a drop estimate (`drop`), vibration
+repeated static load, a shaker dwell or a random vibration spec (`fatigue`), a drop estimate (`drop`), vibration
 (`modal`), shaking across a sine sweep (`harmonic`), random vibration from a PSD
 (`random_vibration`), shock from a response spectrum
 (`shock`), loads that change over time (`transient`), buckling (`buckling`) and heat: steady
@@ -23,12 +23,14 @@ temperatures (`thermal`), temperatures over time (`thermal_transient`) and the
 stress heat puts in a part (`thermal_stress`), and flow (`cfd`, lite: steady laminar
 flow through or around the part, its pressure drop and its push on the part), and
 permanent bending and stretch (`nonlinear`, lite: metal past yield or rubber, the
-load in steps, a collapse found and reported).** Static answers
+load in steps, a collapse found and reported), and a drop impact simulated through
+time (`impact`, lite: the part dropped onto a rigid floor, its peak g, peak stress
+and any permanent strain).** Static answers
 "will it hold, and by how much" under forces, pressures, the part's own weight
 (`gravity`) and a steady acceleration (`acceleration`). Every other analysis in
 [Choose the analysis](#choose-the-analysis) is planned: its study format and
 its words are settled, but this cadgen does not solve it yet, and `cadgen fea
-solve` refuses a study that names one ("'impact' is planned but not in this
+solve` refuses a study that names one ("'contact' is planned but not in this
 cadgen yet"). Do not write such a study; follow [When the question needs an
 analysis that is not here yet](#when-the-question-needs-an-analysis-that-is-not-here-yet).
 
@@ -56,9 +58,9 @@ study names it; left out, it is `static`.
 | A transport or vibration spec in g²/Hz | `random_vibration` | Random vibration | **Runs today** | [random-vibration.md](references/random-vibration.md) |
 | A shock spec, a shock response spectrum (SRS) | `shock` | Shock | **Runs today** | [shock.md](references/shock.md) |
 | A load that changes over time, a hammer blow | `transient` | Over time | **Runs today** | [transient.md](references/transient.md) |
-| "How long will it last", "how many cycles" | `fatigue` | Fatigue life | **Runs today** from a static load case (`"from": "static"`); from `harmonic` or `random_vibration` coming | [fatigue.md](references/fatigue.md) |
+| "How long will it last", "how many cycles" | `fatigue` | Fatigue life | **Runs today** from a static load case (`"from": "static"`), a shaker dwell (`"from": "harmonic"`, `dwell_s`) or a random vibration spec (`"from": "random_vibration"`, `duration_s`) | [fatigue.md](references/fatigue.md) |
 | "What if I drop it" (a quick answer) | `drop` | Drop (estimate) | **Runs today** (an estimate; `"dynamic": true` adds a transient check) | [drop.md](references/drop.md) |
-| "What if I drop it" (a deeper check, after `drop`) | `impact` | Drop impact | Coming, not in this cadgen yet | [impact.md](references/impact.md) |
+| "What if I drop it" (a deeper check, after `drop`) | `impact` | Drop impact | **Runs today** (lite: rigid floor, linear tets, elastic unless plasticity is given) | [impact.md](references/impact.md) |
 | Flow through or around it, pressure drop, the push of air or water on it | `cfd` | Flow | **Runs today** (lite: laminar, steady, incompressible) | [cfd.md](references/cfd.md) |
 | "Does it bend for good", "at what load does it give way", rubber or other stretchy parts | `nonlinear` | Permanent bend / Stretch | **Runs today** (lite: small-strain metal plasticity, Neo-Hookean rubber) | [nonlinear.md](references/nonlinear.md) |
 | Parts pressing or sliding on each other | `contact` | Contact | Coming, not in this cadgen yet | [contact.md](references/contact.md) |
@@ -77,8 +79,9 @@ ships, its reference holds the full schema and this table says it runs today.
   sliding on each other.
 - Offer a static study only where it honestly answers part of the question,
   and say which part:
-  - **A drop impact.** The deeper `impact` check is coming; the `drop`
-    estimate runs today and is exactly a static study: the faces that hit the
+  - **A drop.** Both run today: `impact` simulates the part hitting a rigid
+    floor ([impact.md](references/impact.md)), and the quicker `drop`
+    estimate is exactly a static study: the faces that hit the
     floor held fixed, and an `acceleration` load of G g pointing away from the
     floor (opposite those faces' outward normal), with G = drop height /
     stopping distance (1000 mm stopping in 2 mm is 500 g). Run `drop`
@@ -133,7 +136,7 @@ leave `defeature` out of `fit.allow`) or names a memory or time budget.
 
 | Task | First action | Reference |
 | --- | --- | --- |
-| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `harmonic`, `random_vibration`, `transient`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate), `fatigue` (from a static load) and `nonlinear` (lite) run today. | [Choose the analysis](#choose-the-analysis) |
+| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `harmonic`, `random_vibration`, `transient`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate), `fatigue` (from a static load, a harmonic dwell or a random vibration) and `nonlinear` (lite) run today. | [Choose the analysis](#choose-the-analysis) |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
 | **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`part.step#o1.f17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |

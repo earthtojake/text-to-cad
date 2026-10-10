@@ -47,10 +47,10 @@ the skill's "Choose the analysis" table says what to do instead.
 | `random_vibration` | Random vibration | runs today | [random-vibration.md](random-vibration.md) |
 | `shock` | Shock | runs today | [shock.md](shock.md) |
 | `transient` | Over time | runs today | [transient.md](transient.md) |
-| `fatigue` | Fatigue life | runs today, from a static load case | [fatigue.md](fatigue.md) |
+| `fatigue` | Fatigue life | runs today, from a static load case, a harmonic dwell or a random vibration | [fatigue.md](fatigue.md) |
 | `drop` | Drop (estimate) | runs today, as an estimate | [drop.md](drop.md) |
 | `cfd` | Flow | coming, not in this cadgen yet | [cfd.md](cfd.md) |
-| `impact` | Drop impact | coming, not in this cadgen yet | [impact.md](impact.md) |
+| `impact` | Drop impact | runs today (lite) | [impact.md](impact.md) |
 | `nonlinear` | Permanent bend / Stretch | runs today (lite) | [nonlinear.md](nonlinear.md) |
 | `contact` | Contact | coming, not in this cadgen yet | [contact.md](contact.md) |
 
