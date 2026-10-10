@@ -327,6 +327,30 @@ def _tree_version(digest: str) -> object:
     return data.get("schemaVersion") if isinstance(data, dict) and data.get("kind") == TREE_KIND else None
 
 
+def _named_objects(digest: str, found: Scan) -> list[str] | None:
+    """Every stored object a tree this cadgen cannot read names, by any field: None
+    when ``digest`` is not a tree at all."""
+    from cadgen.store.objects import read_verified_object
+    from cadgen.store.trees import TREE_KIND
+
+    try:
+        data = json.loads(read_verified_object(digest))
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(data, dict) or data.get("kind") != TREE_KIND:
+        return None
+    named, stack = [], [data]
+    while stack:
+        value = stack.pop()
+        if isinstance(value, dict):
+            stack.extend(value.values())
+        elif isinstance(value, list):
+            stack.extend(value)
+        elif isinstance(value, str) and value != digest and value in found.objects:
+            named.append(value)
+    return named
+
+
 def newer_cadgen(found: Scan | None = None) -> dict | None:
     """Why a pass would leave this store to a newer cadgen -- ``{"evidence",
     "lastWritten"}`` -- or None. Reads records and document entries; a pass
@@ -371,6 +395,10 @@ def protected_objects(found: Scan, *, should_stop: Callable[[], bool] = lambda: 
                 if _newer(version, TREE_SCHEMA):
                     raise _Deferred({"evidence": [f"trees in format {version} (this cadgen reads {TREE_SCHEMA})"],
                                      "lastWritten": written})
+            # A tree this cadgen cannot read (another version's format) is still kept, with
+            # every object it names: whoever reads it may still need them.
+            marked.add(digest)
+            pending.extend(_named_objects(digest, found) or ())
             continue
         marked.add(digest)
         for component in tree["components"].values():

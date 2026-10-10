@@ -467,6 +467,33 @@ class AnotherSchemaVersion(StoreSweepCase):
         self.assertTrue(has_object(tree) and has_object(brep))
         self.assertEqual({path: path.read_bytes() for path in ours}, {path: before[path] for path in ours})
 
+    def test_another_versions_tree_in_a_format_this_cadgen_cannot_read_is_kept_whole(self) -> None:
+        from unittest import mock
+
+        from cadgen.store import gc, trees
+        from cadgen.store.objects import has_object
+        from cadgen.store.records import document_key
+        from tests.python.support.store_fixtures import seed_result
+
+        other = self.root / "other.step"
+        other.write_bytes(b"a document another cadgen compiled")
+        other_tree = seed_result(other, components=("a", "b"))
+        named = {other_tree} | {c["brep"] for c in trees.get_tree(other_tree)["components"].values()}
+        index = self.store / "index"
+        digest = hashlib.sha256(other.read_bytes()).hexdigest()
+        ours_at = index / "document" / document_key(digest)
+        (index / "document" / digest).write_text(
+            json.dumps({**json.loads(ours_at.read_text(encoding="utf-8")), "schemaVersion": 4}), encoding="utf-8")
+        ours_at.unlink()
+        for shard in (self.store / "objects").iterdir():
+            for path in shard.iterdir():
+                self.old(path)
+        real = trees.get_tree
+        # Its tree as one in another tree format: this cadgen's reader cannot read it.
+        with mock.patch.object(trees, "get_tree", lambda d: None if d == other_tree else real(d)):
+            gc.collect()
+        self.assertTrue(all(has_object(d) for d in named), "the young entry's tree and its parts stay")
+
 
 class LeastRecentlyWritten(StoreSweepCase):
     def test_eviction_takes_the_oldest_derived_entries_and_never_a_record_or_document(self) -> None:
