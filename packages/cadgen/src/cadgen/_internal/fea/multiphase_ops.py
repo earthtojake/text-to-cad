@@ -25,7 +25,8 @@ interpolant would wobble from element to element, and gravity, against a
 1000:1 density ratio, would turn that wobble into fast spurious air currents).
 
 When the flow has stretched or squeezed d away from a distance (its gradient
-off 1 by more than ``PROFILE_TOL`` across the band), it is rebuilt
+off 1 by more than ``PROFILE_TOL`` across the band, the elements the interface
+crosses or comes within 2 epsilon of), it is rebuilt
 geometrically: the zero level is cut out of the mesh (segments, or the
 triangles of marching tetrahedra) and each corner takes its true distance to
 those pieces. **Volume.** The liquid's volume, the integral of H(d), is
@@ -56,7 +57,14 @@ step, and land on the times asked for.
 **Boundaries.** Walls slide freely by default (a penalty on the normal
 velocity, so a contact line moves) or hold the fluid (no slip). Inlets give a
 velocity and a fluid; outlets a pressure (do-nothing, backflow stabilised). A
-closed container's pressure is pinned to 0 at its highest corner.
+closed container's pressure is pinned to 0 at its highest corner. An inlet's
+fluid enters the level set upwind and weakly, |a . n| (d - d_in) on its face,
+with d_in one element deeper into that fluid than d is there: d grows at about
+the inflow speed, as the sheet coming in does, and stays a distance. (Pinning
+the inlet's corners to the fluid it brings put a jump in d wherever the inlet
+met the other fluid; the hydrostatic split, exact only where d is a distance,
+turned that jump into a body force of several g, and the 1000:1 density ratio
+into air currents twenty times the inflow.)
 
 Linear solves: SuperLU, or (``solver="iterative"``) GMRES with a block
 preconditioner, algebraic multigrid on the momentum block and a
@@ -84,7 +92,7 @@ EPSILON_SHARE = 0.35
 PROFILE_TOL = 0.15
 #: Elements per batch of the vectorised assembly.
 CHUNK = 2000
-#: An inlet's level function: this many epsilons into the fluid it brings.
+#: An inlet lets its fluid's level function in at most this many epsilons deep.
 INLET_DEPTH = 6.0
 #: Krylov solves: relative tolerance, restart and cap.
 KRYLOV_TOL, RESTART, MAX_KRYLOV = 1e-8, 100, 1500
@@ -220,13 +228,21 @@ def _forms():
     def inverse_density_laplace(u, v, w):
         return dot(grad(u), grad(v)) / w["rho"]
 
+    @BilinearForm
+    def inflow_mass(u, v, w):         # |a . n| d w on an inlet: the upwind inflow condition, weakly
+        return w["inward"] * u * v
+
+    @LinearForm
+    def inflow_load(v, w):            # |a . n| d_in w, w["inward"] carrying |a . n| d_in
+        return w["inward"] * v
+
     @LinearForm
     def potential_push(v, w):         # Phi (v . n): the hydrostatic split's pressure on an outlet
         return w["Phi"] * dot(v, w.n)
 
     return dict(divergence=divergence, normal_penalty=normal_penalty, backflow=backflow, capillary=capillary, outflow=outflow, scalar_mass=scalar_mass, supg_mass=supg_mass,
                 supg_convection=supg_convection, inverse_density_laplace=inverse_density_laplace,
-                potential_push=potential_push)
+                inflow_mass=inflow_mass, inflow_load=inflow_load, potential_push=potential_push)
 
 
 # -- the interface's pieces and the distance to them ----------------------------------------------------
@@ -335,6 +351,7 @@ class TwoPhaseSolver:
     def __init__(self, problem: TwoPhaseProblem, *, solver: str = "direct", cfl: float = 0.5,
                  log: Callable[[str], None] | None = None):
         import numpy as np
+        from scipy import sparse
         from skfem import Basis, FacetBasis, asm
 
         self.problem, self.solver, self.cfl, self.log = problem, solver, cfl, log
@@ -398,14 +415,16 @@ class TwoPhaseSolver:
                 self.outlet_bases.append((fb, fb.with_element(scalar)))
                 if opening.pressure:
                     self.outlet_rhs -= opening.pressure * asm(self.forms["outflow"], fb)
-        # The level set at inlets: inside the fluid each brings.
-        inlet_values: dict[int, float] = {}
+        # The level set at inlets, upwind and weak: the fluid each brings flows in at the inlet's speed (its
+        # (a . n) (d - d_in) on the face), never pinned, so the level set stays continuous with what is inside.
+        self.F_in = sparse.csr_matrix((self.np_, self.np_))
+        self.inlets = []
         for opening in problem.openings:
             if opening.kind == "inlet":
-                for vertex in np.unique(mesh.facets[:, np.asarray(opening.facets, dtype=np.int64)]):
-                    inlet_values[int(vertex)] = INLET_DEPTH * self.epsilon * (1.0 if opening.phase >= 0.5 else -1.0)
-        self.D_d = np.fromiter(inlet_values.keys(), dtype=np.int64, count=len(inlet_values))
-        self.x_d = np.fromiter(inlet_values.values(), dtype=float, count=len(inlet_values))
+                fp = FacetBasis(mesh, scalar, facets=np.asarray(opening.facets, dtype=np.int64), intorder=4)
+                inward = np.maximum(-np.einsum("i,i...->...", np.asarray(opening.velocity, dtype=float), np.asarray(fp.normals)), 0.0)
+                self.F_in = self.F_in + asm(self.forms["inflow_mass"], fp, inward=inward)
+                self.inlets.append((fp, inward, 1.0 if opening.phase >= 0.5 else -1.0, self.h[fp.tind][:, None]))
         self.open = bool(problem.openings)
         # A closed container (no outlet): the flow's pressure is pinned to 0 at its highest corner.
         self.pin = None if any(o.kind == "outlet" for o in problem.openings) else self.top
@@ -423,8 +442,6 @@ class TwoPhaseSolver:
         self.timings: dict[str, float] = {"assemble_s": 0.0, "solve_s": 0.0, "level_set_s": 0.0}
 
         self.distance = np.asarray(problem.distance, dtype=float).copy()
-        if len(self.D_d):
-            self.distance[self.D_d] = self.x_d
         self.dx = np.asarray(self.pbasis.dx)
         self.volume0 = self.volume(self.distance)
         self.expected_volume = self.volume0
@@ -532,8 +549,6 @@ class TwoPhaseSolver:
         import numpy as np
 
         self.distance = np.asarray(distance, dtype=float).copy()
-        if len(self.D_d):
-            self.distance[self.D_d] = self.x_d
         self.volume0 = self.expected_volume = self.volume(self.distance)
 
     def at_points(self, points):
@@ -569,16 +584,31 @@ class TwoPhaseSolver:
     # -- the level set ------------------------------------------------------------------------------
 
     def advect(self, distance, u_adv, dt: float):
-        """The level set carried by the flow: Crank-Nicolson with SUPG."""
+        """The level set carried by the flow: Crank-Nicolson with SUPG, each inlet's fluid let in upwind."""
         import numpy as np
+        from scipy.sparse.linalg import splu
         from skfem import asm
 
         a = self.ubasis.interpolate(u_adv).value
         speed = np.sqrt((a * a).sum(axis=0))
         tau = self._tau(speed, dt)
         Ms = self.Mphi + asm(self.forms["supg_mass"], self.pbasis, a=a, tau=tau)
-        Cs = asm(self.forms["supg_convection"], self.pbasis, a=a, tau=tau)
-        return self._solve_scalar((Ms + 0.5 * dt * Cs).tocsr(), (Ms - 0.5 * dt * Cs) @ distance, self.D_d, self.x_d)
+        Cs = asm(self.forms["supg_convection"], self.pbasis, a=a, tau=tau) + self.F_in
+        return splu((Ms + 0.5 * dt * Cs).tocsc()).solve((Ms - 0.5 * dt * Cs) @ distance + dt * self.inflow(distance))
+
+    def inflow(self, distance):
+        """The inlets' upwind load, the integral of |a . n| d_in w: the fluid each brings enters as a continuation of
+        what is inside, its level function one element deeper into that fluid (at most ``INLET_DEPTH`` epsilons),
+        so a liquid inlet's d grows at about the inflow speed, as a sheet coming in does, and stays a distance."""
+        import numpy as np
+        from skfem import asm
+
+        out = np.zeros(self.np_)
+        cap = INLET_DEPTH * self.epsilon
+        for fp, inward, sign, h in self.inlets:
+            deep = sign * fp.interpolate(distance).value              # how far into the fluid it brings
+            out += asm(self.forms["inflow_load"], fp, inward=inward * sign * np.maximum(np.minimum(deep + h, cap), deep))
+        return out
 
     def profile_error(self, distance) -> float:
         """How far the level function's gradient is from 1 across the band (mean over its elements)."""
@@ -586,7 +616,9 @@ class TwoPhaseSolver:
 
         g = self.pbasis.interpolate(distance).grad[..., 0]          # (dim, E): constant per element
         corners = distance[self.mesh.t]
-        band = np.abs(corners).max(axis=0) < 2.0 * self.epsilon
+        # The band: elements the interface crosses or reaches within 2 epsilon. Picked by the nearest corner, not
+        # the farthest: a squeezed level function (steep, the case to catch) puts its far corners far out.
+        band = (np.abs(corners).min(axis=0) < 2.0 * self.epsilon) | ((corners.max(axis=0) > 0) & (corners.min(axis=0) < 0))
         if not band.any():
             return 0.0
         return float(np.abs(np.sqrt((g[:, band] ** 2).sum(axis=0)) - 1.0).mean())
@@ -612,10 +644,7 @@ class TwoPhaseSolver:
                 else _segment_distance(p, piece[:, 0], piece[:, 1])
             best = np.fmin(best, dist)                   # a degenerate piece (zero area) gives NaN: skip it
         best = np.where(np.isfinite(best), best, np.abs(distance))
-        out = sign * best
-        if len(self.D_d):
-            out[self.D_d] = self.x_d
-        return out
+        return sign * best
 
     def keep_volume(self, distance, target: float):
         """d + delta, with the one shift delta that gives the liquid volume ``target``."""
@@ -629,25 +658,7 @@ class TwoPhaseSolver:
             if slope <= 0 or abs(miss) <= 1e-14 * max(abs(target), 1e-300):
                 break
             delta -= miss / slope
-        out = distance + delta
-        if len(self.D_d):
-            out[self.D_d] = self.x_d
-        return out
-
-    def _solve_scalar(self, A, b, D, xD, lu=None):
-        import numpy as np
-        from scipy.sparse.linalg import splu
-
-        x = np.zeros(A.shape[0])
-        x[D] = xD
-        keep = np.ones(A.shape[0], dtype=bool)
-        keep[D] = False
-        idx = np.flatnonzero(keep)
-        rhs = b[idx] - (A[idx][:, D] @ xD if len(D) else 0.0)
-        if lu is None:
-            lu = splu(A[idx][:, idx].tocsc())
-        x[idx] = lu.solve(rhs)
-        return x
+        return distance + delta
 
     def interface_step(self, distance, u_adv, dt: float):
         """Carry the level set, rebuild it when it has drifted from a distance, keep the liquid's volume."""
@@ -909,7 +920,8 @@ class TwoPhaseSolver:
         return state
 
     def _inflow(self, distance, u) -> float:
-        """The liquid's volume flow into the container through its openings, m^3/s: minus the integral of H u . n."""
+        """The liquid's volume flow into the container through its openings, m^3/s: minus the integral of H u . n,
+        H the fluid an inlet brings (1 liquid, 0 gas) and, at an outlet, the share of what is there."""
         import numpy as np
         from skfem import FacetBasis, Functional
 
@@ -918,6 +930,8 @@ class TwoPhaseSolver:
         for opening in self.problem.openings:
             fu = FacetBasis(self.mesh, velocity, facets=np.asarray(opening.facets, dtype=np.int64), intorder=3)
             fp = fu.with_element(scalar)
+            share = heaviside(fp.interpolate(distance).value, self.epsilon) if opening.kind == "outlet" \
+                else np.full(fp.interpolate(distance).value.shape, 1.0 if opening.phase >= 0.5 else 0.0)
             total -= Functional(lambda w: w["phi"] * (w["u"] * w.n).sum(axis=0)).assemble(
-                fu, u=fu.interpolate(u).value, phi=heaviside(fp.interpolate(distance).value, self.epsilon))
+                fu, u=fu.interpolate(u).value, phi=share)
         return float(total)

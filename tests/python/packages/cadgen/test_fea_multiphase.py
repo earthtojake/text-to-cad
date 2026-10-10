@@ -11,6 +11,8 @@ Benchmarks, each on the same numerics (``multiphase_ops``) the analysis runs:
   reference codes agree on the largest rise velocity 0.2417 at t = 0.921 and the centroid's height 1.0813 at t = 3):
   within 15% and 2% on a coarse mesh;
 - the liquid's volume held within 1% over every run;
+- inlets: a liquid inlet bringing nothing leaves a still channel still, and a half-full square duct fed through one
+  end keeps its volume to what came in and went out, with nothing faster than a free fall through its height;
 - the ladder: a run past its budget completes and says, in the GLB, the sidecar, the CLI and a finding, what it did.
 
 Self-contained: build123d writes each tank into a temporary directory. Parse tests run everywhere; solves need the
@@ -228,6 +230,41 @@ class TwoDimensional(unittest.TestCase):
         self.assertLess(abs(when - 0.9213), 0.15)
         self.assertLess(max(abs(v - volumes[0]) for v in volumes) / volumes[0], 0.01)
 
+    def test_a_liquid_inlet_bringing_nothing_leaves_a_still_channel_still(self):
+        # Fixed bug: every inlet corner was pinned to "liquid", the half of the inlet in the air too, so a jump in the
+        # level set stood at the inlet and liquid poured from nothing (air at 0.5 m/s in the first step, the volume
+        # growing with nothing coming in). The inlet's fluid now enters upwind at its own speed: here, none.
+        import numpy as np
+        from skfem import MeshTri
+
+        from cadgen._internal.fea.multiphase_ops import Opening, Phases, TwoPhaseProblem, TwoPhaseSolver
+
+        length, height, depth = 0.03, 0.01, 0.005
+        mesh = MeshTri.init_tensor(np.linspace(0, length, 37), np.linspace(0, height, 13))
+        inlet = mesh.facets_satisfying(lambda x: np.isclose(x[0], 0), boundaries_only=True)
+        top = mesh.facets_satisfying(lambda x: np.isclose(x[1], height), boundaries_only=True)
+        openings = [Opening(inlet, "inlet", velocity=np.zeros(2), phase=1.0), Opening(top, "outlet")]
+        solver = TwoPhaseSolver(TwoPhaseProblem(mesh, Phases(WATER, AIR, 1.002e-3, 1.81e-5), depth - mesh.p[1], [0, -G0],
+                                                openings=openings))
+        speeds = []
+        state = solver.run(0.02, dt_max=5e-4, on_step=lambda s: speeds.append(s.max_speed))
+        self.assertLess(max(speeds), 1e-6)                       # m/s: still to round-off
+        self.assertLess(abs(state.volume - length * depth) / (length * depth), 1e-9)
+
+    def test_the_rebuild_sees_a_squeezed_level_function(self):
+        # Fixed bug: the band the rebuild watches was picked by each element's farthest corner, so a level function
+        # squeezed four times steeper than a distance (the case the hydrostatic split cannot stand) fell out of it
+        # and read as a perfect distance.
+        import numpy as np
+        from skfem import MeshTri
+
+        from cadgen._internal.fea.multiphase_ops import PROFILE_TOL, Phases, TwoPhaseProblem, TwoPhaseSolver
+
+        mesh = MeshTri.init_tensor(np.linspace(0, 0.03, 13), np.linspace(0, 0.01, 5))
+        solver = TwoPhaseSolver(TwoPhaseProblem(mesh, Phases(WATER, AIR, 1.002e-3, 1.81e-5), 0.005 - mesh.p[1], [0, -G0]))
+        self.assertLess(solver.profile_error(0.005 - mesh.p[1]), 1e-9)
+        self.assertGreater(solver.profile_error(4.0 * (0.005 - mesh.p[1])), PROFILE_TOL)
+
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class Tank(unittest.TestCase):
@@ -322,15 +359,34 @@ def box_duct_step(directory: Path, side: float, length: float, wall: float = 1.0
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class BoxDuct(unittest.TestCase):
-    """Liquid fed into a square duct (sharp corners at its inlet) through one end, out of the other: it runs."""
+    """Water fed at 0.05 m/s into a half-full square duct (sharp corners at its inlet) through one end, out of the other.
 
-    def test_a_square_duct_solves(self):
+    What moves, and how fast it may: the inlet switches on at once, and the cheapest way to make room for what it
+    pushes in is to push the air out, so in the first step the air in the duct's top half carries nearly all of the
+    inflow while the water barely starts (about 0.35 m/s at the top wall on this mesh: the air's half is a few
+    elements of a smeared interface, and the speed goes as 1 / density across it). The open outlet spills water,
+    which falls out of the end. Nothing here moves faster than the inlet's speed plus a free fall through the duct's
+    whole height, 0.05 + sqrt(2 g 10 mm) = 0.49 m/s. Before the fix the inlet's level set was pinned to "liquid" over
+    the whole inlet, the air half too: the jump it made fed the hydrostatic split a force of several g, and the air
+    by the inlet's top corner ran away to 1.14 m/s (23 times the inflow) and was still accelerating.
+    """
+
+    def test_a_square_duct_fills_at_its_inflow_and_nothing_outruns_a_free_fall(self):
+        inflow, side, length, end = 0.05, 10.0, 30.0, 0.02
         with tempfile.TemporaryDirectory() as tmp:
-            step = box_duct_step(Path(tmp), 10.0, 30.0, wall=2.0)
-            result = solve(step, {"analysis": "multiphase", "fill": {"fraction": 0.5}, "end_s": 0.02, "mesh": {"size_mm": 3},
-                                  "inlets": [{"opening": "x_min", "velocity_m_s": 0.05}], "outlets": [{"opening": "x_max"}]})
+            step = box_duct_step(Path(tmp), side, length, wall=2.0)
+            result = solve(step, {"analysis": "multiphase", "fill": {"fraction": 0.5}, "end_s": end, "mesh": {"size_mm": 3},
+                                  "inlets": [{"opening": "x_min", "velocity_m_s": inflow}], "outlets": [{"opening": "x_max"}]})
         self.assertTrue(result.ok)
-        self.assertGreater(result.summary["max_speed_m_s"], 0)
+        summary = result.summary
+        self.assertLess(summary["max_speed_m_s"], inflow + math.sqrt(2.0 * G0 * side * 1e-3))
+        volume = summary["volume"]
+        inside_L = side * side * length * 1e-6
+        # Half full, as asked (the pinned inlet used to start it 7.6% fuller); the liquid's volume is what came in
+        # less what spilled, to round-off; and no more came in than the inlet brings.
+        self.assertAlmostEqual(volume["start_L"], 0.5 * inside_L, delta=1e-6 * inside_L)
+        self.assertLess(abs(volume["error_percent"]), 1e-3)
+        self.assertLessEqual(volume["net_inflow_L"], inflow * side * side * 1e-6 * end * 1e3)
 
 
 if __name__ == "__main__":

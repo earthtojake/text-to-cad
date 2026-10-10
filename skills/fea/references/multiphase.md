@@ -104,9 +104,11 @@ Taylor-Hood elements (quadratic velocity, linear pressure) on netgen's tetrahedr
 and viscosity from a level set (the signed distance to the surface, smoothed over about 0.35 element
 each side), surface tension as a continuum force, BDF2 in time with one linear solve a step. The
 hydrostatic pressure is split off analytically from the level set, so a still tank stays still to
-round-off on any mesh. The level set is re-distanced from its zero level whenever the flow has
-stretched it, and the liquid's volume is put back every step (it is conserved to round-off, less what
-leaves through an open side).
+round-off on any mesh. That split is exact only while the level set is a distance, so it is
+re-distanced from its zero level whenever the flow has stretched or squeezed it anywhere along the
+surface, and an inlet lets its fluid in upwind at its own speed rather than pinning the inlet to it.
+The liquid's volume is put back every step (it is conserved to round-off, less what leaves through an
+open side, plus what an inlet brings).
 
 ## Judging the answer (hand checks)
 
@@ -117,6 +119,12 @@ leaves through an open side).
   engine reads its period within 5 % (2-4 % at about 12 elements along L). Shaken near that frequency
   the slosh grows; well below it the surface just tilts by about the angle atan(a / g).
 - A steady acceleration a tilts the surface to slope a / g: the rise at the wall is about (L / 2)(a / g).
+- Filling through an inlet into a part with air in it: the inlet starts at once, and the air, a
+  thousand times lighter, is what gets pushed out first, so the air's speed reads several times the
+  inlet's (a half-full 10 mm duct fed at 0.05 m/s: about 0.35 m/s in the air at the top wall, mostly
+  in the first step, easing after). Liquid spilling out of an open side falls at about free fall:
+  nothing should outrun the inlet's speed plus sqrt(2 g H) over the part's height H. A
+  `max_speed_m_s` well past that is a fault, not physics.
 - Benchmarks the engine is tested against: the still column (floor pressure within 1 %, no spurious
   motion), the sloshing period (within 5 %), Hysing et al.'s rising bubble (Int. J. Numer. Meth. Fluids
   60 (2009) 1259, test case 1: rise velocity within 15 % on a coarse mesh, 5 % measured) and volume within
@@ -132,7 +140,8 @@ leaves through an open side).
 - Walls slide by default (no boundary-layer drag); the contact angle is not modelled.
 - No phase change (evaporation, boiling, condensation), no mixing or foam, no heat.
 - Air near the surface is carried along within the smeared band, so air speeds read high near it; the
-  liquid's motion is not affected.
+  liquid's motion is not affected. `max_speed_m_s` is the fastest of either fluid, so it is usually the
+  air's.
 
 ## When the model is big
 
