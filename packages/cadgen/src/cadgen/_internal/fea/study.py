@@ -296,7 +296,14 @@ def _control(entry: Any, *, where: str) -> dict:
         if entry.get("field") is None:
             raise ValueError(f"{where}.field: name the field it compares, one of {list(VIEW_FIELDS)}")
         control["field"] = _view_field(entry["field"], where=f"{where}.field")
+    # A deformation with no range runs from none to four times the result's own exaggeration, which the
+    # solve picks after the study is written; the viewer reads it from the file.
+    if drives == "deformation" and not {"min", "max", "default"} & set(entry):
+        return {**control, **_text(entry, "unit", where=where)}
     if "max" not in entry:
+        if drives == "deformation":
+            raise ValueError(f"{where}.max: give the top of its range too, or leave min, max and default all out "
+                             "to run from 0 to four times the result's own exaggeration")
         raise ValueError(f"{where}.max: a {drives} control needs the top of its range")
     # A load_scale's bottom is a tenth of the load: at no load there is no stress and nothing to show.
     low = _number(entry.get("min", 0.1 if drives == "load_scale" else 0), where=f"{where}.min")

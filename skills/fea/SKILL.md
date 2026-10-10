@@ -108,13 +108,22 @@ stress. Restate every load in those units before you write it down.
      spec: a `displacement` check with their limit (`limit_mm`), on the
      faces they mean, labelled in their words ("Tip sag"). Keep `stress` too
      unless they only care about stiffness.
-   - **Controls**, 2 to 4 of them, each labelled in the user's words: a
-     `load_scale` slider named for the load ("Rider weight") when they ask
-     how much it can take; a `threshold` only when they asked where the
-     stress is over a limit; a `field` opening on `displacement` for a study
-     about deflection. Add `when: failing` to a control that only helps when
-     a check fails (a load slider to find the load that passes).
-   - **Presets** for named load cases ("landing", "half load").
+   - **Controls**: leave them out unless the user asked something a control
+     answers. The default, Show (stress or displacement) and Exaggerate, is
+     what most results need, and every extra control is more to read.
+     Declaring `controls` replaces that default, so list Show and Exaggerate
+     with what you add: `{"drives": "field", "label": "Show"}` and
+     `{"drives": "deformation", "label": "Exaggerate"}`, the deformation with
+     no range (the solve picks its scale, so a fixed `max` can pin it):
+     - a `load_scale` slider named for the load ("Rider weight") only when
+       they ask how much it can take or what a heavier load does, with
+       `when: failing` when it only helps a part that fails;
+     - a `threshold` only when they asked where the stress is over a limit,
+       its `default` that limit, so it does something when the result opens;
+     - `field` opening on `displacement` only for a study about deflection.
+   - **Presets** only for two or more load cases the user named ("landing"
+     and "cruise"). A single case is the load slider's default, not a preset,
+     and a preset that only moves one slider repeats it.
    - **Sections** only to leave something out (`["verdict", "controls"]` for
      a quick look); the default shows all.
 

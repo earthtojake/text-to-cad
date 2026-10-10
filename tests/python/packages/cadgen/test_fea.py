@@ -257,6 +257,12 @@ class StudyView(unittest.TestCase):
         # A deformation with no default leaves it to the result's own exaggeration; a load_scale starts at a tenth of the load.
         self.assertEqual(view["controls"][0], {"drives": "deformation", "type": "number", "min": 0.0, "max": 40.0})
         self.assertEqual(view["controls"][1], {"drives": "load_scale", "type": "number", "min": 0.1, "max": 2.0, "default": 1.0})
+        # One with no range at all runs to four times the result's own exaggeration, which the viewer reads; half a range is refused.
+        bare = parse_study({**self.BASE, "view": {"controls": [{"drives": "deformation", "label": "Exaggerate"}]}}).view
+        self.assertEqual(bare["controls"], [{"drives": "deformation", "type": "number", "label": "Exaggerate"}])
+        with self.assertRaises(ValueError) as caught:
+            parse_study({**self.BASE, "view": {"controls": [{"drives": "deformation", "default": 12}]}})
+        self.assertIn("leave min, max and default all out", str(caught.exception))
 
     def test_show_parts_overrides_when_the_parts_panel_shows_either_way(self):
         for shown in (True, False):

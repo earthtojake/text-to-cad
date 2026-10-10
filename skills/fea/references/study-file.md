@@ -151,10 +151,10 @@ rest of the study and copies it into the GLB (`extras.view`) and the sidecar
   "controls": [
     {"drives": "load_scale", "type": "number", "label": "Rider weight", "min": 0.5, "max": 3, "default": 1, "unit": "×", "when": "failing"},
     {"drives": "field", "type": "enum", "label": "Show", "options": ["von_mises", "displacement"], "default": "von_mises"},
-    {"drives": "deformation", "type": "number", "label": "Exaggerate", "min": 0, "max": 50, "default": 12},
-    {"drives": "threshold", "type": "number", "label": "Over half yield", "field": "von_mises", "min": 0, "max": 300, "default": 0, "unit": "MPa"}
+    {"drives": "deformation", "type": "number", "label": "Exaggerate"},
+    {"drives": "threshold", "type": "number", "label": "Over half yield", "field": "von_mises", "min": 0, "max": 300, "default": 138, "unit": "MPa"}
   ],
-  "presets": [{"label": "Landing (3×)", "load_scale": 3}],
+  "presets": [{"label": "Cruise", "load_scale": 1}, {"label": "Landing (3×)", "load_scale": 3}],
   "show": {"loads": true, "fixtures": true}
 }
 ```
@@ -166,8 +166,9 @@ solve and writes each result (`kind`, `label`, `value`, `limit`, `unit`,
 `ratio` = value over limit, `close_at`, `status` of `fails`, `close` or
 `passes`, and `where`, the face and point of the worst value) into the
 summary (`summary.checks`), the GLB (`extras.checks`) and the CLI lines. The
-verdict heads with the worst check, one compact row for each other, all
-scaled by `load_scale` (stress and displacement are linear in the load).
+verdict says how many fail and how much of the load the weakest takes, then
+one row per check, worst first, all scaled by `load_scale` (stress and
+displacement are linear in the load).
 
 | `kind` | judges | keys |
 | --- | --- | --- |
@@ -195,7 +196,7 @@ decides what dragging one does:
 | `drives` | `type` | what it moves | keys |
 | --- | --- | --- | --- |
 | `field` | `enum` | which field the colours show | `options` (fields the result writes: `von_mises`, `displacement`; default both), `default` (default the first option) |
-| `deformation` | `number` | how many times the displacement is drawn | `min` (default 0), `max` (required), `default` (left out, the result opens at its own `deformation_scale`) |
+| `deformation` | `number` | how many times the displacement is drawn | none: leave `min`, `max` and `default` out and it runs from 0 to four times the result's own `deformation_scale`, opening there (the solve picks that scale, so a fixed range is often wrong); or `min` (default 0), `max` and `default` (left out, the result's own) |
 | `load_scale` | `number` | the load as a multiple of the solved one: stress, displacement and deformation times it, safety factors divided by it | `min` (default 0.1; more than 0, since at no load there is nothing to show), `max` (required), `default` (1 where the range holds it, else `min`) |
 | `threshold` | `number` | values of `field` under it are drawn grey, so only the regions over it carry colour | `field` (required), `min` (default 0), `max` (required), `default` (default `min`), in that field's units |
 
@@ -215,17 +216,20 @@ whatever `load_scale` is set to.
 
 - Use `load_scale` when the user asks how much the part can take, or what
   happens at a heavier load, labelled with the load in their words.
-- Use `presets` for named load cases: `{"label": ..., <drives>: value}`,
+- Every control is more to read: declare only those the user's question
+  needs, with Show (`field`) and Exaggerate (`deformation`), the default
+  pair, among them.
+- Use `presets` only for two or more load cases the user named: `{"label": ..., <drives>: value}`,
   each key the `drives` of a declared control, each value in its range (an
   option for `field`). With no `controls`, a preset may set `field` and
   `deformation` (zero or more), the two the Viewer shows by default. A
   preset is a full state: controls it does not name go back to their
   defaults.
-- Use `threshold` to show only the regions over a limit: half yield, an
-  allowable stress, a deflection limit on `displacement`. A threshold usually
-  defaults to its minimum, so it is off until dragged; give it a non-zero
-  `default` only when the user asked to see where the stress is over a limit
-  (a high default greys most of the model when the result opens).
+- Use `threshold` only when the user asked where the stress is over a limit
+  (half yield, an allowable stress, a deflection limit on `displacement`),
+  with that limit as its `default` and in its label ("Over half yield"), so
+  it shows what they asked when the result opens. One at its minimum greys
+  nothing, so it does nothing until dragged.
 - `show`: `loads` and `fixtures`, `true` or `false` (default both true): whether
   the arrows on the loaded faces and the cones on the fixed faces are drawn
   when the result opens. The person can still turn them on in Display.
