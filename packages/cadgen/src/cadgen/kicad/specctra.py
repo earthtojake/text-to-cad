@@ -65,6 +65,7 @@ from typing import Iterable
 
 from cadgen.kicad import sexpr
 from cadgen.kicad.design import DesignError
+from cadgen.kicad.geometry import area, bezier_points, board_origin, hull, inside, nm
 from cadgen.kicad.ids import Ids
 from cadgen.kicad.sexpr import Sym
 
@@ -108,11 +109,6 @@ class SessionError(RuntimeError):
 Point = tuple[float, float]
 
 
-def _nm(value: float) -> float:
-    rounded = round(float(value), 6)
-    return 0.0 if rounded == 0 else rounded
-
-
 def _num(value: float) -> str:
     """A DSN number: micrometres to the nanometre, never in exponent form."""
     text = f"{value:.3f}".rstrip("0").rstrip(".")
@@ -142,15 +138,7 @@ class DsnFrame:
         return (x - self.ox) * 1000.0, (self.oy - y) * 1000.0
 
     def to_kicad(self, ux: float, uy: float) -> Point:
-        return _nm(self.ox + ux / 1000.0), _nm(self.oy - uy / 1000.0)
-
-
-def _origin(tree: list) -> Point:
-    setup = sexpr.find(tree, "setup")
-    origin = sexpr.find(setup, "aux_axis_origin") if setup is not None else None
-    if origin is None or len(origin) < 3:
-        return 0.0, 0.0
-    return float(origin[1]), float(origin[2])
+        return nm(self.ox + ux / 1000.0), nm(self.oy - uy / 1000.0)
 
 
 def _xy(node: list | None, default: Point | None = None) -> Point:
@@ -274,26 +262,13 @@ def _coarse(loop: list[_Edge]) -> list[Point]:
     return points
 
 
-def _area(points: list[Point]) -> float:
-    return 0.5 * sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(points, points[1:] + points[:1]))
-
-
-def _inside(point: Point, polygon: list[Point]) -> bool:
-    x, y = point
-    inside = False
-    for (x1, y1), (x2, y2) in zip(polygon, polygon[1:] + polygon[:1]):
-        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
-            inside = not inside
-    return inside
-
-
 def _loop_points(loop: list[_Edge], *, keep_inside: bool) -> list[Point]:
     """A closed loop as a polygon whose copper side only shrinks.
 
     ``keep_inside`` says where copper may be: inside the loop (an outer
     boundary) or outside it (a hole, a keepout).
     """
-    ccw = _area(_coarse(loop)) > 0
+    ccw = area(_coarse(loop)) > 0
     copper_on_left = keep_inside == ccw
     points: list[Point] = []
     for edge in loop:
@@ -306,18 +281,8 @@ def _loop_points(loop: list[_Edge], *, keep_inside: bool) -> list[Point]:
     return points
 
 
-def _bezier(points: list[Point], count: int = 32) -> list[_Edge]:
-    p0, p1, p2, p3 = points
-    samples = []
-    for k in range(count + 1):
-        t = k / count
-        u = 1 - t
-        samples.append(
-            (
-                u**3 * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t**3 * p3[0],
-                u**3 * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t**3 * p3[1],
-            )
-        )
+def _bezier(points: list[Point]) -> list[_Edge]:
+    samples = bezier_points(points, 32)
     return [_Edge(a, b) for a, b in zip(samples, samples[1:]) if a != b]
 
 
@@ -444,7 +409,7 @@ def _outline(tree: list, frame: DsnFrame) -> tuple[list[list[Point]], list[list[
     boundaries: list[list[Point]] = []
     holes: list[list[Point]] = []
     for index, loop in enumerate(loops):
-        depth = sum(1 for other, polygon in enumerate(coarse) if other != index and _inside(coarse[index][0], polygon))
+        depth = sum(1 for other, polygon in enumerate(coarse) if other != index and inside(coarse[index][0], polygon))
         if depth % 2 == 0:
             boundaries.append(_loop_points(loop, keep_inside=True))
         else:
@@ -662,24 +627,8 @@ def _stadium(width: float, height: float, cx: float, cy: float) -> list[Point]:
 
 
 def _hull(points: list[Point]) -> list[Point]:
-    unique = sorted(set((round(x, 6), round(y, 6)) for x, y in points))
-    if len(unique) < 3:
-        return unique
-
-    def cross(o: Point, a: Point, b: Point) -> float:
-        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-
-    lower: list[Point] = []
-    for point in unique:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0:
-            lower.pop()
-        lower.append(point)
-    upper: list[Point] = []
-    for point in reversed(unique):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0:
-            upper.pop()
-        upper.append(point)
-    return lower[:-1] + upper[:-1]
+    """The hull of ``points`` taken to a micrometre's millionth, so near-repeats are one point."""
+    return hull((round(x, 6), round(y, 6)) for x, y in points)
 
 
 def _blob(x: float, y: float, radius: float) -> list[Point]:
@@ -865,7 +814,7 @@ def board_dsn(
     settings = _project(project)
     rules = _rules(settings)
     classes, patterns, assigned = _netclasses(settings)
-    frame = DsnFrame(*_origin(pcb_tree))
+    frame = DsnFrame(*board_origin(pcb_tree))
     board_copper = _copper_layers(pcb_tree)
     default = classes["Default"]
 
@@ -1322,7 +1271,7 @@ def _cleaned(points: list[Point]) -> list[Point]:
                 del ring[index]
                 changed = True
                 break
-    if len(ring) >= 3 and _area(ring) < 0:
+    if len(ring) >= 3 and area(ring) < 0:
         ring.reverse()
     return ring
 
@@ -1569,7 +1518,7 @@ def read_session(text: str, dsn: Dsn) -> Routes:
                 layer = str(path[1])
                 if layer not in dsn.layers:
                     raise SessionError(f"Freerouting routed net {net} on {layer!r}, a layer the board does not have")
-                width = _nm(_number(path[2]) * scale / 1000.0)
+                width = nm(_number(path[2]) * scale / 1000.0)
                 expected = dsn.widths.get(alias)
                 if expected is not None and abs(width - expected) <= 0.0005:
                     width = expected

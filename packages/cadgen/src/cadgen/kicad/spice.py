@@ -42,7 +42,8 @@ from pathlib import Path
 from typing import Sequence
 
 from cadgen.kicad import sexpr
-from cadgen.kicad.design import DesignError, Part, Pin, _natural
+from cadgen.kicad.design import DesignError, Part, Pin
+from cadgen.kicad.naming import natural
 
 __all__ = [
     "LibraryEntry",
@@ -354,7 +355,7 @@ def _library_path(text: str, *, folder: Path, ref: str) -> Path:
 
 def _model_pin_order(part: Part, model_pins: Sequence[str], text: str | None, *, what: str, optional: Sequence[str] = ()):
     """For each model pin, in order, the symbol pins on it (``Sim.Pins``, else number order)."""
-    symbol_pins = sorted(part.pins(), key=lambda pin: _natural(pin.number))
+    symbol_pins = sorted(part.pins(), key=lambda pin: natural(pin.number))
     by_number = {pin.number: pin for pin in symbol_pins}
     canonical = {name.lower(): name for name in model_pins}
     assigned: dict[str, list[Pin]] = {name: [] for name in model_pins}
@@ -684,7 +685,7 @@ def _potentiometer(part: Part, fields: dict[str, str]) -> PartModel:
 
 
 def _no_model(part: Part, fields: dict[str, str]) -> str:
-    pins = sorted(part.pins(), key=lambda pin: _natural(pin.number))
+    pins = sorted(part.pins(), key=lambda pin: natural(pin.number))
     names = {pin.name.upper() for pin in pins}
     lib_id = part.symbol.lib_id
     head = f"{part.ref} ({lib_id}, value {part.value!r}) has no SPICE model"

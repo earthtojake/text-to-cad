@@ -42,7 +42,9 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+from cadgen.kicad.geometry import nm
 from cadgen.kicad.library import Footprint, Libraries, LibraryError, Symbol
+from cadgen.kicad.naming import natural
 
 __all__ = [
     "Board",
@@ -388,8 +390,8 @@ class Part:
         angle = math.radians(placement.rotation)
         cos, sin = math.cos(angle), math.sin(angle)
         return (
-            _nm(placement.x + local_x * cos - local_y * sin),
-            _nm(placement.y + local_x * sin + local_y * cos),
+            nm(placement.x + local_x * cos - local_y * sin),
+            nm(placement.y + local_x * sin + local_y * cos),
         )
 
     def __repr__(self) -> str:
@@ -459,18 +461,12 @@ class Autoroute:
     layers: tuple[str, ...] | None = None  # the copper layers it may run tracks on; None is every one
 
 
-def _nm(value: float) -> float:
-    """A length rounded to KiCad's resolution, one nanometre."""
-    rounded = round(float(value), 6)
-    return 0.0 if rounded == 0 else rounded
-
-
 def _point(value: Any, *, what: str) -> tuple[float, float]:
     if isinstance(value, Pin):
         return value.position
     try:
         x, y = value
-        return _nm(float(x)), _nm(float(y))
+        return nm(float(x)), nm(float(y))
     except (TypeError, ValueError):
         raise DesignError(f"{what} must be an (x, y) pair in millimetres or a pin, got {value!r}") from None
 
@@ -500,7 +496,7 @@ def _positive(value: Any, *, what: str, allow_none: bool = True) -> float | None
         raise DesignError(f"{what} must be a number of millimetres, got {value!r}") from None
     if not math.isfinite(number) or number <= 0:
         raise DesignError(f"{what} must be greater than 0, got {value!r}")
-    return _nm(number)
+    return nm(number)
 
 
 _SIDES = ("top", "bottom")
@@ -679,7 +675,7 @@ class Circuit:
         if missing:
             raise DesignError(
                 f"{part.ref}: symbol {part.symbol.lib_id} has pin(s) {', '.join(missing)} that footprint "
-                f"{part.footprint.lib_id} has no pad for (its pads are {', '.join(sorted(pads, key=_natural)) or 'none'}); "
+                f"{part.footprint.lib_id} has no pad for (its pads are {', '.join(sorted(pads, key=natural)) or 'none'}); "
                 "pick the footprint this symbol's pin numbering was drawn for"
             )
 
@@ -747,7 +743,7 @@ class Circuit:
         pins = net.pins
         if not pins:
             return f"Net-{net._index}"
-        first = min(pins, key=lambda pin: (_natural(pin.part.ref), _natural(pin.number)))
+        first = min(pins, key=lambda pin: (natural(pin.part.ref), natural(pin.number)))
         label = first.name if first.name and first.name not in {"~", ""} else f"Pad{first.number}"
         return f"Net-({first.part.ref}-{label})"
 
@@ -1194,10 +1190,6 @@ class Board(Circuit):
                 found.append(f"two nets are both called {net.name}: name one of them")
             names[net.name] = net
         return found
-
-
-def _natural(text: str) -> tuple:
-    return tuple(int(chunk) if chunk.isdigit() else chunk for chunk in re.split(r"(\d+)", str(text)))
 
 
 def _stack_note(pin: Pin) -> str:

@@ -50,6 +50,7 @@ __all__ = [
     "format_point",
     "parse_board_selector",
     "parse_board_token",
+    "selector_or_none",
 ]
 
 #: The documents whose references are board references.
@@ -226,6 +227,14 @@ def format_board_selector(
     if kind == "point":
         return f"#{format_point(*_pair(at))}"
     raise ValueError(f"a board reference is one of {', '.join(SELECTOR_KINDS)}, not {kind!r}")
+
+
+def selector_or_none(kind: str, **fields) -> str | None:
+    """:func:`format_board_selector`, or ``None`` for what the language cannot name."""
+    try:
+        return format_board_selector(kind, **fields)
+    except ValueError:
+        return None
 
 
 def _pair(at) -> tuple[float, float]:

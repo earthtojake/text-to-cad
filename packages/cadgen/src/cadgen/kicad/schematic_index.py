@@ -62,8 +62,9 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from cadgen.kicad import sexpr
-from cadgen.kicad.board_index import _arc, _box, _natural, _netclass, _netclasses, _xy, unescape_net_name
-from cadgen.kicad.refs import BoardSelector, format_board_selector, parse_board_selector, parse_board_token
+from cadgen.kicad.geometry import XY, arc_points, box, format_xy, nm
+from cadgen.kicad.naming import natural, netclass_of, project_netclasses, unescape_net_name
+from cadgen.kicad.refs import BoardSelector, format_board_selector, parse_board_selector, parse_board_token, selector_or_none
 
 __all__ = [
     "Junction",
@@ -84,8 +85,6 @@ __all__ = [
     "read_schematic",
     "stage_files",
 ]
-
-XY = tuple[float, float]
 
 _IU = 10_000  # KiCad's schematic unit is 100 nm: points meet when they agree to it
 _TEXT_SIZE = 1.27  # KiCad's default text height, mm
@@ -143,11 +142,11 @@ class Pin:
     @property
     def selector(self) -> str | None:
         """``#U3.9``; ``None`` for a pin the language cannot name (no number, or one with a dot)."""
-        return _selector("pad", ref=self.part, pad=self.number)
+        return selector_or_none("pad", ref=self.part, pad=self.number)
 
     def __repr__(self) -> str:
         name = f" ({self.name})" if self.name and self.name != self.number else ""
-        return f"Pin({self.part}.{self.number}{name}, {self.type}, net={self.net!r}, sheet {self.sheet}, at={_xy(self.at)})"
+        return f"Pin({self.part}.{self.number}{name}, {self.type}, net={self.net!r}, sheet {self.sheet}, at={format_xy(self.at)})"
 
 
 @dataclass(frozen=True)
@@ -173,14 +172,14 @@ class Part:
 
     @property
     def selector(self) -> str | None:
-        return _selector("part", ref=self.ref)
+        return selector_or_none("part", ref=self.ref)
 
     def pin(self, number: str) -> Pin:
         """The part's pin ``number`` (the first, when several units draw it)."""
         for pin in self.pins:
             if pin.number == str(number):
                 return pin
-        numbers = ", ".join(sorted({pin.number for pin in self.pins if pin.number}, key=_natural)) or "none"
+        numbers = ", ".join(sorted({pin.number for pin in self.pins if pin.number}, key=natural)) or "none"
         raise ValueError(f"{self.ref} has no pin {number}; its pins are {numbers}")
 
     def __repr__(self) -> str:
@@ -199,7 +198,7 @@ class Wire:
     points: tuple[XY, ...]
 
     def __repr__(self) -> str:
-        return f"Wire({self.net!r} on sheet {self.sheet}, {_xy(self.points[0])} -> {_xy(self.points[-1])})"
+        return f"Wire({self.net!r} on sheet {self.sheet}, {format_xy(self.points[0])} -> {format_xy(self.points[-1])})"
 
 
 @dataclass(frozen=True)
@@ -215,7 +214,7 @@ class Label:
     outline: tuple[XY, ...]
 
     def __repr__(self) -> str:
-        return f"Label({self.kind} {self.text!r}, net={self.net!r}, sheet {self.sheet}, at={_xy(self.at)})"
+        return f"Label({self.kind} {self.text!r}, net={self.net!r}, sheet {self.sheet}, at={format_xy(self.at)})"
 
 
 @dataclass(frozen=True)
@@ -357,33 +356,11 @@ class SchematicIndex:
         }
 
 
-def _selector(kind: str, **fields) -> str | None:
-    try:
-        return format_board_selector(kind, **fields)
-    except ValueError:
-        return None
-
-
 # --- reading a document -------------------------------------------------------------------
 
 
-def _number(value, default: float = 0.0) -> float:
-    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else default
-
-
-def _pair(node: list | None) -> XY | None:
-    if node is None or len(node) < 3:
-        return None
-    return _number(node[1]), _number(node[2])
-
-
 def _angle(node: list | None) -> float:
-    return _number(node[3]) if node is not None and len(node) > 3 else 0.0
-
-
-def _mm(value: float) -> float:
-    rounded = round(value, 6)
-    return 0.0 if rounded == 0 else rounded
+    return sexpr.number(node[3]) if node is not None and len(node) > 3 else 0.0
 
 
 def _key(point: XY) -> tuple[int, int]:
@@ -427,7 +404,7 @@ class _Place:
             y = -y
         elif self.mirror == "y":
             x = -x
-        return _mm(self.at[0] + x), _mm(self.at[1] + y)
+        return nm(self.at[0] + x), nm(self.at[1] + y)
 
 
 def _drawn_unit(name: str) -> tuple[int, int] | None:
@@ -452,17 +429,17 @@ def _drawings(library: list, unit: int, style: int) -> Iterable[list]:
 def _graphic_points(item: list) -> list[XY]:
     head = sexpr.head(item)
     if head == "rectangle":
-        start, end = _pair(sexpr.find(item, "start")), _pair(sexpr.find(item, "end"))
+        start, end = sexpr.pair(sexpr.find(item, "start")), sexpr.pair(sexpr.find(item, "end"))
         return [start, end] if start and end else []
     if head in ("polyline", "bezier"):  # a bezier lies inside the box of its control points
-        return [_pair(xy) for xy in sexpr.find_all(sexpr.find(item, "pts") or [], "xy")]
+        return [sexpr.pair(xy) for xy in sexpr.find_all(sexpr.find(item, "pts") or [], "xy")]
     if head == "circle":
-        center, radius = _pair(sexpr.find(item, "center")), _number(sexpr.value(item, "radius"))
+        center, radius = sexpr.pair(sexpr.find(item, "center")), sexpr.number(sexpr.value(item, "radius"))
         return [(center[0] - radius, center[1] - radius), (center[0] + radius, center[1] + radius)] if center else []
     if head == "arc":
-        start, mid, end = (_pair(sexpr.find(item, key)) for key in ("start", "mid", "end"))
+        start, mid, end = (sexpr.pair(sexpr.find(item, key)) for key in ("start", "mid", "end"))
         if start and mid and end:
-            return _arc(start, mid, end)
+            return arc_points(start, mid, end)
         return [point for point in (start, end) if point]
     return []
 
@@ -484,9 +461,9 @@ def _library_pins(library: list, unit: int, style: int) -> list[_LibraryPin]:
     for sub in _drawings(library, unit, style):
         for node in sexpr.find_all(sub, "pin"):
             at = sexpr.find(node, "at")
-            point = _pair(at) or (0.0, 0.0)
+            point = sexpr.pair(at) or (0.0, 0.0)
             angle = _angle(at) % 360
-            length = _number(sexpr.value(node, "length"))
+            length = sexpr.number(sexpr.value(node, "length"))
             dx, dy = _DIRECTIONS.get(angle) or (math.cos(math.radians(angle)), math.sin(math.radians(angle)))
             name = _text(sexpr.find(node, "name"))
             pins.append(_LibraryPin(
@@ -556,14 +533,14 @@ def _place_symbol(node: list, libraries: Mapping[str, list], instance: str, shee
     if library is None:
         return None
     at_node = sexpr.find(node, "at")
-    at = _pair(at_node) or (0.0, 0.0)
+    at = sexpr.pair(at_node) or (0.0, 0.0)
     rotation = round(_angle(at_node)) % 360
     mirror_node = sexpr.find(node, "mirror")
     mirror = str(mirror_node[1]) if mirror_node is not None and len(mirror_node) > 1 else None
     properties = _properties(node)
     reference, unit = _instance(node, instance)
-    unit = unit or int(_number(sexpr.value(node, "unit"), 1))
-    style = int(_number(sexpr.value(node, "body_style") or sexpr.value(node, "convert"), 1))
+    unit = unit or int(sexpr.number(sexpr.value(node, "unit"), 1))
+    style = int(sexpr.number(sexpr.value(node, "body_style") or sexpr.value(node, "convert"), 1))
     place = _Place(at, rotation, mirror if mirror in ("x", "y") else None)
     pins = _library_pins(library, unit, style)
     body = [point for sub in _drawings(library, unit, style) for item in sub[2:] if sexpr.head(item) in _GRAPHICS for point in _graphic_points(item)]
@@ -578,8 +555,8 @@ def _place_symbol(node: list, libraries: Mapping[str, list], instance: str, shee
         properties=properties,
         dnp=str(sexpr.value(node, "dnp") or "no") == "yes",
         placement=Unit(
-            unit=unit, sheet=sheet, at=(_mm(at[0]), _mm(at[1])), rotation=rotation, mirror=place.mirror,
-            outline=tuple(_box(place(point) for point in body)),
+            unit=unit, sheet=sheet, at=(nm(at[0]), nm(at[1])), rotation=rotation, mirror=place.mirror,
+            outline=tuple(box(place(point) for point in body)),
         ),
         pins=[(pin, place(pin.at), place(pin.end)) for pin in pins],
     )
@@ -603,7 +580,7 @@ def _label_outline(kind: str, text: str, at: XY, angle: float, justify: set[str]
     height = _LABEL_HEIGHT * size
     low, high = (-0.25 * size, height) if kind == "local" else (-height / 2, height / 2)
     return tuple(
-        (_mm(at[0] + forward[0] * along + up[0] * across), _mm(at[1] + forward[1] * along + up[1] * across))
+        (nm(at[0] + forward[0] * along + up[0] * across), nm(at[1] + forward[1] * along + up[1] * across))
         for along, across in ((0.0, low), (length, low), (length, high), (0.0, high))
     )
 
@@ -621,29 +598,29 @@ def _read_sheet(tree: list, instance: str, sheet: int) -> _Drawn:
             if symbol is not None:
                 drawn.symbols.append(symbol)
         elif head == "wire":
-            points = [_pair(xy) for xy in sexpr.find_all(sexpr.find(node, "pts") or [], "xy")]
+            points = [sexpr.pair(xy) for xy in sexpr.find_all(sexpr.find(node, "pts") or [], "xy")]
             drawn.wires.extend((a, b) for a, b in zip(points, points[1:]) if a and b)
         elif head in _LABELS:
             at_node = sexpr.find(node, "at")
-            at = _pair(at_node) or (0.0, 0.0)
+            at = sexpr.pair(at_node) or (0.0, 0.0)
             effects = sexpr.find(node, "effects") or []
             size = sexpr.find(sexpr.find(effects, "font") or [], "size")
             justify = sexpr.find(effects, "justify")
             outline = _label_outline(
                 _LABELS[head], unescape_net_name(_text(node)), at, _angle(at_node), {str(item) for item in (justify or [])[1:]},
-                _number(size[1], _TEXT_SIZE) if size is not None and len(size) > 1 else _TEXT_SIZE,
+                sexpr.number(size[1], _TEXT_SIZE) if size is not None and len(size) > 1 else _TEXT_SIZE,
             )
-            drawn.labels.append(_DrawnLabel(_LABELS[head], _text(node), (_mm(at[0]), _mm(at[1])), outline))
+            drawn.labels.append(_DrawnLabel(_LABELS[head], _text(node), (nm(at[0]), nm(at[1])), outline))
         elif head == "junction":
-            at = _pair(sexpr.find(node, "at"))
+            at = sexpr.pair(sexpr.find(node, "at"))
             if at:
                 drawn.junctions.append(at)
         elif head == "no_connect":
-            at = _pair(sexpr.find(node, "at"))
+            at = sexpr.pair(sexpr.find(node, "at"))
             if at:
                 drawn.no_connects.append(at)
         elif head == "sheet":
-            pins = [(_text(pin), _pair(sexpr.find(pin, "at"))) for pin in sexpr.find_all(node, "pin")]
+            pins = [(_text(pin), sexpr.pair(sexpr.find(pin, "at"))) for pin in sexpr.find_all(node, "pin")]
             drawn.sheet_pins[str(sexpr.value(node, "uuid") or "")] = [(name, at) for name, at in pins if at]
     return drawn
 
@@ -703,7 +680,7 @@ def _page_order(page: str) -> tuple:
     try:
         return (0, int(page), ())
     except ValueError:
-        return (1, 0, _natural(page))
+        return (1, 0, natural(page))
 
 
 def _hierarchy(root: Path) -> tuple[list[_SheetInstance], list[Path]]:
@@ -739,7 +716,7 @@ def _hierarchy(root: Path) -> tuple[list[_SheetInstance], list[Path]]:
             path = Path(file) if os.path.isabs(file) else folder / file
             if not file or path.suffix.lower() != ".kicad_sch" or not path.is_file() or path.resolve() in above:
                 continue  # KiCad cannot show it either
-            children.append((_key(_pair(sexpr.find(node, "at")) or (0.0, 0.0)), str(sexpr.value(node, "uuid") or ""), name, file, path, node))
+            children.append((_key(sexpr.pair(sexpr.find(node, "at")) or (0.0, 0.0)), str(sexpr.value(node, "uuid") or ""), name, file, path, node))
         for _at, uuid, name, file, path, node in sorted(children, key=lambda child: child[:2]):
             sheet_tree = load(path)
             instances.append(_SheetInstance(
@@ -973,10 +950,10 @@ def _index(instances: list[_SheetInstance], *, netlist, project: Path | None) ->
     # the name its labels give (a local one only when KiCad has that net).
     known: dict = {}
     for number, sheet in enumerate(drawn):
-        for symbol in sorted(sheet.symbols, key=lambda symbol: _natural(symbol.ref)):
+        for symbol in sorted(sheet.symbols, key=lambda symbol: natural(symbol.ref)):
             if symbol.power is not None or symbol.ref.startswith("#"):
                 continue
-            for pin, at, _end in sorted(symbol.pins, key=lambda entry: _natural(entry[0].number)):
+            for pin, at, _end in sorted(symbol.pins, key=lambda entry: natural(entry[0].number)):
                 net = pin_nets.get((symbol.ref, pin.number))
                 if net is not None:
                     known.setdefault(group(number, at), net)
@@ -1019,7 +996,7 @@ def _index(instances: list[_SheetInstance], *, netlist, project: Path | None) ->
                 continue
             entry = parts.setdefault(symbol.ref, {"symbols": [], "pins": []})
             entry["symbols"].append(symbol)
-            for pin, at, end in sorted(symbol.pins, key=lambda entry: _natural(entry[0].number)):
+            for pin, at, end in sorted(symbol.pins, key=lambda entry: natural(entry[0].number)):
                 net = pin_nets.get((symbol.ref, pin.number)) or net_of(group(number, at))
                 entry["pins"].append(Pin(
                     part=symbol.ref, number=pin.number, name=pin.name, type=pin.type, unit=symbol.unit,
@@ -1040,7 +1017,7 @@ def _index(instances: list[_SheetInstance], *, netlist, project: Path | None) ->
             flags.append(NoConnect(sheet=number, at=at, part=ref, pin=pin))
 
     built = []
-    for ref in sorted(parts, key=_natural):
+    for ref in sorted(parts, key=natural):
         symbols = sorted(parts[ref]["symbols"], key=lambda symbol: (symbol.unit, symbol.placement.sheet))
         first = symbols[0]
         fields = {
@@ -1055,13 +1032,13 @@ def _index(instances: list[_SheetInstance], *, netlist, project: Path | None) ->
             fields=fields,
             dnp=first.dnp,
             units=tuple(symbol.placement for symbol in symbols),
-            pins=tuple(sorted(parts[ref]["pins"], key=lambda pin: (pin.unit, pin.sheet, _natural(pin.number)))),
+            pins=tuple(sorted(parts[ref]["pins"], key=lambda pin: (pin.unit, pin.sheet, natural(pin.number)))),
         ))
     names = set(classes) | {pin.net for part in built for pin in part.pins} | {item.net for item in (*labels, *wires, *junctions)}
-    assigned, patterns = _netclasses(project)
+    assigned, patterns = project_netclasses(project)
     nets = tuple(
-        (name, classes.get(name) or _netclass(name, assigned, patterns))
-        for name in sorted((name for name in names if name), key=_natural)
+        (name, classes.get(name) or netclass_of(name, assigned, patterns))
+        for name in sorted((name for name in names if name), key=natural)
     )
     return SchematicIndex(
         sheets=tuple(sheets),
@@ -1109,12 +1086,12 @@ def _erc_ref(index: dict, sheet: int | None, at: list[float] | None, text: str) 
     if sheet is not None and at is not None:
         for pin in index.get("pins", []):
             if pin.get("sheet") == sheet and math.dist(pin.get("at") or (math.inf, math.inf), at) < 0.01:
-                return _selector("pad", ref=pin["part"], pad=pin["number"])
+                return selector_or_none("pad", ref=pin["part"], pad=pin["number"])
         for label in index.get("labels", []):
             if label.get("sheet") == sheet and label.get("net") and math.dist(label.get("at") or (math.inf, math.inf), at) < 0.01:
-                return _selector("net", net=label["net"])
+                return selector_or_none("net", net=label["net"])
     match = _SYMBOL.match(text)
-    return _selector("part", ref=match[1]) if match else None
+    return selector_or_none("part", ref=match[1]) if match else None
 
 
 def erc_payload(report: Path, index: dict) -> list[dict]:
@@ -1191,7 +1168,7 @@ class SchematicView:
         """The part ``ref`` (``"U3"``)."""
         found = self._parts.get(str(ref))
         if found is None:
-            close = sorted(difflib.get_close_matches(str(ref), list(self._parts), n=3), key=_natural)
+            close = sorted(difflib.get_close_matches(str(ref), list(self._parts), n=3), key=natural)
             hint = f"; did you mean {', '.join(close)}?" if close else f"; its parts are {_listing(self._parts)}"
             raise ValueError(f"{self.path.name} has no part {ref}{hint}")
         return found
@@ -1200,7 +1177,7 @@ class SchematicView:
         """The net ``name``, as KiCad shows it (``"TX/RX"``, ``"/Power/EN"``)."""
         found = self._nets.get(str(name))
         if found is None:
-            close = sorted(difflib.get_close_matches(str(name), list(self._nets), n=3), key=_natural)
+            close = sorted(difflib.get_close_matches(str(name), list(self._nets), n=3), key=natural)
             hint = f"; did you mean {', '.join(close)}?" if close else ""
             raise ValueError(f"{self.path.name} has no net {name!r}{hint}")
         return found
@@ -1254,7 +1231,7 @@ class SchematicView:
 
 
 def _listing(parts: Mapping[str, Part]) -> str:
-    refs = sorted(parts, key=_natural)
+    refs = sorted(parts, key=natural)
     return ", ".join(refs[:40]) + (f" and {len(refs) - 40} more" if len(refs) > 40 else "")
 
 

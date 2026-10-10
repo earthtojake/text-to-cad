@@ -44,6 +44,8 @@ __all__ = [
     "find_all",
     "format_number",
     "head",
+    "number",
+    "pair",
     "parse",
     "value",
 ]
@@ -150,6 +152,18 @@ def value(node: list, name: str, default=None):
     if child is None or len(child) < 2:
         return default
     return child[1]
+
+
+def number(atom, default: float = 0.0) -> float:
+    """``atom`` as a float when it is a number, else ``default``."""
+    return float(atom) if isinstance(atom, (int, float)) and not isinstance(atom, bool) else default
+
+
+def pair(node: list | None, default: tuple[float, float] | None = None) -> tuple[float, float] | None:
+    """The point ``(at x y ...)``, ``(xy x y)`` holds, else ``default``."""
+    if node is None or len(node) < 3:
+        return default
+    return number(node[1]), number(node[2])
 
 
 # --- writing ---------------------------------------------------------------
