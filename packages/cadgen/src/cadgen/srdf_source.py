@@ -124,7 +124,7 @@ def parse_srdf_file(srdf_path: Path) -> tuple[SrdfSource | None, FindingsReport]
         return None, result
     try:
         xml_text = resolved_path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         result.add("error", "unreadable_file", f"{display_path(resolved_path)} could not be read: {exc}", path="/")
         return None, result
     return parse_srdf_text(xml_text, source_path=resolved_path)
