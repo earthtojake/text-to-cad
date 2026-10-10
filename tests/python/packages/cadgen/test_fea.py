@@ -220,6 +220,79 @@ class StudyFile(unittest.TestCase):
         self.assertIn("--study", str(caught.exception))
 
 
+# The agent's view of a result: which controls Study's Result shows, named states, and the markers.
+VIEW = {
+    "controls": [
+        {"drives": "field", "type": "enum", "label": "Show", "options": ["von_mises", "displacement"], "default": "von_mises"},
+        {"drives": "deformation", "type": "number", "label": "Exaggerate", "min": 0, "max": 50, "default": 12},
+        {"drives": "load_scale", "type": "number", "label": "Rider weight", "min": 0.5, "max": 3, "default": 1, "unit": "×"},
+        {"drives": "threshold", "type": "number", "label": "Show above", "field": "von_mises", "min": 0, "max": 300, "default": 138, "unit": "MPa"},
+    ],
+    "presets": [{"label": "Landing (3×)", "load_scale": 3}],
+    "show": {"loads": True, "fixtures": False},
+}
+
+
+class StudyView(unittest.TestCase):
+    """The study's optional ``view``: checked like the rest of the study, before any heavy import."""
+
+    BASE = {"material": "steel", "fixtures": [{"faces": ["#o1.f1"]}], "loads": [{"faces": ["#o1.f2"], "type": "force", "vector_N": [1, 0, 0]}]}
+
+    def _view(self, **changes):
+        return {**VIEW, **changes}
+
+    def _control(self, drives, **changes):
+        controls = [dict(control, **changes) if control["drives"] == drives else control for control in VIEW["controls"]]
+        return self._view(controls=controls)
+
+    def test_a_view_parses_as_written_and_no_view_is_none(self):
+        self.assertIsNone(parse_study(self.BASE).view)
+        self.assertEqual(parse_study({**self.BASE, "view": VIEW}).view, VIEW)
+
+    def test_a_bare_control_takes_its_type_and_range_defaults(self):
+        view = parse_study({**self.BASE, "view": {"controls": [{"drives": "deformation", "max": 40}, {"drives": "load_scale", "max": 2}]}}).view
+        self.assertEqual(view["controls"][0], {"drives": "deformation", "type": "number", "min": 0.0, "max": 40.0, "default": 0.0})
+        self.assertEqual(view["controls"][1], {"drives": "load_scale", "type": "number", "min": 0.0, "max": 2.0, "default": 1.0})
+
+    def test_a_malformed_view_is_a_study_error_in_a_plain_sentence(self):
+        threshold_on_safety = self._control("threshold", field="safety_factor")
+        cases = [
+            (self._view(colours=1), "view: unknown keys ['colours']"),
+            (self._control("field", colour="red"), "view.controls[0]: unknown keys ['colour']"),
+            (self._view(controls=[{"drives": "speed", "max": 1}]), "view.controls[0].drives: 'speed' is not one of"),
+            (self._view(controls=[{"drives": "deformation", "max": 9}, {"drives": "deformation", "max": 4}]), "only one control drives deformation"),
+            (self._control("field", options=["von_mises", "safety_factor"]), "'safety_factor' is not a field the result writes"),
+            (self._control("field", default="displacement", options=["von_mises"]), "default 'displacement' is not one of its options"),
+            (self._control("deformation", type="enum"), "a deformation control is a number"),
+            (self._control("load_scale", min=3, max=1), "min (3) must be below max (1)"),
+            (self._control("load_scale", default=5), "default (5) must be between min (0.5) and max (3)"),
+            (self._control("deformation", min=-1), "min (-1) must be zero or more"),
+            (threshold_on_safety, "'safety_factor' is not a field the result writes"),
+            (self._control("threshold", field=None), "view.controls[3].field: name the field it compares"),
+            (self._control("deformation", field="von_mises"), "view.controls[1]: unknown keys ['field']"),
+            (self._view(presets=[{"label": "Bump", "threshold": 50, "load_scale": 9}]), "view.presets[0].load_scale: 9 must be between"),
+            (self._view(presets=[{"label": "Bump", "mesh": 1}]), "view.presets[0]: 'mesh' is not a control"),
+            (self._view(presets=[{"load_scale": 2}]), "view.presets[0].label"),
+            (self._view(presets=[{"label": "Flip", "field": "strain"}]), "view.presets[0].field: 'strain' is not one of"),
+            (self._view(show={"loads": "yes"}), "view.show.loads: true or false"),
+            (self._view(show={"arrows": True}), "view.show: unknown keys ['arrows']"),
+        ]
+        for view, fragment in cases:
+            with self.subTest(fragment=fragment), self.assertRaises(ValueError) as caught:
+                parse_study({**self.BASE, "view": view})
+            self.assertIn(fragment, str(caught.exception))
+        # A preset may only set what a declared control drives.
+        with self.assertRaises(ValueError) as caught:
+            parse_study({**self.BASE, "view": {"controls": [VIEW["controls"][0]], "presets": [{"label": "Heavy", "load_scale": 2}]}})
+        self.assertIn("'load_scale' is not a control", str(caught.exception))
+
+    def test_the_view_names_only_fields_the_glb_writes(self):
+        from cadgen._internal.fea.study import VIEW_FIELDS
+
+        written = {"_VON_MISES", "_DISPLACEMENT"}
+        self.assertEqual({f"_{name.upper()}" for name in VIEW_FIELDS}, written)
+
+
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class Cantilever(unittest.TestCase):
     """One solve, many assertions: the run is the expensive part."""
@@ -241,6 +314,7 @@ class Cantilever(unittest.TestCase):
             "fixtures": [{"faces": [cls.fixed_ref], "type": "fixed"}],
             "loads": [{"faces": [cls.load_ref], "type": "force", "vector_N": [0, 0, -FORCE]}],
             "mesh": {"size_mm": 2.0},
+            "view": VIEW,
         }
         cls.out = directory / "results" / "cantilever.glb"
         cls.solver = _CountingSolve()
@@ -309,6 +383,10 @@ class Cantilever(unittest.TestCase):
         self.assertEqual(sidecar["summary"], self.result.summary)
         self.assertEqual(sidecar["fields"][0]["max"], self.result.summary["max_von_mises_MPa"])
         self.assertEqual(sidecar["mesh"]["order"], 2)
+
+    def test_the_studys_view_is_copied_into_the_glb_and_the_sidecar(self):
+        self.assertEqual(_glb_extras(self.result.glb)["view"], VIEW)
+        self.assertEqual(json.loads(self.result.sidecar.read_text(encoding="utf-8"))["view"], VIEW)
 
     def test_the_glb_names_its_step_relative_to_its_own_folder(self):
         self.assertEqual(_glb_extras(self.result.glb)["document"], f"../{self.step.name}")
@@ -467,6 +545,10 @@ class Yielding(unittest.TestCase):
         self.assertEqual(_glb_extras(self.result.glb)["findings"], self.sidecar["findings"])
         self.assertEqual(list(self.result.findings), self.sidecar["findings"])
         self.assertIn(f"error: {first['summary']}", self.result.human_lines())
+
+    def test_a_study_without_a_view_writes_none(self):
+        self.assertNotIn("view", _glb_extras(self.result.glb))
+        self.assertNotIn("view", self.sidecar)
 
     def test_a_close_call_is_solved_again_finer_and_the_finer_result_is_written(self):
         self.assertEqual(self.solver.calls, 2)

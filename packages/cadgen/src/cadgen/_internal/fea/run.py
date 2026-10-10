@@ -891,6 +891,9 @@ def solve_study(
         },
         "margin": parsed.margin,
     }
+    if parsed.view is not None:
+        # The agent's controls, presets and markers for the result, as the study checked them.
+        extras["view"] = parsed.view
     write_glb(
         glb_path,
         positions=outcome.dof_locations,
@@ -953,6 +956,7 @@ def solve_study(
         # The first and the finer solve's size and peak, when the part was solved twice.
         "refined": refined,
         "files": {"glb": glb_path.name, "vtu": vtu_path.name if vtu_path else None},
+        **({} if parsed.view is None else {"view": parsed.view}),
     }
     sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
     logger.debug(f"wrote {glb_path.name}, {sidecar_path.name}" + (f", {vtu_path.name}" if vtu_path else ""))

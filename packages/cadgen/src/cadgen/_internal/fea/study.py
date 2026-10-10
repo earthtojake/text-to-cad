@@ -15,13 +15,16 @@ caller) of this shape::
       "margin": 2.0,                             # optional; the safety factor (>= 1) the part should keep
       "parts": {"post": {"material": "steel"}},   # assemblies: a material per part, by name or ref
       "connections": [{"between": ["post", "base"], "type": "free"}],  # assemblies: overrides of the bonded default
-      "contact_tolerance_mm": 0.1                # assemblies: faces this close are bonded
+      "contact_tolerance_mm": 0.1,               # assemblies: faces this close are bonded
+      "view": {"controls": [...], "presets": [...], "show": {...}}  # optional; what the viewer offers
     }
 
 Face references are the viewer's own selectors (``#o1.f17``, or with the
 document prefix ``part.step#o1.f17``); ``cadgen fea faces`` lists them. A
 ``force`` is the TOTAL force on its faces, spread as a uniform traction. A
 ``pressure`` acts along the inward normal (positive pushes on the surface).
+The optional ``view`` is the agent's choice of what the viewer offers for the
+result (see :func:`_view`): copied, checked, into the GLB and the sidecar.
 Every check here is stdlib-only and runs before the kernel or the solver is
 imported, so a malformed study fails in milliseconds with a message that
 names the field.
@@ -42,6 +45,16 @@ FIXTURE_TYPES = ("fixed",)
 LOAD_TYPES = ("force", "pressure")
 CONNECTION_TYPES = ("bonded", "free")
 UNSUPPORTED_CONNECTION_TYPES = ("bolt", "contact")
+#: What a view's control can move; the viewer knows how to apply each. `field` is an enum, the rest numbers.
+VIEW_DRIVES = ("field", "deformation", "load_scale", "threshold")
+#: The fields a result writes, as a view names them: outputs.py's `_VON_MISES` and `_DISPLACEMENT`.
+VIEW_FIELDS = ("von_mises", "displacement")
+_CONTROL_KEYS = {
+    "field": {"drives", "type", "label", "options", "default"},
+    "deformation": {"drives", "type", "label", "min", "max", "default", "unit"},
+    "load_scale": {"drives", "type", "label", "min", "max", "default", "unit"},
+    "threshold": {"drives", "type", "label", "field", "min", "max", "default", "unit"},
+}
 
 
 @dataclass(frozen=True)
@@ -88,6 +101,8 @@ class Study:
     connections: tuple[Connection, ...] = ()
     #: Assemblies: faces this close (or closer) count as touching.
     contact_tolerance_mm: float = 0.1
+    #: What the viewer offers for the result (controls, presets, markers), checked; ``None`` for its defaults.
+    view: dict | None = None
 
     @property
     def face_refs(self) -> tuple[str, ...]:
@@ -201,6 +216,135 @@ def _connections(entries: Any) -> tuple[Connection, ...]:
     return tuple(connections)
 
 
+def _text(entry: dict, key: str, *, where: str) -> dict:
+    if key not in entry:
+        return {}
+    if not isinstance(entry[key], str) or not entry[key].strip():
+        raise ValueError(f"{where}.{key}: expected a short piece of text")
+    return {key: entry[key].strip()}
+
+
+def _view_field(value: Any, *, where: str) -> str:
+    if value not in VIEW_FIELDS:
+        raise ValueError(f"{where}: {value!r} is not a field the result writes; use one of {list(VIEW_FIELDS)}")
+    return value
+
+
+def _control(entry: Any, *, where: str) -> dict:
+    if not isinstance(entry, dict):
+        raise ValueError(f"{where}: expected an object like {{\"drives\": \"load_scale\", \"max\": 2}}")
+    drives = entry.get("drives")
+    if drives not in VIEW_DRIVES:
+        raise ValueError(f"{where}.drives: {drives!r} is not one of {list(VIEW_DRIVES)}")
+    unknown = set(entry) - _CONTROL_KEYS[drives]
+    if unknown:
+        raise ValueError(f"{where}: unknown keys {sorted(unknown)}; a {drives} control takes {sorted(_CONTROL_KEYS[drives])}")
+    kind = "enum" if drives == "field" else "number"
+    if entry.get("type", kind) != kind:
+        raise ValueError(f"{where}.type: a {drives} control is a{'n' if kind == 'enum' else ''} {kind}, not {entry['type']!r}")
+    control = {"drives": drives, "type": kind, **_text(entry, "label", where=where)}
+    if drives == "field":
+        options = entry.get("options", list(VIEW_FIELDS))
+        if not isinstance(options, list) or not options:
+            raise ValueError(f"{where}.options: list the fields it offers, like {list(VIEW_FIELDS)}")
+        options = [_view_field(option, where=f"{where}.options") for option in options]
+        default = entry.get("default", options[0])
+        if default not in options:
+            raise ValueError(f"{where}.default: default {default!r} is not one of its options {options}")
+        return {**control, "options": options, "default": default}
+    if drives == "threshold":
+        if entry.get("field") is None:
+            raise ValueError(f"{where}.field: name the field it compares, one of {list(VIEW_FIELDS)}")
+        control["field"] = _view_field(entry["field"], where=f"{where}.field")
+    if "max" not in entry:
+        raise ValueError(f"{where}.max: a {drives} control needs the top of its range")
+    low = _number(entry.get("min", 0), where=f"{where}.min")
+    high = _number(entry["max"], where=f"{where}.max")
+    if low < 0:
+        raise ValueError(f"{where}.min: min ({low:g}) must be zero or more")
+    if not low < high:
+        raise ValueError(f"{where}: min ({low:g}) must be below max ({high:g})")
+    # The load as solved, where the range holds it; elsewhere a range's bottom.
+    fallback = min(max(1.0, low), high) if drives == "load_scale" else low
+    default = _number(entry.get("default", fallback), where=f"{where}.default")
+    if not low <= default <= high:
+        raise ValueError(f"{where}: default ({default:g}) must be between min ({low:g}) and max ({high:g})")
+    return {**control, "min": low, "max": high, "default": default, **_text(entry, "unit", where=where)}
+
+
+def _preset(entry: Any, controls: dict[str, dict], *, where: str) -> dict:
+    if not isinstance(entry, dict):
+        raise ValueError(f"{where}: expected an object like {{\"label\": \"Landing\", \"load_scale\": 3}}")
+    if not isinstance(entry.get("label"), str) or not entry["label"].strip():
+        raise ValueError(f"{where}.label: name the preset as the person would, like \"Landing (3×)\"")
+    preset = {"label": entry["label"].strip()}
+    for key, value in entry.items():
+        if key == "label":
+            continue
+        control = controls.get(key)
+        if control is None:
+            raise ValueError(f"{where}: {key!r} is not a control of this view; a preset sets {sorted(controls)} and its label")
+        if control["type"] == "enum":
+            if value not in control["options"]:
+                raise ValueError(f"{where}.{key}: {value!r} is not one of {control['options']}")
+            preset[key] = value
+            continue
+        number = _number(value, where=f"{where}.{key}")
+        if not control["min"] <= number <= control["max"]:
+            raise ValueError(f"{where}.{key}: {number:g} must be between {control['min']:g} and {control['max']:g}")
+        preset[key] = number
+    return preset
+
+
+def _view(raw: Any) -> dict | None:
+    """The study's ``view``, checked: what the viewer offers for the result.
+
+    ``controls`` are parameters in the viewer's generic schema (``type``,
+    ``label``, ``min``, ``max``, ``default``, ``unit``, ``options``) plus
+    ``drives``, which names what each moves: ``field`` (an enum of the fields
+    the result writes), ``deformation`` (the exaggeration), ``load_scale``
+    (the load as a multiple of the solved one) or ``threshold`` (values of its
+    ``field`` under it are drawn grey), at most one each. ``presets`` are
+    named states over those controls, ``show`` whether the loads and fixtures
+    are drawn. ``None`` when the study has none.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError('study.view: expected an object like {"controls": [...], "presets": [...], "show": {...}}')
+    unknown = set(raw) - {"controls", "presets", "show"}
+    if unknown:
+        raise ValueError(f"view: unknown keys {sorted(unknown)}; expected controls, presets, show")
+    view: dict = {}
+    entries = raw.get("controls", [])
+    if not isinstance(entries, list):
+        raise ValueError("view.controls: expected a list of controls")
+    controls: dict[str, dict] = {}
+    for index, entry in enumerate(entries):
+        control = _control(entry, where=f"view.controls[{index}]")
+        if control["drives"] in controls:
+            raise ValueError(f"view.controls[{index}]: only one control drives {control['drives']}")
+        controls[control["drives"]] = control
+    if "controls" in raw:
+        view["controls"] = list(controls.values())
+    if "presets" in raw:
+        if not isinstance(raw["presets"], list):
+            raise ValueError("view.presets: expected a list of named states")
+        view["presets"] = [_preset(entry, controls, where=f"view.presets[{index}]") for index, entry in enumerate(raw["presets"])]
+    if "show" in raw:
+        show = raw["show"]
+        if not isinstance(show, dict):
+            raise ValueError('view.show: expected an object like {"loads": true, "fixtures": true}')
+        unknown = set(show) - {"loads", "fixtures"}
+        if unknown:
+            raise ValueError(f"view.show: unknown keys {sorted(unknown)}; expected loads, fixtures")
+        for key, value in show.items():
+            if not isinstance(value, bool):
+                raise ValueError(f"view.show.{key}: true or false, got {value!r}")
+        view["show"] = dict(show)
+    return view
+
+
 def parse_study(study: str | dict | Path | None) -> Study:
     """Validate a study document and return the typed :class:`Study`."""
     if study is None:
@@ -210,12 +354,12 @@ def parse_study(study: str | dict | Path | None) -> Study:
         )
     document = _load_document(study)
     unknown = set(document) - {
-        "material", "fixtures", "loads", "mesh", "output", "margin", "parts", "connections", "contact_tolerance_mm"
+        "material", "fixtures", "loads", "mesh", "output", "margin", "parts", "connections", "contact_tolerance_mm", "view"
     }
     if unknown:
         raise ValueError(
             f"study: unknown keys {sorted(unknown)}; expected material, fixtures, loads, mesh, output, margin, "
-            "parts, connections, contact_tolerance_mm"
+            "parts, connections, contact_tolerance_mm, view"
         )
     if "material" not in document:
         raise ValueError("study: 'material' is required (a table name or {E_MPa, nu, yield_MPa})")
@@ -286,5 +430,5 @@ def parse_study(study: str | dict | Path | None) -> Study:
 
     return Study(
         material, tuple(fixtures), tuple(loads), mesh_size, deformation_scale, margin, document,
-        parts=parts, connections=connections, contact_tolerance_mm=tolerance,
+        parts=parts, connections=connections, contact_tolerance_mm=tolerance, view=_view(document.get("view")),
     )
