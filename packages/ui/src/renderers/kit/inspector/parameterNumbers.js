@@ -2,8 +2,8 @@
 // (`parameterRow.jsx`): Position's joints and an FEA result's controls. Pure, so a node test can
 // import it with no React.
 
-const DEFAULT_NUMBER_CONTROL_STEP = 0.01;
-const MIN_NUMBER_CONTROL_STEP = 0.000001;
+const DEFAULT_NUMBER_CONTROL_INCREMENT = 0.01;
+const MIN_NUMBER_CONTROL_INCREMENT = 0.000001;
 const TARGET_NUMBER_SLIDER_STEPS = 1000;
 
 function toFiniteNumber(value, fallback = 0) {
@@ -20,7 +20,7 @@ function compactNumber(value) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue)
     ? Number(numericValue.toPrecision(12))
-    : DEFAULT_NUMBER_CONTROL_STEP;
+    : DEFAULT_NUMBER_CONTROL_INCREMENT;
 }
 
 /** A slider's step: about a thousandth of its range, a power of ten, finer than any declared step. */
@@ -32,9 +32,9 @@ export function resolveParameterNumberControlStep(parameter) {
   const rangeStep = range > 0
     ? Math.max(
         10 ** Math.floor(Math.log10(range / TARGET_NUMBER_SLIDER_STEPS)),
-        MIN_NUMBER_CONTROL_STEP
+        MIN_NUMBER_CONTROL_INCREMENT
       )
-    : DEFAULT_NUMBER_CONTROL_STEP;
+    : DEFAULT_NUMBER_CONTROL_INCREMENT;
   return compactNumber(declaredStep > 0 ? Math.min(declaredStep, rangeStep) : rangeStep);
 }
 

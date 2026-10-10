@@ -31,7 +31,7 @@ const defaultValueText = (value, parameter) => `${formatControlNumber(value)}${u
  *   `parameter.ariaLabel`: the control's accessible name, where it differs from its label;
  *   `parameter.hideLabel`: an enum whose options say what it is (a full-width select, no label).
  *   `valueText`: a number's text in its value field (default: its compact figure and unit).
- *   `step`: a slider's step, where the panel sets it; otherwise about a thousandth of its range.
+ *   `props.step`: a slider's increment, where the panel sets it; otherwise about a thousandth of its range.
  *   `wideLabel`: a number's label runs over its value field (`FileSheetSliderField`).
  */
 export function parameterRow({ parameter, value, onChange, labelTitle, valueText = defaultValueText, step, wideLabel = false }) {
