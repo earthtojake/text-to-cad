@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 
 from cadgen.plot import PLOT_SCHEMA_VERSION, PlotError
-from cadgen.viewer.content_types import extension_of, format_of
+from cadgen.file_types import extension_of, format_of
 
 __all__ = ["HARNESS_BACKGROUND", "build_plot", "plot_payload_bytes"]
 

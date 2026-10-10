@@ -138,7 +138,7 @@ from cadgen._internal.api import api_url
 from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
 from cadgen._internal.file_lock import exclusive
 from cadgen.settings import LOCK, read_section, settings_path, update_section
-from cadgen.viewer.content_types import COMPOUND_EXTENSIONS, extension_of
+from cadgen.file_types import COMPOUND_EXTENSIONS, extension_of
 
 LOG = logging.getLogger("cadgen.analytics")
 

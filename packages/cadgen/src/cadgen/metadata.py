@@ -8,7 +8,7 @@ from pathlib import Path
 
 from cadgen.coordination.kinds import DRAWING_PACKAGE, HARNESS_PACKAGE, PCB_PACKAGE, STEP_PACKAGE, ArtifactKind
 from cadgen.render import relative_to_cwd as _display_path
-from cadgen.viewer.content_types import extension_of
+from cadgen.file_types import extension_of
 
 
 @dataclass(frozen=True)

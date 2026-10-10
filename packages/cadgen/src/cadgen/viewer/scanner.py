@@ -15,7 +15,7 @@ FIDELITY NOTES (each one is a place a "natural" Python spelling diverges)
 ------------------------------------------------------------------------
 * ``file`` is spelled with ``/`` BY CONTRACT, on Windows too (``C:/models/part.step``):
   it is what the page puts back into a URL.
-* ``path.extname`` is not ``os.path.splitext`` (see ``content_types``).
+* ``path.extname`` is not ``os.path.splitext`` (see ``cadgen.file_types``).
 * JS ``\\s`` and ``\\w`` are not Python's, so ``_xml_root_name`` spells both
   character classes out.
 * A ``kinematics: {}`` object is a declaration even though Python considers it
@@ -252,7 +252,7 @@ def asset_for_path(file_path) -> dict | None:
 # --- classification -------------------------------------------------------
 
 
-#: A file's format, as the catalog names it (``content_types.format_of``).
+#: A file's format, as the catalog names it (``cadgen.file_types.format_of``).
 source_format_for_path = format_of
 
 

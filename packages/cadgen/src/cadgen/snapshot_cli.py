@@ -57,7 +57,7 @@ from cadgen._internal.snapshot_door import (
     drawing_scene_refusal,
 )
 from cadgen.store.view import view_dir_for
-from cadgen.viewer.content_types import format_of
+from cadgen.file_types import format_of
 from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact, StepTopologyArtifactError
 
 from cadgen.cli_logging import CliLogger

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cadgen.viewer.content_types import format_of
+from cadgen.file_types import format_of
 
 __all__ = ["PLOT_SCHEMA_VERSION", "PLOT_SUFFIXES", "PlotError", "plot_payload_bytes"]
 

@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 from cadgen.results import FabExportFile, FabExportResult
-from cadgen.viewer.content_types import format_of
+from cadgen.file_types import format_of
 
 
 def _absolute(path: Path) -> Path:
