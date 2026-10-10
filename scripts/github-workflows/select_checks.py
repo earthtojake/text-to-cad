@@ -59,7 +59,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages/cadgen"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", "kicad", "harness")
+# The suites that need KiCad or WireViz, each its own job (`kicad`, `harness`).
+TOOL_SUITES = {"kicad": "tests/python/packages/kicad", "harness": "tests/python/packages/harness"}
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", *TOOL_SUITES)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -184,10 +186,6 @@ def _cadgen_tests_naming(names: str, directories: tuple[str, ...]) -> list[str]:
         if inside or pattern.search(path.read_text(encoding="utf-8", errors="replace")):
             found.append(relative)
     return found
-
-
-# The suites that need KiCad or WireViz, each its own job (`kicad`, `harness`).
-TOOL_SUITES = {"kicad": "tests/python/packages/kicad", "harness": "tests/python/packages/harness"}
 
 
 def _tool_jobs_naming(names: str) -> list[str]:
