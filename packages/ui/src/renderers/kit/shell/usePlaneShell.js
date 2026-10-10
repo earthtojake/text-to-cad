@@ -88,7 +88,8 @@ export function usePlaneFileView({ view, rendererState = null }) {
  * @param {{ commands?: Record<string, (...args: any[]) => void>, declined?: Record<string, string>, state?: () => object }} [options.live]
  * @param {readonly import("@text-to-cad/core/prompt").PromptReference[] | null} [options.references]  What is selected,
  *   in the prompt grammar: live state's selection, and with it the view has Quick Edit. Null: neither.
- * @param {(() => unknown) | null} [options.copySelection]  The copy key's, while something is selected.
+ * @param {(() => string) | null} [options.selectionText]  What the copy key copies while something is selected: the
+ *   shell writes it to the clipboard (`copyText`), as the renderer's own Copy buttons do.
  * @param {() => Promise<Blob>} [options.capture]  The view as a picture, when it is more than `plane.capture`.
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first.
  * @param {{ alert: object, startDismissed?: boolean } | null} [options.report]  The renderer's own alert, under a
@@ -97,7 +98,7 @@ export function usePlaneFileView({ view, rendererState = null }) {
  */
 export function usePlaneShell({
   view, services, resource, modelKey, plane, load, words, toolModes = null, tool = null, live = EMPTY,
-  references = null, copySelection = null, capture: captureView = null, escape = EMPTY, report = null, displayInView = false
+  references = null, selectionText = null, capture: captureView = null, escape = EMPTY, report = null, displayInView = false
 }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
@@ -160,7 +161,7 @@ export function usePlaneShell({
   }, [draw, host.clipboard, words.copyFailed, clearActionError, failAction]);
   const copyAction = () => {
     if (drawToolActive && draw.drawing.hasContent) { void copyDrawing(); return true; }
-    if (copySelection) { void copySelection(); return true; }
+    if (selectionText) { void copyText(selectionText()); return true; }
     return false;
   };
   const capture = captureView || plane.capture;
