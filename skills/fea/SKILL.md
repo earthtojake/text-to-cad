@@ -21,7 +21,9 @@ repeated static load (`fatigue`), a drop estimate (`drop`), vibration
 (`shock`), loads that change over time (`transient`), buckling (`buckling`) and heat: steady
 temperatures (`thermal`), temperatures over time (`thermal_transient`) and the
 stress heat puts in a part (`thermal_stress`), and flow (`cfd`, lite: steady laminar
-flow through or around the part, its pressure drop and its push on the part).** Static answers
+flow through or around the part, its pressure drop and its push on the part), and
+permanent bending and stretch (`nonlinear`, lite: metal past yield or rubber, the
+load in steps, a collapse found and reported).** Static answers
 "will it hold, and by how much" under forces, pressures, the part's own weight
 (`gravity`) and a steady acceleration (`acceleration`). Every other analysis in
 [Choose the analysis](#choose-the-analysis) is planned: its study format and
@@ -58,7 +60,7 @@ study names it; left out, it is `static`.
 | "What if I drop it" (a quick answer) | `drop` | Drop (estimate) | **Runs today** (an estimate; `"dynamic": true` adds a transient check) | [drop.md](references/drop.md) |
 | "What if I drop it" (a deeper check, after `drop`) | `impact` | Drop impact | Coming, not in this cadgen yet | [impact.md](references/impact.md) |
 | Flow through or around it, pressure drop, the push of air or water on it | `cfd` | Flow | **Runs today** (lite: laminar, steady, incompressible) | [cfd.md](references/cfd.md) |
-| "Does it bend for good", rubber or other stretchy parts | `nonlinear` | Permanent bend / Stretch | Coming, not in this cadgen yet | [nonlinear.md](references/nonlinear.md) |
+| "Does it bend for good", "at what load does it give way", rubber or other stretchy parts | `nonlinear` | Permanent bend / Stretch | **Runs today** (lite: small-strain metal plasticity, Neo-Hookean rubber) | [nonlinear.md](references/nonlinear.md) |
 | Parts pressing or sliding on each other | `contact` | Contact | Coming, not in this cadgen yet | [contact.md](references/contact.md) |
 | Turbulent or fast gas flow, creep, composites, bolted joints, magnetic or electric fields | not yet named in a study | Planned next | Coming after the rest | [planned-next.md](references/planned-next.md) |
 
@@ -131,7 +133,7 @@ leave `defeature` out of `fit.allow`) or names a memory or time budget.
 
 | Task | First action | Reference |
 | --- | --- | --- |
-| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `harmonic`, `random_vibration`, `transient`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate) and `fatigue` (from a static load) run today. | [Choose the analysis](#choose-the-analysis) |
+| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `harmonic`, `random_vibration`, `transient`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate), `fatigue` (from a static load) and `nonlinear` (lite) run today. | [Choose the analysis](#choose-the-analysis) |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
 | **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`part.step#o1.f17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |

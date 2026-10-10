@@ -51,7 +51,7 @@ the skill's "Choose the analysis" table says what to do instead.
 | `drop` | Drop (estimate) | runs today, as an estimate | [drop.md](drop.md) |
 | `cfd` | Flow | coming, not in this cadgen yet | [cfd.md](cfd.md) |
 | `impact` | Drop impact | coming, not in this cadgen yet | [impact.md](impact.md) |
-| `nonlinear` | Permanent bend / Stretch | coming, not in this cadgen yet | [nonlinear.md](nonlinear.md) |
+| `nonlinear` | Permanent bend / Stretch | runs today (lite) | [nonlinear.md](nonlinear.md) |
 | `contact` | Contact | coming, not in this cadgen yet | [contact.md](contact.md) |
 
 Turbulent and compressible flow, creep, composites, bolted joints and

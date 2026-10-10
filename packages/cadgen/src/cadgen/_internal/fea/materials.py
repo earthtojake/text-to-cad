@@ -34,8 +34,9 @@ class Material:
     E: float
     #: Poisson's ratio.
     nu: float
-    #: Yield strength, MPa. Safety factor = yield / max von Mises.
-    yield_strength: float
+    #: Yield strength, MPa. Safety factor = yield / max von Mises. ``None`` only for a rubber given by its
+    #: hyperelastic block alone, which has none.
+    yield_strength: float | None
     #: tonne/mm^3.
     density: float
     #: Ultimate tensile strength, MPa (fatigue: Goodman).
@@ -226,7 +227,11 @@ def material_from_spec(spec: Any) -> Material:
     of :data:`MATERIAL_PROPERTIES` is optional and overrides the table's.
     ``fatigue_strength_MPa`` and ``fatigue_cycles`` are accepted for
     ``endurance_MPa`` and ``endurance_cycles``, and ``plasticity.tangent_MPa``
-    for ``tangent_MPa``.
+    for ``tangent_MPa`` (0 is perfectly plastic).
+
+    A rubber needs no E, nu or yield: an object with a ``hyperelastic`` block
+    and no table name takes its small-strain E and nu from the block's mu and
+    bulk modulus, and has no yield strength (``None``) unless it gives one.
     """
     if isinstance(spec, str):
         return lookup_material(spec)
@@ -238,15 +243,26 @@ def material_from_spec(spec: Any) -> Material:
             base = lookup_material(spec["name"])
         except ValueError:
             pass
-    if base is None and not {"E_MPa", "nu", "yield_MPa"} <= set(spec):
+    hyperelastic = _hyperelastic(spec["hyperelastic"]) if "hyperelastic" in spec else None
+    rubber = base is None and hyperelastic is not None
+    if base is None and not rubber and not {"E_MPa", "nu", "yield_MPa"} <= set(spec):
         raise ValueError("material: an object needs E_MPa, nu and yield_MPa (density_t_per_mm3 optional)")
-    E = _number(spec.get("E_MPa", base.E if base else None), where="material.E_MPa", positive=True)
-    nu = _number(spec.get("nu", base.nu if base else None), where="material.nu")
+    if rubber:
+        # A rubber's small-strain E and nu, from its shear and bulk moduli: what a linear analysis would use.
+        mu, bulk = hyperelastic["mu_MPa"], hyperelastic["bulk_MPa"]
+        default_E, default_nu = 9.0 * bulk * mu / (3.0 * bulk + mu), (3.0 * bulk - 2.0 * mu) / (2.0 * (3.0 * bulk + mu))
+    else:
+        default_E, default_nu = (base.E, base.nu) if base else (None, None)
+    E = _number(spec.get("E_MPa", default_E), where="material.E_MPa", positive=True)
+    nu = _number(spec.get("nu", default_nu), where="material.nu")
     if not 0 <= nu < 0.5:
         raise ValueError(f"material.nu: Poisson's ratio must be in [0, 0.5), got {nu}")
-    yield_strength = _number(
-        spec.get("yield_MPa", base.yield_strength if base else None), where="material.yield_MPa", positive=True
-    )
+    if rubber and "yield_MPa" not in spec:
+        yield_strength = None
+    else:
+        yield_strength = _number(
+            spec.get("yield_MPa", base.yield_strength if base else None), where="material.yield_MPa", positive=True
+        )
     density = _number(spec.get("density_t_per_mm3", base.density if base else 0.0), where="material.density_t_per_mm3")
 
     def table(attribute: str) -> float | None:
@@ -255,9 +271,12 @@ def material_from_spec(spec: Any) -> Material:
     plasticity = spec.get("plasticity")
     if plasticity is not None and (not isinstance(plasticity, dict) or set(plasticity) - {"tangent_MPa"}):
         raise ValueError('material.plasticity: expected an object like {"tangent_MPa": 2000}')
-    tangent = _optional(spec, ("tangent_MPa",), table("tangent"), where="material")
-    if plasticity:
-        tangent = _optional(plasticity, ("tangent_MPa",), tangent, where="material.plasticity")
+    tangent = table("tangent")
+    for source, where in ((spec, "material"), (plasticity or {}, "material.plasticity")):
+        if "tangent_MPa" in source:
+            tangent = _number(source["tangent_MPa"], where=f"{where}.tangent_MPa")
+            if tangent < 0:
+                raise ValueError(f"{where}.tangent_MPa: the slope past yield must be 0 (perfectly plastic) or more, got {tangent:g}")
     if tangent is not None and not tangent < E:
         raise ValueError(f"material.tangent_MPa: the plastic tangent ({tangent:g} MPa) must be below E ({E:g} MPa)")
     return Material(
@@ -269,7 +288,7 @@ def material_from_spec(spec: Any) -> Material:
         expansion=_optional(spec, ("expansion_per_K",), table("expansion"), where="material"),
         specific_heat=_optional(spec, ("specific_heat_J_kgK",), table("specific_heat"), where="material"),
         tangent=tangent,
-        hyperelastic=_hyperelastic(spec["hyperelastic"]) if "hyperelastic" in spec else table("hyperelastic"),
+        hyperelastic=hyperelastic if hyperelastic is not None else table("hyperelastic"),
     )
 
 
