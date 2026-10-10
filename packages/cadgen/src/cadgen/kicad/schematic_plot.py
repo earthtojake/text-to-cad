@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Sequence
 
-from cadgen.kicad.phrasing import summarize
+from cadgen.kicad.phrasing import kind_title, summarize
 from cadgen.kicad.refs import selector_or_none
 from cadgen.kicad.schematic_index import export_netlist, read_index
 
@@ -68,7 +68,8 @@ def erc_payload(report: Path, index: dict) -> list[dict]:
             kind, description = str(violation.get("type", "")), str(violation.get("description", ""))
             entry = {
                 "check": "erc", "severity": str(violation.get("severity", "error")), "type": kind, "description": description,
-                "summary": summarize("erc", kind, description, [item["text"] for item in items]), "items": items,
+                "summary": summarize("erc", kind, description, [item["text"] for item in items]),
+                "title": kind_title(kind, description), "items": items,
             }
             if entry not in found:
                 found.append(entry)

@@ -9,7 +9,7 @@ const sameFinding = (left, right) => left.check === right.check && left.type ===
 /**
  * What is selected and hovered on a board or a schematic (`useLinkSelection.js` is a robot's): any
  * number of board references (`#U3`, `#U3.9`, `#net:VIN`, on a board `#net:VIN@x..y..` and points),
- * and the check in focus when a finding was chosen in the alert card. Read-only: nothing here
+ * and the check in focus when a finding was chosen in the alert card or Checks. Read-only: nothing here
  * changes the design.
  *
  * The selection is React state, because the tree and the Reference draw it; the hover is not,

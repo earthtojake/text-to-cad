@@ -298,6 +298,7 @@ class ErcPayloadTest(unittest.TestCase):
         self.assertEqual(found["items"][0]["at"], [50.8, 25.4])
         self.assertEqual(found["items"][0]["sheet"], 0)
         self.assertEqual(found["summary"], "U2 pin 7 (VDD) is a power input that nothing powers")
+        self.assertEqual(found["title"], "Input Power pin not driven by any Output Power pins")
 
     def test_a_label_finding_names_its_net(self):
         (found,) = erc_payload(self.report([{"severity": "warning", "type": "label_dangling", "description": "Label not connected",

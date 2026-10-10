@@ -12,7 +12,7 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-__all__ = ["Finding", "FindingItem", "name_item", "summarize"]
+__all__ = ["Finding", "FindingItem", "kind_title", "name_item", "summarize"]
 
 
 @dataclass(frozen=True)
@@ -133,6 +133,20 @@ _SENTENCES: dict[str, Callable[[list[str], tuple[str, str] | None], str | None]]
     "power_pin_not_driven": lambda n, l: n and f"{_cap(n[0])} is a power input that nothing powers",
     "label_dangling": lambda n, l: n and f"{_cap(n[0])} connects to nothing",
 }
+
+
+# The review's own checks, whose descriptions are each finding's measurements.
+_TITLES = {
+    "decoupling_missing": "No decoupling capacitor",
+    "decoupling_far": "Decoupling capacitor too far",
+    "track_current": "Track too thin for its current",
+}
+
+
+def kind_title(type: str, description: str) -> str:
+    """What every finding of a type is called, as one list heading: KiCad's message without the
+    numbers it puts in brackets ("Clearance violation"), or the review check's name."""
+    return _TITLES.get(type) or re.sub(r"\s*\(.*\)\s*$", "", description) or type.replace("_", " ")
 
 
 def summarize(check: str, type: str, description: str, items: Sequence[str]) -> str:

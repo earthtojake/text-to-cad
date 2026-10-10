@@ -3,7 +3,6 @@ import hashlib
 import io
 import json
 import shutil
-import types
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -159,17 +158,15 @@ class CadGenerationTests(unittest.TestCase):
     ) -> Path:
         return self._write_step_at(self.temp_root, name, suffix=suffix)
 
-    def _fake_scene(self, step_path: Path) -> types.SimpleNamespace:
-        """A minimal stand-in for an already-parsed imported STEP scene.
+    def _fake_scene(self, step_path: Path) -> LoadedStepScene:
+        """An already-parsed imported STEP scene with no shapes of its own.
 
         ``source_compound`` avoids the intermediate mesh-compound fallback;
         ``_patch_package_build`` replaces canonical document-tree packaging.
         """
-        return types.SimpleNamespace(
-            step_path=step_path.expanduser().resolve(),
-            source_compound=object(),
-            extra_outputs={},
-        )
+        scene = LoadedStepScene(step_path=step_path.expanduser().resolve(), roots=[], prototype_shapes={})
+        scene.source_compound = object()
+        return scene
 
     def _patch_package_build(self):
         """Patch canonical imported-document packaging without meshing.

@@ -310,21 +310,21 @@ plot without one is the picture alone.
   steps back, as it does for a net in focus, and what is isolated is lit; a second press lets the
   board back in. What is isolated is the file's, kept through a rebuild for whatever still names
   something on the board.
-- **Findings**, what KiCad reported and what the review found, are the viewport's alert card,
-  the card and navbar icon a STEP's alerts use (`board/FindingsList.jsx`). Its title, and its
-  icon's name, is the count: "2 to fix, 3 suggestions", "1 to fix" or "3 suggestions". Under it,
-  **Fix before ordering** (the errors: KiCad's DRC errors, the parity check's, unrouted
-  connections) then **Suggestions** (the rest), each only when it has one, each finding its sentence
-  in full, in KiCad's order. With something to fix the card opens over the board, as a STEP's
-  error does, and can be dismissed; its icon is red. Suggestions alone start put away: the
-  amber icon in the navbar says how many, and brings the card back. Choosing a finding selects
-  what it names, rings its places and puts the card away; its Reference is headed by its
+- **Findings**, what KiCad reported and what the review found (`board/FindingsList.jsx`). The
+  errors (KiCad's DRC errors, the parity check's, unrouted connections) are the viewport's alert
+  card, the card and navbar icon a STEP's alerts use: titled by their count ("1 to fix"), under it
+  **Fix before ordering**, each its sentence in full, in KiCad's order. It opens over the board, as
+  a STEP's error does, and can be dismissed; its icon is red. The rest, the suggestions, are
+  Select's **Checks** panel under the tree, folded until a person opens it, with nothing in the
+  navbar: one row per kind of finding (KiCad reports a silkscreen clash once per pair), headed by
+  its sentence, or what every finding of its type is called when they differ, with its count and
+  the parts and nets it names. Choosing a finding, or a Checks row, selects what it names, rings
+  its places and puts the card away if it is up; its Reference is headed by its
   sentence, its rows the sentence in full (where it says more than KiCad's message), then
   KiCad's check, severity, message and items, then what it names (with a picker over them when
   it names several), and Copy and Quick Edit carry
-  its sentence before its references. A rebuild that changes the findings is a new card: open
-  again if there is something to fix, else put away with its new count. A board with nothing to
-  report has no card and no icon; a failure to load, or a failed action, has the card first.
+  its sentence before its references. A rebuild that changes the errors is a new card, open again.
+  A board with nothing to fix has no card and no icon; a failure to load, or a failed action, has the card first.
 - **The Reference** is headed by the pick as a person names it (`C14 · 100n`,
   `U3 · pad 9 VBUS`, `net VIN`, `VIN · track`) and reads it back in the script's millimetres
   (y up, from the board's drill/place origin): a part's footprint, side, position, rotation,
@@ -379,8 +379,8 @@ Reference, and having no layers it has no Display settings.
 - **The tree** is the board's, in pins: **Parts** by kind, each with its pins; **Nets**, each with
   the pins on it. A symbol's units on several sheets are one row. Its rows light what they name
   on hover and isolate parts and nets with their eye, as the board's do.
-- **Findings** are the board's alert card and navbar icon, from KiCad's ERC, which the
-  schematic's plot runs: its errors to fix, its warnings suggestions.
+- **Findings** are the board's, from KiCad's ERC, which the schematic's plot runs: its errors the
+  alert card, its warnings Select's Checks.
 - **The Reference**: a symbol's library entry, footprint, units, sheets (on a schematic of
   several), pins, MPN and LCSC fields and `Script`; a pin's net, name and type; a net's class,
   pins, parts and labels; a pin's net and part, and a net's parts, select what they name.
@@ -906,8 +906,8 @@ model survives (a failed update, a warning beside the model) has an X, **Dismiss
 the card away for as long as that alert stands, and its icon, first of the navbar's
 right-hand controls after the update button, brings it back. The dismissal goes once the alert changes or clears, or
 another file opens; with the card back, so does the icon. Preview has no navbar, and so no
-icon. A KiCad board's or schematic's findings are this card and icon too, listed under its
-title; suggestions alone start put away, their icon showing (see
+icon. A KiCad board's or schematic's errors are this card and icon too, listed under its
+title; its suggestions are Select's Checks panel, not the card (see
 [A KiCad board](#a-kicad-board)).
 
 ## Verification

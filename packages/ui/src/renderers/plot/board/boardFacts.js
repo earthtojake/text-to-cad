@@ -36,11 +36,13 @@ const linked = (label, text, selector) => [label, text, [{ text, selector }]];
 const netRow = (net) => (net ? linked("Net", net, netSelector(net)) : ["Net", "None"]);
 /** A part's row, named by its reference and value. */
 const partRow = (part) => linked("Part", [part.ref, part.value].filter(Boolean).join(" · "), partSelector(part.ref));
+/** What a list shown only to its first `shown` says of the rest: "and 3 more", or nothing. */
+export const moreThan = (count, shown) => (count > shown ? `and ${count - shown} more` : "");
 /** A net's Parts row: the first twelve select, the rest are counted. */
 function partsRow(refs) {
   if (!refs.length) return ["Parts", "None"];
   const shown = refs.slice(0, 12);
-  const more = refs.length > 12 ? `and ${refs.length - 12} more` : "";
+  const more = moreThan(refs.length, 12);
   return ["Parts", [shown.join(", "), more].filter(Boolean).join(" "),
     [...shown.map((ref) => ({ text: ref, selector: partSelector(ref) })), ...(more ? [{ text: more }] : [])]];
 }

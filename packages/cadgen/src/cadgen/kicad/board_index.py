@@ -49,7 +49,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 from cadgen.kicad import sexpr
 from cadgen.kicad.geometry import XY, arc_points, area, bezier_points, board_origin, box, format_xy, hull, inside, script_frame
 from cadgen.kicad.naming import natural, netclass_of, project_netclasses, unescape_net_name
-from cadgen.kicad.phrasing import Finding
+from cadgen.kicad.phrasing import Finding, kind_title
 from cadgen.kicad.refs import BoardSelector, ReferenceView, format_board_selector, selector_or_none
 
 __all__ = [
@@ -398,6 +398,7 @@ class BoardIndex:
                     "check": finding.check, "severity": finding.severity, "type": finding.type,
                     "description": finding.description,
                     "summary": finding.summary or finding.description,
+                    "title": kind_title(finding.type, finding.description),
                     "items": [
                         {"text": item.text, "ref": item.ref, "at": xy(item.at) if item.at is not None else None}
                         for item in finding.items

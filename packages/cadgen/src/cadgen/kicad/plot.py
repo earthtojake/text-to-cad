@@ -72,7 +72,7 @@ __all__ = [
 
 # The derivation's own revision, in the cache key beside the schema version: a fix that changes
 # what a payload holds, not its shape, bumps it so the store never serves the old payloads.
-_REVISION = 5
+_REVISION = 6
 #: KiCad's default colour theme behind a board, and behind a schematic sheet.
 BOARD_BACKGROUND = "#001023"
 SCHEMATIC_BACKGROUND = "#F5F4EF"

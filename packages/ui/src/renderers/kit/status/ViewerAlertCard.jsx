@@ -18,7 +18,7 @@ export function alertDismissible(alert, hasContent) {
 }
 
 // The same failure raised again is the same alert, even as a new object. `key` is what tells two
-// alerts apart that the card says alike (a board's findings, by their count, are its `title`).
+// alerts apart that the card says alike (a board's errors, by their count, are its `title`).
 const alertKey = alert => JSON.stringify([alert.severity, alert.title, alert.message, alert.reason, alert.details, alert.key]);
 /** What the card is headed, and what its icon in the navbar is called. */
 const alertTitle = alert => alert.title || alert.summary || "Couldn’t display the model";

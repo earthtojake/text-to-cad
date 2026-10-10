@@ -7,7 +7,7 @@ import { usePlaneFileView, usePlaneShell } from "../kit/shell/usePlaneShell.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { BoardDisplaySection, boardDisplayAirwires, boardDrawView, readBoardDisplay } from "./board/BoardDisplay.jsx";
 import { BoardMeasurePanel, BoardReferencePanel, BoardTreePanel } from "./board/BoardPanels.jsx";
-import FindingsList, { ChecksPanel, findingsReport } from "./board/FindingsList.jsx";
+import FindingsList, { ChecksPanel, findingsAlert, splitFindings } from "./board/FindingsList.jsx";
 import { BoardMeasureIcon, BoardSelectIcon } from "./board/boardModes.jsx";
 import { useBoardHandover } from "./board/useBoardHandover.js";
 import { readBoardIsolation, useBoardIsolation } from "./board/useBoardIsolation.js";
@@ -69,15 +69,16 @@ function PlotSurface({ view, data }) {
     active: Boolean(index && (selection.active || measure.start || toolMode === PLOT_TOOL.MEASURE)),
     handle: () => escapePlot({ toolMode, selectTool, selection, measure })
   }), [index, selection, measure, toolMode, selectTool]);
-  // What KiCad and the review found: the errors are the card a STEP's alerts are (`findingsReport`), the rest Select's Checks.
+  // What KiCad and the review found: the errors are the card, as a STEP's alerts are; the rest are Select's Checks.
   const compact = Boolean(view.appearance?.compact);
   const findings = document.shown && !compact ? index?.findings ?? null : null;
-  const report = useMemo(() => findingsReport(findings), [findings]);
+  const { errors, suggestions } = useMemo(() => splitFindings(findings), [findings]);
+  const reportAlert = useMemo(() => findingsAlert(errors), [errors]);
 
   const shell = usePlaneShell({
     view, services: workspace.services, resource: workspace.resource, modelKey: document.file, plane: plotView, load: document.load,
     words, toolModes: PLOT_TOOL_MODES, tool: { mode: toolMode, set: setToolMode }, live: handover.live, references: handover.references,
-    selectionText: selection.selection.length ? handover.copyText : null, capture, escape, report, displayInView: layered
+    selectionText: selection.selection.length ? handover.copyText : null, capture, escape, reportAlert, displayInView: layered
   });
   const { copyText } = shell;
   const { copyText: referenceText } = handover;
@@ -87,7 +88,7 @@ function PlotSurface({ view, data }) {
   // A board and its schematic open in two views select together, through the host (selection only).
   useCrossProbe({ port: host.crossProbe, path: view.file.path, index, selection, toolMode, view: plotView,
     layout: document.plot?.layout ?? null, mirrored: picking.mirrored });
-  // A finding chosen in the card or in Checks selects what it names, as a tree row would, and puts the card away.
+  // A finding chosen in the card or in Checks selects what it names, as a tree row would, and puts away the card if one is up.
   const { select } = selection;
   const { dismissAlert } = shell;
   const chooseFinding = useCallback((finding) => {
@@ -113,7 +114,7 @@ function PlotSurface({ view, data }) {
       onIsolate={isolation.toggle} clear={selection.clear} active={selecting} />
     <BoardReferencePanel index={index} resolved={selection.resolved} finding={selection.finding} active={selecting}
       onClear={selection.clear} onSelect={select} onCopy={() => copyReferences(selection.selection)} copyShortcut={copyShortcut} />
-    <ChecksPanel findings={findings} onChoose={chooseFinding} active={selecting} />
+    <ChecksPanel suggestions={suggestions} onChoose={chooseFinding} active={selecting} />
     <BoardMeasurePanel measure={measure} shown={toolMode === PLOT_TOOL.MEASURE || measure.measurements.length > 0}
       onClose={() => { measure.clear(); if (toolMode === PLOT_TOOL.MEASURE) selectTool(PLOT_TOOL.SELECT); }} />
   </> : null;
@@ -121,7 +122,7 @@ function PlotSurface({ view, data }) {
   return <PlaneShell shell={shell} surface="plot-surface" label={`${words.label}: ${view.file.name}`} interactive={Boolean(index)}
     tools={tools} toolPanels={toolPanels} onClearReferences={selection.clear}
     display={layered ? <BoardDisplaySection display={display} onChange={setDisplay} /> : null}
-    reportBody={<FindingsList findings={findings} onChoose={chooseFinding} />}
+    reportBody={<FindingsList errors={errors} onChoose={chooseFinding} />}
     style={chromeStyle(document.plot?.layout.sheets, view.appearance?.colorScheme === "dark")} />;
 }
 

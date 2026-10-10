@@ -1,7 +1,7 @@
 /**
  * A board's or a schematic's Select tree: its parts, by kind, each with its pads (a schematic's
- * pins), and its nets, each with the pads or pins on it. (What KiCad reported is the alert card's:
- * `FindingsList.jsx`.) Nodes are what
+ * pins), and its nets, each with the pads or pins on it. (What KiCad reported is the alert card's
+ * and Select's Checks: `FindingsList.jsx`.) Nodes are what
  * the kit's tree search reads (`id`, `label`, `children`, `selectionId` — the reference a pasted
  * `#U3.9` finds — and `searchAliases`), plus the selector the row selects (`selector`) and a muted
  * `detail`.

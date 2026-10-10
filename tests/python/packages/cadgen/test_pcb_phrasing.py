@@ -8,7 +8,18 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from cadgen.kicad.phrasing import name_item, summarize  # noqa: E402
+from cadgen.kicad.phrasing import kind_title, name_item, summarize  # noqa: E402
+
+
+class KindTitleTest(unittest.TestCase):
+    def test_a_type_is_named_once_for_every_finding_of_it(self):
+        # KiCad's message without the numbers it brackets, so every clearance reads alike.
+        self.assertEqual(kind_title("clearance", "Clearance violation (netclass 'Default' clearance 0.2000 mm; actual 0.1500 mm)"),
+                         "Clearance violation")
+        self.assertEqual(kind_title("silk_overlap", "Silkscreen clearance"), "Silkscreen clearance")
+        # The review's descriptions are each finding's measurements: its checks have names of their own.
+        self.assertEqual(kind_title("decoupling_far", "U2 pad 3 to C8 pad 1: 3.67 mm, centre to centre; review threshold 3 mm."),
+                         "Decoupling capacitor too far")
 
 
 class NameItemTest(unittest.TestCase):

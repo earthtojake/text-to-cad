@@ -34,7 +34,6 @@ from __future__ import annotations
 import glob
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -210,20 +209,14 @@ def _install_candidates() -> list[Path]:
 def find_freerouting() -> Freerouting:
     """The Freerouting this process runs, or :class:`FreeroutingMissingError` saying how to get one."""
     explicit = os.environ.get("CADGEN_FREEROUTING", "").strip()
-    if explicit:
-        path = Path(explicit).expanduser()
-        if not path.exists():
-            raise FreeroutingMissingError(
-                f"CADGEN_FREEROUTING is {explicit}, which does not exist; point it at Freerouting's jar or its "
-                f"launcher, or unset it ({freerouting_hint()})"
-            )
-        return _tool(path)
-    on_path = shutil.which("freerouting")
-    if on_path:
-        return _tool(Path(on_path))
-    for candidate in _install_candidates():
-        if candidate.is_file():
+    for candidate in tool_probe.candidates("CADGEN_FREEROUTING", ["freerouting", *_install_candidates()]):
+        if candidate.exists() if explicit else candidate.is_file():
             return _tool(candidate)
+    if explicit:
+        raise FreeroutingMissingError(
+            f"CADGEN_FREEROUTING is {explicit}, which does not exist; point it at Freerouting's jar or its "
+            f"launcher, or unset it ({freerouting_hint()})"
+        )
     raise FreeroutingMissingError(f"board.autoroute() needs Freerouting, which was not found: {freerouting_hint()}")
 
 

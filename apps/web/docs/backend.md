@@ -365,6 +365,7 @@ the pane shows on its alert card.
     "nets":   [{ "name": "TX/RX", "class": "Default" }],
     "findings": [{ "check": "unconnected", "severity": "error", "type": "unconnected_items",
                    "description": "Missing connection between items",
+                   "summary": "R1 pad 2 isn't connected to D1 pad 1", "title": "Missing connection between items",
                    "items": [{ "text": "Pad 2 [Net-(D1-A)] of R1 on F.Cu", "ref": "#R1.2", "at": [36.65, 15] }] }]
   }
 }
@@ -406,7 +407,8 @@ the schematic's index:
   and its `type` the pin's electrical type, a part's `outline` is its courtyard (else the
   box round its pads), its `script` the line that made it (the hidden `Script` field a
   cadgen build writes). `findings` is every finding of the plot's DRC (custom rules
-  applied), each item with a board reference when it is a pad (`#R1.2`), something a
+  applied) and the review, each with its sentence (`summary`) and what every finding of its
+  type is called (`title`: KiCad's message without its numbers, or the review check's name), each item with a board reference when it is a pad (`#R1.2`), something a
   part draws (`#R1`) or a track or via (`#net:VIN@x..y..`); an item's `at` is where
   KiCad places it, which for an arc is its centre, so an arc's reference names its middle.
 - **The schematic's index** (`cadgen.kicad.schematic_index`) is in KiCad's schematic
