@@ -1,7 +1,7 @@
 """The analytics receiver takes every file kind the CAD apps send.
 
 cadgen's analytics client names each file it counts by a kind (``FILE_KINDS``); the
-docs site's receiver refuses a batch that names a kind outside its own closed list,
+api's receiver (`apps/api`) refuses a batch that names a kind outside its own closed list,
 and a refused batch is dropped with every count in it. The two lists live in two
 languages; this keeps them one list.
 """
@@ -21,10 +21,10 @@ from cadgen.analytics import FILE_KINDS  # noqa: E402
 
 
 def receiver_kinds() -> set[str]:
-    text = (REPO / "apps/docs/src/lib/api/events.mjs").read_text(encoding="utf-8")
+    text = (REPO / "apps/api/src/events.mjs").read_text(encoding="utf-8")
     match = re.search(r"const KINDS = new Set\(\[([^\]]*)\]\)", text)
     if match is None:
-        raise AssertionError("apps/docs/src/lib/api/events.mjs has no `const KINDS = new Set([...])`")
+        raise AssertionError("apps/api/src/events.mjs has no `const KINDS = new Set([...])`")
     return set(re.findall(r"'([^']+)'", match.group(1)))
 
 
