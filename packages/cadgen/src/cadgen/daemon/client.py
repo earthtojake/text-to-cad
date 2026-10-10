@@ -52,37 +52,46 @@ _RESTART = object()
 # A frame did not arrive in time, as distinct from the channel closing.
 _TIMED_OUT = object()
 
-# Cache resolution is per-CLIENT, never per-daemon. A worker inherits the
-# environment of whichever build spawned the daemon, so without forwarding
-# these the first build's cache root silently became every later build's,
-# across projects (a model that set XDG_CACHE_HOME at import relocated the
-# cache for every other project on the machine until the daemon recycled).
-# They travel with every request and the worker applies them per JOB —
-# a name absent here means "unset for this job" (see worker._apply_request_env).
-# PYTHONPATH rides along too: it is how a project declares an import root beyond the
-# script's own folder (``PYTHONPATH=src``), and a build must resolve imports exactly as
-# ``python script.py`` run by the client would. Entries are absolutized against the
-# client's cwd, because the worker runs elsewhere.
-# CADGEN_FFMPEG is the same kind of per-client choice: `snapshot --video` encodes
-# with the ffmpeg the CALLER has, and a warm worker's ambient PATH is whatever
-# shell happened to start the daemon. CADGEN_STORE_MAX is the cap the daemon's
-# idle housekeeping holds the client's store to (STORE.md §8). CADGEN_VERIFY_READBACK
-# is one build's request (STORE.md §10): a daemon started with it verified every
-# later build, and one started without it skipped the check a maintainer asked for.
-# The telemetry switches (``cadgen.analytics.ENVIRONMENT``) are the client's too: a
-# client whose environment turns telemetry off has none of its builds counted, whatever
-# the environment of the build that started the daemon said (``cadgen.daemon.telemetry``).
-FORWARDED_ENV_VARS = (
-    "CADGEN_CACHE_DIR",
-    "XDG_CACHE_HOME",
-    "LOCALAPPDATA",
-    "PYTHONPATH",
-    "CADGEN_FFMPEG",
-    "CADGEN_STORE_MAX",
-    "CADGEN_VERIFY_READBACK",
-    "DO_NOT_TRACK",
-    "CADGEN_TELEMETRY",
-)
+# A job runs in its CALLER's environment, never the daemon's. A worker inherits the
+# environment of whichever build spawned the daemon, so a model that read
+# ``os.environ["SIZE"]`` saw that build's SIZE warm and its own caller's cold, and the
+# first build's cache root silently became every later build's, across projects. So
+# the caller's whole environment travels with every request and the worker applies it
+# per JOB: a name the caller has is set, a name it lacks is unset, which also clears
+# what a previous job's model code exported (worker._apply_request_env). That is
+# also how the per-client choices reach a job: the cache root (CADGEN_CACHE_DIR,
+# XDG_CACHE_HOME, LOCALAPPDATA), the import roots (PYTHONPATH, absolutized against the
+# client's cwd because the worker runs elsewhere), the cap the daemon's idle housekeeping
+# holds the client's store to (CADGEN_STORE_MAX, STORE.md §8), one build's read-back check
+# (CADGEN_VERIFY_READBACK, STORE.md §10), and the telemetry switches
+# (``cadgen.analytics.ENVIRONMENT``): a client whose environment turns telemetry off has
+# none of its builds counted, whatever the environment of the build that started the
+# daemon said (``cadgen.daemon.telemetry``). CADGEN_FFMPEG is resolved here, below.
+#
+# Except the names the daemon, its pool and a job's own machinery set for themselves:
+# a caller never sends them, and applying a job's environment leaves them as they are.
+INTERNAL_ENV_VARS = frozenset({
+    # A daemon worker: it submits its children to its own daemon at its own address,
+    # whose key lives in its own state directory (pool.Worker, worker.serve).
+    "CADGEN_DAEMON",
+    "CADGEN_DAEMON_CHILD",
+    "CADGEN_DAEMON_SOCKET",
+    "CADGEN_DAEMON_STATE_DIR",
+    # A request's own fields (worker._apply_request_env), and a transient worker's
+    # event lines (executors._submit_transient).
+    "CADGEN_ROOT_ID",
+    "CADGEN_JOB_ID",
+    "CADGEN_EVENTS",
+    # The job-slot broker a process's builds share (broker.BROKER_*_VAR).
+    "CADGEN_BROKER",
+    "CADGEN_BROKER_KEY",
+    "CADGEN_BROKER_STATS",
+    # The daemon's processes report their installation's channel, whoever started
+    # them (_spawn_daemon), and a Windows worker names its virtual environment so
+    # (pool.interpreter).
+    "CADGEN_INSTALL_CHANNEL",
+    "__PYVENV_LAUNCHER__",
+})
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than
 # in the worker because a PATH lookup only answers for the process that does it:
@@ -105,8 +114,9 @@ def _client_ffmpeg() -> str:
 
 
 def forwarded_env() -> dict[str, str]:
-    """The requesting process's environment that a job must see, for the payload."""
-    env = {name: os.environ[name] for name in FORWARDED_ENV_VARS if name in os.environ}
+    """The requesting process's environment, which a job runs in, for the payload:
+    all of it but the daemon's own names (``INTERNAL_ENV_VARS``)."""
+    env = {name: value for name, value in os.environ.items() if name not in INTERNAL_ENV_VARS}
     if "PYTHONPATH" in env:
         entries = [os.path.abspath(e) for e in env["PYTHONPATH"].split(os.pathsep) if e]
         env["PYTHONPATH"] = os.pathsep.join(entries)
@@ -536,7 +546,7 @@ def _spawn_daemon(address: str) -> subprocess.Popen | None:
     # The daemon and its workers must import THIS cadgen from whatever directory they
     # run in; a relative PYTHONPATH entry would otherwise pick the installed one. The
     # daemon serves every client, so it takes no telemetry switch from the one that
-    # started it: each client's travels with its own builds (FORWARDED_ENV_VARS).
+    # started it: each client's travels with its own builds (forwarded_env).
     env = for_others(worker_env())
     # Nor its install channel: it reports the one its installation's plugin wrote down, whoever started it
     # (``cadgen/_internal/channel.py``).

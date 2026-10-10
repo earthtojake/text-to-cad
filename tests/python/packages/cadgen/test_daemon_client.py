@@ -258,19 +258,26 @@ class ResidentProcessLifecycle(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(tokens, ["before", "after"])
 
-    def test_a_build_verifies_its_read_back_exactly_when_its_caller_asked(self):
-        # CADGEN_VERIFY_READBACK is one build's request (STORE.md §10). It travels with the
-        # job, and a job whose caller did not set it runs without it, in a daemon started with it.
+    def test_a_job_runs_in_its_callers_environment_and_the_daemon_keeps_its_own_names(self):
+        # A model reading os.environ, and one build's request such as CADGEN_VERIFY_READBACK
+        # (STORE.md §10), see the caller's environment warm as cold: what the caller has is
+        # set, what it lacks is unset -- in a daemon started with it -- and the names the
+        # daemon's machinery sets for itself are neither sent nor replaced.
         import os
 
         from cadgen.daemon import worker
 
-        with mock.patch.dict("os.environ", {"CADGEN_VERIFY_READBACK": "1"}):
-            self.assertEqual(client.forwarded_env().get("CADGEN_VERIFY_READBACK"), "1")
-            worker._apply_request_env({"env": {}})
+        with mock.patch.dict("os.environ", {"SIZE": "10", "CADGEN_VERIFY_READBACK": "1",
+                                            "CADGEN_DAEMON_CHILD": "1", "CADGEN_DAEMON_SOCKET": "/daemon.sock"}):
+            caller = client.forwarded_env()
+            self.assertEqual((caller["SIZE"], caller["CADGEN_VERIFY_READBACK"]), ("10", "1"))
+            self.assertFalse(set(caller) & client.INTERNAL_ENV_VARS)
+            caller = {name: value for name, value in caller.items() if name != "CADGEN_VERIFY_READBACK"}
+            worker._apply_request_env({"env": {**caller, "SIZE": "20", "CADGEN_DAEMON_SOCKET": "/elsewhere.sock"}})
+            self.assertEqual(os.environ["SIZE"], "20")
             self.assertNotIn("CADGEN_VERIFY_READBACK", os.environ)
-            worker._apply_request_env({"env": {"CADGEN_VERIFY_READBACK": "1"}})
-            self.assertEqual(os.environ.get("CADGEN_VERIFY_READBACK"), "1")
+            self.assertEqual((os.environ["CADGEN_DAEMON_CHILD"], os.environ["CADGEN_DAEMON_SOCKET"]),
+                             ("1", "/daemon.sock"))
 
     def test_the_daemon_popen_is_retained_by_an_owned_reaper(self):
         process = mock.Mock(pid=4321)

@@ -370,8 +370,9 @@ def _run_transient(request, root, env, endpoint, *, subscriber=None):
                                    stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="backslashreplace")
         if orphaned.is_set():
             raise ArtifactDetached("artifact producer lost its last subscriber")
+        # No "env": the worker was started with its caller's environment and keeps it.
         payload = {"tool": "artifact", "argv": [], "artifact": request, "store_root": root,
-                   "env": {}, "root_id": env.get("CADGEN_ROOT_ID")}
+                   "root_id": env.get("CADGEN_ROOT_ID")}
         process.stdin.write(json.dumps(payload) + "\n")
         process.stdin.close()
         exit_seen = None

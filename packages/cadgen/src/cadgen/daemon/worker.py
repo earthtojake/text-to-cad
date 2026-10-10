@@ -42,33 +42,37 @@ import traceback
 
 # Same registry the supervisor validates against; imported rather than duplicated.
 from cadgen.daemon import telemetry
-from cadgen.daemon.client import FORWARDED_ENV_VARS
+from cadgen.daemon.client import INTERNAL_ENV_VARS
 from cadgen.daemon.server import _TOOL_IMPORTS, _evict_first_party_modules
 
 
 def _apply_request_env(request: dict) -> None:
-    """Apply the requesting CLIENT's environment for this job.
+    """Apply the requesting CLIENT's environment for this job: the one a cold run
+    of the same command sees.
 
     A worker inherits the environment of whichever build spawned the DAEMON, so
-    without this the first build's store became every later build's, across
-    projects. The store root is an explicit request field and wins; the
-    forwarded vars cover the rest of ``store.paths.store_root()``'s resolution
-    rule so the daemon adds no hidden second one. A var absent from the request
-    is DELETED — unset for the client means unset for the job — which also
-    clears a var a previous job's model code exported at import time.
+    without this a model reading ``os.environ`` saw that build's variables, and
+    the first build's store became every later build's, across projects. Every
+    name the client has is set; every name it lacks is DELETED -- unset for the
+    client means unset for the job -- which also clears a var a previous job's
+    model code exported. The names the daemon's machinery sets for itself
+    (``client.INTERNAL_ENV_VARS``) are left as they are. A request that carries
+    no environment -- a one-shot artifact worker, started with its caller's --
+    changes none of it. The store root is an explicit request field and wins.
 
     ``root_id`` names the build tree this job belongs to; a child this job
     submits inherits it through the environment so its events tag the same tree.
     """
     env = request.get("env")
-    if not isinstance(env, dict):
-        env = {}
-    for name in FORWARDED_ENV_VARS:
-        value = env.get(name)
-        if isinstance(value, str):
-            os.environ[name] = value
-        else:
+    if isinstance(env, dict):
+        for name in [name for name in os.environ if name not in env and name not in INTERNAL_ENV_VARS]:
             os.environ.pop(name, None)
+        for name, value in env.items():
+            if not isinstance(name, str) or not isinstance(value, str) or name in INTERNAL_ENV_VARS:
+                continue
+            if os.environ.get(name) != value:
+                with contextlib.suppress(ValueError):  # a name or value no environment can hold
+                    os.environ[name] = value
     store_root = request.get("store_root")
     if isinstance(store_root, str) and store_root:
         os.environ["CADGEN_CACHE_DIR"] = store_root

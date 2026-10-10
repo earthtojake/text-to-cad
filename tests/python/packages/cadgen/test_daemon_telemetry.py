@@ -148,7 +148,8 @@ class DaemonTelemetryTest(unittest.TestCase):
             telemetry.worker_died(-11)
         self.assertFalse(self.recorder.flush())
         # The variables that say no travel with every build a client asks for.
-        self.assertLessEqual(set(analytics.ENVIRONMENT), set(client.FORWARDED_ENV_VARS))
+        with mock.patch.dict(os.environ, {"DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "off"}):
+            self.assertLessEqual(set(analytics.ENVIRONMENT), set(client.forwarded_env()))
 
     def test_a_command_hands_its_counts_over_and_the_daemon_takes_only_what_it_knows(self) -> None:
         handed: list[dict] = []

@@ -1475,6 +1475,18 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
   soon as its URL is announced, so a session's first build finds warm spares.
   Inside a worker, `submit` is the same client call back to the daemon, so a
   parent's children land on their own workers while the parent's body runs.
+  **A job runs in its caller's environment**, as it would cold: every request
+  carries the client's whole environment and the worker applies it for that
+  job -- a name the caller has is set, a name it lacks is unset, which also
+  clears what a previous job's model code exported (`worker._apply_request_env`).
+  The store root, `PYTHONPATH` (absolutized against the caller's folder),
+  `CADGEN_STORE_MAX`, `CADGEN_VERIFY_READBACK` and the telemetry switches reach a
+  job this way, and so does every variable a model reads (§3). Only the names
+  the daemon's machinery sets for itself are neither sent nor replaced
+  (`client.INTERNAL_ENV_VARS`: the worker's own daemon, address and state
+  directory, the request's root and job ids, the job-slot broker, the
+  install channel). Nothing else a job sees comes from the process that
+  started the daemon.
 - **Transient executor (`CADGEN_DAEMON=0`).** A subprocess per job, alive for
   this build only. Each imports build123d once, concurrently with its
   siblings. It inherits the environment, so a test's `CADGEN_CACHE_DIR`
