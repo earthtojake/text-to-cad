@@ -239,7 +239,14 @@ class OneTokenForOneCodeTest(unittest.TestCase):
 
     def test_the_version_is_the_one_declared_beside_the_code(self):
         self.assertTrue(client.compute_version_token(self._tree(checkout=True)).startswith("1.2.3:"))
-        self.assertTrue(client.compute_version_token(self._tree(checkout=False)).startswith("4.5.6:"))
+        installed = self._tree(checkout=False)
+        self.assertTrue(client.compute_version_token(installed).startswith("4.5.6:"))
+        # An install that failed midway left an older version's metadata: the newest written
+        # names what is there, whatever the names sort as.
+        stale = installed.parent / "cadgen-4.5.10.dist-info"
+        stale.mkdir()
+        os.utime(stale, (1, 1))
+        self.assertTrue(client.compute_version_token(installed).startswith("4.5.6:"))
 
 
 @unittest.skipIf(os.name == "nt", "a pipe name has no path to outgrow")

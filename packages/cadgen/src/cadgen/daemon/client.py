@@ -183,8 +183,16 @@ def _declared_version(base: Path) -> str:
             return str(project["version"])
     except (OSError, ValueError):
         pass
-    for metadata in sorted(base.parent.glob("cadgen-*.dist-info")):
-        return metadata.name[len("cadgen-"):-len(".dist-info")]
+    # More than one only after an install that failed midway: the last one written is
+    # the install that put these files here.
+    found = []
+    for metadata in base.parent.glob("cadgen-*.dist-info"):
+        try:
+            found.append((metadata.stat().st_mtime_ns, metadata.name))
+        except OSError:
+            continue
+    if found:
+        return max(found)[1][len("cadgen-"):-len(".dist-info")]
     return "0+unknown"
 
 
@@ -274,11 +282,9 @@ def run_via_daemon(
         return _run_with_retry(payload, on_event=emit_event)
     except KeyboardInterrupt:
         # Ctrl-C while this process only waits on the daemon: the build service stops the
-        # job when its caller leaves, so there is nothing here to unwind, and a traceback
-        # through the transport's wait would say only where this process was waiting.
-        sys.stderr.write(f"\n{prog or f'cadgen {tool}'}: interrupted\n")
-        sys.stderr.flush()
-        raise SystemExit(130) from None
+        # job when its caller leaves. The same KeyboardInterrupt a cold run raises, so a
+        # script's own handler catches it either way, without the transport's wait in it.
+        raise KeyboardInterrupt from None
 
 
 def run_nested(

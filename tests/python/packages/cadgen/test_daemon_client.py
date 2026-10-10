@@ -121,16 +121,12 @@ class DeadWorkerMessage(unittest.TestCase):
         self.assertIn("closed the connection", err)
         self.assertIn("Running it cold now, in this process", err)
 
-    def test_ctrl_c_while_waiting_on_the_daemon_is_one_line(self):
-        err = io.StringIO()
+    def test_ctrl_c_while_waiting_on_the_daemon_is_the_interrupt_a_cold_run_raises(self):
         with mock.patch.dict(os.environ, {"CADGEN_DAEMON": "1"}), \
-                mock.patch.object(client, "_run_with_retry", side_effect=KeyboardInterrupt), \
-                redirect_stderr(err):
+                mock.patch.object(client, "_run_with_retry", side_effect=KeyboardInterrupt):
             os.environ.pop("CADGEN_DAEMON_CHILD", None)
-            with self.assertRaises(SystemExit) as stop:
+            with self.assertRaises(KeyboardInterrupt) as stop:
                 client.run_via_daemon("run", ["/w/box.py"], "/w", prog="python box.py")
-        self.assertEqual(stop.exception.code, 130)
-        self.assertEqual(err.getvalue(), "\npython box.py: interrupted\n")
         self.assertTrue(stop.exception.__suppress_context__, "no traceback through the wait")
 
     def test_a_job_with_no_prog_is_named_by_its_tool(self):
