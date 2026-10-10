@@ -168,6 +168,7 @@ class CadGenerationTests(unittest.TestCase):
         return types.SimpleNamespace(
             step_path=step_path.expanduser().resolve(),
             source_compound=object(),
+            extra_outputs={},
         )
 
     def _patch_package_build(self):
