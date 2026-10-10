@@ -26,6 +26,7 @@ vi.mock('../../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
 import HarnessRenderer from '../../../../dist/renderers/shell-harness/HarnessRenderer.js';
 import { ViewerHostContext } from '../../../../dist/host/context.js';
 import { testHost } from '../../../../dist/host/testing/host.js';
+import { createAnimationClock } from '../../../../dist/renderers/kit/tools/playbar/animationClock.js';
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -226,3 +227,47 @@ it('a view that has gone writes nothing more: its last write is the one it makes
 
 // The full reset crosses the renderer callback and the shell's tool/preview
 // lifecycle; it must reach the camera only after those changes commit.
+
+// A stand-in routine runtime: what preview puts down on the way in and hands back on the way out.
+function routineRuntime(name: string, calls: string[]) {
+  return { clips: [{ id: name }], clock: createAnimationClock(), savePlayback: () => { calls.push(`save ${name}`); return `${name}@3s`; },
+    resetPlayback: () => calls.push(`reset ${name}`), onRelease: () => calls.push(`release ${name}`),
+    restorePlayback: (saved: string) => calls.push(`restore ${name} ${saved}`), onPlayToggle: () => calls.push(`play ${name}`) };
+}
+
+function mountRoutine(data: Record<string, unknown>) {
+  const settings = { toolStack: { panels: {}, collapsed: {} } };
+  const preferences = { getSnapshot: () => settings, subscribe: () => () => {}, update() {} };
+  const slot = navbarSlot();
+  const props = (extra: Record<string, unknown>) => ({ source: { id: 'one' }, file: { path: '/models/one.harness', name: 'one.harness', kind: 'file' },
+    document: null, navbarSlot: slot, onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' }, state: undefined,
+    onStateChange() {}, onNavigationActionsChange() {}, reload() {}, data: { services: { preferences }, ...extra } });
+  const view = render(<ViewerHostContext.Provider value={testHost()}><HarnessRenderer {...(props(data) as any)} /></ViewerHostContext.Provider>);
+  return (extra: Record<string, unknown>) => view.rerender(
+    <ViewerHostContext.Provider value={testHost()}><HarnessRenderer {...(props(extra) as any)} /></ViewerHostContext.Provider>);
+}
+
+it('the tools view\'s routine goes back only to the file it came from', () => {
+  const calls: string[] = [];
+  const first = routineRuntime('a', calls);
+  const rerender = mountRoutine({ animation: first, modelKey: 'a.glb' });
+  act(() => { fireEvent.click(screen.getAllByRole('button', { name: 'Preview' })[0]); });
+  // Another file opened in this view while preview was up: its runtime starts at rest.
+  const second = routineRuntime('b', calls);
+  rerender({ animation: second, modelKey: 'b.glb' });
+  // Opening another file leaves preview; the routine saved from a is never posed on b, which
+  // starts at rest (put down, however many times).
+  expect(screen.queryAllByRole('button', { name: 'Exit preview' })).toEqual([]);
+  expect(calls.filter(call => !call.startsWith('release'))).toEqual(['save a', 'reset a']);
+  expect(calls).toContain('release b');
+});
+
+it('a view that stops offering Preview while it is up leaves it as every exit does', () => {
+  const calls: string[] = [];
+  const runtime = routineRuntime('a', calls);
+  const rerender = mountRoutine({ animation: runtime });
+  act(() => { fireEvent.click(screen.getAllByRole('button', { name: 'Preview' })[0]); });
+  rerender({ animation: runtime, previewable: false });
+  expect(calls.filter(call => !call.startsWith('release'))).toEqual(['save a', 'reset a', 'restore a a@3s']);
+  expect(calls).toContain('release a');
+});

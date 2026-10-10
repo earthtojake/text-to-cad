@@ -203,25 +203,36 @@ export function useRendererShell({
   // Speed and Loop chosen there, and hands the saved routine back, as it was.
   const animationRef = useRef(animation);
   animationRef.current = animation;
+  const modelKeyRef = useRef(modelKey);
+  modelKeyRef.current = modelKey;
   const autoplayRef = useRef(false);
   const toolsRoutine = useRef(null);
   // Speed and Loop chosen in preview's Playback settings: preview's alone, forgotten on the way out.
   const [previewChoice, setPreviewChoice] = useState(NO_CHOICE);
   const setPreviewing = useCallback(next => {
     const entering = Boolean(next);
-    // A view that does not offer Preview stays as it is, whatever asks.
-    if (!previewable || entering === previewingRef.current) return;
+    // A view that does not offer Preview never enters it, whatever asks.
+    if ((entering && !previewable) || entering === previewingRef.current) return;
     previewingRef.current = entering;
     const runtime = animationControlsHaveContent(animationRef.current) ? animationRef.current : null;
-    if (entering) toolsRoutine.current = runtime ? runtime.savePlayback() : null;
+    // The routine is saved with the file it came from, and handed back only to that file: another
+    // file opened while preview was up starts at rest instead.
+    if (entering) toolsRoutine.current = runtime ? { file: modelKeyRef.current, playback: runtime.savePlayback() } : null;
     if (entering) runtime?.resetPlayback();
     else runtime?.onRelease();
-    if (!entering && runtime && toolsRoutine.current) runtime.restorePlayback(toolsRoutine.current);
+    if (!entering && runtime && toolsRoutine.current?.file === modelKeyRef.current) runtime.restorePlayback(toolsRoutine.current.playback);
     if (!entering) toolsRoutine.current = null;
     setPreviewChoice(NO_CHOICE);
     previewState.set(entering);
     if (entering && runtime && autoplayRef.current) runtime.onPlayToggle();
   }, [previewable, previewState.set]);
+  // A view that stops offering Preview while it is up leaves it the way every exit does.
+  useEffect(() => {
+    if (!previewable && previewState.previewing) {
+      previewingRef.current = true;
+      setPreviewing(false);
+    }
+  }, [previewable, previewState.previewing, setPreviewing]);
 
   // ---- the file's view --------------------------------------------------------
   const [restored] = useState(() => readFileView(view.state));
