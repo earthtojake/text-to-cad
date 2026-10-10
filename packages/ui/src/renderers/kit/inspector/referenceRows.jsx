@@ -30,6 +30,9 @@ export function InfoRow({ label, children, title }) {
   );
 }
 
+/** A value that names something else a Reference can go to (another link, a net, a file): a button that reads as a link. */
+export const REFERENCE_LINK_CLASS = "rounded-sm text-left text-sidebar-foreground underline decoration-muted-foreground/50 underline-offset-2 hover:decoration-current focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring [overflow-wrap:anywhere]";
+
 /** A number, an id or a colour: the UI font, with tabular figures so a column of them lines up. */
 export function MonoValue({ children }) {
   return <span className="tabular-nums">{children}</span>;
