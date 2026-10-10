@@ -216,15 +216,17 @@ jobs:
           scripts/test/test-python.sh --keep-going --select cadgen --print-weights $TESTS
         shell: bash
 
-  # The stress solver needs the optional cadgen[fea] stack (netgen, scikit-fem, pyamg), which
-  # no other job installs: without it test_fea.py and test_fea_assembly.py skip their solves.
-  # Linux only: the stack is the same wheels everywhere, and the solves are CPU-bound.
+  # The solvers need the optional cadgen[fea] stack (netgen, scikit-fem, pyamg), which no other
+  # job installs: without it every test_fea*.py skips its solves. Every analysis's suite matches
+  # the glob below, so a new one needs no edit here. Linux only: the stack is the same wheels
+  # everywhere, and the solves are CPU-bound. 40 minutes for every analysis's benchmarks; past
+  # 25 measured minutes the job splits into shards (structural, dynamics, thermal and flow).
   fea:
     name: fea
     needs: changes
     if: needs.changes.outputs.fea == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository
@@ -244,7 +246,8 @@ jobs:
         run: python -m pip install --editable "./packages/cadgen[fea]" "netgen-mesher==6.2.2608"
 
       - name: Run the fea tests
-        run: scripts/test/test-python.sh --select cadgen --print-weights tests/python/packages/cadgen/test_fea.py tests/python/packages/cadgen/test_fea_assembly.py
+        run: scripts/test/test-python.sh --select cadgen --print-weights tests/python/packages/cadgen/test_fea*.py
+        shell: bash
 
   core-js:
     name: core-js

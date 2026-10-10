@@ -256,8 +256,15 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertIn("cadgen[fea]", JOBS["fea"])
         # The accuracy tests' margins were measured with this mesher; pyproject only sets a floor.
         self.assertIn('"netgen-mesher==6.2.2608"', JOBS["fea"])
-        self.assertIn(f"{CADGEN}/test_fea.py", JOBS["fea"])
-        self.assertIn(f"{CADGEN}/test_fea_assembly.py", JOBS["fea"])
+        # One glob runs every analysis's suite, so a new test_fea_<name>.py needs no workflow edit.
+        self.assertIn(f"{CADGEN}/test_fea*.py", JOBS["fea"])
+        self.assertIn("timeout-minutes: 40", JOBS["fea"])
+        # Every FEA suite on disk is one the glob runs, and a change to it selects the job.
+        on_disk = sorted(path.name for path in (REPO_ROOT / CADGEN).glob("test_fea*.py"))
+        self.assertLessEqual({"test_fea.py", "test_fea_assembly.py", "test_fea_checks.py"}, set(on_disk))
+        for name in on_disk:
+            with self.subTest(name=name):
+                self.assertIn("fea", jobs_for(f"{CADGEN}/{name}"))
         fea = {"fea", "skills"}
         for path in (
             "packages/cadgen/src/cadgen/_internal/fea/solve.py",
