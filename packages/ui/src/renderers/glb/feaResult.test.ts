@@ -2,7 +2,7 @@ import { BufferAttribute, BufferGeometry, Group, Mesh, Ray, Vector3 } from 'thre
 import { describe, expect, it } from 'vitest';
 import {
   applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaControls, feaMarkerShow, feaPresets, feaRamp, feaSummaryLine, fieldValues, forceDirection,
-  feaVerdict, formatValue, pickFace, readFeaResult, partRows, recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows, weakestPartIndex,
+  feaVerdict, formatValue, pickFace, readFeaResult, partRows, recolorByField, resultSourcePath, studyRows, weakestPartIndex,
   feaChecks, feaFailing, feaSections, feaShownControls, feaDefaults
 } from './feaResult.js';
 
@@ -164,23 +164,6 @@ describe('a result\'s findings', () => {
     expect(resultSourcePath('/work/results/bracket.glb', '/parts/bracket.step')).toBe('/parts/bracket.step');
     expect(resultSourcePath('/work/results/bracket.glb', '')).toBe('');
     expect(resultSourcePath('FEA/x.glb', '../part.step')).toBe('part.step');
-  });
-
-  it('ring the CAD point in the mesh\'s metres, moved by the displacement there at the scale shown', () => {
-    // Two vertices whose positions carry 10x their displacement, as the writer bakes it.
-    const geometry = new BufferGeometry();
-    const displacement = [0, 0, 0, 0.001, 0, 0];
-    geometry.setAttribute('_displacement', new BufferAttribute(new Float32Array(displacement), 3));
-    geometry.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 0.1 + 0.01, 0, 0]), 3));
-    const mesh = new Mesh(geometry);
-    const result = { mesh, deformationScale: 10 } as any;
-    // CAD (100, 0, 0) mm is (0.1, 0, 0) m: the second vertex, undeformed.
-    const [target] = ringTargets(result, [[100, 0, 0]]);
-    expect(target.base).toEqual([0.1, 0, 0]);
-    expect(ringPoint(target, 0)[0]).toBeCloseTo(0.1, 9);
-    expect(ringPoint(target, 10)[0]).toBeCloseTo(0.11, 9);
-    // The CAD axes become glTF's: z up is Y, y is -Z.
-    expect(ringTargets(result, [[0, 20, 5]])[0].base).toEqual([0, 0.005, -0.02]);
   });
 });
 

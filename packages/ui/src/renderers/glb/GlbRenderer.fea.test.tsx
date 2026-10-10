@@ -179,142 +179,18 @@ it('the colour bar steps up above the playbar while it is there, in preview, and
   expect(animated.mesh.geometry.getAttribute('position').getZ(2)).toBeCloseTo(0.06, 6);
 });
 
-// What the result's checks found: errors first, as the card a board's are.
+// What the result's checks found stays in the file for the agent; the viewer's status is Study's verdict.
 const PEAK = { check: 'fea', severity: 'error', type: 'peak', summary: 'The peak stress, 120 MPa, is above the 100 MPa this material yields at',
-  description: 'The peak stress is above yield.', items: [{ text: 'the peak stress', ref: '#o1.f3', at: [10, 20, 30] }, { text: 'a fixed face', ref: '#o1.f1', at: [0, 0, 0] }] };
+  description: 'The peak stress is above yield.', items: [{ text: 'the peak stress', ref: '#o1.f3', at: [10, 20, 30] }] };
 const SOFT = { check: 'fea', severity: 'warning', type: 'bend', summary: 'The part bends visibly: 0.4 mm', description: 'It bends.', items: [{ text: 'the tip', ref: null }] };
 const FOUND = { ...RESULT, document: 'part.step', occurrence: 'o1' };
-const alertCard = () => screen.queryByRole('alert');
 
-it('opens the card for what must be fixed, listing errors under their heading and the rest under Suggestions', () => {
+it('a result with findings raises no alert card and puts no findings icon in the navbar', () => {
   const actions = vi.fn();
-  mount({ ...FOUND, findings: [SOFT, PEAK] }, undefined, { actions });
-  const card = alertCard()!;
-  expect(card.textContent).toContain('1 to fix, 1 suggestion');
-  expect(card.textContent).toContain('Fix before using');
-  expect(card.textContent).toContain('Suggestions');
-  expect(Array.from(card.querySelectorAll('[data-finding-row]')).map(row => row.textContent)).toEqual([PEAK.summary, SOFT.summary]);
-  expect(card.querySelector('[data-report-issue]')).toBeNull();
-  // Nothing is in the navbar while the card is up.
+  mount({ ...FOUND, findings: [PEAK, SOFT] }, undefined, { actions });
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByText(PEAK.summary)).toBeNull();
   expect(actions.mock.calls.flat(2).filter((action: any) => action?.label)).toEqual([]);
-});
-
-it('puts suggestions alone away, their icon in the navbar saying what is there, and brings the card back from it', () => {
-  const actions = vi.fn();
-  mount({ ...FOUND, findings: [SOFT] }, undefined, { actions });
-  expect(alertCard()).toBeNull();
-  const published = actions.mock.calls.at(-1)![0];
-  expect(published.map((action: any) => action.label)).toEqual(['1 suggestion']);
-  act(() => { published[0].onInvoke(); });
-  expect(alertCard()!.textContent).toContain('The part bends visibly');
-  expect(alertCard()!.textContent).not.toContain('Fix before using');
-});
-
-it('a GLB with no findings, or whose findings are not a list, raises no card', () => {
-  mount({ ...FOUND, findings: [] });
-  expect(alertCard()).toBeNull();
-  cleanup();
-  mount({ ...FOUND, findings: 'nope' });
-  expect(alertCard()).toBeNull();
-  expect(document.querySelector('[data-quick-edit-chip]')).toBeNull();
-});
-
-it('choosing a finding puts the card away, rings the places it names and carries its sentence and the part\'s face into Quick Edit', async () => {
-  const copied: string[] = [];
-  const host = testHost({ clipboard: { writeText: async (text: any) => { copied.push(await text); }, readText: async () => '', writeImage: async () => {} } });
-  const actions = vi.fn();
-  mount({ ...FOUND, findings: [PEAK, SOFT] }, undefined, { host, actions });
-  expect(document.querySelector('[data-fea-finding-rings]')).toBeNull();
-  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
-  expect(alertCard()).toBeNull();
-  expect(actions.mock.calls.at(-1)![0].map((action: any) => action.label)).toEqual(['1 to fix, 1 suggestion']);
-  expect(document.querySelector('[data-fea-finding-rings]')).toBeTruthy();
-  const box = screen.getByRole('region', { name: 'Quick Edit' });
-  expect(box.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('2 refs');
-  const note = screen.getByRole('textbox', { name: 'Describe your changes' });
-  act(() => { fireEvent.change(note, { target: { value: 'thicken it' } }); });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' })); });
-  // The STEP the result records, beside the GLB, named by its faces, after the sentence.
-  expect(copied).toEqual([`thicken it\n\nFile: /models/part.glb\nReferences:\n${PEAK.summary} · /models/part.step#o1.f1,o1.f3`]);
-});
-
-it('a finding about no face names the whole part, and a result that names no source offers no reference', async () => {
-  const copied: string[] = [];
-  const host = testHost({ clipboard: { writeText: async (text: any) => { copied.push(await text); }, readText: async () => '', writeImage: async () => {} } });
-  const actions = vi.fn();
-  mount({ ...FOUND, findings: [SOFT] }, undefined, { actions, host });
-  act(() => { actions.mock.calls.at(-1)![0][0].onInvoke(); });
-  act(() => { fireEvent.click(screen.getByText(SOFT.summary)); });
-  expect(screen.getByRole('region', { name: 'Quick Edit' }).querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('1 ref');
-  act(() => { fireEvent.change(screen.getByRole('textbox', { name: 'Describe your changes' }), { target: { value: 'thicken it' } }); });
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' })); });
-  expect(copied).toEqual([`thicken it\n\nFile: /models/part.glb\nReferences:\n${SOFT.summary} · /models/part.step#o1`]);
-  cleanup();
-  mount({ ...FOUND, document: '', findings: [PEAK] });
-  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
-  expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull();
-  expect(document.querySelector('[data-fea-finding-rings]')).toBeTruthy();
-});
-
-it('lets go of a chosen finding\'s ring on Escape and when the card is brought back, with no reference to clear it through Quick Edit', () => {
-  const actions = vi.fn();
-  const { container } = mount({ ...FOUND, document: '', findings: [PEAK] }, undefined, { actions });
-  const rings = () => document.querySelector('[data-fea-finding-rings]');
-  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
-  expect(rings()).toBeTruthy();
-  act(() => { fireEvent.keyDown(container.querySelector('[data-stand-in-viewport]')!, { key: 'Escape' }); });
-  expect(rings()).toBeNull();
-  // Chosen again, then the card comes back from its icon: nothing is chosen under it.
-  expect(alertCard()).toBeNull();
-  act(() => { actions.mock.calls.at(-1)![0][0].onInvoke(); });
-  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
-  expect(rings()).toBeTruthy();
-  act(() => { actions.mock.calls.at(-1)![0][0].onInvoke(); });
-  expect(alertCard()).toBeTruthy();
-  expect(rings()).toBeNull();
-});
-
-it('rings each place at the deformed position under the camera, and follows the deformation scale', () => {
-  const arcs: number[][] = [];
-  const context = { setTransform() {}, clearRect() {}, beginPath() {}, stroke() {}, arc: (...args: number[]) => { arcs.push(args); } } as any;
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
-  let frame: (() => void) | null = null;
-  vi.stubGlobal('requestAnimationFrame', (callback: () => void) => { frame = callback; return 1; });
-  vi.stubGlobal('cancelAnimationFrame', () => {});
-  const camera = new THREE.OrthographicCamera(-0.05, 0.05, 0.0375, -0.0375, 0.001, 10);
-  camera.position.set(0, 0, 1);
-  camera.updateMatrixWorld();
-  loaded.runtime = { THREE, camera };
-  mount({ ...FOUND, findings: [{ ...PEAK, items: [{ text: 'the tip', ref: '#o1.f3', at: [0, 10, 0] }] }] });
-  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
-  const paint = () => { arcs.length = 0; act(() => { frame!(); }); return arcs.map(([x, y]) => [Math.round(x), Math.round(y)]); };
-  // CAD (0, 10, 0) mm is glTF (0, 0, -0.01) m: the screen's centre, before the displacement moves it.
-  expect(paint()).toEqual([[400, 300]]);
-});
-
-it('moves a ring when Study\'s scale changes on a result that displaces', () => {
-  const arcs: number[][] = [];
-  const context = { setTransform() {}, clearRect() {}, beginPath() {}, stroke() {}, arc: (...args: number[]) => { arcs.push(args); } } as any;
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
-  let frame: (() => void) | null = null;
-  vi.stubGlobal('requestAnimationFrame', (callback: () => void) => { frame = callback; return 1; });
-  vi.stubGlobal('cancelAnimationFrame', () => {});
-  // Looking down -x, so the displacement along z is sideways on the screen: screen x is minus z.
-  const camera = new THREE.OrthographicCamera(-0.05, 0.05, 0.0375, -0.0375, 0.001, 10);
-  camera.position.set(1, 0, 0);
-  camera.lookAt(0, 0, 0);
-  camera.updateMatrixWorld();
-  loaded.runtime = { THREE, camera };
-  // The CAD point of the third vertex before it moves: glTF (0, 1, -0.02) m.
-  mount({ ...FOUND, findings: [{ ...PEAK, items: [{ text: 'the tip', ref: '#o1.f3', at: [0, 20, 1000] }] }] });
-  act(() => { fireEvent.click(screen.getByText(PEAK.summary)); });
-  const paint = () => { arcs.length = 0; act(() => { frame!(); }); return Math.round(arcs[0][0]); };
-  // At the file's own 10x the vertex has moved 0.02 m back to z = 0, the screen's middle.
-  expect(paint()).toBe(400);
-  const value = screen.getByRole('textbox', { name: 'Deformation scale value' });
-  act(() => { fireEvent.change(value, { target: { value: '0' } }); fireEvent.blur(value); });
-  // At none it is where the part was solved: 0.02 m across, 160px.
-  expect(paint()).toBe(560);
 });
 
 it('lays the deformation slider out as Display\'s sliders are: under its label, never on its row', () => {

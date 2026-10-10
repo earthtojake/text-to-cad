@@ -86,7 +86,7 @@ function rampStops(raw) {
 
 const vector = (value) => (Array.isArray(value) && value.length === 3 && value.every(Number.isFinite) ? value.map(Number) : null);
 
-/** The result's findings as the card lists them, in the file's order, each with its position as `index`; malformed ones are left out. */
+/** The result's findings, kept for the agent (the viewer shows none), in the file's order, each with its position as `index`; malformed ones are left out. */
 function readFindings(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -205,40 +205,6 @@ export function resultSourcePath(glbPath, document) {
 
 /** A finding's `ref` as a selector in the prompt grammar: the token's leading "#" is not part of it. */
 export const findingSelector = (ref) => String(ref).replace(/^#/, "");
-
-/**
- * Where a finding's `at` points are in the mesh's own space (glTF metres, Y up), with the
- * displacement there. `at` is the part's CAD millimetres, undeformed: (x, y, z) is (x, z, -y) in
- * metres (the writer's own convention). The displacement is the nearest vertex's, found once
- * against the undeformed positions (the file's, less the scale already baked in), so a ring can
- * follow the part as the deformation slider moves.
- */
-export function ringTargets(result, points) {
-  const geometry = result.mesh.geometry;
-  const position = shown(result.mesh).position;
-  const displacement = geometry.getAttribute("_displacement");
-  const usable = displacement?.itemSize === 3 && displacement.count * 3 === position.length;
-  return points.map(([x, y, z]) => {
-    const base = [x / 1000, z / 1000, 0 - y / 1000];
-    let nearest = -1;
-    let best = Infinity;
-    if (usable) {
-      for (let i = 0; i < displacement.count; i += 1) {
-        let sum = 0;
-        for (let k = 0; k < 3; k += 1) {
-          const d = position[i * 3 + k] - result.deformationScale * displacement.array[i * 3 + k] - base[k];
-          sum += d * d;
-        }
-        if (sum < best) { best = sum; nearest = i; }
-      }
-    }
-    const move = nearest < 0 ? [0, 0, 0] : [0, 1, 2].map((k) => displacement.array[nearest * 3 + k]);
-    return { base, move };
-  });
-}
-
-/** A ring target in the mesh's space at the deformation `scale` (times the true displacement). */
-export const ringPoint = ({ base, move }, scale) => base.map((value, k) => value + scale * move[k]);
 
 /**
  * The FEA result a loaded glTF scene root carries, or null for any other GLB.

@@ -12,8 +12,8 @@ const HIDDEN_EVERY_MS = 100;
 /**
  * Each load's amount ("300 N", "2 MPa") beside its arrows, drawn over the view on a canvas that
  * takes no pointer. `labels()` hands the current ones (`createFeaMarkers().labels`, in the result
- * mesh's space, following the deformation drawn); a frame loop repaints them, as the finding rings
- * are painted, so they follow the camera. A label behind the camera is left out. `colours`: the
+ * mesh's space, following the deformation drawn); a frame loop repaints them, so they follow the
+ * camera. A label behind the camera is left out. `colours`: the
  * ink and the halo it sits on. A label the model hides (a ray from the eye meets the part before
  * it) is drawn as its arrows are there, a faint ghost.
  */

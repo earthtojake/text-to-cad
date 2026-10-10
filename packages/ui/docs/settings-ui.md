@@ -661,7 +661,7 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   to), and one face chosen shows the **Reference** under Study: headed "Face 17", its ref and
   what the study does to it ("fixed", "2500 N load, down", "free"), with **Copy** (the STEP's
   path and the ref, as a STEP's Copy writes it). Escape, the Reference's X, Quick Edit's clear
-  and a press on nothing let go; one choice at a time, a finding or faces. In an assembly the
+  and a press on nothing let go. In an assembly the
   Reference has one more row, **Part**: the part's material and what it holds at the load shown
   ("6061‑T6 · holds 1.4×", or "yields"), as Parts' rows say it, so a small assembly with no Parts
   panel loses nothing The Reference opens at its content's height, so the row is never under its foot.
@@ -680,21 +680,15 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   to a second line only past that: the line is never truncated. It has no controls. The safety factor is the result's own, the conservative one. An assembly's stress line
   leads with its weakest part, whose peak and factor these are, and says the displacement is the
   assembly's: "Weakest: post · peak stress 180 MPa · holds 1.4× this load · the assembly moves up to 0.2 mm".
-- **Findings are the alert card and its icon**, as a board's are (`kit/status/findings.jsx`): the
-  result's checks, errors first under "Fix before using", the rest under "Suggestions", each in its
-  full sentence. The card is open over the view while something must be fixed; for suggestions alone
-  it is put away, its icon in the navbar saying "3 suggestions", and brings it back. Choosing a
-  finding puts the card away, rings each place it names over the view (following the part as it is
-  orbited and as the deformation moves it) and carries its sentence and the part's faces into Quick
-  Edit, when the result names the STEP it was solved from. Escape, Quick Edit's clear and bringing
-  the card back let go of the choice.
+- **Findings stay in the file for the agent.** The result's checks (`findings` in the GLB's extras,
+  the sidecar and the CLI's lines) are what the agent reads and acts on; the viewer raises no alert
+  card and puts no icon in the navbar for them (a board's findings keep theirs). The verdict at the top of Study is
+  the viewer's status. Only a failure to load has the alert card.
 - **A load other than the solved one** (`load_scale` k; the study is linear, so it scales exactly):
   the colour bar's range and its line are k times the solved ones ("at 1.5× the load" ends the
   line when k ≠ 1), the safety factor and every part's "holds" (in Parts and a picked face's Reference) are divided by k, so a part
   can turn to "yields" (at no load there is no factor, and "holds" is left out), and the displacement is drawn k times further. The colours keep their place
-  on the bar, which reads k times higher. A threshold compares its field at the load shown. **The
-  findings card stays as solved, at 1×**: its sentences are the checks cadgen made, not a reading of
-  the slider.
+  on the bar, which reads k times higher. A threshold compares its field at the load shown.
 - **Load ramp.** Every result has one routine of the viewer's own, "Load ramp" (`useGlbAnimation`'s
   own clips): in preview the playbar plays the load going on, from none to the load chosen, over
   two seconds, the colours climbing under the bar of that load and the deformation and markers
