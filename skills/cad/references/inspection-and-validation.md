@@ -1,9 +1,9 @@
 # Inspecting and checking saved CAD in Python
 
 Checks are small Python scripts against the saved STEP/STP; there is no
-inspection command or universal validation report. A check reads the last saved
-document, so it sees a source edit only after the model runs. Examples below use
-paths relative to the CAD project root.
+inspection command. A check reads the last saved document, so it sees a source
+edit only after the model runs. Paths resolve from the working directory and
+expand `~`.
 
 ## Opening and selecting geometry
 
@@ -24,34 +24,19 @@ for face in housing.entities("face"):
     print(face.ref, face.shape().area)
 ```
 
-Inside a model, the document either reads is a build input, as every file a build
-reads is. Paths expand `~` and resolve relative to the working directory.
-
-- `scene.roots` and `occurrence.children` are tuples. `scene.leaves()` yields
-  geometry occurrences, including repeated copies. A leaf can hold multiple
-  solids; the reader does not infer manufactured parts.
-- `scene.resolve(ref)` returns a selection with `ref`, `kind`,
-  `occurrence_ref`, `shape()` and `entities(kind)`. Kinds for enumeration are
-  `"shape"`, `"face"`, `"edge"`, `"vertex"`. Shape entities (`sN`) are solids,
-  or shells when no solids exist, or the leaf geometry itself.
-- Every `shape()` is caller-owned exact build123d geometry in the document's
-  world coordinates, including ancestor placements. A group produces an
-  unfused compound. Modifying the result cannot change the scene or another
-  selection. Keep the returned shape when making several queries about it.
-- `prototype_id` identifies shared geometry within this scene, allowing a
-  script to avoid repeating a suitable body-local check. It is not a part
-  number or an identity across revisions. Numeric self-intersection tests can
-  behave differently at different placements.
-- A scene is bound to one document hash. Replacing the file does not change an
-  already opened scene. Reopen it to inspect the new revision. Selector IDs
-  are revision-scoped, not persistent feature names.
-- Opening reuses the canonical BREP cache, decoding prototypes on demand.
-  No display surfaces, tessellation, source discovery or source execution are
-  needed. Cached inventory and occurrence lookup defer the build123d import
-  until native geometry is requested. Keep the scene open: repeated reads
-  still hash the document bytes, and fresh Python processes pay import costs.
-- The scene describes the saved placement. It does not evaluate sidecar
-  kinematics or animation poses.
+- `scene.roots` and `occurrence.children` are tuples; `scene.leaves()` yields the
+  geometry occurrences, repeated copies included. A leaf can hold several solids.
+- `scene.resolve(ref)` returns a selection with `ref`, `kind`, `occurrence_ref`,
+  `shape()` and `entities(kind)`, for kinds `"shape"`, `"face"`, `"edge"` and
+  `"vertex"`. Shape entities (`sN`) are solids, or shells when there are none.
+- `shape()` is caller-owned exact geometry in document world coordinates; a group
+  gives an unfused compound. Keep it when making several queries.
+- `prototype_id` names geometry shared within this scene, so a body-local check
+  can run once per prototype. It is not an identity across revisions.
+- A scene is bound to one document hash: reopen it after the file changes, and
+  keep it open rather than reopening (each open re-hashes the document). It shows
+  the saved placement, not sidecar poses or animation.
+- Inside a model, the document either function reads is a build input.
 
 ### Reference syntax
 
@@ -63,112 +48,48 @@ reads is. Paths expand `~` and resolve relative to the working directory.
 part.step#o1  a file-prefixed ref matching the opened STEP
 ```
 
-Pass one reference per `resolve()` call. To enumerate a subassembly's faces,
-use `scene.resolve("#group").entities("face")`; a group has no independent
-face ordinals. Enumeration preserves canonical occurrence IDs and never
-merges coincident instances. Face and edge IDs agree with the viewer; vertex
-IDs enumerate native STEP vertices (the viewer currently exposes no vertex
-table).
+One reference per `resolve()` call. A group has no face ordinals of its own:
+`scene.resolve("#group").entities("face")` enumerates its leaves' faces. Face and
+edge ids agree with the viewer; vertex ids enumerate native STEP vertices.
 
-Labels use letters, digits, `_` and `:`, and cannot start with a digit or
-collide with numeric reference syntax. Other labels remain accessible through
-numeric IDs. Duplicate labels receive numbered aliases in occurrence order;
-resolving the ambiguous bare label raises and lists candidates. No fuzzy
-matching or choosing the first match.
+Labels use letters, digits, `_` and `:`, and cannot start with a digit or look
+like numeric ref syntax; other names stay reachable by numeric id. Duplicate
+labels get numbered aliases in occurrence order (`#wheel_1`, `#wheel_2`), and the
+bare duplicate label raises, listing them.
 
-A copied reference's file prefix is the file's absolute path, with the file's real
-name and extension (in quotes when it holds a space or `#`). `resolve()` reads the
-prefix as a path, with `~` expanded, links followed and a relative one read from the
-working directory, and it must name the opened document.
-A relative prefix that names no file from where you run still matches the end of
-the document's path. A prefix naming a different document is rejected.
+A copied reference's file prefix is the file's absolute path (quoted when it holds
+a space or `#`) and must name the opened document; a relative prefix may match
+the end of the document's path.
 
 ## Measurements
 
-Most measurements already have native build123d interfaces:
-
 ```python
-# p, q: chosen points; u, v, direction, normal: explicit vectors
+# p, q: points; u, v, direction, normal: vectors
 length = (q - p).length
 signed_offset = (q - p).dot(direction.normalized())
 angle_degrees = u.get_angle(v)
 signed_angle_degrees = u.get_signed_angle(v, normal)
-
-# Select the actual geometric feature that defines the dimension.
 center = circular_edge.arc_center
 radius = circular_edge.radius
-diameter = 2 * radius
-length = edge.length
-area = face.area
-volume = solid.volume
 size = shape.bounding_box().size
 ```
 
-A bounding box dimension is an envelope, not a hole diameter or wall
-thickness. A surface centroid is not necessarily a datum. Use analytic
-centers, axes and selected points when those define the requested dimension.
-The default `bounding_box()` searches for tight bounds and can be expensive
-on curved geometry. Use `bounding_box(optimal=False)` for a fast conservative
-envelope when filtering candidate collision pairs, not for a tight dimension.
+The default `bounding_box()` searches for tight bounds and can be slow on curved
+geometry; `bounding_box(optimal=False)` is a fast conservative envelope.
 
 ```python
-from cadgen.geometry import closest_points
+from cadgen.geometry import closest_points, overlap_volume
 
-result = closest_points(a, b)
-print(result.distance, result.point_a, result.point_b)
+result = closest_points(a, b)   # .distance, .point_a, .point_b
+volume = overlap_volume(solid_a, solid_b)
 ```
 
-`closest_points(Shape, Shape) -> ClosestPoints` returns a nonnegative minimum
-set distance and one witness pair in the input frame. Solid overlap, contact
-and containment have distance zero; it does not measure penetration depth.
-Witnesses may be nonunique or internal to a solid. Pass selected faces/shells
-when asking about boundary separation. Minimum distance does not replace
-center spacing, angles, radii, lengths, areas or volume measurements.
-
-## Overlap and clearance checks
-
-`overlap_volume(Solid, Solid) -> float` measures the exact intersection volume
-of two finite, positively oriented solids. It returns zero for mere contact.
-It applies no minimum volume, exclusions, part hierarchy or pass/fail policy.
-Kernel failures raise; inputs remain unchanged. Length units from STEP are mm,
-so overlap volume is mm³. Tolerances in these scripts are design decisions,
-separate from the kernel's numerical precision.
-
-For example, checking every body pair inside a chosen subassembly:
-
-```python
-from itertools import combinations
-from cadgen import read_scene
-from cadgen.geometry import overlap_volume
-
-scene = read_scene("STEP/assembly.step")
-selection = scene.resolve("#housing_assembly")
-bodies = [
-    (entity.ref, solid)
-    for entity in selection.entities("shape")
-    for solid in entity.shape().solids()
-]
-if len(bodies) < 2:
-    raise ValueError("This interference check needs at least two bodies")
-
-max_overlap_mm3 = 0.01  # chosen for this design
-failures = []
-tested = 0
-for (ref_a, a), (ref_b, b) in combinations(bodies, 2):
-    volume = overlap_volume(a, b)
-    tested += 1
-    if volume > max_overlap_mm3:
-        failures.append((ref_a, ref_b, volume))
-print({"tested_pairs": tested, "limit_mm3": max_overlap_mm3,
-       "overlaps_mm3": failures})
-if failures:
-    raise SystemExit(1)
-```
-
-For large pair sets, compute conservative bounds once per body: disjoint bounds
-rule out overlap, and intersecting bounds only identify candidates for the exact
-query. A clearance is `closest_points(a, b).distance`. A static check covers only
-its pose; motion needs sampled poses or a swept volume.
+`closest_points` returns the minimum distance and one witness pair; overlap,
+contact and containment all give 0, so it does not measure penetration.
+`overlap_volume` is the exact intersection volume (mm³) of two finite, positively
+oriented solids, 0 for mere contact; pair bodies with
+`[s for e in scene.resolve("#group").entities("shape") for s in e.shape().solids()]`.
+Kernel failures raise.
 
 ## Geometry diagnostics
 
@@ -182,21 +103,13 @@ free = boundary_edges(shell)              # tuple[Edge, ...]
 crossings = self_intersections(shape)     # tuple[GeometryIssue, ...], expensive
 ```
 
-`GeometryIssue` has `code` and `entities`, containing owned build123d geometry.
-Topology codes are OCCT `BRepCheck_*` statuses; self-intersection codes are
-`BOPAlgo_SelfIntersect`. Failed/inconclusive checks raise `GeometryError`,
-never an empty success result. None of these functions repairs geometry.
-
-`is_sound` is `BRepAlgoAPI_Check`'s verdict: BRepCheck-valid, no
-self-intersections, no too-small edges, an argument type a boolean accepts.
-It is the gate a fuse or cut demands of an operand. Closure, solid count and
-signed volume stay the script's own checks. `is_sound` is `False` for a null
-or empty shape, which the boolean kernel rejects as an argument.
-
-A reversed solid can pass topology validation with negative volume, and
-aggregate volumes can cancel, so signed volume is a per-solid check. No free
-edges establishes closure, not full manifold validity. Open shells can be valid
-when surfaces are intended.
+A `GeometryIssue` has `code` (an OCCT `BRepCheck_*` or `BOPAlgo_SelfIntersect`
+status) and `entities`. An inconclusive check raises `GeometryError` rather than
+passing; none of these repair geometry. `is_sound` is `BRepAlgoAPI_Check`'s
+verdict, the gate a fuse or cut demands of an operand (`False` for a null or
+empty shape). A reversed solid can pass topology checks with negative volume and
+aggregate volumes can cancel, so signed volume is checked per solid; no free
+edges means closed, not manifold.
 
 ## Mass properties
 
@@ -211,8 +124,6 @@ print(properties.volume, properties.mass, properties.center_of_mass)
 print(properties.inertia)
 ```
 
-`mass_properties(Iterable[tuple[Solid, float]]) -> MassProperties` integrates
-uniform density per solid and sums the supplied bodies, including overlaps.
-Densities must be finite and positive. It does not infer materials or fuse
-bodies. The 3×3 inertia tuple is about the combined center of mass in the input
-coordinate axes. With mm and kg/mm³, outputs are mm³, kg, mm and kg·mm².
+`mass_properties` integrates uniform density per solid and sums the bodies,
+overlaps included. The 3×3 inertia is about the combined centre of mass in the
+input axes; with mm and kg/mm³, outputs are mm³, kg, mm and kg·mm².

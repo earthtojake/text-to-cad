@@ -43,28 +43,8 @@ entrypoints.
 Mirroring nested source paths in output folders keeps repeated names
 unambiguous: `src/chassis/frame.py` → `STEP/chassis/frame.step`. Several mesh
 densities of the same model can keep the stem in variant subfolders, such as
-`STL/draft/bracket.stl` and `STL/print/bracket.stl`.
-
-Decorator `out=` paths are relative to the script. For `src/plate.py`:
-
-```python
-from cadgen import build123d as bd
-from cadgen import step
-
-WIDTH = 10.0
-
-
-@step(out="../STEP/plate.step")
-def plate():
-    return bd.Box(WIDTH, 10, 10)
-
-
-if __name__ == "__main__":
-    plate()
-```
-
-`python src/plate.py` builds it from the project root; an unchanged model is a
-no-op.
+`STL/draft/bracket.stl` and `STL/print/bracket.stl`. Decorator `out=` paths are
+relative to the script, so `src/plate.py` declares `out="../STEP/plate.step"`.
 
 ## Imports and shared code
 

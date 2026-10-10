@@ -4,35 +4,24 @@ Read this file when the user asks to articulate, pose, or animate a STEP
 model, or when designing or reviewing mates, couplings, pose presets, posed
 exports, or animation clips.
 
-There are THREE systems with different lifecycles, deliberately independent:
+Three independent systems:
 
-- **Geometry** is the module's constants and the factory the parameterless
-  model calls with them (`WIDTH = 10.0` … `return _bracket(WIDTH)`). Changing
-  one re-runs Python and rebuilds the outputs. They are not live in the viewer.
-- **Kinematics** is typed mates declared as PURE DATA via `kinematics=` on
-  the export decorators. It drives the viewer's pose sliders — no rebuild, no
-  Python at render time — and never moves the geometry a model writes. It
-  lives in the model's sidecar (`<name>.step.json`, written beside the
-  artifact), alongside any intrinsic material appearance.
-- **Animation** is clips: Python functions declared with `cadgen.clip` and
-  passed to `@step(animation=...)`. When the model builds, each clip is
-  sampled into keyframes in `<name>.step.json`; the viewer, snapshot door, and
-  animated GLB export interpolate those keyframes, and no animation code ships
-  with the model. An animated GLB export's freshness covers those keyframes and
-  the clip request, so a changed clip re-exports. Animation targets
-  occurrences directly and knows nothing about mates. Like materials and
-  kinematics, it never changes STEP geometry or bytes.
+- **Geometry** is the model's constants and factory; changing it rebuilds the
+  outputs. It is not live in the viewer.
+- **Kinematics** is typed mates declared as data via `kinematics=`. It drives
+  the viewer's pose sliders at render time and never moves the geometry a model
+  writes.
+- **Animation** is Python clips passed to `@step(animation=...)`, sampled into
+  keyframes when the model builds. It targets occurrences directly and knows
+  nothing about mates.
+
+Both live in the STEP's sidecar (`<name>.step.json`); neither changes STEP bytes.
 
 ## Kinematics: typed mates
 
-Kinematics is one sidecar section, independent of intrinsic material appearance.
-It never moves saved geometry: the declaration describes how the written tree
-articulates, and the viewer poses it at render time. A STEP model with no
-kinematics, intrinsic material finishes or animation has no sidecar.
-
 One `kinematics=` dict, closed keys `mates` / `couplings` / `poses`, on any of
 `@step`/`@stl`/`@glb`/`@threemf`. Each decorator's declaration stands alone
-(share a module-level dict; there is no cross-decorator inheritance).
+(share a module-level dict).
 
 ```python
 import cadgen
@@ -65,74 +54,44 @@ if __name__ == "__main__":
 
 - **Mate kinds**: `revolute` (degrees about an axis), `slider` (model units
   along it), `cylindrical` (sub-DOFs `<name>.turn` and `<name>.travel` about
-  one axis), `fastened` (0-DOF rigid attachment — needed exactly when
+  one axis), `fastened` (0-DOF rigid attachment, needed exactly when
   occurrences are SIBLINGS in the instance tree, like a pin that must orbit
   with its carrier; instance-tree children ride for free).
-- **`limits=(lo, hi)`** is required on every mate that moves, and both ends
-  must be finite: Position sliders and exports read the range. A joint that
-  turns freely takes a full range such as `(-180, 180)`; `math.inf` fails the build.
-- **`parent`/`child`** are occurrence refs: `#`-prefixed labels (canonical —
-  label parts with `cadgen.label_shape`) or occurrence ids. They must resolve
-  at build or the build fails; `read_scene(path).leaves()` lists saved geometry occurrences.
-  A label resolves **into linked children**: a part labelled inside a
-  sub-assembly you call (`#shoulder_yaw_servo` living in `base_link()`'s
-  tree) resolves to its occurrence under the link (`o1.1.1`), so an assembly
-  can mate parts of a sub-assembly it links without owning their geometry.
-  A ref may name a SUBASSEMBLY as well as a part — a labelled group `Compound`
-  is an occurrence in the instance tree, and mating it carries every part
-  beneath it. That is how a rocker-bogie chain is three mates instead of three
-  hundred. `scene.roots` and `occurrence.children` expose those groups. Targets may NEST — a part inside a mated group may carry its
-  own mate to a sibling (a servo's output horn bolted to the jaw it drives):
-  the DEEPEST mate naming a part owns it and moves it exactly once, and the
-  enclosing group carries only what no deeper mate claimed.
-- **`axis`** is a selector ref (`axis="#forearm.f2"` — a cylindrical
-  face or circular edge yields its axis, a planar face its center+normal) or
-  literals (`origin=(x, y, z), direction=(x, y, z)`). Refs resolve ONCE at
-  build into world numbers; the viewer does arithmetic, never topology.
-- **`limits`** are required for every DOF a mate declares: `(lo, hi)` for
-  `revolute` (degrees) and `slider` (model units), and a pair for BOTH
-  sub-DOFs of a `cylindrical` mate
-  (`limits={"turn": (0, 360), "travel": (0, 40)}`). `couple(...)` takes
-  `limits=(lo, hi)` too; a coupling without one spans `(0, 1)`. A pose preset
-  or a `--kinematics` value outside a DOF's limits is refused, naming the DOF,
-  the value and its range.
-- **ZERO IS THE ARTIFACT AS WRITTEN.** Every DOF's rest value is 0 — the
-  placement the author built. There is no `default=`; a presentation pose is a
-  preset. A model that must be WRITTEN at another configuration is authored
-  at that configuration (or is another model): no decorator argument moves
-  geometry.
-- **`couple(name, {dof: ratio})`** declares a virtual DOF gearing real ones
-  linearly and ADDITIVELY (above, setting `curl=x` adds `x` degrees to `elbow`
-  and `0.5*x` to `wrist`).
-  Exact gear trains are ratio arithmetic, not code.
-  A geared member BACK-DRIVES in the viewer: when exactly one coupling gears a
-  DOF with a nonzero ratio, its Position slider reads the effective value
-  (own + ratio x coupling), is labelled "driven by <coupling>", and dragging it
-  moves the COUPLING — `coupling = (target - own)/ratio`, clamped to the
-  coupling's limits — so sliding one gear turns the whole train. A member's own
-  value (from a preset or `--kinematics`) is never overwritten, and a DOF geared
-  by two couplings stays independent: that inverse is underdetermined, so the
-  viewer refuses it rather than guessing a split.
-- A declaration needs at least one mate (or coupling): a pose is a set of joint
-  values and a joint is what a mate declares, so `poses` alone declare nothing
-  and are refused. A part with no joints declares no `kinematics=`.
-- **`poses`** are named `{dof: value}` presets — all that remains of "pose"
-  as a concept.
-- The mate graph is a TREE: one parent mate per occurrence, no cycles.
-  Closed-loop linkages (four-bars) are out of scope by design — they need a
-  solver; cadgen resolves the mates into joints over the DOFs, and the viewer
-  plays pure forward kinematics over them at render time.
+- **Limits** are required for every DOF a mate declares, finite at both ends:
+  `(lo, hi)` for `revolute` and `slider` (a free joint takes `(-180, 180)`), a
+  pair for both sub-DOFs of a `cylindrical` mate
+  (`limits={"turn": (0, 360), "travel": (0, 40)}`). A coupling without limits
+  spans `(0, 1)`. A pose or `--kinematics` value outside a DOF's limits is
+  refused.
+- **`parent`/`child`** are `#`-prefixed labels or occurrence ids, and must name
+  exactly one occurrence. A label resolves into linked children (a part labelled
+  inside a sub-assembly you call resolves under the link), and may name a labelled
+  group `Compound`, which carries every part beneath it. Targets may nest: the
+  deepest mate naming a part moves it, and the enclosing group carries only what
+  no deeper mate claimed.
+- **`axis`** is a selector ref (`axis="#forearm.f2"`: a cylindrical face or
+  circular edge gives its axis, a planar face its centre and normal) or literals
+  (`origin=(x, y, z), direction=(x, y, z)`), resolved once at build into numbers.
+- **Zero is the artifact as written**: every DOF's rest value is 0, the placement
+  the author built. A presentation pose is a preset; a model that must be written
+  at another configuration is authored at it.
+- **`couple(name, {dof: ratio})`** declares a virtual DOF that gears real ones
+  linearly and additively (above, `curl=x` adds `x` degrees to `elbow` and
+  `0.5*x` to `wrist`). In the viewer, a DOF geared by exactly one coupling
+  back-drives it: dragging that DOF's slider moves the coupling.
+- **`poses`** are named `{dof: value}` presets. A declaration needs at least one
+  mate or coupling.
+- The mate graph is a tree: one parent mate per occurrence, no cycles. Closed
+  loops (four-bars) need a solver and are out of scope; the viewer plays forward
+  kinematics.
 
 ## Annotating a STEP you did not generate
 
-A document with no model script gets its kinematics from
-`cadgen step build IN OUT`, whose `--kinematics` takes the whole SPACE — the
-same `{mates, couplings, poses}` vocabulary, as inline JSON or a `.json`
-path. `--materials` accepts the named material declaration as inline JSON or
-a `.json` path. Animation is declared only by a model script, so a STEP that
-needs clips gets a wrapper script (below). The input is read with OCCT and
-re-emitted by the canonical writer, so OUT's bytes are deterministic whichever
-kernel wrote IN:
+`cadgen step build IN OUT` gives a document with no model script its kinematics
+(`--kinematics`: the same `{mates, couplings, poses}` as inline JSON or a `.json`
+path) and materials (`--materials`), re-emitting IN through the canonical writer
+([re-emitting](step-generation.md#re-emitting-a-foreign-step-as-your-own)).
+Clips need a model script: a thin wrapper that reads the foreign STEP.
 
 ```bash
 cadgen step build vendor/hinge.step STEP/hinge.step \
@@ -141,14 +100,6 @@ cadgen step build vendor/hinge.step STEP/hinge.step \
                             "axis": "#lever.f2", "limits": [0, 90]}],
                  "poses": {"open": {"swing": 45}}}'
 ```
-
-**Wrapper script or `step build`?** A wrapper script (a thin `@step` function
-that reads the foreign STEP and re-exports it) keeps the kinematics and clips
-beside the geometry decisions, and only a script can declare animation.
-`step build` is a one-shot annotation or canonicalization of a fixed vendor
-file: re-running it is a no-op, editing only these annotations refreshes the
-sidecar without re-emitting a byte, and vendor metadata (PMI, GD&T) does not
-survive the trip.
 
 ## Animation: clips baked to keyframes
 
@@ -188,93 +139,63 @@ if __name__ == "__main__":
     turntable()
 ```
 
-When the model builds, each clip runs at `fps` samples a second from `t = 0` to
-`t = duration`, and the samples become KEYFRAMES in the document's sidecar. The
-viewer, snapshots and GLB export interpolate those keyframes: the sidecar
-carries data, never code, and nothing runs a clip after the build.
+The build samples each clip at `fps` from `t = 0` to `t = duration` into
+keyframes in the sidecar; the viewer, snapshots and GLB export interpolate them,
+and nothing runs a clip after the build.
 
-- `cadgen.clip(update, *, duration, loop=True, label=None, fps=60)`.
-  `duration` is in seconds. A clip loops by default; `loop=False` holds its
-  last pose. `label` is the name the viewer lists (the clip id when omitted).
-  `fps` is the build's sampling rate, not a playback rate: raise it when the
-  build reports a part turning more than 90 degrees between two samples. The
-  keyframes hold the clip to a ten-thousandth of the model's size at every
-  sample and curve smoothly between samples, so a motion that changes speed
-  abruptly (an impact, a snap) is rounded off within one sample; raise `fps`
-  if that shows. The viewer lists clips in the order the dict declares them and
-  opens on the first.
-- `update(t, m)` must be a pure function of `t`. Every sample starts from rest,
-  so the same `t` must give the same pose: no state carried between calls, no
-  clock, no randomness.
+- `cadgen.clip(update, *, duration, loop=True, label=None, fps=60)`: `duration`
+  in seconds; `loop=False` holds the last pose; `label` is the name the viewer
+  lists (the clip id when omitted). `fps` is the sampling rate, not a playback
+  rate: raise it when the build reports a part turning more than 90 degrees
+  between samples, or when an abrupt motion (an impact, a snap) looks rounded
+  off. The viewer opens on the first clip in the dict.
+- `update(t, m)` must be a pure function of `t`: every sample starts from rest,
+  so no state between calls, no clock, no randomness.
 - `m.get(*targets)` returns one handle on every occurrence its targets name. A
-  target is `"#name"` — every part or group with that name; a group moves
-  everything beneath it — or an occurrence id such as `"#o1.2"`, which covers
-  that occurrence's whole subtree. Targets resolve against the WRITTEN
-  document's tree: the names and ids the viewer shows and `read_scene` reports.
-  `m.labels()` lists the names. The document's root is named after the file it
-  is written to, so in `arm.step` the target `#arm` also names the root and
-  moves the whole model.
-- A handle's methods chain, each returning the handle:
-  `.rotate(axis, degrees, origin=(0, 0, 0))`, `.translate(vector)`,
-  `.transform(matrix)` (a rigid 4x4, row-major, translation in the last
-  column), `.opacity(value)` (0..1, clamped), `.visible(flag)`, and
-  `.deform_tube(...)` for flexible swept bodies; see
-  [tube deformation](animation-deformation.md).
-- Transform calls PREMULTIPLY: a later call acts in world space on the part as
+  target is `"#name"` (every part or group with that name; a group moves
+  everything beneath it) or an occurrence id such as `"#o1.2"` (that occurrence's
+  subtree). Targets resolve against the written document's tree, the names and
+  ids the viewer shows and `read_scene` reports; `m.labels()` lists the names. An
+  assembly's root is named after the file it is written to, so in `arm.step` the
+  target `#arm` also names the root and moves the whole model.
+- A handle's methods chain: `.rotate(axis, degrees, origin=(0, 0, 0))`,
+  `.translate(vector)`, `.transform(matrix)` (a rigid 4x4, row-major,
+  translation in the last column), `.opacity(value)` (0..1), `.visible(flag)`,
+  and `.deform_tube(...)` for flexible swept bodies
+  ([tube deformation](animation-deformation.md)).
+- Transform calls premultiply: a later call acts in world space on the part as
   already moved. Above, the spinner turns about its own axis first and the
-  platter's turn then carries it, so the spin rides the orbit; in the other
-  order the spin would pivot about the world point where the spinner started.
-- A clip that cannot be baked fails the BUILD, naming the clip and the time:
-  `animation clip 'demo' at t=0 s: animation target '#spiner' names no part or
-  group; names: #base, #platter, #spinner, #turntable`. An exception raised in
-  `update` fails the same way, so a typo never silently animates nothing.
-- A clip is authored against the model at rest and targets occurrences
-  independently of mates; a model may declare both. The viewer and snapshots
-  play a clip on top of the current pose, in world space.
-- A clip is source: editing one rebuilds the model, and the rebuild rewrites
-  the sidecar's keyframes while keeping the STEP's bytes. See
-  [annotation caching](step-generation.md#annotation-caching).
-- Animation is declared on `@step` alone. Mesh-only models (no `.step`) have no
-  document sidecar, and `cadgen step build` takes no clips.
+  platter's turn then carries it; in the other order the spin would pivot about
+  the world point where the spinner started.
+- A clip that cannot be baked fails the build, naming the clip and the time
+  (`animation clip 'demo' at t=0 s: animation target '#spiner' names no part or
+  group; names: #base, #platter, #spinner, #turntable`), as does an exception
+  raised in `update`.
+- A clip plays on top of the current pose, in world space, independently of
+  mates. Animation is declared on `@step` alone: mesh-only models have no
+  sidecar.
 
 ## Reviewing motion
 
 The viewer plays motion interactively; a snapshot renders a pose, a clip frame
-or a clip video. A still of the arm example's configuration renders at DOF values:
+or a clip video. `--kinematics` takes `{dof: value}` JSON or the name of a
+declared pose; `--animation` names a clip and `--time` the moment in seconds
+(default 0), played on top of the `--kinematics` pose. Unknown poses and clips
+fail with the ones the model has.
 
 ```bash
 cadgen step snapshot STEP/arm.step tmp/bent.png --kinematics '{"curl": 60}'
-```
-
-`--kinematics` is named for the `kinematics=` block it drives, and takes
-either spelling: `{dof: value}` JSON, or the NAME of a pose the model
-declares under `poses`. A name is checked against the declaration, so a typo
-fails with the poses this model actually has:
-
-```bash
 cadgen step snapshot STEP/arm.step tmp/bent.png --kinematics bent
-```
-
-A still of a CLIP freezes one frame: `--animation` names a clip in
-the document's sidecar and `--time` the moment in seconds (default 0). The
-frame is composed exactly as the viewer composes it: `--kinematics` sets the
-base pose, and the clip's keyframes at that time play on top of it. A clip
-name the model does not declare fails with the clips it has:
-
-```bash
 cadgen step snapshot STEP/turntable.step tmp/demo_t1.png --animation demo --time 1.0
 ```
 
-In a JSON job the request is one field, `"animation": {"clip": "demo",
-"time": 2.0}`, beside `"kinematics"`; the Python door takes the same object
-(`step.snapshot(..., animation={"clip": "demo", "time": 2.0})`) or the clip
-name with `time=`.
+In a JSON job the request is `"animation": {"clip": "demo", "time": 2.0}` beside
+`"kinematics"` ([flags and job keys](snapshot-review.md#flags-and-job-keys)).
 
 ### Rendering the whole clip
 
-`--video` renders the SPAN instead of a moment, into the `.mp4` or `.gif` the
-OUT names. Everything else is unchanged — same unified display settings, camera
-and size profile as a still, and the same `--kinematics` base pose underneath:
+`--video` renders a span of the clip into the `.mp4` or `.gif` OUT names, with
+the same display settings, camera and size as a still:
 
 ```bash
 cadgen step snapshot STEP/turntable.step tmp/demo.mp4 --animation demo --video '{"fps": 30}'
@@ -282,41 +203,21 @@ cadgen step snapshot STEP/turntable.step tmp/demo.gif --animation demo \
   --video '{"fps": 12, "seconds": 2, "start": 1, "quality": "draft"}'
 ```
 
-The request's keys, all optional:
-
 | key | default | meaning |
 | --- | --- | --- |
 | `fps` | `30` | frames per second, a whole number 1..120 |
 | `seconds` | what is left of the clip from `start` | how much of the clip to render |
 | `start` | `0` | seconds into the clip where the video begins; must be inside it |
 | `quality` | `review` | `draft`, `review`, or `high` |
-| `loop` | `true` | GIF only — an `.mp4` carries no loop count, so `"loop": false` on one is refused |
+| `loop` | `true` | GIF only; `"loop": false` on an `.mp4` is refused |
 
-The span is measured against the clip rather than trusted, because the clip
-evaluator ANSWERS a time past the end instead of refusing it: a clip that does
-not loop holds its final pose, so an overrunning span buys frames that are all
-one still image, and a looping clip wraps, so it renders a different span than
-the one asked for. A `start` at or past the end is refused; an explicit
-`seconds` that overruns a clip which does not loop renders and warns. Hence the
-default: a looping clip gets one whole cycle from wherever it starts, and a clip
-that stops gets the part of it that is left. `fps * seconds` is capped at 7200
-frames — every frame is a full-size PNG on disk before ffmpeg runs.
-
-Width and height come from `--width`/`--height`/`--size-profile` like any
-other render; there is no size key here. `--video` needs `--animation` (it
-renders a clip) and refuses `--time` (that freezes one frame instead), and it
-needs **ffmpeg** on `PATH` — or `CADGEN_FFMPEG` pointing at one. A missing
-encoder is reported before the first frame is drawn, never after minutes of
-rendering. A GIF stores its frame delay in hundredths of a second, so a player
-shows the nearest rate to the one asked for; `.mp4` is exact.
-
-The camera is fitted ONCE, to everything the clip covers, so the model moves
-and the frame does not. That is why a long clip is worth trimming with
-`start`/`seconds`: framing the whole of a clip that travels a long way leaves
-the interesting part small.
-
-In a JSON job the request is a `"video"` object beside `"animation"`, and a
-video job carries exactly one output:
+A looping clip defaults to one whole cycle, and a clip that stops to what is left
+of it; an explicit `seconds` that overruns a clip that stops renders and warns.
+`fps * seconds` is capped at 7200 frames. `--video` needs `--animation`, refuses
+`--time`, and needs ffmpeg on `PATH` (or `CADGEN_FFMPEG`). The camera is fitted
+once to everything the clip covers, so trimming a long clip with
+`start`/`seconds` keeps the subject large. In a JSON job the request is a
+`"video"` object beside `"animation"`, with exactly one output:
 
 ```json
 {
@@ -327,17 +228,11 @@ video job carries exactly one output:
 }
 ```
 
-The result names the file and what it covers — `saved video: tmp/demo.mp4
-(120 frames, 30 fps, 4s)` — so a wrong clip or a wrong span shows up without
-opening it.
-
 ### Exporting the clip INSIDE a GLB
 
-A video is pixels. `cadgen glb build --animation` writes the motion itself: the
-clip's own keyframes go into the file as glTF animation, so whatever opens the
-`.glb` — Blender, a three.js viewer, a browser's model preview — plays exactly
-what the CAD Viewer plays. Nothing is resampled, so there is no frame rate here,
-and no camera, quality or encoder.
+`cadgen glb build --animation` writes the clip's own keyframes into the file as
+glTF animation, so Blender, three.js or a browser's model preview plays what the
+CAD Viewer plays. It needs an explicit OUT; STL and 3MF have no animation export.
 
 ```bash
 cadgen glb build STEP/turntable.step GLB/animated/turntable.glb --animation demo
@@ -345,51 +240,24 @@ cadgen glb build STEP/turntable.step GLB/animated/turntable.glb \
   --animation '{"clip": "demo", "seconds": 8, "start": 0}'
 ```
 
-The request is a clip name, or an object whose keys are all optional but `clip`:
-
 | key | default | meaning |
 | --- | --- | --- |
 | `clip` | — | the clip to export; required |
 | `seconds` | what is left of the clip from `start` | how much of the clip to export |
 | `start` | `0` | seconds into the clip where the span begins; must be inside it |
-| `drop` | `[]` | effects to bake STATIC instead of refusing: `opacity`, `visible` |
+| `drop` | `[]` | effects to bake static instead of refusing: `opacity`, `visible` |
 
-A looping clip defaults to one whole cycle and repeats its keys to fill a longer
-span (at most 240 times); a clip that stops gets what is left of it. The exported
-animation is re-based to zero, so `start` picks where in the CLIP the span begins
-and the file still opens at t = 0.
-
-**What glTF carries, and what it will not:**
+A looping clip defaults to one cycle and repeats its keys to fill a longer span;
+the exported animation starts at t = 0 whatever `start` is.
 
 | clip effect | in the GLB |
 | --- | --- |
 | `.rotate()`, `.translate()`, `.transform()` | the parts hang under a pivot node whose translation and rotation channels carry the clip's keys (glTF `CUBICSPLINE`) |
-| `.deform_tube()` | a glTF skin: joints along the tube's centerline, keyed `LINEAR`, and the tube's mesh bound to them; see [tube deformation](animation-deformation.md) |
-| `.opacity()` | **refused.** glTF has no animated opacity. `"drop": ["opacity"]` bakes the value at `start` as a material alpha, and warns |
-| `.visible()` | **refused.** Same reason. `"drop": ["visible"]` omits whatever is hidden at `start`, and warns — an occurrence dropped this way loses its motion too, because a node that is not in the file cannot be animated |
+| `.deform_tube()` | a glTF skin: joints along the tube's centerline, keyed `LINEAR` ([tube deformation](animation-deformation.md)) |
+| `.opacity()` | **refused**: glTF has no animated opacity. `"drop": ["opacity"]` bakes the value at `start` as a material alpha, and warns |
+| `.visible()` | **refused**, likewise. `"drop": ["visible"]` omits whatever is hidden at `start` (and its motion), and warns |
 
-Nothing is dropped quietly: an effect the file cannot carry stops the export and
-names the occurrences. Render the clip with
-`cadgen step snapshot --animation <clip> --video` when the motion is one of
-those — `--video` needs the clip named too, so both flags go together. The
-export's summary says what moves: `(demo, 8s, 3 moving, 1 tube on 11 joints)`.
-
-The CAD Viewer plays a GLB's own rigid, skinned and morph animation in preview,
-from the playbar under the model.
-
-An animated export writes ONE node per occurrence instead of the flat,
-colour-grouped mesh a static one writes, so the file is bigger and its parts are
-individually addressable. Only occurrences the clip actually MOVES get channels;
-an occurrence held at a constant offset carries it on its node and nothing else.
-Freshness folds the clip request and the sidecar's keyframes into the export's
-key, so an edited clip re-exports once the model is rebuilt, even though the
-STEP has not changed.
-
-`--animation` is GLB's alone, and the CLI is generated from each door's
-signature, so `cadgen stl build` and `cadgen 3mf build` have no such flag at all
-— they exit 2 with `unrecognized arguments: --animation`. Neither format has
-anywhere to put a clip; export it as `.glb`, or render it with
-`cadgen step snapshot --animation <clip> --video`.
-
-Animated GLB requires an explicit OUT. A static export without OUT writes one
-sibling `.glb` beside the STEP; it does not read model output declarations.
+An effect the file cannot carry stops the export and names the occurrences; a
+clip video carries them. An animated export writes one node per occurrence,
+so it is bigger than a static one, and an edited clip re-exports once the model
+is rebuilt.

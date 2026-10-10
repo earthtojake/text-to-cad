@@ -11,8 +11,6 @@ Use the installed local skill files for the current interface.
 
 ## Start with the task
 
-Read only the references a request needs.
-
 | Task | Start with | Reference |
 | --- | --- | --- |
 | **Create or edit a part or assembly** | The project's model script, or a new one (below). | [Model contract](references/step-generation.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
@@ -145,9 +143,21 @@ aliases, enumeration and measurement.
 
 ## Checks and diagnostics
 
-- `read_scene` and `read_step` read the saved document, so a check through them
-  tests what was written. A mesh-only model has no STEP; called from plain Python,
-  it returns its geometry.
+`read_scene` and `read_step` read the saved document, so a check through them
+tests what was written:
+
+```python
+from cadgen import read_scene
+
+scene = read_scene("STEP/assembly.step")
+for occurrence in scene.leaves():  # every placed part
+    print(occurrence.ref, occurrence.label)
+bracket = scene.resolve("#bracket").shape()  # exact geometry, world coordinates
+print(bracket.bounding_box().size, bracket.volume, len(bracket.faces()))
+```
+
+- A mesh-only model has no STEP; called from plain Python, it returns its
+  geometry.
 - A snapshot renders a saved document as the viewer draws it
   (`cadgen step snapshot STEP/bracket.step tmp/review.png`; each mesh format has
   the same verb). It shows arrangement and appearance, not dimensions.

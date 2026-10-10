@@ -88,48 +88,32 @@ transparent and 1 for opaque.
 | `floor` | `placement`: `lowest` or `origin`; `finish`: `matte` or `glossy`; hex `color`; `opacity`: 0–1 |
 | `grid`, `axes` | hex `color`; `opacity`: 0–1 |
 
-Render's floor defaults to the model's lowest point (`placement: "lowest"`, its
-minimum Z), as in the Viewer. `placement: "origin"` moves it to the document's Z=0
-plane, moving neither geometry nor lighting. `--camera` or a top-level/output
-`camera` controls pose and framing (`preset`, `position`, `target`, `up`,
-`direction`, `zoom`, `orthographicHalfHeight`); projection and focal length belong
-only in `display.camera`. `clip` and `exploded` remain independent inspection tools
-under `display`. Selection, kinematics, robot joint values, animation frames and
-video compose with every display preset where the source format supports them.
-`edges`, `clip`, `exploded`, the `xray`, `hidden-line` and `wireframe` presets and
-the `hidden`/`off` surface styles are STEP/STP-only: a mesh, drawing or robot
-description has no CAD edges, parts to explode or solids to section, and its
-snapshot door refuses them by name. Those inputs take `solid` or `render`.
+Render's floor sits at the model's lowest point; `placement: "origin"` moves it to
+Z=0. `--camera` (or a job's top-level or per-output `camera`) sets pose and
+framing (`preset`, `position`, `target`, `up`, `direction`, `zoom`,
+`orthographicHalfHeight`); projection and focal length belong in
+`display.camera`. `clip` and `exploded` are further `display` tools. `edges`,
+`clip`, `exploded`, the `xray`, `hidden-line` and `wireframe` presets and the
+`hidden`/`off` surface styles are STEP-only; meshes, drawings and robot
+descriptions take `solid` or `render`.
 
-For close macro views in normal CAD, a JSON job can set `quality.tessellation` to
-`{"chordTolerance": 0.0005, "angleTolerance": 0.10}`. Chord tolerance is
-relative to each component's bounding diagonal; angle tolerance is radians.
-These positive numeric overrides have cadgen mesh the exact STEP surfaces at
-those tolerances, stored as separate mesh entries. They do not change the STEP geometry or a model's
-declared mesh-export tolerances, and lower tolerances cost more memory and render
-time. `chordTolerance` must be from `0.00005` to `0.05` and `angleTolerance` from
-`0.05` to `1.5708` radians, the same bounds as a mesh export's; finer sampling
-costs minutes of meshing instead of improving the image, and a job outside them is
-refused. Existing mesh documents cannot be remeshed this way. The explicit
-top-level sampling request works in every display mode. When it is omitted,
-`display.lighting.quality` selects the photographic preview or final LOD.
+For close views of a STEP, a JSON job can set `quality.tessellation` to
+`{"chordTolerance": 0.0005, "angleTolerance": 0.10}` (chord relative to each
+component's bounding diagonal, angle in radians; bounds `0.00005`–`0.05` and
+`0.05`–`1.5708`, as for mesh exports). cadgen meshes the exact surfaces at those
+tolerances for the image alone; finer costs memory and render time. Mesh
+documents cannot be remeshed this way.
 
-Scene setup, output capture and geometric sampling are separate closed objects.
-`display` carries the grouped view settings.
-`camera` carries the common pose and framing: a preset (`front`, `back`, `left`,
-`right`, `top`, `bottom`, `iso`), an `azimuth:elevation` pair of exactly two
-numbers, or a camera object. `output` supports `sizeProfile`, `padding` (0–0.15),
-`renderScale` (1–3) and the booleans `viewLabels`, `tightFrame` and
-`transparent`. Top-level `quality` supports exact-surface tessellation, and
-`timeoutSeconds` is a positive number of seconds. Scene units use the top-level
-`scale` (`cad` or `urdf`). Unknown keys and out-of-range values are refused, so a
-misspelling cannot render the wrong thing quietly.
+`camera` is a preset (`front`, `back`, `left`, `right`, `top`, `bottom`, `iso`),
+an `azimuth:elevation` pair, or a camera object. `output` takes `sizeProfile`,
+`padding` (0–0.15), `renderScale` (1–3) and the booleans `viewLabels`,
+`tightFrame` and `transparent`. Top-level `timeoutSeconds` is a positive number
+and `scale` is `cad` or `urdf`. Unknown keys and out-of-range values are refused.
 
 ### Flags and job keys
 
-A JSON job's keys are the flags without their dashes, and the job is the only
-place some shapes exist. `--animation CLIP --time SECONDS` is ONE request, so a
-job carries it as one `animation` object — `time` is not a top-level job key:
+A JSON job's keys are the flags without their dashes. `--animation CLIP --time
+SECONDS` is one `animation` object in a job; `time` is not a top-level key:
 
 ```json
 {
@@ -140,19 +124,13 @@ job carries it as one `animation` object — `time` is not a top-level job key:
 }
 ```
 
-`clip` names a clip in the document's sidecar and is required;
-`time` is seconds, finite and >= 0, defaulting to 0. A bare clip name is the
-FLAG's spelling, not the job's: `"animation": "demo"` is refused, as is any key
-the job does not support — the error lists the supported set.
+`clip` is required; `time` is seconds, default 0. A bare `"animation": "demo"` is
+refused (that is the flag's spelling). A `"video"` object beside `animation`
+renders the clip's span instead of one frame; see
+[rendering the whole clip](kinematics.md#rendering-the-whole-clip).
 
-A `"video"` object beside it renders the clip's SPAN into the `.mp4` or `.gif`
-the single output names, instead of one frame: `{"fps": 30, "seconds": <what is
-left of the clip>, "start": 0, "quality": "review", "loop": true}`, every key
-optional and every other key refused. It needs `animation`, refuses an
-`animation.time`, refuses a `start` past the end of the clip, and needs ffmpeg
-installed. See `kinematics.md`, "Rendering the whole clip".
-
-In a JSON job these two flags are the one exception to "job key = flag name without dashes": they nest under a job-level `selection` object, and a top-level `"hide"` or `"focus"` is rejected as an unknown key. Selection applies to the whole job, not to one output — to hide or focus parts for a single view, give that view its own job in a `jobs` array.
+`--focus` and `--hide` nest under a job-level `selection` object, which applies
+to the whole job (give a view its own job in a `jobs` array to select per view):
 
 ```json
 {
@@ -163,11 +141,7 @@ In a JSON job these two flags are the one exception to "job key = flag name with
 }
 ```
 
-`"selection": { "focus": ["#o1.2"] }` is the `--focus` form; `focus` and `hide` are the only selection keys. Every other flag keeps the plain rule (`--kinematics` → `"kinematics"`, `--animation CLIP --time S` → `"animation": {"clip": ..., "time": ...}`, `--section XZ:12.5` → `"section": {"plane": "XZ", "offset": 12.5}`).
-
-With `--job`, the other flags override the packet: each one given replaces that
-setting in every job, and `--width`/`--height` size every output. A job is a
-file; there is no stdin form.
+With `--job FILE`, other flags override every job in it; there is no stdin form.
 
 ## Section planes
 
@@ -179,25 +153,16 @@ cadgen step snapshot STEP/housing.step tmp/cut.png --mode section --section XZ:1
 cadgen step snapshot STEP/housing.step tmp/cut.svg --mode section --section YZ
 ```
 
-`PLANE` is `XY`, `XZ` or `YZ` — the two axes the plane contains — and defaults to
-`XY`. `OFFSET` moves the plane along its own normal in model units (Z for `XY`,
-Y for `XZ`, X for `YZ`) and defaults to 0, so `XZ:12.5` cuts at Y = 12.5. In a job
-it is `"section": {"plane": "XZ", "offset": 12.5}` beside `"mode": "section"`;
-those are its only two keys, and a `section` on a job whose mode is not `section`
-is refused. A plane that cuts no material — it misses the model, only touches
-it, or meets nothing but curves — renders an empty drawing with a warning that
-says so. Section mode is STEP-only, and takes no kinematics, animation or Render
-display.
+`PLANE` is `XY`, `XZ` or `YZ` (default `XY`); `OFFSET` moves it along its normal
+in model units (default 0), so `XZ:12.5` cuts at Y = 12.5. In a job it is
+`"section": {"plane": "XZ", "offset": 12.5}` beside `"mode": "section"`. A plane
+that cuts no material renders an empty drawing and warns. Section mode is
+STEP-only and takes no kinematics, animation or Render display.
 
-The cut is exact: cadgen sections each part's solid with the plane, so a bore
-cut across its axis is a true circle, not a polygon. `--focus` and `--hide` pick
-the parts that are cut. Each solid's cut is filled and hatched (a face lying in
-the plane counts), outlined in the appearance's foreground (or
-`display.edges.color`), with dash-dot centre lines and a cut locator;
-`--view-labels` adds the plane's label. A surface (sheet) body's cut is drawn as
-lines and never filled. A `.svg` is the same drawing, y up, in model units
-measured from the point its root's `data-origin` names: `0 0`, unless the cut
-lies far from the origin. A job whose outputs are all `.svg` needs no browser.
+The cut is exact (a bore cut across its axis is a true circle), limited by
+`--focus`/`--hide`, filled and hatched per solid; a sheet body's cut is lines
+only. A `.svg` is the same drawing, y up, in model units from the point its
+root's `data-origin` names, and needs no browser.
 
 `--mode list` writes no image: it prints one row per placed part — its `ref`
 (what `--focus`, `--hide` and `scene.resolve(ref)` accept), its `name`, its exact
@@ -205,27 +170,14 @@ lies far from the origin. A job whose outputs are all `.svg` needs no browser.
 mesh a view would draw. `--focus`/`--hide` narrow the rows. A STEP list starts no
 browser, so it is the cheap way to learn what an assembly contains.
 
-OUT's extension picks the format and nothing else does: section mode writes
-`.png` or `.svg`, view mode writes `.png`, and a video writes `.mp4` or `.gif`.
-Any other extension — a view named `.svg` or `.jpg` — is refused instead of
-writing PNG bytes under it.
+OUT's extension picks the format: section mode writes `.png` or `.svg`, view
+mode `.png`, a video `.mp4` or `.gif`; any other extension is refused.
 
 ## Output paths
 
-Name the file and you get that file:
-
-```bash
-cadgen step snapshot STEP/bracket.step tmp/review.png
-```
-
-OUT (and an output's `path` in a JSON packet) is written exactly as given,
-relative to the working directory. A refused request — an unknown key or value,
-a setting this kind of input cannot take, the wrong door, conflicting options, an
-unknown pose, clip or joint name — leaves an existing file untouched, for every
-job in a packet, so after a refusal the path can still hold an older image. Once
-the request is accepted the target is cleared before anything is built, so a
-failed build or render (and an occurrence ref the model does not have, which
-needs the built tree to check) leaves no file; successful output is written
-atomically.
-
-Pass a directory (`tmp/` as OUT, or an output `path` that is one) only when the name does not matter: a timestamped name is generated inside it, and that is the one case where you read the path from the `saved snapshot:` line.
+OUT (and an output's `path` in a job) is written exactly as given, relative to
+the working directory. A refused request (an unknown key, value, pose, clip or
+joint, or an option this input cannot take) leaves an existing file untouched,
+so after a refusal the path can still hold an older image. An accepted request
+clears the target first, so a failed build or render leaves no file. A directory
+as OUT gets a timestamped name, printed on the `saved snapshot:` line.

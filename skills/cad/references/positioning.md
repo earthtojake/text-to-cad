@@ -1,9 +1,7 @@
 # Assembly positioning and mating
 
 Read this file when placing assembly parts, defining mating datums or checking
-alignment. Placements live in the model source; the saved geometry is what was
-written. Explicit transforms and native build123d joints both work at any
-assembly size.
+alignment.
 
 ## Transforms and local frames
 
