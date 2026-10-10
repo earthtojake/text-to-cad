@@ -1172,6 +1172,74 @@ test('the Animation tool plays the routine in the tools view, preview leaves its
   assert.deepEqual(errors, []);
 });
 
+test('preview\'s Speed and Loop are its own, forgotten on the way out, while Orbit is the file\'s in both', async () => {
+  const view = await open();
+  const { page, pane, errors } = view;
+  const toolSettings = pane.getByRole('region', { name: 'Animation controls', exact: true }).getByRole('button', { name: 'Animation settings' });
+  const previewSettings = pane.getByRole('toolbar', { name: 'Animation playback' }).getByRole('button', { name: 'Playback settings' });
+  // A menu's Speed and Loop, as it shows them.
+  const settings = async (button, name) => {
+    await button.click();
+    const menu = page.getByRole('menu', { name, exact: true });
+    const read = [await menu.getByRole('menuitem', { name: /^Animation speed: / }).getAttribute('aria-label'),
+      await menu.getByRole('menuitemcheckbox', { name: 'Loop', exact: true }).getAttribute('aria-checked')];
+    await page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'detached' });
+    return read;
+  };
+  // Chooses a Speed, and turns Loop over. By keyboard: a menu item still easing in under a loaded
+  // software renderer never reads as stable under the pointer.
+  const choose = async (button, name, speed) => {
+    await button.click();
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitem', { name: /^Animation speed: / }).click();
+    await page.getByRole('menuitemradio', { name: `${speed}×`, exact: true }).press('Enter');
+    await page.getByRole('menu', { name, exact: true }).waitFor({ state: 'detached' });
+    await button.click();
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitemcheckbox', { name: 'Loop', exact: true }).press('Enter');
+    await page.keyboard.press('Escape');
+    await page.getByRole('menu', { name, exact: true }).waitFor({ state: 'detached' });
+  };
+  // The tools view's own: the Animation tool at 2×, its routine not looping.
+  await view.tool('Animation').click();
+  assert.deepEqual(await settings(toolSettings, 'Animation settings'), ['Animation speed: 1×', 'true'], 'the routine\'s own Speed and Loop');
+  await choose(toolSettings, 'Animation settings', 2);
+  assert.deepEqual(await settings(toolSettings, 'Animation settings'), ['Animation speed: 2×', 'false']);
+
+  // Preview opens on the routine's own, never the tools view's; what is chosen there is preview's.
+  await view.enterPreview();
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 1×', 'true'], 'preview opens at the routine\'s own Speed and Loop');
+  await choose(previewSettings, 'Playback settings', 0.5);
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 0.5×', 'false']);
+  // Orbit is the file's: off (as this file's view was left) it stays off; on, it stays on.
+  const corner = pane.locator('[data-preview-corner]');
+  const orbit = () => page.getByRole('menu', { name: 'Orbit', exact: true }).getByRole('menuitemcheckbox', { name: 'Orbit', exact: true });
+  const orbitChecked = async () => {
+    await corner.getByRole('button', { name: 'Orbit', exact: true }).click();
+    const checked = await orbit().getAttribute('aria-checked');
+    await page.keyboard.press('Escape');
+    await page.getByRole('menu', { name: 'Orbit', exact: true }).waitFor({ state: 'detached' });
+    return checked;
+  };
+  assert.equal(await orbitChecked(), 'false');
+  await view.exitPreview();
+
+  // The tools view's settings are as it left them, and preview's are gone.
+  assert.deepEqual(await settings(toolSettings, 'Animation settings'), ['Animation speed: 2×', 'false'], 'preview never writes the tools view\'s');
+  await view.enterPreview();
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 1×', 'true'], 'preview forgot its own');
+  assert.equal(await orbitChecked(), 'false', 'Orbit off stays off');
+  const still = await page.evaluate(() => window.__cadCamera().position);
+  await corner.getByRole('button', { name: 'Orbit', exact: true }).click();
+  await orbit().press('Enter');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(start => window.__cadCamera().position.some((value, axis) => Math.abs(value - start[axis]) > 1e-6), still);
+  await view.exitPreview();
+  await view.enterPreview();
+  assert.equal(await orbitChecked(), 'true', 'and on stays on');
+  await view.exitPreview();
+  assert.deepEqual(errors, []);
+});
+
 test('a pose pass React re-runs while a routine plays draws the clock, never the time playback started from', async () => {
   // The pose pass has two callers: the clock per playing tick, and React whenever something the
   // pass reads changes (a detail swap, a progressive publish, a display change). React's copy of

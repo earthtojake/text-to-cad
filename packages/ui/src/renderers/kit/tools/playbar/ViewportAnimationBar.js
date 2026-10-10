@@ -17,11 +17,12 @@ import { FILE_SHEET_PRECISION_SLIDER_CLASSES } from "../../inspector/FileSheet.j
 //
 // runtime: { clips: [{ id, label, duration }], activeClipId, playing, elapsedSec,
 //   speed, loopEnabled, clock, onClipSelect, onPlayToggle, onScrub, onSpeedChange,
-//   onLoopToggle, onRelease, savePlayback, restorePlayback }. `clock` is the owner's live
-//   AnimationClock (`animationClock.js`); `onRelease` stops, rewinds and puts the model back at
+//   onLoopToggle, onRelease, savePlayback, resetPlayback, restorePlayback }. `clock` is the owner's
+//   live AnimationClock (`animationClock.js`); `onRelease` stops, rewinds and puts the model back at
 //   rest. Preview's routine is its own: entering preview saves the tools view's routine as it
-//   stands (`savePlayback()`: which routine, its time, whether it plays) and releases it, and
-//   leaving releases preview's and hands the saved one back (`restorePlayback(saved)`).
+//   stands (`savePlayback()`: which routine, its time, whether it plays, its speed and loop) and
+//   puts it down at the routine's own speed and loop (`resetPlayback()`), and leaving releases
+//   preview's and hands the saved one back (`restorePlayback(saved)`).
 
 export const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3];
 

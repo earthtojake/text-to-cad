@@ -11,8 +11,9 @@ import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
 //   camera    the renderer's own camera value, opaque here: a perspective snapshot for a scene
 //             (`readShellCamera`), a plane transform for a drawing. Null is "fit the model".
 //   display   the Display settings, every section of them.
-//   playback  preview's settings, its Orbit's and its playbar's (`tools/playbar/playbackPreferences.js`):
-//             orbit on or off and its speed, Autoplay, and the speed and loop chosen for the routine.
+//   playback  the playback settings (`tools/playbar/playbackPreferences.js`): preview's orbit on or off
+//             and its speed, Autoplay, and the speed and loop the Animation tool chose for the
+//             routine (never preview's own, which it forgets on leaving).
 //   renderer  the renderer's own slices of view state, each `{ signature, value }`: what the
 //             slice was written against. A slice comes back only while its signature still
 //             matches the one the renderer declares for the file on screen — a rebuilt model

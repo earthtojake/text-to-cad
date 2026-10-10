@@ -49,7 +49,7 @@ export function stepMotionSources(entry) {
  * Out: what the Position panel and the playbar read and call, what the viewport draws a frame
  * from (`animationRuntime`), and `restore`, which the file's view calls once before the
  * first paint. A routine is never restored: every open starts at rest, and the speed and
- * loop it plays with are the tab's (the playbar's Playback settings, the shell's).
+ * loop it plays with are the shell's (the Animation tool's, the file's; preview's, its own).
  *
  * @param {{ entry: object, fileKey: string, resources: object,
  *   readStored: () => { pose: object | null }, clipboard: object,
@@ -389,6 +389,7 @@ export function useStepMotion({ entry, fileKey, resources, readStored, clipboard
     onLoopToggle: commands.handleAnimationLoopToggle,
     onRelease: commands.releaseAnimation,
     savePlayback: commands.savePlayback,
+    resetPlayback: commands.resetPlayback,
     restorePlayback: commands.restorePlayback,
     resetModel: commands.resetMotion,
     // The kit's playbar reads its time from the runtime it is handed, not from a context: the

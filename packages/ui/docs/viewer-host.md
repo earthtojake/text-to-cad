@@ -101,10 +101,11 @@ throws preview's state away and gives the tools view back exactly as it was. A r
 draws preview from its opening view instead of resetting its own state (`useRendererShell`'s
 `preview`), and the shell saves the tools view's camera and routine on the way in and
 restores them on the way out; nothing of preview is persisted. Orbit
-starts by default, with its speed, unless the file's Orbit says otherwise: preview's
-settings are the file's view's `playback` — orbit on or off and its speed, Autoplay, the
-routine's chosen speed and loop — kept between previews and across a reload, and a
-file's routine plays on entry only when its Autoplay is on. The rules are in
+starts by default, with its speed, unless the file's Orbit says otherwise: the file's
+view's `playback` — orbit on or off and its speed, Autoplay, and the tools view's chosen
+speed and loop — is kept between previews and across a reload, and a file's routine
+plays on entry only when its Autoplay is on. Preview's own speed and loop start at the
+routine's every time and are never written there. The rules are in
 [settings-ui.md](settings-ui.md#camera-animation-and-preview).
 
 A renderer can publish `FileNavigationAction[]` through
@@ -351,8 +352,8 @@ at the defaults. In the CAD app there is one record per view: a view the host
 creates again (its frame re-created) starts afresh, since nothing names a view across its
 frames. A view is `{ camera, display, playback, renderer }` (`kit/shell/fileView.js`):
 the camera is restored in place of the open-time fit, the display settings with their
-Clip and Explode, preview's settings (Orbit on or off and its speed, Autoplay, the
-routine's chosen speed and loop), and the renderer's own slices each behind the
+Clip and Explode, the playback settings (Orbit on or off and its speed, Autoplay, and the
+Animation tool's chosen speed and loop — never preview's, which are forgotten on leaving it), and the renderer's own slices each behind the
 signature it was written against — a slice that no longer fits the file on screen is
 dropped, the camera, the display and the playback never. Not in it, and started afresh
 on every open: the tool in hand, the selection, measurements, ink, preview, a

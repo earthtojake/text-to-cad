@@ -393,6 +393,64 @@ test('an animated GLB opens at rest with its Animation panel up, plays there and
   assert.deepEqual(errors, []);
 });
 
+test('an animated GLB\'s preview opens at the clip\'s own Speed and Loop and forgets what it chose, the panel keeping its own, and Orbit off stays off', async (t) => {
+  const { page, pane, errors } = await open(t, 'animated.glb', { record: { version: 2, settings: {},
+    files: { [JSON.stringify(['/models/animated.glb', 'glb'])]: { version: 2, playback: { orbit: false } } } } });
+  await ready(pane);
+  const panelSettings = pane.getByRole('region', { name: 'Animation controls', exact: true }).getByRole('button', { name: 'Animation settings' });
+  const previewSettings = pane.getByRole('toolbar', { name: 'Animation playback' }).getByRole('button', { name: 'Playback settings' });
+  const enter = async () => {
+    await pane.getByRole('button', { name: 'Preview', exact: true }).click();
+    await pane.getByRole('button', { name: 'Exit preview', exact: true }).waitFor();
+  };
+  const exit = async () => {
+    await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
+    await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
+  };
+  const settings = async (button, name) => {
+    await button.click();
+    const menu = page.getByRole('menu', { name, exact: true });
+    const read = [await menu.getByRole('menuitem', { name: /^Animation speed: / }).getAttribute('aria-label'),
+      await menu.getByRole('menuitemcheckbox', { name: 'Loop', exact: true }).getAttribute('aria-checked')];
+    await page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'detached' });
+    return read;
+  };
+  // A Speed chosen and Loop turned over, by keyboard (an item easing in never reads as stable under the pointer).
+  const choose = async (button, name, speed) => {
+    await button.click();
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitem', { name: /^Animation speed: / }).click();
+    await page.getByRole('menuitemradio', { name: `${speed}×`, exact: true }).press('Enter');
+    await page.getByRole('menu', { name, exact: true }).waitFor({ state: 'detached' });
+    await button.click();
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitemcheckbox', { name: 'Loop', exact: true }).press('Enter');
+    await page.keyboard.press('Escape');
+    await page.getByRole('menu', { name, exact: true }).waitFor({ state: 'detached' });
+  };
+  const orbitChecked = async () => {
+    await pane.locator('[data-preview-corner]').getByRole('button', { name: 'Orbit', exact: true }).click();
+    const menu = page.getByRole('menu', { name: 'Orbit', exact: true });
+    const checked = await menu.getByRole('menuitemcheckbox', { name: 'Orbit', exact: true }).getAttribute('aria-checked');
+    await page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'detached' });
+    return checked;
+  };
+  await choose(panelSettings, 'Animation settings', 2);
+  assert.deepEqual(await settings(panelSettings, 'Animation settings'), ['Animation speed: 2×', 'false']);
+  await enter();
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 1×', 'true'], 'preview opens at the clip\'s own');
+  assert.equal(await orbitChecked(), 'false', 'the file\'s Orbit, off');
+  await choose(previewSettings, 'Playback settings', 0.5);
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 0.5×', 'false']);
+  await exit();
+  assert.deepEqual(await settings(panelSettings, 'Animation settings'), ['Animation speed: 2×', 'false'], 'the panel keeps its own');
+  await enter();
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 1×', 'true'], 'and preview forgot its own');
+  assert.equal(await orbitChecked(), 'false', 'Orbit off stays off');
+  await exit();
+  assert.deepEqual(errors, []);
+});
+
 test('a corrupt GLB raises the viewer\'s load alert, with reload and details', async (t) => {
   const { page, pane } = await open(t, 'broken.glb');
   const alert = pane.getByRole('alert');

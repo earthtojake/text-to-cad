@@ -259,8 +259,8 @@ tick where the shortcut was; the copy shortcut does the same. A sketch begun ope
 file with routines has it, after Position on the strip (its icon a clapperboard).
 Its **Animation** panel leads the stack while it is up, headed as Measure's is:
 "Animation", then its settings — the sliders button, whose dropdown holds Speed,
-Loop and Autoplay, the very settings of preview's Playback settings, kept the
-same way (see [preview](#camera-animation-and-preview)) — and its X, which puts
+Loop and Autoplay, the file's, kept in its view (preview's Speed and Loop are preview's
+own, and never these: see [preview](#camera-animation-and-preview)) — and its X, which puts
 it down as a second press on Animation does. Its body sits flush under the
 heading, whose 28px row is the room above it, 8px in at each side and 4px at the
 foot, and its 24px controls sit 4px apart: with more than one routine, the routine's dropdown across the
@@ -746,13 +746,17 @@ hands the tools view's back as preview found it: at rest, or under Animation whe
 was, paused at its time or playing on from it (`savePlayback` and `restorePlayback`
 on the playbar runtime, `kit/tools/playbar/ViewportAnimationBar.js`). An update of the model that leaves its routines as they were
 neither stops nor rewinds one that is playing; a changed routine starts at rest.
-Orbit's settings and the playbar's are the file's own and are remembered between leaving
+Orbit's settings and Autoplay are the file's own and are remembered between leaving
 and re-entering preview and across a reload of the tab: Orbit on or off (on by
-default) and its speed (1×), Autoplay, and a Speed or Loop once chosen — until one
-is chosen, the routine's own apply. The Animation tool's Speed, Loop and Autoplay
-are these same settings. Another file has its own, and a file the tab
-left starts at the defaults again. Nothing of the routine — which one, its time,
-whether it plays — is saved. Orbit is not an animation setting.
+default) and its speed (1×) — an Orbit turned off stays off in every later preview, and
+one turned on stays on — and Autoplay, which the Animation tool's settings and preview's
+Playback settings both show and set. Speed and Loop are each mode's own. The tools
+view's, the Animation tool's, are the file's, kept in its view once chosen — until then
+the routine's own apply. Preview's start at the routine's own every time it opens,
+whatever the tools view chose; what is chosen in its Playback settings plays there and
+is forgotten on the way out, never written to the tools view's. Another file has its
+own, and a file the tab left starts at the defaults again. Nothing of the routine —
+which one, its time, whether it plays — is saved. Orbit is not an animation setting.
 
 **Preview and the tools view are two states.** Entering preview leaves the tools view's
 state exactly as it is — the tool in hand and its panels, the Position pose, the
@@ -760,8 +764,8 @@ selection, hidden and isolated parts, Explode and Clip, Measure's results, Draw'
 the camera, the Animation tool's routine — and preview starts clean, from the model as
 authored: at its opening pose, every part shown, nothing isolated, picked, hovered,
 measured, exploded or clipped, its own camera fitted at the default angle, its routine
-at rest. Leaving preview throws away what was done there — its camera, its routine —
-and the tools view comes back exactly as it was, its camera in the projection and lens
+at rest at the routine's own Speed and Loop. Leaving preview throws away what was done
+there — its camera, its routine, the Speed and Loop chosen in it — and the tools view comes back exactly as it was, its camera in the projection and lens
 the Display settings now hold. Nothing of the tools view is reset to make room for
 preview and nothing of preview's is kept: the next preview starts clean again. A
 renderer holds this by drawing preview from its opening view rather than resetting
@@ -769,7 +773,7 @@ its own state (`useRendererShell`'s `preview`); the routine, which both modes pl
 the one model, is saved on the way in and handed back on the way out (above). The
 viewport stays mounted throughout. What is not either mode's state is the file's
 settings, shared by both and kept: its Display settings (an edit in preview's Display
-is the tools view's too), and Orbit and the Playback settings.
+is the tools view's too), Orbit (on or off, and its speed) and Autoplay.
 
 **Render profiles.** One viewport draws the same Display settings two ways
 (`kit/viewport/renderProfile.js`). The tools view is drawn for working on the
