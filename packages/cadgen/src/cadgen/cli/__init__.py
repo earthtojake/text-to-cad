@@ -239,15 +239,20 @@ def _harden_std_stream_errors() -> None:
 def main(argv: list[str] | None = None) -> int:
     try:
         code = _main(argv)
-        sys.stdout.flush()  # here, not as Python exits, where a closed pipe could only be complained about
+        if sys.stdout is not None:
+            sys.stdout.flush()  # here, not as Python exits, where a closed pipe could only be complained about
         return code
     except BrokenPipeError:
+        from cadgen.analytics import stdout_closed
+
+        if not stdout_closed():
+            raise  # another pipe it wrote to (a child's stdin): a failure like any other
         return _output_closed()
 
 
 def _output_closed() -> int:
     """Whatever read this command's output closed it (``cadgen ... | head``): stop quietly, as a CLI does
-    on SIGPIPE -- no traceback, no crash report (``cadgen.analytics.GONE``), nothing more written. Both
+    on SIGPIPE -- no traceback, no crash report (``cadgen.analytics.stdout_closed``), nothing more written. Both
     streams go to the null device first: Python flushes them again as it exits, and would print that
     flush's own BrokenPipeError."""
     try:
@@ -315,8 +320,12 @@ def _main(argv: list[str] | None) -> int:
         _tell()
     try:
         return _run(command, entry[0], rest)
-    except BrokenPipeError:
-        raise  # its output's reader left: `main` stops quietly
+    except BrokenPipeError as error:
+        from cadgen.analytics import stdout_closed
+
+        if not stdout_closed():  # its output's reader left: `main` stops quietly; any other pipe is a failure
+            _report(error)
+        raise
     except Exception as error:
         _report(error)
         raise

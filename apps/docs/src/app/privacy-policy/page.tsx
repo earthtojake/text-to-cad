@@ -79,8 +79,8 @@ export default function PrivacyPolicyPage() {
                 values, your files, or file or folder names.
               </li>
             </ul>
-            We record each batch at the time it was made, or at the time it arrives when your
-            computer’s clock is far from ours, and our server adds the country each request comes
+            We record each batch at the time your computer’s clock says it was made, and our server
+            adds the country each request comes
             from, which it works out from your IP address; it keeps neither the address nor anything
             finer than the country. Nothing is sent while cadgen sits unused. Telemetry never includes
             your files, models, file or folder names, prompts, tool arguments or anything you type. A{" "}

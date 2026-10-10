@@ -122,11 +122,15 @@ class SignatureTest(unittest.TestCase):
         def write() -> None:
             raise BrokenPipeError(32, "Broken pipe")
 
-        # A page that left a route mid-reply, a reader that closed a command's output (`| head`).
-        for error, where in ((ConnectionAbortedError(10053, "aborted"), "route"), (ConnectionResetError(), "route"),
-                             (_caught(write), "command")):
-            with self.subTest(type=type(error).__name__, where=where):
-                self.assertIsNone(analytics.signature(error, where, handled=False))
+        # A reader that closed the command's own output (`| head`): its stdout is the pipe that broke.
+        with mock.patch.object(analytics, "stdout_closed", return_value=True):
+            self.assertIsNone(analytics.signature(_caught(write), "command", handled=False))
+        # Another pipe the command wrote to (a child's stdin), and a route's own connection out, are cadgen's: a
+        # page leaving a route is the response writer's to swallow, and never reaches here.
+        with mock.patch.object(analytics, "stdout_closed", return_value=False):
+            self.assertEqual(analytics.signature(_caught(write), "command", handled=False)["type"], "BrokenPipeError")
+        for error in (ConnectionAbortedError(10053, "aborted"), ConnectionRefusedError()):
+            self.assertEqual(analytics.signature(error, "route", handled=False)["type"], type(error).__name__)
         # Anywhere else it may be cadgen's: a tool's call, a request, a command's own connection.
         self.assertEqual(analytics.signature(ConnectionAbortedError(), "tool")["type"], "ConnectionAbortedError")
         self.assertEqual(analytics.signature(ConnectionResetError(), "command")["type"], "ConnectionResetError")
@@ -256,6 +260,10 @@ class FailureReasonTest(unittest.TestCase):
                 # The same as a crash report finds: a bug, and only a bug, is cadgen's own mistake.
                 self.assertEqual(analytics.signature(error, "build", bugs_only=True) is not None, reason == "bug")
         self.assertLessEqual(set(cases), analytics.BUILD_FAILURES)
+        # A name a module does not have is the model's mistake, not a module missing from the machine.
+        misspelled = _caught(_user_calls(lambda: exec("from os import secret_name_os_does_not_have")))
+        self.assertNotIsInstance(misspelled, ModuleNotFoundError)
+        self.assertEqual(analytics.build_failure(misspelled), "model_error")
 
     def test_a_reason_cadgen_names_where_it_raises_stands_but_never_over_a_bug(self) -> None:
         named = _caught(_raises(analytics.because(ValueError(), "export_error")))  # the person's frames say model_error
@@ -413,6 +421,15 @@ class CommandCrashTest(unittest.TestCase):
         finally:
             os.close(write)
         self.assertEqual((done.returncode, done.stderr), (141, b""))
+        # Another pipe it wrote to (a child that died before reading its stdin) is a failure like any other: said,
+        # and the command fails, its own output still open.
+        code = ("import sys\nfrom cadgen import cli\n"
+                "def run(*a):\n    raise BrokenPipeError(32, 'Broken pipe')\n"
+                "cli._run = run\nsys.exit(cli.main(['telemetry', 'status']))\n")
+        done = subprocess.run([sys.executable, "-c", code], capture_output=True, env={**os.environ, "CADGEN_TELEMETRY": "0"},
+                              timeout=60)
+        self.assertEqual(done.returncode, 1)
+        self.assertIn(b"BrokenPipeError", done.stderr)
 
     def test_a_commands_reported_failure_is_a_crash_only_when_it_is_a_mistake_in_cadgens_code(self) -> None:
         import io

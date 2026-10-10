@@ -11,7 +11,8 @@ const NOISE = {
   page_left: [
     crash({ where: 'route', type: 'ConnectionAbortedError' }, [{ file: 'cadgen/viewer/response.py', function: 'Response._begin', line: 130 },
       { file: 'http/server.py', function: 'BaseHTTPRequestHandler.end_headers', line: 549 }, { file: 'socketserver.py', function: '_SocketWriter.write', line: 845 }]),
-    ...['ConnectionResetError', 'BrokenPipeError', 'ConnectionError'].map(type => crash({ where: 'route', type })),
+    ...['ConnectionResetError', 'BrokenPipeError', 'ConnectionError'].map(type => crash({ where: 'route', type },
+      [{ file: 'cadgen/viewer/response.py', function: 'Response._write', line: 138 }])),
   ],
   output_closed: [crash({ where: 'command', type: 'BrokenPipeError', handled: false },
     [{ file: 'cadgen/cli/__init__.py', function: 'main', line: 288 }, { file: 'cadgen/cli/store.py', function: '_why_one', line: 193 }])],
@@ -30,6 +31,12 @@ const BUGS = [
   crash({ where: 'tool', tool: 'cad_show', type: 'ConnectionAbortedError' }), // only a route's peer leaving is no bug
   crash({ where: 'command', type: 'ConnectionResetError' }),
   crash({ where: 'request', type: 'BrokenPipeError' }),
+  // A route's own connection out, and a command's child pipe: cadgen's to fix.
+  crash({ where: 'route', type: 'ConnectionRefusedError' }, [{ file: 'cadgen/daemon/client.py', function: '_connect', line: 120 }]),
+  crash({ where: 'command', type: 'BrokenPipeError' }, [{ file: 'cadgen/_internal/node_runtime.py', function: 'run_node_builder', line: 341 },
+    { file: 'subprocess.py', function: 'Popen._stdin_write', line: 1252 }]),
+  // A recursion through cadgen code beyond the model's wrapper: cadgen's cycle, even with the person's code in it.
+  crash({ where: 'build', type: 'RecursionError' }, Array(15).fill([USER, { file: 'cadgen/store/lazy.py', function: 'child', line: 40 }]).flat()),
   crash({ where: 'build', type: 'WorkerDied', handled: false }), // no status: Windows says nothing of a signal
   ...[-11, -6, -9, 1, 106].map(status => crash({ where: 'build', type: 'WorkerDied', handled: false, status })),
   crash({ where: 'build', type: 'AttributeError' }, [{ file: 'cadgen/_internal/mesh_export.py', function: 'run_mesh_exporter', line: 137 }]),

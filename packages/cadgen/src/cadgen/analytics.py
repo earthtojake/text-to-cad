@@ -257,14 +257,41 @@ CRASHES_PENDING = 16  # past this many different crashes waiting, a process coun
 BUGS = (AttributeError, LookupError, TypeError, NameError, AssertionError, ZeroDivisionError, RecursionError,
         NotImplementedError)
 _RAISED = re.compile(r"(?:^|:)\s*raise\b")
-# Errors that are never cadgen's bug where they happen, whoever catches them: the other end leaving -- a page that
-# left a viewer route mid-reply (Windows' WSAECONNABORTED among them), or whatever reads a command's output closing
-# it (``cadgen ... | head``, which the command answers by stopping quietly). And a ``RecursionError`` with the
-# person's code among its innermost frames: their code is in the cycle (a model that calls itself never ends).
-# The rule for the next noisy class: an error goes here only when, there, it can never be a mistake in cadgen's
-# code -- never because it is frequent -- and in the same change the receiver drops it from the releases already
-# out (``NEVER_OURS`` in the API's ``noise.mjs``), so it stops costing anything at once.
-GONE = {"route": ConnectionError, "command": BrokenPipeError}
+# Errors that are never cadgen's bug: a command's own output closed by whatever read it (``cadgen ... | head``,
+# which the command answers by stopping quietly) -- that pipe, not another the command wrote to (``stdout_closed``);
+# a page leaving a viewer route mid-reply is the response writer's to swallow (``cadgen.viewer.response``), so a
+# route's connection error that reaches here is cadgen's own connection failing, and is reported. And a
+# ``RecursionError`` whose cycle is the person's: their code among its innermost frames, and of cadgen's only the
+# decorator wrapper that calls it (``_THEIR_CYCLE``). The rule for the next noisy class: an error goes here only when,
+# there, it can never be a mistake in cadgen's code -- never because it is frequent -- and in the same change the
+# receiver drops it from the releases already out (``NEVER_OURS`` in the API's ``noise.mjs``), so it stops costing
+# anything at once.
+_THEIR_CYCLE = frozenset({"cadgen/authoring.py"})
+
+
+def stdout_closed() -> bool:
+    """Whether this process's own output is the pipe that closed: flushing it fails the same way, or -- a write too
+    large for the buffer leaves nothing to flush -- its descriptor reports no reader (POLLERR on Linux, POLLHUP on
+    macOS). Windows has no ``poll``, and says a closed pipe is EINVAL, not EPIPE: never there."""
+    stream = sys.stdout
+    if stream is None:
+        return False
+    try:
+        stream.flush()
+    except BrokenPipeError:
+        return True
+    except (OSError, ValueError):
+        return False
+    try:
+        import select
+
+        poller = select.poll()
+        poller.register(stream.fileno(), select.POLLOUT)
+        return any(events & (select.POLLERR | select.POLLHUP) for _, events in poller.poll(0))
+    except (AttributeError, OSError, ValueError):  # no poll, or not a real file
+        return False
+
+
 USER = "<user>"  # the person's own code, a frame or an exception's type: never named
 _CHUNK_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")  # a page chunk's debug id
 _FILE = re.compile(r"(?!\.\.?(?:/|$))[A-Za-z0-9_.+-]{1,64}(?:/(?!\.\.?(?:/|$))[A-Za-z0-9_.+-]{1,64}){0,8}")
@@ -718,7 +745,7 @@ def signature(error: BaseException, where: str, *, tool: str | None = None, hand
     send."""
     if where not in WHERE or not isinstance(error, Exception):  # an interrupt, an exit: no crash
         return None
-    if where in GONE and isinstance(error, GONE[where]):  # the other end left: no crash
+    if where == "command" and isinstance(error, BrokenPipeError) and stdout_closed():  # its reader left: no crash
         return None
     if bugs_only and not isinstance(error, BUGS):  # before reading any frame: a failure is never kept waiting
         return None
@@ -737,8 +764,9 @@ def signature(error: BaseException, where: str, *, tool: str | None = None, hand
     if bugs_only and not (decisive is not None and decisive[0] is not None and _mistake(error, decisive[1], decisive[2])):
         return None
     frames = frames[-MAX_FRAMES:]
-    if isinstance(error, RecursionError) and any(frame["file"] == USER for frame in frames):  # the person's recursion
-        return None
+    if isinstance(error, RecursionError) and any(frame["file"] == USER for frame in frames) \
+            and all(frame["file"] in _THEIR_CYCLE for frame in frames if frame["file"].startswith("cadgen/")):
+        return None  # the person's recursion, through no cadgen code but the wrapper that calls their model
     found = {"where": where, "type": _type_of(error), "handled": bool(handled), "frames": frames}
     if tool is not None and _TOOL.fullmatch(str(tool)):
         found["tool"] = tool
@@ -754,9 +782,11 @@ def _mistake(error: BaseException, filename: str, line: int) -> bool:
 # Why a failure failed, where cadgen named it (``because``): a word of ``BUILD_FAILURES`` or ``SNAPSHOT_FAILURES``.
 _BECAUSE = "__cadgen_failure__"
 # Errors that say why by what they are, whoever raised them, by the first of their classes named here (a class
-# by its module and name: importing it would import what defines it, the CAD kernel among them).
+# by its module and name: importing it would import what defines it, the CAD kernel among them). Only a module
+# that is not there is the machine's: another ``ImportError`` (``from build123d import Boxx``) is whoever's code
+# asked for the name, decided below.
 _BUILD_ERRORS: tuple[tuple[type[BaseException] | str, str], ...] = (
-    (SyntaxError, "script_error"), (ImportError, "missing_module"), (FileNotFoundError, "missing_file"),
+    (SyntaxError, "script_error"), (ModuleNotFoundError, "missing_module"), (FileNotFoundError, "missing_file"),
     ("cadgen.assets.AssetMissing", "missing_file"), ("cadgen.store.lazy.ChildBuildError", "child_failed"),
     (TimeoutError, "timeout"), (MemoryError, "memory"), (OSError, "io_error"))
 
@@ -1086,6 +1116,9 @@ class Recorder:
         # The batch the receiver did not take, whole, and the answer it was made under: sent again, as it is,
         # before anything newer (``flush``). One at most: what is noted meanwhile waits in the tally.
         self._unsent: tuple[dict[str, Any], Any] | None = None
+        # The batch on its way now, and its answer: kept as the process exits too (``close``), since its send may
+        # yet fail with nothing left to keep it. Sent again when it was taken after all, its ids make it one.
+        self._sending: tuple[dict[str, Any], Any] | None = None
         self._day = ""
         self._shown: set[str] = set()  # the files a view showed today, by absolute path: never leaves this process
         self._basis: Any = _UNREAD  # the answer in force when what is noted now began to be noted
@@ -1303,7 +1336,13 @@ class Recorder:
         if taken is None:
             return False
         payload, answer, choices = taken
-        outcome = _outcome(self._send(payload))
+        with self._lock:
+            self._sending = (payload, answer)
+        try:
+            outcome = _outcome(self._send(payload))
+        finally:
+            with self._lock:
+                self._sending = None
         if outcome == "failed":  # kept whole, its id and all, to be sent again -- unless a choice made here
             with self._lock:     # while it was on its way cleared it (two answers can share a tick)
                 if self._choices == choices:
@@ -1419,8 +1458,8 @@ class Recorder:
 
     @_guarded(lambda: None)
     def close(self) -> None:
-        """As the process exits: the batch it could not send, and what it noted since, are kept beside the
-        settings, each whole and in that order (``KEPT``), for the next process that sends (``send_kept``) --
+        """As the process exits: the batch it could not send, the one on its way, and what it noted since, are kept
+        beside the settings, each whole and in that order (``KEPT``), for the next process that sends (``send_kept``) --
         never sent from here, so an exit waits on nothing but a local file. Only under the answer each was made
         under, and only while that is still in force."""
         if self._timer is not None:
@@ -1430,9 +1469,11 @@ class Recorder:
         settings = self.path or settings_path()
         with self._lock:
             unsent, self._unsent = self._unsent, None
-        if unsent is not None and not self._off and status(path=self.path, probe=False)["sharing"] \
-                and _answer(_read(settings) or {}) == unsent[1]:
-            _keep(settings, KEPT, {"answer": list(unsent[1]), "batch": unsent[0]})
+            sending = self._sending
+        for owed in (unsent, sending):
+            if owed is not None and not self._off and status(path=self.path, probe=False)["sharing"] \
+                    and _answer(_read(settings) or {}) == owed[1]:
+                _keep(settings, KEPT, {"answer": list(owed[1]), "batch": owed[0]})
         taken = self._batch(settings)
         if taken is not None:
             _keep(settings, KEPT, {"answer": list(taken[1]), "batch": taken[0]})

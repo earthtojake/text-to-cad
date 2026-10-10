@@ -28,13 +28,13 @@ const DAEMON = {
 const SETTINGS_EU = { region: 'eu', projectKey: 'phc_project', personalKey: 'phx_personal', projectId: '1234' };
 
 // PostHog over a fetch that keeps what it was asked and answers `status`.
-function posthog(status = 200, now = undefined) {
+function posthog(status = 200) {
   const asked = [];
   const fetch = async (url, init) => {
     asked.push({ url, method: init.method ?? 'GET', headers: init.headers, body: init.body === undefined ? undefined : JSON.parse(init.body) });
     return new Response('{}', { status });
   };
-  return { asked, store: posthogStore(SETTINGS_EU, { fetch, ...(now ? { now } : {}) }) };
+  return { asked, store: posthogStore(SETTINGS_EU, { fetch }) };
 }
 
 test("each of a batch's rows is one PostHog event, under the install id, with the country and no location lookup", async () => {
@@ -78,8 +78,8 @@ const NAMED = {
     ...DAEMON.events,
   ],
 };
-const at = (batch, now = NOW) => {
-  const { asked, store } = posthog(200, () => now);
+const at = batch => {
+  const { asked, store } = posthog(200);
   return store.insert(rowsOf(batch)).then(() => asked[0].body.batch);
 };
 
@@ -94,19 +94,16 @@ test("why builds and snapshots failed are PostHog's build_failed and snapshot_fa
 
 test('a batch sent again is the same PostHog events, uuid and time alike, so PostHog counts it once', async () => {
   const first = await at(NAMED);
-  const again = await at(NAMED, NOW + 3 * 3600 * 1000); // its answer was lost; sent again hours later
+  const again = await at(NAMED); // its answer was lost; sent again, however long after
   assert.deepEqual(again, first);
   assert.ok(first.every(event => event.timestamp === '2026-10-09T11:59:00.000Z'));
   assert.equal(new Set(first.map(event => event.uuid)).size, first.length, 'one uuid per event of a batch');
   // Another batch's events are their own, though they count the same.
   const other = await at({ ...NAMED, batch: 'f1e2d3c4-b5a6-4978-8a1b-2c3d4e5f6a7b' });
   assert.ok(other.every((event, index) => event.uuid !== first[index].uuid));
-  // A clock far off is not trusted with the time: the event is stamped as it arrives. Its uuid still holds.
-  for (const offset of [-8 * 24 * 3600, 2 * 3600]) {
-    const skewed = await at({ ...NAMED, at: NOW / 1000 + offset });
-    assert.ok(skewed.every(event => !('timestamp' in event)));
-    assert.deepEqual(skewed.map(event => event.uuid), first.map(event => event.uuid));
-  }
+  // Its time is always the batch's own, whatever the receiver's clock says: a copy keeps its key.
+  const old = await at({ ...NAMED, at: NOW / 1000 - 8 * 24 * 3600 });
+  assert.ok(old.every(event => event.timestamp === '2026-10-01T12:00:00.000Z'));
 });
 
 test('a row id is a UUIDv5, as RFC 9562 makes one', () => {

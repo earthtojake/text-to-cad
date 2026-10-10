@@ -363,6 +363,29 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(len(sent), 2)
         self.assertFalse((self.tmp / KEPT).exists())
 
+    def test_a_batch_on_its_way_as_the_process_exits_is_kept_whole(self) -> None:
+        # The exit comes while the send is still out; it fails after: the batch is kept all the same, as it was.
+        choose(True, by="cli", path=self.path)
+        out, exiting, sent = threading.Event(), threading.Event(), []
+
+        def send(payload: dict) -> bool:
+            sent.append(json.dumps(payload))
+            out.set()
+            exiting.wait(10)
+            return False
+
+        recorder = Recorder(path=self.path, send=send)
+        recorder.called("cad_show", True)
+        flushing = threading.Thread(target=recorder.flush)
+        flushing.start()
+        self.assertTrue(out.wait(10))
+        recorder.close()
+        exiting.set()
+        flushing.join(10)
+        following: list[str] = []
+        Recorder(path=self.path, send=lambda payload: following.append(json.dumps(payload)) or True).send_kept()
+        self.assertEqual(following, sent)
+
     def test_a_failed_call_says_why_by_a_word_chosen_where_it_failed_never_what_it_said(self) -> None:
         server, sent = self.serve("claude-directory")
         self.consent(server, True)

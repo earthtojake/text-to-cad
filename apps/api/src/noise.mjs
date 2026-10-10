@@ -6,7 +6,7 @@
  *
  * The rule: a signature goes on `NEVER_OURS` only when it can never be a mistake in cadgen's code -- never
  * because it is frequent -- and in the same change the client stops sending it (`cadgen/analytics.py`:
- * `GONE`, `signature`). Each entry matches on a row's `where`, `type`, `status` and frames alone. Dropping
+ * `stdout_closed`, `signature`). Each entry matches on a row's `where`, `type`, `status` and frames alone. Dropping
  * a row is not a refusal: the batch is still taken, and its other rows stored.
  */
 
@@ -16,6 +16,8 @@ const CONNECTION_ERRORS = new Set(['ConnectionError', 'BrokenPipeError', 'Connec
   'ConnectionResetError', 'ConnectionRefusedError']);
 // What a person's interrupt or logout stops a build worker with: SIGTERM, SIGINT, SIGHUP, as a negative exit status.
 const STOPPED = new Set([-15, -2, -1]);
+// The only cadgen code a person's own recursion runs through: the decorator wrapper that calls their model.
+const THEIR_CYCLE = new Set(['cadgen/authoring.py']);
 
 // The innermost frame is cadgen's `file` at `fn`, and the person's code called its way there: cadgen only
 // passed on what the model asked of it.
@@ -27,9 +29,13 @@ const askedOf = (frames, file, fn) => {
 /** Each signature by its name, as the log counts it, and the test a crash row must pass to be dropped. */
 export const NEVER_OURS = [
   // A page that left a viewer route mid-reply (Windows' WSAECONNABORTED): cadgen 0.7.16 to 0.7.18.
-  { name: 'page_left', test: row => row.where === 'route' && CONNECTION_ERRORS.has(row.type) },
+  // Only when the response writer raised it (`cadgen/viewer/response.py`): a route's own connection out is cadgen's.
+  { name: 'page_left', test: row => row.where === 'route' && CONNECTION_ERRORS.has(row.type)
+    && row.frames.some(frame => frame.file === 'cadgen/viewer/response.py') },
   // Whatever read a command's output closed it (`cadgen ... | head`): cadgen 0.7.19 and earlier.
-  { name: 'output_closed', test: row => row.where === 'command' && row.type === 'BrokenPipeError' },
+  // Only when cadgen's own code wrote it (a print: its innermost frame is cadgen's), not a child's pipe (`subprocess`).
+  { name: 'output_closed', test: row => row.where === 'command' && row.type === 'BrokenPipeError'
+    && (row.frames.at(-1)?.file ?? '').startsWith('cadgen/') },
   // A model asking `cadgen.build123d` for a name build123d does not have: before 0.7.19 it said so as Python did.
   { name: 'no_such_build123d_name', test: row => row.type === 'AttributeError' && askedOf(row.frames, 'cadgen/build123d.py', '__getattr__') },
   // A colour that is not a string, handed to `srgb()`: before 0.7.19 its `.strip()` failed.
@@ -38,7 +44,9 @@ export const NEVER_OURS = [
   { name: 'worker_stopped', test: row => row.type === 'WorkerDied' && STOPPED.has(row.status) },
   // A RecursionError with the person's code among its innermost frames: their code is in the cycle (a model
   // that calls itself never ends). cadgen's own recursion fills those frames with cadgen's.
-  { name: 'their_recursion', test: row => row.type === 'RecursionError' && row.frames.some(frame => frame.file === USER) },
+  // Of cadgen's code, only the decorator wrapper that calls the model may be in it: anything else may be cadgen's cycle.
+  { name: 'their_recursion', test: row => row.type === 'RecursionError' && row.frames.some(frame => frame.file === USER)
+    && row.frames.every(frame => !frame.file.startsWith('cadgen/') || THEIR_CYCLE.has(frame.file)) },
 ];
 
 /**

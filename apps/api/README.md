@@ -71,9 +71,9 @@ and its batch's `at` as its `timestamp`, both the same however often the batch c
 events with the same `uuid`, event name, `timestamp` and distinct id as one
 ([its docs](https://posthog.com/docs/cdp/common-questions): sent with a uuid, duplicates "are eventually
 de-duplicated"), collapsing them as its tables merge, so a query may see both copies until then. The
-`timestamp` is the batch's only within 7 days before and an hour after the receiver's clock: a sender's
-clock further off would misplace its counts, so such an event, and every earlier schema's, is stamped
-as it arrives, and a copy of it sent again is not told apart.
+`timestamp` is always the batch's own, by the sender's clock, so a copy sent however long after keeps the
+same key; a clock that is off places its counts where it says. Every earlier schema's event is stamped as
+it arrives.
 
 - **Every release keeps counting.** The receiver reads every schema a released
   cadgen sends, for as long as that release can still be running: a copy nobody
@@ -94,7 +94,7 @@ as it arrives, and a copy of it sent again is not told apart.
   keep sending what a later one learned to leave out, and each would be an issue in
   PostHog with no fix in cadgen. A signature goes on the list only when it can never
   be a mistake in cadgen's code, never because it is frequent, and in the same change
-  the client stops sending it (`GONE` and `signature` in `cadgen/analytics.py`). Each
+  the client stops sending it (`stdout_closed` and `signature` in `cadgen/analytics.py`). Each
   entry matches on `where`, `type`, `status` and frames alone: any `ConnectionError` at a
   `route` (a page that left mid-reply); a `BrokenPipeError` at a `command` (its output's
   reader closed it, `| head`); an `AttributeError` whose innermost frame is

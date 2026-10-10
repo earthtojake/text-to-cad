@@ -131,8 +131,10 @@ def remember(*, path: Path | None = None) -> str | None:
         from cadgen._internal.file_lock import exclusive
 
         path = path or _record_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
         key = installation()
+        if _load(path).get(key) == value:  # as nearly every start finds it: no lock to wait on, nothing to write
+            return value
+        path.parent.mkdir(parents=True, exist_ok=True)
         with exclusive(path.with_name(RECORD + ".lock")):
             kept = _load(path)
             if kept.get(key) == value:
