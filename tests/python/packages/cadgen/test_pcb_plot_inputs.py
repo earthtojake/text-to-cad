@@ -21,7 +21,8 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen.kicad.plot import _drc_report, _inputs  # noqa: E402
-from cadgen.kicad.schematic_index import read_index, stage_files  # noqa: E402
+from cadgen.kicad.cli import stage_files  # noqa: E402
+from cadgen.kicad.schematic_index import read_index  # noqa: E402
 
 
 class PlotInputsTest(unittest.TestCase):

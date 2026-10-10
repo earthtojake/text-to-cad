@@ -114,7 +114,7 @@ def validate(path: Path, *, strict: bool = False, verbose: bool = False) -> Vali
         return failed(target, str(error), code="kicad_missing")
     issues = []
     for finding in sorted(report.findings, key=lambda finding: (finding.severity != "error", finding.check, finding.type)):
-        located = [text + (f" at ({position[0]:g}, {position[1]:g})" if position is not None else "") for text, position in finding.items]
+        located = [item.text + (f" at ({item.at[0]:g}, {item.at[1]:g})" if item.at is not None else "") for item in finding.items]
         issues.append(
             ValidationIssue(
                 severity=finding.severity,

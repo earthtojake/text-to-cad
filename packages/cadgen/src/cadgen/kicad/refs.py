@@ -31,6 +31,7 @@ package; both are held to one fixture of cases.
 
 from __future__ import annotations
 
+import difflib
 import json
 import math
 import re
@@ -38,18 +39,21 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import PurePath
 
-from cadgen.cad_ref_syntax import QUOTED_PREFIX_RE, split_cad_ref
+from cadgen.cad_ref_syntax import QUOTED_PREFIX_RE, ref_prefix_names, split_cad_ref
+from cadgen.kicad.naming import natural
 
 __all__ = [
     "BOARD_REF_SUFFIXES",
     "BoardSelector",
     "BoardToken",
+    "ReferenceView",
     "SELECTOR_KINDS",
     "board_ref_document",
     "format_board_selector",
     "format_point",
     "parse_board_selector",
     "parse_board_token",
+    "selector_or_none",
 ]
 
 #: The documents whose references are board references.
@@ -228,6 +232,14 @@ def format_board_selector(
     raise ValueError(f"a board reference is one of {', '.join(SELECTOR_KINDS)}, not {kind!r}")
 
 
+def selector_or_none(kind: str, **fields) -> str | None:
+    """:func:`format_board_selector`, or ``None`` for what the language cannot name."""
+    try:
+        return format_board_selector(kind, **fields)
+    except ValueError:
+        return None
+
+
 def _pair(at) -> tuple[float, float]:
     try:
         x, y = at
@@ -288,3 +300,79 @@ def parse_board_token(text: str) -> BoardToken | None:
     if any(selector is None for selector in selectors):
         return None
     return BoardToken(path, tuple(selectors))
+
+
+class ReferenceView:
+    """What a board's view and a schematic's share: parts and nets by name, and references answered.
+
+    A subclass sets ``path``, ``_parts`` (by reference designator) and ``_nets`` (by name), says
+    what its document is in the class attributes below, and answers a pad selector
+    (:meth:`_pad`) and a point (:meth:`_place`).
+    """
+
+    _DOCUMENT = ""  # "board" or "schematic"
+    _FORMS = ""  # the references it answers, for a reference that is none of them
+    _NAMEABLE = ""  # what a selector names in it
+
+    def part(self, ref: str):
+        """The part ``ref`` (``"U3"``)."""
+        found = self._parts.get(str(ref))
+        if found is None:
+            close = sorted(difflib.get_close_matches(str(ref), list(self._parts), n=3), key=natural)
+            if close:
+                hint = f"; did you mean {', '.join(close)}?"
+            else:
+                refs = sorted(self._parts, key=natural)
+                hint = f"; its parts are {', '.join(refs[:40])}" + (f" and {len(refs) - 40} more" if len(refs) > 40 else "")
+            raise ValueError(f"{self.path.name} has no part {ref}{hint}")
+        return found
+
+    def net(self, name: str):
+        """The net ``name``, as KiCad shows it (``"TX/RX"``; a sheet's local net ``"/Power/EN"``)."""
+        found = self._nets.get(str(name))
+        if found is None:
+            close = sorted(difflib.get_close_matches(str(name), list(self._nets), n=3), key=natural)
+            hint = f"; did you mean {', '.join(close)}?" if close else ""
+            raise ValueError(f"{self.path.name} has no net {name!r}{hint}")
+        return found
+
+    def resolve(self, ref: str):
+        """What the reference ``ref`` names (the class says what each selector answers). A file
+        before the ``#`` must name this document."""
+        answers = self.resolve_all(ref)
+        if len(answers) != 1:
+            raise ValueError(
+                f"{ref!r} names {len(answers)} things; resolve_all() answers each, in the order written"
+            )
+        return answers[0]
+
+    def resolve_all(self, ref: str) -> list:
+        """Every selector of a reference token (``board.kicad_pcb#U3,C14.2``), each resolved."""
+        token = parse_board_token(ref)
+        if token is None:
+            selector = parse_board_selector(ref)
+            if selector is None:
+                raise ValueError(f"not a {self._DOCUMENT} reference: {ref!r}; {self._FORMS}")
+            path, selectors = "", (selector,)
+        else:
+            path, selectors = token.path, token.selectors
+        if path and not ref_prefix_names(path, str(self.path)):
+            raise ValueError(f"reference names {path!r}, but this {self._DOCUMENT} is {str(self.path)!r}")
+        if not selectors:
+            raise ValueError(f"{ref!r} names the whole {self._DOCUMENT}; name {self._NAMEABLE} in it")
+        return [self._answer(selector) for selector in selectors]
+
+    def _answer(self, selector: BoardSelector):
+        if selector.kind == "part":
+            return self.part(selector.ref)
+        if selector.kind == "pad":
+            return self._pad(self.part(selector.ref), selector.pad)
+        if selector.kind == "net":
+            return self.net(selector.net)
+        return self._place(selector)
+
+    def _pad(self, part, number: str):
+        raise NotImplementedError
+
+    def _place(self, selector: BoardSelector):
+        raise NotImplementedError

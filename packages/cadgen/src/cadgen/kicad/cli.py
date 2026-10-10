@@ -23,14 +23,13 @@ import shutil
 import subprocess
 import tempfile
 import threading
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
 from cadgen.kicad.install import KicadInstall
-from cadgen.kicad.phrasing import summarize
+from cadgen.kicad.phrasing import Finding, FindingItem, summarize
 
-__all__ = ["Finding", "KicadRunError", "erc_findings", "drc_findings", "run_kicad_cli"]
+__all__ = ["Finding", "KicadRunError", "erc_findings", "drc_findings", "run_kicad_cli", "stage_files"]
 
 _TIMEOUT_SECONDS = 600
 _NOISE = ("Fontconfig error",)
@@ -55,6 +54,24 @@ def _private_config() -> Path:
 
 def config_home() -> Path:
     return _private_config()
+
+
+def stage_files(files: Sequence[tuple[Path, bytes]], folder: Path) -> Path:
+    """Write ``files`` (absolute paths and their bytes, the document first) into ``folder`` as
+    they lie relative to one another; the staged document. A sheet on another drive than the
+    document is left out: KiCad reads a sheet named by an absolute path where it lies."""
+    document = files[0][0]
+    try:
+        base = Path(os.path.commonpath([str(path.parent) for path, _data in files]))
+    except ValueError:  # a sheet on another drive
+        base = document.parent
+    for path, data in files:
+        if not path.is_relative_to(base):
+            continue
+        target = folder / path.relative_to(base)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    return folder / document.relative_to(base)
 
 
 def _quiet(text: str) -> str:
@@ -88,38 +105,6 @@ def run_kicad_cli(install: KicadInstall, args: Sequence[str], *, cwd: Path, time
     return completed
 
 
-@dataclass(frozen=True)
-class Finding:
-    """One thing KiCad reported, positions in the board script's coordinates."""
-
-    check: str  # "erc", "drc", "parity" or "unconnected"
-    severity: str  # "error" or "warning"
-    type: str  # KiCad's own key, e.g. "clearance", "pin_not_connected"
-    description: str
-    items: tuple[tuple[str, tuple[float, float] | None], ...]
-    summary: str = ""  # one plain sentence (`cadgen.kicad.phrasing`); KiCad's own words when empty
-
-    def render(self) -> str:
-        where = "; ".join(
-            text + (f" at ({position[0]:g}, {position[1]:g})" if position is not None else "")
-            for text, position in self.items
-        )
-        return f"{self.severity} [{self.check} {self.type}] {self.summary or self.description}" + (f": {where}" if where else "")
-
-    def as_json(self) -> dict:
-        return {
-            "check": self.check,
-            "severity": self.severity,
-            "type": self.type,
-            "description": self.description,
-            "summary": self.summary or self.description,
-            "items": [
-                {"description": text, "position": list(position) if position is not None else None}
-                for text, position in self.items
-            ],
-        }
-
-
 def _items(raw: list, to_script: Callable[[float, float], tuple[float, float]] | None) -> tuple:
     items = []
     for item in raw or []:
@@ -127,7 +112,7 @@ def _items(raw: list, to_script: Callable[[float, float], tuple[float, float]] |
         point = None
         if isinstance(position, dict) and to_script is not None:
             point = to_script(float(position.get("x", 0.0)), float(position.get("y", 0.0)))
-        items.append((str(item.get("description", "")), point))
+        items.append(FindingItem(text=str(item.get("description", "")), at=point))
     return tuple(items)
 
 
@@ -152,7 +137,7 @@ def erc_findings(report: Path) -> list[Finding]:
                     type=kind,
                     description=description,
                     items=items,
-                    summary=summarize("erc", kind, description, [text for text, _ in items]),
+                    summary=summarize("erc", kind, description, [item.text for item in items]),
                 )
             )
     return _unique(found)
@@ -174,7 +159,7 @@ def drc_findings(report: Path, *, to_script: Callable[[float, float], tuple[floa
                     type=kind,
                     description=description,
                     items=items,
-                    summary=summarize(check, kind, description, [text for text, _ in items]),
+                    summary=summarize(check, kind, description, [item.text for item in items]),
                 )
             )
     return _unique(found)

@@ -22,6 +22,7 @@ from cadgen.kicad.design import DesignError  # noqa: E402
 from cadgen.kicad.install import KicadMissingError  # noqa: E402
 from cadgen.kicad.sim import Testbench  # noqa: E402
 from cadgen.kicad.spice import parse_value, spice_number  # noqa: E402
+from cadgen.kicad.waveform import Waveform  # noqa: E402
 
 _FONT = "(effects (font (size 1.27 1.27)))"
 
@@ -258,10 +259,20 @@ class TestbenchNetlistTest(unittest.TestCase):
 
     def test_a_missing_ngspice_is_reported_only_when_a_simulation_runs(self) -> None:
         tb = self.divider()
-        with mock.patch.object(ngspice, "_ENGINE", None), mock.patch.object(ngspice, "library_candidates", return_value=[]):
+        with mock.patch.object(ngspice, "_ENGINE", None), mock.patch.object(ngspice, "_library", return_value=None):
             self.assertIn("R1 VIN OUT 10k", tb.netlist())
             with self.assertRaisesRegex(KicadMissingError, "ngspice, the simulator KiCad ships, was not found.*CADGEN_NGSPICE"):
                 tb.operating_point()
+
+
+class WaveformTest(unittest.TestCase):
+    def test_crossings_narrow_to_a_direction_and_a_window(self) -> None:
+        wave = Waveform([0.0, 1.0, 2.0, 3.0, 4.0], [0.0, 2.0, 0.0, 2.0, 0.0], name="V(A)", unit="V", axis="time", axis_unit="s")
+        self.assertEqual(wave.crossings(1.0), [0.5, 1.5, 2.5, 3.5])
+        self.assertEqual(wave.crossings(1.0, rising=True), [0.5, 2.5])
+        self.assertEqual(wave.crossings(1.0, rising=False, start=2.0), [3.5])
+        self.assertEqual(list(wave.window(1.0, 3.0).x), [1.0, 2.0, 3.0])
+        self.assertEqual(wave.window(1.5, 3.0).min(), 0.0)
 
 
 if __name__ == "__main__":

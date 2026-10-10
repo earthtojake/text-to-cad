@@ -31,12 +31,13 @@ import copy
 import shutil
 import tempfile
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from cadgen.kicad import sexpr
 from cadgen.kicad.cli import Finding, drc_findings, erc_findings, run_kicad_cli
 from cadgen.kicad.design import Board, DesignError
+from cadgen.kicad.geometry import board_origin, script_frame
 from cadgen.kicad.install import KicadInstall, find_kicad
 from cadgen.kicad.project import project_texts
 
@@ -89,13 +90,9 @@ def _reviewed(tree: list, project: Path, currents: Mapping[str, float] | None = 
     from cadgen.kicad.review import net_currents, review
 
     index = read_index(tree, project=project)
-    to_script = _to_script(_origin(tree))
+    to_script = script_frame(board_origin(tree), digits=4)
     return [
-        Finding(
-            check=found.check, severity=found.severity, type=found.type, description=found.description,
-            items=tuple((item.text, to_script(*item.at) if item.at else None) for item in found.items),
-            summary=found.summary,
-        )
+        replace(found, items=tuple(replace(item, at=to_script(*item.at) if item.at else None) for item in found.items))
         for found in review(index, net_currents(project) if currents is None else currents)
     ]
 
@@ -134,21 +131,6 @@ class BoardBuild(ProjectCheck):
     sch: str = ""
     pcb: str = ""
     dru: str = ""
-
-
-def _origin(pcb_tree: list) -> tuple[float, float]:
-    setup = sexpr.find(pcb_tree, "setup")
-    origin = sexpr.find(setup, "aux_axis_origin") if setup is not None else None
-    if origin is None or len(origin) < 3:
-        return 0.0, 0.0
-    return float(origin[1]), float(origin[2])
-
-
-def _to_script(origin: tuple[float, float]):
-    def convert(x: float, y: float) -> tuple[float, float]:
-        return round(x - origin[0], 4), round(origin[1] - y, 4)
-
-    return convert
 
 
 def _merge_fills(ours: list, kicad_text: str) -> list:
@@ -211,7 +193,7 @@ def build_board(board: Board, *, name: str, install: KicadInstall | None = None,
             ["pcb", "drc", "--format", "json", "--schematic-parity", "--refill-zones", "--save-board", "-o", "drc.json", f"{name}.kicad_pcb"],
             cwd=stage,
         )
-        board_findings, loaded = _without_canary(drc_findings(stage / "drc.json", to_script=_to_script(_origin(pcb_tree))))
+        board_findings, loaded = _without_canary(drc_findings(stage / "drc.json", to_script=script_frame(board_origin(pcb_tree), digits=4)))
         if board.design_rules and not loaded:
             raise DesignError(
                 "KiCad could not read the board's custom rules, so it applied none of them: a board.rule(...) "
@@ -262,7 +244,7 @@ def check_project(path: Path, *, install: KicadInstall | None = None) -> Project
             if sch.is_file():
                 args.insert(4, "--schematic-parity")
             run_kicad_cli(install, args, cwd=stage)
-            board_findings, loaded = _without_canary(drc_findings(stage / "drc.json", to_script=_to_script(_origin(tree))))
+            board_findings, loaded = _without_canary(drc_findings(stage / "drc.json", to_script=script_frame(board_origin(tree), digits=4)))
             if canary and not loaded:
                 board_findings.insert(0, Finding(
                     check="drc",

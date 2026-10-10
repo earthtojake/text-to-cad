@@ -27,33 +27,27 @@ import math
 from dataclasses import dataclass
 
 from cadgen.kicad import sexpr
-from cadgen.kicad.design import SCRIPT_FIELD, Board, Part, Pin, _natural, kicad_net_name, script_reference, unit_letter
+from cadgen.kicad.design import SCRIPT_FIELD, Board, Part, Pin, kicad_net_name, script_reference, unit_letter
+from cadgen.kicad.geometry import ISO_PAGES, nm
 from cadgen.kicad.ids import Ids
+from cadgen.kicad.naming import GENERATOR, GENERATOR_VERSION, natural
 from cadgen.kicad.outline import outline_bounds, outline_segments, polygon_rings
 from cadgen.kicad.sexpr import Sym
 
-__all__ = ["BOARD_FORMAT_VERSION", "Frame", "board_document", "page_for", "unconnected_net_name"]
+__all__ = ["BOARD_FORMAT_VERSION", "Frame", "board_document", "unconnected_net_name"]
 
 BOARD_FORMAT_VERSION = 20260206
-GENERATOR = "cadgen"
-GENERATOR_VERSION = "10.0"
 EDGE_WIDTH = 0.05
 
-_PAGES = (("A4", 297.0, 210.0), ("A3", 420.0, 297.0), ("A2", 594.0, 420.0), ("A1", 841.0, 594.0), ("A0", 1189.0, 841.0))
 _PAGE_MARGIN = 20.0
 
 
-def page_for(width: float, height: float) -> tuple[str, float, float]:
+def _page_for(width: float, height: float) -> tuple[str, float, float]:
     """The smallest landscape ISO page holding ``width`` x ``height`` plus a margin."""
-    for name, page_width, page_height in _PAGES:
+    for name, page_width, page_height in ISO_PAGES:
         if width + 2 * _PAGE_MARGIN <= page_width and height + 2 * _PAGE_MARGIN <= page_height:
             return name, page_width, page_height
     return "User", math.ceil(width + 2 * _PAGE_MARGIN), math.ceil(height + 2 * _PAGE_MARGIN)
-
-
-def _nm(value: float) -> float:
-    rounded = round(float(value), 6)
-    return 0.0 if rounded == 0 else rounded
 
 
 @dataclass(frozen=True)
@@ -69,17 +63,17 @@ class Frame:
     @classmethod
     def for_outline(cls, outline) -> "Frame":
         min_x, min_y, max_x, max_y = outline_bounds(outline)
-        page, width, height = page_for(max_x - min_x, max_y - min_y)
+        page, width, height = _page_for(max_x - min_x, max_y - min_y)
         # The board's centre at the page's centre, on a 0.1 mm grid.
         offset_x = round(width / 2 - (min_x + max_x) / 2, 1)
         offset_y = round(height / 2 + (min_y + max_y) / 2, 1)
         return cls(offset_x=offset_x, offset_y=offset_y, page=page, page_width=width, page_height=height)
 
     def x(self, x: float) -> float:
-        return _nm(x + self.offset_x)
+        return nm(x + self.offset_x)
 
     def y(self, y: float) -> float:
-        return _nm(self.offset_y - y)
+        return nm(self.offset_y - y)
 
     def point(self, point: tuple[float, float]) -> tuple[float, float]:
         return self.x(point[0]), self.y(point[1])
@@ -159,7 +153,7 @@ def _stackup(board: Board) -> list:
     copper_thickness = 0.035
     mask = 0.01
     dielectrics = len(copper) - 1
-    dielectric = _nm((board.thickness - copper_thickness * len(copper) - 2 * mask) / dielectrics)
+    dielectric = nm((board.thickness - copper_thickness * len(copper) - 2 * mask) / dielectrics)
     if dielectric <= 0:
         raise ValueError(f"a {board.layer_count}-layer board cannot be {board.thickness} mm thick")
     node: list = [
@@ -250,11 +244,11 @@ def _mirror_points(node: list) -> None:
             continue
         head = child[0]
         if head in _POINT_KEYS and len(child) >= 3 and isinstance(child[2], (int, float)):
-            child[2] = _nm(-child[2])
+            child[2] = nm(-child[2])
         elif head == "xy" and len(child) >= 3:
-            child[2] = _nm(-child[2])
+            child[2] = nm(-child[2])
         elif head == "rect_delta" and len(child) >= 3:
-            child[2] = _nm(-child[2])
+            child[2] = nm(-child[2])
         if head not in {"xy"}:
             _mirror_points(child)
 
@@ -270,7 +264,7 @@ def _set_angle(node: list, angle: float) -> None:
     at = sexpr.find(node, "at")
     if at is None:
         return
-    angle = _nm(angle % 360.0)
+    angle = nm(angle % 360.0)
     if angle == 360.0:
         angle = 0.0
     del at[3:]
@@ -298,7 +292,7 @@ def _place_footprint(
     body = [item for item in tree[2:] if not (isinstance(item, list) and item and item[0] in {"version", "generator", "generator_version", "layer", "uuid", "at"})]
     at: list = [Sym("at"), frame.x(placement.x), frame.y(placement.y)]
     if placement.rotation:
-        at.append(_nm(placement.rotation))
+        at.append(nm(placement.rotation))
     node: list = [Sym("footprint"), part.footprint.lib_id, [Sym("layer"), "B.Cu" if bottom else "F.Cu"], [Sym("uuid"), ids(f"footprint:{part.ref}")], at]
     pad_counter = 0
     item_counter = 0
@@ -398,7 +392,7 @@ def _place_footprint(
                 Sym("property"),
                 key,
                 value,
-                [Sym("at"), 0, 0, *([_nm(placement.rotation)] if placement.rotation else [])],
+                [Sym("at"), 0, 0, *([nm(placement.rotation)] if placement.rotation else [])],
                 [Sym("layer"), "B.Fab" if bottom else "F.Fab"],
                 [Sym("hide"), Sym("yes")],
                 [Sym("uuid"), ids(f"footprint:{part.ref}:property:{key}")],
@@ -415,7 +409,7 @@ def _place_footprint(
                     Sym("property"),
                     key,
                     part.symbol.properties.get(key, ""),
-                    [Sym("at"), 0, 0, *([_nm(placement.rotation)] if placement.rotation else [])],
+                    [Sym("at"), 0, 0, *([nm(placement.rotation)] if placement.rotation else [])],
                     [Sym("layer"), "B.Fab" if bottom else "F.Fab"],
                     [Sym("hide"), Sym("yes")],
                     [Sym("uuid"), ids(f"footprint:{part.ref}:property:{key}")],
@@ -516,7 +510,7 @@ def _edge_items(board: Board, *, frame: Frame, ids: Ids) -> list[list]:
             center = frame.point(segment.points[0])
             end = (center[0] + segment.radius, center[1])
             items.append(
-                [Sym("gr_circle"), [Sym("center"), *center], [Sym("end"), _nm(end[0]), end[1]], _stroke(EDGE_WIDTH),
+                [Sym("gr_circle"), [Sym("center"), *center], [Sym("end"), nm(end[0]), end[1]], _stroke(EDGE_WIDTH),
                  [Sym("fill"), Sym("no")], layer, uuid]
             )
     return items
@@ -579,7 +573,7 @@ def _text(board: Board, text, index: int, *, frame: Frame, ids: Ids) -> list:
     thickness = text.thickness if text.thickness is not None else max(round(text.size * 0.15, 3), board.rules.min_text_thickness)
     at: list = [Sym("at"), *frame.point(text.at)]
     if text.rotation:
-        at.append(_nm(text.rotation))
+        at.append(nm(text.rotation))
     effects: list = [Sym("effects"), [Sym("font"), [Sym("size"), text.size, text.size], [Sym("thickness"), thickness]]]
     if text.layer.startswith("B."):
         effects.append([Sym("justify"), Sym("mirror")])
@@ -624,7 +618,7 @@ def board_document(board: Board, *, project: str, frame: Frame, symbol_paths: di
         ],
     ]
     sheetfile = f"{project}.kicad_sch"
-    for part in sorted(board.parts, key=lambda part: _natural(part.ref)):
+    for part in sorted(board.parts, key=lambda part: natural(part.ref)):
         document.append(
             _place_footprint(
                 part, frame=frame, ids=ids, board=board, symbol_path=symbol_paths[part.ref], sheetfile=sheetfile,

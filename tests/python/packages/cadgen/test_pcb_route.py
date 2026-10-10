@@ -57,7 +57,7 @@ PTH2 = (
 
 def _parse(dsn_text: str) -> list:
     """A DSN as nested lists of strings (its lone string-quote character set aside)."""
-    from cadgen.kicad.specctra import _specctra
+    from cadgen.kicad.specctra.session import _specctra
 
     return _specctra(dsn_text.replace('(string_quote ")', "(string_quote Q)"))
 

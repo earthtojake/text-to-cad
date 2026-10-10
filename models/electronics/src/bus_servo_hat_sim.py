@@ -9,8 +9,6 @@ from), so a thin margin here is worth confirming with the makers' models, or on 
 import sys
 from pathlib import Path
 
-import numpy
-
 from cadgen import pcb
 
 import bus_servo_hat_circuits as circuits
@@ -24,27 +22,10 @@ def check(ok, message):
         failures.append(message)
 
 
-def edges(wave, level, start, stop):
-    """``(time, +1 rising | -1 falling)`` for each crossing of ``level`` between ``start`` and ``stop``."""
-    x, v = numpy.asarray(wave.x, dtype=float), numpy.asarray(wave.values, dtype=float) - level
-    found = []
-    for i in numpy.nonzero((v[:-1] < 0) != (v[1:] < 0))[0]:
-        t = x[i] + (x[i + 1] - x[i]) * v[i] / (v[i] - v[i + 1])
-        if start <= t <= stop:
-            found.append((float(t), 1 if v[i + 1] > v[i] else -1))
-    return found
-
-
-def window(wave, start, stop):
-    x = numpy.asarray(wave.x, dtype=float)
-    return numpy.asarray(wave.values, dtype=float)[(x >= start) & (x <= stop)]
-
-
 def widest_dip(wave, level, start, stop):
     """The longest time ``wave`` stays below ``level`` between ``start`` and ``stop`` (0 if never)."""
-    crossings = edges(wave, level, start, stop)
-    falls = [t for t, d in crossings if d < 0]
-    rises = [t for t, d in crossings if d > 0]
+    falls = wave.crossings(level, rising=False, start=start, stop=stop)
+    rises = wave.crossings(level, rising=True, start=start, stop=stop)
     return max((min((r for r in rises if r > f), default=stop) - f for f in falls), default=0.0)
 
 
@@ -122,50 +103,50 @@ def check_bus(bus):
         level = data.at(at)
         check(level > VIH if bit else level < VIL, f"{name}: host bit {index} reads {level:.2f} V on DATA mid-bit; sent {bit}")
     # DATA follows TX: each of its edges, how long after TX's.
-    tx_edges = edges(tx, THRESHOLD, HOST_START - BIT / 2, HOST_END + BIT / 2)
-    data_edges = edges(data, THRESHOLD, HOST_START - BIT / 2, HOST_END + BIT)
-    delays = {1: [], -1: []}
-    for at, direction in tx_edges:
-        follow = [t for t, d in data_edges if d == direction and at <= t < at + BIT / 2]
-        check(bool(follow), f"{name}: DATA does not follow TX's {'rise' if direction > 0 else 'fall'} at {at * 1e6:.2f} us")
-        if follow:
-            delays[direction].append(follow[0] - at)
+    host, heard = dict(start=HOST_START - BIT / 2, stop=HOST_END + BIT / 2), dict(start=HOST_START - BIT / 2, stop=HOST_END + BIT)
+    tx_rises = tx.crossings(THRESHOLD, rising=True, **host)
+    delays = {True: [], False: []}  # after each rise, after each fall
+    for rising in (True, False):
+        data_edges = data.crossings(THRESHOLD, rising=rising, **heard)
+        for at in tx.crossings(THRESHOLD, rising=rising, **host):
+            follow = [t for t in data_edges if at <= t < at + BIT / 2]
+            check(bool(follow), f"{name}: DATA does not follow TX's {'rise' if rising else 'fall'} at {at * 1e6:.2f} us")
+            if follow:
+                delays[rising].append(follow[0] - at)
     # How long the '126 keeps driving after each rise (until TXEN crosses its threshold), and
     # how fast DATA rises: 10 to 90 %.
     windows, rise_times = [], []
-    txen_edges = edges(txen, THRESHOLD, HOST_START, REPLY_START)
-    for at, direction in tx_edges:
-        if direction > 0:
-            off = [t for t, d in txen_edges if d < 0 and t > at]
-            windows.append(off[0] - at if off else float("inf"))
-    for at, direction in data_edges:
-        if direction > 0:
-            low = [t for t, d in edges(data, 0.1 * VCC, at - BIT / 2, at) if d > 0]
-            high = [t for t, d in edges(data, 0.9 * VCC, at, at + BIT / 2) if d > 0]
-            rise_times.append(high[0] - low[-1] if low and high else float("inf"))
+    txen_falls = txen.crossings(THRESHOLD, rising=False, start=HOST_START, stop=REPLY_START)
+    for at in tx_rises:
+        off = [t for t in txen_falls if t > at]
+        windows.append(off[0] - at if off else float("inf"))
+    for at in data.crossings(THRESHOLD, rising=True, **heard):
+        low = data.crossings(0.1 * VCC, rising=True, start=at - BIT / 2, stop=at)
+        high = data.crossings(0.9 * VCC, rising=True, start=at, stop=at + BIT / 2)
+        rise_times.append(high[0] - low[-1] if low and high else float("inf"))
     worst_rise = max(rise_times)
     check(worst_rise < 0.1 * BIT, f"{name}: DATA takes {worst_rise * 1e9:.0f} ns to rise (10-90 %), a tenth of a bit is 100 ns")
-    distortion = max(delays[-1]) - min(delays[1])
+    distortion = max(delays[False]) - min(delays[True])
     check(abs(distortion) < 0.1 * BIT, f"{name}: low bits on DATA are {distortion * 1e9:.0f} ns short of TX's")
     # The host does not hear itself while it sends. As TX falls, TXEN turns the '126 on and the '125
     # off at once, so RX may dip for a moment; a UART samples 16 times a bit and checks a start bit
     # at its middle, so a dip shorter than one sample cannot be read as a bit.
-    rx_low = window(rx, HOST_START, HOST_END + BIT).min()
+    rx_low = rx.window(HOST_START, HOST_END + BIT).min()
     dip = widest_dip(rx, THRESHOLD, HOST_START, HOST_END + BIT)
     check(dip < BIT / 16, f"{name}: RX stays low for {dip * 1e9:.0f} ns while the host sends: it would read its own bytes")
     # The switch lets go of the bus soon after the host's last stop bit, before a servo answers.
-    last_rise = max(at for at, direction in tx_edges if direction > 0)
-    released = [t for t, d in txen_edges if d < 0 and t > last_rise]
+    last_rise = max(tx_rises)
+    released = [t for t in txen_falls if t > last_rise]
     release = released[0] - last_rise if released else float("inf")
     check(release < 2 * BIT, f"{name}: the bus is let go {release * 1e6:.2f} us after the host's last rise")
-    check(window(data, last_rise + release + 0.2e-6, REPLY_START - 2 * BIT).min() > VIH,
+    check(data.window(last_rise + release + 0.2e-6, REPLY_START - 2 * BIT).min() > VIH,
           f"{name}: DATA does not rest high between the host's frame and the servo's")
     # The host hears the servo: RX, sampled mid-bit, is each bit the servo sent.
     for index, bit in enumerate(uart_bits(STATUS)):
         at = REPLY_START + (index + 0.5) * BIT
         level = rx.at(at)
         check(level > VIH if bit else level < VIL, f"{name}: servo bit {index} reads {level:.2f} V on RX mid-bit; sent {bit}")
-    print(f"  {bus + 'F':>6}  DATA falls {max(delays[-1]) * 1e9:4.0f} ns and rises {max(delays[1]) * 1e9:4.0f} ns after TX, "
+    print(f"  {bus + 'F':>6}  DATA falls {max(delays[False]) * 1e9:4.0f} ns and rises {max(delays[True]) * 1e9:4.0f} ns after TX, "
           f"rises in {worst_rise * 1e9:4.0f} ns (driven {min(windows) * 1e9:4.0f} ns), low bits {distortion * 1e9:3.0f} ns short; "
           f"RX dips to {rx_low:.2f} V for {dip * 1e9:2.0f} ns; bus let go {release * 1e9:4.0f} ns after the last rise")
     return tb, switch

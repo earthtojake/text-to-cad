@@ -21,19 +21,19 @@ for a given ``kicad-cli``.
 from __future__ import annotations
 
 import ctypes.util
-import functools
 import os
-import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from cadgen._internal import tool_probe
 
 __all__ = [
     "KICAD_MAJOR",
     "KicadInstall",
     "KicadMissingError",
     "find_kicad",
+    "find_ngspice",
     "install_hint",
 ]
 
@@ -99,23 +99,14 @@ def _major(version: str) -> int:
 
 
 def _candidates() -> list[Path]:
-    found: list[Path] = []
-    explicit = os.environ.get("CADGEN_KICAD_CLI", "").strip()
-    if explicit:
-        return [Path(explicit).expanduser()]
-    on_path = shutil.which("kicad-cli")
-    if on_path:
-        found.append(Path(on_path))
     if sys.platform == "darwin":
-        for root in (Path("/Applications"), Path.home() / "Applications"):
-            found.append(root / "KiCad" / "KiCad.app" / "Contents" / "MacOS" / "kicad-cli")
+        places = [root / "KiCad" / "KiCad.app" / "Contents" / "MacOS" / "kicad-cli" for root in (Path("/Applications"), Path.home() / "Applications")]
     elif sys.platform.startswith("win"):
         program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
-        versions = sorted((program_files / "KiCad").glob("*/bin/kicad-cli.exe"), reverse=True)
-        found.extend(versions)
+        places = sorted((program_files / "KiCad").glob("*/bin/kicad-cli.exe"), reverse=True)
     else:
-        found.extend([Path("/usr/bin/kicad-cli"), Path("/usr/local/bin/kicad-cli")])
-    return found
+        places = [Path("/usr/bin/kicad-cli"), Path("/usr/local/bin/kicad-cli")]
+    return tool_probe.candidates("CADGEN_KICAD_CLI", ["kicad-cli", *places])
 
 
 def _library_dir(cli: Path, kind: str, major: int) -> Path | None:
@@ -138,45 +129,39 @@ def _library_dir(cli: Path, kind: str, major: int) -> Path | None:
     return None
 
 
-def _ngspice(cli: Path) -> Path | None:
+def find_ngspice(cli: Path | None = None) -> Path | None:
+    """ngspice's shared library: ``CADGEN_NGSPICE``, else the one KiCad ships beside ``cli``,
+    else the system's (a bare name such as ``libngspice.so.0`` is what its loader resolves)."""
     explicit = os.environ.get("CADGEN_NGSPICE", "").strip()
     if explicit:
         return Path(explicit).expanduser()
-    resolved = cli.resolve()
-    for candidate in (
-        resolved.parent.parent / "Frameworks" / "libngspice.0.dylib",  # macOS app bundle
-        resolved.parent.parent / "PlugIns" / "sim" / "libngspice.0.dylib",
-        resolved.parent / "libngspice-0.dll",  # Windows
-    ):
-        if candidate.is_file():
-            return candidate
-    # A bare name (``libngspice.so.0``) is what the system loader resolves.
+    if cli is not None:
+        resolved = cli.resolve()
+        for candidate in (
+            resolved.parent.parent / "Frameworks" / "libngspice.0.dylib",  # macOS app bundle
+            resolved.parent.parent / "PlugIns" / "sim" / "libngspice.0.dylib",
+            resolved.parent / "libngspice-0.dll",  # Windows
+        ):
+            if candidate.is_file():
+                return candidate
     found = ctypes.util.find_library("ngspice")
-    return Path(found) if found else None
+    if found:
+        return Path(found)
+    # A distribution's libngspice0, which KiCad's Linux packages depend on.
+    return Path("libngspice.so.0") if sys.platform.startswith("linux") else None
 
 
-@functools.lru_cache(maxsize=8)
-def _probe(cli: str, stamp: tuple[int, int]) -> str | None:
-    del stamp  # part of the cache key: a reinstalled kicad-cli is probed again
-    try:
-        completed = subprocess.run(
-            [cli, "version"], capture_output=True, text=True, timeout=60, check=False
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    version = (completed.stdout or "").strip().splitlines()
-    return version[-1].strip() if completed.returncode == 0 and version else None
+def _version(cli: Path) -> str | None:
+    printed = tool_probe.output(cli, "version")
+    lines = printed[0].strip().splitlines() if printed is not None else []
+    return lines[-1].strip() if lines else None
 
 
 def find_kicad() -> KicadInstall:
     """The KiCad this process uses, or :class:`KicadMissingError` saying why not."""
     too_old: list[str] = []
     for candidate in _candidates():
-        try:
-            stat = candidate.stat()
-        except OSError:
-            continue
-        version = _probe(str(candidate), (stat.st_mtime_ns, stat.st_size))
+        version = _version(candidate)
         if version is None:
             continue
         if _major(version) < KICAD_MAJOR:
@@ -189,7 +174,7 @@ def find_kicad() -> KicadInstall:
             symbol_dir=_library_dir(candidate, "symbols", major),
             footprint_dir=_library_dir(candidate, "footprints", major),
             model_dir=_library_dir(candidate, "3dmodels", major),
-            ngspice=_ngspice(candidate),
+            ngspice=find_ngspice(candidate),
         )
         # The libraries a board reads are its inputs wherever KiCad is installed: a
         # KiCad update that changes a footprint makes the boards using it stale.

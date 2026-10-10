@@ -15,7 +15,8 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 
-from cadgen.kicad.board_index import BoardIndex, Finding, FindingItem, Net
+from cadgen.kicad.board_index import BoardIndex, Net
+from cadgen.kicad.phrasing import Finding, FindingItem
 
 __all__ = ["DECOUPLING_DISTANCE", "TEMPERATURE_RISE", "is_ground", "net_currents", "required_width", "review"]
 

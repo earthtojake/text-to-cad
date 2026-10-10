@@ -30,8 +30,6 @@ powers the circuit); ``run.current(load)`` the current a net feeds into a load;
 
 from __future__ import annotations
 
-import io
-import math
 import re
 import sys
 from collections.abc import Mapping
@@ -40,7 +38,10 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
 
 from cadgen.kicad.design import Circuit, DesignError, Net, Part, Pin
-from cadgen.kicad.spice import PartModel, _param_number, parse_value, part_model, spice_number
+from cadgen.kicad.ngspice import error_hints
+from cadgen.kicad.sim_plot import plot_run
+from cadgen.kicad.spice import PartModel, parse_value, part_model, spice_number, to_number
+from cadgen.kicad.waveform import Waveform
 
 __all__ = ["Load", "OperatingPoint", "Run", "SimulationError", "Source", "Testbench", "Waveform"]
 
@@ -73,26 +74,8 @@ def _calling_folder() -> Path:
     return Path(script).resolve().parent if script else Path.cwd().resolve()
 
 
-def _number(value: Any, *, what: str) -> float:
-    """A number given as a float, an int or SPICE-style text (``'1m'``, ``'4.7k'``; ``M`` is mega)."""
-    if isinstance(value, bool):
-        raise DesignError(f"{what} is a number, got {value!r}")
-    if isinstance(value, (int, float)):
-        number = float(value)
-    elif isinstance(value, str):
-        parsed = _param_number(value.strip())
-        if parsed is None:
-            raise DesignError(f"{what} is a number such as 5, 1e-3 or '1m', got {value!r}")
-        number = parsed
-    else:
-        raise DesignError(f"{what} is a number, got {value!r}")
-    if not math.isfinite(number):
-        raise DesignError(f"{what} must be finite, got {value!r}")
-    return number
-
-
 def _positive(value: Any, *, what: str) -> float:
-    number = _number(value, what=what)
+    number = to_number(value, what=what)
     if number <= 0:
         raise DesignError(f"{what} must be greater than 0, got {value!r}")
     return number
@@ -168,23 +151,23 @@ def _stimulus(*, dc: Any, ac: Any, pulse: Any, sine: Any, pwl: Any, unit: str) -
         raise DesignError("a source needs a value: dc=, ac= (for ac()), or a waveform: pulse=, sine= or pwl=")
     words: list[str] = []
     if dc is not None:
-        words.append(f"DC {spice_number(_number(dc, what='dc'))}")
+        words.append(f"DC {spice_number(to_number(dc, what='dc'))}")
     if ac is not None:
         if isinstance(ac, (tuple, list)):
             if len(ac) != 2:
                 raise DesignError(f"ac= is a magnitude, or (magnitude, phase in degrees); got {ac!r}")
-            magnitude, phase = _number(ac[0], what="ac magnitude"), _number(ac[1], what="ac phase")
+            magnitude, phase = to_number(ac[0], what="ac magnitude"), to_number(ac[1], what="ac phase")
             words.append(f"AC {spice_number(magnitude)} {spice_number(phase)}")
         else:
-            words.append(f"AC {spice_number(_number(ac, what='ac'))}")
+            words.append(f"AC {spice_number(to_number(ac, what='ac'))}")
     if pulse is not None:
         spec = _keys(pulse, _PULSE_KEYS, ("v1", "v2"), what="pulse")
-        values = [spice_number(_number(spec[key], what=f"pulse {key}")) for key in ("v1", "v2")]
+        values = [spice_number(to_number(spec[key], what=f"pulse {key}")) for key in ("v1", "v2")]
         for key in ("delay", "rise", "fall", "width", "period"):
             if key not in spec:
                 values.append("0")  # SPICE's own default: rise/fall the step, width/period the whole run
                 continue
-            number = _number(spec[key], what=f"pulse {key}")
+            number = to_number(spec[key], what=f"pulse {key}")
             if number < 0 or (number == 0 and key != "delay"):
                 raise DesignError(
                     f"pulse {key} must be {'0 or more' if key == 'delay' else 'greater than 0'}, got {spec[key]!r}"
@@ -195,21 +178,21 @@ def _stimulus(*, dc: Any, ac: Any, pulse: Any, sine: Any, pwl: Any, unit: str) -
     if sine is not None:
         spec = _keys(sine, _SINE_KEYS, ("amplitude", "frequency"), what="sine")
         frequency = _positive(spec["frequency"], what="sine frequency")
-        delay = _number(spec.get("delay", 0), what="sine delay")
+        delay = to_number(spec.get("delay", 0), what="sine delay")
         if delay < 0:
             raise DesignError(f"sine delay must be 0 or more, got {spec['delay']!r}")
         values = [
-            _number(spec.get("offset", 0), what="sine offset"),
-            _number(spec["amplitude"], what="sine amplitude"),
+            to_number(spec.get("offset", 0), what="sine offset"),
+            to_number(spec["amplitude"], what="sine amplitude"),
             frequency,
             delay,
-            _number(spec.get("damping", 0), what="sine damping"),
-            _number(spec.get("phase", 0), what="sine phase"),
+            to_number(spec.get("damping", 0), what="sine damping"),
+            to_number(spec.get("phase", 0), what="sine phase"),
         ]
         words.append(f"SIN({' '.join(spice_number(value) for value in values)})")
     if pwl is not None:
         try:
-            points = [(_number(time, what="pwl time"), _number(value, what=f"pwl {unit}")) for time, value in pwl]
+            points = [(to_number(time, what="pwl time"), to_number(value, what=f"pwl {unit}")) for time, value in pwl]
         except (TypeError, ValueError) as error:
             if isinstance(error, DesignError):
                 raise
@@ -340,7 +323,7 @@ class Testbench(Circuit):
         for key, value, kind in (("ohms", ohms, "R"), ("farads", farads, "C"), ("henries", henries, "L")):
             if value is None:
                 continue
-            number = parse_value(value, kind=kind, ref=f"load {key}") if isinstance(value, str) else _number(value, what=key)
+            number = parse_value(value, kind=kind, ref=f"load {key}") if isinstance(value, str) else to_number(value, what=key)
             if number <= 0:
                 raise DesignError(f"load {key} must be greater than 0, got {value!r}")
             values[key] = number
@@ -527,7 +510,7 @@ class Testbench(Circuit):
         operating point (each source's value at time 0).
         """
         stop = _positive(stop, what="transient stop")
-        start = _number(start, what="transient start")
+        start = to_number(start, what="transient start")
         if start < 0 or start >= stop:
             raise DesignError(f"transient start must be 0 or more and before stop ({spice_number(stop)} s), got {start!r}")
         step = (stop - start) / 1000.0 if step is None else _positive(step, what="transient step")
@@ -562,8 +545,8 @@ class Testbench(Circuit):
         ``source_net`` is a source this testbench made, or the net one drives.
         """
         source = self._sweep_source(source_net)
-        start = _number(start, what="dc_sweep start")
-        stop = _number(stop, what="dc_sweep stop")
+        start = to_number(start, what="dc_sweep start")
+        stop = to_number(stop, what="dc_sweep stop")
         step = _positive(step, what="dc_sweep step")
         if start == stop:
             raise DesignError("dc_sweep start and stop are the same value")
@@ -589,42 +572,7 @@ class Testbench(Circuit):
 
 
 def _explain(failure: Any, deck: _Deck, what: str) -> str:
-    seen: list[str] = []
-    for line in failure.errors:
-        text = line[len("stderr ") :] if line.startswith("stderr ") else line
-        if text not in seen:
-            seen.append(text)
-    hints: list[str] = []
-    for text in seen:
-        lowered = text.lower()
-        match = re.search(r"singular matrix:\s*check node (\S+)", lowered)
-        if match:
-            node = match.group(1)
-            if node.endswith("#branch"):
-                owner = deck.described.get(node[: -len("#branch")], node[: -len("#branch")])
-                hint = f"{owner} is in a loop of voltage sources or inductors with nothing between them"
-            else:
-                owner = deck.described.get(node, f"node {node}")
-                hint = (
-                    f"{owner} has no DC path to ground: every net needs one (a capacitor alone does not "
-                    "conduct at DC, an unconnected pin floats); connect it, or give it a bleeder such as "
-                    "tb.load(net, ohms=1e9)"
-                )
-        elif "timestep too small" in lowered:
-            hint = (
-                "the simulation could not converge: give sources finite rise and fall times, add the "
-                "series resistance real parts have, or check for a source shorted by a part"
-            )
-        elif "unknown subckt" in lowered or ("model" in lowered and ("find" in lowered or "valid" in lowered or "unknown" in lowered)):
-            hint = "a model the netlist names is not defined: check Sim.Name against the model file"
-        elif "unrecognized parameter" in lowered or "unknown parameter" in lowered:
-            hint = "a parameter is not one that model has: check Sim.Params against the model's parameters"
-        else:
-            continue
-        if hint not in hints:
-            hints.append(hint)
-    if any("no DC path" in hint or "loop of voltage sources" in hint for hint in hints):
-        hints = [hint for hint in hints if not hint.startswith("the simulation could not converge")]  # a consequence
+    seen, hints = error_hints(failure.errors, deck.described)
     shown = seen[:12] + ([f"... and {len(seen) - 12} more"] if len(seen) > 12 else [])
     message = f"the {what} did not run: {failure.reason}"
     if shown:
@@ -787,287 +735,7 @@ class Run:
         ]
         voltages = [self[name] for name in chosen]
         measured = [self.current(what) for what in currents]
-        return _plot_run(self, Path(path), voltages, measured, title=title or self._bench.title)
+        return plot_run(self, Path(path), voltages, measured, title=title or self._bench.title)
 
     def __repr__(self) -> str:
         return f"Run({self.kind}: {len(self.x)} points, nets {', '.join(self._deck.nets)})"
-
-
-class Waveform:
-    """One result over an analysis's axis: ``x`` (seconds, hertz, or the swept value) and ``values``.
-
-    Both are numpy arrays; ``values`` is complex for an AC run (use ``db``,
-    ``magnitude`` and ``phase``). ``final`` is the last value, ``at(x)`` a
-    linear interpolation (in log frequency for an AC run), ``crossings(level)``
-    every axis value where the waveform crosses ``level``.
-    """
-
-    __slots__ = ("x", "values", "name", "unit", "axis", "axis_unit")
-
-    def __init__(self, x: Any, values: Any, *, name: str, unit: str, axis: str, axis_unit: str):
-        self.x = x
-        self.values = values
-        self.name = name
-        self.unit = unit
-        self.axis = axis
-        self.axis_unit = axis_unit
-
-    @property
-    def is_complex(self) -> bool:
-        import numpy
-
-        return bool(numpy.iscomplexobj(self.values))
-
-    def _real(self, what: str):
-        if self.is_complex:
-            raise DesignError(f"{self.name} is complex (an AC result): take {what} of .db, .magnitude or .phase")
-        return self.values
-
-    @staticmethod
-    def _scalar(value: Any) -> float | complex:
-        return complex(value) if isinstance(value, complex) else float(value)
-
-    @property
-    def final(self) -> float | complex:
-        return self._scalar(self.values[-1])
-
-    @property
-    def initial(self) -> float | complex:
-        return self._scalar(self.values[0])
-
-    def max(self) -> float:
-        return float(self._real("max()").max())
-
-    def min(self) -> float:
-        return float(self._real("min()").min())
-
-    def _ordered(self):
-        import numpy
-
-        x, values = numpy.asarray(self.x, dtype=float), numpy.asarray(self.values)
-        if len(x) > 1 and x[0] > x[-1]:
-            x, values = x[::-1], values[::-1]
-        return x, values
-
-    def at(self, x: float) -> float | complex:
-        """The value at axis position ``x``, interpolated linearly (log-frequency for AC)."""
-        import numpy
-
-        axis, values = self._ordered()
-        position = _number(x, what=f"{self.axis}")
-        if not len(axis) or position < axis[0] or position > axis[-1]:
-            raise DesignError(
-                f"{self.name}.at({position:g}) is outside the run's {self.axis} "
-                f"({axis[0]:g} to {axis[-1]:g} {self.axis_unit})" if len(axis) else f"{self.name} has no points"
-            )
-        if self.axis_unit == "Hz":
-            axis, position = numpy.log10(axis), math.log10(position)
-        if numpy.iscomplexobj(values):
-            return complex(numpy.interp(position, axis, values.real), numpy.interp(position, axis, values.imag))
-        return float(numpy.interp(position, axis, values))
-
-    def crossings(self, level: float) -> list[float]:
-        """Every axis value where the waveform crosses ``level`` (rising or falling), interpolated."""
-        import numpy
-
-        values = numpy.asarray(self._real("crossings()"), dtype=float) - _number(level, what="level")
-        x = numpy.asarray(self.x, dtype=float)
-        found: list[float] = []
-        logarithmic = self.axis_unit == "Hz"
-        for index in range(len(values) - 1):
-            a, b = values[index], values[index + 1]
-            if a == 0:
-                if not found or found[-1] != x[index]:
-                    found.append(float(x[index]))
-            elif a * b < 0:
-                fraction = a / (a - b)
-                if logarithmic:
-                    found.append(float(10 ** (math.log10(x[index]) + fraction * (math.log10(x[index + 1]) - math.log10(x[index])))))
-                else:
-                    found.append(float(x[index] + fraction * (x[index + 1] - x[index])))
-        if len(values) and values[-1] == 0 and (not found or found[-1] != x[-1]):
-            found.append(float(x[-1]))
-        return found
-
-    @property
-    def magnitude(self) -> "Waveform":
-        import numpy
-
-        return Waveform(self.x, numpy.abs(self.values), name=f"|{self.name}|", unit=self.unit, axis=self.axis, axis_unit=self.axis_unit)
-
-    @property
-    def db(self) -> "Waveform":
-        """20 log10 of the magnitude: an AC transfer function's gain when the input is ``ac=1``."""
-        import numpy
-
-        with numpy.errstate(divide="ignore"):
-            values = 20.0 * numpy.log10(numpy.abs(self.values))
-        return Waveform(self.x, values, name=f"{self.name} dB", unit="dB", axis=self.axis, axis_unit=self.axis_unit)
-
-    @property
-    def phase(self) -> "Waveform":
-        """The phase in degrees, unwrapped (it runs past +-180 rather than jumping)."""
-        import numpy
-
-        values = numpy.degrees(numpy.unwrap(numpy.angle(numpy.asarray(self.values, dtype=complex))))
-        return Waveform(self.x, values, name=f"{self.name} phase", unit="deg", axis=self.axis, axis_unit=self.axis_unit)
-
-    def __array__(self, dtype: Any = None, copy: Any = None):
-        import numpy
-
-        return numpy.asarray(self.values, dtype=dtype)
-
-    def __len__(self) -> int:
-        return len(self.values)
-
-    def _combine(self, other: Any, operation: Any, symbol: str, reverse: bool = False) -> "Waveform":
-        import numpy
-
-        if isinstance(other, Waveform):
-            if len(other.x) != len(self.x) or not numpy.array_equal(other.x, self.x):
-                raise DesignError(f"{self.name} {symbol} {other.name}: the waveforms come from different runs")
-            values, name = other.values, other.name
-            unit = self.unit if other.unit == self.unit else ""
-        elif isinstance(other, (int, float, complex)) and not isinstance(other, bool):
-            values, name, unit = other, f"{other:g}", self.unit
-        else:
-            return NotImplemented
-        left, right = (values, self.values) if reverse else (self.values, values)
-        label = f"({name} {symbol} {self.name})" if reverse else f"({self.name} {symbol} {name})"
-        return Waveform(self.x, operation(left, right), name=label, unit=unit if symbol in "+-" else "", axis=self.axis, axis_unit=self.axis_unit)
-
-    def __add__(self, other: Any) -> "Waveform":
-        return self._combine(other, lambda a, b: a + b, "+")
-
-    def __radd__(self, other: Any) -> "Waveform":
-        return self._combine(other, lambda a, b: a + b, "+", reverse=True)
-
-    def __sub__(self, other: Any) -> "Waveform":
-        return self._combine(other, lambda a, b: a - b, "-")
-
-    def __rsub__(self, other: Any) -> "Waveform":
-        return self._combine(other, lambda a, b: a - b, "-", reverse=True)
-
-    def __mul__(self, other: Any) -> "Waveform":
-        return self._combine(other, lambda a, b: a * b, "*")
-
-    def __rmul__(self, other: Any) -> "Waveform":
-        return self._combine(other, lambda a, b: a * b, "*", reverse=True)
-
-    def __truediv__(self, other: Any) -> "Waveform":
-        return self._combine(other, lambda a, b: a / b, "/")
-
-    def __neg__(self) -> "Waveform":
-        return Waveform(self.x, -self.values, name=f"-{self.name}", unit=self.unit, axis=self.axis, axis_unit=self.axis_unit)
-
-    def __repr__(self) -> str:
-        if not len(self.values):
-            return f"Waveform({self.name}, empty)"
-        final = self.final
-        shown = f"{final.real:.6g}{final.imag:+.6g}j" if isinstance(final, complex) else f"{final:.6g}"
-        return f"Waveform({self.name}, {len(self.values)} points over {self.axis}, final {shown} {self.unit})"
-
-
-# --- plotting -----------------------------------------------------------------------
-
-# A categorical palette in a fixed order (never cycled), validated for colour-vision
-# deficiency on the light surface, and the chart's ink.
-_SERIES = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948")
-_SURFACE, _INK, _INK_2, _MUTED, _GRID, _AXIS_LINE = "#fcfcfb", "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
-_SI = ((1e9, "G"), (1e6, "M"), (1e3, "k"), (1.0, ""), (1e-3, "m"), (1e-6, "\u00b5"), (1e-9, "n"), (1e-12, "p"), (1e-15, "f"))
-_PLOT_SUFFIXES = (".png", ".svg", ".pdf")
-
-
-def _si_scale(peak: float) -> tuple[float, str]:
-    if not math.isfinite(peak) or peak <= 0:
-        return 1.0, ""
-    for scale, prefix in _SI:
-        if peak >= scale * 0.999:
-            return scale, prefix
-    return _SI[-1]
-
-
-def _plot_run(run: Run, path: Path, voltages: list[Waveform], currents: list[Waveform], *, title: str) -> Path:
-    """Draw ``run``'s waveforms: one panel per quantity (never two y-scales on one panel)."""
-    import numpy
-    from matplotlib.backends.backend_agg import FigureCanvasAgg
-    from matplotlib.figure import Figure
-
-    if path.suffix.lower() not in _PLOT_SUFFIXES:
-        raise DesignError(f"plot() writes {', '.join(_PLOT_SUFFIXES)}; {path.name} has none of those suffixes")
-    series = [*voltages, *currents]
-    if not series:
-        raise DesignError("plot() has nothing to draw: name nets=[...] or currents=[...]")
-    if len(series) > len(_SERIES):
-        raise DesignError(
-            f"plot() draws at most {len(_SERIES)} waveforms at once, so each keeps its own colour; "
-            f"this one has {len(series)}: choose them with nets=[...]"
-        )
-    colour = {wave.name: _SERIES[index] for index, wave in enumerate(series)}
-    if run.kind == "ac":
-        rows = [("Magnitude", "dB", [(wave.name, wave.db) for wave in series]), ("Phase", "deg", [(wave.name, wave.phase) for wave in series])]
-    else:
-        rows = ([("Voltage", "V", [(wave.name, wave) for wave in voltages])] if voltages else []) + (
-            [("Current", "A", [(wave.name, wave) for wave in currents])] if currents else []
-        )
-    figure = Figure(figsize=(8.0, 1.0 + 2.6 * len(rows)), dpi=144, facecolor=_SURFACE, layout="constrained")
-    FigureCanvasAgg(figure)
-    axes = figure.subplots(len(rows), 1, sharex=True, squeeze=False)[:, 0]
-    x = numpy.asarray(run.x, dtype=float)
-    x_scale, x_prefix = (1.0, "") if run.kind == "ac" else _si_scale(float(numpy.max(numpy.abs(x))) if len(x) else 0.0)
-    for ax, (quantity, unit, waves) in zip(axes, rows):
-        ax.set_facecolor(_SURFACE)
-        finite = [numpy.asarray(wave.values, dtype=float) for _name, wave in waves]
-        peak = max((float(numpy.nanmax(numpy.abs(values[numpy.isfinite(values)]))) for values in finite if numpy.isfinite(values).any()), default=0.0)
-        y_scale, y_prefix = _si_scale(peak) if unit in ("V", "A") else (1.0, "")
-        for (name, wave), values in zip(waves, finite):
-            ax.plot(x / x_scale, values / y_scale, color=colour[name], linewidth=1.0, solid_joinstyle="round", solid_capstyle="round", label=name)
-        if run.kind == "ac":
-            ax.set_xscale("log")
-        for side in ("top", "right"):
-            ax.spines[side].set_visible(False)
-        for side in ("left", "bottom"):
-            ax.spines[side].set_color(_AXIS_LINE)
-            ax.spines[side].set_linewidth(0.5)
-        ax.grid(True, which="major", color=_GRID, linewidth=0.5)
-        ax.set_axisbelow(True)
-        ax.tick_params(colors=_MUTED, labelcolor=_INK_2, labelsize=8, length=0)
-        label = waves[0][0] if len(waves) == 1 else quantity
-        ax.set_ylabel(f"{label} ({y_prefix}{unit})", color=_INK_2, fontsize=9)
-        if len(waves) >= 2:
-            ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.0), ncol=min(len(waves), 4), frameon=False, fontsize=8, labelcolor=_INK_2, handlelength=1.6, borderaxespad=0.2)
-        if len(waves) <= 4 and run.kind != "ac":
-            _end_labels(ax, x / x_scale, [(name, values / y_scale) for (name, _wave), values in zip(waves, finite)], colour, f"{y_prefix}{unit}")
-    axis_label = {"transient": f"Time ({x_prefix}s)", "ac": "Frequency (Hz)", "dc_sweep": f"Swept source ({x_prefix}{run._axis[1]})"}[run.kind]
-    axes[-1].set_xlabel(axis_label, color=_INK_2, fontsize=9)
-    figure.suptitle(title, color=_INK, fontsize=11, x=0.01, ha="left")
-    from cadgen._internal.atomic_replace import write_bytes_atomic
-
-    picture = io.BytesIO()
-    kind = path.suffix[1:].lower()
-    # No "Software" stamp: the same run draws the same bytes.
-    figure.savefig(picture, format=kind, facecolor=_SURFACE, metadata={"Software": None} if kind == "png" else None)
-    path = path.expanduser()
-    write_bytes_atomic(path, picture.getvalue())  # a failed draw leaves no file at the path
-    return path
-
-
-def _end_labels(ax: Any, x: Any, waves: list[tuple[str, Any]], colour: dict[str, str], unit: str) -> None:
-    """Name each line and its final value at its end, unless the ends crowd each other."""
-    import numpy
-
-    if not len(x):
-        return
-    end = int(numpy.argmax(x))  # the right-hand end, whichever way a sweep ran
-    ax.relim()
-    ax.autoscale_view()
-    low, high = ax.get_ylim()
-    span = (high - low) or 1.0
-    # A value a millionth of the axis from zero is zero as drawn (an off LED's picoamps).
-    ends = [(name, 0.0 if abs(float(values[end])) < 1e-6 * span else float(values[end])) for name, values in waves if numpy.isfinite(values[end])]
-    spots = sorted((value - low) / span for _name, value in ends)
-    if any(later - earlier < 0.08 for earlier, later in zip(spots, spots[1:])):
-        return  # converging ends: the legend names them
-    for name, value in ends:
-        ax.plot([x[end]], [value], marker="o", markersize=4.5, color=colour[name], markeredgecolor=_SURFACE, markeredgewidth=1.0, clip_on=False)
-        ax.annotate(f"{name} {value:.4g} {unit}", xy=(x[end], value), xytext=(6, 0), textcoords="offset points", va="center", fontsize=8, color=_INK_2, annotation_clip=False)

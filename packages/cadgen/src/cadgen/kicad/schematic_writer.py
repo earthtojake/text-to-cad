@@ -21,23 +21,22 @@ import math
 from dataclasses import dataclass
 
 from cadgen.kicad import sexpr
-from cadgen.kicad.design import Board, Part, _natural, kicad_net_name
+from cadgen.kicad.design import Board, Part, kicad_net_name
+from cadgen.kicad.geometry import ISO_PAGES
 from cadgen.kicad.ids import Ids
 from cadgen.kicad.library import Symbol
+from cadgen.kicad.naming import GENERATOR, GENERATOR_VERSION
 from cadgen.kicad.sexpr import Sym
 
 __all__ = ["SCHEMATIC_FORMAT_VERSION", "schematic_document", "symbol_path_key"]
 
 SCHEMATIC_FORMAT_VERSION = 20260101
-GENERATOR = "cadgen"
-GENERATOR_VERSION = "10.0"
 
 GRID = 1.27
 STUB = 2.54
 LABEL_SIZE = 1.27
 _SPACING = 7.62
 _PAGE_MARGIN = 25.4
-_PAGES = (("A4", 297.0, 210.0), ("A3", 420.0, 297.0), ("A2", 594.0, 420.0), ("A1", 841.0, 594.0), ("A0", 1189.0, 841.0))
 
 
 def symbol_path_key(ref: str, unit: int) -> str:
@@ -147,7 +146,7 @@ def _pack(units: list[_Unit]) -> tuple[str, float, float, list[tuple[float, floa
     """A page and each unit's symbol origin, packed in rows (schematic coordinates)."""
     widest = max((unit.right - unit.left for unit in units), default=0.0)
     area = sum((unit.right - unit.left + _SPACING) * (unit.top - unit.bottom + _SPACING) for unit in units)
-    for name, width, height in _PAGES:
+    for name, width, height in ISO_PAGES:
         usable_width, usable_height = width - 2 * _PAGE_MARGIN, height - 2 * _PAGE_MARGIN
         if widest > usable_width or area * 1.3 > usable_width * usable_height:
             continue
@@ -349,7 +348,3 @@ def schematic_document(
     document.append([Sym("sheet_instances"), [Sym("path"), "/", [Sym("page"), "1"]]])
     document.append([Sym("embedded_fonts"), Sym("no")])
     return document, paths
-
-
-def sorted_parts(board: Board) -> list[Part]:
-    return sorted(board.parts, key=lambda part: _natural(part.ref))

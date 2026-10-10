@@ -39,20 +39,23 @@ import re
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 from cadgen.kicad import sexpr
-from cadgen.kicad.design import DesignError, Part, Pin, _natural
+from cadgen.kicad.design import DesignError, Part, Pin
+from cadgen.kicad.naming import natural
 
 __all__ = [
     "LibraryEntry",
     "PartModel",
     "SIM_FIELDS",
     "library_entries",
+    "param_number",
     "parse_value",
     "part_model",
     "sim_fields",
     "spice_number",
+    "to_number",
 ]
 
 #: KiCad's simulation fields; any other ``Sim.*`` property on a part is a typo.
@@ -168,7 +171,7 @@ def _decimal(mantissa: str, exponent: str | None, prefix: str | None) -> float:
 _PARAM_NUMBER = re.compile(r"(?P<sign>[+-])?(?P<mantissa>\d+\.?\d*|\.\d+)(?:[eE](?P<exponent>[+-]?\d+))?(?P<prefix>[Mm][Ee][Gg]|[fpnumkKMgGtT])?")
 
 
-def _param_number(text: str) -> float | None:
+def param_number(text: str) -> float | None:
     """A number in a ``Sim.*`` field (KiCad's notation: ``M`` mega, ``m`` milli), or None."""
     match = _PARAM_NUMBER.fullmatch(text)
     if match is None:
@@ -177,10 +180,28 @@ def _param_number(text: str) -> float | None:
     return -number if match.group("sign") == "-" else number
 
 
+def to_number(value: Any, *, what: str) -> float:
+    """A number given as a float, an int or SPICE-style text (``'1m'``, ``'4.7k'``; ``M`` is mega)."""
+    if isinstance(value, bool):
+        raise DesignError(f"{what} is a number, got {value!r}")
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str):
+        parsed = param_number(value.strip())
+        if parsed is None:
+            raise DesignError(f"{what} is a number such as 5, 1e-3 or '1m', got {value!r}")
+        number = parsed
+    else:
+        raise DesignError(f"{what} is a number, got {value!r}")
+    if not math.isfinite(number):
+        raise DesignError(f"{what} must be finite, got {value!r}")
+    return number
+
+
 def _param_text(value: str, *, ref: str, key: str) -> str:
     """One ``Sim.Params`` value as SPICE text: numbers converted, expressions passed through."""
     text = value.strip()
-    number = _param_number(text)
+    number = param_number(text)
     if number is not None:
         return spice_number(number)
     if text[:1].isdigit() or text[:1] in ".+-":
@@ -268,7 +289,6 @@ class PartModel:
     tail: str
     models: tuple[str, ...] = ()
     include: Path | None = None
-    needs_codemodels: bool = False
 
 
 @dataclass(frozen=True)
@@ -355,7 +375,7 @@ def _library_path(text: str, *, folder: Path, ref: str) -> Path:
 
 def _model_pin_order(part: Part, model_pins: Sequence[str], text: str | None, *, what: str, optional: Sequence[str] = ()):
     """For each model pin, in order, the symbol pins on it (``Sim.Pins``, else number order)."""
-    symbol_pins = sorted(part.pins(), key=lambda pin: _natural(pin.number))
+    symbol_pins = sorted(part.pins(), key=lambda pin: natural(pin.number))
     by_number = {pin.number: pin for pin in symbol_pins}
     canonical = {name.lower(): name for name in model_pins}
     assigned: dict[str, list[Pin]] = {name: [] for name in model_pins}
@@ -681,11 +701,11 @@ def _potentiometer(part: Part, fields: dict[str, str]) -> PartModel:
     words = [f"r={r}"] + ([f"position={_param_text(params['pos'], ref=part.ref, key='pos')}"] if "pos" in params else [])
     name = _model_name(part.ref)
     pins = _model_pin_order(part, ("r0", "wiper", "r1"), fields.get("Sim.Pins"), what="a potentiometer (pins r0 wiper r1)")
-    return PartModel("A", ("r0", "wiper", "r1"), pins, name, models=(f".model {name} potentiometer({' '.join(words)})",), needs_codemodels=True)
+    return PartModel("A", ("r0", "wiper", "r1"), pins, name, models=(f".model {name} potentiometer({' '.join(words)})",))
 
 
 def _no_model(part: Part, fields: dict[str, str]) -> str:
-    pins = sorted(part.pins(), key=lambda pin: _natural(pin.number))
+    pins = sorted(part.pins(), key=lambda pin: natural(pin.number))
     names = {pin.name.upper() for pin in pins}
     lib_id = part.symbol.lib_id
     head = f"{part.ref} ({lib_id}, value {part.value!r}) has no SPICE model"

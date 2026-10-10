@@ -21,14 +21,12 @@ per process for a given executable.
 
 from __future__ import annotations
 
-import functools
 import os
-import re
-import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from cadgen._internal import tool_probe
 
 __all__ = [
     "WIREVIZ_MINIMUM",
@@ -78,70 +76,27 @@ def install_hint() -> str:
     )
 
 
-def _version_tuple(version: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in re.findall(r"\d+", version)[:3])
-
-
-def _executable(name: str) -> str:
-    return f"{name}.exe" if sys.platform.startswith("win") else name
-
-
 def _wireviz_candidates() -> list[Path]:
-    explicit = os.environ.get("CADGEN_WIREVIZ", "").strip()
-    if explicit:
-        return [Path(explicit).expanduser()]
-    found: list[Path] = []
-    on_path = shutil.which("wireviz")
-    if on_path:
-        found.append(Path(on_path))
-    found.append(Path.home() / ".local" / "bin" / _executable("wireviz"))
-    return found
+    return tool_probe.candidates("CADGEN_WIREVIZ", ["wireviz", Path.home() / ".local" / "bin" / tool_probe.executable("wireviz")])
 
 
 def _dot_candidates() -> list[Path]:
-    found: list[Path] = []
-    on_path = shutil.which("dot")
-    if on_path:
-        found.append(Path(on_path))
+    places: list[Path] = []
     if sys.platform == "darwin":
-        found += [Path("/opt/homebrew/bin/dot"), Path("/usr/local/bin/dot"), Path("/opt/local/bin/dot")]
+        places = [Path("/opt/homebrew/bin/dot"), Path("/usr/local/bin/dot"), Path("/opt/local/bin/dot")]
     elif sys.platform.startswith("win"):
         for variable in ("ProgramFiles", "ProgramFiles(x86)"):
             root = os.environ.get(variable)
             if root:
-                found += sorted(Path(root).glob("Graphviz*/bin/dot.exe"), reverse=True)
+                places += sorted(Path(root).glob("Graphviz*/bin/dot.exe"), reverse=True)
     else:
-        found += [Path("/usr/bin/dot"), Path("/usr/local/bin/dot")]
-    return found
-
-
-def _stamp(path: Path) -> tuple[int, int] | None:
-    try:
-        stat = path.stat()
-    except OSError:
-        return None
-    return (stat.st_mtime_ns, stat.st_size)
-
-
-@functools.lru_cache(maxsize=8)
-def _probe(command: str, flag: str, pattern: str, stamp: tuple[int, int]) -> str | None:
-    del stamp  # part of the cache key: a reinstalled program is probed again
-    try:
-        completed = subprocess.run([command, flag], capture_output=True, text=True, timeout=60, check=False)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if completed.returncode != 0:
-        return None
-    match = re.search(pattern, (completed.stdout or "") + "\n" + (completed.stderr or ""))
-    return match.group(1) if match else None
+        places = [Path("/usr/bin/dot"), Path("/usr/local/bin/dot")]
+    return tool_probe.candidates(None, ["dot", *places])
 
 
 def _find_dot() -> tuple[Path, str]:
     for candidate in _dot_candidates():
-        stamp = _stamp(candidate)
-        if stamp is None:
-            continue
-        version = _probe(str(candidate), "-V", r"graphviz version (\S+)", stamp)
+        version = tool_probe.version(candidate, "-V", r"graphviz version (\S+)")
         if version is not None:
             return candidate, version
     raise WirevizMissingError(f"Graphviz's dot, which WireViz draws with, was not found: {install_hint()}")
@@ -151,13 +106,10 @@ def find_wireviz(*, dot: bool = True) -> WirevizInstall:
     """The WireViz this process uses (and, with ``dot``, the Graphviz it draws with)."""
     too_old: list[str] = []
     for candidate in _wireviz_candidates():
-        stamp = _stamp(candidate)
-        if stamp is None:
-            continue
-        version = _probe(str(candidate), "--version", r"WireViz (\d+(?:\.\d+)*)", stamp)
+        version = tool_probe.version(candidate, "--version", r"WireViz (\d+(?:\.\d+)*)")
         if version is None:
             continue
-        if _version_tuple(version) < WIREVIZ_MINIMUM:
+        if tool_probe.version_tuple(version) < WIREVIZ_MINIMUM:
             too_old.append(f"{candidate} is WireViz {version}")
             continue
         if not dot:

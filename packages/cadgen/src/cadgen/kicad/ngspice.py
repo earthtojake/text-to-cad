@@ -18,27 +18,28 @@ ends the Python process: ngspice reports it through its ``ControlledExit``
 callback instead of exiting, and the library is initialised again before its
 next use (using it without that would crash the process).
 
-The library is ``CADGEN_NGSPICE`` (a full path) when set, else the one beside
-the KiCad :func:`cadgen.kicad.install.find_kicad` finds (KiCad ships ngspice on
-macOS and Windows), else the system's (``libngspice.so.0``, a distribution's
-``libngspice0``, which KiCad's Linux packages depend on). Nothing is loaded
-until a simulation runs; when there is none, the error says how to get one.
+The library is the one :func:`cadgen.kicad.install.find_ngspice` finds:
+``CADGEN_NGSPICE`` (a full path) when set, else the one beside the KiCad in use
+(KiCad ships ngspice on macOS and Windows), else the system's
+(``libngspice.so.0``, a distribution's ``libngspice0``, which KiCad's Linux
+packages depend on). Nothing is loaded until a simulation runs; when there is
+none, the error says how to get one.
 """
 
 from __future__ import annotations
 
 import contextlib
 import ctypes
-import ctypes.util
 import locale
 import os
+import re
 import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
-__all__ = ["NgspiceFailure", "Plot", "library_candidates", "simulate"]
+__all__ = ["NgspiceFailure", "Plot", "error_hints", "simulate"]
 
 
 class NgspiceFailure(RuntimeError):
@@ -105,29 +106,61 @@ _ERROR_MARKERS = (
 )
 
 
-def library_candidates() -> list[str]:
-    """Where ngspice's shared library may be, best first (paths or names the loader resolves)."""
-    explicit = os.environ.get("CADGEN_NGSPICE", "").strip()
-    if explicit:
-        return [str(Path(explicit).expanduser())]
-    found: list[str] = []
-    from cadgen.kicad.install import KicadMissingError, find_kicad
+def error_hints(errors: Sequence[str], described: Mapping[str, str]) -> tuple[list[str], list[str]]:
+    """ngspice's error lines, each once, and what they mean for a person: ``described`` names a
+    node or an element (lowercased, as ngspice prints them) as the circuit's author knows it."""
+    seen: list[str] = []
+    for line in errors:
+        text = line[len("stderr ") :] if line.startswith("stderr ") else line
+        if text not in seen:
+            seen.append(text)
+    hints: list[str] = []
+    for text in seen:
+        lowered = text.lower()
+        match = re.search(r"singular matrix:\s*check node (\S+)", lowered)
+        if match:
+            node = match.group(1)
+            if node.endswith("#branch"):
+                owner = described.get(node[: -len("#branch")], node[: -len("#branch")])
+                hint = f"{owner} is in a loop of voltage sources or inductors with nothing between them"
+            else:
+                owner = described.get(node, f"node {node}")
+                hint = (
+                    f"{owner} has no DC path to ground: every net needs one (a capacitor alone does not "
+                    "conduct at DC, an unconnected pin floats); connect it, or give it a bleeder such as "
+                    "tb.load(net, ohms=1e9)"
+                )
+        elif "timestep too small" in lowered:
+            hint = (
+                "the simulation could not converge: give sources finite rise and fall times, add the "
+                "series resistance real parts have, or check for a source shorted by a part"
+            )
+        elif "unknown subckt" in lowered or ("model" in lowered and ("find" in lowered or "valid" in lowered or "unknown" in lowered)):
+            hint = "a model the netlist names is not defined: check Sim.Name against the model file"
+        elif "unrecognized parameter" in lowered or "unknown parameter" in lowered:
+            hint = "a parameter is not one that model has: check Sim.Params against the model's parameters"
+        else:
+            continue
+        if hint not in hints:
+            hints.append(hint)
+    if any("no DC path" in hint or "loop of voltage sources" in hint for hint in hints):
+        hints = [hint for hint in hints if not hint.startswith("the simulation could not converge")]  # a consequence
+    return seen, hints
+
+
+def _library() -> str | None:
+    """ngspice's shared library as :mod:`cadgen.kicad.install` finds it: beside the KiCad in use,
+    or without one, the system's."""
+    from cadgen.kicad.install import KicadMissingError, find_kicad, find_ngspice
 
     try:
-        install = find_kicad()
+        found = find_kicad().ngspice
     except KicadMissingError:
-        install = None
-    if install is not None and install.ngspice is not None:
-        found.append(str(install.ngspice))
-    system = ctypes.util.find_library("ngspice")
-    if system:
-        found.append(system)
-    if sys.platform.startswith("linux"):
-        found.append("libngspice.so.0")
-    return list(dict.fromkeys(found))
+        found = find_ngspice()
+    return None if found is None else str(found)
 
 
-def _missing(tried: Sequence[str], problems: Sequence[str]) -> Exception:
+def _missing(problem: str | None) -> Exception:
     from cadgen.kicad.install import KicadMissingError, install_hint
 
     linux = (
@@ -135,7 +168,7 @@ def _missing(tried: Sequence[str], problems: Sequence[str]) -> Exception:
         if sys.platform.startswith("linux")
         else ""
     )
-    detail = f" (tried {'; '.join(problems)})" if problems else ""
+    detail = f" (tried {problem})" if problem else ""
     return KicadMissingError(
         f"ngspice, the simulator KiCad ships, was not found{detail}: {install_hint()}{linux}, "
         "or set CADGEN_NGSPICE to the ngspice shared library's path"
@@ -340,17 +373,13 @@ _ENGINE: _Engine | None = None
 def _engine() -> _Engine:
     global _ENGINE
     if _ENGINE is None:
-        tried: list[str] = []
-        problems: list[str] = []
-        for candidate in library_candidates():
-            tried.append(candidate)
-            try:
-                _ENGINE = _Engine(candidate)
-                break
-            except (OSError, AttributeError) as error:  # not loadable, or not ngspice's shared API
-                problems.append(f"{candidate}: {error}")
-        else:
-            raise _missing(tried, problems)
+        library = _library()
+        if library is None:
+            raise _missing(None)
+        try:
+            _ENGINE = _Engine(library)
+        except (OSError, AttributeError) as error:  # not loadable, or not ngspice's shared API
+            raise _missing(f"{library}: {error}") from None
     return _ENGINE
 
 

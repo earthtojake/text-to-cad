@@ -31,7 +31,6 @@ build, rather than leaving a route that depends on how fast the machine was.
 
 from __future__ import annotations
 
-import functools
 import glob
 import os
 import re
@@ -41,7 +40,10 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterator
 
+import cadgen
+from cadgen._internal import tool_probe
 from cadgen.kicad.design import Board, DesignError, Net, kicad_net_name
 from cadgen.kicad.specctra import Routes, SessionError, board_dsn, read_session, with_routes
 
@@ -107,63 +109,36 @@ def _java_major(version: str) -> int:
     return int(parts[1]) if major == 1 and len(parts) > 1 else major
 
 
-@functools.lru_cache(maxsize=16)
-def _java_version(java: str, stamp: tuple[int, int]) -> str | None:
-    del stamp  # part of the cache key: a replaced java is asked again
-    try:
-        completed = subprocess.run([java, "-version"], capture_output=True, text=True, timeout=60, check=False)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    match = re.search(r'version "([^"]+)"', (completed.stderr or "") + (completed.stdout or ""))
-    return match.group(1) if completed.returncode == 0 and match else None
+def _java_version(java: Path) -> str | None:
+    return tool_probe.version(java, "-version", r'version "([^"]+)"')
 
 
-def _executable(name: str) -> str:
-    return f"{name}.exe" if sys.platform.startswith("win") else name
-
-
-def _java_candidates() -> list[Path]:
-    explicit = os.environ.get("CADGEN_JAVA", "").strip()
-    if explicit:
-        return [Path(explicit).expanduser()]
-    found: list[Path] = []
+def _java_places() -> Iterator[Path | str | None]:
     home = os.environ.get("JAVA_HOME", "").strip()
-    if home:
-        found.append(Path(home).expanduser() / "bin" / _executable("java"))
-    on_path = shutil.which("java")
-    if on_path:
-        found.append(Path(on_path))
+    yield Path(home).expanduser() / "bin" / tool_probe.executable("java") if home else None
+    yield "java"
     if sys.platform == "darwin":
-        found.extend(Path(prefix) / "opt" / "openjdk" / "bin" / "java" for prefix in ("/opt/homebrew", "/usr/local"))
+        yield from (Path(prefix) / "opt" / "openjdk" / "bin" / "java" for prefix in ("/opt/homebrew", "/usr/local"))
         try:
             completed = subprocess.run(
                 ["/usr/libexec/java_home", "-v", f"{JAVA_MAJOR}+"], capture_output=True, text=True, timeout=30, check=False
             )
             if completed.returncode == 0 and completed.stdout.strip():
-                found.append(Path(completed.stdout.strip()) / "bin" / "java")
+                yield Path(completed.stdout.strip()) / "bin" / "java"
         except (OSError, subprocess.SubprocessError):
             pass
     elif sys.platform.startswith("win"):
         program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
         for vendor in ("Eclipse Adoptium", "Microsoft", "Java", "Zulu", "Amazon Corretto"):
-            found.extend(Path(path) for path in sorted(glob.glob(os.path.join(program_files, vendor, "*", "bin", "java.exe")), reverse=True))
+            yield from (Path(path) for path in sorted(glob.glob(os.path.join(program_files, vendor, "*", "bin", "java.exe")), reverse=True))
     else:
-        found.extend(Path(path) for path in sorted(glob.glob("/usr/lib/jvm/*/bin/java"), reverse=True))
-    unique: list[Path] = []
-    for path in found:
-        if path not in unique:
-            unique.append(path)
-    return unique
+        yield from (Path(path) for path in sorted(glob.glob("/usr/lib/jvm/*/bin/java"), reverse=True))
 
 
 def _find_java() -> tuple[Path, str]:
     too_old: list[str] = []
-    for candidate in _java_candidates():
-        try:
-            stat = candidate.stat()
-        except OSError:
-            continue
-        version = _java_version(str(candidate), (stat.st_mtime_ns, stat.st_size))
+    for candidate in tool_probe.candidates("CADGEN_JAVA", _java_places()):
+        version = _java_version(candidate)
         if version is None:
             continue
         if _java_major(version) < JAVA_MAJOR:
@@ -366,7 +341,7 @@ def route_board(board: Board, pcb_tree: list, *, project: str, name: str, tool: 
         raise DesignError("route_board needs a board that asked for routing: call board.autoroute()")
     # The written board spells nets as KiCad does (TX/RX is TX{slash}RX).
     skip = [kicad_net_name(item.name if isinstance(item, Net) else str(item).strip()) for item in request.skip]
-    dsn = board_dsn(pcb_tree, project, skip=skip, layers=request.layers, name=name, host_version=_cadgen_version())
+    dsn = board_dsn(pcb_tree, project, skip=skip, layers=request.layers, name=name, host_version=cadgen.__version__)
     if not dsn.routed:
         return Routed(tree=pcb_tree, routes=Routes(tracks=(), vias=()), freerouting="")
     tool = tool or find_freerouting()
@@ -380,12 +355,3 @@ def route_board(board: Board, pcb_tree: list, *, project: str, name: str, tool: 
         except SessionError as error:
             raise RouteError(f"Freerouting {version} answered with a session cadgen cannot use: {error}") from None
     return Routed(tree=with_routes(pcb_tree, routes, project=name), routes=routes, freerouting=version)
-
-
-def _cadgen_version() -> str:
-    try:
-        import cadgen
-
-        return str(getattr(cadgen, "__version__", "") or "")
-    except Exception:  # noqa: BLE001 - a version string is decoration, never a failure
-        return ""
