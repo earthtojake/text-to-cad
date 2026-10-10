@@ -17,7 +17,7 @@
  * interface faces of both sides), `_PART` (the index into `parts` of the part
  * each vertex belongs to) and the weakest part's name and peak; a single part has
  * none of these. A study that says what the viewer should offer carries its `view`
- * (`feaControls`): the controls of Study's Result, named presets and whether the
+ * (`feaControls`): the controls of Study's What you see, named presets and whether the
  * loads and fixtures are drawn.
  * GLTFLoader lower-cases custom attribute names and copies extras into
  * `userData`, which is what is read here.
@@ -159,6 +159,7 @@ function readStudy(raw) {
       type: text(load.type), faces: faceRefs(load.faces), vector: vector(load.vector_N), pressure: finiteOrNull(load.pressure_MPa),
     })),
     mesh,
+    margin: Number.isFinite(raw.margin) && raw.margin >= 1 ? Number(raw.margin) : null,
   };
 }
 
@@ -452,7 +453,7 @@ function fieldOptions(result, attributes) {
 const finiteNumber = (value) => typeof value === "number" && Number.isFinite(value);
 
 /**
- * Study's Result controls, as generic parameters (`@text-to-cad/core/common/parameters.js`: `id`,
+ * Study's What you see controls, as generic parameters (`@text-to-cad/core/common/parameters.js`: `id`,
  * `type`, `label`, `min`, `max`, `defaultValue`, `unit`, `options`) with `drives`, what each moves:
  * `field` (which field the colours show; its options are attributes), `deformation` (how many times
  * the displacement is drawn), `load_scale` (the load as a multiple of the solved one) and
@@ -757,66 +758,122 @@ export function weakestPartIndex(result) {
   return weakest;
 }
 
+/** The safety factor a study asks a part to keep, where it records none: cadgen's own default. */
+export const DEFAULT_MARGIN = 2;
+
 /**
- * Study's Material row: the name alone ("6061-T6"); its yield is the findings' and the colour bar's
- * to say. In an assembly it is the default a part with none of its own takes ("Default material").
+ * The answer at a glance, at `loadScale` times the solved load, for the verdict at the top of Study:
+ * `status` ("weak" under a safety factor of 1, "close" under the study's margin, "strong" from it up,
+ * "none" with no stress: no load reaches the part, or the load is set to 0), its `title` in plain
+ * words, `part` (an assembly's weakest part, whose numbers these are; "" for a single part), `line`
+ * (the peak against the limit: "Peak 405 MPa, limit 276 MPa"), `use` (how hard the part is working:
+ * the peak over the limit, 1 at yield; past 1 it is over), the `margin` the study asked for and the
+ * `caption` ("Holds only 0.6× this load", "Would hold 1.5× this load"). null where the file cannot
+ * say (no stress field, or a stress with no safety factor: a result older than the factor).
  */
-function materialRows(result) {
-  const material = result.study.material;
-  if (!material?.name) return [];
-  return [{ id: "material", label: result.parts.length ? "Default material" : "Material", detail: material.name }];
+export function feaVerdict(result, loadScale = 1) {
+  const stress = result.fields.find((entry) => entry.attribute === "_von_mises");
+  if (!stress) return null;
+  const k = Number(loadScale) >= 0 ? Number(loadScale) : 1;
+  const margin = result.study?.margin ?? DEFAULT_MARGIN;
+  const weakest = result.parts[weakestPartIndex(result)] || null;
+  const part = result.weakestPart ? spaced(result.weakestPart) : weakest?.name ? spaced(weakest.name) : "";
+  const base = { part, margin };
+  if (!(k > 0)) return { ...base, status: "none", title: "No load", line: "The load is set to 0", use: 0, caption: "" };
+  if (result.safetyFactor === null || !(result.safetyFactor > 0)) {
+    return stress.max > 0 ? null : { ...base, status: "none", title: "No stress", line: "Check the load reaches the part", use: 0, caption: "" };
+  }
+  const factor = result.safetyFactor / k;
+  const peak = (result.weakestPartPeakMPa ?? weakest?.peakMPa ?? stress.max) * k;
+  // The limit is the yield of the part these numbers are for; failing that, what the factor says it is.
+  const limit = weakest?.yieldMPa ?? result.study?.material?.yieldMPa ?? peak * factor;
+  const status = factor < 1 ? "weak" : factor < margin ? "close" : "strong";
+  return {
+    ...base, status, title: VERDICT_TITLES[status], use: 1 / factor,
+    // Each half kept whole, so a narrow panel breaks the line at its comma.
+    line: [`Peak ${plainNumber(peak)} ${stress.units || "MPa"}`, `limit ${plainNumber(limit)} ${stress.units || "MPa"}`].map((part) => part.replace(/ /g, "\u00a0")).join(", "),
+    caption: factor < 1 ? `Holds only ${flooredFactor(factor)}× this load` : `Would hold ${flooredFactor(factor)}× this load`,
+  };
 }
 
-/** Study's Fixed group: one row per fixed face, its name alone ("Face 9", "base · face 9"): the group says fixed. */
-function fixedRows(result) {
+const VERDICT_TITLES = Object.freeze({ weak: "Too weak", close: "Close to the limit", strong: "Strong enough" });
+
+/** Study's "Held at": one row per fixed face, its name alone ("Face 9", "base · face 9"), under the fixture glyph. */
+function heldRows(result) {
   const study = result.study;
   const fixed = study.fixtures.flatMap((fixture, index) => fixture.faces.map((ref) => ({
-    id: `fixed:${index}:${ref}`, label: faceTitle(result, ref), detail: "", faces: [ref], summary: faceSummary(study, ref),
+    id: `fixed:${index}:${ref}`, label: faceTitle(result, ref), detail: "", faces: [ref], summary: faceSummary(study, ref), wrap: true,
   })));
-  return fixed.length ? [{ id: "fixed", label: "Fixed", detail: "", children: fixed }] : [];
+  return fixed.length ? [{ id: "fixed", label: "Held at", detail: "", glyph: "fixture", children: fixed }] : [];
 }
 
 /**
- * Study's Loads group: one row per load, what it is and which way ("300 N · along −X"), its faces
- * under it by name alone (the group says loaded), shut until opened (`collapsed`).
+ * Study's "Pushed": one row per load, how much and which way ("300 N along −X"), under the arrow
+ * glyph, its faces under it by name alone, shut until opened (`collapsed`).
  */
-function loadRows(result) {
+function pushedRows(result) {
   const study = result.study;
   const loads = study.loads.filter((load) => load.faces.length).map((load, index) => {
     const words = loadWords(load);
+    const label = [words.amount, words.direction].filter(Boolean).join(" ");
     return {
-      id: `load:${index}`, label: [words.amount, words.direction].filter(Boolean).join(" · "), name: [words.amount, words.direction].filter(Boolean).join(" "),
-      detail: "", faces: load.faces,
+      id: `load:${index}`, label, detail: "", faces: load.faces,
       summary: loadSummary(words, load.faces), collapsed: true,
-      children: load.faces.map((ref) => ({ id: `load:${index}:${ref}`, label: faceTitle(result, ref), detail: "", faces: [ref],
+      children: load.faces.map((ref) => ({ id: `load:${index}:${ref}`, label: faceTitle(result, ref), detail: "", faces: [ref], wrap: true,
         summary: study.fixtures.some((fixture) => fixture.faces.includes(ref)) ? faceSummary(study, ref) : loadSummary(words, [ref]) })),
     };
   });
-  return loads.length ? [{ id: "loads", label: "Loads", detail: "", children: loads }] : [];
+  return loads.length ? [{ id: "loads", label: "Pushed", detail: "", glyph: "load", children: loads }] : [];
 }
 
-/** Study's Mesh row: "1.9 mm elements", and how it got there as its hint (`hint`: "refined from 2.8 mm", "not refined"). */
-function meshRows({ study }) {
+/**
+ * Study's "Made of", under a swatch: the material's name ("Aluminum 6061-T6"). In an assembly whose
+ * parts differ, "Mostly Aluminum 6061-T6" where one material has most of the parts, else
+ * "2 materials", each part's own in its hint (and in Parts and a picked face's Reference).
+ */
+function madeOfRows(result) {
+  const fallback = result.study.material?.name || "";
+  const each = result.parts.map((part) => part.material || fallback).filter(Boolean);
+  const counts = new Map();
+  for (const name of each) counts.set(name, (counts.get(name) || 0) + 1);
+  let label = fallback;
+  let hint = "";
+  if (counts.size === 1) label = each[0];
+  else if (counts.size > 1) {
+    const [top, count] = [...counts].sort((a, b) => b[1] - a[1])[0];
+    label = count * 2 > each.length ? `Mostly ${top}` : `${counts.size} materials`;
+    hint = [...counts].map(([name, n]) => `${name}: ${n} ${n === 1 ? "part" : "parts"}`).join(", ");
+  }
+  if (!label) return [];
+  return [{ id: "material", label: "Made of", detail: "", glyph: "material", children: [{ id: "material:name", label, detail: "", wrap: true, ...(hint ? { hint } : {}) }] }];
+}
+
+/** Details, shut until opened: the mesh, "3.7 mm elements", how it got there its hint ("refined from 2.8 mm", "not refined"). */
+function detailRows({ study }) {
   const mesh = study.mesh;
   if (mesh?.sizeMm === null || mesh?.sizeMm === undefined) return [];
   const refined = mesh.refinedFromMm === null ? "not refined" : `refined from ${plainNumber(mesh.refinedFromMm)} mm`;
-  return [{ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements`, hint: refined }];
+  return [{ id: "details", label: "Details", detail: "", collapsed: true,
+    children: [{ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements`, hint: refined }] }];
 }
 
-// Study's groups, in order, each from what the file records and none when it records nothing for
-// it: a result kind with more to say (a modal's modes, a thermal load) adds a group here.
-const STUDY_GROUPS = Object.freeze([materialRows, fixedRows, loadRows, meshRows]);
+// Study's setup, in order, each from what the file records and none when it records nothing for it:
+// a result kind with more to say (a modal's modes, a thermal load) adds a group here. Details follow
+// "What you see" (the panel's own), shut.
+const STUDY_GROUPS = Object.freeze([heldRows, pushedRows, madeOfRows]);
+const DETAIL_GROUPS = Object.freeze([detailRows]);
 
 /**
- * Study's rows for a result's study, in order: the material, the fixed faces, the loads (each with
- * its faces under it) and the mesh (`STUDY_GROUPS`). An assembly's parts and joints are the Parts
- * panel's (`partRows`). A row that stands for faces carries them (`faces`, the file's refs) and
- * what a prompt calls them (`summary`); a group row (`children`) carries none. A row that opens
- * shut says so (`collapsed`: a load's faces), and a fact's further words are its hint (`hint`). Each
- * row is one line. [] for a result written before the study was recorded.
+ * Study's rows for a result's study, in order: where it is held (the fixed faces), what pushes it
+ * (each load with its faces under it), what it is made of (`STUDY_GROUPS`), then Details (the mesh,
+ * shut: `DETAIL_GROUPS`). An assembly's parts and joints are the Parts panel's (`partRows`). A row
+ * that stands for faces carries them (`faces`, the file's refs) and what a prompt calls them
+ * (`summary`); a group row (`children`) carries none, and one of the setup's names its `glyph`, the
+ * marker it is drawn as on the model. A row that opens shut says so (`collapsed`), and a fact's
+ * further words are its hint (`hint`). [] for a result written before the study was recorded.
  */
 export function studyRows(result) {
-  return result.study ? STUDY_GROUPS.flatMap((group) => group(result)) : [];
+  return result.study ? [...STUDY_GROUPS, ...DETAIL_GROUPS].flatMap((group) => group(result)) : [];
 }
 
 /** The index into the result's `parts` of the part a face is on; -1 for a single part's face. */

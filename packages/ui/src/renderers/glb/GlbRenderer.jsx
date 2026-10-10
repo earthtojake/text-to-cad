@@ -18,7 +18,7 @@ import FeaLoadLabels from "./FeaLoadLabels.jsx";
 import { FileSheetStatusText } from "../kit/inspector/FileSheet.js";
 import { DEFAULT_POSE_VALUE, NO_PRESET_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 import {
-  applyDeformation, faceIndices, facePartDetail, faceTitle, facePromptSummary, faceRole, feaControls, feaDefaults, feaMarkerShow, feaPresets, feaShowsParts, findingSelector, pickFace,
+  applyDeformation, faceIndices, facePartDetail, faceTitle, facePromptSummary, faceRole, feaControls, feaDefaults, feaMarkerShow, feaPresets, feaShowsParts, feaVerdict, findingSelector, pickFace,
   readFeaResult, recolorByField, resultSourcePath, partRows, ringTargets, studyRows, weakestPartIndex
 } from "./feaResult.js";
 import { createFeaMarkers } from "./feaMarkers.js";
@@ -101,7 +101,7 @@ function GlbSurface({ view, data }) {
   }), [document.catalogError, loaded.error, document.modelKey, scene]);
 
   // An FEA result (cadgen fea solve) carries its fields and true displacement in the file; what is
-  // shown of it is chosen in Study's Result, with the controls the study's view names (`feaControls`;
+  // shown of it is chosen in Study's What you see, with the controls the study's view names (`feaControls`;
   // by default the field and the deformation), per tab. That choice is this renderer's one slice of
   // the file's view (`kit/shell/fileView.js`), written against the result's own fields, scale and
   // view: a re-solved result opens at its own defaults.
@@ -151,6 +151,8 @@ function GlbSurface({ view, data }) {
   // An assembly's parts, each with its joints, are a panel of their own above Study, from six parts
   // up unless the view says (`feaShowsParts`); under that a picked face's Reference names its part.
   const parts = useMemo(() => (fea && feaShowsParts(fea) ? partRows(fea, loadScale) : EMPTY), [fea, loadScale]);
+  // The answer at a glance, at the load shown: it follows the load control, and may change its word.
+  const verdict = useMemo(() => (fea ? feaVerdict(fea, loadScale) : null), [fea, loadScale]);
   const chooseFaces = useCallback((row) => { setChosen(NO_FINDING); setChosenFaces({ result: fea, id: row.id, faces: row.faces || EMPTY, refs: row.refs || EMPTY, parts: row.parts || EMPTY, softParts: row.softParts || EMPTY, summary: row.summary }); }, [fea]);
   // A press on the result picks the face under it, called what Study calls it.
   const pickScene = useMemo(() => (fea ? { pick: (ray) => pickFace(fea, ray) } : null), [fea]);
@@ -272,7 +274,7 @@ function GlbSurface({ view, data }) {
     catch (error) { shellRef.current?.reportActionError(error instanceof Error ? error.message : "Could not copy reference"); return false; }
   }, [single, source, host.clipboard]);
   const copySelection = selectActive && single ? copyFace : null;
-  // Study's Result: each control writes its value, and a moved control leaves the preset (Custom).
+  // Study's What you see: each control writes its value, and a moved control leaves the preset (Custom).
   const resultControls = {
     controls, values, presets, preset: activePreset,
     onChange: (id, value) => choose({ [DRIVE_KEYS[id]]: value, preset: null }),
@@ -282,7 +284,7 @@ function GlbSurface({ view, data }) {
     },
     onReset: () => choose({ ...NO_VALUES, preset: null }),
   };
-  const toolPanels = fea ? <FeaStudyPanel active={selectActive} parts={parts} openPart={weakestPartIndex(fea)} rows={rows} chosen={faces.id} onChoose={chooseFaces}
+  const toolPanels = fea ? <FeaStudyPanel active={selectActive} parts={parts} openPart={weakestPartIndex(fea)} rows={rows} verdict={verdict} chosen={faces.id} onChoose={chooseFaces}
     result={resultControls}
     reference={single ? { title: faceTitle(fea, single), ref: single, role: faceRole(fea, single), part: facePartDetail(fea, single, loadScale) } : null} onClearSelection={clearChoice}
     copy={single ? { label: "Copy", shortcut: shell.frame.copyShortcut, onCopy: copyFace } : null} /> : null;

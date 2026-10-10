@@ -351,19 +351,27 @@ async function copiedPrompt(copied: string[]) {
 }
 const clipboardHost = (copied: string[]) => testHost({ clipboard: { writeText: async (text: any) => { copied.push(await text); }, readText: async () => '', writeImage: async () => {} } });
 
-it('Study lists the material, the fixed faces, each load with its faces and the mesh, then the Result', () => {
+it('Study reads in plain words: where it is held, what pushes it and what it is made of, then What you see, then Details, shut', () => {
   mount(STUDIED, undefined, { faces: FACES });
   const study = studyPanel()!;
   expect(study.querySelector('h3')!.textContent).toBe('Study');
   expect(study.querySelector('button[aria-label="Close study"]')).toBeTruthy();
-  // One line a row: the material's name alone, each face by name (the group says fixed or loaded), a
-  // load as what and which way with its faces shut under it, and the mesh's size (how it got there is its hint).
-  expect(rowTexts(study)).toEqual(['Material6061-T6', 'Fixed', 'Face 1', 'Loads', '2500 N · down', 'Mesh1.9 mm elements', 'Result']);
+  // Each heading with the glyph its marker is drawn as, each face by name under it, a load as how much and
+  // which way with its faces shut under it, the material's name; the mesh is Details', shut.
+  const plain = () => rowTexts(study).map(text => text!.replace(/\u2011/g, '-'));
+  expect(plain()).toEqual(['Held at', 'Face 1', 'Pushed', '2500 N down', 'Made of', '6061-T6', 'What you see', 'Details']);
+  expect(Array.from(study.querySelectorAll('[data-study-heading]')).map(row => [row.textContent, Boolean(row.querySelector('svg'))]))
+    .toEqual([['Held at', true], ['Pushed', true], ['Made of', true]]);
+  // The old jargon is gone.
+  for (const word of ['Fixed', 'Loads', 'Material', 'Result', 'Mesh']) expect(screen.queryByText(word, { exact: true })).toBeNull();
   expect(study.querySelector('[role="combobox"][aria-label="Result field"]')).toBeTruthy();
-  for (const detail of Array.from(study.querySelectorAll('[data-study-detail]'))) expect(detail.className).toMatch(/truncate/);
   // The load's faces open by its chevron.
-  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand 2500 N · down' })); });
-  expect(rowTexts(study)).toEqual(['Material6061-T6', 'Fixed', 'Face 1', 'Loads', '2500 N · down', 'Face 2', 'Mesh1.9 mm elements', 'Result']);
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand 2500 N down' })); });
+  expect(plain()).toEqual(['Held at', 'Face 1', 'Pushed', '2500 N down', 'Face 2', 'Made of', '6061-T6', 'What you see', 'Details']);
+  // Details opens by its chevron, the mesh's size there, how it got there its hint.
+  expect(screen.getByRole('button', { name: 'Expand Details' }).getAttribute('aria-expanded')).toBe('false');
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand Details' })); });
+  expect(plain().slice(-2)).toEqual(['Details', 'Mesh1.9 mm elements']);
   // It opens at its content's height, so Result's slider is not under its foot; a person's own cap still holds.
   expect(study.style.maxHeight).toBe('');
   cleanup();
@@ -382,7 +390,7 @@ it('a face both fixed and loaded is named for both, chosen from either row or pi
 it('a result written before its study was recorded shows Study with the Result alone', () => {
   mount(FOUND);
   const study = studyPanel()!;
-  expect(rowTexts(study)).toEqual(['Result']);
+  expect(rowTexts(study)).toEqual(['What you see']);
   expect(study.querySelector('[role="slider"][aria-label="Deformation scale"]')).toBeTruthy();
 });
 
@@ -492,8 +500,8 @@ it('an assembly has a Parts panel above Study, each part with its joints, the we
   // Opened, base lists the same joint, naming post.
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand base' })); });
   expect(plain(parts).slice(2)).toEqual(['baseSteel · holds 2.5×', '↔ postbonded · 100 mm²']);
-  // Study no longer lists parts or joints.
-  expect(rowTexts(study)[0]).toBe('Default material6061-T6');
+  // Study no longer lists parts or joints; what the parts are made of, which differ, is how many.
+  expect(study.querySelector('[data-study-row="material:name"]')!.textContent!.replace(/\u00a0/g, ' ')).toBe('2 materials');
   expect(study.querySelector('[data-study-row^="part:"], [data-study-row^="joint:"], [data-study-row="parts"], [data-study-row="connections"]')).toBeNull();
   expect(document.querySelector('[data-fea-summary]')!.textContent).toBe('Weakest: post · peak stress 180 MPa · holds 1.4× this load · the assembly moves up to 0.029 mm');
 });
@@ -573,7 +581,7 @@ it('a joint chosen under either of its parts is the same choice: both copies pre
   expect(await copiedPrompt(copied)).toBe("move it\n\nFile: /models/part.glb\nReferences:\nBonded joint between 'post' and 'base' · /models/part.step#o1.1.f1,o1.2.f1");
 });
 
-// The study's view: the agent chooses Result's controls, their order, ranges and words, and named presets.
+// The study's view: the agent chooses What you see's controls, their order, ranges and words, and named presets.
 const VIEWED = {
   ...RESULT,
   view: {
@@ -718,4 +726,67 @@ it('a view that turns the markers off opens with the switch off', () => {
   openDisplay();
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Enable Loads and fixtures' })); });
   expect(group.children.map(child => child.visible)).toEqual([true, true, true, true, true, true]);
+});
+
+// The answer at a glance, at the top of Study.
+const verdictOf = () => {
+  const section = screen.getByRole('region', { name: 'Verdict' });
+  const text = (key: string) => section.querySelector(`[data-fea-verdict-${key}]`)?.textContent?.replace(/ /g, ' ') ?? null;
+  return { status: section.getAttribute('data-fea-verdict'), title: text('title'), part: text('part'), line: text('line'), caption: text('caption'), section };
+};
+
+it('leads Study with the verdict: too weak, close to the limit or strong enough, each in its status tone', () => {
+  for (const [factor, status, title, tone] of [[0.68, 'weak', 'Too weak', 'text-error'], [1.5, 'close', 'Close to the limit', 'text-warning'], [5.83, 'strong', 'Strong enough', 'text-success']] as const) {
+    mount({ ...STUDIED, safety_factor: factor }, undefined, { faces: FACES });
+    const verdict = verdictOf();
+    expect([verdict.status, verdict.title]).toEqual([status, title]);
+    expect(verdict.section.querySelector('[data-fea-verdict-title]')!.parentElement!.className).toContain(tone);
+    expect(verdict.line).toBe('Peak 47 MPa, limit 276 MPa');
+    // It comes before the setup.
+    expect(verdict.section.compareDocumentPosition(studyPanel()!.querySelector('[data-study-row="fixed"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    cleanup();
+  }
+});
+
+it('draws how hard the part is working: filled to the peak over the limit, held at full and striped past it, with a tick at the margin', () => {
+  mount({ ...STUDIED, safety_factor: 1.6 }, undefined, { faces: FACES });
+  const bar = () => screen.getByRole('meter', { name: 'How hard the part is working' });
+  const fill = () => (bar().querySelector('[data-fea-verdict-fill]') as HTMLElement).style.width;
+  expect(fill()).toBe('62.5%');
+  expect(bar().getAttribute('aria-valuenow')).toBe('63');
+  expect(bar().hasAttribute('data-over')).toBe(false);
+  // The margin of 2: the tick at half the limit, and its words.
+  expect((bar().querySelector('[data-fea-verdict-tick]') as HTMLElement).style.left).toBe('50%');
+  expect(verdictOf().section.textContent).toContain('your 2× margin');
+  cleanup();
+  mount({ ...STUDIED, safety_factor: 0.5 }, undefined, { faces: FACES });
+  expect(fill()).toBe('100%');
+  expect(bar().getAttribute('aria-valuenow')).toBe('200');
+  expect(bar().hasAttribute('data-over')).toBe(true);
+  expect(verdictOf().caption).toBe('Holds only 0.5× this load');
+});
+
+it('the verdict follows the load control, and can change its word', () => {
+  const controls = [VIEWED.view.controls[0]];
+  mount({ ...STUDIED, safety_factor: 1.5, view: { controls } }, undefined, { faces: FACES });
+  expect([verdictOf().status, verdictOf().caption]).toEqual(['close', 'Would hold 1.5× this load']);
+  setValue('Rider weight slider value', '2');
+  expect([verdictOf().status, verdictOf().caption, verdictOf().line]).toEqual(['weak', 'Holds only 0.7× this load', 'Peak 95 MPa, limit 276 MPa']);
+  setValue('Rider weight slider value', '0.5');
+  expect([verdictOf().status, verdictOf().caption]).toEqual(['strong', 'Would hold 3.0× this load']);
+});
+
+it('with no stress, says to check the load reaches the part, in no tone and with no bar; an assembly names its weakest part', () => {
+  const unloaded = { ...STUDIED, safety_factor: null, fields: [{ ...RESULT.fields[0], max: 0 }, RESULT.fields[1]] };
+  mount(unloaded, undefined, { faces: FACES });
+  expect(verdictOf()).toMatchObject({ status: 'none', title: 'No stress', line: 'Check the load reaches the part', caption: null });
+  expect(screen.queryByRole('meter')).toBeNull();
+  cleanup();
+  // A result with a stress but no safety factor (older than it) has no verdict, and still opens.
+  mount({ ...STUDIED, safety_factor: null }, undefined, { faces: FACES });
+  expect(screen.queryByRole('region', { name: 'Verdict' })).toBeNull();
+  expect(studyPanel()).toBeTruthy();
+  cleanup();
+  mountAssembly([]);
+  expect(verdictOf()).toMatchObject({ status: 'close', part: 'Weakest: post', line: 'Peak 180 MPa, limit 276 MPa' });
 });

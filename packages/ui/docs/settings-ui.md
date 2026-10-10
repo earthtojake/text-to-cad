@@ -319,7 +319,7 @@ stack.
   scrolls, or a drag of its corner shows it). An FEA result's Study is short and ends in
   controls, so it opens at its content's height, uncapped (`fitContent`), giving way as the
   tree does only when the stack is short; an assembly's Parts above it opens the same way and is
-  the one that gives way first, Study after it as a details panel does, so Result stays in view. A
+  the one that gives way first, Study after it as a details panel does, so What you see stays in view. A
   cap the person drags holds as for any panel.
   A cap is never a floor. Setting one panel's cap changes no other's.
 - **One grip, on a resizable panel only.** A resizable panel is sized from its
@@ -571,16 +571,38 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     (the one the file names, else the lowest factor) opens with its joints and the rest start shut,
     so four parts and their joints do not fill the column; each opens by its chevron. Names and
     details wrap between words, never cut off.
-  - **Study**, every row one line, so it reads light and fits a laptop's height: in order
-    **Material**, the name alone ("Aluminum 6061-T6"; its yield is the findings' and the colour
-    bar's to say), "Default material" in an assembly, the name taking the line under its label
-    whole where the two do not fit side by side; **Fixed**, one row per fixed face, its name
-    alone ("Face 17"; in an assembly "post · face 17"), since the group says fixed; **Loads**, one
-    row per load, what and which way ("2500 N · down": "down" and "up" are CAD Z, else
-    "along −X" or the unit vector; or "2 MPa pressure"), its faces under it by name, shut until
-    its chevron opens them (choosing the load row still tints all its faces and its arrows);
-    **Mesh**, the size alone ("1.9 mm elements"), how it got there ("refined from 2.8 mm", "not
-    refined") its hint; and **Result**: the controls the study's
+  - **Study** leads with the answer and reads the study in plain words, technical terms after them
+    or in hints, so a person who is not an engineer has the answer in two seconds. Top to bottom:
+    - **The verdict** (`glb/FeaVerdict.jsx`, from `feaVerdict` in `glb/feaResult.js`), a block on
+      the status tone's own background at the top of the panel's body: a status word with its icon,
+      in the theme's status tones (the findings card's and its alert icon's): **Too weak** under a
+      safety factor of 1 (error, a crossed circle), **Close to the limit** under the study's margin
+      (`study.margin`, else cadgen's 2; warning, a triangle) and **Strong enough** from it up
+      (success, a ticked circle). Under it, in an assembly, the weakest part ("Weakest: bulkhead
+      right support block"), whose numbers these are, then the peak against the limit ("Peak
+      405 MPa, limit 276 MPa", the limit the part's yield, each half kept whole so the narrow panel
+      breaks it at its comma). Then a bar of how hard the part is working (a `meter`): filled to the
+      peak over the limit in the status tone, held at full past the limit with its end striped, and
+      a tick at the margin (the limit over the margin) labelled "your 2× margin"; and its caption,
+      "Holds only 0.6× this load" under 1, else "Would hold 1.5× this load" (the factor floored, as
+      the findings say it). It follows the load shown (`load_scale`), so it can change its word.
+      With no stress it says **No stress** and "Check the load reaches the part", in no tone and
+      with no bar; at a load of 0, **No load**. A result with a stress but no safety factor (older
+      than it) has no verdict.
+    - **The setup**, read as sentences, each heading muted with, in the disclosure column, the glyph
+      its marker is drawn as on the model (`glb/feaGlyphs.jsx`, lucide's grid at the trees' light
+      stroke): **Held at** (a cone pointing into a face, the fixtures' grey), one row per fixed face,
+      its name alone ("Face 17"; in an assembly "post · face 17"); **Pushed** (an arrow with a cone
+      for its head, the loads' ink), one row per load, how much and which way ("2500 N down": "down"
+      and "up" are CAD Z, else "along −X" or the unit vector; or "2 MPa pressure"), its faces under
+      it by name, shut until its chevron opens them (choosing the load row still tints all its faces
+      and its arrows); and **Made of** (a swatch), the material's name ("Aluminum 6061-T6"; its
+      yield is the verdict's to say). In an assembly whose parts differ, "Mostly Aluminum 6061-T6"
+      where one material has most of the parts, else "2 materials", each part's own in its hint and
+      in Parts and a picked face's Reference; a part with none of its own takes the study's. A
+      heading neither chooses nor folds; its rows hang from a faint line under its glyph. A face or
+      material row too long for the one width wraps between words, never cut off.
+    - **What you see**: the controls the study's
     `view` chose (`feaControls` in `glb/feaResult.js`), in its order, with its labels, ranges and
     units, each a generic parameter row drawn by the same `parameterRow` as Position's joints
     (`kit/inspector/parameterRow.jsx`), a sentence-long label wrapping between words on its
@@ -590,18 +612,21 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     Mises stress, is the colour bar's), **deformation** (how many times the displacement is drawn,
     "×12.0"), **load_scale** (the load as a multiple of the solved one, "×1.50") and **threshold**
     (values of its field under it drawn neutral grey, "138 MPa"). A control whose `drives` or type
-    the viewer does not know is skipped. With no `view`, or none of its controls the viewer can draw (an empty list, or all from a newer cadgen), Result is as it always was, and a preset may set those two: a Field select
+    the viewer does not know is skipped. With no `view`, or none of its controls the viewer can draw (an empty list, or all from a newer cadgen), What you see is as it always was, and a preset may set those two: a Field select
     with no visible label over every field, opening on stress, and a Deformation slider with its
     committed number, from 0 to four times the file's own exaggeration. When the view names
-    `presets`, a **Preset** row leads Result, the Position panel's Pose row (`KinematicsPoseRow`)
+    `presets`, a **Preset** row leads What you see, the Position panel's Pose row (`KinematicsPoseRow`)
     labelled "Preset": Default, each preset (a full state: every control at its default but what
-    the preset sets), and Custom once any control moves. Each group shows only where the file records
-    something for it (`STUDY_GROUPS` in `glb/feaResult.js`: a result kind with more to say adds a
-    group there, touching no other), so a result written before its study was recorded has Result
-    alone. A row too long for the one width (a long part's name before "· face 9", a long
-    material) is cut off at its end and hinted whole (`TooltipHint`, `overflowOnly`), never
-    wrapped onto further lines. It opens at its content's height (see Heights), so Result's
-    slider is in view.
+    the preset sets), and Custom once any control moves.
+    - **Details**, shut until its chevron opens it: the mesh, its size ("Mesh 1.9 mm elements"), how
+      it got there ("refined from 2.8 mm", "not refined") its hint.
+
+    Each group shows only where the file records something for it (`STUDY_GROUPS` and
+    `DETAIL_GROUPS` in `glb/feaResult.js`: a result kind with more to say adds a group there,
+    touching no other), so a result written before its study was recorded has its verdict, if it
+    has a safety factor, and What you see alone. Study keeps the one width: the verdict and the
+    setup wrap to fit it. It opens at its content's height (see Heights), so the sliders of What
+    you see are in view.
 
   A GLB that is not a result has no strip at all.
 - **Choosing faces.** A fixed face, a load or a load's face chosen in Study tints its triangles

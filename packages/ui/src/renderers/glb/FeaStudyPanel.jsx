@@ -7,12 +7,14 @@ import { KinematicsPoseRow } from "../kit/inspector/kinematicsControls.jsx";
 import { parameterRow } from "../kit/inspector/parameterRow.jsx";
 import ToolPanel, { ToolPanelClose, ToolPanelFooterButton } from "../kit/tools/ToolPanel.jsx";
 import { formatValue } from "./feaResult.js";
+import FeaVerdict from "./FeaVerdict.jsx";
+import { STUDY_GLYPHS } from "./feaGlyphs.jsx";
 
 /** A control's number as its value field shows it: a multiple as "×12.0", others with their unit after ("138 MPa"). */
 const controlText = (value, control) => (control.unit === "×" ? `×${formatValue(value)}` : `${formatValue(value)}${control.unit ? ` ${control.unit}` : ""}`);
 
 /**
- * Study's Result: the controls the study's view chose (`feaControls`), in its order, each a generic
+ * Study's What you see: the controls the study's view chose (`feaControls`), in its order, each a generic
  * parameter row as Position's joints are (`parameterRow`), under a Preset select when the view names
  * presets (Default, each preset, Custom once a control has moved). The file carries every field and
  * the true displacement (feaResult.js), so each is a choice, not a readout. `values` by control id.
@@ -53,19 +55,21 @@ function WrappedRowText({ row }) {
 }
 
 /**
- * A row that only says something (Material, Mesh): its label then its detail ("Aluminum 6061-T6",
- * "3.7 mm elements"), on one line where both fit, else the detail whole on the line under the label
- * ("Default material" over the name), never broken between words. Its further words are its hint
- * ("refined from 6 mm"); a detail cut off even on its own line is hinted whole.
+ * A row that only says something (the material's name, the mesh): its label then any detail ("Mesh
+ * 3.7 mm elements"), on one line where both fit, else the detail whole on the line under the label,
+ * never broken between words. Its further words are its hint ("refined from 6 mm", each part's
+ * material); a row cut off even on its own line is hinted whole.
  */
-function StudyFactRow({ row }) {
-  const hint = row.hint || `${row.label} ${row.detail}`;
+function StudyFactRow({ row, depth }) {
+  const hint = row.hint || [row.label, row.detail].filter(Boolean).join(" ");
   return <li className="min-w-0">
-    <TreeRowSurface dense className="h-auto min-h-6 pl-4" style={{ height: "auto" }} data-study-row={row.id}>
+    <TreeRowSurface dense className="h-auto min-h-6 gap-0 pr-0 hover:bg-transparent" style={{ height: "auto", paddingLeft: depth * TREE_INDENT_PX }} data-study-row={row.id}>
+      <TreeRowGuides depth={depth} column={16} />
+      <span className="w-4 shrink-0" />
       <TooltipHint content={hint} overflowOnly={!row.hint}>
         <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 py-1 pr-2">
-          <span className="shrink-0">{row.label}</span>
-          <span className="min-w-0 max-w-full truncate text-micro text-muted-foreground" data-study-detail="">{row.detail}</span>
+          <span className={cn("min-w-0 max-w-full", row.wrap ? "[overflow-wrap:break-word]" : "truncate")}>{row.wrap ? unbroken(row.label) : row.label}</span>
+          {row.detail ? <span className="min-w-0 max-w-full truncate text-micro text-muted-foreground" data-study-detail="">{row.detail}</span> : null}
         </span>
       </TooltipHint>
     </TreeRowSurface>
@@ -73,15 +77,32 @@ function StudyFactRow({ row }) {
 }
 
 /**
+ * A heading of the study's setup, read as the start of a sentence ("Held at", "Pushed", "Made of"):
+ * the glyph its marker is drawn as on the model in the disclosure column, its words muted, and its
+ * rows always under it, hung from a line under the glyph. Not a control: it neither chooses nor folds.
+ */
+function StudyHeadingRow({ row, depth, ...rest }) {
+  const Glyph = STUDY_GLYPHS[row.glyph];
+  return <li className="min-w-0">
+    <div className="relative flex h-6 min-w-0 items-center text-tiny text-muted-foreground" style={{ paddingLeft: depth * TREE_INDENT_PX }} data-study-row={row.id} data-study-heading="">
+      <span className="grid w-4 shrink-0 place-items-center">{Glyph ? <Glyph /> : null}</span>
+      <span className="min-w-0 truncate pl-1.5">{row.label}</span>
+    </div>
+    <ul>{row.children.map((child) => <StudyRow key={child.id} row={child} depth={depth + 1} {...rest} />)}</ul>
+  </li>;
+}
+
+/**
  * One of a tree's rows (Parts', Study's), the Links tree's: a 16px disclosure column, then its name
  * and detail. A row that stands for faces (a fixed face, a load, a load's face) or for parts (an
- * assembly's part or joint) is a button that chooses them; a group (Fixed, Loads, Result) only opens
- * and closes. `contents`: what an open row shows in place of child rows, by id (Result's controls).
+ * assembly's part or joint) is a button that chooses them; a group (What you see, Details) only opens
+ * and closes, and a heading of the setup (Held at, Pushed, Made of) does neither (`StudyHeadingRow`). `contents`: what an open row shows in place of child rows, by id (What you see's controls).
  */
 function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, contents }) {
   const content = contents[row.id] || null;
   const choosable = Boolean(row.faces || row.refs);
-  if (!choosable && !row.children && !content) return <StudyFactRow row={row} />;
+  if (row.glyph && row.children?.length) return <StudyHeadingRow {...{ row, depth, chosen, collapsed, toggle, onChoose, contents }} />;
+  if (!choosable && !row.children && !content) return <StudyFactRow row={row} depth={depth} />;
   const branch = Boolean(row.children?.length || content);
   const open = branch && !collapsed.has(row.id);
   const active = chosen === row.id;
@@ -112,7 +133,7 @@ function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, contents })
  * rows it opens with shut (every part but the weakest). Which rows are open is the panel's own, kept
  * while it is mounted (closed or not).
  */
-function StudyTreePanel({ id, title, rows, startsCollapsed, fit, hidden, chosen, onChoose, contents }) {
+function StudyTreePanel({ id, title, rows, startsCollapsed, fit, hidden, chosen, onChoose, contents, lead = null }) {
   const [collapsed, setCollapsed] = useState(() => new Set(startsCollapsed));
   const toggle = (rowId) => setCollapsed((current) => {
     const next = new Set(current);
@@ -120,14 +141,22 @@ function StudyTreePanel({ id, title, rows, startsCollapsed, fit, hidden, chosen,
     return next;
   });
   return <ToolPanel id={id} title={title} label={title} actions={<ToolPanelClose />} fit={fit} resizable fitContent closable collapsible={false} hidden={hidden}>
+    {lead}
     <ul className="flex flex-col px-1 pb-1 text-tiny" aria-label={title}>
       {rows.map((row) => <StudyRow key={row.id} row={row} depth={0} {...{ chosen, collapsed, toggle, onChoose, contents }} />)}
     </ul>
   </ToolPanel>;
 }
 
-const RESULT_ROW = Object.freeze({ id: "result", label: "Result", detail: "" });
+// What the view shows and how: the study view's controls, under the setup and above Details.
+const RESULT_ROW = Object.freeze({ id: "result", label: "What you see", detail: "" });
 const NONE = Object.freeze([]);
+
+/** Study's rows with What you see after the setup, before Details. */
+const withResult = (rows) => {
+  const at = rows.findIndex((row) => row.id === "details");
+  return at < 0 ? [...rows, RESULT_ROW] : [...rows.slice(0, at), RESULT_ROW, ...rows.slice(at)];
+};
 
 /** The ids of the rows that open shut (`collapsed`: a load's faces), at any depth. */
 const collapsedIds = (rows) => rows.flatMap((row) => [...(row.collapsed ? [row.id] : []), ...collapsedIds(row.children || NONE)]);
@@ -141,19 +170,20 @@ export const FEA_STUDY_PANEL_ID = "tree";
  * face picked on the result. They are composed from what the file holds: **Parts** only for an
  * assembly whose panel shows (`parts`: `partRows`, each part with its joints under it, the weakest
  * part open; `feaShowsParts`, from six parts up unless the view says), then
- * **Study** (`rows`: `studyRows`, the material, fixed faces, loads with their faces and mesh, each
- * only where the file records it), ending in Result: the study view's controls (`result`:
- * `FeaResultControls`' props), by default the field and deformation. A result written before its
- * study was recorded has Result alone. Choosing a row that stands for faces or parts is
+ * **Study**: the verdict at the load shown (`verdict`: `feaVerdict`, none where the file cannot say),
+ * then `rows` (`studyRows`: where it is held, what pushes it, what it is made of, each only where the
+ * file records it), What you see: the study view's controls (`result`: `FeaResultControls`' props,
+ * by default the field and deformation), and Details, shut. A result written before its study was
+ * recorded has its verdict and What you see alone. Choosing a row that stands for faces or parts is
  * `onChoose(row)`; `chosen` is the row (or picked face) chosen.
  *
- * @param {{ active: boolean, parts?: object[], openPart?: number, rows: object[], chosen: string, onChoose(row: object): void,
+ * @param {{ active: boolean, parts?: object[], openPart?: number, rows: object[], verdict?: object | null, chosen: string, onChoose(row: object): void,
  *   result: { controls: object[], values: Record<string, unknown>, presets: object[], preset: string,
  *     onChange(id: string, value: unknown): void, onPreset(value: string): void, onReset(): void },
  *   reference: { title: string, ref: string, role: string, part?: string } | null, onClearSelection(): void,
  *   copy: { label: string, shortcut: string, onCopy(): unknown } | null }} props
  */
-export default function FeaStudyPanel({ active, parts = NONE, openPart = -1, rows, chosen, onChoose, result,
+export default function FeaStudyPanel({ active, parts = NONE, openPart = -1, rows, verdict = null, chosen, onChoose, result,
   reference, onClearSelection, copy }) {
   const contents = {
     [RESULT_ROW.id]: <FeaResultControls {...result} />,
@@ -161,7 +191,8 @@ export default function FeaStudyPanel({ active, parts = NONE, openPart = -1, row
   const panels = [
     parts.length ? { id: FEA_PARTS_PANEL_ID, title: "Parts", rows: parts, startsCollapsed: parts.filter((_, index) => index !== openPart).map((row) => row.id), fit: "tree" } : null,
     // Under Parts, Study gives way only after Parts has, as a details panel does, so Result stays in view.
-    { id: FEA_STUDY_PANEL_ID, title: "Study", rows: [...rows, RESULT_ROW], startsCollapsed: collapsedIds(rows), fit: parts.length ? "details" : "tree" },
+    { id: FEA_STUDY_PANEL_ID, title: "Study", rows: withResult(rows), startsCollapsed: collapsedIds(rows), fit: parts.length ? "details" : "tree",
+      lead: verdict ? <FeaVerdict verdict={verdict} /> : null },
   ].filter(Boolean);
   return <>
     {/* Each headed with its X; Select, pressed while it is the tool, opens the closed ones again. */}

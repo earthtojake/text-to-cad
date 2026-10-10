@@ -2,7 +2,7 @@ import { BufferAttribute, BufferGeometry, Group, Mesh, Ray, Vector3 } from 'thre
 import { describe, expect, it } from 'vitest';
 import {
   applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaControls, feaMarkerShow, feaPresets, feaRamp, feaSummaryLine, fieldValues, forceDirection,
-  formatValue, pickFace, readFeaResult, partRows, recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows, weakestPartIndex
+  feaVerdict, formatValue, pickFace, readFeaResult, partRows, recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows, weakestPartIndex
 } from './feaResult.js';
 
 /** A two-triangle "result" the way GLTFLoader hands one over: lower-cased custom attributes, extras in userData. */
@@ -200,18 +200,17 @@ function studyResult(extras: Record<string, unknown> = { study: STUDY, faces: ['
   Object.assign(built.mesh.userData, extras);
   return { ...built, result: readFeaResult(built.root)! };
 }
-const strip = (rows: any[]): any[] => rows.map(({ id, label, detail, hint, collapsed, summary, faces, children }) =>
-  ({ id, label, detail, ...(hint ? { hint } : {}), ...(collapsed ? { collapsed } : {}), ...(summary ? { summary, faces } : {}), ...(children ? { children: strip(children) } : {}) }));
+const strip = (rows: any[]): any[] => rows.map(({ id, label, detail, hint, glyph, collapsed, summary, faces, children }) =>
+  ({ id, label, detail, ...(hint ? { hint } : {}), ...(glyph ? { glyph } : {}), ...(collapsed ? { collapsed } : {}), ...(summary ? { summary, faces } : {}), ...(children ? { children: strip(children) } : {}) }));
 
 describe('a result\'s study', () => {
-  it('reads as Study\'s rows: material, each fixed face, each load with its faces, and the mesh', () => {
+  it('reads as Study\'s rows in plain words: where it is held, what pushes it, what it is made of, then Details, shut', () => {
     expect(strip(studyRows(studyResult().result))).toEqual([
-      { id: 'material', label: 'Material', detail: '6061-T6' },
-      { id: 'fixed', label: 'Fixed', detail: '', children: [
+      { id: 'fixed', label: 'Held at', detail: '', glyph: 'fixture', children: [
         { id: 'fixed:0:#o1.f1', label: 'Face 1', detail: '', summary: 'Fixed face 1', faces: ['#o1.f1'] },
       ] },
-      { id: 'loads', label: 'Loads', detail: '', children: [
-        { id: 'load:0', label: '2500 N · down', detail: '', collapsed: true, summary: '2500 N load on face 2', faces: ['#o1.f2'], children: [
+      { id: 'loads', label: 'Pushed', detail: '', glyph: 'load', children: [
+        { id: 'load:0', label: '2500 N down', detail: '', collapsed: true, summary: '2500 N load on face 2', faces: ['#o1.f2'], children: [
           { id: 'load:0:#o1.f2', label: 'Face 2', detail: '', summary: '2500 N load on face 2', faces: ['#o1.f2'] },
         ] },
         { id: 'load:1', label: '2 MPa pressure', detail: '', collapsed: true, summary: '2 MPa pressure on faces 3, 4', faces: ['#o1.f3', '#o1.f4'], children: [
@@ -219,13 +218,16 @@ describe('a result\'s study', () => {
           { id: 'load:1:#o1.f4', label: 'Face 4', detail: '', summary: '2 MPa pressure on face 4', faces: ['#o1.f4'] },
         ] },
       ] },
-      { id: 'mesh', label: 'Mesh', detail: '1.9 mm elements', hint: 'refined from 2.8 mm' },
+      { id: 'material', label: 'Made of', detail: '', glyph: 'material', children: [{ id: 'material:name', label: '6061-T6', detail: '' }] },
+      { id: 'details', label: 'Details', detail: '', collapsed: true, children: [
+        { id: 'mesh', label: 'Mesh', detail: '1.9 mm elements', hint: 'refined from 2.8 mm' },
+      ] },
     ]);
   });
 
   it('says a mesh was not refined, and a result written before the study was recorded has no rows', () => {
     const plain = studyResult({ study: { ...STUDY, mesh: { ...STUDY.mesh, refined_from_mm: null } }, faces: [] });
-    expect(studyRows(plain.result).at(-1)).toMatchObject({ id: 'mesh', detail: '1.9 mm elements', hint: 'not refined' });
+    expect(studyRows(plain.result).at(-1)!.children![0]).toMatchObject({ id: 'mesh', detail: '1.9 mm elements', hint: 'not refined' });
     const old = resultMesh();
     expect(readFeaResult(old.root)!.study).toBeNull();
     expect(studyRows(readFeaResult(old.root)!)).toEqual([]);
@@ -253,9 +255,9 @@ describe('a result\'s study', () => {
   it('names a face both fixed and loaded for both, in either row', () => {
     const { result } = studyResult({ study: { ...STUDY, loads: [{ type: 'force', faces: ['#o1.f1'], vector_N: [0, 0, -2500] }] }, faces: ['#o1.f1'] });
     const rows = studyRows(result);
-    expect(rows[1].children[0].summary).toBe('Fixed and loaded face 1');
-    expect(rows[2].children[0].children[0].summary).toBe('Fixed and loaded face 1');
-    expect(rows[2].children[0].summary).toBe('2500 N load on face 1');
+    expect(rows[0].children[0].summary).toBe('Fixed and loaded face 1');
+    expect(rows[1].children[0].children[0].summary).toBe('Fixed and loaded face 1');
+    expect(rows[1].children[0].summary).toBe('2500 N load on face 1');
   });
 
   it('tints the chosen faces\' vertices over the field colours, and only those', () => {
@@ -331,7 +333,7 @@ describe('an assembly result', () => {
     // A free pair has no faces: both parts' refs go instead.
     expect(rows[0].children[1]).toMatchObject({ refs: ['#o1.1', '#o1.3'], summary: "'post' and 'lid' aren't connected" });
     expect(rows[0].children[1].faces).toBeUndefined();
-    expect(studyRows(result).map((row) => row.id)).toEqual(['material', 'fixed', 'loads', 'mesh']);
+    expect(studyRows(result).map((row) => row.id)).toEqual(['fixed', 'loads', 'material', 'details']);
     expect(weakestPartIndex(result)).toBe(0);
   });
 
@@ -398,10 +400,10 @@ describe('an assembly result', () => {
     const loads = rows.find((row) => row.id === 'loads');
     expect(fixed.children[0].label).toBe('base · face 9');
     expect(loads.children[0].children[0].label).toBe('post · face 23');
-    expect(loads.children[0].label).toBe('5 N · down');
-    // The study's material is the default a part with none of its own takes.
-    expect(rows[0]).toMatchObject({ label: 'Default material', detail: '6061-T6' });
-    expect((studyRows(studyResult().result) as any[])[1].children[0].label).toBe('Face 1');
+    expect(loads.children[0].label).toBe('5 N down');
+    // Parts that differ, one material each: how many; each part's own is the hint.
+    expect(rows.find((row) => row.id === 'material').children[0]).toMatchObject({ label: '2 materials', hint: '6061-T6: 1 part, Steel: 1 part' });
+    expect((studyRows(studyResult().result) as any[])[0].children[0].label).toBe('Face 1');
   });
 
   it('tints a chosen joint\'s two parts lightly while its interface faces keep the full tint', () => {
@@ -429,7 +431,7 @@ describe('an assembly result', () => {
     const { result } = studyResult();
     expect(result.parts).toEqual([]);
     expect(partRows(result)).toEqual([]);
-    expect(studyRows(result).map((row) => row.id)).toEqual(['material', 'fixed', 'loads', 'mesh']);
+    expect(studyRows(result).map((row) => row.id)).toEqual(['fixed', 'loads', 'material', 'details']);
     expect(feaSummaryLine(result, result.fields[0])).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
   });
 });
@@ -567,3 +569,50 @@ function solvedAt(field: any, value: number) {
   const [r, g, b] = feaRamp(Math.round(Math.min(1, value / field.max) * 255) / 255);
   return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), 255];
 }
+
+describe('the verdict', () => {
+  const single = (safety_factor: number | null, extras: Record<string, unknown> = {}) => studyResult({ study: STUDY, faces: [], safety_factor, ...extras }).result;
+
+  it('says too weak under a safety factor of 1, close to the limit under the margin, strong enough from it up', () => {
+    expect(feaVerdict(single(0.68))).toMatchObject({ status: 'weak', title: 'Too weak', caption: 'Holds only 0.6× this load', margin: 2, part: '' });
+    expect(feaVerdict(single(1.5))).toMatchObject({ status: 'close', title: 'Close to the limit', caption: 'Would hold 1.5× this load' });
+    expect(feaVerdict(single(2))).toMatchObject({ status: 'strong', title: 'Strong enough', caption: 'Would hold 2.0× this load' });
+    // The peak against the limit, each half kept whole; how hard the part works is the peak over the limit.
+    const weak = feaVerdict(single(0.68))!;
+    expect(weak.line.replace(/ /g, ' ')).toBe('Peak 47 MPa, limit 276 MPa');
+    expect(weak.use).toBeCloseTo(1 / 0.68, 6);
+    // The study's own margin sets where "close" ends.
+    expect(feaVerdict(single(2.5, { study: { ...STUDY, margin: 3 } }))).toMatchObject({ status: 'close', margin: 3 });
+    // A study that records no margin is held to cadgen's default.
+    expect(feaVerdict(single(1.9, { study: { ...STUDY, margin: undefined } }))).toMatchObject({ status: 'close', margin: 2 });
+  });
+
+  it('follows the load shown: twice the load halves the factor and can change the word, half of it doubles it', () => {
+    const result = single(1.5);
+    expect(feaVerdict(result, 2)).toMatchObject({ status: 'weak', caption: 'Holds only 0.7× this load' });
+    expect(feaVerdict(result, 2)!.line.replace(/ /g, ' ')).toBe('Peak 95 MPa, limit 276 MPa');
+    expect(feaVerdict(result, 0.5)).toMatchObject({ status: 'strong', caption: 'Would hold 3.0× this load' });
+  });
+
+  it('with no stress says so in a neutral tone, and a result too old to judge has no verdict', () => {
+    const none = single(null);
+    none.fields[0].max = 0;
+    expect(feaVerdict(none)).toMatchObject({ status: 'none', title: 'No stress', line: 'Check the load reaches the part', caption: '' });
+    expect(feaVerdict(single(1.5), 0)).toMatchObject({ status: 'none', title: 'No load' });
+    expect(feaVerdict(single(null))).toBeNull();
+  });
+
+  it('in an assembly names the weakest part, whose peak and limit these are', () => {
+    const { result } = studyResult(ASSEMBLY);
+    const verdict = feaVerdict(result)!;
+    expect(verdict).toMatchObject({ status: 'close', part: 'post' });
+    expect(verdict.line.replace(/ /g, ' ')).toBe('Peak 180 MPa, limit 276 MPa');
+  });
+
+  it('says what an assembly is mostly made of, a part with no material of its own taking the study\'s', () => {
+    const parts = [...ASSEMBLY.parts, { ...ASSEMBLY.parts[0], ref: '#o1.3', name: 'lid', material: '' }];
+    const made = (list: object[]) => (studyRows(studyResult({ ...ASSEMBLY, parts: list }).result) as any[]).find((row) => row.id === 'material').children[0];
+    expect(made(parts)).toMatchObject({ label: 'Mostly 6061-T6', hint: '6061-T6: 2 parts, Steel: 1 part' });
+    expect(made([ASSEMBLY.parts[0], { ...ASSEMBLY.parts[1], material: '6061-T6' }]).label).toBe('6061-T6');
+  });
+});
