@@ -1,9 +1,9 @@
 """The build tree renders model transitions; it never invents any.
 
 Driven with synthetic events so the assertions are about the rendering rules: one
-JSON line per transition off a TTY, current children counted on the parent's line, a
-finished subtree folded to one line, a finished model that never regresses, and a
-stranger's root id ignored.
+JSON line per transition with --json, nothing but durable lines in any other non-TTY,
+current children counted on the parent's line, a finished subtree folded to one line,
+a finished model that never regresses, and a stranger's root id ignored.
 """
 
 from __future__ import annotations
@@ -24,9 +24,9 @@ from cadgen.daemon import executors  # noqa: E402
 ROBOT, ARM, GRIPPER, FINGER = "/m/robot.py", "/m/arm.py", "/m/gripper.py", "/m/finger.py"
 
 
-def _tree(**kwargs) -> tuple[BuildTree, io.StringIO]:
+def _tree(*, json_lines: bool = True) -> tuple[BuildTree, io.StringIO]:
     out = io.StringIO()
-    return BuildTree(root_id="r", stream=out, **kwargs), out
+    return BuildTree(root_id="r", stream=out, json_lines=json_lines), out
 
 
 def _lines(out: io.StringIO) -> list[dict]:
@@ -104,6 +104,36 @@ class JsonLines(unittest.TestCase):
         tree.handle("nonsense")  # type: ignore[arg-type]
         tree.close()
         self.assertEqual(_lines(out), [])
+
+
+class PlainNonTty(unittest.TestCase):
+    """An agent's shell or a CI log: no TTY, no --json. A line per phase and per part
+    of every model was most of what a build printed, so transitions print nothing."""
+
+    def test_transitions_print_nothing(self):
+        tree, out = _tree(json_lines=False)
+        tree.handle({"model": ROBOT, "state": "building", "phase": "generate"})
+        tree.handle({"model": ARM, "state": "submitted", "parent": ROBOT})
+        tree.handle({"model": ARM, "state": "building", "phase": "Storing parts", "done": 3, "total": 7})
+        tree.handle({"model": ARM, "state": "done", "elapsed": 1.5})
+        tree.handle({"model": GRIPPER, "state": "current", "parent": ROBOT})
+        tree.handle({"model": FINGER, "state": "failed", "exit": 1, "parent": ROBOT})
+        tree.close()
+        self.assertEqual(out.getvalue(), "")
+
+    def test_a_built_model_still_gets_its_time_line(self):
+        tree, out = _tree(json_lines=False)
+        tree.handle({"model": ARM, "state": "building", "phase": "generate"})
+        tree.handle({"model": ARM, "state": "done", "timings": _timings(1.0)})
+        tree.close()
+        self.assertEqual(out.getvalue().splitlines(), ["[cadgen] built /m/STEP/arm.step in 3.0s: model code 1.0s, cadgen 2.0s"])
+
+    def test_an_already_stale_model_says_so_once(self):
+        tree, out = _tree(json_lines=False)
+        tree.handle({"model": ROBOT, "state": "done", "elapsed": 4.1, "stale": "child arm.py changed"})
+        tree.handle({"model": ROBOT, "state": "done", "stale": "child arm.py changed"})
+        tree.close()
+        self.assertEqual(out.getvalue().splitlines(), ["[cadgen] robot is already stale: child arm.py changed; rerun"])
 
 
 class TreeRendering(unittest.TestCase):

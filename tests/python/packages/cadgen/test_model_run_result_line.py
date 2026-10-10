@@ -250,20 +250,28 @@ class BuildTimeTest(_ModelRunCase):
 
         # The record kept the first build's model-code time, and the next build
         # compares itself against it (the warning's rule is BuildTree's tests').
-        forced = self._run("cart.py", "--force")
+        forced = self._run("cart.py", "--force", "--json")
         self.assertEqual(self._done(forced)["timings"]["lastModelSeconds"], timings["modelSeconds"])
 
         # --profile rebuilds the model (it is current) with its own code profiled; its
         # child is reused, so only the parent has a line. A profiled body is slowed by
         # the profiler, so it is compared with nothing.
-        profiled = self._run("cart.py", "--profile")
-        self.assertEqual(self._lines(profiled), ["built cart.step"])
+        profiled = self._run("cart.py", "--profile", "--json")
+        self.assertEqual(json.loads(profiled.stdout.strip())["outcome"], "built")
         lines = profiled.stderr.splitlines()
         self.assertEqual(sum(line.startswith("[cadgen] built ") for line in lines), 1, profiled.stderr)
         start = lines.index("[cadgen]   in this project, by cumulative time:")
         project_rows = lines[start + 1:lines.index("[cadgen]   everywhere, by own time:")]
         self.assertTrue(any(row.endswith("cart.py:6 spin_the_planner") for row in project_rows), profiled.stderr)
         self.assertIsNone(self._done(profiled)["timings"]["lastModelSeconds"])
+
+        # What an agent's shell (no TTY, no --json) reads from a build: the result on
+        # stdout and each built model's time line, no line per transition.
+        plain = self._run("cart.py", "--force")
+        self.assertEqual(self._lines(plain), ["built cart.step"])
+        lines = plain.stderr.splitlines()
+        self.assertTrue(lines and all(line.startswith("[cadgen] ") for line in lines), plain.stderr)
+        self.assertEqual(sum(line.startswith("[cadgen] built cart.step in ") for line in lines), 1, plain.stderr)
 
     @staticmethod
     def _done(proc: subprocess.CompletedProcess) -> dict:

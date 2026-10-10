@@ -6,19 +6,23 @@ processes, so their events travel back to the top-level call through the pool: a
 ``{"event": ...}`` frames from a daemon worker, as ``CADGEN_EVENT`` stderr lines from a
 transient worker. Both arrive here identically, tagged with the root request's id.
 
-Two renderings, chosen once per process:
+Three renderings, chosen once per process:
 
 * a **TTY**: one block on stderr, refreshed in place, one line per model doing WORK.
   Current children are summarized on their parent's line; a finished subtree folds to
   one line, so a 200-model assembly never scrolls. Stdout stays the result channel.
-* **non-TTY / ``--json``**: one JSON line per transition on stderr, no drawing.
+* ``--json``: one JSON line per transition on stderr, no drawing.
+* any other **non-TTY** (an agent's shell, a CI log): no transitions at all. A line per
+  phase and per part of every model was most of what an agent read from a build.
 
 Every model that was BUILT also gets a durable human line on stderr saying where its
 time went -- ``[cadgen] built robot.step in 9m42s: model code 8m20s, cadgen 1m22s`` --
 read off its ``done`` event's ``timings`` (cadgen._internal.build_timing), followed by
 a warning when its model code got much slower than its last build, and by the
 ``--profile`` report when the build carried one. Off a TTY they print as the model
-finishes; on a TTY, below the frozen block when the build ends.
+finishes; on a TTY, below the frozen block when the build ends. A plain non-TTY also
+gets the one notice the transitions carried that a reader acts on: a model already
+stale when it finished.
 
 Nothing here knows what a build is; it renders events.
 """
@@ -58,7 +62,7 @@ class _Model:
     __slots__ = (
         "model", "name", "state", "phase", "done", "total", "started", "finished",
         "elapsed", "exit", "parent", "children", "stale", "seen", "timings", "profile",
-        "timed",
+        "timed", "stale_told",
     )
 
     def __init__(self, model: str, parent: str | None) -> None:
@@ -82,6 +86,7 @@ class _Model:
         self.timings: dict | None = None  # where a built model's time went
         self.profile: str | None = None  # its --profile report
         self.timed = False  # its time lines were printed (or held for the block)
+        self.stale_told = False  # its already-stale notice was printed (plain non-TTY)
 
     @property
     def terminal(self) -> bool:
@@ -149,12 +154,15 @@ class BuildTree:
                 self._attach(node, parent)
             changed = self._apply(node, event, state) or fresh
             if changed:
-                if self._json or not self._tty:
+                if self._json:
                     self._write_line(node)
-                else:
+                elif self._tty:
                     self._draw(force=True)
             if node.timings is not None and not node.timed:
                 self._time_lines(node)
+            if node.stale and node.terminal and not node.stale_told and not (self._json or self._tty):
+                node.stale_told = True
+                self._write_text([f"[cadgen] {node.name} is already stale: {node.stale}; rerun"])
 
     def _attach(self, node: _Model, parent: str) -> None:
         """Hang ``node`` under ``parent``, inventing the parent's line if its own

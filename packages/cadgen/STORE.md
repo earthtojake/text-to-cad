@@ -1820,8 +1820,9 @@ Missing pinned objects fail the request rather than substituting a newer tree.
 The top-level call renders the graph these calls reveal as a build tree on
 stderr (`cadgen.cli_tree`): a TTY gets one refreshed block — `submitted`,
 `building · <phase> n/total`, `current`, `✓ <time>`, finished subtrees folded
-to one line, current children counted on the parent's line; `--json` or a
-non-TTY gets one JSON line per model transition. Child events reach the root
+to one line, current children counted on the parent's line; `--json` gets one
+JSON line per model transition; any other non-TTY gets no transitions, only each
+built model's time line and an already-stale notice. Child events reach the root
 through the pool, tagged with the root request's id, identically for both
 executors. After publishing, the root runs its gate once more and says
 `already stale: …; rerun` if a child changed during the build.

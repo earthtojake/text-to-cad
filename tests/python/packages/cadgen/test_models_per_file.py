@@ -173,7 +173,7 @@ class ModelsPerFile(unittest.TestCase):
             "    return bd.Box(1, 2, 3)\n\n\nif __name__ == '__main__':\n    solo()\n",
             encoding="utf-8",
         )
-        out = self.run_py("solo.py", cwd=self.src)
+        out = self.run_py("solo.py", "--json", cwd=self.src)
         events = [json.loads(line) for line in out.stderr.splitlines() if line.startswith("{")]
         self.assertTrue(events)
         self.assertTrue(all(e["model"].endswith("solo.py") for e in events), events[0])
