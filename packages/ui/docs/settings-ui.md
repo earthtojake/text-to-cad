@@ -632,7 +632,7 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
 - **A load other than the solved one** (`load_scale` k; the study is linear, so it scales exactly):
   the colour bar's range and its line are k times the solved ones ("at 1.5× the load" ends the
   line when k ≠ 1), the safety factor and every part's "holds" in Parts are divided by k, so a part
-  can turn to "yields", and the displacement is drawn k times further. The colours keep their place
+  can turn to "yields" (at no load there is no factor, and "holds" is left out), and the displacement is drawn k times further. The colours keep their place
   on the bar, which reads k times higher. A threshold compares its field at the load shown. **The
   findings card stays as solved, at 1×**: its sentences are the checks cadgen made, not a reading of
   the slider.

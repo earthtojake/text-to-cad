@@ -497,6 +497,8 @@ describe('a load other than the solved one', () => {
     expect(feaSummaryLine(result, result.fields[1], 0.5)).toBe('Moves up to 0.014 mm · at 0.5× the load');
     expect(feaSummaryLine(result, result.fields[0], 1)).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
     expect(feaSummaryLine({ ...result, safetyFactor: 1.5 }, result.fields[0], 2)).toContain('yields under this load');
+    // No load has no factor to say: "holds" is left out, never "holds Infinity×".
+    expect(feaSummaryLine(result, result.fields[0], 0)).toBe('Peak stress 0 MPa · moves up to 0 mm · at 0× the load');
   });
 
   it('halves what each part holds at twice the load, and a part can flip to yields', () => {
@@ -505,6 +507,7 @@ describe('a load other than the solved one', () => {
     const result = readFeaResult(root)!;
     expect(partRows(result).map((row: any) => row.detail)).toEqual(['steel · holds 3.1×', 'steel · holds 1.5×']);
     expect(partRows(result, 2).map((row: any) => row.detail)).toEqual(['steel · holds 1.5×', 'steel · yields']);
+    expect(partRows(result, 0).map((row: any) => row.detail)).toEqual(['steel', 'steel']);
   });
 
   it('draws the values at the load over the range at that load, and the values alone climbing while a ramp plays', () => {

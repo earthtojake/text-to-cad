@@ -569,7 +569,7 @@ export function feaSummaryLine(result, field, loadScale = 1) {
   if (field.attribute !== "_von_mises") {
     return "";
   }
-  const factor = result.safetyFactor === null ? null : scaledFactor(result.safetyFactor, k);
+  const factor = scaledFactor(result.safetyFactor, k);
   // Under 1 the part yields: "holds 0.4×" would read as a pass.
   const holds = factor === null ? "" : factor < 1 ? "yields under this load" : `holds ${flooredFactor(factor)}× this load`;
   // An assembly leads with its weakest part, whose peak (not the assembly's) and factor these are.
@@ -583,8 +583,15 @@ export function feaSummaryLine(result, field, loadScale = 1) {
   ].filter(Boolean).join(" · ");
 }
 
-/** A safety factor at `loadScale` times the solved load: yield over a stress that many times larger. No load holds forever. */
-const scaledFactor = (factor, loadScale) => (loadScale > 0 ? factor / loadScale : Infinity);
+/**
+ * A safety factor at `loadScale` times the solved load: yield over a stress that many times larger.
+ * No load has no factor to say (null, so "holds" is left out rather than "holds Infinity×").
+ */
+const scaledFactor = (factor, loadScale) => {
+  if (factor === null || !(loadScale > 0)) return null;
+  const scaled = factor / loadScale;
+  return Number.isFinite(scaled) ? scaled : null;
+};
 
 /** A colour bar end's text: enough figures to tell the values apart, no more. */
 export function formatValue(value) {
@@ -663,7 +670,7 @@ function faceSummary(study, ref) {
 
 /** A part's row detail: its material and what it holds ("yields" under a factor of 1, as the colour bar says), at `loadScale` times the load. */
 function partDetail(part, loadScale) {
-  const factor = part.safetyFactor === null ? null : scaledFactor(part.safetyFactor, loadScale);
+  const factor = scaledFactor(part.safetyFactor, loadScale);
   const holds = factor === null ? "" : factor < 1 ? "yields" : `holds ${flooredFactor(factor)}×`;
   return [part.material, holds].filter(Boolean).join(" · ");
 }
