@@ -17,4 +17,5 @@ Modules, each importing nothing heavy at module scope:
 - ``cli``: run ``wireviz`` on a staged copy of a document.
 - ``plot``: the diagram as the CAD Viewer's plot payload.
 - ``bom``: the bill of materials, as CSV.
+- ``build``: a ``@harness`` model's build -- its last checks, and its files written.
 """

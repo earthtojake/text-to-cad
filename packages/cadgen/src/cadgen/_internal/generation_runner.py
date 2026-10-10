@@ -22,13 +22,12 @@ from cadgen._internal.step_scene import LoadedStepScene
 from cadgen.catalog import build_scope
 from cadgen.cli_logging import CliLogger
 from cadgen.cli_progress import cli_progress_line
-from cadgen.coordination import PHASE_CHECK_BOARD
 from cadgen.coordination import PHASE_GENERATE
 from cadgen.coordination import ProgressEvent
 from cadgen.coordination import generator_busy
 from cadgen.coordination import reporting_as
 from cadgen.coordination import resolve as resolve_progress
-from cadgen.metadata import MODEL_FORMATS, TREE_LESS_FORMATS, format_named
+from cadgen.metadata import MODEL_FORMATS, TREE_LESS_FORMATS, DocumentWritten, ModelFormat, format_named
 from cadgen.render import relative_to_file
 from cadgen.step_export import build_build123d_step_scene
 
@@ -330,35 +329,39 @@ def _mark_scene_python_backed(
     return scene
 
 
-def _write_drawing_record(
+def _output_entries(written: DocumentWritten) -> dict[str, dict]:
+    """Each file a writer wrote, as its record entry: its hash, and what a door reads beside it."""
+    import hashlib
+
+    facts = written.facts
+    return {
+        str(Path(path).resolve()): {"sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(), **facts.get(path, {})}
+        for path in written.paths
+    }
+
+
+def _write_treeless_record(
     spec: EntrySpec,
-    output_path: Path,
+    fmt: ModelFormat,
+    written: DocumentWritten,
     *,
     source_closure,
     child_trees,
-    entry_kind: str = "drawing",
-    outputs: Sequence[Path] | None = None,
-    output_facts: dict[Path, dict] | None = None,
 ) -> None:
-    """A tree-less model's record: ``tree: null``, its files as the outputs
-    (a drawing's ``.dxf``; a board's three KiCad files), children pinned from the
-    body's calls. ``output_facts`` adds what a door needs to an output's entry
-    beside its hash (a board's unrouted count). Published under the same rule as
-    a @step record (never replace a current record with a stale one)."""
-    import hashlib
-
+    """A tree-less model's record: ``tree: null``, its files as the outputs (a
+    drawing's ``.dxf``; a board's KiCad project; a harness's document), children
+    pinned from the body's calls. Published under the same rule as a @step record
+    (never replace a current record with a stale one)."""
     from cadgen.store.publish import decide
     from cadgen.store.records import note_output, write_record
 
     from cadgen.store.index import model_ref
 
-    model_path = model_ref(spec.script_path, getattr(spec.generator_metadata, "entry_function", None))
-    written_paths = [Path(path).resolve() for path in (outputs if outputs is not None else [output_path])]
-    facts = {Path(path).resolve(): dict(meta) for path, meta in (output_facts or {}).items()}
+    model_path = model_ref(spec.script_path, spec.generator_metadata.entry_function)
     closure_files = list(source_closure.files)
     closure_hash = str(source_closure.closure_hash)
     record = {
-        "entryKind": entry_kind,
+        "entryKind": fmt.record_kind,
         "sourceKind": "python",
         "tree": None,
         "closure": {
@@ -372,10 +375,7 @@ def _write_drawing_record(
         },
         "constants": dict(getattr(source_closure, "constants", None) or {}),
         "children": [{"model": str(child), "tree": tree} for child, tree in child_trees],
-        "outputs": {
-            str(written): {"sha256": hashlib.sha256(written.read_bytes()).hexdigest(), **facts.get(written, {})}
-            for written in written_paths
-        },
+        "outputs": _output_entries(written),
         "stepHash": "",
     }
     decision = decide(model_path, ran_closure_hash=closure_hash, ran_files=closure_files,
@@ -384,20 +384,11 @@ def _write_drawing_record(
     if not decision.publish_outputs:
         return
     write_record(model_path, record)
-    for written in written_paths:
-        note_output(written, model_path)
+    for path in written.paths:
+        note_output(Path(path).resolve(), model_path)
 
 
-@dataclass(frozen=True)
-class BoardWritten:
-    """What a @pcb build wrote: the project's files, and how finished the board is."""
-
-    paths: tuple[Path, ...]
-    unrouted: int
-    warnings: int
-
-
-def _write_pcb_project(
+def _write_drawing(
     result: object,
     *,
     output_path: Path,
@@ -405,148 +396,7 @@ def _write_pcb_project(
     logger: CliLogger,
     progress: object | None = None,
     fab_exports: Sequence[object] = (),
-) -> BoardWritten:
-    """Check a ``@pcb`` return with KiCad and write its project, or write nothing.
-
-    KiCad fills the zones and runs ERC and DRC (with the schematic-to-board
-    parity check) on a staged copy first. Any error fails the build before a
-    byte reaches the output folder; warnings and unrouted connections are
-    reported, and a board with unrouted connections is written as a draft --
-    unless it declares a manufacturing export (``@pcb(gerber=, pos=)``), which a
-    draft cannot have: then the build fails, naming what is left to route.
-    The declared exports are written after the project, from the files just
-    written.
-    """
-    from cadgen._internal.atomic_replace import write_bytes_atomic
-    from cadgen.kicad.check import build_board, fixes
-    from cadgen.kicad.design import Board
-
-    label = _display_path(script_path)
-    if not isinstance(result, Board):
-        raise TypeError(f"{label} @pcb must return a pcb.Board, got {type(result).__name__}")
-    output_path = Path(output_path)
-    resolve_progress(progress).phase(PHASE_CHECK_BOARD)
-    built = build_board(result, name=output_path.stem, script_root=Path(script_path).resolve().parent)
-    errors = built.errors
-    if errors:
-        # Only the errors: warnings and the unrouted list come back once these are fixed.
-        later = [
-            f"{count} {noun}"
-            for count, noun in ((built.unrouted, "unrouted connection(s)"), (len(built.warnings), "warning(s)"))
-            if count
-        ]
-        listed = "\n  ".join(finding.render() for finding in errors)
-        how = "".join(f"\n  {line}" for line in fixes(errors))
-        raise RuntimeError(
-            f"{label}: KiCad found {len(errors)} error(s), so nothing was written"
-            + (f" ({' and '.join(later)} reported once they are fixed)" if later else "")
-            + f":\n  {listed}"
-            + (f"\nHow to fix:{how}" if how else "")
-        )
-    for finding in built.warnings:
-        logger.info(f"{label} {finding.render()}")
-    if built.unrouted:
-        logger.info(f"{label} has {built.unrouted} unrouted connection(s); the board is a draft until they are routed:")
-        for finding in built.findings:
-            if finding.check == "unconnected":
-                logger.info(f"  {finding.render()}")
-    from cadgen.kicad.fab import MANUFACTURING
-
-    manufacturing = sorted({getattr(decl, "fmt", "") for decl in fab_exports} & MANUFACTURING)
-    if manufacturing and built.unrouted:
-        listed = "\n  ".join(finding.render() for finding in built.findings if finding.check == "unconnected")
-        raise RuntimeError(
-            f"{label}: the board has {built.unrouted} unrouted connection(s), so nothing was written: "
-            f"@pcb({', '.join(fmt + '=' for fmt in manufacturing)}) write manufacturing files only for a finished "
-            f"board. Route these, or leave {' and '.join(fmt + '=' for fmt in manufacturing)} off while the board is "
-            f"a draft:\n  {listed}"
-        )
-    from cadgen.coordination.kinds import PHASE_WRITE
-
-    resolve_progress(progress).phase(PHASE_WRITE)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    written = []
-    for suffix, text in ((".kicad_pro", built.pro), (".kicad_sch", built.sch), (".kicad_pcb", built.pcb), (".kicad_dru", built.dru)):
-        target = output_path.with_suffix(suffix)
-        write_bytes_atomic(target, text.encode("utf-8"))
-        written.append(target)
-    logger.debug(f"wrote KiCad project: {_display_path(output_path)}")
-    if fab_exports:
-        from cadgen.kicad.fab import export
-        from cadgen.metadata import fab_output_path
-
-        for decl in fab_exports:
-            target = fab_output_path(script_path, decl, output_path.resolve())
-            target.parent.mkdir(parents=True, exist_ok=True)
-            write_bytes_atomic(target, export(decl.fmt, output_path))
-            written.append(target)
-            logger.info(f"wrote {decl.fmt.upper()}: {_display_path(target)}")
-    return BoardWritten(paths=tuple(written), unrouted=built.unrouted, warnings=len(built.warnings))
-
-
-@dataclass(frozen=True)
-class HarnessWritten:
-    """What a @harness build wrote: its document, and its BOM when ``@harness(bom=)`` declares one."""
-
-    paths: tuple[Path, ...]
-
-
-def _write_harness_document(
-    result: object,
-    *,
-    output_path: Path,
-    script_path: Path,
-    logger: CliLogger,
-    progress: object | None = None,
-    fab_exports: Sequence[object] = (),
-) -> HarnessWritten:
-    """Check a ``@harness`` return and write its WireViz document, or write nothing.
-
-    The checks are the harness's own (``cadgen.wireviz.design``): most ran as
-    the script connected it, and the last -- something connected, every
-    connector and cable used -- run here. A declared ``bom=`` is WireViz's list
-    of the document's parts, made from the document's bytes before either file
-    is written, so a build that cannot list them writes neither.
-    """
-    from cadgen._internal.atomic_replace import write_bytes_atomic
-    from cadgen.coordination.kinds import PHASE_WRITE
-    from cadgen.wireviz.design import Harness, HarnessError
-    from cadgen.wireviz.document import harness_document
-
-    label = _display_path(script_path)
-    if not isinstance(result, Harness):
-        raise TypeError(f"{label} @harness must return a harness.Harness, got {type(result).__name__}")
-    try:
-        document = harness_document(result).encode("utf-8")
-    except HarnessError as error:
-        raise HarnessError(f"{label}: {error}") from None
-    output_path = Path(output_path)
-    files: list[tuple[Path, bytes]] = [(output_path, document)]
-    resolve_progress(progress).phase(PHASE_WRITE)
-    if fab_exports:
-        from cadgen.metadata import fab_output_path
-        from cadgen.wireviz.bom import harness_bom
-
-        for decl in fab_exports:
-            # Only a BOM: the decorators refuse a harness any other export.
-            bom = harness_bom(document, label=output_path.name)
-            files.append((fab_output_path(script_path, decl, output_path.resolve()), bom))
-    for target, data in files:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        write_bytes_atomic(target, data)
-    logger.debug(f"wrote harness: {_display_path(output_path)}")
-    for target, _data in files[1:]:
-        logger.info(f"wrote BOM: {_display_path(target)}")
-    return HarnessWritten(paths=tuple(target for target, _data in files))
-
-
-def _write_dxf_payload(
-    result: object,
-    *,
-    output_path: Path,
-    script_path: Path,
-    logger: CliLogger,
-) -> None:
+) -> DocumentWritten:
     """Serialize a ``@dxf`` return value and write it.
 
     The drawing's bytes are engineered to be a pure function of its geometry
@@ -554,6 +404,7 @@ def _write_dxf_payload(
     layout, hash seed, wall clock — reaches the file. Validation runs against the
     document those exact bytes came from, before anything is written.
     """
+    del progress, fab_exports  # a drawing reports no phase of its own and declares no exports
     from cadgen._internal.dxf_emit import emit_dxf, write_dxf
     from cadgen.drawing_checks import raise_on_error_findings, validate_drawing_document
 
@@ -566,7 +417,34 @@ def _write_dxf_payload(
                 logger.info(f"{label} {finding.render()}")
         raise_on_error_findings(findings, label=label)
     write_dxf(payload, output_path)
+    if not Path(output_path).exists():
+        raise RuntimeError(f"{label} did not write {_display_path(output_path)}")
     logger.debug(f"wrote DXF: {_display_path(output_path)}")
+    return DocumentWritten(paths=(Path(output_path),))
+
+
+def _document_writer(fmt: ModelFormat) -> Callable[..., DocumentWritten]:
+    """What checks a tree-less model's return and writes its files, or writes nothing."""
+    if fmt.name == "pcb":
+        from cadgen.kicad.build import write_board
+
+        return write_board
+    if fmt.name == "harness":
+        from cadgen.wireviz.build import write_harness
+
+        return write_harness
+    return _write_drawing
+
+
+def _write_document(fmt: ModelFormat, result: object, spec: EntrySpec, *, logger: CliLogger, progress: object | None) -> DocumentWritten:
+    """``result`` written as the ``fmt`` document ``spec`` declares, with its declared exports."""
+    output_path = getattr(spec, fmt.spec_path)
+    if output_path is None:
+        raise RuntimeError(f"{spec.source_ref} has no configured {fmt.document} output")
+    return _document_writer(fmt)(
+        result, output_path=output_path, script_path=spec.script_path, logger=logger, progress=progress,
+        fab_exports=spec.generator_metadata.fab_exports,
+    )
 
 
 def run_script_generator(
@@ -579,8 +457,9 @@ def run_script_generator(
     intent: str = "write",
     model_prints_to_stdout: bool = False,
     _defer_reference_scene: bool = False,
-) -> LoadedStepScene | None:
-    """Run a model script's decorated entry (``@step``/``@dxf``) and return its scene.
+) -> LoadedStepScene | DocumentWritten:
+    """Run a model script's decorated entry and return its scene -- or, for a tree-less
+    model (a drawing, a board without a 3D export, a harness), what its writer wrote.
 
     ``intent`` says whether this run will rewrite the model's outputs (``"write"``, the
     default) or merely occupy its generator (``"generate"`` -- an export, a topology
@@ -669,7 +548,7 @@ def _run_script_generator_inner(
     force: bool = False,
     progress: object | None = None,
     _defer_reference_scene: bool = False,
-) -> LoadedStepScene | None:
+) -> LoadedStepScene | DocumentWritten:
     # Worker-pool admission owns memory policy; this inner call adds no second
     # guard. The pool reports an OS-killed worker with its exit status.
     return _run_script_generator_body(
@@ -686,7 +565,7 @@ def _run_script_generator_body(
     force: bool = False,
     progress: object | None = None,
     _defer_reference_scene: bool = False,
-) -> LoadedStepScene | None:
+) -> LoadedStepScene | DocumentWritten:
     # Order-stable shape de-duplication (see determinism.py): a re-executed model
     # script should produce the SAME geometry it produced last time, and component
     # identity is its bytes. This has to be in force before the generator's first
@@ -697,7 +576,6 @@ def _run_script_generator_body(
         # A harness writes no geometry, so nothing it writes depends on the kernel's
         # order -- and the hook's import of the kernel is most of a harness build.
         determinism.install()
-    generated_scene: LoadedStepScene | None = None
     # Deterministic closure capture: start from a clean first-party module space, so
     # every first-party file the generator loads and runs executes inside the window
     # and is hashed as it runs (ExecutionHashes), from the source it was compiled from
@@ -721,7 +599,7 @@ def _run_script_generator_body(
         # name run its body (and lets the children it calls compose) instead of
         # starting a build of its own.
         metadata = spec.generator_metadata
-        entry_name = getattr(metadata, "entry_function", None) if metadata is not None else None
+        entry_name = metadata.entry_function if metadata is not None else None
         if not entry_name:
             raise RuntimeError(f"{_display_path(spec.script_path)} declares no decorated model entry function")
         generator = getattr(module, entry_name, None)
@@ -778,129 +656,64 @@ def _run_script_generator_body(
         wholes=store_closure.wholes,
         own=store_closure.own,
     )
-    board_outputs: dict[Path, dict] | None = None
-    if model_format == "step" and spec.pcb_path is not None:
+    if model_format != "step":
+        # A drawing, a board without a 3D export or a harness is a model in the graph
+        # (STORE.md §3): the same record, gate and pins as a @step model, with its files
+        # as the outputs and NO tree (gate clause 4 is vacuous). The children its body
+        # composed -- a flat pattern of `bracket()` -- are pinned from the calls, so a
+        # child's new geometry makes it stale like any parent. The boards a harness read
+        # are source, not pins: a board without a 3D export runs inline
+        # (cadgen.store.closure._pinned), so its script is in the closure.
+        fmt = MODEL_FORMATS[model_format]
+        frame.wait_children()
+        written = _write_document(fmt, raw_payload, spec, logger=logger, progress=progress)
+        _write_treeless_record(spec, fmt, written, source_closure=source_closure, child_trees=child_trees)
+        return written
+    board_outputs: dict[str, dict] = {}
+    if spec.pcb_path is not None:
         # A board with a 3D export: write and check its KiCad project exactly as a
         # board alone does, then hand the STEP pipeline the populated board KiCad
         # builds from it -- the model's geometry, and so its tree.
         frame.wait_children()
-        board_written = _write_pcb_project(
-            raw_payload, output_path=spec.pcb_path, script_path=spec.script_path, logger=logger, progress=progress,
-            fab_exports=getattr(spec.generator_metadata, "fab_exports", ()) or (),
+        board_outputs = _output_entries(
+            _write_document(MODEL_FORMATS["pcb"], raw_payload, spec, logger=logger, progress=progress)
         )
         from cadgen.kicad.solid import board_solid
 
-        raw_payload = board_solid(spec.pcb_path, name=getattr(spec.generator_metadata, "entry_function", None) or spec.pcb_path.stem)
-        import hashlib
-
-        board_outputs = {
-            path.resolve(): {
-                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                **({"unrouted": board_written.unrouted} if path.suffix == ".kicad_pcb" else {}),
-            }
-            for path in board_written.paths
-        }
-    if model_format == "step":
-        payload = _normalize_step_payload(raw_payload, script_path=spec.script_path)
-        if spec.step_path is None:
-            raise RuntimeError(f"{spec.source_ref} has no configured STEP output")
-        # Kinematics (validated at decoration) rides the scene into the sidecar.
-        declared = _resolve_declared_kinematics(getattr(generator, "__cadgen_model__", None))
-        generated_scene = _write_shape_step_payload(
-            payload,
-            output_path=spec.step_path,
-            script_path=spec.script_path,
-            logger=logger,
-            defer_reference_scene=_defer_reference_scene,
-        )
-        if declared.block:
-            generated_scene.kinematics = declared.block
-        generated_scene.materials = declared.materials
-        generated_scene.animation = declared.animation
-        # Children pinned by the body's calls — recorded from the CALLS, never
-        # derived from the tree's links (a modified child is still a dependency).
-        generated_scene.store_children = [
-            {"model": str(child), "tree": tree} for child, tree in child_trees
-        ]
-        # Runtime handles never enter objects/records. Source-ready children may
-        # still owe their own files; the parent drains these after its preview.
-        generated_scene.wait_child_outputs = frame.wait_children
-        if board_outputs is not None:
-            generated_scene.extra_outputs = board_outputs
-    elif model_format == "dxf":
-        if spec.dxf_path is None:
-            raise RuntimeError(f"{spec.source_ref} has no configured DXF output")
-        # The product IS the .dxf: the run always writes it — the sibling by
-        # default, `-o` renames — and the viewer parses that file directly.
-        output_path = spec.dxf_path
-        frame.wait_children()
-        _write_dxf_payload(
-            raw_payload, output_path=output_path, script_path=spec.script_path, logger=logger
-        )
-        # A drawing is a model in the graph (STORE.md §3): the same record, gate and
-        # pins as a @step model, with the .dxf as its output and NO tree (gate
-        # clause 4 is vacuous). The children its body composed -- a flat pattern of
-        # `bracket()` -- are pinned from the calls, so a child's new geometry makes
-        # the drawing stale like any parent.
-        _write_drawing_record(spec, output_path, source_closure=source_closure, child_trees=child_trees)
-    elif model_format == "pcb":
-        if spec.pcb_path is None:
-            raise RuntimeError(f"{spec.source_ref} has no configured board output")
-        frame.wait_children()
-        board_written = _write_pcb_project(
-            raw_payload, output_path=spec.pcb_path, script_path=spec.script_path, logger=logger, progress=progress,
-            fab_exports=getattr(spec.generator_metadata, "fab_exports", ()) or (),
-        )
-        # A board is a model like a drawing: no tree, its three KiCad files as the
-        # outputs, and the board file's entry carrying how much is left to route.
-        _write_drawing_record(
-            spec,
-            spec.pcb_path,
-            source_closure=source_closure,
-            child_trees=child_trees,
-            entry_kind="pcb",
-            outputs=board_written.paths,
-            output_facts={spec.pcb_path: {"unrouted": board_written.unrouted}},
-        )
-    elif model_format == "harness":
-        if spec.harness_path is None:
-            raise RuntimeError(f"{spec.source_ref} has no configured harness output")
-        frame.wait_children()
-        harness_written = _write_harness_document(
-            raw_payload, output_path=spec.harness_path, script_path=spec.script_path, logger=logger,
-            progress=progress, fab_exports=getattr(spec.generator_metadata, "fab_exports", ()) or (),
-        )
-        # A harness is a model like a drawing: no tree, its document (and BOM) the
-        # outputs. The boards it read are source, not pins: a board without a 3D
-        # export runs inline (cadgen.store.closure._pinned), so its script is in the
-        # closure and the library files it read are traced inputs.
-        _write_drawing_record(
-            spec,
-            spec.harness_path,
-            source_closure=source_closure,
-            child_trees=child_trees,
-            entry_kind="harness",
-            outputs=harness_written.paths,
-        )
-    if generated_scene is not None and source_closure is not None:
-        generated_scene.source_closure_hash = source_closure.closure_hash
-        generated_scene.source_closure_files = source_closure.files
-        generated_scene.source_closure_file_hashes = dict(getattr(source_closure, "file_hashes", None) or {})
-        generated_scene.source_closure_names = dict(getattr(source_closure, "names", None) or {})
-        generated_scene.source_closure_wholes = dict(getattr(source_closure, "wholes", None) or {})
-        generated_scene.source_closure_own = dict(getattr(source_closure, "own", None) or {})
-        generated_scene.source_closure_constants = dict(source_closure.constants)
-    if model_format == "dxf":
-        written = spec.dxf_path
-        if written is not None and not written.exists():
-            raise RuntimeError(
-                f"{_display_path(spec.script_path)} did not write {_display_path(written)}"
-            )
-    if model_format == "pcb":
-        return board_written
-    if model_format == "harness":
-        return harness_written
-    return generated_scene if model_format == "step" else None
+        raw_payload = board_solid(spec.pcb_path, name=spec.generator_metadata.entry_function or spec.pcb_path.stem)
+    payload = _normalize_step_payload(raw_payload, script_path=spec.script_path)
+    if spec.step_path is None:
+        raise RuntimeError(f"{spec.source_ref} has no configured STEP output")
+    # Kinematics (validated at decoration) rides the scene into the sidecar.
+    declared = _resolve_declared_kinematics(getattr(generator, "__cadgen_model__", None))
+    generated_scene = _write_shape_step_payload(
+        payload,
+        output_path=spec.step_path,
+        script_path=spec.script_path,
+        logger=logger,
+        defer_reference_scene=_defer_reference_scene,
+    )
+    if declared.block:
+        generated_scene.kinematics = declared.block
+    generated_scene.materials = declared.materials
+    generated_scene.animation = declared.animation
+    # Children pinned by the body's calls — recorded from the CALLS, never
+    # derived from the tree's links (a modified child is still a dependency).
+    generated_scene.store_children = [
+        {"model": str(child), "tree": tree} for child, tree in child_trees
+    ]
+    # Runtime handles never enter objects/records. Source-ready children may
+    # still owe their own files; the parent drains these after its preview.
+    generated_scene.wait_child_outputs = frame.wait_children
+    generated_scene.extra_outputs = board_outputs
+    generated_scene.source_closure_hash = source_closure.closure_hash
+    generated_scene.source_closure_files = source_closure.files
+    generated_scene.source_closure_file_hashes = dict(getattr(source_closure, "file_hashes", None) or {})
+    generated_scene.source_closure_names = dict(getattr(source_closure, "names", None) or {})
+    generated_scene.source_closure_wholes = dict(getattr(source_closure, "wholes", None) or {})
+    generated_scene.source_closure_own = dict(getattr(source_closure, "own", None) or {})
+    generated_scene.source_closure_constants = dict(source_closure.constants)
+    return generated_scene
 
 
 def _own_outputs(spec: EntrySpec, model_format: str, entry_name: str) -> list[Path]:

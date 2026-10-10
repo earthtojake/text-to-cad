@@ -51,6 +51,18 @@ def format_named(name: str | None) -> ModelFormat:
     return MODEL_FORMATS.get(str(name or ""), MODEL_FORMATS["step"])
 
 
+@dataclass(frozen=True)
+class DocumentWritten:
+    """What a tree-less model's writer wrote: its document and every file beside it."""
+
+    paths: tuple[Path, ...]
+
+    @property
+    def facts(self) -> dict[Path, dict[str, object]]:
+        """What a door reads off an output's record entry beside its hash, by path."""
+        return {}
+
+
 class InvalidModelScriptError(ValueError):
     """A script whose model DECLARATION is malformed in a way directory
     discovery should skip-with-a-note rather than abort on (e.g. a file holding
