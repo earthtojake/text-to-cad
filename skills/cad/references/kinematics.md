@@ -142,14 +142,13 @@ cadgen step build vendor/hinge.step STEP/hinge.step \
                  "poses": {"open": {"swing": 45}}}'
 ```
 
-**Wrapper script or `step build`?** A model that will keep changing, or that
-needs animation, belongs in a script — a thin `@step` function that imports the
-foreign STEP and re-exports it, so the kinematics and clips live beside the
-geometry decisions and every edit is one `python model.py`. Reach for
-`step build` when the geometry is fixed and not yours: a one-shot annotation or
-canonicalization of a vendor file. Re-running it is a no-op, editing only these
-annotations refreshes the sidecar without re-emitting a byte, and vendor
-metadata (PMI, GD&T) does not survive the trip.
+**Wrapper script or `step build`?** A wrapper script (a thin `@step` function
+that reads the foreign STEP and re-exports it) keeps the kinematics and clips
+beside the geometry decisions, and only a script can declare animation.
+`step build` is a one-shot annotation or canonicalization of a fixed vendor
+file: re-running it is a no-op, editing only these annotations refreshes the
+sidecar without re-emitting a byte, and vendor metadata (PMI, GD&T) does not
+survive the trip.
 
 ## Animation: clips baked to keyframes
 
@@ -212,7 +211,9 @@ carries data, never code, and nothing runs a clip after the build.
   everything beneath it — or an occurrence id such as `"#o1.2"`, which covers
   that occurrence's whole subtree. Targets resolve against the WRITTEN
   document's tree: the names and ids the viewer shows and `read_scene` reports.
-  `m.labels()` lists the names.
+  `m.labels()` lists the names. The document's root is named after the file it
+  is written to, so in `arm.step` the target `#arm` also names the root and
+  moves the whole model.
 - A handle's methods chain, each returning the handle:
   `.rotate(axis, degrees, origin=(0, 0, 0))`, `.translate(vector)`,
   `.transform(matrix)` (a rigid 4x4, row-major, translation in the last
@@ -238,8 +239,8 @@ carries data, never code, and nothing runs a clip after the build.
 
 ## Reviewing motion
 
-Review motion interactively in the viewer or render a clip video as described
-below. For a still of the arm example's configuration, render at DOF values:
+The viewer plays motion interactively; a snapshot renders a pose, a clip frame
+or a clip video. A still of the arm example's configuration renders at DOF values:
 
 ```bash
 cadgen step snapshot STEP/arm.step tmp/bent.png --kinematics '{"curl": 60}'
@@ -254,7 +255,7 @@ fails with the poses this model actually has:
 cadgen step snapshot STEP/arm.step tmp/bent.png --kinematics bent
 ```
 
-For still evidence of a CLIP, freeze one frame: `--animation` names a clip in
+A still of a CLIP freezes one frame: `--animation` names a clip in
 the document's sidecar and `--time` the moment in seconds (default 0). The
 frame is composed exactly as the viewer composes it: `--kinematics` sets the
 base pose, and the clip's keyframes at that time play on top of it. A clip
@@ -328,8 +329,7 @@ video job carries exactly one output:
 
 The result names the file and what it covers — `saved video: tmp/demo.mp4
 (120 frames, 30 fps, 4s)` — so a wrong clip or a wrong span shows up without
-opening it. Still snapshots remain the evidence for a POSE; a video is for
-motion a still cannot show.
+opening it.
 
 ### Exporting the clip INSIDE a GLB
 
@@ -393,8 +393,3 @@ anywhere to put a clip; export it as `.glb`, or render it with
 
 Animated GLB requires an explicit OUT. A static export without OUT writes one
 sibling `.glb` beside the STEP; it does not read model output declarations.
-Choose a separate destination for the animated file when retaining both.
-
-Choose pivots and axes for the intended motion. For hinged motion, use the
-physical hinge axis. Verify the relevant dimensions, alignments and clearances
-with geometry checks.

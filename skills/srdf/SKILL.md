@@ -40,8 +40,7 @@ validation don't replace this.
 
 - If your tools include `cad_show` (your host may prefix it), use it with the file's
   absolute path, and follow its description for when to call it again. `cad_view` reads
-  what the user selected; `cad_screenshot` shows you what they see. Neither is a review
-  of your own work.
+  what the user selected; `cad_screenshot` shows you what they see.
 - Otherwise run the CAD Viewer, from any folder:
 
   ```bash

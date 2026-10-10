@@ -1,14 +1,8 @@
 # Supported exports
 
-Read this file when the user requests STL, 3MF, or native GLB output files from CAD geometry. For a `.step` file, run the model script (see `step-generation.md`) — a mesh door writes mesh formats only. For 2D DXF output, use the `$dxf` skill: a drawing is its own `<name>.py` declaring one `@dxf` function — one model per file, so a drawing never shares a script with a `@step` model.
+Read this file when the user requests STL, 3MF, or native GLB output files from CAD geometry. A `.step` file comes from running the model script (see `step-generation.md`) — a mesh door writes mesh formats only. 2D DXF output belongs to the `$dxf` skill: a drawing is its own `<name>.py` declaring one `@dxf` function.
 
-## Policy
-
-Validate the requested geometry and outputs. When a STEP is declared, inspect
-that saved document; for a mesh-only model, check the returned native geometry
-and review its mesh. A mesh image does not establish exact dimensions or topology.
-
-Native GLB exports are ordinary glTF 2.0 binary files for external tools: Y-up, with one material per distinct part/face color. Do not confuse them with what the CAD Viewer renders from — the model's result tree in the store (`~/.cache/cadgen`: content-addressed exact-geometry components plus links to child trees), which every build writes and a mesh door never does.
+Native GLB exports are ordinary glTF 2.0 binary files for external tools: Y-up, with one material per distinct part/face color. The CAD Viewer does not render from them: it draws the model's result tree in the store (`~/.cache/cadgen`: content-addressed exact-geometry components plus links to child trees), which every build writes and a mesh door never does.
 
 ## Declare the exports the model always has
 
@@ -38,7 +32,7 @@ never the model's output declarations. Mesh declarations alone create no sidecar
 
 ## A model with no STEP
 
-A model's outputs are whatever its decorators declare, and STEP is one output kind, not the primary. A function decorated with `@stl`, `@glb` or `@threemf` alone — no `@step` — is a full model: the same tree and record in the store, the same build, the same parallel children, the same no-op when nothing changed, the same composition (`spacer()` inside another model's body links its tree like any child). It writes its declared meshes and no `.step` (and no sidecar). Use it for a print-only part or a render asset; there is no requirement to write a STEP. Review it with its format's snapshot door (`cadgen stl snapshot STL/spacer.stl tmp/spacer.png`); `cadgen store why spacer.py` explains its freshness exactly as for a STEP model.
+A model's outputs are whatever its decorators declare, and STEP is one output kind, not the primary. A function decorated with `@stl`, `@glb` or `@threemf` alone — no `@step` — is a full model: the same tree and record in the store, the same build, the same parallel children, the same no-op when nothing changed, the same composition (`spacer()` inside another model's body links its tree like any child). It writes its declared meshes and no `.step` (and no sidecar), which suits a print-only part or a render asset. Its format's snapshot door renders it (`cadgen stl snapshot STL/spacer.stl tmp/spacer.png`), and `cadgen store why spacer.py` explains its freshness exactly as for a STEP model.
 
 ```python
 from cadgen import build123d as bd
@@ -58,7 +52,7 @@ Stacking order stays neutral: add `@step` above or below later and the same decl
 
 A decorator `out=` is the one intentional exception to native path semantics: on `@stl`, `@glb` and `@threemf` — exactly as on `@step` — a relative `out=` resolves relative to the SCRIPT, not the working directory. That is what makes a project relocatable: the declaration travels with the model and produces the same layout whatever directory the script is run from. Ad-hoc OUT arguments on the doors are cwd-relative instead, because they are one-shot and never persisted.
 
-For maintained draft/print variants, keep the model's stem in separate subfolders:
+Maintained draft/print variants can keep the model's stem in separate subfolders:
 
 ```python
 @stl(out="STL/draft/bracket.stl", mesh_tolerance=8e-3)
@@ -74,11 +68,12 @@ cadgen stl build STEP/model.step                     # writes STEP/model.stl
 cadgen stl build STEP/model.step meshes/model.stl    # one ad-hoc export
 ```
 
-Export commands take saved STEP/STP documents, never scripts. Omitting OUT
-writes one file beside the input with the requested extension, whether the
-document is imported or generated. To build declared variants, run the model
-script instead. An explicit OUT resolves against the working directory;
-absolute paths and `~` are supported. For several formats:
+Export commands take saved STEP/STP documents, never scripts, so a source change
+reaches an export only after the model runs. Omitting OUT writes one file beside
+the input with the requested extension, whether the document is imported or
+generated; declared variants come from running the model script. An explicit OUT
+resolves against the working directory; absolute paths and `~` are supported.
+For several formats:
 
 ```bash
 cadgen stl build STEP/model.step
@@ -88,9 +83,8 @@ cadgen glb build STEP/model.step
 
 An unchanged export is reported `current`. `--force` re-exports the document;
 it never rebuilds its source model. Missing cache data is compiled from the
-document on demand. Rerun the model first if its source has changed.
-
-Use an explicit OUT to choose another destination, including for imported files:
+document on demand. An explicit OUT chooses another destination, including for
+imported files:
 
 ```bash
 cadgen stl build path/to/imported.step meshes/imported.stl
@@ -98,21 +92,9 @@ cadgen stl build path/to/imported.step meshes/imported.stl
 
 A mesh door never writes a `.step` file. A generated model's STEP is the OUTPUT of `python <model>.py`; an imported model's STEP is already the file on disk.
 
-### Carrying a clip into the GLB
-
-GLB is the one mesh format with somewhere to put motion. `--animation` writes one of the clips in the document's sidecar into the file as glTF animation, its keyframes as they stand, so an external viewer plays what the CAD Viewer plays:
-
-```bash
-cadgen glb build STEP/model.step meshes/model.glb --animation demo
-cadgen glb build STEP/model.step meshes/model.glb \
-  --animation '{"clip": "demo", "seconds": 24, "start": 0}'
-```
-
-Rigid motion and bending tubes are supported; visibility and opacity tracks are
-rejected unless explicitly dropped.
-Animated GLB requires an explicit OUT so the clip does not overwrite the default
-static export. STL and 3MF have no animation export. See [kinematics](kinematics.md)
-for clip requests and supported channels.
+`cadgen glb build --animation CLIP` writes one of the document's clips into the
+GLB as glTF animation, and needs an explicit OUT; STL and 3MF have no animation
+export. See [exporting the clip inside a GLB](kinematics.md#exporting-the-clip-inside-a-glb).
 
 ## Rendering a mesh file
 
@@ -141,20 +123,15 @@ an STL or a 3MF is its objects in their colours, and a GLB is its own glTF scene
 skins, morph targets and authored materials), so `--display render` shows the finish the
 file authored. A GLB's clips play in the viewer; its snapshot is the file at rest.
 
-For a mesh-only model, this is its required visual review. When a STEP is also
-produced, review that document and render the mesh when tessellation or external
-tool output is the question. Pure format conversion with unchanged geometry
-follows the skip cases in [snapshot review](snapshot-review.md).
-
 ## Mesh tolerance
 
 Mesh exports write the same meshes the CAD Viewer draws: OCCT's mesh of each
 component's exact surfaces, at the export's tolerances. Viewer detail can vary
-with its level of detail settings; choose export tolerances for the output's
-requirements. Faces that meet share their boundary vertices, and identical
-export inputs produce identical bytes.
+with its level of detail settings; an export's tolerances are its own. Faces that
+meet share their boundary vertices, and identical export inputs produce identical
+bytes.
 
-Use these flags when the default mesh density is wrong for the part:
+These flags set the mesh density:
 
 ```bash
 --mesh-tolerance FLOAT           # chord tolerance RELATIVE to each component's
@@ -169,9 +146,7 @@ model's mesh declarations. On a model-script run, the same flags temporarily
 override its declared tolerances — every declaration's, including one that sets
 its own (flag > declaration > `@step` > default): the declared meshes are re-cut
 at the flag's values for that run, and the next run without the flags restores
-them. Use tighter values for curved-surface fidelity and looser values when a
-coarser mesh meets the requirements. `--json` results report the effective pair,
-the defaults included.
+them. `--json` results report the effective pair, the defaults included.
 
 Linear tolerance is relative, not an absolute deflection in millimetres, and is
 refused above `0.05` (a twentieth of the bounding diagonal — past that the mesh
@@ -189,28 +164,5 @@ decorator, and a value outside them is refused before anything builds.
 A face no mesher can cover (typically a sliver a boolean left, narrower than the
 chord tolerance) never fails the export: the part is written without it, and the
 result's `warnings` name it, for example `#o1.2 pin: 1 face (f3) could not be
-meshed, so pin.stl has a hole in place of it: it is not watertight`. Repair the
-face in the model, or export again with a finer `--mesh-tolerance`, before
-handing the file to a slicer.
-
-## Workflow
-
-1. For maintained outputs, declare the mesh decorators and run the model script.
-2. For one-off exports, run the format command against the saved document.
-3. Check the requested geometry and output quality; report the files and checks.
-
-Example — the model declares its STL, and a coarse GLB is requested for review:
-
-```bash
-python bracket.py
-
-cadgen glb build STEP/bracket.step tmp/bracket.glb \
-  --mesh-tolerance 5e-3 \
-  --mesh-angular-tolerance 0.5
-
-python tmp/check_bracket.py  # check the saved STEP with read_scene
-```
-
-Report the actual output paths and checks performed, including the snapshot
-review or its documented skip reason. Do not imply exact geometry was verified
-from a mesh image alone.
+meshed, so pin.stl has a hole in place of it: it is not watertight`. Repairing
+the face in the model, or a finer `--mesh-tolerance`, closes the hole.

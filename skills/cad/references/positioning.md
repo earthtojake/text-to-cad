@@ -1,16 +1,11 @@
 # Assembly positioning and mating
 
 Read this file when placing assembly parts, defining mating datums or checking
-alignment. Author placements in the model source, then check the saved geometry.
-Choose explicit transforms or native build123d joints according to which makes
-the intended relationship easiest to express and maintain. Neither requires a
-particular assembly size or complexity.
+alignment. Placements live in the model source; the saved geometry is what was
+written. Explicit transforms and native build123d joints both work at any
+assembly size.
 
 ## Transforms and local frames
-
-Use functional datums and explicit dimensions for placements. A part's origin
-might be its mounting interface, symmetry center or rotational axis; use the
-convention that fits the design. Record it when another part depends on it.
 
 ```python
 # Inside an assembly model:
@@ -21,11 +16,10 @@ right.label = "spacer_right"
 assembly = bd.Compound(children=[left, right], label="spacer_pair")
 ```
 
-Place each child model once, with `.moved()` or `Pos/Rot/Location * child`:
-the parent links its tree, but every call copies the shape and all under it.
-`.located()` replaces the placement and copies the geometry, losing the link. Labels identify roles and repeated
-occurrences, such as `m3_screw:front_left`. A functional group can be a nested
-labeled `Compound` when the design benefits from that hierarchy.
+A placed child model stays linked to its tree; `.located()` replaces the
+placement and loses the link. Labels identify roles and repeated occurrences,
+such as `m3_screw:front_left`; a functional group can be a nested labeled
+`Compound`.
 
 Mirroring changes geometry, so an inline mirrored child belongs to the parent
 rather than linking to the original child's tree. It remains cached with that
@@ -78,31 +72,25 @@ for rigid/ball joint frames and `Axis` for revolute/linear/cylindrical joints.
 
 Creating joints reads the child's placement and may materialize it earlier
 than a deferred transform. Cached child models return geometry, labels,
-appearance and placements; do not rely on Python joint objects surviving a
-child's cache round trip. Define the joints needed by the parent in its source.
+appearance and placements, not Python joint objects, so the joints a parent
+needs are defined in its source.
 
 ## Child models and imported components
 
-Call a project model to compose it. Use `cadgen.read_step` for a vendor document
-or an explicitly decoupled export; like every file a build reads, it is an input.
-See the [model contract](step-generation.md) for dependency tracking.
+A project model is composed by calling it; `cadgen.read_step` reads a vendor
+document or an explicitly decoupled export, an input like every file a build
+reads. See the [model contract](step-generation.md) for dependency tracking.
 
-For imported geometry, inspect its existing origin, orientation and functional
-features with `read_scene` before choosing datums. Express measured offsets
-or joint frames in the source, then validate the placed result. Anchor model
-input paths on `__file__` when they must work from any working directory.
-
-```bash
-python path/to/assembly.py
-python tmp/check_assembly.py
-```
+An imported part keeps its vendor's origin and orientation; `read_scene` shows
+them and its functional features. Measured offsets or joint frames go in the
+source.
 
 ## Alignment and measurement checks
 
-Select the actual mating features from `read_scene`, then express the intended
-relationship in Python. There is no generic alignment mode that guesses which
-points or axes the design means. See `inspection-and-validation.md` for the
-reader and native measurement interfaces.
+There is no generic alignment mode that guesses which points or axes the design
+means: a check names the mating features (from `read_scene`) and states the
+relationship in Python. See `inspection-and-validation.md` for the reader and
+native measurement interfaces.
 
 For example, for two planar mating faces (with their refs already identified):
 
@@ -121,17 +109,8 @@ assert abs(signed_gap_mm) < 0.01
 assert parallel_error_deg < 0.1
 ```
 
-These thresholds are illustrative; use the task's tolerances. The plane gap
-and parallelism test does not establish lateral alignment or overlapping face
-footprints. Check those when required. For opposed normals, assert the signed
-orientation explicitly instead of accepting either parallel direction.
-
-For a screw-pattern dimension, compare the analytic centers of the selected
-circular edges. For clear space between bodies use `closest_points`.
-`shape.bounding_box().size` measures the world-aligned envelope. Use explicit
-vectors and datums for orientation, signed offsets and center spacing.
-Update source placements, regenerate, and rerun the relevant checks.
-
-Correct failed positioning in the model source, then regenerate and rerun the
-relevant checks. Report measured relationships and any intended alignment left
-unchecked; no positioning report is needed when positioning is irrelevant.
+A plane gap and parallelism test does not establish lateral alignment or
+overlapping face footprints, and accepting either parallel direction misses a
+flipped part. A screw pattern's spacing is between the analytic centers of its
+circular edges, clear space between bodies is `closest_points`, and
+`shape.bounding_box().size` is the world-aligned envelope.

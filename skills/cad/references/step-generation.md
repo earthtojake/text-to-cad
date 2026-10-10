@@ -52,13 +52,11 @@ Rules the decorator enforces:
   and record), otherwise loaded from the store, and either way its result is
   linked into the parent's. Composition is ordinary Python; there is nothing
   to cache by hand and no composition API.
-- **Use one decorated model per entrypoint file.** Match the script's stem in
-  its declared outputs: `plate.py` → `STEP/plate.step`, `STL/plate.stl`, etc.
-  Stack output decorators on that one function; put shared factories in helper
-  modules and independently exported configurations in separate entrypoints.
-  The model is addressed by its script path (`python plate.py`,
-  `cadgen store why plate.py`). This is the skill's project convention;
-  helpers and package `__init__.py` files are not model entrypoints.
+- **A model is addressed by its script path** (`python plate.py`,
+  `cadgen store why plate.py`), and every model in a file is stale when any
+  line of the file changes, so a file usually holds one model, with its output
+  decorators stacked on that one function. Helpers and package `__init__.py`
+  files are not model entrypoints.
 - **Calling a model from plain Python returns its geometry.** Outside a build,
   `plate()` builds (or finds current) and returns the model's tree as a
   `Compound` — what a parent composing it would get — so a script, a notebook
@@ -120,19 +118,18 @@ Rules the decorator enforces:
   child's intrinsic materials inherit through its pinned tree. Kinematics and
   animation are document-scoped and never inherit into a parent.
 
-**Imports:** use `from cadgen import build123d as bd`, a lazy re-export,
-so a current model can finish before loading the CAD kernel. Keep geometry,
-CAD file reads and `bd` attributes out of module-level constants/defaults.
-Use `from __future__ import annotations` for annotations such as `-> bd.Shape`.
+**Imports:** `from cadgen import build123d as bd` is a lazy re-export, so a
+current model can finish before loading the CAD kernel. Geometry, CAD file reads
+or `bd` attributes in module-level constants or defaults load it anyway, as does
+an annotation such as `-> bd.Shape` without `from __future__ import annotations`.
 Raw `import build123d` works but pays the import cost on every rerun.
 
 **A model runs like `python script.py`.** Its folder is on `sys.path` for the
 whole build, plus your `PYTHONPATH` — cadgen adds nothing else and infers no
 project root — so an import inside the body, or inside a helper the body calls,
 resolves exactly like one at module top — and the file it loads is hashed when
-it executes, so it is in the closure either way. Prefer module-top imports for
-readability and so the static scan sees the graph up front; a lazy import is
-not an error.
+it executes, so it is in the closure either way. Module-top imports let the
+static scan see the graph up front; a lazy import is not an error.
 
 ## Generated vs imported STEP
 
@@ -155,13 +152,13 @@ its twin.
 
 ## Composing on other parts: children and inputs
 
-A model that builds on another part wires it in one of two modes. Choose
-deliberately:
+A model that builds on another part wires it in one of two modes:
 
 - **A CHILD (the default)** — the other part is a model in this project:
   import its function and call it. A child edit flows into the parent on the
-  parent's next rebuild; there are no exported bytes to keep in sync. Never
-  route a generated child through its exported `.step`.
+  parent's next rebuild; there are no exported bytes to keep in sync. A
+  generated child read back through its exported `.step` becomes an input
+  instead: nothing rebuilds it, and the parent copies it rather than linking it.
 - **An INPUT** — the other part is a document, not source: a purchased or
   downloaded part, or a generated part the user has EXPLICITLY asked to
   decouple (export it once, then treat the export like any other document).
@@ -205,10 +202,10 @@ if __name__ == "__main__":
 LINKS to the child's tree (stored once, shared by every parent; two placements
 are two links to one tree). Modify it (a boolean, a mirror, extracting a
 sub-shape) and the parent owns that geometry as its own components; the
-dependency is tracked either way. **Never `located()`** for placement: its
+dependency is tracked either way. `located()` replaces the placement, and its
 copy becomes the parent's own component, not a link (`positioning.md`). Each
-`moved()` copies the shape and all under it, so place a child once. Put geometry changes that belong to the child in
-the child's file or its factory.
+`moved()` copies the shape and all under it. Geometry changes that belong to the
+child go in the child's file or its factory.
 
 Child calls submit work and return lazy shapes. Placements, labels and colours
 can be set before geometry is ready; geometry queries wait for the child.
@@ -270,21 +267,17 @@ cadgen never caches work inside a model: a model whose inputs changed runs
 from scratch, and one whose inputs did not is skipped whole. Rebuild speed
 therefore comes from how the project is split:
 
-- Give a part its own model when it dominates its model's build time, takes
-  more than about 15 s, or is edited independently of its neighbours: a thin
-  entry file whose `@step` function calls a factory in `lib/`, placed by its
-  parent like any child. An edit then rebuilds that part and relinks the
-  parent; its siblings stay current, and stale children build in parallel. One
-  heavy casing or shell inside a model of many light parts is the case that
-  pays most: edits to the light parts stop paying for it.
-- Keep geometry in `lib/` factories. A model reruns only when code it reaches
-  changes, so an edit to one factory leaves the models that never call it
-  current.
-- One entry file per expensive model: every `@step` function in a file is
-  stale when any line of that file changes.
+- A part in its own model (a thin entry file whose `@step` function calls a
+  factory in `lib/`, placed by its parent like any child) rebuilds alone: an
+  edit to it relinks the parent, its siblings stay current, and stale children
+  build in parallel. One heavy casing or shell inside a model of many light
+  parts is the case that gains most: edits to the light parts stop paying for it.
+- A model reruns only when code it reaches changes, so an edit to one `lib/`
+  factory leaves the models that never call it current.
+- Every `@step` function in a file is stale when any line of that file changes.
 
-A part that builds in a second or two gains nothing from its own file; read
-each model's time line (below) before splitting further.
+A part that builds in a second or two gains nothing from its own file; each
+model's time line (below) shows where a split pays.
 
 ### Annotation caching
 
@@ -454,17 +447,16 @@ python src/frame.py --force         # force this model's body to run
 ```
 
 The gate cannot track geometry selected by environment variables, the working
-directory, time or randomness. Put configurations in source/factory arguments;
-the files a model reads are tracked on their own. After a runtime fix, force affected models
-if their cached results still reflect the old behavior.
+directory, time or randomness; configurations in source or factory arguments,
+and the files a model reads, are tracked. A cadgen fix does not invalidate
+results cached before it: `--force` rebuilds a model whose cached result still
+reflects the old behaviour.
 
 ## Generated assemblies
 
 An assembly is a model whose return places children (a `Compound` of parts
 or of other models' results); `read_scene` exposes the saved hierarchy.
-Edit the `.py` source to change an assembly; inspect or export its saved STEP
-to check what was actually written. Use native labels and choose transforms
-or native joints to express placement; see [positioning](positioning.md).
+Transforms or native joints express placement; see [positioning](positioning.md).
 
 ## Imported STEP/STP files
 
@@ -512,10 +504,9 @@ document is named after the file it writes — so the same input re-emitted to t
 paths yields two differently named documents. Names below the root are kept, so
 `#label` references to the parts keep resolving; do not address the root by the
 name IN carried.
-**Choose the door by how the model will evolve**: a shape you will keep changing
-belongs in a model script (a thin wrapper that reads the foreign STEP), while
-a one-shot canonicalization or annotation of a file you do not own is exactly
-what `step build` is for.
+A shape that will keep changing suits a model script (a thin wrapper that reads
+the foreign STEP); `step build` canonicalizes or annotates a file you do not own,
+once.
 
 ## Optional-module assemblies
 
@@ -526,20 +517,8 @@ individual parts are still being written. It has one sharp edge.
 The model's closure is computed from the modules it ACTUALLY IMPORTED at build
 time. A module that did not exist during the build was never in the closure,
 so its later appearance cannot make the model stale, and every door keeps
-reading the old document's tree — no error, no warning. Run the model script
-with `--force` after adding a previously absent part module.
-
-## After generation
-
-- Confirm the process succeeded and each declared output exists and is
-  non-empty (the stdout line names the document; `--json` adds the `tree`
-  hash).
-- Run the Python geometry checks selected for this design per
-  `inspection-and-validation.md`:
-
-```bash
-python tmp/check_model.py
-```
+reading the old document's tree — no error, no warning, until `--force` rebuilds
+the model with the new module.
 
 ## Progress and runtime diagnostics
 
@@ -587,10 +566,9 @@ for rib in track(ribs, label=lambda r: r.name):
     ...
 ```
 
-Use one cache store for normal project work. A separate `CADGEN_CACHE_DIR`
-is useful for isolated tests, but two stores writing the same project outputs
-can cause repeated freshness misses. The store holds derived results only.
-Prefer a targeted `--force` or `cadgen store forget <model>.py` when diagnosing
-one stale result; `cadgen store gc` removes unreachable cache data. The store
+Two stores (a separate `CADGEN_CACHE_DIR`) writing the same project's outputs
+cause repeated freshness misses. The store holds derived results only:
+`--force` or `cadgen store forget <model>.py` drops one model's result, and
+`cadgen store gc` removes unreachable cache data. The store
 keeps itself under `CADGEN_STORE_MAX` (default 20 GB) by evicting its least
 recently written derived entries; `cadgen store info` shows its size.

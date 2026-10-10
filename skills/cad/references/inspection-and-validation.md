@@ -1,22 +1,9 @@
 # Inspecting and checking saved CAD in Python
 
-Use small Python scripts against the saved STEP/STP. `cadgen step inspect`
-and `cadgen.step.inspect` have been removed. Choose the relevant entities,
-measurements and acceptance criteria in the script; there is no replacement
-inspection command or universal validation report.
-
-Put exploratory scripts in the CAD project's ignored `tmp/`, for example
-`tmp/check_clearance.py`; system `/tmp/` is also fine for disposable work.
-Keep reusable design checks in `checks/` (for example `checks/clearance.py`),
-or use the project's existing test location. Commit those checks so they can
-be rerun after a model changes. Create the directory only when needed.
-Keep checks outside `src/` model directories and raw format folders such as
-`STEP/`. Examples below use paths relative to the CAD project root; run from
-there, or anchor input paths explicitly when a script must run elsewhere.
-
-Report what was measured, the units, the threshold and the selected geometry.
-A failed computation is not a passing check, and an untested relationship has
-no verdict. Run the model first when you want to check newly authored geometry.
+Checks are small Python scripts against the saved STEP/STP; there is no
+inspection command or universal validation report. A check reads the last saved
+document, so it sees a source edit only after the model runs. Examples below use
+paths relative to the CAD project root.
 
 ## Opening and selecting geometry
 
@@ -37,9 +24,8 @@ for face in housing.entities("face"):
     print(face.ref, face.shape().area)
 ```
 
-`read_step` keeps its existing name. `read_scene` replaces the old
-`load_step_scene` helper. Inside a model, the document either reads is a build
-input, as every file a build reads is. Paths expand `~` and resolve relative to the working directory.
+Inside a model, the document either reads is a build input, as every file a build
+reads is. Paths expand `~` and resolve relative to the working directory.
 
 - `scene.roots` and `occurrence.children` are tuples. `scene.leaves()` yields
   geometry occurrences, including repeated copies. A leaf can hold multiple
@@ -55,7 +41,7 @@ input, as every file a build reads is. Paths expand `~` and resolve relative to 
 - `prototype_id` identifies shared geometry within this scene, allowing a
   script to avoid repeating a suitable body-local check. It is not a part
   number or an identity across revisions. Numeric self-intersection tests can
-  behave differently at different placements; state which placements ran.
+  behave differently at different placements.
 - A scene is bound to one document hash. Replacing the file does not change an
   already opened scene. Reopen it to inspect the new revision. Selector IDs
   are revision-scoped, not persistent feature names.
@@ -95,8 +81,7 @@ name and extension (in quotes when it holds a space or `#`). `resolve()` reads t
 prefix as a path, with `~` expanded, links followed and a relative one read from the
 working directory, and it must name the opened document.
 A relative prefix that names no file from where you run still matches the end of
-the document's path. A prefix naming a different document is rejected. Do not
-guess between ambiguous files.
+the document's path. A prefix naming a different document is rejected.
 
 ## Measurements
 
@@ -180,15 +165,10 @@ if failures:
     raise SystemExit(1)
 ```
 
-Adapt pair selection to the question: for clearance around a moving carriage,
-compare that carriage against relevant fixed geometry. List intentional
-press fits/excluded pairs explicitly. Do not infer exclusions from assembly
-depth. For large pair sets, retain the shapes and compute conservative bounds
-once per body. Disjoint bounds rule out overlap; intersecting bounds only
-identify candidates for the exact query. For a clearance requirement use
-`closest_points(a, b).distance` and
-compare against the specified minimum. A static check proves only that pose;
-path or motion checks need an explicit sampling or swept-volume strategy.
+For large pair sets, compute conservative bounds once per body: disjoint bounds
+rule out overlap, and intersecting bounds only identify candidates for the exact
+query. A clearance is `closest_points(a, b).distance`. A static check covers only
+its pose; motion needs sampled poses or a swept volume.
 
 ## Geometry diagnostics
 
@@ -211,17 +191,12 @@ never an empty success result. None of these functions repairs geometry.
 self-intersections, no too-small edges, an argument type a boolean accepts.
 It is the gate a fuse or cut demands of an operand. Closure, solid count and
 signed volume stay the script's own checks. `is_sound` is `False` for a null
-or empty shape, which the boolean kernel rejects as an argument. A check costs
-kernel time, so gate where a failure is plausible rather than after every
-operation.
+or empty shape, which the boolean kernel rejects as an argument.
 
-Choose checks appropriate to the artifact. For an intended closed solid,
-check topology, free shell edges and each solid's signed volume. A reversed
-solid can pass topology validation but have negative volume; check individual
-solids because aggregate volumes can cancel. Open shells can be valid when
-surfaces are intended. No free edges establishes closure, not full manifold
-validity. Run self-intersection checks explicitly when required and report
-any checks you did not complete.
+A reversed solid can pass topology validation with negative volume, and
+aggregate volumes can cancel, so signed volume is a per-solid check. No free
+edges establishes closure, not full manifold validity. Open shells can be valid
+when surfaces are intended.
 
 ## Mass properties
 
@@ -241,6 +216,3 @@ uniform density per solid and sums the supplied bodies, including overlaps.
 Densities must be finite and positive. It does not infer materials or fuse
 bodies. The 3×3 inertia tuple is about the combined center of mass in the input
 coordinate axes. With mm and kg/mm³, outputs are mm³, kg, mm and kg·mm².
-
-Use snapshots for visual review per `snapshot-review.md`. Turn visual concerns
-into explicit geometric checks before claiming they have been resolved.

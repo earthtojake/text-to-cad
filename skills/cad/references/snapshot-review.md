@@ -1,44 +1,25 @@
-# Snapshot review
+# Snapshots
 
-Read this file when choosing visual checks for saved STEP/STP or mesh outputs.
-Use `cadgen step snapshot` for STEP, or the corresponding `stl`, `3mf` or `glb`
-snapshot command for meshes (see [mesh exports](supported-exports.md)). The
-CAD topology, selection, section and motion controls below apply to STEP.
-
-## Policy
-
-Every created or visibly updated part or assembly gets at least one reviewed
-PNG snapshot of its STEP, or its mesh when no STEP is declared. Passing geometry
-checks does not waive this visual review. Use the format's snapshot command.
-For a STEP pose or clip frame, pass `--kinematics` and/or
-`--animation CLIP --time SECONDS`. A motion review may additionally need video;
-see [kinematics](kinematics.md#reviewing-motion).
-
-Skip saved snapshots only when no visible geometry was created or updated, or no valid artifact exists:
-
-- pure format/export requests where geometry is unchanged
-- source changes that do not alter visible geometry
-- inspection-only tasks (for example direct measurement questions) that create or update nothing
-- failed Python or STEP generation before a valid artifact exists
-
-When skipping, report the reason and the deterministic evidence that still ran.
-
-Do not loop on snapshots. Rerender only when a source repair changed visible geometry or when a specific visual finding needs confirmation.
+A snapshot renders a saved document the way the CAD Viewer draws it:
+`cadgen step snapshot` for STEP/STP, and the `stl`, `3mf` or `glb` command's
+`snapshot` for a mesh (see [mesh exports](supported-exports.md)). It shows
+arrangement and appearance; dimensions come from
+[measurement](inspection-and-validation.md). The CAD topology, selection, section
+and motion options below apply to STEP. A pose or clip frame takes `--kinematics`
+and/or `--animation CLIP --time SECONDS`, and a clip can render to video; see
+[kinematics](kinematics.md#reviewing-motion).
 
 A STEP model with no surfaces (empty, or only curves and points) has nothing a
 view can draw: the snapshot still writes its image and warns that the model has
-no surfaces. Treat that warning as a finding about the model, not the camera.
+no surfaces. A view or list that warns faces `could not be meshed` draws that part
+without them (and a list counts it without them); they are usually slivers a
+boolean left, and the warning names the part's ref and the faces (`#o1.2`, `f7`).
 
-## Packet sizing
+## Views
 
-Choose views that expose the features being checked. One may be enough;
-add an opposing view for hidden exterior features, an orthographic view for
-a pattern or silhouette, or a section for internal geometry. No fixed set of
-views proves every face or feature is correct.
-
-## Small packet
-
-For example, a four-view comparison can use one JSON job:
+No fixed set of views shows every face. Opposed isometric views reveal more
+exterior faces, orthographic views show patterns and silhouettes, and a section
+shows internal geometry. Several views can share one JSON job:
 
 ```json
 {
@@ -53,9 +34,6 @@ For example, a four-view comparison can use one JSON job:
   "output": { "viewLabels": true, "padding": 0.12, "sizeProfile": "diagnostic" }
 }
 ```
-
-Use only the views relevant to the design. Opposed isometric views reveal more
-exterior faces, but neither they nor orthographic views reveal all occluded geometry.
 
 Set `input` to the saved STEP/STP artifact using a relative or absolute path
 (documents only: run a `.py` model first). With no explicit display settings,
@@ -81,11 +59,13 @@ with a whole number of pixels from 1 to 8192; a larger request is refused rather
 than clamped. With `--job` they size every output in the packet.
 
 `--display` accepts a preset name, inline JSON, or a JSON file path. The six
-presets are `solid` (default), `render`, `xray`, `hidden-line`, `wireframe`, and
-`grid`. Only `grid` draws the grid: Solid on a finer, plainer measuring grid.
-Render starts with perspective projection and photographic lighting; the other
-presets start with orthographic projection. `appearance` is `light` (the CLI
-default) or `dark`. The Viewer and CLI accept the same grouped display object:
+presets are `solid` (the default: shaded, with edge linework), `render`
+(perspective projection and photographic lighting), `xray` (translucent surfaces
+with occluded edges visible), `hidden-line` (linework with occluded edges
+suppressed), `wireframe` (edges only) and `grid` (Solid on a finer, plainer
+measuring grid; the only preset that draws the grid). Every preset but Render
+starts with orthographic projection. `appearance` is `light` (the CLI default) or
+`dark`. The Viewer and CLI accept the same grouped display object:
 
 ```bash
 cadgen step snapshot STEP/part.step tmp/review.png --display render
@@ -120,21 +100,18 @@ video compose with every display preset where the source format supports them.
 the `hidden`/`off` surface styles are STEP/STP-only: a mesh, drawing or robot
 description has no CAD edges, parts to explode or solids to section, and its
 snapshot door refuses them by name. Those inputs take `solid` or `render`.
-The old `display.render`, `guides` and `partColor` fields and old display-mode
-names are rejected. Use the group table above when updating a saved JSON file.
 
 For close macro views in normal CAD, a JSON job can set `quality.tessellation` to
 `{"chordTolerance": 0.0005, "angleTolerance": 0.10}`. Chord tolerance is
 relative to each component's bounding diagonal; angle tolerance is radians.
 These positive numeric overrides have cadgen mesh the exact STEP surfaces at
 those tolerances, stored as separate mesh entries. They do not change the STEP geometry or a model's
-declared mesh-export tolerances. Use them only when visible faceting needs finer
-sampling; lower tolerances cost more memory and render time. `chordTolerance`
-must be from `0.00005` to `0.05` and `angleTolerance` from `0.05` to `1.5708`
-radians, the same bounds as a mesh export's; finer sampling costs minutes of
-meshing instead of improving the image, and a job outside them is refused.
-Existing mesh documents cannot be remeshed this way. The explicit top-level
-sampling request works in every display mode. When it is omitted,
+declared mesh-export tolerances, and lower tolerances cost more memory and render
+time. `chordTolerance` must be from `0.00005` to `0.05` and `angleTolerance` from
+`0.05` to `1.5708` radians, the same bounds as a mesh export's; finer sampling
+costs minutes of meshing instead of improving the image, and a job outside them is
+refused. Existing mesh documents cannot be remeshed this way. The explicit
+top-level sampling request works in every display mode. When it is omitted,
 `display.lighting.quality` selects the photographic preview or final LOD.
 
 Scene setup, output capture and geometric sampling are separate closed objects.
@@ -239,47 +216,16 @@ Name the file and you get that file:
 
 ```bash
 cadgen step snapshot STEP/bracket.step tmp/review.png
-# then Read tmp/review.png
 ```
 
 OUT (and an output's `path` in a JSON packet) is written exactly as given,
-relative to the working directory. Check the command's exit before reading. A
-refused request — an unknown key or value, a setting this kind of input cannot
-take, the wrong door, conflicting options, an unknown pose, clip or joint name —
-leaves an existing file untouched, for every job in a packet. Once the request is
-accepted the target is cleared before anything is built, so a failed build or
-render (and an occurrence ref the model does not have, which needs the built
-tree to check) leaves no file; successful output is written atomically.
-Reuse `tmp/review.png` during iteration, or name before/after images when both
-are needed for comparison.
+relative to the working directory. A refused request — an unknown key or value,
+a setting this kind of input cannot take, the wrong door, conflicting options, an
+unknown pose, clip or joint name — leaves an existing file untouched, for every
+job in a packet, so after a refusal the path can still hold an older image. Once
+the request is accepted the target is cleared before anything is built, so a
+failed build or render (and an occurrence ref the model does not have, which
+needs the built tree to check) leaves no file; successful output is written
+atomically.
 
 Pass a directory (`tmp/` as OUT, or an output `path` that is one) only when the name does not matter: a timestamped name is generated inside it, and that is the one case where you read the path from the `saved snapshot:` line.
-
-## Targeted additions
-
-Add views only when the brief or a failure mode calls for them:
-
-- reference-image reproduction: one snapshot from the reference image's viewpoint for side-by-side comparison
-- `--mode section --section PLANE[:OFFSET]`: shell, bore, internal cavity, passage, blind hole, enclosure, or wall/floor relationship (see [Section planes](#section-planes))
-- `display.mode: "solid"`: shaded CAD view with visible edge linework
-- `display.edges.enabled: false`: shaded surfaces without the edge overlay
-- `display.mode: "xray"`: translucent surfaces with hidden/occluded edges visible
-- `display.mode: "hidden-line"`: line-focused review with occluded edges suppressed
-- `display.mode: "wireframe"`: edge-only review for internal overlap or interference
-- `display.mode: "grid"`: Solid on a fine measuring grid, for reading size and placement at a glance
-- labeled or annotated review: use supported CAD Viewer refs, selections, screenshots, or GUI review links
-
-Exploded or labeled review is an intent, not a render mode. Satisfy it through supported CAD Viewer mechanisms, supported JSON job settings, or the GUI link.
-
-## Diagnostic review
-
-Visual review is diagnostic, not authoritative. Convert every visual concern into a follow-up geometry check before using it as a validation claim:
-
-- hole pattern appears asymmetric -> measure hole centers and compare offsets
-- lid, child part, or occurrence appears offset -> inspect frames and mating deltas
-- gusset, boss, standoff, rib, or plate may be floating -> inspect solid count, labels, connectivity, contact, or relevant distances
-- cavity, bore, or blind hole looks wrong -> run section review, then measure wall thickness, depth, or through-condition
-- repeated pattern looks uneven -> measure pattern centers, angular spacing, or occurrence frames
-- a view or list warns that faces `could not be meshed` -> the image draws that part without them (and a list counts it without them); inspect those faces by their refs, usually slivers a boolean left, and repair them in the model
-
-Final reports name what the snapshots showed, or the documented skip reason, and which deterministic checks support any visual finding. The PNGs are for your review; the user sees the model in the viewer, so attach one only when they ask for an image.

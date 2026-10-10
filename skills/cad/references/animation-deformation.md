@@ -30,8 +30,8 @@ Segments must connect tangentially:
 | Cubic Bezier | `{"kind": "bezier", "points": [p0, p1, p2, p3]}` |
 
 Positions are `[x, y, z]` millimetres; angles are degrees. Normalized arc length
-maps the rest path to the posed path. Check tendon length, bend radius and
-collisions separately: deformation does not solve those constraints.
+maps the rest path to the posed path. Deformation does not solve tendon length,
+bend radius or collisions.
 `twist_deg` rotates authored cross-sections; it does not calculate spool payout.
 
 Only `path` and `twist_deg` move during a clip: `rest`, `max_segment_length`
@@ -85,5 +85,5 @@ Limitations:
 
 - Procedural braid shading is not exported. The GLB retains the tube's geometry
   and motion with a smooth surface, and the export warns.
-- Render a video when the output needs effects GLB cannot carry; see
+- A clip video carries what GLB cannot; see
   [motion review](kinematics.md#reviewing-motion).
