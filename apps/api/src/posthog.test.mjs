@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { rowsOf } from './events.mjs';
+import { rowsOf, uuidV5 } from './events.mjs';
 import { EVENTS, missingSettings, posthogStore, SETTINGS, settingsOf } from './posthog.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
@@ -62,8 +62,53 @@ test("the build daemon's counts are PostHog events of their own, each a window's
     channel: 'claude-directory', platform: 'linux', arch: 'x86_64', country: 'NZ' };
   const countsOf = event => Object.fromEntries(Object.entries(event).filter(([key]) => key !== 'name'));
   assert.deepEqual(batch.map(event => event.properties), DAEMON.events.map(event => ({ ...context, ...countsOf(event) })));
-  assert.deepEqual(Object.keys(EVENTS).sort(),
-    ['build', 'exception', 'feature', 'files', 'health', 'snapshot', 'tool', 'tool_failure', 'view']);
+  assert.deepEqual(Object.keys(EVENTS).sort(), ['build', 'build_failure', 'exception', 'feature', 'files', 'health', 'snapshot',
+    'snapshot_failure', 'tool', 'tool_failure', 'view']);
+  // Schemas before 5 name no batch: PostHog makes up each event's uuid and stamps it as it arrives, as ever.
+  assert.ok(batch.every(event => !('uuid' in event) && !('timestamp' in event)));
+});
+
+// Schema 5: a named batch, made a minute before the receiver's clock (`NOW`).
+const NOW = Date.UTC(2026, 9, 9, 12, 0, 0);
+const NAMED = {
+  ...DAEMON, schema: 5, batch: '5d0f3c2e-8b1a-4c6e-9f2d-7a3b1e4c5d6f', at: NOW / 1000 - 60,
+  events: [
+    { name: 'build_failure', kind: 'dxf', via: 'script', reason: 'io_error', count: 2 },
+    { name: 'snapshot_failure', kind: 'step', reason: 'browser', count: 1 },
+    ...DAEMON.events,
+  ],
+};
+const at = batch => {
+  const { asked, store } = posthog(200);
+  return store.insert(rowsOf(batch)).then(() => asked[0].body.batch);
+};
+
+test("why builds and snapshots failed are PostHog's build_failed and snapshot_failed, by format and reason", async () => {
+  const [build, snapshot] = await at(NAMED);
+  assert.deepEqual([build.event, build.properties.kind, build.properties.via, build.properties.reason, build.properties.count],
+    ['build_failed', 'dxf', 'script', 'io_error', 2]);
+  assert.deepEqual([snapshot.event, snapshot.properties.kind, snapshot.properties.reason, snapshot.properties.count],
+    ['snapshot_failed', 'step', 'browser', 1]);
+  assert.ok(!('id' in build.properties) && !('at' in build.properties) && !('batch' in build.properties));
+});
+
+test('a batch sent again is the same PostHog events, uuid and time alike, so PostHog counts it once', async () => {
+  const first = await at(NAMED);
+  const again = await at(NAMED); // its answer was lost; sent again, however long after
+  assert.deepEqual(again, first);
+  assert.ok(first.every(event => event.timestamp === '2026-10-09T11:59:00.000Z'));
+  assert.equal(new Set(first.map(event => event.uuid)).size, first.length, 'one uuid per event of a batch');
+  // Another batch's events are their own, though they count the same.
+  const other = await at({ ...NAMED, batch: 'f1e2d3c4-b5a6-4978-8a1b-2c3d4e5f6a7b' });
+  assert.ok(other.every((event, index) => event.uuid !== first[index].uuid));
+  // Its time is always the batch's own, whatever the receiver's clock says: a copy keeps its key.
+  const old = await at({ ...NAMED, at: NOW / 1000 - 8 * 24 * 3600 });
+  assert.ok(old.every(event => event.timestamp === '2026-10-01T12:00:00.000Z'));
+});
+
+test('a row id is a UUIDv5, as RFC 9562 makes one', () => {
+  // Python's uuid.uuid5(uuid.NAMESPACE_DNS, 'python.org').
+  assert.equal(uuidV5('python.org', '6ba7b810-9dad-11d1-80b4-00c04fd430c8'), '886313e1-3b8a-5372-9b90-0c9aee199e5d');
 });
 
 test("why a tool's calls failed is PostHog's tool_failed, by tool and reason, to break down and add up", async () => {
@@ -83,10 +128,11 @@ test("a crash is PostHog's $exception: its type and frames, only cadgen's in the
   await store.insert(rowsOf({ ...BATCH, events: [
     { name: 'exception', where: 'tool', tool: 'cad_show', type: 'KeyError', handled: true, frames, count: 2 },
     { name: 'exception', where: 'build', type: 'WorkerDied', handled: false, status: -11, frames: [], count: 1 },
+    { name: 'exception', where: 'build', type: 'WorkerDied', handled: false, status: 0xC0000409, frames: [], count: 1 },
     { name: 'exception', where: 'page', type: 'TypeError', handled: false, count: 1,
       frames: [{ file: 'assets/index-Bx3k2.js', function: 'Kt', line: 1, column: 48213, chunk_id: '0de4d024-c159-4f6d-b15a-cc4ef7a6856d' }] },
   ] }), { country: 'DE' });
-  const [tool, worker, page] = asked[0].body.batch;
+  const [tool, worker, fault, page] = asked[0].body.batch;
   assert.deepEqual([tool.event, worker.event, page.event], ['$exception', '$exception', '$exception']);
   assert.deepEqual([tool.properties.where, tool.properties.tool, tool.properties.count, tool.properties.process], ['tool', 'cad_show', 2, 'app']);
   assert.deepEqual(tool.properties.$exception_list, [{
@@ -100,6 +146,8 @@ test("a crash is PostHog's $exception: its type and frames, only cadgen's in the
   // A worker that died shows its exit status, and nothing else; a page's frames are JavaScript's.
   assert.deepEqual(worker.properties.$exception_list, [{ type: 'WorkerDied', value: 'exit status -11',
     mechanism: { type: 'generic', handled: false, synthetic: false } }]);
+  // A Windows worker's fault, by its exception code as Windows writes it.
+  assert.equal(fault.properties.$exception_list[0].value, 'exit status 0xC0000409');
   // A page's frame names its chunk, by which PostHog finds the source map the release uploaded.
   assert.deepEqual(page.properties.$exception_list[0].stacktrace.frames,
     [{ platform: 'web:javascript', filename: 'assets/index-Bx3k2.js', function: 'Kt', lineno: 1, colno: 48213,

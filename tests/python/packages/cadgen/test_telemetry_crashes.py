@@ -25,6 +25,13 @@ def _user_calls(target, filename: str = "/home/someone/secret_bracket.py"):
     return namespace["make_secret_bracket"]
 
 
+def _raises(error: BaseException):
+    """The person's model, raising ``error`` in their own code."""
+    def model() -> None:
+        raise error
+    return _user_calls(model)
+
+
 def _caught(call) -> BaseException:
     try:
         call()
@@ -111,6 +118,44 @@ class SignatureTest(unittest.TestCase):
                 self.assertIsNone(analytics.signature(error, "build", bugs_only=True))
         self.assertIs(bd.Box, __import__("build123d").Box, "a name it has is build123d's own")
 
+    def test_the_other_end_leaving_or_the_persons_own_recursion_is_never_a_crash(self) -> None:
+        def write() -> None:
+            raise BrokenPipeError(32, "Broken pipe")
+
+        # A reader that closed the command's own output (`| head`): its stdout is the pipe that broke.
+        with mock.patch.object(analytics, "stdout_closed", return_value=True):
+            self.assertIsNone(analytics.signature(_caught(write), "command", handled=False))
+        # Another pipe the command wrote to (a child's stdin), and a route's own connection out, are cadgen's: a
+        # page leaving a route is the response writer's to swallow, and never reaches here.
+        with mock.patch.object(analytics, "stdout_closed", return_value=False):
+            self.assertEqual(analytics.signature(_caught(write), "command", handled=False)["type"], "BrokenPipeError")
+        for error in (ConnectionAbortedError(10053, "aborted"), ConnectionRefusedError()):
+            self.assertEqual(analytics.signature(error, "route", handled=False)["type"], type(error).__name__)
+        # Anywhere else it may be cadgen's: a tool's call, a request, a command's own connection.
+        self.assertEqual(analytics.signature(ConnectionAbortedError(), "tool")["type"], "ConnectionAbortedError")
+        self.assertEqual(analytics.signature(ConnectionResetError(), "command")["type"], "ConnectionResetError")
+
+        # A RecursionError: whose cycle it is. This file stands in for cadgen's code.
+        def ours() -> None:
+            ours()
+
+        def model() -> None:  # cadgen's wrapper, calling a model that calls itself through it
+            _user_calls(model, "/work/model.py")()
+
+        file_of, here = analytics._file_of, os.path.realpath(__file__)
+        self.addCleanup(sys.setrecursionlimit, sys.getrecursionlimit())
+        sys.setrecursionlimit(200)  # a short stack: each frame's file is looked up on disk
+        with mock.patch.object(analytics, "_file_of", lambda path: "cadgen/authoring.py"
+                               if os.path.realpath(path) == here else file_of(path)):
+            theirs, mine = _caught(model), _caught(_user_calls(ours, "/work/model.py"))
+            sys.setrecursionlimit(1000)
+            for where, bugs_only in (("build", True), ("tool", False)):
+                with self.subTest(where=where):
+                    self.assertIsNone(analytics.signature(theirs, where, bugs_only=bugs_only), "theirs is in the cycle")
+                    found = analytics.signature(mine, where, bugs_only=bugs_only)
+                    self.assertEqual((found["type"], {frame["file"] for frame in found["frames"]}),
+                                     ("RecursionError", {"cadgen/authoring.py"}), "the person's call is far outside it")
+
     def test_an_installed_package_that_is_not_cadgens_is_never_named(self) -> None:
         site = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, site, ignore_errors=True)
@@ -134,6 +179,14 @@ class SignatureTest(unittest.TestCase):
                             "chunk_id": "0de4d024-c159-4f6d-b15a-cc4ef7a6856d"}]}
         self.assertTrue(analytics.valid_signature(good))
         self.assertTrue(analytics.valid_signature(analytics.died(-11)))
+        # Windows ends a faulted process with its exception code (STATUS_ACCESS_VIOLATION): that is its exit
+        # status, and the crash says it as a signal's would.
+        self.assertEqual(analytics.died(0xC0000005)["status"], 0xC0000005)
+        self.assertTrue(analytics.valid_signature(analytics.died(0xC0000005)))
+        for status in (70000, -0xC0000005, 0x100000000):
+            with self.subTest(status=status):
+                self.assertNotIn("status", analytics.died(status))
+                self.assertFalse(analytics.valid_signature({**analytics.died(-11), "status": status}))
         for bad in (
             {**good, "message": "Cannot read properties of undefined (reading 'secret')"},
             {**good, "frames": [{"file": "/Users/someone/secret.js", "function": "f", "line": 1}]},
@@ -154,6 +207,92 @@ class SignatureTest(unittest.TestCase):
         ):
             with self.subTest(bad=bad):
                 self.assertFalse(analytics.valid_signature(bad))
+
+
+class FailureReasonTest(unittest.TestCase):
+    """Why a build or a snapshot failed (``build_failure``, ``snapshot_failure``): a word of a closed vocabulary,
+    from what the error is and whose code raised it, never from what it says."""
+
+    def setUp(self) -> None:
+        # A module of cadgen's, as the frames place it: one that calls into a dependency, one that refuses what it
+        # was given at a raise, and one with a mistake in it.
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        source = folder / "export.py"
+        source.write_text("def export(write):\n    return write()\n\n"
+                          "def refuse():\n    raise TypeError(\n        '@step returned a dict')\n\n"
+                          "def broke():\n    return {}['tree']\n", encoding="utf-8")
+        self.cadgen: dict = {}
+        exec(compile(source.read_text(encoding="utf-8"), str(source), "exec"), self.cadgen)  # noqa: S102
+        located, ours = analytics._located, os.path.realpath(source)
+        placed = mock.patch.object(analytics, "_located", lambda path: ("cadgen", "cadgen/_internal/export.py")
+                                   if os.path.realpath(path) == ours else located(path))
+        placed.start()
+        self.addCleanup(placed.stop)
+
+    def test_a_builds_failure_is_named_by_what_failed_and_whose_code_raised_it(self) -> None:
+        import functools
+        import importlib
+
+        from PIL import Image
+
+        kernel = functools.partial(Image.new, "NOT A MODE", (1, 1))  # a library refusing what it was asked
+        child = type("ChildBuildError", (RuntimeError,), {"__module__": "cadgen.store.lazy"})
+        raises = _raises
+        cases = {
+            "model_error": raises(ValueError("No module named secret: a message is never read")),
+            "kernel_error": _user_calls(kernel),
+            "refused": _user_calls(self.cadgen["refuse"]),
+            "export_error": lambda: self.cadgen["export"](kernel),
+            "bug": _user_calls(self.cadgen["broke"]),
+            "script_error": lambda: compile("def (", "/work/secret_model.py", "exec"),
+            "missing_module": _user_calls(lambda: importlib.import_module("secret_missing_module")),
+            "missing_file": _user_calls(lambda: open("/nonexistent/secret.step", encoding="utf-8")),
+            "io_error": raises(PermissionError("locked")),
+            "timeout": raises(TimeoutError()),
+            "memory": raises(MemoryError()),
+            "child_failed": raises(child("child model secret_arm failed")),
+        }
+        for reason, call in cases.items():
+            with self.subTest(reason=reason):
+                error = _caught(call)
+                self.assertEqual(analytics.build_failure(error), reason)
+                # The same as a crash report finds: a bug, and only a bug, is cadgen's own mistake.
+                self.assertEqual(analytics.signature(error, "build", bugs_only=True) is not None, reason == "bug")
+        self.assertLessEqual(set(cases), analytics.BUILD_FAILURES)
+        # A name a module does not have is the model's mistake, not a module missing from the machine.
+        misspelled = _caught(_user_calls(lambda: exec("from os import secret_name_os_does_not_have")))
+        self.assertNotIsInstance(misspelled, ModuleNotFoundError)
+        self.assertEqual(analytics.build_failure(misspelled), "model_error")
+
+    def test_a_reason_cadgen_names_where_it_raises_stands_but_never_over_a_bug(self) -> None:
+        named = _caught(_raises(analytics.because(ValueError(), "export_error")))  # the person's frames say model_error
+        self.assertEqual(analytics.build_failure(named), "export_error")
+        error = _caught(_user_calls(self.cadgen["broke"]))
+        analytics.because(error, "missing_file")
+        self.assertEqual(analytics.build_failure(error), "bug")
+        # The innermost name stands; one outside the vocabulary names nothing.
+        twice = analytics.because(analytics.because(ValueError(), "timeout"), "memory")
+        self.assertEqual(analytics.build_failure(twice), "timeout")
+        self.assertEqual(analytics.build_failure(analytics.because(ValueError(), "Secret words")), "other")
+        self.assertEqual(analytics.build_failure(ValueError()), "other", "no frames: whose code is unknown")
+
+    def test_a_snapshots_failure_is_what_it_was_doing_unless_the_error_says_more(self) -> None:
+        playwright_timeout = type("TimeoutError", (Exception,), {"__module__": "playwright._impl._errors"})
+        route = type("RouteFileError", (RuntimeError,), {"__module__": "cadgen.snapshot_core", "status": 404})
+        for error, otherwise, reason in (
+            (_caught(_user_calls(self.cadgen["broke"])), "input_error", "bug"),
+            (analytics.because(RuntimeError(), "browser"), "render_error", "browser"),
+            (FileNotFoundError("/w/secret.step"), "input_error", "no_file"),
+            (route("no such file"), "bad_request", "no_file"),
+            (playwright_timeout(), "render_error", "timeout"),
+            (MemoryError(), "render_error", "memory"),
+            (ValueError("bad camera"), "bad_request", "bad_request"),
+            (ValueError("bad camera"), "a word of tomorrow", "other"),
+        ):
+            with self.subTest(error=type(error).__name__, otherwise=otherwise):
+                self.assertEqual(analytics.snapshot_failure(error, otherwise), reason)
+                self.assertIn(reason, analytics.SNAPSHOT_FAILURES)
 
 
 class _Recording(unittest.TestCase):
@@ -263,6 +402,34 @@ class CommandCrashTest(unittest.TestCase):
                 mock.patch.object(cli, "_tell"), self.assertRaises(KeyError):
             cli.main(["telemetry", "status"])
         self.assertEqual([(crash["where"], crash["handled"]) for crash in self.crashes()], [("command", False)])
+
+    @unittest.skipIf(sys.platform == "win32", "Windows has no SIGPIPE, and says a closed pipe is EINVAL")
+    def test_a_command_whose_output_is_closed_stops_quietly_and_reports_nothing(self) -> None:
+        import subprocess
+
+        # `cadgen ... | head`, its reader gone before it writes: no traceback, the exit a shell gives
+        # `yes | head`, and nothing handed over, which a command would do through `report`.
+        read, write = os.pipe()
+        os.close(read)
+        code = ("import sys\nfrom cadgen import analytics, cli\n"
+                "analytics.report = lambda *a, **k: sys.stderr.write('reported\\n')\n"
+                "cli._run = lambda *a: sys.stdout.write('x' * 1_000_000) and 0\n"
+                "sys.exit(cli.main(['telemetry', 'status']))\n")
+        try:
+            done = subprocess.run([sys.executable, "-c", code], stdout=write, stderr=subprocess.PIPE,
+                                  env={**os.environ, "CADGEN_TELEMETRY": "0"}, timeout=60)
+        finally:
+            os.close(write)
+        self.assertEqual((done.returncode, done.stderr), (141, b""))
+        # Another pipe it wrote to (a child that died before reading its stdin) is a failure like any other: said,
+        # and the command fails, its own output still open.
+        code = ("import sys\nfrom cadgen import cli\n"
+                "def run(*a):\n    raise BrokenPipeError(32, 'Broken pipe')\n"
+                "cli._run = run\nsys.exit(cli.main(['telemetry', 'status']))\n")
+        done = subprocess.run([sys.executable, "-c", code], capture_output=True, env={**os.environ, "CADGEN_TELEMETRY": "0"},
+                              timeout=60)
+        self.assertEqual(done.returncode, 1)
+        self.assertIn(b"BrokenPipeError", done.stderr)
 
     def test_a_commands_reported_failure_is_a_crash_only_when_it_is_a_mistake_in_cadgens_code(self) -> None:
         import io

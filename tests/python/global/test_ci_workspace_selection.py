@@ -199,7 +199,7 @@ class TheWorkflowFollowsTheSelector(unittest.TestCase):
         # main's branch protection requires exactly these names (CONTRIBUTING.md, Repository settings).
         names = {re.search(r"^    name: (.+)$", body, re.M)[1] for body in JOBS.values()}
         self.assertTrue({"Version Check", "cadgen (Linux)", "cadgen (Windows)", "core-js", "web", "skills", "docs",
-                         "packaging"} <= names)
+                         "packaging", "api"} <= names)
 
 
 class ChangesRunWhatCanBreak(unittest.TestCase):
