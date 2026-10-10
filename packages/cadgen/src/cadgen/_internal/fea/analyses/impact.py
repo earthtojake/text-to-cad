@@ -62,8 +62,6 @@ WINDOW_EXPECTED = 1.2
 CHECK_SHARE = 0.1
 #: ... when that fits the time target or costs at most this share of the run itself (at worst, twice the time).
 RERUN_SHARE = 1.0
-#: The explicit cost model: seconds per element per step, and per step (measured on this engine's force loop).
-SECONDS_PER_ELEMENT_STEP, SECONDS_PER_STEP = 5.5e-7, 3e-4
 #: Bytes per element (its arrays, the force loop's chunk temporaries) and per node (state, envelopes).
 BYTES_PER_ELEMENT, BYTES_PER_NODE = 1_500.0, 400.0
 #: An acceleration check's label when the study gives none: the peak g the floor gives the part.
@@ -230,6 +228,8 @@ class ImpactAnalysis:
     tier: ClassVar[int] = 3
     word: ClassVar[str] = "Drop impact"
     estimate_only: ClassVar[bool] = False
+    #: Its explicit elements are the same in every direction: study.parse_study refuses an orthotropic material.
+    isotropic_only: ClassVar[bool] = True
     limits: ClassVar[tuple[str, ...]] = (LIMITS_LINE,)
     study_keys: ClassVar[frozenset[str]] = frozenset({"drop", "window_ms", "plasticity"})
     material_needs: ClassVar[frozenset[str]] = frozenset({"density"})
@@ -329,13 +329,13 @@ class ImpactAnalysis:
             share = explicit.subcycle_work(element_dt, model.tets, model.count, substeps)
         step = explicit.SAFETY * float(element_dt.min())
         elements = float(model.elements)
-        if getattr(ctx, "meshed_plan", None) != fit._mesh_key(plan) and ctx.geometry is not None:
+        if getattr(ctx, "meshed_plan", None) != fit.mesh_key(plan) and ctx.geometry is not None:
             # Another mesh than the one made: its elements from the geometry, its step scaled with the element size.
-            elements, _, _ = fit._plan_counts(ctx)
+            elements, _, _ = fit.plan_counts(ctx)
             if plan.size_mm and ctx.volume.max_h:
                 step *= plan.size_mm / ctx.volume.max_h
         steps = window / step
-        seconds = steps * (SECONDS_PER_STEP + SECONDS_PER_ELEMENT_STEP * elements * share)
+        seconds = steps * (fit.SECONDS_PER_STEP + fit.SECONDS_PER_ELEMENT_STEP * elements * share)
         frames = int(getattr(ctx.budget, "max_frames", 24) or 24)
         nodes = elements / 4.0
         memory = fit.BASE_BYTES + BYTES_PER_ELEMENT * elements + BYTES_PER_NODE * nodes + 2 * frames * (12 * nodes + 4 * elements)
@@ -363,7 +363,6 @@ class ImpactAnalysis:
             return None
         model = _model(ctx)
         plan = ctx.plan
-        steps = plan.__dict__.setdefault("_impact_steps", {})
         if rung == "window":
             if plan.window_s is not None:
                 return None
@@ -379,7 +378,6 @@ class ImpactAnalysis:
                 "the first impact and its peak are kept; a second bounce or later ringing is not followed", None,
                 detail={"window_ms": round(window * 1e3, 6), "expected_ms": round(expected * 1e3, 6)},
             )
-            steps["window"] = step
             return step
         if rung == "subcycling":
             if plan.subcycle > 1:
@@ -399,7 +397,6 @@ class ImpactAnalysis:
                 "interpolated through the small steps", None,
                 detail={"substeps": n, "fine_share": round(percent / 100.0, 4), "work_share": round(share, 4)},
             )
-            steps["subcycling"] = step
             return step
         if rung == "mass_scaling":
             if plan.mass_scale_dt is not None:
@@ -427,7 +424,6 @@ class ImpactAnalysis:
                 detail={"added_share": round(share, 6), "elements": heavier, "step_gain": round(reached / smallest, 4),
                         "measured": False},
             )
-            steps["mass_scaling"] = step
             return step
         return None
 
@@ -477,7 +473,7 @@ class ImpactAnalysis:
         if added is not None:
             scaled = {"elements": int((added > 0).sum()),
                       "gain": float((model.element_dt * ((model.rho + added) / model.rho) ** 0.5).min() / model.element_dt.min())}
-        self._settle_steps(plan, run, window, share, mass_check, mass, scaled)
+        settled_steps = self._settled_steps(run, window, share, mass_check, mass, scaled)
 
         nodal = model.nodal
         frame_vm = [nodal(vm) for vm in run.frame_vm]
@@ -526,6 +522,7 @@ class ImpactAnalysis:
                 "yields": [m.yield_strength for m in ctx.materials], "node_domain": _node_domain(model, space),
                 "margin": float(getattr(ctx.study, "margin", 2.0) or 2.0), "analysis_warnings": [],
                 "elements": model.elements, "length_mm": _length_along(model, inputs.direction), "subcycle": run.subcycle,
+                "settled_steps": settled_steps,
             },
             dofs=3 * model.count,
             solver=(f"explicit central difference, lumped mass, {run.steps} steps of {run.dt * 1e6:.3g} µs"
@@ -570,11 +567,11 @@ class ImpactAnalysis:
     def _mass_effect(self, ctx, model, drop, window, run, plastic, watch, *, seconds_used: float):
         """Mass scaling's effect on peak g: the first 10 % of the window that ran, rerun unscaled, when the time target
         allows."""
-        from cadgen._internal.fea import explicit
+        from cadgen._internal.fea import explicit, fit
 
         span = CHECK_SHARE * window
         steps = span / (explicit.SAFETY * float(model.element_dt.min()))
-        cost = steps * (SECONDS_PER_STEP + SECONDS_PER_ELEMENT_STEP * model.elements)
+        cost = steps * (fit.SECONDS_PER_STEP + fit.SECONDS_PER_ELEMENT_STEP * model.elements)
         # Measured when it fits the time target, or costs no more than the run itself.
         if seconds_used + cost > ctx.budget.seconds and cost > RERUN_SHARE * seconds_used:
             return {"measured": False, "span_s": span, "cost_s": cost}
@@ -585,53 +582,58 @@ class ImpactAnalysis:
         return {"measured": True, "span_s": span, "scaled_N": scaled, "unscaled_N": unscaled, "pct": pct,
                 "seconds": check.seconds}
 
-    def _settle_steps(self, plan, run, window: float, share: float, mass_check: dict | None, mass: float,
-                      scaled: dict | None) -> None:
-        """The ladder's steps say what happened once the run is done (in place: they were recorded before the solve)."""
-        steps = getattr(plan, "_impact_steps", {})
-        step = steps.get("window")
-        if step is not None:
-            if run.stopped_early:
-                words = (f"Stopped at {time_words(run.end_s)}, once the first impact was over (the floor stopped pushing "
-                         f"at {time_words(run.pulse_end_s)}, plus 20%), instead of following the whole {time_words(window)}, to fit")
-            else:
-                words = (f"Was ready to stop once the first impact was over, but the floor was still pushing, so the whole "
-                         f"{time_words(window)} was followed")
-            object.__setattr__(step, "words", words)
-            step.detail.update({"stopped_ms": round(run.end_s * 1e3, 6), "stopped_early": run.stopped_early})
-        step = steps.get("subcycling")
-        if step is not None:
-            if run.subcycle > 1:
-                words = (f"Stepped the {run.fine_share * 100:.0f}% of elements with the smallest stable step (and their "
-                         f"neighbours) {run.subcycle}× as often as the rest, to fit")
-            else:
-                words = ("Was ready to step the smallest elements more often, but on the final mesh (after mass scaling, where "
-                         "taken) no group of small elements was worth it, so every element shared one step")
-            object.__setattr__(step, "words", words)
-            step.detail.update({"fine_share": round(run.fine_share, 4), "substeps_used": run.subcycle})
-        step = steps.get("mass_scaling")
-        if step is not None:
-            step.detail.update({"added_share": round(share, 6), "added_t": round(share * mass, 12)})
-            if share > 0 and scaled is not None:
-                object.__setattr__(step, "words", f"Added {share * 100:.1f}% to the part's mass, on its {scaled['elements']} "
-                                                  f"smallest elements, so the time step could grow {scaled['gain']:.2f}× to fit")
-                step.detail.update({"elements": scaled["elements"], "step_gain": round(scaled["gain"], 4)})
-            if share <= 0:
-                object.__setattr__(step, "words", "Was ready to add mass to the smallest elements, but the final mesh had "
-                                                  "none small enough to need it")
-                object.__setattr__(step, "accuracy", "no mass was added, so peak g is unchanged")
-                object.__setattr__(step, "accuracy_pct", 0.0)
-            elif mass_check and mass_check.get("measured"):
-                pct = mass_check["pct"]
-                object.__setattr__(step, "accuracy", f"peak g moved {pct:.1f}% against an unscaled rerun of the first "
-                                                     f"{time_words(mass_check['span_s'])}")
-                object.__setattr__(step, "accuracy_pct", pct)
-                step.detail.update({"measured": True, "unscaled_peak_N": round(mass_check["unscaled_N"], 4),
-                                    "scaled_peak_N": round(mass_check["scaled_N"], 4)})
-            else:
-                object.__setattr__(step, "accuracy", f"peak g may read up to about {share * 100:.1f}% off (the added "
-                                                     "mass; no time was left to rerun it unscaled)")
-                object.__setattr__(step, "accuracy_pct", share * 100.0)
+    @staticmethod
+    def _settled_steps(run, window: float, share: float, mass_check: dict | None, mass: float,
+                       scaled: dict | None) -> dict[str, dict]:
+        """What each rung's step says once the run is done (window, subcycling, mass_scaling), for :meth:`settle_steps`:
+        ``{rung: {"words", "accuracy", "accuracy_pct", "detail"}}``. A rung not taken is never said again."""
+        window_words = (
+            f"Stopped at {time_words(run.end_s)}, once the first impact was over (the floor stopped pushing "
+            f"at {time_words(run.pulse_end_s)}, plus 20%), instead of following the whole {time_words(window)}, to fit"
+            if run.stopped_early else
+            f"Was ready to stop once the first impact was over, but the floor was still pushing, so the whole "
+            f"{time_words(window)} was followed"
+        )
+        subcycle_words = (
+            f"Stepped the {run.fine_share * 100:.0f}% of elements with the smallest stable step (and their "
+            f"neighbours) {run.subcycle}× as often as the rest, to fit"
+            if run.subcycle > 1 else
+            "Was ready to step the smallest elements more often, but on the final mesh (after mass scaling, where "
+            "taken) no group of small elements was worth it, so every element shared one step"
+        )
+        mass_step: dict = {"detail": {"added_share": round(share, 6), "added_t": round(share * mass, 12)}}
+        if share > 0 and scaled is not None:
+            mass_step["words"] = (f"Added {share * 100:.1f}% to the part's mass, on its {scaled['elements']} smallest "
+                                  f"elements, so the time step could grow {scaled['gain']:.2f}× to fit")
+            mass_step["detail"].update({"elements": scaled["elements"], "step_gain": round(scaled["gain"], 4)})
+        if share <= 0:
+            mass_step.update(words="Was ready to add mass to the smallest elements, but the final mesh had none small "
+                                   "enough to need it", accuracy="no mass was added, so peak g is unchanged", accuracy_pct=0.0)
+        elif mass_check and mass_check.get("measured"):
+            pct = mass_check["pct"]
+            mass_step.update(accuracy=f"peak g moved {pct:.1f}% against an unscaled rerun of the first "
+                                      f"{time_words(mass_check['span_s'])}", accuracy_pct=pct)
+            mass_step["detail"].update({"measured": True, "unscaled_peak_N": round(mass_check["unscaled_N"], 4),
+                                        "scaled_peak_N": round(mass_check["scaled_N"], 4)})
+        else:
+            mass_step.update(accuracy=f"peak g may read up to about {share * 100:.1f}% off (the added mass; no time was "
+                                      "left to rerun it unscaled)", accuracy_pct=share * 100.0)
+        return {
+            "window": {"words": window_words,
+                       "detail": {"stopped_ms": round(run.end_s * 1e3, 6), "stopped_early": run.stopped_early}},
+            "subcycling": {"words": subcycle_words,
+                           "detail": {"fine_share": round(run.fine_share, 4), "substeps_used": run.subcycle}},
+            "mass_scaling": mass_step,
+        }
+
+    def settle_steps(self, result: AnalysisResult, steps: list) -> list:
+        """The window, subcycling and mass_scaling steps said again once the run is done (run.py calls this after
+        the solve; each settled step is a new one, never changed in place)."""
+        from cadgen._internal.fea import fit
+
+        for rung, settled in result.scalars.get("settled_steps", {}).items():
+            steps = fit.settle_step(steps, rung, settled)
+        return steps
 
     def _onto(self, volume, model, run) -> list[str]:
         """The faces that met the floor: every boundary triangle whose corners all touched it."""
@@ -683,7 +685,7 @@ class ImpactAnalysis:
 
     def judge(self, check: dict, index: int, ctx: SolveContext, result: AnalysisResult, inputs: ImpactInputs) -> dict:
         from cadgen._internal.fea import checks
-        from cadgen._internal.fea.analyses.static import _peak_face
+        from cadgen._internal.fea.analyses.static import peak_face
 
         kind = check["kind"]
         if kind == "stress":
@@ -691,7 +693,7 @@ class ImpactAnalysis:
             at = tuple(float(c) for c in result.dof_locations[node])
             solved = checks.Solved(
                 material_name="", yield_MPa=self._yield_at(result, node), peak_MPa=peak, peak_gauss_MPa=peak, peak_at=at,
-                peak_face=_peak_face(ctx.volume, result, node, set()), fixed_faces=(), max_displacement_mm=0.0,
+                peak_face=peak_face(ctx.volume, result, node, set()), fixed_faces=(), max_displacement_mm=0.0,
                 displacement_at=at, bbox_diagonal_mm=0.0, margin=result.scalars["margin"], coarser_peak_MPa=None, part="",
             )
             return {**checks.stress_check(solved, label=check.get("label")), "at": self._at(result, when)}
@@ -732,7 +734,7 @@ class ImpactAnalysis:
             "kind": "plastic_strain", "label": check.get("label") or kinds.PLASTIC_STRAIN.default_label,
             "value": round(value, 6), "limit": check["limit_percent"], "unit": "%", "ratio": round(ratio, 6),
             "close_at": _CLOSE_AT, "status": checks.check_status(ratio, _CLOSE_AT),
-            "where": {"ref": _peak_face(ctx.volume, result, node, set()),
+            "where": {"ref": peak_face(ctx.volume, result, node, set()),
                       "at": [round(float(c), 3) for c in result.dof_locations[node]]},
             "at": self._at(result, end),
         }

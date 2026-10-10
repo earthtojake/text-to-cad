@@ -18,20 +18,14 @@ import { plainNumber, threeFigures } from "../numbers.js";
 import { cooledRows, faceTitle, heldRows, keptAtRows, madeOfRows, spaced } from "../setup.js";
 import { planned } from "./stub.js";
 
-/** The study as the file echoes it (the viewer's reader keeps only the keys every analysis shares). */
-const echo = (result) => {
-  const raw = result?.mesh?.userData?.study;
-  return raw && typeof raw === "object" ? raw : {};
-};
-
-const list = (value) => (Array.isArray(value) ? value.filter((entry) => entry && typeof entry === "object") : []);
-const refs = (value) => (Array.isArray(value) ? value.filter((ref) => typeof ref === "string" && ref) : []);
-const number = (value) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+/** The study as the viewer read it (`readStudy`: its voltages, currents, coils, AC field and heat out); {} for none. */
+const studyOf = (result) => result?.study || {};
+const list = (value) => (Array.isArray(value) ? value : []);
 
 /** An AC study's frequency, null for a static or DC one. */
 const frequencyOf = (result) => {
-  const study = echo(result);
-  return study.mode === "ac_magnetic" ? number(study.frequency_Hz) : null;
+  const study = studyOf(result);
+  return study.mode === "ac_magnetic" && Number.isFinite(study.frequencyHz) ? study.frequencyHz : null;
 };
 
 /** A frequency as a person says it: "50 Hz", "15.8 kHz", "2 MHz". */
@@ -66,18 +60,18 @@ function entryRows(result, id, entries) {
 
 /** Study's "Electrodes": "Held at 1000 V" per held voltage, "2 A in" ("2 A in at 50 kHz") per current put in, each its faces under it. */
 export function electrodeRows(result) {
-  const study = echo(result);
+  const study = studyOf(result);
   const at = atFrequency(result);
   const held = list(study.voltages).map((entry) => {
-    const volts = number(entry.V);
+    const volts = entry.value;
     const label = volts === null ? "Held at a voltage" : `Held at ${plainNumber(volts)} V`;
     const named = typeof entry.name === "string" && entry.name && !/^-?[\d.e+]+ V$/.test(entry.name) ? entry.name : "";
-    return { faces: refs(entry.faces), label, hint: named, summary: (faces) => `${label} on ${facesWords(faces)}` };
+    return { faces: entry.faces, label, hint: named, summary: (faces) => `${label} on ${facesWords(faces)}` };
   });
   const fed = list(study.currents).map((entry) => {
-    const amps = number(entry.A);
+    const amps = entry.value;
     const label = amps === null ? `A current in${at}` : `${plainNumber(amps)} A in${at}`;
-    return { faces: refs(entry.faces), label, summary: (faces) => `${label} through ${facesWords(faces)}` };
+    return { faces: entry.faces, label, summary: (faces) => `${label} through ${facesWords(faces)}` };
   });
   const rows = entryRows(result, "electrode", [...held, ...fed].filter((entry) => entry.faces.length));
   return rows.length ? [{ id: "electrodes", label: "Electrodes", detail: "", glyph: "fixture", children: rows }] : [];
@@ -88,26 +82,25 @@ export function electrodeRows(result) {
  * "Coil 2 A at 50 kHz" (its turns in the hint), and a uniform field the air carries, "Field 10 mT at 500 Hz".
  */
 export function coilRows(result) {
-  const study = echo(result);
+  const study = studyOf(result);
   const at = atFrequency(result);
   const rows = list(study.coils).map((coil, index) => {
-    const amps = number(coil.A);
-    const turns = number(coil.turns);
+    const { amps, turns } = coil;
     const ampsWords = amps === null ? "" : ` ${plainNumber(amps)} A`;
     const turnsWords = turns === null ? "" : `${plainNumber(turns)} turns`;
     const whole = `Coil${ampsWords}${turnsWords ? ` × ${turnsWords}` : ""}${at}`;
     const label = at ? `Coil${ampsWords}${at}` : whole;
-    const part = typeof coil.part === "string" && coil.part ? spaced(coil.part) : "";
+    const part = coil.part ? spaced(coil.part) : "";
     const wound = part ? `wound on ${part}` : "";
     // At a frequency the row has no room for the turns, so they lead the hint.
     const hint = at && turnsWords ? [turnsWords, wound].filter(Boolean).join(", ") : wound && `Wound on ${part}`;
     return { id: `coil:${index}`, label, detail: "", ...(hint ? { hint } : {}), summary: `${whole}${wound ? ` ${wound}` : ""}` };
   });
-  const field = study.applied_field && typeof study.applied_field === "object" ? study.applied_field : null;
+  const field = study.appliedField || null;
   if (field && at) {
-    const mT = number(field.mT);
+    const mT = field.mT;
     const label = `Field${mT === null ? "" : ` ${plainNumber(mT)} mT`}${at}`;
-    const axis = Array.isArray(field.direction) ? field.direction.map(Number) : [];
+    const axis = field.direction || [];
     const along = axis.length === 3 && axis.filter((c) => c !== 0).length === 1 ? ` along ${"xyz"[axis.findIndex((c) => c !== 0)]}` : "";
     rows.push({ id: "field", label, detail: "", summary: `A uniform${mT === null ? "" : ` ${plainNumber(mT)} mT`} field${along}${at}` });
   }
@@ -119,13 +112,9 @@ export const electromagneticLimitWord = (result) => (frequencyOf(result) === nul
 
 /** The Joule heat's way out (electro_thermal), as a thermal study's: kept at, cooled by air. */
 function heatOutRows(result) {
-  const block = echo(result).electro_thermal;
-  if (!block || typeof block !== "object") return [];
-  const study = {
-    ...result.study,
-    temperatures: list(block.temperatures).map((entry) => ({ faces: refs(entry.faces), celsius: number(entry.C) })),
-    convection: list(block.convection).map((entry) => ({ faces: refs(entry.faces), h: number(entry.h_W_m2K), ambientC: number(entry.ambient_C) })),
-  };
+  const block = studyOf(result).heatOut;
+  if (!block) return [];
+  const study = { ...result.study, temperatures: block.temperatures, convection: block.convection };
   const view = { ...result, study };
   return [...keptAtRows(view), ...cooledRows(view)];
 }

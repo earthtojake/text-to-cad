@@ -20,6 +20,10 @@ again, doubling up to :data:`MAX_GROWTH` times the starting step, after a step
 Newton got through in :data:`EASY_ITERATIONS` iterations or fewer: fewer
 solves where the response is smooth.
 
+A problem may settle a converged step further (contact's Uzawa updates: its optional ``settle`` and
+``rollback``): a step that does not settle is cut the same way, and one that still does not at the
+smallest step is kept, marked (``StepRecord.settled``), with a warning; never a refusal.
+
 Each Newton step's linear solve is direct (SuperLU) or, on the ladder's
 ``iterative`` rung, Newton-Krylov: GMRES preconditioned by smoothed-aggregation
 AMG on the tangent (the six rigid-body modes as its near-nullspace), the
@@ -39,8 +43,8 @@ if TYPE_CHECKING:
     import numpy as np
 
 __all__ = [
-    "EASY_ITERATIONS", "MAX_GROWTH", "MAX_HALVINGS", "MAX_ITERATIONS", "NonlinearProblem", "PathResult", "StepRecord",
-    "TOLERANCE", "solve_path",
+    "EASY_ITERATIONS", "MAX_GROWTH", "MAX_HALVINGS", "MAX_ITERATIONS", "LinearSolver", "NonlinearProblem", "PathResult",
+    "Settled", "StepRecord", "TOLERANCE", "newton", "solve_path",
 ]
 
 #: A step that does not converge is halved at most this many times before the path ends (spec 5.16).
@@ -81,6 +85,19 @@ class NonlinearProblem(Protocol):
     def commit(self, u: "np.ndarray", factor: float) -> None:
         """Keep the state at ``u``: the step to load factor ``factor`` converged."""
 
+    # Optional, for a problem that settles further at a converged step (contact's Uzawa updates):
+    #   settle(u, factor) -> Settled: the settled displacement, and whether it settled; the driver records and
+    #       continues from that displacement, and commits it.
+    #   rollback() -> None: forget what an unsettled settle changed, so the step can be cut and tried again.
+
+
+@dataclass
+class Settled:
+    """What a problem's ``settle`` gives back: the displacement to keep, and whether its forces settled there."""
+
+    u: "np.ndarray"
+    settled: bool = True
+
 
 @dataclass
 class StepRecord:
@@ -88,6 +105,9 @@ class StepRecord:
     iterations: int
     u: "np.ndarray"                 # the full displacement there
     residual: float                 # the free residual's norm, relative
+    #: False when the problem's ``settle`` did not settle at this step even at the smallest step: it was kept,
+    #: and its forces do not balance (contact); True for every step of a problem with nothing to settle.
+    settled: bool = True
 
 
 @dataclass
@@ -108,8 +128,13 @@ class PathResult:
     def u(self) -> "np.ndarray":
         return self.records[-1].u
 
+    @property
+    def unsettled(self) -> list[float]:
+        """The load factors of the steps kept although they did not settle (``StepRecord.settled``)."""
+        return [record.factor for record in self.records if not record.settled]
 
-class _Linear:
+
+class LinearSolver:
     """The Newton step's linear solve: SuperLU, or GMRES with an AMG hierarchy kept per load step."""
 
     def __init__(self, problem: NonlinearProblem, method: str):
@@ -180,10 +205,11 @@ def _residual(problem: NonlinearProblem, u: "np.ndarray", factor: float) -> "tup
     return r, float(np.linalg.norm(internal[free])), internal
 
 
-def _newton(problem: NonlinearProblem, linear: _Linear, u0: "np.ndarray", factor: float,
-            max_iterations: int, tolerance: float) -> "tuple[np.ndarray | None, int, float]":
+def newton(problem: NonlinearProblem, linear: LinearSolver, u0: "np.ndarray", factor: float,
+           max_iterations: int = MAX_ITERATIONS, tolerance: float = TOLERANCE) -> "tuple[np.ndarray | None, int, float]":
     """Newton with a backtracking line search to load factor ``factor`` from ``u0``: (u, iterations, relative residual),
-    ``u`` None when it did not converge."""
+    ``u`` None when it did not converge. ``u0`` is not changed. A problem's own re-solves (contact's ``settle``) call
+    it with their own :class:`LinearSolver`."""
     import numpy as np
 
     free = problem.free
@@ -237,7 +263,7 @@ def _newton(problem: NonlinearProblem, linear: _Linear, u0: "np.ndarray", factor
     return (u if relative <= tolerance else None), max_iterations, relative
 
 
-def _elastic_reach(problem: NonlinearProblem, linear: _Linear) -> float | None:
+def _elastic_reach(problem: NonlinearProblem, linear: LinearSolver) -> float | None:
     """The largest displacement the full load would give the unloaded part, solved linearly (the stiffness a
     runaway step is measured against); None when that tangent cannot be solved."""
     import numpy as np
@@ -274,7 +300,7 @@ def solve_path(
     smallest_allowed = base / 2 ** max_halvings
     step = base
     smallest = base
-    linear = _Linear(problem, "iterative" if solver in ("iterative", "matrix_free") else "direct")
+    linear = LinearSolver(problem, "iterative" if solver in ("iterative", "matrix_free") else "direct")
     u = np.zeros(problem.size)
     factor = 0.0
     records: list[StepRecord] = []
@@ -285,7 +311,7 @@ def solve_path(
     elastic = _elastic_reach(problem, linear) if runaway else None
     while factor < 1.0 - 1e-12:
         target = min(1.0, factor + step)
-        found, taken, relative = _newton(problem, linear, u, target, max_iterations, tolerance)
+        found, taken, relative = newton(problem, linear, u, target, max_iterations, tolerance)
         iterations += taken
         if found is not None and elastic:
             moved = float(np.abs(found - u).max())
@@ -302,13 +328,30 @@ def solve_path(
                 why = "ran away (moved far for the load)" if relative == math.inf else f"did not converge (residual {relative:.2g})"
                 log(f"load step to {target * 100:.4g}% {why}; cutting it to {step * 100:.4g}%")
             continue
+        settled = True
+        settle = getattr(problem, "settle", None)
+        if settle is not None:
+            outcome = settle(found, target)
+            if not outcome.settled and step > smallest_allowed * (1.0 + 1e-9):
+                # Its forces did not settle: forget the step and take a smaller one, as for one that did not converge.
+                problem.rollback()
+                step = max(step / 2.0, smallest_allowed)
+                smallest = min(smallest, step)
+                cuts += 1
+                if log:
+                    log(f"load step to {target * 100:.4g}% did not settle; cutting it to {step * 100:.4g}%")
+                continue
+            found, settled = outcome.u, outcome.settled
+            if not settled:
+                warnings.append(f"the step to {target * 100:.4g}% of the load did not settle even at the smallest step; "
+                                "it was kept, and its forces do not balance")
         u = found
         problem.commit(u, target)
-        records.append(StepRecord(target, taken, u.copy(), relative))
+        records.append(StepRecord(target, taken, u.copy(), relative, settled))
         if log:
             log(f"load {target * 100:.4g}% in {taken} Newton iterations")
         factor = target
-        if adaptive and taken <= EASY_ITERATIONS:
+        if adaptive and taken <= EASY_ITERATIONS and settled:
             step = min(2.0 * step, MAX_GROWTH * base)
     if collapsed and log:
         log(f"no equilibrium past {factor * 100:.4g}% of the load: the part collapses there")

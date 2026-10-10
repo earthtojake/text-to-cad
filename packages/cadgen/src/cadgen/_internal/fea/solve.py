@@ -254,19 +254,32 @@ def solve_linear_static(
         f += operators.initial_strain_load(space, materials, initial_strain)
     applied = tuple(float(f[component == c].sum()) for c in range(3))
 
-    # Fixtures
-    fixture_dofs = [basis.get_dofs(facets_of(fixture.faces)).all() for fixture in fixtures]
-    held = list(fixture_dofs)
+    # Fixtures: fixed faces, roller faces (supports.py), and a symmetry plane's held component.
+    from cadgen._internal.fea.supports import not_held_sentence, supports_of, unheld_motions
+
+    planes = []
     for ordinals, axis in rollers:
         dofs = basis.get_dofs(space.facets_of_ordinals(list(ordinals), "a symmetry plane")).all()
-        held.append(dofs[space.component[dofs] == axis])
-    fixed = np.unique(np.concatenate(held))
+        planes.append(dofs[space.component[dofs] == axis])
+    supports = supports_of(space, fixtures, ordinal_of, held=planes)
+    fixture_dofs = supports.per_fixture
+    fixed = supports.fixed
     free = np.setdiff1d(np.arange(basis.N), fixed)
+    if supports.rollers and (loose := unheld_motions(space, supports)):
+        raise ValueError(not_held_sentence(loose))
 
     started = time.perf_counter()
     u = np.zeros(basis.N)
     method = {"direct": "direct", "iterative": "iterative"}.get(solver or "")
-    u[free], how = _solve_system(K, f, free, locations, component, warnings, method)
+    if supports.turned:
+        # A sloped or curved roller: solved in its nodes' own axes, then turned back (matrix-free assembles here).
+        K = operators.stiffness(space, materials) if solver == "matrix_free" else K
+        local = np.zeros(basis.N)
+        local[free], how = _solve_system(supports.local(K), supports.local_vector(f), free, locations, component, warnings,
+                                         method)
+        u = supports.global_vector(local)
+    else:
+        u[free], how = _solve_system(K, f, free, locations, component, warnings, method)
     timings["solve_s"] = time.perf_counter() - started
     if log:
         log(f"solved with {how} in {timings['solve_s']:.1f}s")

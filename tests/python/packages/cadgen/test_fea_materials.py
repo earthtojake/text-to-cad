@@ -174,6 +174,42 @@ class Requires(unittest.TestCase):
         self.assertIsNone(moved.material.yield_strength)
         self.assertEqual(parse_study({**study, "material": {**rubber, "yield_MPa": 8}}).material.yield_strength, 8.0)
 
+    def test_an_analysis_with_isotropic_solids_refuses_an_orthotropic_material_naming_those_that_take_one(self):
+        from cadgen._internal.fea.analyses import get_analysis
+        from cadgen._internal.fea.study import ORTHOTROPIC_ANALYSES, parse_study
+
+        block = {"E1_MPa": 135000, "E2_MPa": 10000, "E3_MPa": 10000, "nu12": 0.3, "nu13": 0.3, "nu23": 0.45,
+                 "G12_MPa": 5000, "G13_MPa": 5000, "G23_MPa": 3500}
+        # Steel with an orthotropic block, and everything else each analysis asks of its material.
+        ortho = {"name": "steel", "orthotropic": block, "plasticity": {"tangent_MPa": 0},
+                 "creep": {"A": 1e-20, "n": 5, "m": 0, "units": "MPa, hours"}}
+        held = {"fixtures": [{"faces": ["#o1.f1"]}], "loads": [{"faces": ["#o1.f2"], "type": "force", "vector_N": [0, 0, -10]}]}
+        bolt = {"between": ["plate", "bracket"], "type": "bolt", "size": "M6", "preload_N": 5000, "holes": ["#o1.1.f3", "#o1.2.f3"]}
+        studies = {
+            "nonlinear": {"analysis": "nonlinear", **held},
+            "creep": {"analysis": "creep", "duration_h": 1000, **held},
+            "contact": {"analysis": "contact", **held, "rigid_planes": [{"point_mm": [0, 0, 0], "normal": [0, 0, 1]}]},
+            "bolt": {"analysis": "bolt", "fixtures": [{"faces": ["#o1.2.f1"]}], "connections": [bolt]},
+            "impact": {"analysis": "impact", "drop": {"height_mm": 500}},
+        }
+        for name, study in studies.items():
+            self.assertTrue(get_analysis(name).isotropic_only)
+            isotropic = {key: value for key, value in ortho.items() if key != "orthotropic"}
+            parse_study({**study, "material": isotropic})  # the same steel, the same in every direction: fine
+            with self.subTest(analysis=name), self.assertRaises(ValueError) as caught:
+                parse_study({**study, "material": ortho})
+            message = str(caught.exception)
+            self.assertIn(f"material: {name} studies treat a material as the same in every direction, and steel is orthotropic", message)
+            self.assertIn("static, modal, buckling, harmonic, random_vibration, shock, transient, fatigue, drop and thermal_stress "
+                          "studies take an orthotropic material", message)
+        # An assembly's part made of one is refused the same way.
+        with self.assertRaisesRegex(ValueError, "nonlinear studies treat a material as the same in every direction"):
+            parse_study({**studies["nonlinear"], "material": "steel", "parts": {"rib": {"material": ortho}}})
+        # The analyses named really take one: none of them is isotropic only, and a static study parses.
+        for name in ORTHOTROPIC_ANALYSES:
+            self.assertFalse(getattr(get_analysis(name), "isotropic_only", False), name)
+        self.assertIsNotNone(parse_study({"analysis": "static", "material": ortho, **held}).material.orthotropic)
+
     def test_every_need_is_a_known_property(self):
         with self.assertRaises(KeyError):
             requires(lookup_material("steel"), ("colour",), "static")

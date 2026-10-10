@@ -120,10 +120,10 @@ def cut(geometry: "Geometry", prepared: "Prepared | None", planes: list[Plane]) 
     from OCP.BRepPrimAPI import BRepPrimAPI_MakeBox
     from OCP.gp import gp_Pnt
 
-    from cadgen._internal.fea.defeature import Prepared, _face_map, trace
+    from cadgen._internal.fea.defeature import Prepared, face_map, trace
 
     shape = geometry.shape if prepared is None else prepared.shape
-    origin = list(range(1, _face_map(shape).Extent() + 1)) if prepared is None else list(prepared.origin)
+    origin = list(range(1, face_map(shape).Extent() + 1)) if prepared is None else list(prepared.origin)
     margin = max(geometry.bbox_diagonal_mm, 1.0)
     for index, plane in enumerate(planes):
         plane.index = index
@@ -139,7 +139,7 @@ def cut(geometry: "Geometry", prepared: "Prepared | None", planes: list[Plane]) 
         except Exception:  # noqa: BLE001 - a kernel failure means the rung does not apply
             return None
         traced = trace(common, shape, half, origin)
-        faces = _face_map(half)
+        faces = face_map(half)
         for k in range(1, faces.Extent() + 1):
             if traced[k - 1] == 0 and _on_plane(faces.FindKey(k), plane, margin):
                 traced[k - 1] = plane.ordinal

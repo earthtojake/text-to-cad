@@ -50,6 +50,9 @@ keys in [study-file.md](study-file.md#common-keys):
   then solved at its preload alone. A part need not be fixed itself: the bolt and the contact hold
   it.
 - `steps`: how many equal load steps the load is applied in after the preload, 1 to 200, default 5.
+  A step (of the preload or the load) whose contact forces do not settle is cut, and at the
+  smallest step kept and marked as `contact` does ([contact.md](contact.md)): "Contact did not
+  settle at 80% of the preload: ... not reliable", every check failing.
 - Checks, each judged at the last load solved (the default is the first three):
   - `bolt_load`: each bolt's force after loading against `limit_N`, else its proof load. Fails past
     it, close past 0.9 of it. "Bolt overloaded" / "Close to the limit" / "Bolt holds", row line

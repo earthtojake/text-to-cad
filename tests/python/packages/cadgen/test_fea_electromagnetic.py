@@ -339,7 +339,7 @@ class Electrostatics(unittest.TestCase):
         self.assertGreater(summary["region"]["elements"], 0)
 
     def test_the_air_is_coarsened_to_fit_and_says_so(self):
-        step = next(step for step in self.plates.fit if step["rung"] == "fluid_coarsen")
+        step = next(step for step in self.plates.fit if step["rung"] == "far_field")
         self.assertIn("Coarsened the air away from the parts to fit", step["words"])
         self.assertIn("still meshed at 1.5 mm", step["words"])
         self.assertIsNotNone(step["accuracy"])

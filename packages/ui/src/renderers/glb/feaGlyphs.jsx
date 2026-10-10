@@ -4,7 +4,8 @@ import { TREE_GLYPH_STROKE } from "@text-to-cad/ui/primitives/tree-row";
 /**
  * Study's setup glyphs, drawn as the model draws its markers (`feaMarkers.js`), in lucide's 24px
  * grid at the trees' light stroke: a fixture is a cone pointing into the face it holds, in the
- * markers' muted grey; a load an arrow with a cone for its head, in their ink; a material a swatch.
+ * markers' muted grey, and a roller (a face that may slide) that cone on a plate that rolls on the
+ * face; a load an arrow with a cone for its head, in their ink; a material a swatch.
  * Another analysis's setup in the same two tones, as its markers are: a thermometer (a fixed
  * temperature, grey), a flame (heat, ink), wind (the air that cools it, grey), a wave (the shaker,
  * ink), a drop (ink), the flow (ink) and a plane (a rigid floor, grey).
@@ -18,6 +19,17 @@ export function FixtureGlyph({ className }) {
   return <Glyph className={cn("text-muted-foreground", className)}>
     <path d="M6 3.5h12L12 15z" fill="currentColor" fillOpacity={0.35} />
     <path d="M3.5 19.5h17" />
+  </Glyph>;
+}
+
+/** A roller: the fixture's cone pressing on a plate that rolls on the face, so the face may slide but not lift. */
+export function RollerGlyph({ className }) {
+  return <Glyph className={cn("text-muted-foreground", className)}>
+    <path d="M7 2.5h10L12 10.5z" fill="currentColor" fillOpacity={0.35} />
+    <path d="M6.5 12.5h11" />
+    <circle cx="9.25" cy="16.5" r="2" />
+    <circle cx="14.75" cy="16.5" r="2" />
+    <path d="M3.5 20.5h17" />
   </Glyph>;
 }
 
@@ -86,6 +98,6 @@ export function PlaneGlyph({ className }) {
 }
 
 export const STUDY_GLYPHS = Object.freeze({
-  fixture: FixtureGlyph, load: LoadGlyph, material: MaterialGlyph, temperature: TemperatureGlyph, heat: HeatGlyph,
+  fixture: FixtureGlyph, roller: RollerGlyph, load: LoadGlyph, material: MaterialGlyph, temperature: TemperatureGlyph, heat: HeatGlyph,
   convection: ConvectionGlyph, wave: WaveGlyph, drop: DropGlyph, flow: FlowGlyph, plane: PlaneGlyph,
 });

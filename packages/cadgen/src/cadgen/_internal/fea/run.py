@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from cadgen._internal.fea.analyses.static import _peak_face  # noqa: F401  (moved with static; tests read it here)
 from cadgen._internal.fea.checks import quoted
 from cadgen.cli_logging import CliLogger
 from cadgen.results import FeaFace, FeaFacesResult, FeaPair, FeaPart, FeaPartsResult, FeaResult
@@ -195,7 +194,7 @@ class _Plan:
     contact: set = dataclasses.field(default_factory=set)
 
 
-def _find_part(parts: list, names: list[str], key: str, where: str) -> int:
+def find_part(parts: list, names: list[str], key: str, where: str) -> int:
     """The part a study names by occurrence ref or by name; ``names`` are the display names, for the error."""
     for index, part in enumerate(parts):
         if key in (part.ref, f"#{key}"):
@@ -209,7 +208,7 @@ def _find_part(parts: list, names: list[str], key: str, where: str) -> int:
 
 
 def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
-    from cadgen._internal.fea.assembly import _groups, detect_contacts, detect_overlaps, display_names, interferences, list_parts
+    from cadgen._internal.fea.assembly import joined_groups, detect_contacts, detect_overlaps, display_names, interferences, list_parts
 
     logger.info("reading the parts")
     parts = list_parts(scene)
@@ -220,7 +219,7 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
     materials = [parsed.material] * len(parts)
     given: set[int] = set()
     for key, material in parsed.parts.items():
-        index = _find_part(parts, names, key, f"parts[{key!r}]")
+        index = find_part(parts, names, key, f"parts[{key!r}]")
         if index in given:
             raise ValueError(f"parts[{key!r}]: {quoted(names[index])} is named twice in 'parts'")
         given.add(index)
@@ -244,7 +243,7 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
     bolted: set[frozenset[int]] = set()
     for n, connection in enumerate(parsed.connections):
         where = f"connections[{n}]"
-        i, j = (_find_part(parts, names, key, f"{where}.between") for key in connection.between)
+        i, j = (find_part(parts, names, key, f"{where}.between") for key in connection.between)
         pair = frozenset((i, j))
         if i == j:
             raise ValueError(f"{where}.between: both names are {quoted(names[i])}")
@@ -273,7 +272,7 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
 
     bonded = [c for c in contacts if frozenset((index_of[c.a], index_of[c.b])) not in freed]
     group_of = [0] * len(parts)
-    for number, group in enumerate(_groups(len(parts), [(index_of[c.a], index_of[c.b]) for c in bonded])):
+    for number, group in enumerate(joined_groups(len(parts), [(index_of[c.a], index_of[c.b]) for c in bonded])):
         for index in group:
             group_of[index] = number
     for o in overlaps:
@@ -321,10 +320,10 @@ def _not_connected(plan: _Plan, unheld: list[list[int]], logger: CliLogger) -> l
     The nearest part is found nearest-box first: the exact distance is only
     taken to parts whose box is nearer than the best found, not to every part.
     """
-    from cadgen._internal.fea.assembly import _box, part_centre, part_gap
+    from cadgen._internal.fea.assembly import bounding_box, part_centre, part_gap
 
     logger.info(f"{len(unheld)} groups of parts are not connected to a fixed part; finding the nearest part to each")
-    boxes = [_box(part.shape, 0.0) for part in plan.parts]
+    boxes = [bounding_box(part.shape, 0.0) for part in plan.parts]
     index_of = {part.ref: i for i, part in enumerate(plan.parts)}
     found = []
     for group in unheld:
@@ -621,7 +620,7 @@ def solve_study(
                 )
         occurrence, resolved = _single_occurrence(scene, resolved, owners, chosen.ref if occurrence is not None else None)
         occurrence_ref = occurrence.ref
-        ordinal_of.update({ref: int(selection._ordinal) for ref, selection in resolved.items()})
+        ordinal_of.update({ref: int(selection.ordinal) for ref, selection in resolved.items()})
     else:
         roots = scene.roots
         occurrence_ref = roots[0].ref if len(roots) == 1 else ", ".join(part.ref for part in plan.parts)
@@ -692,7 +691,7 @@ def solve_study(
         started = time.perf_counter()
         space = FemSpace.build(volume, fit_plan.order)
         built = time.perf_counter() - started
-        ctx = context(volume, space=space, automatic=automatic, meshed=fit._mesh_key(fit_plan))
+        ctx = context(volume, space=space, automatic=automatic, meshed=fit.mesh_key(fit_plan))
         # Each upstream analysis on the same element space first, from the same study document
         # (an analysis whose source the study names, fatigue's `from`, says which: `upstream_for(inputs)`).
         for name in (analysis.upstream_for(inputs) if hasattr(analysis, "upstream_for") else analysis.upstream):
@@ -704,15 +703,20 @@ def solve_study(
         return ctx.volume, ctx, result
 
     def mesh_and_solve(max_h: float | None, automatic: bool = False, refine: float = 1.0):
-        return solve_on(mesh(max_h, refine), automatic)
+        return solve_on(mesh(max_h, refine, size_field=study_field), automatic)
 
+    # The study's own finer balls (mesh.refine), kept through every pass.
+    from cadgen._internal.fea.study import refine_points
+
+    study_points = refine_points(getattr(parsed, "mesh_refine", ()))
+    study_field = {"points": study_points, "radius_mm": 0.0} if study_points else None
     try:
-        volume = mesh(fit_plan.size_mm)
+        volume = mesh(fit_plan.size_mm, size_field=study_field)
         # The ladder again, on the mesh's own counts: a mesh the geometry under-guessed may still take a rung.
-        key = fit._mesh_key(fit_plan)
+        key = fit.mesh_key(fit_plan)
         steps += ladder(context(volume, meshed=key), tail=True)
-        if fit._mesh_key(fit_plan) != key:
-            volume = mesh(fit_plan.size_mm)
+        if fit.mesh_key(fit_plan) != key:
+            volume = mesh(fit_plan.size_mm, size_field=study_field)
         volume, ctx, result = solve_on(volume)
     except _NotConnected as exc:
         return _unsolved(document, occurrence_ref, _not_connected(plan, exc.groups, logger))
@@ -737,6 +741,8 @@ def solve_study(
         refined = analysis.refined_record(first, volume.max_h, fit_plan.refine_to_mm, assembly=plan is not None) \
             if hasattr(analysis, "refined_record") else None
         logger.debug(f"local refine: solving again at {fit_plan.refine_to_mm:.3g} mm near the peak")
+        if study_points:
+            field = {**field, "points": [*study_points, *field.get("points", [])]}
         volume, ctx, result = solve_on(mesh(fit_plan.size_mm, size_field=field))
         _, second_value = fit.governing(analysis, result)
         if refined is not None:

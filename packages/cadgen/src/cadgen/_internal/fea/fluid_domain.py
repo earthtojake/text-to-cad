@@ -411,20 +411,20 @@ def mesh_fluid(domain: FluidDomain, wall_mm: float, far_mm: float | None = None,
 
     with tempfile.TemporaryDirectory(prefix="cadgen-cfd-") as tmp:
         brep = Path(tmp) / "fluid.brep"
-        part_mesh._write_brep(domain.shape, brep)
+        part_mesh.write_brep(domain.shape, brep)
         with kernel_messages_on_stderr():
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
-            mapping = part_mesh._match_faces(prints, list(geometry.faces), diagonal)
+            mapping = part_mesh.match_faces(prints, list(geometry.faces), diagonal)
             keys = {index: [ordinal] for index, ordinal in mapping.items()}
-            mesh = part_mesh._generate(geometry, ngocc, far, 1.0, order, size_field, keys)
+            mesh = part_mesh.generate_mesh(geometry, ngocc, far, 1.0, order, size_field, keys)
             coordinates = np.array(mesh.Coordinates(), dtype=float, copy=True)
             e3 = mesh.Elements3D().NumPy().copy()
             e2 = mesh.Elements2D().NumPy().copy()
             del mesh, geometry
     if len(e3) == 0:
         raise RuntimeError("the mesher produced no fluid elements")
-    part_mesh._require_elements(e3, order)
+    part_mesh.require_elements(e3, order)
     width = 10 if order == 2 else 4
     index_of = np.zeros(int(e2["index"].max()) + 1, dtype=np.int64)
     for index, ordinal in mapping.items():

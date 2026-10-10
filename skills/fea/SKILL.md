@@ -1,6 +1,6 @@
 ---
 name: fea
-description: Run finite element studies on a STEP part, or a bonded assembly of parts, with cadgen. Fix faces, apply forces, pressures, gravity or a steady acceleration, choose a material, and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Strength (linear static), vibration, buckling, heat (steady, over time and the stress it causes), shaking, random vibration, shock from a response spectrum, loads over time, fatigue life, a drop estimate, and as lite solvers flow (laminar and turbulent), permanent bending and stretch, creep, composite plates, contact, bolted joints (preload, separation, slip), a drop impact simulated through time and electric and magnetic fields (static, DC and AC: eddy currents, skin effect, induction heating) solve today; fast gas flow is planned, and the skill maps each question to its analysis and says which are not available yet. Use when the user asks whether a part or an assembly is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part, or asks about its vibration, buckling, heat, fatigue life, drop, flow, contact or a bolted joint.
+description: Run finite element studies on a STEP part, or a bonded assembly of parts, with cadgen. Fix faces or let them slide on rollers, apply forces, pressures, gravity or a steady acceleration, choose a material, and report stress, safety factor and displacement as a colour-mapped result the CAD Viewer shows. Every analysis runs today: strength, vibration, buckling, heat (steady, over time and the stress it causes), shaking, random vibration, shock, loads over time, fatigue life, a drop estimate, and lite solvers for flow (laminar, turbulent, fast gas), permanent bending and stretch, creep, composite plates, contact, bolted joints, a drop impact and electric and magnetic fields; the skill maps each question to its analysis. Use when the user asks whether a part or assembly is strong enough, how much it deflects or where it is most stressed, wants a stress analysis, FEA or simulation, or asks about vibration, buckling, heat, fatigue, a drop, flow, contact or a bolted joint.
 license: MIT
 ---
 
@@ -39,15 +39,16 @@ time (`impact`, lite: the part dropped onto a rigid floor, its peak g, peak stre
 and any permanent strain).** Static answers
 "will it hold, and by how much" under forces, pressures, the part's own weight
 (`gravity`) and a steady acceleration (`acceleration`). Every analysis in
-[Choose the analysis](#choose-the-analysis) runs today. A name this cadgen
-registers but does not solve yet is refused ("'<name>' is planned but not in
-this cadgen yet"): do not write such a study; follow [When the question needs an
-analysis that is not here yet](#when-the-question-needs-an-analysis-that-is-not-here-yet).
+[Choose the analysis](#choose-the-analysis) runs today, and nothing is
+registered as planned; for a question none of them answers, follow [When the
+question needs an analysis that is not here](#when-the-question-needs-an-analysis-that-is-not-here).
 
-The static solve uses quadratic tetrahedra and isotropic linear elasticity. It
+The static solve uses quadratic tetrahedra and linear elasticity (isotropic, or
+orthotropic where the material gives its directions). It
 is a first-pass engineering check, not a certification: it assumes small
-displacements, a linear material below yield, perfectly rigid fixtures and
-loads that do not move. In an assembly every joint is also perfectly rigid
+displacements, a linear material below yield, perfectly rigid fixtures (a
+`fixed` face held still, a `roller` face free to slide in its plane but not
+off it) and loads that do not move. In an assembly every joint is also perfectly rigid
 (bonded) unless the study names `contact` pairs (the `contact` analysis) or
 `bolt`s (the `bolt` analysis). Say so when you report.
 
@@ -83,14 +84,13 @@ study names it; left out, it is `static`.
 | Eddy currents, skin effect, AC resistance, a coil's impedance at a frequency, induction heating, the loss in a part near an AC field | `electromagnetic` with `"mode": "ac_magnetic"` | Magnetic / electric | **Runs today** (lite: time-harmonic at one frequency, linear materials, stranded coils; no saturation, hysteresis or waves) | [electromagnetic.md](references/electromagnetic.md#ac-magnetic-fields-ac_magnetic) |
 | Fast gas flow (past about Mach 0.3, 100 m/s in air): a nozzle, valve or orifice under a real pressure ratio, "does it choke", "what Mach number", "where is the shock" | `cfd_compressible` | Fast gas flow | **Runs today** (lite: steady ideal gas, adiabatic, an inviscid core past the laminar range, shocks captured; no supersonic outlet) | [cfd-compressible.md](references/cfd-compressible.md) |
 
-Each reference marked "Coming" says at its top that it is not available in
-this cadgen yet, and lists the study keys it will take. When an analysis
-ships, its reference holds the full schema and this table says it runs today.
+Each reference holds its analysis's full schema. A test keeps this table and
+the study file's `analysis` table in step with what cadgen registers.
 
-### When the question needs an analysis that is not here yet
+### When the question needs an analysis that is not here
 
-- Tell the user plainly, in their words: "A shaker test is not in this
-  version yet." Do not write the study; it is refused.
+- Tell the user plainly, in their words: "That is not in this version." Do
+  not write a study for it.
 - Do not pass a static result off as the answer. A static safety factor says
   nothing about resonance, buckling, temperature, fatigue life, flow or parts
   sliding on each other.
@@ -156,7 +156,7 @@ leave `defeature` out of `fit.allow`) or names a memory or time budget.
 
 | Task | First action | Reference |
 | --- | --- | --- |
-| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `harmonic`, `random_vibration`, `transient`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate), `fatigue` (from a static load, a harmonic dwell or a random vibration), `nonlinear` (lite), `creep` (lite), `composite` (lite), `contact` (lite), `bolt` (lite) and `electromagnetic` (lite) run today. | [Choose the analysis](#choose-the-analysis) |
+| **Pick the analysis** | Match the question to a row of the table above; every analysis in that table runs today: the Tier 1 solvers, `drop` (an estimate) and the lite ones (`cfd`, `cfd_turbulent`, `cfd_compressible`, `impact`, `nonlinear`, `creep`, `composite`, `contact`, `bolt`, `electromagnetic`). | [Choose the analysis](#choose-the-analysis) |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
 | **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`part.step#o1.f17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |
@@ -194,7 +194,7 @@ The first run downloads the mesher and solver (large); later runs reuse them.
 Units are fixed: mm for geometry, N for forces, MPa for pressure, modulus and
 stress, t/mm³ for density, and g (9.81 m/s²) for gravity and acceleration.
 Restate every load in those units before you write it down. The full table,
-including the heat and flow units the coming analyses take, is in
+including the heat and flow units the other analyses take, is in
 [study-file.md](references/study-file.md#units).
 
 ## Workflow
@@ -225,7 +225,9 @@ including the heat and flow units the coming analyses take, is in
    }
    ```
 
-   A `force` is the total force over its faces; a `pressure` is in MPa and
+   A fixture is `fixed` (held still) or `roller` (slides in its plane, never
+   off it: a frictionless support, or a symmetry plane cut through the part;
+   [fixtures](references/study-file.md#fixtures)). A `force` is the total force over its faces; a `pressure` is in MPa and
    pushes into the surface. Add `{"type": "gravity", "vector_g": [0, 0, -1]}`
    when the part's own weight matters (a long arm, a heavy casting), and
    `{"type": "acceleration", "vector_g": [5, 0, 0]}` when the part is speeding

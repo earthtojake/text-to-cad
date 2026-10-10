@@ -166,6 +166,10 @@ class FitPlan:
     estimate: Estimate | None = None
     #: What the rungs that change the geometry made (:mod:`.defeature`, :mod:`.symmetry`): the shape to mesh.
     prepared: Any = None
+    #: reduce_modes on a response in time (transient): the method it switched to ("modal"), else None.
+    time_method: str | None = None
+    #: reduce_modes on a modal response in time: keep only the fewest modes that hold most of it.
+    fewest_modes: bool = False
 
     @property
     def two_pass(self) -> bool:
@@ -530,6 +534,9 @@ DIRECT_BELOW = 20_000
 MF_ITERATIONS, MF_SECONDS_PER_ELEMENT = 50.0, {2: 6.5e-5, 1: 1e-5}
 #: Python and the CAD kernel, before any mesh.
 BASE_BYTES = 300 * 2 ** 20
+#: Explicit dynamics (impact's central difference): seconds per element per step, and per step (measured on
+#: explicit.py's force loop).
+SECONDS_PER_ELEMENT_STEP, SECONDS_PER_STEP = 5.5e-7, 3e-4
 
 
 def _face_band(face: FaceInfo, h: float) -> float:
@@ -597,7 +604,7 @@ def plan_counts(ctx) -> tuple[float, float, bool]:
     plan meshes as it was meshed, else from the geometry. An analysis's own ``estimate`` builds on it."""
     plan = ctx.plan
     volume = ctx.volume
-    if volume is not None and getattr(ctx, "meshed_plan", None) == _mesh_key(plan):
+    if volume is not None and getattr(ctx, "meshed_plan", None) == mesh_key(plan):
         elements = float(len(volume.tets))
         nodes = float(len(volume.nodes))
         if plan.order == 1 and volume.tets.shape[1] == 10:
@@ -617,7 +624,7 @@ def plan_counts(ctx) -> tuple[float, float, bool]:
 _plan_counts = plan_counts
 
 
-def _mesh_key(plan: FitPlan) -> tuple:
+def mesh_key(plan: FitPlan) -> tuple:
     return (plan.size_mm, plan.order, plan.defeatured, plan.symmetry, plan.idealisation)
 
 
@@ -653,7 +660,7 @@ def geometry_of(shape, occurrence_ref: str = "", *, parts: int = 1, keep_shape: 
     from OCP.GProp import GProp_GProps
 
     from cadgen._internal.entity_ordinals import entity_map
-    from cadgen._internal.fea.mesh import _bbox_diagonal
+    from cadgen._internal.fea.mesh import shape_diagonal
 
     props = GProp_GProps()
     BRepGProp.VolumeProperties_s(shape, props)
@@ -685,7 +692,7 @@ def geometry_of(shape, occurrence_ref: str = "", *, parts: int = 1, keep_shape: 
         prefix = occurrence_ref or ""
         infos.append(FaceInfo(ordinal, f"{prefix}.f{ordinal}" if prefix else f"f{ordinal}", kind, float(size), area,
                               (centre.X(), centre.Y(), centre.Z())))
-    return Geometry(volume, total, _bbox_diagonal(shape), tuple(infos), shape if keep_shape else None, occurrence_ref, parts)
+    return Geometry(volume, total, shape_diagonal(shape), tuple(infos), shape if keep_shape else None, occurrence_ref, parts)
 
 
 def _as_face(shape):

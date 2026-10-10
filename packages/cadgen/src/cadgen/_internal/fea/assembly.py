@@ -83,7 +83,7 @@ class Overlap:
     a: str
     b: str
     volume_mm3: float
-    #: The shared solid's thickness, mm (:func:`_thickness`): a thin slab's own thickness,
+    #: The shared solid's thickness, mm (:func:`solid_thickness`): a thin slab's own thickness,
     #: a compact lump's full depth.
     thickness_mm: float = 0.0
     #: Half the shared solid's surface area, mm^2: a thin slab's footprint.
@@ -143,7 +143,7 @@ def part_faces(shape) -> list:
     return [faces.FindKey(i) for i in range(1, faces.Extent() + 1)]
 
 
-def _box(shape, enlarge: float):
+def bounding_box(shape, enlarge: float):
     """The tight bounding box of a shape (computed from its geometry, not its control points), grown by ``enlarge``."""
     from OCP.Bnd import Bnd_Box
     from OCP.BRepBndLib import BRepBndLib
@@ -189,7 +189,7 @@ class _Faces:
 
         BRepMesh_IncrementalMesh(shape, _DEFLECTION_MM, False, _ANGLE_RAD, False)
         self.faces = part_faces(shape)
-        self.boxes = [_box(face, reach) for face in self.faces]
+        self.boxes = [bounding_box(face, reach) for face in self.faces]
         self.bounds = [_sampled(face) for face in self.faces]
 
 
@@ -268,7 +268,7 @@ def part_gap(first: Part, second: Part) -> float | None:
 
 def part_centre(part: Part) -> tuple[float, float, float]:
     """The centre of a part's bounding box, mm."""
-    xmin, ymin, zmin, xmax, ymax, zmax = _box(part.shape, 0.0).Get()
+    xmin, ymin, zmin, xmax, ymax, zmax = bounding_box(part.shape, 0.0).Get()
     return ((xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2)
 
 
@@ -301,7 +301,7 @@ def detect_overlaps(parts: list[Part], *, log=None) -> list[Overlap]:
     from OCP.BRepGProp import BRepGProp
     from OCP.GProp import GProp_GProps
 
-    candidates = _close_pairs([_box(part.shape, 0.0) for part in parts])
+    candidates = _close_pairs([bounding_box(part.shape, 0.0) for part in parts])
     if log:
         log(f"checking {len(candidates)} part pairs whose boxes meet for overlap")
     overlaps = []
@@ -317,11 +317,11 @@ def detect_overlaps(parts: list[Part], *, log=None) -> list[Overlap]:
             BRepGProp.SurfaceProperties_s(common.Shape(), surface)
             area = float(surface.Mass())
             a, b = sorted((parts[i], parts[j]), key=lambda part: part.volume_mm3)
-            overlaps.append(Overlap(a=a.ref, b=b.ref, volume_mm3=volume, thickness_mm=_thickness(common.Shape(), volume, area), area_mm2=area / 2))
+            overlaps.append(Overlap(a=a.ref, b=b.ref, volume_mm3=volume, thickness_mm=solid_thickness(common.Shape(), volume, area), area_mm2=area / 2))
     return overlaps
 
 
-def _thickness(solid, volume: float, area: float) -> float:
+def solid_thickness(solid, volume: float, area: float) -> float:
     """How thick a shared solid is, mm: the larger of two average thicknesses.
 
     Twice the volume over the surface area is a thin slab's thickness, but the
@@ -351,7 +351,7 @@ def _thickness(solid, volume: float, area: float) -> float:
 def interferences(overlaps: list[Overlap], tolerance_mm: float) -> tuple[list[Contact], list[Overlap]]:
     """The overlaps no thicker than ``tolerance_mm``, as contacts to bond, and the overlaps left.
 
-    A shared solid that thin (:func:`_thickness`) is two faces pressed a little into each other, a
+    A shared solid that thin (:func:`solid_thickness`) is two faces pressed a little into each other, a
     contact the glue closes like a gap; a thicker one is parts in each other's
     space, which the model may have wrong.
     """
@@ -374,7 +374,7 @@ def detect_contacts(parts: list[Part], tolerance_mm: float, *, skip: "set[frozen
     """
     reach = tolerance_mm * (1 + 1e-6) + _TOUCHING_MM
     candidates = [
-        (i, j) for i, j in _close_pairs([_box(part.shape, reach) for part in parts])
+        (i, j) for i, j in _close_pairs([bounding_box(part.shape, reach) for part in parts])
         if frozenset((parts[i].ref, parts[j].ref)) not in skip
     ]
     if log:
@@ -409,7 +409,7 @@ def detect_contacts(parts: list[Part], tolerance_mm: float, *, skip: "set[frozen
     return contacts
 
 
-def _groups(count: int, pairs: list[tuple[int, int]]) -> list[list[int]]:
+def joined_groups(count: int, pairs: list[tuple[int, int]]) -> list[list[int]]:
     """The parts joined by ``pairs``, directly or through others, as sorted groups."""
     root = list(range(count))
 
@@ -446,7 +446,7 @@ def glue(shapes: list, bonded: list[tuple[int, int, float]], tolerance_mm: float
     maker.MakeCompound(compound)
     builder_of: dict[int, Any] = {}
     fuzzy_mm = 0.0
-    for group in _groups(len(shapes), [(a, b) for a, b, _ in bonded]):
+    for group in joined_groups(len(shapes), [(a, b) for a, b, _ in bonded]):
         if len(group) == 1:
             maker.Add(compound, shapes[group[0]])
             continue

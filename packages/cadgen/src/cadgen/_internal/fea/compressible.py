@@ -260,7 +260,7 @@ def solve_gas(problem: GasProblem, *, schedule: tuple[float, ...] = (), solver: 
     from scipy import sparse
     from skfem import ElementTetP1, FacetBasis, asm
 
-    from cadgen._internal.fea.turbulence import _factor, _rotation, _wall_geometry
+    from cadgen._internal.fea.turbulence import factor_saddle, wall_rotation, wall_geometry
 
     timings: dict[str, float] = {}
     started = time.perf_counter()
@@ -313,8 +313,8 @@ def solve_gas(problem: GasProblem, *, schedule: tuple[float, ...] = (), solver: 
         wall_nodes = np.unique(boundary[wall_rows]) if len(wall_rows) else np.zeros(0, dtype=np.int64)
     wall_dofs = table[wall_nodes].ravel()
     if len(slipping):
-        _, _, normals_of = _wall_geometry(space, slipping)
-        T, rotated_zero = _rotation(space, normals_of, set(int(i) for i in inlet_nodes) | set(int(i) for i in wall_nodes), table)
+        _, _, normals_of = wall_geometry(space, slipping)
+        T, rotated_zero = wall_rotation(space, normals_of, set(int(i) for i in inlet_nodes) | set(int(i) for i in wall_nodes), table)
     else:
         T, rotated_zero = sparse.identity(nv, format="csr"), np.zeros(0, dtype=np.int64)
     Tbig = sparse.block_diag([T, sparse.identity(npr)], format="csr")
@@ -382,7 +382,7 @@ def solve_gas(problem: GasProblem, *, schedule: tuple[float, ...] = (), solver: 
             if solved is None and not warnings:
                 warnings.append("the iterative flow solver stalled, so the direct solver finished the run")
         if solved is None:
-            solved = _factor(K_ff).solve(b)
+            solved = factor_saddle(K_ff).solve(b)
         x[free_ids] = solved
         if not np.all(np.isfinite(x)):
             raise RuntimeError("the gas flow's linear solve produced non-finite values")

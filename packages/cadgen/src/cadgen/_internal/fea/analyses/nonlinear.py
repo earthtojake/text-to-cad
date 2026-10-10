@@ -94,7 +94,7 @@ class NonlinearInputs(StaticInputs):
     model: str = "plasticity"
 
 
-def _material_specs(document: dict) -> list[tuple[str, Any]]:
+def material_specs(document: dict) -> list[tuple[str, Any]]:
     specs = [("material", document["material"])] if "material" in document else []
     parts = document.get("parts")
     if isinstance(parts, dict):
@@ -106,7 +106,7 @@ def _material_specs(document: dict) -> list[tuple[str, Any]]:
 def _model(document: dict) -> str:
     from cadgen._internal.fea.materials import material_from_spec
 
-    materials = [(where, material_from_spec(spec)) for where, spec in _material_specs(document)]
+    materials = [(where, material_from_spec(spec)) for where, spec in material_specs(document)]
     if any(m.hyperelastic for _, m in materials):
         return "hyperelastic"
     if any(m.tangent is not None for _, m in materials):
@@ -214,7 +214,7 @@ class _RubberProblem(_Problem):
         self.history.append((von_mises(cauchy(P, F)), None))
 
 
-def _external(space, materials, loads, body, ordinal_of, share: float) -> "np.ndarray":
+def external_load(space, materials, loads, body, ordinal_of, share: float) -> "np.ndarray":
     """The full load on every DOF: each force as a uniform traction on its faces (``share`` of it on a symmetric
     half), each pressure along the faces' inward normal on the undeformed part, each body acceleration as ∫ ρ b·v."""
     import numpy as np
@@ -246,7 +246,7 @@ def _external(space, materials, loads, body, ordinal_of, share: float) -> "np.nd
     return f
 
 
-def _pick_frames(count: int, keep: int) -> list[int]:
+def pick_frames(count: int, keep: int) -> list[int]:
     """At most ``keep`` of ``count`` steps, evenly spread, the last always among them."""
     if count <= keep:
         return list(range(count))
@@ -261,6 +261,9 @@ class NonlinearAnalysis:
     tier: ClassVar[int] = 3
     word: ClassVar[str] = "Permanent bend / Stretch"
     estimate_only: ClassVar[bool] = False
+    #: Its solids are the same in every direction: study.parse_study refuses an orthotropic material (contact, bolt
+    #: and creep inherit this).
+    isotropic_only: ClassVar[bool] = True
     limits: ClassVar[tuple[str, ...]] = LIMITS
     study_keys: ClassVar[frozenset[str]] = frozenset({"fixtures", "loads", "steps"})
     material_needs: ClassVar[frozenset[str]] = frozenset()
@@ -296,7 +299,7 @@ class NonlinearAnalysis:
         if isinstance(checks, list):
             from cadgen._internal.fea.materials import material_from_spec
 
-            yieldless = any(material_from_spec(spec).yield_strength is None for _, spec in _material_specs(document))
+            yieldless = any(material_from_spec(spec).yield_strength is None for _, spec in material_specs(document))
             for index, check in enumerate(checks):
                 if isinstance(check, dict) and check.get("kind") == "stress" and yieldless:
                     raise ValueError(f"view.checks[{index}]: a stress check compares the peak with a yield strength, and "
@@ -399,6 +402,7 @@ class NonlinearAnalysis:
         import numpy as np
 
         from cadgen._internal.fea import nonlinear_driver
+        from cadgen._internal.fea.supports import check_held, driven, path_to_global, supports_of
 
         space = ctx.space
         basis = space.basis
@@ -409,13 +413,16 @@ class NonlinearAnalysis:
         fit_plan = ctx.plan
         planes = list(fit_plan.prepared.planes) if fit_plan is not None and fit_plan.prepared is not None else []
         share = 0.5 ** len(planes)
-        external = _external(space, materials, inputs.surface_loads, inputs.body_accelerations, ctx.ordinal_of, share)
-        fixture_dofs = [basis.get_dofs(space.facets_of(fixture.faces, ctx.ordinal_of)).all() for fixture in inputs.fixtures]
-        held = list(fixture_dofs)
+        external = external_load(space, materials, inputs.surface_loads, inputs.body_accelerations, ctx.ordinal_of, share)
+        plane_dofs = []
         for plane in planes:
             dofs = basis.get_dofs(space.facets_of_ordinals([plane.ordinal], "a symmetry plane")).all()
-            held.append(dofs[space.component[dofs] == plane.component])
-        fixed = np.unique(np.concatenate(held)) if held else np.zeros(0, dtype=np.int64)
+            plane_dofs.append(dofs[space.component[dofs] == plane.component])
+        # Fixed faces, rollers (a sloped or curved one's nodes turned into their own axes: supports.py) and planes.
+        supports = supports_of(space, inputs.fixtures, ctx.ordinal_of, held=plane_dofs)
+        check_held(space, supports)
+        fixture_dofs = supports.per_fixture
+        fixed = supports.fixed
         free = np.setdiff1d(np.arange(basis.N), fixed)
         if inputs.model == "hyperelastic":
             from cadgen._internal.fea.hyperelastic import neo_hookean_params
@@ -431,7 +438,8 @@ class NonlinearAnalysis:
 
         solver = getattr(fit_plan, "solver", "direct") if fit_plan is not None else "direct"
         adaptive = bool(getattr(fit_plan, "adaptive_steps", False)) if fit_plan is not None else False
-        path = nonlinear_driver.solve_path(problem, steps=inputs.steps, solver=solver, adaptive=adaptive, log=ctx.log)
+        path = path_to_global(nonlinear_driver.solve_path(driven(problem, supports, free), steps=inputs.steps, solver=solver,
+                                                          adaptive=adaptive, log=ctx.log), supports)
         timings["solve_s"] = path.seconds
         warnings += path.warnings
         if ctx.log:
@@ -445,7 +453,7 @@ class NonlinearAnalysis:
             zeros = np.zeros(problem.size)
             records = [nonlinear_driver.StepRecord(0.0, 0, zeros, 0.0)]
             problem.history = [(np.zeros(basis.dx.shape), None if inputs.model == "hyperelastic" else np.zeros(basis.dx.shape))]
-        picked = _pick_frames(len(records), max(frames_max, 1))
+        picked = pick_frames(len(records), max(frames_max, 1))
         plastic = inputs.model == "plasticity"
         stress_frames, displacement_frames, plastic_frames = [], [], []
         def nodal(values):
@@ -546,7 +554,7 @@ class NonlinearAnalysis:
         import numpy as np
 
         from cadgen._internal.fea import checks
-        from cadgen._internal.fea.analyses.static import _peak_face
+        from cadgen._internal.fea.analyses.static import peak_face
 
         stress = result.scalars["final"]["von_mises"]
         moved = np.linalg.norm(result.scalars["final"]["displacement"], axis=1)
@@ -559,13 +567,13 @@ class NonlinearAnalysis:
             material = materials[int(ctx.volume.domain[element])]
         volume = ctx.volume
         fixed = {ctx.ordinal_of[ref] for fixture in inputs.fixtures for ref in fixture.faces}
-        outcome = _Outcome(result.boundary_quadratic, result.dof_locations)
+        outcome = PathOutcome(result.boundary_quadratic, result.dof_locations)
         extent = result.dof_locations.max(axis=0) - result.dof_locations.min(axis=0)
         return checks.Solved(
             material_name=material.name, yield_MPa=material.yield_strength, peak_MPa=float(stress[peak]),
             peak_gauss_MPa=float(result.scalars["von_mises_gauss_max"]),
             peak_at=tuple(float(c) for c in result.dof_locations[peak]),
-            peak_face=_peak_face(volume, outcome, peak, fixed),
+            peak_face=peak_face(volume, outcome, peak, fixed),
             fixed_faces=tuple(volume.faces[o].ref for o in sorted(fixed) if o in volume.faces),
             max_displacement_mm=float(moved[node_moved]),
             displacement_at=tuple(float(c) for c in result.dof_locations[node_moved]),
@@ -749,8 +757,8 @@ class NonlinearAnalysis:
 
 
 @dataclass
-class _Outcome:
-    """What static's ``_peak_face`` reads of a solve."""
+class PathOutcome:
+    """What static's ``peak_face`` reads of a solve."""
 
     boundary_quadratic: Any
     dof_locations: Any

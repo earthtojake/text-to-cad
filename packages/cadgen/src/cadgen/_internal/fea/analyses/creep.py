@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Series, SeriesFrame, SolveContext
-from cadgen._internal.fea.analyses.nonlinear import NonlinearAnalysis, _external, _material_specs, _Outcome
+from cadgen._internal.fea.analyses.nonlinear import NonlinearAnalysis, external_load, material_specs, PathOutcome
 from cadgen._internal.fea.analyses.static import StaticAnalysis, StaticInputs
 
 if TYPE_CHECKING:
@@ -103,7 +103,7 @@ class CreepInputs(StaticInputs):
 def _creep_materials(document: dict) -> list[tuple[str, Any]]:
     from cadgen._internal.fea.materials import material_from_spec
 
-    return [(where, material_from_spec(spec)) for where, spec in _material_specs(document)]
+    return [(where, material_from_spec(spec)) for where, spec in material_specs(document)]
 
 
 def _require_creep(document: dict) -> list:
@@ -258,7 +258,7 @@ def _march(problem: _CreepProblem, duration: float, steps: int, *, solver: str, 
     from cadgen._internal.fea import nonlinear_driver
 
     started = time.perf_counter()
-    linear = nonlinear_driver._Linear(problem, "iterative" if solver in ("iterative", "matrix_free") else "direct")
+    linear = nonlinear_driver.LinearSolver(problem, "iterative" if solver in ("iterative", "matrix_free") else "direct")
     max_iterations, tolerance = nonlinear_driver.MAX_ITERATIONS, nonlinear_driver.TOLERANCE
 
     def solve(u, t0, t1):
@@ -426,6 +426,7 @@ class CreepAnalysis(NonlinearAnalysis):
         import numpy as np
 
         from cadgen._internal.fea.creep_law import creep_params
+        from cadgen._internal.fea.supports import Turned, check_held, supports_of
 
         space = ctx.space
         basis = space.basis
@@ -436,13 +437,16 @@ class CreepAnalysis(NonlinearAnalysis):
         fit_plan = ctx.plan
         planes = list(fit_plan.prepared.planes) if fit_plan is not None and fit_plan.prepared is not None else []
         share = 0.5 ** len(planes)
-        external = _external(space, materials, inputs.surface_loads, inputs.body_accelerations, ctx.ordinal_of, share)
-        fixture_dofs = [basis.get_dofs(space.facets_of(fixture.faces, ctx.ordinal_of)).all() for fixture in inputs.fixtures]
-        held = list(fixture_dofs)
+        external = external_load(space, materials, inputs.surface_loads, inputs.body_accelerations, ctx.ordinal_of, share)
+        plane_dofs = []
         for plane in planes:
             dofs = basis.get_dofs(space.facets_of_ordinals([plane.ordinal], "a symmetry plane")).all()
-            held.append(dofs[space.component[dofs] == plane.component])
-        fixed = np.unique(np.concatenate(held)) if held else np.zeros(0, dtype=np.int64)
+            plane_dofs.append(dofs[space.component[dofs] == plane.component])
+        # Fixed faces, rollers (a sloped or curved one's nodes turned into their own axes: supports.py) and planes.
+        supports = supports_of(space, inputs.fixtures, ctx.ordinal_of, held=plane_dofs)
+        check_held(space, supports)
+        fixture_dofs = supports.per_fixture
+        fixed = supports.fixed
         free = np.setdiff1d(np.arange(basis.N), fixed)
         if not any(m.creep for m in materials):
             raise ValueError("material.creep: no part of this study has a creep law; add a creep block to its material")
@@ -454,8 +458,11 @@ class CreepAnalysis(NonlinearAnalysis):
         solver = getattr(fit_plan, "solver", "direct") if fit_plan is not None else "direct"
         adaptive = bool(getattr(fit_plan, "adaptive_steps", False)) if fit_plan is not None else False
         frames_max = int(getattr(ctx.budget, "max_frames", MAX_FRAMES) or MAX_FRAMES) if ctx.budget is not None else MAX_FRAMES
-        path, frames, curve = _march(problem, inputs.duration_h, inputs.steps, solver=solver, adaptive=adaptive,
+        marched = Turned(problem, supports, free) if supports.turned else problem
+        path, frames, curve = _march(marched, inputs.duration_h, inputs.steps, solver=solver, adaptive=adaptive,
                                      keep=max(frames_max, 2), log=ctx.log)
+        if supports.turned:  # a sloped or curved roller: the march's displacements back in global axes
+            frames = [(t, supports.global_vector(u), vm, eq) for t, u, vm, eq in frames]
         timings["solve_s"] = path.seconds
         reached = path.times[-1]
         if ctx.log:
@@ -554,7 +561,7 @@ class CreepAnalysis(NonlinearAnalysis):
         import numpy as np
 
         from cadgen._internal.fea import checks
-        from cadgen._internal.fea.analyses.static import _peak_face
+        from cadgen._internal.fea.analyses.static import peak_face
 
         stress = result.frame_fields["von_mises"][frame]
         moved = np.linalg.norm(result.frame_fields["displacement"][frame], axis=1)
@@ -567,13 +574,13 @@ class CreepAnalysis(NonlinearAnalysis):
             material = materials[int(ctx.volume.domain[element])]
         volume = ctx.volume
         fixed = {ctx.ordinal_of[ref] for fixture in inputs.fixtures for ref in fixture.faces}
-        outcome = _Outcome(result.boundary_quadratic, result.dof_locations)
+        outcome = PathOutcome(result.boundary_quadratic, result.dof_locations)
         extent = result.dof_locations.max(axis=0) - result.dof_locations.min(axis=0)
         return checks.Solved(
             material_name=material.name, yield_MPa=material.yield_strength, peak_MPa=float(stress[peak]),
             peak_gauss_MPa=float(result.scalars["von_mises_gauss_peaks"][frame]),
             peak_at=tuple(float(c) for c in result.dof_locations[peak]),
-            peak_face=_peak_face(volume, outcome, peak, fixed),
+            peak_face=peak_face(volume, outcome, peak, fixed),
             fixed_faces=tuple(volume.faces[o].ref for o in sorted(fixed) if o in volume.faces),
             max_displacement_mm=float(moved[node_moved]),
             displacement_at=tuple(float(c) for c in result.dof_locations[node_moved]),

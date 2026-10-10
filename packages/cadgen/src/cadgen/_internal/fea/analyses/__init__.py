@@ -1,10 +1,10 @@
 """Every analysis ``cadgen fea`` knows, by name: built, or registered as planned.
 
 The registry is written once, here, in the order the skill and the viewer list
-them: the Tier 1 solvers, the Tier 2 estimate, the Tier 3 lite solvers, then
-the types planned next. Each entry names the module and class that implement
-it; a module that is not in this cadgen yet makes :func:`get_analysis` say so
-in a sentence, never an ImportError. Stdlib only: the modules import lazily.
+them: the Tier 1 solvers, the Tier 2 estimate, then the Tier 3 lite solvers.
+Every entry is built today (none is ``planned``). Each entry names the module
+and class that implement it; an entry whose module is not in this cadgen makes
+:func:`get_analysis` say so in a sentence, never an ImportError. Stdlib only: the modules import lazily.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ class Entry:
     module: str            # "cadgen._internal.fea.analyses.modal"
     cls: str               # "ModalAnalysis"
     word: str
-    #: Registered now, built after Tier 3 (spec section 2.1).
+    #: Registered but not built in this cadgen (none is today); get_analysis refuses it in a sentence.
     planned: bool = False
 
 
@@ -60,7 +60,7 @@ REGISTRY: dict[str, Entry] = {entry.name: entry for entry in (
     _entry("impact", 3, "ImpactAnalysis", "Drop impact"),
     _entry("nonlinear", 3, "NonlinearAnalysis", "Permanent bend / Stretch"),
     _entry("contact", 3, "ContactAnalysis", "Contact"),
-    # Planned next (spec 2.1): registered so they answer plainly; built after Tier 3.
+    # Spec 2.1's types, built after the first Tier 3 four.
     _entry("cfd_turbulent", 3, "CfdTurbulentAnalysis", "Turbulent flow"),
     _entry("cfd_compressible", 3, "CfdCompressibleAnalysis", "Fast gas flow"),
     _entry("creep", 3, "CreepAnalysis", "Creep"),

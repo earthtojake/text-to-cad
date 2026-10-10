@@ -152,6 +152,31 @@ class StudyFile(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class SettledSteps(unittest.TestCase):
+    """The ladder's steps are said again after the run through settle_steps, as new steps; the cost model is fit's."""
+
+    def test_settle_steps_says_each_step_again_without_changing_one_in_place(self):
+        from types import SimpleNamespace
+
+        from cadgen._internal.fea import fit
+        from cadgen._internal.fea.analyses import impact
+
+        run = SimpleNamespace(end_s=2e-4, pulse_end_s=1.5e-4, stopped_early=True, subcycle=2, fine_share=0.25)
+        settled = impact.ImpactAnalysis._settled_steps(run, 1e-3, 0.0, None, 1e-6, None)
+        steps = [fit.Step("window", "Stopped once the first impact was over", "a note", None, detail={"window_ms": 1.0}),
+                 fit.Step("mass_scaling", "Added mass", None, None, detail={})]
+        before = [(step.words, dict(step.detail)) for step in steps]
+        result = SimpleNamespace(scalars={"settled_steps": settled})
+        after = get_analysis("impact").settle_steps(result, steps)
+        self.assertEqual([(step.words, step.detail) for step in steps], before)  # the recorded steps are untouched
+        self.assertTrue(after[0].words.startswith("Stopped at 200 µs"))
+        self.assertEqual(after[0].detail, {"window_ms": 1.0, "stopped_ms": 0.2, "stopped_early": True})
+        self.assertEqual((after[1].accuracy, after[1].accuracy_pct), ("no mass was added, so peak g is unchanged", 0.0))
+        self.assertEqual(len(after), 2)  # subcycling was not taken: nothing to say again
+        self.assertEqual((fit.SECONDS_PER_ELEMENT_STEP, fit.SECONDS_PER_STEP), (5.5e-7, 3e-4))
+        self.assertFalse(hasattr(impact, "SECONDS_PER_STEP"))
+
+
 class Engine(unittest.TestCase):
     """The explicit engine's pieces on hand-built tets."""
 

@@ -508,6 +508,88 @@ class MeshOptions(unittest.TestCase):
         self.assertGreater(mean_edge(by_face, int(self.fixed.rsplit("f", 1)[1])), 1.2)
 
 
+class SkillDocs(unittest.TestCase):
+    """The skill says what the registry says: every built analysis runs today, in both of its tables."""
+
+    def _rows(self, path: Path, heading: str) -> list[list[str]]:
+        import re
+
+        text = path.read_text(encoding="utf-8")
+        section = text.split(heading, 1)[1]
+        section = re.split(r"\n#{2,3} ", section, maxsplit=1)[0]
+        lines = [line for line in section.splitlines() if line.startswith("|") and "---" not in line]
+        return [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in lines[1:]]  # past the header
+
+    def test_every_built_analysis_has_a_runs_today_row_and_a_status_cell(self):
+        import re
+
+        skill = Path(__file__).resolve().parents[4] / "skills" / "fea"
+        built = [name for name, entry in REGISTRY.items() if not entry.planned]
+        planned = [name for name, entry in REGISTRY.items() if entry.planned]
+
+        # SKILL.md's "Choose the analysis": the analysis is the first `name` of its second column.
+        status_of: dict[str, list[str]] = {}
+        for cells in self._rows(skill / "SKILL.md", "## Choose the analysis"):
+            if len(cells) < 5:
+                continue
+            found = re.match(r"`([a-z_]+)`", cells[1])
+            if found:
+                status_of.setdefault(found.group(1), []).append(cells[3])
+        for name in built:
+            with self.subTest(table="SKILL.md", analysis=name):
+                self.assertIn(name, status_of, f"{name} has no row in SKILL.md's Choose the analysis table")
+                self.assertTrue(all(status.startswith("**Runs today**") for status in status_of[name]), status_of[name])
+        self.assertEqual(sorted(set(status_of) - set(REGISTRY)), [])
+        for name in planned:
+            self.assertFalse(any("Runs today" in status for status in status_of.get(name, [])), name)
+
+        # study-file.md's `analysis` table: one row per registered name, its word and its status.
+        table = {}
+        for cells in self._rows(skill / "references" / "study-file.md", "## `analysis`"):
+            found = re.fullmatch(r"`([a-z_]+)`", cells[0])
+            if found and len(cells) >= 4:
+                table[found.group(1)] = (cells[1], cells[2])
+        self.assertEqual(sorted(table), sorted(REGISTRY))
+        for name, (word, status) in table.items():
+            with self.subTest(table="study-file.md", analysis=name):
+                self.assertEqual(word, REGISTRY[name].word)
+                self.assertTrue(status.startswith("planned" if REGISTRY[name].planned else "runs today"), status)
+        # Nothing says an analysis is only coming or that static alone runs.
+        for path in (skill / "SKILL.md", skill / "references" / "study-file.md", skill / "references" / "planned-next.md"):
+            text = path.read_text(encoding="utf-8")
+            for stale in ("coming, not in this cadgen", "Only `static` runs", "the only one that runs today", "is planned, and"):
+                self.assertNotIn(stale, text, f"{path.name} still says {stale!r}")
+
+
+class PrivateNames(unittest.TestCase):
+    """No fea module reaches into another's private names: each shares what others use under a public name."""
+
+    def test_no_module_imports_or_reads_another_modules_private_name(self):
+        import ast
+
+        root = Path(__file__).resolve().parents[4] / "packages" / "cadgen" / "src" / "cadgen" / "_internal" / "fea"
+        found = []
+        for path in sorted(root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            own = "cadgen._internal." + ".".join(path.relative_to(root.parent).with_suffix("").parts)
+            modules = {}  # a name bound to a cadgen module in this file -> that module
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("cadgen"):
+                    for alias in node.names:
+                        if alias.name.startswith("_") and not alias.name.startswith("__") and node.module != own:
+                            found.append(f"{path.name}:{node.lineno} from {node.module} import {alias.name}")
+                        modules[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name.startswith("cadgen"):
+                            modules[alias.asname or alias.name.split(".")[0]] = alias.name
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Attribute) and node.attr.startswith("_") and not node.attr.startswith("__")
+                        and isinstance(node.value, ast.Name) and node.value.id in modules):
+                    found.append(f"{path.name}:{node.lineno} {node.value.id}.{node.attr}")
+        self.assertEqual(found, [])
+
+
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class Golden(unittest.TestCase):
     """Static moved, not rewritten: a study with and without ``"analysis": "static"`` writes the same GLB, byte for byte."""

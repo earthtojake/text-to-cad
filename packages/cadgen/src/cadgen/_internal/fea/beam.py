@@ -85,7 +85,7 @@ def _detect(shape, volume: float) -> Bar | None:
     records = shell.face_records(shape)
     halves = shell.obb_half_sizes(shape)
     long_axis = halves[2][1]
-    ends = [r for r in records if r.kind == "plane" and r.normals and all(abs(abs(shell._dot(m, long_axis)) - 1.0) < 1e-6 for m in r.normals)]
+    ends = [r for r in records if r.kind == "plane" and r.normals and all(abs(abs(shell.dot(m, long_axis)) - 1.0) < 1e-6 for m in r.normals)]
     if len(ends) < 2 or not volume > 0:
         return None
     a = np.asarray(ends[0].normals[0], dtype=float)
@@ -97,11 +97,11 @@ def _detect(shape, volume: float) -> Bar | None:
     last = [r for r in ends if abs(levels[r.ordinal] - high) <= tol]
     if len(first) + len(last) != len(ends) or not length > 0:
         return None   # a planar face across the axis between the ends: a step
-    if any(shell._dot(m, a) > -0.999999 for r in first for m in r.normals) or \
-       any(shell._dot(m, a) < 0.999999 for r in last for m in r.normals):
+    if any(shell.dot(m, a) > -0.999999 for r in first for m in r.normals) or \
+       any(shell.dot(m, a) < 0.999999 for r in last for m in r.normals):
         return None
     sides = [r for r in records if r.ordinal not in levels]
-    if not sides or any(abs(shell._dot(m, a)) > shell.ACROSS_TOL for r in sides for m in r.normals):
+    if not sides or any(abs(shell.dot(m, a)) > shell.ACROSS_TOL for r in sides for m in r.normals):
         return None
     area_first, area_last = sum(r.area for r in first), sum(r.area for r in last)
     if abs(area_first - area_last) > shell.AGREE * area_first or abs(volume - area_first * length) > shell.AGREE * volume:
@@ -114,7 +114,7 @@ def _detect(shape, volume: float) -> Bar | None:
         return None
     # A round bar or tube: every side face a cylinder about the centroidal axis. Its polar moment is the twist constant.
     circular = all(
-        r.kind == "cylinder" and r.axis is not None and abs(abs(shell._dot(r.axis, a)) - 1.0) < 1e-6
+        r.kind == "cylinder" and r.axis is not None and abs(abs(shell.dot(r.axis, a)) - 1.0) < 1e-6
         and np.linalg.norm(np.cross(np.asarray(r.axis_point) - centroid, a)) < 1e-6 * max(depth, 1.0)
         for r in sides
     )
@@ -177,7 +177,7 @@ def idealise(analysis, ctx, inputs) -> "Step | None":
     """The ``idealise`` rung for a slender bar: the plan solves its centreline as a Timoshenko frame."""
     from cadgen._internal.fea.fit import Step
 
-    if not shell._usable(analysis, ctx):
+    if not shell.usable(analysis, ctx):
         return None
     bar = detect(ctx.geometry)
     if bar is None:

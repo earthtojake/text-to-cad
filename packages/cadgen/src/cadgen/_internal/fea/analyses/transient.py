@@ -47,7 +47,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Inputs, Series, SeriesFrame, SolveContext
 from cadgen._internal.fea.analyses.modal import (
-    align_degenerate, eigen_estimate, fixed_dofs, hz_text, materials_of, max_frames, solver_method,
+    align_degenerate, eigen_estimate, held_supports, hz_text, materials_of, max_frames, solver_method,
 )
 from cadgen._internal.fea.analyses.thermal_transient import time_label
 from cadgen._internal.fea.study import Fixture, Load, parse_fixtures, parse_loads
@@ -381,7 +381,7 @@ class TransientAnalysis:
     @staticmethod
     def method_of(plan, inputs: TransientInputs) -> str:
         """The method the run uses: the study's, unless the ladder switched direct to modal."""
-        return getattr(plan, "_transient_method", None) or inputs.method
+        return getattr(plan, "time_method", None) or inputs.method
 
     def estimate(self, ctx: SolveContext, inputs: TransientInputs):
         """Modal: finding the modes (:func:`modal.eigen_estimate`) and a static solve per load, each mode's shape and
@@ -430,7 +430,7 @@ class TransientAnalysis:
         method = self.method_of(plan, inputs)
         if rung == "reduce_modes":
             if method == "direct":
-                plan._transient_method = "modal"
+                plan.time_method = "modal"
                 return fit.Step(
                     "reduce_modes",
                     "Solved by modal superposition (each mode followed exactly, the modes left out by their steady share) "
@@ -442,7 +442,7 @@ class TransientAnalysis:
             plan.modes = REDUCED_GUESS
             step = fit.Step("reduce_modes", f"Kept only the fewest modes holding {KEEP_SHARE * 100:.0f}% of the response, "
                             "the rest by their steady share, to fit", None, None, detail={"keep_share": KEEP_SHARE})
-            plan._transient_fewest_modes = True
+            plan.fewest_modes = True
             return step
         if rung == "iterative":
             if plan.solver != "direct":
@@ -500,7 +500,8 @@ class TransientAnalysis:
         materials = materials_of(ctx)
         K = operators.stiffness(space, materials)
         M = operators.mass(space, materials)
-        fixed = fixed_dofs(space, inputs.fixtures, ctx.ordinal_of)
+        held = held_supports(space, inputs.fixtures, ctx.ordinal_of, require=True)
+        fixed = held.fixed
         free = np.setdiff1d(np.arange(space.dofs), fixed)
         # Each load vector with its history: the face loads, then the shake as the inertia it puts in, -M r a.
         vectors: list[np.ndarray] = [sp.load_vector(space, (load,), ctx.ordinal_of) for load in inputs.loads]
@@ -514,10 +515,12 @@ class TransientAnalysis:
         iterative = getattr(plan, "solver", "direct") != "direct"
         started = time.perf_counter()
         statics = np.zeros_like(F)
+        K_local, F_local = held.local(K), held.local_vector(F)   # a sloped or curved roller: in its nodes' own axes
         for j in range(F.shape[1]):
-            u_free, _ = operators.solve_spd(K, F[:, j], free, space.locations, space.component, warnings,
+            u_free, _ = operators.solve_spd(K_local, F_local[:, j], free, space.locations, space.component, warnings,
                                             method="iterative" if iterative else None)
             statics[free, j] = u_free
+        statics = held.global_vector(statics)
         peaks = np.array([h.peak for h in histories])
         steady_vector = statics @ peaks
         steady = space.nodal(steady_vector)
@@ -530,9 +533,9 @@ class TransientAnalysis:
         corners = sorted({c for h in histories for c in h.corners})
         frames_wanted = max_frames(ctx)
         if method == "modal":
-            march = self._modal(ctx, inputs, K, M, fixed, F, statics, histories, corners, frames_wanted, timings, warnings)
+            march = self._modal(ctx, inputs, K, M, held, F, statics, histories, corners, frames_wanted, timings, warnings)
         else:
-            march = self._direct(ctx, inputs, K, M, fixed, free, F, histories, corners, frames_wanted, timings, warnings)
+            march = self._direct(ctx, inputs, K, M, held, free, F, histories, corners, frames_wanted, timings, warnings)
         if ctx.log:
             ctx.log(f"transient: {march['steps']} steps to {inputs.end_s:g} s, {march['solver']}")
 
@@ -623,7 +626,7 @@ class TransientAnalysis:
         from cadgen._internal.fea import timestep
 
         space, plan = ctx.space, ctx.plan
-        reduce = bool(getattr(plan, "_transient_fewest_modes", False))
+        reduce = bool(getattr(plan, "fewest_modes", False))
         base = inputs.excitation is not None and not inputs.loads
         r = None if inputs.excitation is None else sp.rigid_translation(space.component, inputs.excitation.direction)
         Mr = None if r is None else M @ r
@@ -634,7 +637,7 @@ class TransientAnalysis:
                 return float(((vectors.T @ Mr[free]) ** 2).sum()) / total_along >= KEEP_SHARE
 
         started = time.perf_counter()
-        method = solver_method(ctx, space.dofs - len(fixed))
+        method = solver_method(ctx, space.dofs - len(fixed.fixed))
         found = sp.find_modes(K, M, fixed, inputs.top_Hz, method=method, locations=space.locations,
                               component=space.component, enough=enough)
         warnings.extend(found.warnings)
@@ -756,6 +759,9 @@ class TransientAnalysis:
         # The first two modes: Rayleigh damping is fitted to the damping ratio there, and mode 1 sets the auto step.
         two = sp.find_modes(K, M, fixed, 1e12, method=method, locations=space.locations, component=space.component,
                             start=2, cap=2)
+        # Newmark marches in the supports' axes (a sloped or curved roller's nodes turned); frames turn back below.
+        K, M, F = fixed.local(K), fixed.local(M), fixed.local_vector(F)
+        error_modes = fixed.local_vector(two.vectors)[free]
         omega = [float(w) for w in two.omega]
         timings["eigen_s"] = time.perf_counter() - started
         alpha, beta = timestep.rayleigh(omega[0], omega[1] if len(omega) > 1 else None, inputs.damping_ratio)
@@ -803,7 +809,7 @@ class TransientAnalysis:
         near_null = rigid_body_modes(space.locations[free], space.component[free]) if iterative else None
         run = timestep.newmark(Mff, C, Kff, load, end, dt, adaptive=adaptive, largest_step=end / 20, stops=corners,
                                solver="iterative" if iterative else "direct", near_null=near_null,
-                               error_modes=two.vectors[free], on_step=on_step,
+                               error_modes=error_modes, on_step=on_step,
                                log=ctx.log)
         warnings.extend(run.warnings)
         if all(t != state["best_t"] for t, _ in kept):
@@ -812,6 +818,7 @@ class TransientAnalysis:
         columns = np.zeros((space.dofs, len(kept)))
         for i, (_, u) in enumerate(kept):
             columns[free, i] = u
+        columns = fixed.global_vector(columns)
         frames = sp.Modes(np.zeros(len(kept)), columns)
         frame_u = list(sp.nodal_shapes(space, frames))
         frame_vm = [sp.von_mises_of(s) for s in sp.modal_stresses(space, materials_of(ctx), frames)]
@@ -896,7 +903,7 @@ class TransientAnalysis:
 
     def judge(self, check: dict, index: int, ctx: SolveContext, result: AnalysisResult, inputs: TransientInputs) -> dict:
         from cadgen._internal.fea import checks
-        from cadgen._internal.fea.analyses.static import _peak_face
+        from cadgen._internal.fea.analyses.static import peak_face
 
         if check["kind"] == "stress":
             node, peak, when = self._stress_peak(result)
@@ -904,7 +911,7 @@ class TransientAnalysis:
             at = tuple(float(c) for c in result.dof_locations[node])
             solved = checks.Solved(
                 material_name="", yield_MPa=self._yield_at(result, node), peak_MPa=peak, peak_gauss_MPa=peak, peak_at=at,
-                peak_face=_peak_face(ctx.volume, result, node, fixed), fixed_faces=(), max_displacement_mm=0.0,
+                peak_face=peak_face(ctx.volume, result, node, fixed), fixed_faces=(), max_displacement_mm=0.0,
                 displacement_at=at, bbox_diagonal_mm=0.0, margin=result.scalars["margin"], coarser_peak_MPa=None, part="",
             )
             return {**checks.stress_check(solved, label=check.get("label")), "at": self._at(result, when)}

@@ -37,13 +37,16 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Series, SeriesFrame, SolveContext
-from cadgen._internal.fea.analyses.nonlinear import NonlinearAnalysis, NonlinearInputs, _pick_frames, load_label
+from cadgen._internal.fea.analyses.nonlinear import NonlinearAnalysis, NonlinearInputs, pick_frames, load_label
 from cadgen._internal.fea.study import parse_fixtures, parse_loads
 
 if TYPE_CHECKING:
     import numpy as np
 
-__all__ = ["ContactAnalysis", "ContactInputs", "ContactPair", "DEFAULT_STEPS", "LIMITS", "RigidPlane", "contact_words"]
+__all__ = [
+    "ContactAnalysis", "ContactInputs", "ContactPair", "DEFAULT_STEPS", "LIMITS", "RigidPlane", "contact_words",
+    "mark_unsettled", "parse_rigid_planes", "parse_steps", "unsettled_extras", "unsettled_sentence", "unsettled_steps",
+]
 
 #: Load steps a study starts with when it names none.
 DEFAULT_STEPS = 5
@@ -138,7 +141,7 @@ def _pairs(document: dict) -> tuple[ContactPair, ...]:
     return tuple(pairs)
 
 
-def _planes(document: dict) -> tuple[RigidPlane, ...]:
+def parse_rigid_planes(document: dict) -> tuple[RigidPlane, ...]:
     raw = document.get("rigid_planes")
     if raw is None:
         return ()
@@ -172,7 +175,7 @@ def _planes(document: dict) -> tuple[RigidPlane, ...]:
     return tuple(planes)
 
 
-def _steps(document: dict) -> int:
+def parse_steps(document: dict) -> int:
     raw = document.get("steps", DEFAULT_STEPS)
     if isinstance(raw, bool) or not isinstance(raw, int) or not 1 <= raw <= MAX_STEPS:
         raise ValueError(f"steps: the number of load steps to start with, a whole number from 1 to {MAX_STEPS}, "
@@ -186,6 +189,31 @@ def _material_specs(document: dict) -> list[Any]:
     if isinstance(parts, dict):
         specs += [entry["material"] for entry in parts.values() if isinstance(entry, dict) and "material" in entry]
     return specs
+
+
+def unsettled_sentence(percent: float, of: str = "the load") -> str:
+    """What a result says of a load step whose contact forces did not settle (it was kept at the smallest step)."""
+    return (f"Contact did not settle at {percent:.0f}% of {of}: the forces here do not balance, so this result is "
+            "not reliable")
+
+
+def unsettled_steps(path, of: str = "the load") -> list[dict]:
+    """The driver's steps kept unsettled (``PathResult.unsettled``), as ``{"percent", "of"}``."""
+    return [{"percent": round(factor * 100.0, 4), "of": of} for factor in path.unsettled]
+
+
+def unsettled_extras(unsettled: list[dict]) -> dict:
+    """``extras.analysis.unsettled``: the shares of the load whose contact did not settle, and the first."""
+    return {"at_percent": [step["percent"] for step in unsettled], "first_percent": unsettled[0]["percent"]}
+
+
+def mark_unsettled(judged: dict, scalars: dict) -> dict:
+    """A check of a result with an unsettled step fails, saying at what share of the load (the first)."""
+    unsettled = scalars.get("unsettled") or []
+    if unsettled:
+        judged["status"] = "fails"
+        judged["unsettled_at_percent"] = unsettled[0]["percent"]
+    return judged
 
 
 def _pair_name(pair: ContactPair) -> str:
@@ -233,9 +261,9 @@ class ContactAnalysis(NonlinearAnalysis):
 
         fixtures = parse_fixtures(document, required=False)
         loads = parse_loads(document)
-        steps = _steps(document)
+        steps = parse_steps(document)
         pairs = _pairs(document)
-        planes = _planes(document)
+        planes = parse_rigid_planes(document)
         if not pairs and not planes:
             raise ValueError(
                 'study: a contact study needs a contact: connections like [{"between": ["pin", "plate"], "type": "contact", '
@@ -309,9 +337,9 @@ class ContactAnalysis(NonlinearAnalysis):
     def _part_index(self, ctx: SolveContext, name: str, where: str) -> int:
         if ctx.assembly is None:
             return 0
-        from cadgen._internal.fea.run import _find_part
+        from cadgen._internal.fea.run import find_part
 
-        return _find_part(ctx.assembly.parts, ctx.assembly.names, name, where)
+        return find_part(ctx.assembly.parts, ctx.assembly.names, name, where)
 
     def _part_names(self, ctx: SolveContext) -> list[str]:
         return list(ctx.assembly.names) if ctx.assembly is not None else [ctx.part_name or "the part"]
@@ -322,8 +350,9 @@ class ContactAnalysis(NonlinearAnalysis):
         import numpy as np
 
         from cadgen._internal.fea import contact_ops, nonlinear_driver, operators
-        from cadgen._internal.fea.analyses.nonlinear import _external
+        from cadgen._internal.fea.analyses.nonlinear import external_load
         from cadgen._internal.fea.checks import quoted
+        from cadgen._internal.fea.supports import check_held, driven, held_bodies, path_to_global, supports_of
 
         space = ctx.space
         basis = space.basis
@@ -334,13 +363,16 @@ class ContactAnalysis(NonlinearAnalysis):
         fit_plan = ctx.plan
         planes = list(fit_plan.prepared.planes) if fit_plan is not None and fit_plan.prepared is not None else []
         share = 0.5 ** len(planes)
-        external = _external(space, materials, inputs.surface_loads, inputs.body_accelerations, ctx.ordinal_of, share)
-        fixture_dofs = [basis.get_dofs(space.facets_of(fixture.faces, ctx.ordinal_of)).all() for fixture in inputs.fixtures]
-        held = list(fixture_dofs)
+        external = external_load(space, materials, inputs.surface_loads, inputs.body_accelerations, ctx.ordinal_of, share)
+        plane_dofs = []
         for plane in planes:
             dofs = basis.get_dofs(space.facets_of_ordinals([plane.ordinal], "a symmetry plane")).all()
-            held.append(dofs[space.component[dofs] == plane.component])
-        fixed = np.unique(np.concatenate(held)) if held else np.zeros(0, dtype=np.int64)
+            plane_dofs.append(dofs[space.component[dofs] == plane.component])
+        # Fixed faces, rollers (a sloped or curved one's nodes turned into their own axes: supports.py) and planes.
+        supports = supports_of(space, inputs.fixtures, ctx.ordinal_of, held=plane_dofs)
+        check_held(space, supports)
+        fixture_dofs = supports.per_fixture
+        fixed = supports.fixed
         free = np.setdiff1d(np.arange(basis.N), fixed)
         K = operators.stiffness(space, materials).tocsr()
 
@@ -401,7 +433,7 @@ class ContactAnalysis(NonlinearAnalysis):
         vdofs = contact_ops.vector_dofs(space)
         for c in range(3):
             scalar_of[vdofs[:, c]] = np.arange(space.scalar_count)
-        fixed_bodies = set(np.unique(node_body[scalar_of[fixed]]).tolist()) if len(fixed) else set()
+        fixed_bodies = held_bodies(space, supports, node_body[scalar_of])  # a body on rollers alone may still move
         holds = set(fixed_bodies)
         holds |= set(np.unique(node_body[constraints.node[constraints.owner < 0]]).tolist())
         links = []
@@ -446,8 +478,8 @@ class ContactAnalysis(NonlinearAnalysis):
         if ctx.log:
             ctx.log(f"{constraints.count} contact nodes over {len(contacts)} contacts; {len(floating)} bodies rest on contacts alone")
         # runaway=None: a part that rests on a contact has no stiffness of its own until the contact closes.
-        path = nonlinear_driver.solve_path(problem, steps=inputs.steps, solver=solver, adaptive=adaptive, runaway=None,
-                                           log=ctx.log)
+        path = path_to_global(nonlinear_driver.solve_path(driven(problem, supports, free), steps=inputs.steps, solver=solver,
+                                                          adaptive=adaptive, runaway=None, log=ctx.log), supports)
         timings["solve_s"] = path.seconds
         warnings += path.warnings
         if problem.unsettled > UNSETTLED:
@@ -464,7 +496,10 @@ class ContactAnalysis(NonlinearAnalysis):
             zeros = np.zeros(problem.size)
             records = [nonlinear_driver.StepRecord(0.0, 0, zeros, 0.0)]
             history = [(np.zeros(basis.dx.shape), problem.response(zeros))]
-        picked = _pick_frames(len(records), max(frames_max, 1))
+        picked = pick_frames(len(records), max(frames_max, 1))
+        # A step kept although its contact did not settle is always among the frames, and its label says so.
+        loose_steps = {i for i, record in enumerate(records) if not record.settled}
+        picked = sorted(set(picked) | loose_steps)
 
         def nodal(values):
             return np.clip(space.scalar.project(values), 0.0, float(values.max()))
@@ -526,10 +561,12 @@ class ContactAnalysis(NonlinearAnalysis):
 
         factors = [records[i].factor for i in picked]
         attributes = {"von_mises": "_VON_MISES", "displacement": "_DISPLACEMENT", "contact_pressure": "_CONTACT_PRESSURE"}
+        unsettled = unsettled_steps(path)
         series = Series(kind="time", unit="%", default=len(picked) - 1, frames=[
-            SeriesFrame(value=round(f * 100.0, 6), label=load_label(f),
-                        attributes={name: attribute if i == 0 else f"{attribute}_F{i}" for name, attribute in attributes.items()})
-            for i, f in enumerate(factors)
+            SeriesFrame(value=round(records[i].factor * 100.0, 6),
+                        label=load_label(records[i].factor) + (" · did not settle" if i in loose_steps else ""),
+                        attributes={name: attribute if n == 0 else f"{attribute}_F{n}" for name, attribute in attributes.items()})
+            for n, i in enumerate(picked)
         ])
         frame_fields = {"von_mises": stress_frames, "displacement": displacement_frames, "contact_pressure": pressure_frames}
         fields = {name: values[0] for name, values in frame_fields.items()}
@@ -553,7 +590,10 @@ class ContactAnalysis(NonlinearAnalysis):
                 "frame_factors": factors, "contacts": stats, "augmentations": problem.augmentations,
                 "contact_nodes": constraints.count, "floating_bodies": len(floating), "loose_parts": loose_parts,
                 "peak_pressure_at": [round(float(c), 3) for c in dof_locations[peak_node]],
-                "analysis_warnings": [stop_words(path.factor)] if path.collapsed else [],
+                "analysis_warnings": ([stop_words(path.factor)] if path.collapsed else [])
+                + [unsettled_sentence(step["percent"], step["of"]) for step in unsettled[:1]],
+                "unsettled": unsettled,
+                "analysis_extras": {"unsettled": unsettled_extras(unsettled)} if unsettled else {},
                 "part_refs": None if ctx.assembly is None else [part.ref for part in ctx.assembly.parts],
                 "part_names": names,
             },
@@ -595,7 +635,7 @@ class ContactAnalysis(NonlinearAnalysis):
         from cadgen._internal.fea import checks
 
         if check["kind"] != "contact_pressure":
-            return super().judge(check, index, ctx, result, inputs)
+            return mark_unsettled(super().judge(check, index, ctx, result, inputs), result.scalars)
         common = dict(boundary=result.boundary_quadratic, boundary_ordinal=ctx.volume.boundary_ordinal,
                       locations=result.dof_locations, face_ref=ctx.volume.faces, ordinal_of=ctx.ordinal_of,
                       where=f"view.checks[{index}]")
@@ -613,7 +653,7 @@ class ContactAnalysis(NonlinearAnalysis):
         if result.scalars["collapsed"]:
             judged["status"] = "fails"
             judged["collapsed_at_percent"] = round(result.scalars["factor"] * 100.0, 4)
-        return judged
+        return mark_unsettled(judged, result.scalars)
 
     def findings(self, ctx: SolveContext, result: AnalysisResult, inputs: ContactInputs,
                  check_results: list[dict], *, assembly: bool) -> list[dict]:
@@ -625,6 +665,15 @@ class ContactAnalysis(NonlinearAnalysis):
             return {"check": "fea", "severity": severity, "type": kind, "summary": summary, "description": description,
                     "items": list(items)}
 
+        for step in (scalars.get("unsettled") or [])[:1]:
+            others = len(scalars["unsettled"]) - 1
+            found.append(finding(
+                "error", "contact_unsettled", unsettled_sentence(step["percent"], step["of"]),
+                "the contact forces kept changing there even at the smallest load step, and the last re-solve found no "
+                "equilibrium, so the parts' forces do not add up; every check fails until it settles"
+                + (f" ({others} more step{'s' if others > 1 else ''} did not settle either)" if others else "")
+                + ": try more load steps, a finer mesh where the parts touch, or friction 0 to see whether it is the sliding",
+            ))
         if scalars["collapsed"]:
             found.append(finding(
                 "error", "contact_stops",
@@ -729,9 +778,14 @@ class ContactAnalysis(NonlinearAnalysis):
                     out[key] = value
             return out
 
+        unsettled = scalars.get("unsettled") or []
+        status = stop_words(factor) if scalars["collapsed"] else "Carries the full load"
+        if unsettled:
+            status = f"Not reliable: contact did not settle at {unsettled[0]['percent']:.0f}% of {unsettled[0]['of']}"
         summary: dict[str, Any] = {
-            "status": stop_words(factor) if scalars["collapsed"] else "Carries the full load",
+            "status": status,
             "collapsed": scalars["collapsed"],
+            "unsettled_at_percent": [step["percent"] for step in unsettled],
             "load_percent": round(factor * 100.0, 4),
             "max_von_mises_MPa": round(float(final["von_mises"][peak]), 4),
             "max_von_mises_gauss_MPa": round(scalars["von_mises_gauss_max"], 4),
@@ -775,7 +829,10 @@ class ContactAnalysis(NonlinearAnalysis):
         }
 
     def extras_head(self, summary: dict) -> dict:
-        return {"load_percent": summary["load_percent"], "collapsed": summary["collapsed"], "contacts": summary["contacts"]}
+        head = {"load_percent": summary["load_percent"], "collapsed": summary["collapsed"], "contacts": summary["contacts"]}
+        if summary.get("unsettled_at_percent"):
+            head["unsettled_at_percent"] = summary["unsettled_at_percent"]
+        return head
 
     def study_echo(self, inputs: ContactInputs, bare: Callable[[tuple[str, ...]], list[str]]) -> dict:
         from cadgen._internal.fea.analyses.static import StaticAnalysis
@@ -788,7 +845,7 @@ class ContactAnalysis(NonlinearAnalysis):
         }
 
     def human_lines(self, summary: dict) -> list[str]:
-        head = summary["status"].lower() if summary["collapsed"] else "carries the full load"
+        head = summary["status"].lower() if summary["collapsed"] or summary.get("unsettled_at_percent") else "carries the full load"
         lines = [f"{head}: max von Mises {summary['max_von_mises_MPa']:g} MPa, max displacement "
                  f"{summary['max_displacement_mm']:g} mm, peak contact pressure {summary['max_contact_pressure_MPa']:g} MPa"]
         for contact in summary["contacts"]:

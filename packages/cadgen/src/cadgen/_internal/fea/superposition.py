@@ -109,6 +109,9 @@ def find_modes(
 ) -> Modes:
     """Every mode of ``K φ = ω² M φ`` (held DOF ``fixed`` removed) up to ``top_Hz``, at least one.
 
+    ``fixed`` is the held DOF, or a :class:`~cadgen._internal.fea.supports.Supports` (rollers on a sloped or curved
+    face are held in their nodes' own axes; the modes come back in the global ones).
+
     The search asks for ``start`` modes and doubles until the highest found
     passes ``top_Hz``, until ``cap`` modes, or until ``enough(omega2, vectors,
     free)`` says the modes so far are enough (the ladder's reduce_modes: they
@@ -122,6 +125,19 @@ def find_modes(
     from cadgen._internal.fea import eigen
 
     n_all = K.shape[0]
+    supports = fixed if hasattr(fixed, "fixed") else None   # supports.Supports: fixed faces and rollers
+    if supports is not None:
+        fixed = supports.fixed
+        if supports.turned:
+            # A sloped or curved roller: the modes are found in its nodes' own axes and turned back below.
+            K, M_global, M = supports.local(K), M, supports.local(M)
+            if enough is not None:
+                wanted = enough
+
+                def enough(omega2, vectors, free, wanted=wanted):
+                    turned = np.zeros((n_all, vectors.shape[1]))
+                    turned[free] = vectors
+                    return wanted(omega2, supports.global_vector(turned), np.arange(n_all))
     free = np.setdiff1d(np.arange(n_all), np.asarray(fixed, dtype=np.int64))
     Kff = K[free][:, free].tocsr()
     Mff = M[free][:, free].tocsr()
@@ -160,6 +176,8 @@ def find_modes(
                         f"modes from there to {top_Hz:.4g} Hz were left out")
     full = np.zeros((n_all, int(keep.sum())))
     full[free] = vectors[:, keep]
+    if supports is not None and supports.turned:
+        full, M = supports.global_vector(full), M_global
     # Mass-normalised on the whole matrix (the held rows are zero, so this is the free one's).
     norms = np.sqrt(np.einsum("ij,ij->j", full, M @ full))
     full /= np.where(norms > 0, norms, 1.0)

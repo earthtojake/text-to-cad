@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Inputs, SolveContext
-from cadgen._internal.fea.study import _DEFAULT_CONTROLS, DEFAULT_CHECKS, VIEW_DRIVES, Fixture, Load, parse_fixtures, parse_loads
+from cadgen._internal.fea.study import DEFAULT_CONTROLS, DEFAULT_CHECKS, VIEW_DRIVES, Fixture, Load, parse_fixtures, parse_loads
 
 if TYPE_CHECKING:
     from cadgen._internal.fea.checks import Solved
@@ -48,7 +48,7 @@ class StaticInputs(Inputs):
         return [tuple(sign[load.type] * G0_MM_S2 * c for c in load.vector_g) for load in self.loads if load.body]
 
 
-def _solved(volume, outcome, study, ordinal_of: dict[str, int], part: str, fixtures) -> "Solved":
+def solved_record(volume, outcome, study, ordinal_of: dict[str, int], part: str, fixtures) -> "Solved":
     """The numbers of one solve the checks read, faces as bare ``#o1.fN`` refs.
 
     The study may name a face with a document prefix (``part.step#o1.f17``) or a
@@ -70,7 +70,7 @@ def _solved(volume, outcome, study, ordinal_of: dict[str, int], part: str, fixtu
         peak_MPa=float(outcome.von_mises[peak_node]),
         peak_gauss_MPa=outcome.von_mises_gauss_max,
         peak_at=tuple(float(c) for c in outcome.dof_locations[peak_node]),
-        peak_face=_peak_face(volume, outcome, peak_node, fixed_ordinals),
+        peak_face=peak_face(volume, outcome, peak_node, fixed_ordinals),
         fixed_faces=tuple(volume.faces[ordinal].ref for ordinal in sorted(fixed_ordinals)),
         max_displacement_mm=float(magnitude[moved_node]),
         displacement_at=tuple(float(c) for c in outcome.dof_locations[moved_node]),
@@ -82,7 +82,7 @@ def _solved(volume, outcome, study, ordinal_of: dict[str, int], part: str, fixtu
     )
 
 
-def _solved_part(volume, outcome, study, plan, index: int, ordinal_of: dict[str, int], fixtures) -> "Solved":
+def solved_part_record(volume, outcome, study, plan, index: int, ordinal_of: dict[str, int], fixtures) -> "Solved":
     """One part of a solved assembly, as the checks read it: its own peak, yield and displacement.
 
     The part's elements pick its share of the fields; faces are those of the part alone.
@@ -119,7 +119,7 @@ def _solved_part(volume, outcome, study, plan, index: int, ordinal_of: dict[str,
         peak_MPa=float(field[peak_node]),
         peak_gauss_MPa=float(outcome.element_von_mises_gauss[rows].max()),
         peak_at=tuple(float(c) for c in here),
-        peak_face=_peak_face(volume, outcome, peak_node, fixed_ordinals, own),
+        peak_face=peak_face(volume, outcome, peak_node, fixed_ordinals, own),
         fixed_faces=tuple(volume.faces[ordinal].ref for ordinal in sorted(fixed_ordinals)),
         max_displacement_mm=float(magnitude.max()),
         displacement_at=tuple(float(c) for c in outcome.dof_locations[moved_node]),
@@ -133,7 +133,7 @@ def _solved_part(volume, outcome, study, plan, index: int, ordinal_of: dict[str,
     )
 
 
-def _peak_face(
+def peak_face(
     volume, outcome, peak_node: int, fixed_ordinals: set[int], own: set[int] | None = None
 ) -> str | None:
     """The ``#o1.fN`` face the peak sits on, or ``None`` inside the part and away from every fixed face.
@@ -194,7 +194,7 @@ def _unfold(volume, outcome, planes):
     return volume, outcome
 
 
-def _floored(factor: float | None) -> float | None:
+def floored(factor: float | None) -> float | None:
     # Floored, so a factor just under a threshold is never shown as reaching it.
     return None if factor is None else math.floor(factor * 1000) / 1000
 
@@ -216,7 +216,7 @@ class StaticAnalysis:
     checks: ClassVar[tuple] = (kinds.STRESS, kinds.DISPLACEMENT)
     default_checks: ClassVar[tuple[dict, ...]] = DEFAULT_CHECKS
     drives: ClassVar[tuple[str, ...]] = VIEW_DRIVES
-    default_controls: ClassVar[dict[str, dict]] = _DEFAULT_CONTROLS
+    default_controls: ClassVar[dict[str, dict]] = DEFAULT_CONTROLS
     upstream: ClassVar[tuple[str, ...]] = ()
     ladder: ClassVar[tuple[str, ...]] = ("iterative", "local_refine", "defeature", "linear_elements", "idealise", "symmetry")
     #: The noun of the viewer's load control and the verdict's takeaway ("OK up to 1.6× this load").
@@ -314,12 +314,12 @@ class StaticAnalysis:
             volume, outcome = _unfold(volume, outcome, planes)
             ctx.volume = volume
         if plan is None:
-            solved = [_solved(volume, outcome, study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
+            solved = [solved_record(volume, outcome, study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
         else:
-            solved = [_solved_part(volume, outcome, study, plan, index, ctx.ordinal_of, inputs.fixtures) for index in range(len(plan.parts))]
-        return self._result(outcome, solved, plan)
+            solved = [solved_part_record(volume, outcome, study, plan, index, ctx.ordinal_of, inputs.fixtures) for index in range(len(plan.parts))]
+        return self.static_result(outcome, solved, plan)
 
-    def _result(self, outcome, solved, plan) -> AnalysisResult:
+    def static_result(self, outcome, solved, plan) -> AnalysisResult:
         return AnalysisResult(
             dof_locations=outcome.dof_locations,
             vertices=outcome.vertices,
@@ -439,7 +439,7 @@ class StaticAnalysis:
             "reaction_force_N": [round(x, 4) for x in reaction_total],
             "deformation_scale": result.scalars["deformation_scale"],
         }
-        summary["safety_factor"] = _floored(checks.safety_factor(solved))
+        summary["safety_factor"] = floored(checks.safety_factor(solved))
         refs = result.scalars["part_refs"]
         if refs is not None:
             # The headline is the weakest part: its yield and safety factor; the peak and the colours span the assembly.
@@ -456,7 +456,7 @@ class StaticAnalysis:
                     "peak_MPa": round(part.peak_MPa, 4),
                     "peak_gauss_MPa": round(part.peak_gauss_MPa, 4),
                     "peak_at_mm": [round(c, 3) for c in part.peak_at],
-                    "safety_factor": _floored(checks.safety_factor(part)),
+                    "safety_factor": floored(checks.safety_factor(part)),
                     "max_displacement_mm": round(part.max_displacement_mm, 6),
                 }
                 for i, part in enumerate(result.solved)

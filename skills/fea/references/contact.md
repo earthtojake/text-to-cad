@@ -44,9 +44,19 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
 - `fixtures` and `loads`: as `static` ([linear-static.md](linear-static.md)), body loads included.
   `loads` are required; `fixtures` are optional when a rigid plane holds the parts. A part need not
   be fixed itself: it may rest on a contact or a plane alone. A part held by nothing (no fixture,
-  no rigid plane, no contact with a held part) is refused, naming it.
+  no rigid plane, no contact with a held part) is refused, naming it. A `roller` fixture
+  ([study-file.md](study-file.md#fixtures)) is how to model one quarter or half of a symmetric
+  contact yourself: rollers on the cut planes of every part, so each slides in the plane but never
+  through it (a ball pressed on a block, cut along x = 0 and y = 0: four roller faces, the load a
+  quarter of the whole).
 - `steps`: how many equal load steps to start with, 1 to 200, default 5. A step that does not
-  converge is halved and tried again (up to six times).
+  converge is halved and tried again (up to six times). So is a step whose contact forces do not
+  settle (the re-solve that balances them finds no equilibrium); if it still does not settle at the
+  smallest step it is kept, and the result says so plainly: "Contact did not settle at 80% of the
+  load: the forces here do not balance, so this result is not reliable", as an error finding, in
+  `extras.analysis.warnings` and `extras.analysis.unsettled`, in that frame's label ("80 % load ·
+  did not settle") and on every check, which fails. Report it as not reliable, never its numbers
+  as the answer: try more `steps`, a finer mesh where the parts touch, or friction 0.
 - Checks, each judged at the last load solved:
   - `stress` (the default with no `view.checks`): the peak von Mises against the yield, as static.
   - `contact_pressure`: `limit_MPa` (for bearing, often 1.5 times the yield for a static load; for

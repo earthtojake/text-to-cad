@@ -74,4 +74,20 @@ describe('composite', () => {
   it('offers the field and the deformation', () => {
     expect(feaControls(compositeResult()).map((control: any) => control.drives)).toEqual(['field', 'deformation']);
   });
+
+  it('reads its layup and ply materials through the study it keeps, not the raw echo', () => {
+    const result = compositeResult();
+    expect(result.study.layup).toMatchObject({ plies: [ply(0), ply(90), ply(90), ply(0)], notation: '[0/90]s', thicknessMm: 2 });
+    const before = layupRows(result);
+    result.mesh.userData.study = {};
+    expect(readLayup(result)).toMatchObject({ notation: '[0/90]s', thicknessMm: 2 });
+    expect(layupRows(result)).toEqual(before);
+    expect(before[0].children[0]).toMatchObject({ label: '4 plies, [0/90]s, 2 mm', hint: 'cfrp' });
+    const laminae = { cfrp: { E1_MPa: 135000, E2_MPa: 10000, nu12: 0.3, name: 'carbon' } };
+    const named = compositeResult();
+    named.mesh.userData.study.laminae = laminae;
+    const root = new Group();
+    root.add(named.mesh);
+    expect(readFeaResult(root)!.study.laminae).toEqual({ cfrp: { E1_MPa: 135000, E2_MPa: 10000, nu12: 0.3 } });
+  });
 });

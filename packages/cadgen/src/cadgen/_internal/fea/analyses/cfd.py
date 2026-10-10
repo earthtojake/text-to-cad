@@ -469,8 +469,8 @@ class CfdAnalysis:
             ctx.log(f"flow: {flow.picard} Picard and {flow.newton} Newton steps, residual {flow.residual:.1e}")
 
         started = time.perf_counter()
-        post = _post(space, fluid, face_of, row_kind, flow, inputs)
-        pressure, shear = _to_part(ctx, space, fluid, face_of, row_kind, post)
+        post = flow_numbers(space, fluid, face_of, row_kind, flow, inputs)
+        pressure, shear = wall_to_part(ctx, space, fluid, face_of, row_kind, post)
         timings["post_s"] = time.perf_counter() - started
 
         warnings = list(flow.warnings)
@@ -552,7 +552,7 @@ class CfdAnalysis:
                     shape = {int(n): 1.0 for n in np.setdiff1d(np.unique(boundary[rows]), walls)}
                 # The mean speed over the opening's true area: scale the profile so its flux is V A.
                 area = sum(face.area for face in face_of.values() if face.kind == "inlet" and face.opening == inlet.opening)
-                flux = _flux_of(space, rows, {n: w for n, w in shape.items()}, axis)
+                flux = flux_of(space, rows, {n: w for n, w in shape.items()}, axis)
                 scale = inlet.velocity_m_s * SPEED * area / flux if flux > 0 else inlet.velocity_m_s * SPEED
                 for node, w in shape.items():
                     for c in range(3):
@@ -576,7 +576,7 @@ class CfdAnalysis:
         import numpy as np
 
         from cadgen._internal.fea import solve
-        from cadgen._internal.fea.analyses.static import _solved
+        from cadgen._internal.fea.analyses.static import solved_record
 
         volume = ctx.volume
         wetted = result.scalars["post"]["wetted"]
@@ -589,7 +589,7 @@ class CfdAnalysis:
                                             log=ctx.log, automatic=ctx.automatic, **extra)
         study = types.SimpleNamespace(material=inputs.structure_material,
                                       margin=getattr(ctx.study, "margin", 2.0) if ctx.study is not None else 2.0)
-        result.solved = [_solved(volume, outcome, study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
+        result.solved = [solved_record(volume, outcome, study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
         result.fields["von_mises"] = outcome.von_mises
         result.fields["displacement"] = outcome.displacement
         result.deformation = outcome.displacement
@@ -717,7 +717,7 @@ class CfdAnalysis:
         }
         if result.solved:
             from cadgen._internal.fea import checks
-            from cadgen._internal.fea.analyses.static import _floored
+            from cadgen._internal.fea.analyses.static import floored
 
             outcome = result.scalars["outcome"]
             magnitude = np.linalg.norm(outcome.displacement, axis=1)
@@ -727,7 +727,7 @@ class CfdAnalysis:
                 "max_von_mises_at_mm": [round(c, 3) for c in solved.peak_at],
                 "yield_MPa": solved.yield_MPa,
                 "max_displacement_mm": round(float(magnitude.max()), 6),
-                "safety_factor": _floored(checks.safety_factor(solved)),
+                "safety_factor": floored(checks.safety_factor(solved)),
             })
         summary["checks"] = check_results
         return summary
@@ -790,7 +790,7 @@ class CfdAnalysis:
 # -- numbers from the flow ----------------------------------------------------------------------------
 
 
-def _triangles(space, rows):
+def wall_triangles(space, rows):
     """Boundary triangles ``rows``: each one's area (flat, through its corners) and unit normal pointing out of
     the fluid (away from the element it closes). Integrals over them use the quadratic triangle's rule, exact
     for a quadratic on a flat triangle: the area times the mean of the three mid-edge values."""
@@ -808,24 +808,24 @@ def _triangles(space, rows):
     return triangles, area, normal
 
 
-def _integral(space, rows, nodal) -> float:
+def surface_integral(space, rows, nodal) -> float:
     """∫ f dA over boundary triangles ``rows`` of a field given at the quadratic nodes (scalar per node)."""
     import numpy as np
 
     if len(rows) == 0:
         return 0.0
-    triangles, area, _ = _triangles(space, rows)
+    triangles, area, _ = wall_triangles(space, rows)
     return float((area * np.asarray(nodal)[triangles[:, 3:]].mean(axis=1)).sum())
 
 
-def _flux_of(space, rows, values: dict[int, float], axis: int) -> float:
+def flux_of(space, rows, values: dict[int, float], axis: int) -> float:
     """∫ w dA of a profile given by node over the opening's triangles ``rows``."""
     import numpy as np
 
     field = np.zeros(space.scalar_count)
     for node, w in values.items():
         field[node] = w
-    return _integral(space, rows, field)
+    return surface_integral(space, rows, field)
 
 
 def _node_gradients(space, u) -> "np.ndarray":
@@ -849,7 +849,7 @@ def _node_gradients(space, u) -> "np.ndarray":
     return total / np.maximum(count, 1.0)[:, None, None]
 
 
-def _post(space, fluid, face_of, row_kind, flow, inputs: CfdInputs) -> dict:
+def flow_numbers(space, fluid, face_of, row_kind, flow, inputs: CfdInputs) -> dict:
     """The flow's numbers: fastest speed, flow rates, pressure drop, force on the part, and per-node wall values."""
     import numpy as np
 
@@ -863,13 +863,13 @@ def _post(space, fluid, face_of, row_kind, flow, inputs: CfdInputs) -> dict:
     p_nodes[space.scalar.edge_dofs[0]] = 0.5 * (flow.p[edges[0]] + flow.p[edges[1]])
 
     def mean_pressure(rows) -> float:
-        area = _integral(space, rows, np.ones(space.scalar_count))
-        return _integral(space, rows, p_nodes) / area if area > 0 else 0.0
+        area = surface_integral(space, rows, np.ones(space.scalar_count))
+        return surface_integral(space, rows, p_nodes) / area if area > 0 else 0.0
 
     def flux(rows) -> float:
         if len(rows) == 0:
             return 0.0
-        triangles, area, normal = _triangles(space, rows)
+        triangles, area, normal = wall_triangles(space, rows)
         along = np.einsum("tki,ti->tk", nodal[triangles[:, 3:]], normal)
         return float((area * along.mean(axis=1)).sum())
 
@@ -884,7 +884,7 @@ def _post(space, fluid, face_of, row_kind, flow, inputs: CfdInputs) -> dict:
     shear_nodes = np.zeros(space.scalar_count)
     force = np.zeros(3)
     if len(walls):
-        triangles, area, normal = _triangles(space, walls)
+        triangles, area, normal = wall_triangles(space, walls)
         node_normal = np.zeros((space.scalar_count, 3))
         np.add.at(node_normal, triangles.ravel(), np.repeat(normal * area[:, None], triangles.shape[1], axis=0))
         length = np.linalg.norm(node_normal, axis=1)
@@ -923,7 +923,7 @@ def _post(space, fluid, face_of, row_kind, flow, inputs: CfdInputs) -> dict:
     }
 
 
-def _to_part(ctx: SolveContext, space, fluid, face_of, row_kind, post: dict):
+def wall_to_part(ctx: SolveContext, space, fluid, face_of, row_kind, post: dict):
     """The wall pressure and shear carried onto the part's surface nodes, face by face (nearest fluid wall node
     on the same face). A part face the fluid does not wet reads 0."""
     import numpy as np

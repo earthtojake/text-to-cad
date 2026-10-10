@@ -64,6 +64,8 @@ class CompositeInputs(StaticInputs):
     plies: tuple = ()
     #: The plies' 0° direction the study gave, else ``None`` (the default).
     axis: tuple[float, float, float] | None = None
+    #: The ply materials the study named (``laminae``), each its numbers as given, for the result's study echo.
+    laminae: dict = field(default_factory=dict, compare=False, hash=False)
     #: What the solve resolved (the method, the frame), written once by ``solve``.
     resolved: dict = field(default_factory=dict, compare=False, hash=False)
 
@@ -102,7 +104,7 @@ def _plate(geometry):
     if geometry is None or geometry.shape is None:
         return None
     return shell.cached(geometry.shape, "laminate",
-                        lambda shape: shell._detect(shape, geometry.volume_mm3, geometry.area_mm2, thin=math.inf))
+                        lambda shape: shell.detect_plate(shape, geometry.volume_mm3, geometry.area_mm2, thin=math.inf))
 
 
 def _setup(ctx, inputs: CompositeInputs) -> _Setup:
@@ -181,6 +183,9 @@ class CompositeAnalysis(StaticAnalysis):
         return CompositeInputs(
             static.face_refs, static.anchor_refs, True, fixtures=static.fixtures, loads=static.loads,
             laminate=laminate, plies=tuple(plies), axis=axis,
+            laminae={str(name): {key: value for key, value in spec.items() if isinstance(value, (int, float))
+                                 and not isinstance(value, bool)}
+                     for name, spec in (document.get("laminae") or {}).items() if isinstance(spec, dict)},
         )
 
     # -- the ladder ----------------------------------------------------------------------------------
@@ -191,13 +196,16 @@ class CompositeAnalysis(StaticAnalysis):
 
         plate = _plate(ctx.geometry)
         plan = ctx.plan
-        if plate is not None and plate.slenderness < shell.THIN and ctx.assembly is None:
+        # A roller slides along its face, which the mid-surface (whole nodes held) cannot: the layered solid takes it.
+        from cadgen._internal.fea.supports import has_rollers
+
+        if plate is not None and plate.slenderness < shell.THIN and ctx.assembly is None and not has_rollers(inputs.fixtures):
             if plan.idealisation == "solid" and not plan.taken:
                 plan.idealisation = "shell"
                 plan.size_mm = max(float(plan.requested_mm or 0.0), plate.span / shell.CARRIER_ACROSS)
             if plan.idealisation == "shell":
                 h = shell.element_size(plate, plan.requested_mm)
-                return shell.idealised_cost(ctx, 6 * (shell._triangles(plate.area, h) + 1), 42.0)
+                return shell.idealised_cost(ctx, 6 * (shell.triangles_for(plate.area, h) + 1), 42.0)
         return fit.solid_estimate(ctx)
 
     def apply(self, rung, ctx: SolveContext, inputs: CompositeInputs):
@@ -260,7 +268,7 @@ class CompositeAnalysis(StaticAnalysis):
         local = np.einsum("tij,tj->ti", shell.rotation_blocks(frame, 6), u[mid.connectivity])
         strain = np.einsum("tki,ti->tk", mid.membrane, local)          # element axes: e_x, e_y, g_xy
         curvature = np.einsum("tki,ti->tk", mid.bending, local)
-        c, s = shell._laminate_rotation(frame, n, setup.axis)
+        c, s = shell.laminate_rotation(frame, n, setup.axis)
         phi = np.arctan2(s, c)
         z = seen.interfaces()
         count = len(triangles)
@@ -578,6 +586,8 @@ class CompositeAnalysis(StaticAnalysis):
             layup["normal"] = [round(c, 6) + 0.0 for c in inputs.resolved["normal"]]
             layup["method"] = inputs.resolved["method"]
         echo["layup"] = layup
+        if inputs.laminae:
+            echo["laminae"] = {name: dict(numbers) for name, numbers in inputs.laminae.items()}
         return echo
 
     def human_lines(self, summary: dict) -> list[str]:

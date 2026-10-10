@@ -24,7 +24,7 @@ from typing import Any, ClassVar
 
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, SolveContext
-from cadgen._internal.fea.analyses.static import StaticAnalysis, StaticInputs, _solved, _solved_part
+from cadgen._internal.fea.analyses.static import StaticAnalysis, StaticInputs, solved_record, solved_part_record
 from cadgen._internal.fea.analyses.thermal import HEAT_KEYS, ThermalAnalysis, heat_echo
 from cadgen._internal.fea.study import VIEW_DRIVES, parse_fixtures, parse_loads
 
@@ -119,10 +119,10 @@ class ThermalStressAnalysis(StaticAnalysis):
             volume, materials, inputs.fixtures, inputs.surface_loads, ctx.ordinal_of, log=ctx.log, automatic=ctx.automatic, **extra
         )
         if plan is None:
-            solved = [_solved(volume, outcome, study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
+            solved = [solved_record(volume, outcome, study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
         else:
-            solved = [_solved_part(volume, outcome, study, plan, index, ctx.ordinal_of, inputs.fixtures) for index in range(len(plan.parts))]
-        result = self._result(outcome, solved, plan)
+            solved = [solved_part_record(volume, outcome, study, plan, index, ctx.ordinal_of, inputs.fixtures) for index in range(len(plan.parts))]
+        result = self.static_result(outcome, solved, plan)
         result.fields["temperature"] = temperature
         result.scalars["reference_C"] = inputs.reference_C
         result.scalars["thermal"] = upstream.scalars.get("summary")

@@ -46,10 +46,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, Series, SeriesFrame, SolveContext
 from cadgen._internal.fea.analyses.contact import (
-    LIMITS as CONTACT_LIMITS, MAX_FRICTION, ContactAnalysis, ContactInputs, ContactPair, _planes, _steps, contact_words,
-    stop_words,
+    LIMITS as CONTACT_LIMITS, MAX_FRICTION, ContactAnalysis, ContactInputs, ContactPair, parse_rigid_planes, parse_steps, contact_words,
+    mark_unsettled, stop_words, unsettled_extras, unsettled_sentence, unsettled_steps,
 )
-from cadgen._internal.fea.analyses.nonlinear import _pick_frames, load_label
+from cadgen._internal.fea.analyses.nonlinear import pick_frames, load_label
 from cadgen._internal.fea.bolt_ops import DEFAULT_GRADE, DEFAULT_NUT_FACTOR, PROOF_MPa, SIZES, BoltSize, bolt_size
 from cadgen._internal.fea.study import parse_fixtures, parse_loads
 
@@ -286,9 +286,9 @@ class BoltAnalysis(ContactAnalysis):
 
         fixtures = parse_fixtures(document, required=False)
         loads = parse_loads(document, required=False)
-        steps = _steps(document)
+        steps = parse_steps(document)
         pairs, bolts = _connections(document)
-        planes = _planes(document)
+        planes = parse_rigid_planes(document)
         if not bolts:
             raise ValueError(
                 'study: a bolt study needs a bolt: connections like [{"between": ["plate", "bracket"], "type": "bolt", '
@@ -339,9 +339,10 @@ class BoltAnalysis(ContactAnalysis):
         import numpy as np
 
         from cadgen._internal.fea import bolt_ops, contact_ops, nonlinear_driver, operators
-        from cadgen._internal.fea.analyses.nonlinear import _external
+        from cadgen._internal.fea.analyses.nonlinear import external_load
         from cadgen._internal.fea.checks import quoted
         from cadgen._internal.fea.materials import lookup_material
+        from cadgen._internal.fea.supports import check_held, driven, held_bodies, path_to_global, supports_of
 
         if ctx.assembly is None:
             raise ValueError("connections: a bolt clamps two parts, and this document has one; put the parts it clamps "
@@ -353,9 +354,12 @@ class BoltAnalysis(ContactAnalysis):
         warnings: list[str] = []
         started = time.perf_counter()
         fit_plan = ctx.plan
-        external = _external(space, materials, inputs.surface_loads, inputs.body_accelerations, ctx.ordinal_of, 1.0)
-        fixture_dofs = [basis.get_dofs(space.facets_of(fixture.faces, ctx.ordinal_of)).all() for fixture in inputs.fixtures]
-        fixed = np.unique(np.concatenate(fixture_dofs)) if fixture_dofs else np.zeros(0, dtype=np.int64)
+        external = external_load(space, materials, inputs.surface_loads, inputs.body_accelerations, ctx.ordinal_of, 1.0)
+        # Fixed faces and rollers (a sloped or curved one's nodes turned into their own axes: supports.py).
+        supports = supports_of(space, inputs.fixtures, ctx.ordinal_of)
+        check_held(space, supports)
+        fixture_dofs = supports.per_fixture
+        fixed = supports.fixed
         free = np.setdiff1d(np.arange(basis.N), fixed)
         K = operators.stiffness(space, materials).tocsr()
 
@@ -444,7 +448,7 @@ class BoltAnalysis(ContactAnalysis):
         scalar_of = np.zeros(basis.N, dtype=np.int64)
         for c in range(3):
             scalar_of[vdofs[:, c]] = np.arange(space.scalar_count)
-        fixed_bodies = set(np.unique(node_body[scalar_of[fixed]]).tolist()) if len(fixed) else set()
+        fixed_bodies = held_bodies(space, supports, node_body[scalar_of])  # a body on rollers alone may still move
         holds = set(fixed_bodies) | set(np.unique(node_body[constraints.node[constraints.owner < 0]]).tolist())
         links = []
         for k in range(len(pair_list)):
@@ -512,8 +516,8 @@ class BoltAnalysis(ContactAnalysis):
         if ctx.log:
             ctx.log(f"{len(springs)} bolts, {constraints.count} contact nodes over {len(contacts)} contacts")
         # Step 1: the preload, the shanks pulling head and nut together; then each shank is locked there.
-        tightened = nonlinear_driver.solve_path(problem, steps=PRELOAD_STEPS, solver=solver, adaptive=False, runaway=None,
-                                                log=ctx.log)
+        tightened = path_to_global(nonlinear_driver.solve_path(driven(problem, supports, free), steps=PRELOAD_STEPS,
+                                                               solver=solver, adaptive=False, runaway=None, log=ctx.log), supports)
         warnings += tightened.warnings
         preload_frame = len(history) - 1
         clamped = bool(tightened.records) and not tightened.collapsed
@@ -523,11 +527,14 @@ class BoltAnalysis(ContactAnalysis):
             problem.lock(tightened.u, external, friction)
             if np.any(external):
                 # Step 2: the study's loads, the shanks now springs of the bolts' stiffness.
-                loaded = nonlinear_driver.solve_path(problem, steps=inputs.steps, solver=solver, adaptive=adaptive,
-                                                     runaway=None, log=ctx.log)
+                loaded = path_to_global(nonlinear_driver.solve_path(driven(problem, supports, free), steps=inputs.steps,
+                                                                    solver=solver, adaptive=adaptive, runaway=None,
+                                                                    log=ctx.log), supports)
                 warnings += loaded.warnings
                 path = loaded
         timings["solve_s"] = tightened.seconds + (loaded.seconds if loaded is not None else 0.0)
+        # Steps kept although their contact did not settle: the preload's, then the load's.
+        unsettled = unsettled_steps(tightened, "the preload") + (unsettled_steps(loaded) if loaded is not None else [])
         if problem.unsettled > 0.1:
             warnings.append(f"the contact forces were still changing by {problem.unsettled * 100:.2g} % after "
                             f"{contact_ops.MAX_AUGMENTATIONS} updates at a load step")
@@ -542,7 +549,7 @@ class BoltAnalysis(ContactAnalysis):
         # Frames: the preload (the last step-1 state), then step 2's load steps.
         load_states = list(range(preload_frame + 1, len(history)))
         frames_max = int(getattr(ctx.budget, "max_frames", 24) or 24) if ctx.budget is not None else 24
-        picked = [preload_frame] + [load_states[i] for i in _pick_frames(len(load_states), max(frames_max - 1, 1))] \
+        picked = [preload_frame] + [load_states[i] for i in pick_frames(len(load_states), max(frames_max - 1, 1))] \
             if load_states else [preload_frame]
         load_factors = [0.0] + [record.factor for record in loaded.records] if loaded is not None else [0.0]
         factor_of = {preload_frame + i: f for i, f in enumerate(load_factors)}
@@ -704,8 +711,11 @@ class BoltAnalysis(ContactAnalysis):
                 "frame_factors": [v / 100.0 for v in frame_values], "contacts": stats, "augmentations": problem.augmentations,
                 "contact_nodes": constraints.count, "floating_bodies": len(floating), "loose_parts": loose_parts,
                 "peak_pressure_at": [round(float(c), 3) for c in space.dof_locations[peak_node]],
-                "analysis_warnings": [] if not collapsed else [
-                    "The preload could not be applied" if not clamped else stop_words(factor)],
+                "analysis_warnings": ([] if not collapsed else [
+                    "The preload could not be applied" if not clamped else stop_words(factor)])
+                + [unsettled_sentence(step["percent"], step["of"]) for step in unsettled[:1]],
+                "unsettled": unsettled,
+                "analysis_extras": {"unsettled": unsettled_extras(unsettled)} if unsettled else {},
                 "part_refs": refs, "part_names": names, "bolts": bolts_out, "joints": joints,
                 "preload_steps": len(tightened.records), "load_steps": len(loaded.records) if loaded is not None else 0,
             },
@@ -755,7 +765,7 @@ class BoltAnalysis(ContactAnalysis):
         if scalars["collapsed"]:
             judged["status"] = "fails"
             judged["collapsed_at_percent"] = round(scalars["factor"] * 100.0, 4)
-        return judged
+        return mark_unsettled(judged, scalars)
 
     def findings(self, ctx: SolveContext, result: AnalysisResult, inputs: BoltInputs,
                  check_results: list[dict], *, assembly: bool) -> list[dict]:
@@ -844,6 +854,9 @@ class BoltAnalysis(ContactAnalysis):
             status = "Joint slips"
         else:
             status = "Joint holds"
+        if scalars.get("unsettled"):
+            first = scalars["unsettled"][0]
+            status = f"Not reliable: contact did not settle at {first['percent']:.0f}% of {first['of']}"
         checks_out = summary.pop("checks")
         summary.update({"status": status, "preload_steps": scalars["preload_steps"], "steps": scalars["load_steps"],
                         "bolts": rounded(scalars["bolts"]),

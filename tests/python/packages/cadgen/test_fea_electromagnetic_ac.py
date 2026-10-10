@@ -97,7 +97,7 @@ class StudyFile(unittest.TestCase):
         # Its limits and its ladder follow the mode: time-harmonic, and the air before the skin.
         self.assertEqual(analysis.limits, AC_LIMITS)
         self.assertIn("Time-harmonic", analysis.limits[0])
-        self.assertEqual(analysis.ladder, ("iterative", "fluid_coarsen", "local_refine"))
+        self.assertEqual(analysis.ladder, ("iterative", "far_field", "local_refine"))
         parse_dc = parse({"mode": "magnetostatic", "coils": [{"turns": 10, "A": 2, "axis": {"direction": [0, 0, 1]}}]})
         self.assertIsNone(parse_dc.inputs.frequency_Hz)
         self.assertEqual(analysis.limits, LIMITS)
@@ -205,7 +205,7 @@ class SkinEffect(unittest.TestCase):
     def test_on_a_tiny_budget_it_coarsens_the_air_and_the_skin_and_says_so(self):
         result = solve(self.step, self.directory / "fit.glb", {**self.study, "fit": {"memory_GB": 0.01, "seconds": 0.001}})
         rungs = [step["rung"] for step in result.fit]
-        self.assertIn("fluid_coarsen", rungs)
+        self.assertIn("far_field", rungs)
         step = next(step for step in result.fit if step["rung"] == "local_refine")
         self.assertIn("Meshed the conductors' surfaces at 1 mm to fit, coarser than the 0.4 mm", step["words"])
         self.assertIn("about 6% at one element per skin depth", step["accuracy"])

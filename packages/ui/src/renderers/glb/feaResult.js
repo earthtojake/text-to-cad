@@ -40,9 +40,9 @@ import { clamp } from "@text-to-cad/core/common/numbers.js";
 import { feaAnalysis } from "./fea/analyses/index.js";
 import { CHECK_KINDS, FEA_CHECK_KINDS, checkCaption, checkLabel as kindLabel, checkLine as kindLine, checkTitle, loadCaption } from "./fea/checkKinds.js";
 import { deformationRange, fieldOptions } from "./fea/controls.js";
-import { flooredFactor, plainNumber } from "./fea/numbers.js";
+import { flooredFactor, plainNumber, threeFigures } from "./fea/numbers.js";
 import { DISPLACEMENT, frameControl, sigmaControl, snapFrame } from "./fea/series.js";
-import { detailRows, faceLabel, facePartIndex, faceSummary, loadWords, spaced, wholeRefs } from "./fea/setup.js";
+import { detailRows, faceLabel, facePartIndex, faceSummary, isRoller, loadWords, spaced, wholeRefs } from "./fea/setup.js";
 
 export { FEA_CHECK_KINDS } from "./fea/checkKinds.js";
 export { deformationRange } from "./fea/controls.js";
@@ -214,7 +214,33 @@ function readAnalysis(raw) {
     estimate: typeof own.estimate === "boolean" ? own.estimate : known.estimate, noun: text(own.noun) || known.noun,
     limits: sentences(own.limits), warnings: sentences(own.warnings), referenceC: finiteOrNull(own.reference_C),
     ...(readReynolds(own.reynolds) ? { reynolds: readReynolds(own.reynolds) } : {}),
+    ...(readMach(own.mach) ? { mach: readMach(own.mach) } : {}),
+    ...(readUnsettled(own.unsettled) ? { unsettled: readUnsettled(own.unsettled) } : {}),
   };
+}
+
+/**
+ * Where a contact solve's forces did not settle (`analysis.unsettled`: `at_percent`, the load steps
+ * in % of the load, and `first_percent`): `{ atPercent, firstPercent }`. null for none.
+ */
+function readUnsettled(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const atPercent = (Array.isArray(raw.at_percent) ? raw.at_percent : []).filter(Number.isFinite).map(Number);
+  const firstPercent = Number.isFinite(raw.first_percent) ? Number(raw.first_percent) : atPercent.length ? Math.min(...atPercent) : null;
+  return firstPercent === null ? null : { atPercent, firstPercent };
+}
+
+/**
+ * A fast gas flow's highest Mach number as the file states it (`analysis.mach`: value, limit, regime,
+ * checked): `checked` false where the file warns (past the Mach the solver is checked to, or a
+ * supersonic outlet); a file that does not say is judged by its value against its limit. null for none.
+ */
+function readMach(raw) {
+  if (!raw || typeof raw !== "object" || !Number.isFinite(raw.value)) return null;
+  const limit = Number.isFinite(raw.limit) && raw.limit > 0 ? Number(raw.limit) : null;
+  const regime = ["subsonic", "transonic", "supersonic"].includes(raw.regime) ? raw.regime : "";
+  const checked = typeof raw.checked === "boolean" ? raw.checked : limit === null || raw.value <= limit;
+  return { value: Number(raw.value), limit, regime, checked };
 }
 
 /** A flow's Reynolds number as the file states it (`analysis.reynolds`: value, limit, kind); null for none. */
@@ -322,12 +348,60 @@ function readFlow(raw) {
   };
 }
 
-/** A drop, from the study's echo: its `heightMm`, the faces that land (`onto`), how it stops, its `direction` and its `floor`. null for none. */
+/** A drop, from the study's echo: its `heightMm`, the faces that land (`onto`), how it stops, its `direction`, its `floor` and an impact's `friction`. null for none. */
 function readDrop(raw) {
   const drop = record(raw);
   if (!drop) return null;
   return { heightMm: finiteOrNull(drop.height_mm), onto: faceRefs(drop.onto), stopMm: finiteOrNull(drop.stop_mm), impactMs: finiteOrNull(drop.impact_ms),
-    direction: vector(drop.direction), floor: text(drop.floor) };
+    direction: vector(drop.direction), floor: text(drop.floor), friction: finiteOrNull(drop.friction) };
+}
+
+/** An electromagnetic study's voltages or currents put on faces: each its `faces`, its `value` (V or A) and its `name`. */
+const electrodes = (raw, unit) => entries(raw).map((entry) => ({ faces: faceRefs(entry.faces), value: finiteOrNull(entry[unit]), name: text(entry.name) }));
+
+/** An electromagnetic study's coils: the `part` each is wound on, its `turns`, its current (`amps`), its `name` and its `axis` (direction, point). */
+function readCoils(raw) {
+  return entries(raw).map((coil) => ({
+    part: text(coil.part), turns: finiteOrNull(coil.turns), amps: finiteOrNull(coil.A), name: text(coil.name),
+    axis: { direction: vector(coil.axis?.direction), point: vector(coil.axis?.point_mm) },
+  }));
+}
+
+/** An AC study's uniform field the air carries (`applied_field`): its `mT` and `direction`. null for none. */
+function readAppliedField(raw) {
+  const field = record(raw);
+  return field ? { mT: finiteOrNull(field.mT), direction: vector(field.direction) } : null;
+}
+
+/** Where an electromagnetic study's Joule heat goes (`electro_thermal`): its fixed `temperatures` and its `convection`, as a thermal study's. null for none. */
+function readHeatOut(raw) {
+  const block = record(raw);
+  if (!block) return null;
+  return {
+    temperatures: entries(block.temperatures).map((entry) => ({ faces: faceRefs(entry.faces), celsius: finiteOrNull(entry.C) })),
+    convection: entries(block.convection).map((entry) => ({ faces: faceRefs(entry.faces), h: finiteOrNull(entry.h_W_m2K), ambientC: finiteOrNull(entry.ambient_C) })),
+  };
+}
+
+/**
+ * A composite's layup, from the study's echo (`layup`): its `plies` bottom first (each its `material`,
+ * `angle_deg` and `thickness_mm`, as the file says them), its `notation` ("" where it gives none), its
+ * `thicknessMm` and the 0° `axis` and `normal` where it says. null for none.
+ */
+function readLayupEcho(raw) {
+  const layup = record(raw);
+  if (!layup) return null;
+  const plies = entries(layup.plies).filter((ply) => Number.isFinite(ply.thickness_mm))
+    .map((ply) => ({ material: text(ply.material), angle_deg: Number.isFinite(ply.angle_deg) ? Number(ply.angle_deg) : 0, thickness_mm: Number(ply.thickness_mm) }));
+  return { plies, notation: text(layup.notation), thicknessMm: finiteOrNull(layup.thickness_mm), axis: vector(layup.axis), normal: vector(layup.normal) };
+}
+
+/** A composite's ply materials by name (`laminae`), each its numeric properties as the file gives them. {} for none. */
+function readLaminae(raw) {
+  const named = record(raw);
+  if (!named) return {};
+  return Object.fromEntries(Object.entries(named).filter(([, lamina]) => record(lamina))
+    .map(([name, lamina]) => [name, Object.fromEntries(Object.entries(lamina).filter(([, value]) => Number.isFinite(value)))]));
 }
 
 /**
@@ -337,7 +411,10 @@ function readDrop(raw) {
  * inputs, `convection`, the `excitation`, the `drop`, the `flow`, the `rigidPlanes`, the
  * `sigma` a random vibration judges at and its `psd` (table and g rms), a shock's `srs` and how its
  * modes were `combination`ed, a sweep's `sweepHz` and the `dampingRatio`. A load over time keeps its
- * `history`, as the excitation does.
+ * `history`, as the excitation does. An electromagnetic study's `mode`, `frequencyHz`, `voltages`,
+ * `currents`, `coils`, `appliedField` and `heatOut`; a composite's `layup` and `laminae`. A fixture's
+ * `type` is "fixed" (none given) or "roller" (it may slide in the face's plane, not off it). Every
+ * analysis reads its study from here, never the raw echo.
  */
 function readStudy(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -370,6 +447,18 @@ function readStudy(raw) {
     combination: raw.combination === "cqc" || raw.combination === "srss" ? raw.combination : "",
     sweepHz: band(raw.sweep_Hz),
     dampingRatio: finiteOrNull(raw.damping_ratio),
+    // Electromagnetic: what it solved (`mode`, an AC study's `frequencyHz`), its voltages and currents on faces, its coils, an AC
+    // field the air carries, and where its Joule heat goes.
+    mode: text(raw.mode),
+    frequencyHz: finiteOrNull(raw.frequency_Hz),
+    voltages: electrodes(raw.voltages, "V"),
+    currents: electrodes(raw.currents, "A"),
+    coils: readCoils(raw.coils),
+    appliedField: readAppliedField(raw.applied_field),
+    heatOut: readHeatOut(raw.electro_thermal),
+    // Composite: the layup and the ply materials.
+    layup: readLayupEcho(raw.layup),
+    laminae: readLaminae(raw.laminae),
   };
 }
 
@@ -1013,20 +1102,58 @@ export function reynoldsWarning(result) {
   return { sentence, limit: said ? Number(said[1].replace(/,/g, "")) : result.study?.flow?.kind === "external" ? 1000 : 2000 };
 }
 
+const MACH_SENTENCE = /\bMach\s*\d[\d.]*.*(past Mach|faster than sound)/i;
 /**
- * What leads the verdict's takeaway, by the analysis's tier: "Estimate · " for an estimate (Tier 2),
+ * A fast gas flow's warning that it ran past what its solver is checked to, from the file's
+ * `analysis.mach` (checked false): `{ sentence, short, value, limit }`, the file's own sentence
+ * (`analysis.warnings`) where it gives one, and the caption's few words: "past Mach 1.8", or, a flow
+ * within it whose outlet runs supersonic, "supersonic outlet". null for none, or for another analysis.
+ */
+export function machWarning(result) {
+  const mach = result.analysis?.mach;
+  if (!mach || mach.checked) return null;
+  const past = mach.limit !== null && mach.value > mach.limit;
+  const stated = result.analysis.warnings.find((line) => MACH_SENTENCE.test(line));
+  const sentence = stated || (past
+    ? `Mach ${threeFigures(mach.value)} is past Mach ${plainNumber(mach.limit)}, the fastest this solver is checked to: shocks are captured over a few elements and their strength and place are approximate`
+    : `Mach ${threeFigures(mach.value)}, and the gas leaves the outlet faster than sound: the flow near the outlet is not to be trusted`);
+  return { sentence, short: past ? `past Mach ${plainNumber(mach.limit)}` : "supersonic outlet", value: mach.value, limit: mach.limit };
+}
+
+const UNSETTLED_SENTENCE = /did not settle/i;
+/**
+ * A contact solve whose forces did not settle at some load step (`analysis.unsettled`): `{ sentence,
+ * short, percent }`, the file's own sentence (`analysis.warnings`) where it gives one, and the
+ * caption's few words, "contact did not settle at 80%". null for none.
+ */
+export function unsettledWarning(result) {
+  const unsettled = result.analysis?.unsettled;
+  if (!unsettled) return null;
+  const percent = plainNumber(unsettled.firstPercent);
+  const sentence = result.analysis.warnings.find((line) => UNSETTLED_SENTENCE.test(line))
+    || `Contact did not settle at ${percent}% of the load: the forces here do not balance, so this result is not reliable`;
+  return { sentence, short: `contact did not settle at ${percent}%`, percent: unsettled.firstPercent };
+}
+
+/**
+ * What leads the verdict's takeaway, by the analysis's tier, after "Not reliable · contact did not
+ * settle at 80% · " where a contact solve's forces did not settle (`unsettledWarning`): "Estimate · " for an estimate (Tier 2),
  * a Tier 3 analysis's short limit word ("Laminar · ", "Rigid floor · "; a flow past the laminar
- * range "Laminar · unreliable above Re 2000 · "); "" for Tier 1. And what ends it: " · adapted" where a
- * step to fit the run cost some accuracy.
+ * range "Laminar · unreliable above Re 2000 · "; a fast gas flow the file warns of "Ideal gas · past
+ * Mach 1.8 · "); "" for Tier 1. And what ends it: " · adapted" where a step to fit the run cost some
+ * accuracy.
  */
 function captionFrame(result, analysis) {
   const lead = [];
+  const unsettled = unsettledWarning(result);
+  if (unsettled) lead.push("Not reliable", unsettled.short);
   if (result.analysis?.estimate || (result.analysis?.tier ?? analysis.tier) === 2) lead.push("Estimate");
   if ((result.analysis?.tier ?? analysis.tier) === 3) {
     const reynolds = reynoldsWarning(result);
     // An analysis whose limit word follows what the file solved (electromagnetic: "Static", or "AC" at a frequency).
     const word = (typeof analysis.limitWordOf === "function" && analysis.limitWordOf(result)) || analysis.limitWord;
-    lead.push(word || "Lite", ...(reynolds ? [`unreliable above Re ${reynolds.limit}`] : []));
+    const mach = machWarning(result);
+    lead.push(word || "Lite", ...(reynolds ? [`unreliable above Re ${reynolds.limit}`] : []), ...(mach ? [mach.short] : []));
   }
   return { lead: lead.length ? `${lead.join(" · ")} · ` : "", tail: feaAdapted(result) ? " · adapted" : "" };
 }
@@ -1105,8 +1232,25 @@ export function feaVerdict(result, loadScale = 1) {
 }
 
 /**
- * Details' rows, each chosen into Quick Edit with what it says: a flow's warning that it ran past the
- * laminar range (its own row, first); the mesh (`detailRows`); "Adapted to fit", one row per step
+ * A fast gas flow's Mach row in Details: where the file warns, its sentence (first, as a flow's
+ * Reynolds warning is); else "Fastest flow Mach 1.2", its regime and the Mach the solver is checked
+ * to its hint. [] for another analysis.
+ */
+function machRows(result, whole) {
+  const mach = result.analysis?.mach;
+  if (!mach) return [];
+  const warning = machWarning(result);
+  if (warning) return [{ id: "mach", label: warning.sentence, detail: "", wrap: true, ...whole(warning.sentence) }];
+  const label = `Fastest flow Mach ${threeFigures(mach.value)}`;
+  const hint = [mach.regime, mach.limit !== null ? `checked to Mach ${plainNumber(mach.limit)}` : ""].filter(Boolean).join(", ");
+  const summary = `${label}${mach.regime ? ` (${mach.regime})` : ""}${mach.limit !== null ? `, within the Mach ${plainNumber(mach.limit)} its solver is checked to` : ""}`;
+  return [{ id: "mach", label, detail: "", wrap: true, ...(hint ? { hint: `${hint.charAt(0).toUpperCase()}${hint.slice(1)}` } : {}), ...whole(summary) }];
+}
+
+/**
+ * Details' rows, each chosen into Quick Edit with what it says: a contact solve's warning that its
+ * forces did not settle (first, its own row); a flow's warning that it ran past the
+ * laminar range (its own row, first); a fast gas flow's Mach number (`machRows`); the mesh (`detailRows`); "Adapted to fit", one row per step
  * cadgen took to fit the run, its words as the label and its accuracy note as the hint, chosen with
  * the faces it is about (the region kept fine, the features left out) tinted, else the whole result;
  * and a Tier 3 analysis's "Limits", one row per sentence of what its model leaves out.
@@ -1125,7 +1269,9 @@ function detailsGroup(result) {
   const tier3 = result.analysis?.tier === 3 && result.analysis.limits.length;
   const limits = tier3 ? [{ id: "limits", label: "Limits", detail: "", children: result.analysis.limits.map((sentence, index) => ({
     id: `limit:${index}`, label: sentence, detail: "", wrap: true, ...whole(`Limits of this ${result.analysis.word.toLowerCase()} result: ${sentence}`) })) }] : [];
-  const children = [...flow, ...mesh, ...fit, ...limits];
+  const unsettled = unsettledWarning(result);
+  const settle = unsettled ? [{ id: "unsettled", label: unsettled.sentence, detail: "", wrap: true, ...whole(unsettled.sentence) }] : [];
+  const children = [...settle, ...flow, ...machRows(result, whole), ...mesh, ...fit, ...limits];
   return children.length ? [{ id: "details", label: "Details", detail: "", collapsed: true, children }] : [];
 }
 
@@ -1166,12 +1312,12 @@ export function facePromptSummary(result, ref) {
   return (result.study && faceSummary(result.study, ref)) || faceLabel(ref);
 }
 
-/** What the study does to a face, in words: "fixed", "2500 N load, down", "2 MPa pressure", or "free". */
+/** What the study does to a face, in words: "fixed", "slides along it" (a roller), "2500 N load, down", "2 MPa pressure", or "free". */
 export function faceRole(result, ref) {
   const study = result.study;
   if (!study) return "";
   const roles = [
-    ...study.fixtures.filter((fixture) => fixture.faces.includes(ref)).map((fixture) => fixture.type),
+    ...study.fixtures.filter((fixture) => fixture.faces.includes(ref)).map((fixture) => (isRoller(fixture) ? "slides along it" : fixture.type)),
     ...study.loads.filter((load) => load.faces.includes(ref)).map((load) => {
       const words = loadWords(load);
       return [[words.amount, words.noun].filter(Boolean).join(" "), words.direction].filter(Boolean).join(", ");

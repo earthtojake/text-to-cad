@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, SolveContext
 from cadgen._internal.fea.analyses.modal import (
-    apply_eigen_rung, eigen_estimate, factor_text, finding, fixed_dofs, governing_field, materials_of, max_frames,
+    apply_eigen_rung, eigen_estimate, factor_text, finding, governing_field, held_supports, materials_of, max_frames,
     mode_series, mode_shapes, parse_modes, raw_checks, solver_method, where_moves,
 )
 from cadgen._internal.fea.analyses.static import StaticAnalysis, StaticInputs
@@ -153,8 +153,10 @@ class BucklingAnalysis:
         sigma = operators.stress(space, materials, outcome.u)
         Kg = operators.geometric_stiffness(space, sigma)
         K = operators.stiffness(space, materials)
-        fixed = fixed_dofs(space, inputs.fixtures, ctx.ordinal_of)
+        held = held_supports(space, inputs.fixtures, ctx.ordinal_of)
+        fixed = held.fixed
         free = np.setdiff1d(np.arange(space.dofs), fixed)
+        K, Kg = held.local(K), held.local(Kg)   # a sloped or curved roller: in its nodes' own axes
         Kff, Gff = K[free][:, free].tocsr(), (-Kg)[free][:, free].tocsr()
         timings["assemble_s"] = time.perf_counter() - started
 
@@ -184,6 +186,7 @@ class BucklingAnalysis:
         full = np.zeros((space.dofs, max(len(keep), 1)))
         if factors:
             full[free] = found.vectors[:, keep]
+            full = held.global_vector(full)
         frames = min(len(factors), max_frames(ctx)) or 1
         shapes, _ = mode_shapes(space, full[:, :frames])
         governing = governing_field(space, materials, full[:, 0] / max(float(np.abs(full[:, 0]).max()), 1e-300))

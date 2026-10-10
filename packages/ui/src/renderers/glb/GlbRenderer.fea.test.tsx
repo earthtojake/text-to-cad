@@ -587,6 +587,33 @@ it('draws the loads and fixtures on the model, the chosen load\'s arrows in the 
   expect(group.parent).toBeNull();
 });
 
+it('a roller fixture reads as Slides on, after Held at, with its own glyph and marker, and is chosen as it slides', async () => {
+  const copied: string[] = [];
+  const rolling = { ...STUDY, fixtures: [{ type: 'fixed', faces: ['#o1.f2'] }, { type: 'roller', faces: ['#o1.f1'] }], loads: [] };
+  const { mesh } = mount({ ...STUDIED, study: rolling }, undefined, { faces: FACES, host: clipboardHost(copied) });
+  const study = studyPanel()!;
+  expect(rowTexts(study).map(text => text!.replace(/\u2011/g, '-')).slice(0, 4)).toEqual(['Held at', 'Face 2', 'Slides on', 'Face 1']);
+  const headings = Array.from(study.querySelectorAll('[data-study-heading]'));
+  expect(headings.map(row => row.textContent)).toEqual(['Held at', 'Slides on', 'Made of']);
+  // Its glyph is the fixture's cone on a plate that rolls on the face: the cone, the plate, two rollers, the face.
+  const glyph = headings[1].querySelector('svg')!;
+  expect(glyph.querySelectorAll('circle').length).toBe(2);
+  expect(glyph.getAttribute('class')).toContain('text-muted-foreground');
+  expect(headings[0].querySelector('svg circle')).toBeNull();
+  // On the model, the roller's own grey cones on plates (face 2 has no whole triangle here, so no fixture cone stands on it).
+  const group = mesh.children.find(child => child.name === 'fea-markers')!;
+  const rollerCones = group.getObjectByName('fea-roller-cones') as THREE.InstancedMesh;
+  expect(rollerCones.count).toBe(1);
+  expect((group.getObjectByName('fea-fixture-cones') as THREE.InstancedMesh).count).toBe(0);
+  const colour = new THREE.Color();
+  rollerCones.getColorAt(0, colour);
+  expect(colour.getHexString()).toBe('71717a');
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select Face 1' })); });
+  rollerCones.getColorAt(0, colour);
+  expect(colour.getHexString()).toBe('ff40f2');
+  expect(await copiedPrompt(copied)).toBe('move it\n\nFile: /models/part.glb\nReferences:\nSlides on face 1 · /models/part.step#o1.f1');
+});
+
 it('a view that turns the markers off opens with the switch off', () => {
   const both = { ...STUDY, loads: [{ type: 'force', faces: ['#o1.f1'], vector_N: [0, 0, -2500] }] };
   const { mesh } = mount({ ...STUDIED, study: both, view: { show: { loads: false, fixtures: false } } }, undefined, { faces: [0, 0, 0, 0] });

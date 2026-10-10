@@ -46,9 +46,10 @@ consistent (unsymmetric) tangent of that return. The driver's linear solves
 :class:`ContactProblem` is a :class:`~.nonlinear_driver.NonlinearProblem`:
 linear elastic parts, the contacts, and a very weak spring holding each body
 nothing fixes (it rests only on contacts) against drifting where the contact
-has no stiffness (sideways, frictionless). Its ``commit`` runs the Uzawa
-updates at the converged load step and leaves the settled displacement in the
-driver's own array. :func:`pressure_field` is each slave node's force over its
+has no stiffness (sideways, frictionless). Its ``settle`` runs the Uzawa
+updates at the converged load step and gives the driver the settled
+displacement (or says it did not settle, and the driver cuts the step);
+``commit`` keeps it. :func:`pressure_field` is each slave node's force over its
 area, copied to the master side. Numeric imports live inside the functions.
 """
 
@@ -303,7 +304,7 @@ def _rule(depth: int) -> "tuple[np.ndarray, np.ndarray]":
     return points, np.full(len(points), 1.0 / len(points))
 
 
-def _contact_points(space: "FemSpace", triangles: "np.ndarray"):
+def contact_points(space: "FemSpace", triangles: "np.ndarray"):
     """Each triangle's integration points: :data:`RULE_DEPTH` rounds of splitting each flat corner triangle, three
     points on each piece. Returns (P, 3) positions, (P, 6) the triangle's shape functions there, (P, 6) each node's
     averaging weight (its hat on the corner triangles), (P,) the area each point stands for, (P, 3) the triangle's
@@ -449,7 +450,7 @@ def pair_constraints(space: "FemSpace", pair: PairSpec, node_part: "np.ndarray",
         return empty
     slaves = surface_triangles(space, slave_rows)
     masters = surface_triangles(space, master_rows)
-    position, slave_N, hat, area, slave_normal, slave_of = _contact_points(space, slaves)
+    position, slave_N, hat, area, slave_normal, slave_of = contact_points(space, slaves)
     flat, parent, local = _flat(space, masters)
     A, B, C = (points[flat[:, k]] for k in range(3))
     centres = (A + B + C) / 3.0
@@ -498,7 +499,7 @@ def plane_constraints(space: "FemSpace", plane: PlaneSpec, node_part: "np.ndarra
     if not len(rows):
         return empty
     triangles = surface_triangles(space, rows)
-    position, N, hat, area, normal_of, of = _contact_points(space, triangles)
+    position, N, hat, area, normal_of, of = contact_points(space, triangles)
     n = np.asarray(plane.normal, dtype=float)
     gap = (position - np.asarray(plane.point, dtype=float)) @ n
     usable = (normal_of @ n < FACING) & (gap <= search_mm) & (gap >= -tolerance_mm - 1e-9)
@@ -618,6 +619,9 @@ class ContactProblem:
         #: Uzawa updates over the whole path, and the largest relative change in normal force left at the end of a step.
         self.augmentations = 0
         self.unsettled = 0.0
+        #: What the last settle started from (rollback restores it) and the change it ended with (commit reads it).
+        self._before = None
+        self._change = None
 
     def evaluate(self, u, *, tangent):
         response = self.response(u, tangent=tangent)
@@ -627,17 +631,22 @@ class ContactProblem:
     def response(self, u, *, tangent: bool = False) -> ContactResponse:
         return respond(self.constraints, u, self.state, self.vdofs, tangent=tangent, scale=self.scale, stick=self.stick)
 
-    def commit(self, u, factor):
+    def settle(self, u, factor):
         """Uzawa at this load step: λ ← p and solve again from ``u``, stiffening the penalties to their full value on
         the way (each solve starts next to its answer, so the stiff ones converge where a cold start may chatter
-        between open and closed points), until the normal forces settle. The settled displacement is written back
-        into ``u``, the driver's own array, which it records and continues from."""
+        between open and closed points), until the normal forces settle. Returns the settled displacement
+        (:class:`~.nonlinear_driver.Settled`), ``settled`` False when a re-solve at the full penalty found no
+        equilibrium: the forces there do not balance, and the driver cuts the step (:meth:`rollback`) or, at its
+        smallest, keeps it marked. ``u`` is not changed."""
         import numpy as np
 
         from cadgen._internal.fea import nonlinear_driver as driver
 
+        self._before = (self.state.multiplier.copy(), self.state.slip.copy(), self.scale, self.stick, self.augmentations)
+        u = u.copy()
         change = 0.0
         stiffen = True
+        settled = True
         for _ in range(MAX_AUGMENTATIONS):
             p = self.response(u).normal_force
             norm = float(np.linalg.norm(p))
@@ -650,17 +659,34 @@ class ContactProblem:
             self.stick = False
             if stiffer:
                 self.scale = min(1.0, self.scale * GROWTH)
-            found, _, _ = driver._newton(self, driver._Linear(self, self.method), u, factor, driver.MAX_ITERATIONS,
-                                         driver.TOLERANCE)
+            found, _, _ = driver.newton(self, driver.LinearSolver(self, self.method), u, factor)
             if found is None:
-                # Keep the step as the last solve left it; a stiffening that did not converge stops stiffening.
+                # A stiffening that did not converge stops stiffening; a re-solve at the full penalty that finds no
+                # equilibrium leaves the forces unbalanced: the step did not settle.
                 self.state.multiplier, self.scale = kept
                 if not stiffer:
+                    settled = False
                     break
                 stiffen = False
                 continue
-            u[:] = found
+            u = found
             self.augmentations += 1
+        self._change = change
+        return driver.Settled(u, settled)
+
+    def rollback(self):
+        """Forget what the last :meth:`settle` changed: the driver cuts the step and tries a smaller one."""
+        multiplier, slip, self.scale, self.stick, self.augmentations = self._before
+        self.state.multiplier, self.state.slip = multiplier, slip
+
+    def commit(self, u, factor):
+        """Keep the step at ``u`` (settled, or kept unsettled at the smallest step): the multipliers and the slip it
+        reached, and tell ``on_commit``. A problem driven without :meth:`settle` settles here first."""
+        import numpy as np
+
+        if getattr(self, "_change", None) is None:
+            u[:] = self.settle(u, factor).u
+        change, self._change = self._change, None
         self.unsettled = max(self.unsettled, change if change > AUGMENT_TOLERANCE else 0.0)
         response = self.response(u)
         self.state.multiplier = response.normal_force.copy()

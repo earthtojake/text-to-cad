@@ -840,7 +840,7 @@ class PeakFace(unittest.TestCase):
 
         import numpy as np
 
-        from cadgen._internal.fea.run import _peak_face
+        from cadgen._internal.fea.analyses.static import peak_face as _peak_face
 
         # Two triangles on f1, one on f2, sharing node 2 (an edge between them); node 9 is inside.
         volume = SimpleNamespace(
@@ -872,7 +872,7 @@ class PeakFace(unittest.TestCase):
 
         import numpy as np
 
-        from cadgen._internal.fea.run import _peak_face
+        from cadgen._internal.fea.analyses.static import peak_face as _peak_face
 
         volume = SimpleNamespace(
             boundary_ordinal=np.array([1, 2]),

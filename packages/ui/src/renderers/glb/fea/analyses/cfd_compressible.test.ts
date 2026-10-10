@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
-import { feaControls, feaVerdict, readFeaResult, reynoldsWarning, studyRows } from '../../feaResult.js';
+import { feaControls, feaVerdict, machWarning, readFeaResult, reynoldsWarning, studyRows } from '../../feaResult.js';
 import { FLOW_SETUP } from './cfd.js';
 import cfdCompressible from './cfd_compressible.js';
 import { feaAnalysis } from './index.js';
@@ -75,5 +75,27 @@ describe('cfd_compressible', () => {
     const details = studyRows(gasResult()).find((row: { id: string }) => row.id === 'details');
     expect(JSON.stringify(details)).toContain(LIMIT);
     expect(reynoldsWarning(gasResult())).toBeNull();
+  });
+
+  it('says its fastest flow in Details, and where the file warns, leads the takeaway with how far past it ran', () => {
+    const within = studyRows(gasResult()).find((row: { id: string }) => row.id === 'details');
+    expect(within.children[0]).toMatchObject({ id: 'mach', label: 'Fastest flow Mach 0.53', hint: 'Subsonic, checked to Mach 1.8',
+      refs: ['#o1'], summary: 'Fastest flow Mach 0.53 (subsonic), within the Mach 1.8 its solver is checked to' });
+    expect(machWarning(gasResult())).toBeNull();
+    expect(feaVerdict(gasResult([mach(0.53, 'passes')])).caption.startsWith('Ideal gas · Peak')).toBe(true);
+
+    const sentence = 'Mach 2.10 is past Mach 1.8, the fastest this solver is checked to: shocks are captured over a few elements and their strength and place are approximate';
+    const past = gasResult([mach(2.1, 'fails')]);
+    past.analysis.mach = { value: 2.1, limit: 1.8, regime: 'supersonic', checked: false };
+    past.analysis.warnings = [sentence];
+    expect(feaVerdict(past).caption.startsWith('Ideal gas · past Mach 1.8 · ')).toBe(true);
+    const row = studyRows(past).find((entry: { id: string }) => entry.id === 'details').children[0];
+    expect(row).toMatchObject({ id: 'mach', label: sentence, refs: ['#o1'], summary: sentence });
+
+    // Within the range, but the gas leaves the outlet faster than sound: still not checked.
+    const outlet = gasResult([mach(1.2, 'fails')]);
+    outlet.analysis.mach = { value: 1.2, limit: 1.8, regime: 'supersonic', checked: false };
+    expect(feaVerdict(outlet).caption.startsWith('Ideal gas · supersonic outlet · ')).toBe(true);
+    expect(machWarning(outlet)!.sentence).toContain('faster than sound');
   });
 });

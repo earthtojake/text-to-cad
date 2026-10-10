@@ -69,15 +69,20 @@ function loadSummary(words, refs) {
 
 const capitalised = (word) => word.charAt(0).toUpperCase() + word.slice(1);
 
+/** Whether a fixture is a roller: its face may slide in its own plane but not move off it. Any other (none given is fixed) holds it. */
+export const isRoller = (fixture) => fixture.type === "roller";
+
 /**
- * What a prompt calls one face, by everything the study does to it: "Fixed face 17", "2500 N load
- * on face 22", and for a face both fixed and loaded, "Fixed and loaded face 17". "" for a free face.
+ * What a prompt calls one face, by everything the study does to it: "Fixed face 17", "Slides on
+ * face 3", "2500 N load on face 22", and for a face both held and loaded, "Fixed and loaded face 17"
+ * ("Sliding and loaded face 3"). "" for a free face.
  */
 export function faceSummary(study, ref) {
   const fixture = study.fixtures.find((entry) => entry.faces.includes(ref));
   const loads = study.loads.filter((entry) => entry.faces.includes(ref));
-  if (fixture && loads.length) return `${capitalised(fixture.type)} and loaded ${facesWords([ref])}`;
-  if (fixture) return `${capitalised(fixture.type)} ${facesWords([ref])}`;
+  const roller = fixture && isRoller(fixture);
+  if (fixture && loads.length) return `${roller ? "Sliding" : capitalised(fixture.type)} and loaded ${facesWords([ref])}`;
+  if (fixture) return roller ? `Slides on ${facesWords([ref])}` : `${capitalised(fixture.type)} ${facesWords([ref])}`;
   if (loads.length === 1) return loadSummary(loadWords(loads[0]), [ref]);
   return loads.length ? `Loaded ${facesWords([ref])}` : "";
 }
@@ -94,13 +99,31 @@ export function faceTitle(result, ref) {
 /** The whole result, for a prompt: its occurrence, else every part it holds. */
 export const wholeRefs = (result) => (result.occurrence ? [result.occurrence] : result.parts.map((part) => part.ref).filter(Boolean));
 
-/** Study's "Held at": one row per fixed face, its name alone ("Face 9", "base · face 9"), under the fixture glyph. */
+/**
+ * Study's "Held at": one row per fixed face, its name alone ("Face 9", "base · face 9"), under the
+ * fixture glyph; then, right after it, "Slides on" (`slidesOnRows`), so every analysis that says where
+ * it is held says where it slides too.
+ */
 export function heldRows(result) {
   const study = result.study;
-  const fixed = study.fixtures.flatMap((fixture, index) => fixture.faces.map((ref) => ({
+  const fixed = study.fixtures.flatMap((fixture, index) => (isRoller(fixture) ? [] : fixture.faces.map((ref) => ({
     id: `fixed:${index}:${ref}`, label: faceTitle(result, ref), detail: "", faces: [ref], summary: faceSummary(study, ref), wrap: true,
-  })));
-  return fixed.length ? [{ id: "fixed", label: "Held at", detail: "", glyph: "fixture", children: fixed }] : [];
+  }))));
+  return [...(fixed.length ? [{ id: "fixed", label: "Held at", detail: "", glyph: "fixture", children: fixed }] : []), ...slidesOnRows(result)];
+}
+
+/**
+ * Study's "Slides on", under the roller glyph: one row per face of a roller fixture (a frictionless
+ * sliding support), its name alone, the hint saying what that means. Its rows number their fixture
+ * as Held at's do (`roller:<fixture>:<ref>`), so a row chooses its own markers.
+ */
+export function slidesOnRows(result) {
+  const study = result.study;
+  const rows = study.fixtures.flatMap((fixture, index) => (isRoller(fixture) ? fixture.faces.map((ref) => ({
+    id: `roller:${index}:${ref}`, label: faceTitle(result, ref), detail: "", faces: [ref], summary: faceSummary(study, ref), wrap: true,
+    hint: "May slide along the face, not move off it",
+  })) : []));
+  return rows.length ? [{ id: "roller", label: "Slides on", detail: "", glyph: "roller", children: rows }] : [];
 }
 
 /**

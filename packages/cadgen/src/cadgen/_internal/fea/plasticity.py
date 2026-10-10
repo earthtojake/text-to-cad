@@ -107,7 +107,7 @@ class J2Update:
     tangent: "np.ndarray | None"   # (3, 3, 3, 3, elements, points) MPa
 
 
-def _identities():
+def identities():
     import numpy as np
 
     delta = np.eye(3)
@@ -120,7 +120,7 @@ def elastic_tensor(bulk, shear, shape: tuple[int, int]) -> "np.ndarray":
     """Isotropic C = K 1⊗1 + 2G (I_sym - 1/3 1⊗1) at every point, (3, 3, 3, 3, elements, points)."""
     import numpy as np
 
-    _, one, symmetric = _identities()
+    _, one, symmetric = identities()
     bulk = np.broadcast_to(np.asarray(bulk, dtype=float), shape)
     shear = np.broadcast_to(np.asarray(shear, dtype=float), shape)
     return one[..., None, None] * bulk + 2.0 * (symmetric - one / 3.0)[..., None, None] * shear
@@ -146,7 +146,7 @@ def radial_return(strain: "np.ndarray", state: J2State, params: J2Params, *, tan
     """
     import numpy as np
 
-    delta, one, symmetric = _identities()
+    delta, one, symmetric = identities()
     shape = strain.shape[2:]
     K, G, H = params.bulk, params.shear, params.hardening
     volumetric = strain[0, 0] + strain[1, 1] + strain[2, 2]

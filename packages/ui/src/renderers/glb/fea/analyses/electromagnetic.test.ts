@@ -116,4 +116,23 @@ describe('electromagnetic', () => {
     expect(feaVerdict(electricResult()).caption.startsWith('Static · ')).toBe(true);
     expect([hertz(50), hertz(15791.86), hertz(2e6)]).toEqual(['50 Hz', '15.8 kHz', '2 MHz']);
   });
+
+  it('reads its voltages, currents, coils and AC source through the study it keeps, not the raw echo', () => {
+    const ac = electricResult({ study: {
+      material: { name: 'Aluminum 6061-T6', yield_MPa: 276 }, mode: 'ac_magnetic', frequency_Hz: 50000,
+      voltages: [{ faces: ['#o1.f1'], V: 12, name: 'feed' }], currents: [{ faces: ['#o1.f2'], A: 3, name: '' }],
+      coils: [{ part: 'winding_a', turns: 100, A: 2, name: 'coil', axis: { direction: [0, 0, 1], point_mm: [0, 0, 5] } }],
+      applied_field: { mT: 10, direction: [0, 0, 1] },
+    } });
+    expect(ac.study).toMatchObject({ mode: 'ac_magnetic', frequencyHz: 50000,
+      voltages: [{ faces: ['#o1.f1'], value: 12, name: 'feed' }], currents: [{ faces: ['#o1.f2'], value: 3, name: '' }],
+      coils: [{ part: 'winding_a', turns: 100, amps: 2, name: 'coil', axis: { direction: [0, 0, 1], point: [0, 0, 5] } }],
+      appliedField: { mT: 10, direction: [0, 0, 1] } });
+    const before = [electrodeRows(ac), coilRows(ac)];
+    ac.mesh.userData.study = {};
+    expect([electrodeRows(ac), coilRows(ac)]).toEqual(before);
+    expect(electrodeRows(ac)[0].children.map((row: { label: string }) => row.label)).toEqual(['Held at 12 V', '3 A in at 50 kHz']);
+    expect(coilRows(ac)[0].children.map((row: { label: string }) => row.label)).toEqual(['Coil 2 A at 50 kHz', 'Field 10 mT at 50 kHz']);
+    expect(feaVerdict(ac).caption.startsWith('AC · ')).toBe(true);
+  });
 });

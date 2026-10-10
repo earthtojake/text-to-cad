@@ -376,6 +376,7 @@ class CrossPlyStrip(unittest.TestCase):
         self.assertEqual(self.extras["analysis"]["tier"], 3)
         self.assertTrue(any("no delamination" in line for line in self.extras["analysis"]["limits"]))
         self.assertEqual(self.extras["study"]["layup"]["notation"], "[0/90]s")
+        self.assertEqual(self.extras["study"]["laminae"], {"cfrp": CFRP})  # the viewer's Study reads the ply materials
         self.assertIn("_FAILURE_INDEX", self.attributes)
         self.assertEqual([f["field"] for f in self.extras["fields"]], ["von_mises", "displacement", "failure_index"])
         self.assertIn("composite_method", [f["type"] for f in self.result.findings])

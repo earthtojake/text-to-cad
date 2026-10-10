@@ -117,15 +117,15 @@ material's datasheet or test data, never make them up.
 - `G12_MPa`, `G13_MPa`, `G23_MPa`: the shear moduli.
 - `axes` (optional): directions 1 and 2 in the part's coordinates, perpendicular; 3 is 1 × 2.
   Default: the global X and Y axes.
-- `E_MPa` and `nu` are not needed; E1 and ν12 stand in for them where an analysis has no
-  orthotropic path. `yield_MPa` is optional, and needed only for a `stress` check (judged, as for
+- `E_MPa` and `nu` are not needed (E1 and ν12 fill them). `yield_MPa` is optional, and needed only for a `stress` check (judged, as for
   any material, by von Mises against it: a rough measure for a directional material; say so).
 
 Where it is used: every analysis that assembles the solid stiffness takes the full 6 × 6 tensor
 (rotated into the part's axes): `static`, `modal`, `buckling`, `harmonic`, `random_vibration`,
 `shock`, `transient`, `thermal_stress` (with the isotropic expansion the material gives) and the
-static solve under `fatigue` and `drop`. `nonlinear`, `impact`, `creep` and `contact` use the E1
-and ν12 stand-in: do not give them an orthotropic material. The symmetry ladder rung cuts an
+static solve under `fatigue` and `drop`. `nonlinear`, `impact`, `creep`, `contact` and `bolt` treat
+every material as the same in every direction, so they refuse an orthotropic one with a sentence
+naming the analyses that take it. The symmetry ladder rung cuts an
 orthotropic part only across a plane normal to one of its material directions.
 
 A laminate (plies at angles) is not one orthotropic material: use the `composite` analysis

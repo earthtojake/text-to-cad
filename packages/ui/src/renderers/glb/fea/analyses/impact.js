@@ -17,15 +17,11 @@ import { PLAY, timeFieldAndDeformation } from "./transient.js";
 
 export { PLAY };
 
-/** The drop as the file echoes it: its friction and direction ride on it, which `readStudy` keeps no copy of. */
-const rawDrop = (result) => result?.mesh?.userData?.study?.drop || {};
-
 /** How it falls and slides, in words: "Falling down, no friction", "Falling along +X, friction 0.3". */
 export function fallWords(result) {
   const drop = result.study.drop;
-  const raw = rawDrop(result);
   const way = drop?.direction ? forceDirection(drop.direction) : "";
-  const friction = Number(raw.friction) > 0 ? `friction ${plainNumber(Number(raw.friction))}` : "no friction";
+  const friction = drop?.friction > 0 ? `friction ${plainNumber(drop.friction)}` : "no friction";
   return [way ? `Falling ${way}` : "", friction].filter(Boolean).join(", ");
 }
 

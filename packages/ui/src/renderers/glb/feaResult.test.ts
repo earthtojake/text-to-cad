@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaControls, feaMarkerShow, feaPresets, feaRamp, fieldValues, forceDirection,
   feaVerdict, formatValue, pickFace, readFeaResult, partRows, recolorByField, resultSourcePath, studyRows, weakestPartIndex,
-  feaChecks, feaFailing, feaSections, feaShownControls, feaDefaults
+  feaChecks, feaFailing, feaSections, feaShownControls, feaDefaults, facePromptSummary
 } from './feaResult.js';
+import { shakenRows } from './fea/setup.js';
 
 /** A two-triangle "result" the way GLTFLoader hands one over: lower-cased custom attributes, extras in userData. */
 function resultMesh({ generator = 'cadgen fea', scale = 10, safetyFactor = 5.83 as number | null } = {}) {
@@ -198,6 +199,31 @@ describe('a result\'s study', () => {
     expect(faceRole(result, '#o1.f2')).toBe('2500 N load, down');
     expect(faceRole(result, '#o1.f4')).toBe('2 MPa pressure');
     expect(faceRole(result, '#o1.f9')).toBe('free');
+  });
+
+  it('reads a roller fixture as "Slides on", right after Held at, which keeps only the fixed ones; a picked face says it slides', () => {
+    const rolling = { ...STUDY, fixtures: [{ type: 'fixed', faces: ['#o1.f1'] }, { faces: ['#o1.f3'] }, { type: 'roller', faces: ['#o1.f2', '#o1.f4'] }],
+      excitation: { type: 'base', direction: [0, 0, 1], amplitude_g: 1 } };
+    const { result } = studyResult({ study: rolling, faces: ['#o1.f1', '#o1.f2', '#o1.f3', '#o1.f4'] });
+    const rows = strip(studyRows(result));
+    expect(rows.slice(0, 2)).toEqual([
+      { id: 'fixed', label: 'Held at', detail: '', glyph: 'fixture', children: [
+        { id: 'fixed:0:#o1.f1', label: 'Face 1', detail: '', summary: 'Fixed face 1', faces: ['#o1.f1'] },
+        { id: 'fixed:1:#o1.f3', label: 'Face 3', detail: '', summary: 'Fixed and loaded face 3', faces: ['#o1.f3'] },
+      ] },
+      { id: 'roller', label: 'Slides on', detail: '', glyph: 'roller', children: [
+        { id: 'roller:2:#o1.f2', label: 'Face 2', detail: '', hint: 'May slide along the face, not move off it', summary: 'Sliding and loaded face 2', faces: ['#o1.f2'] },
+        { id: 'roller:2:#o1.f4', label: 'Face 4', detail: '', hint: 'May slide along the face, not move off it', summary: 'Sliding and loaded face 4', faces: ['#o1.f4'] },
+      ] },
+    ]);
+    expect(rows[2].id).toBe('loads');
+    expect(faceRole(result, '#o1.f2')).toBe('slides along it; 2500 N load, down');
+    expect(facePromptSummary(result, '#o1.f2')).toBe('Sliding and loaded face 2');
+    const unloaded = studyResult({ study: { ...rolling, loads: [] }, faces: ['#o1.f2'] }).result;
+    expect(facePromptSummary(unloaded, '#o1.f2')).toBe('Slides on face 2');
+    expect(faceRole(unloaded, '#o1.f2')).toBe('slides along it');
+    // The shaker is on every face that holds it, rollers too.
+    expect(shakenRows(result)[0].children[0].faces).toEqual(['#o1.f1', '#o1.f3', '#o1.f2', '#o1.f4']);
   });
 
   it('names a face both fixed and loaded for both, in either row', () => {

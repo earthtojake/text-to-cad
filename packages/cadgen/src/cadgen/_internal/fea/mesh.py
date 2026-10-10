@@ -147,10 +147,10 @@ def face_area_center(face) -> tuple[float, tuple[float, float, float]]:
     from OCP.BRepGProp import BRepGProp
     from OCP.GProp import GProp_GProps
 
-    return _area_center(face.wrapped)
+    return area_center(face.wrapped)
 
 
-def _area_center(shape) -> tuple[float, tuple[float, float, float]]:
+def area_center(shape) -> tuple[float, tuple[float, float, float]]:
     from OCP.BRepGProp import BRepGProp
     from OCP.GProp import GProp_GProps
 
@@ -165,18 +165,18 @@ def occurrence_fingerprints(occurrence: "Occurrence") -> list[FaceFingerprint]:
     out = []
     for selection in occurrence.entities("face"):
         area, centre = face_area_center(selection.shape())
-        out.append(FaceFingerprint(selection.ref, int(selection._ordinal), area, centre))
+        out.append(FaceFingerprint(selection.ref, int(selection.ordinal), area, centre))
     return out
 
 
-def _write_brep(shape, path: Path) -> None:
+def write_brep(shape, path: Path) -> None:
     from OCP.BRepTools import BRepTools
 
     if not BRepTools.Write_s(shape, str(path)):
         raise RuntimeError(f"could not write the BREP the mesher reads: {path}")
 
 
-def _match_faces(fingerprints: list[FaceFingerprint], ng_faces, scale: float) -> dict[int, int]:
+def match_faces(fingerprints: list[FaceFingerprint], ng_faces, scale: float) -> dict[int, int]:
     """``{netgen face index (0-based): cadgen ordinal}`` for EVERY face, verified.
 
     Order is the fast path (netgen face i <-> ordinal i+1); a face that does
@@ -229,14 +229,14 @@ def _require_ten_node_tets(e3) -> None:
         raise RuntimeError("the mesher produced elements that are not 10-node tetrahedra")
 
 
-def _require_elements(e3, order: int) -> None:
+def require_elements(e3, order: int) -> None:
     if order == 2:
         _require_ten_node_tets(e3)
     elif e3["nodes"].shape[1] < 4 or not (e3["nodes"][:, :4] > 0).all():
         raise RuntimeError("the mesher produced elements that are not 4-node tetrahedra")
 
 
-def _generate(geometry, ngocc, h: float, refine: float, order: int, size_field: dict | None, keys_of_face: dict[int, list]):
+def generate_mesh(geometry, ngocc, h: float, refine: float, order: int, size_field: dict | None, keys_of_face: dict[int, list]):
     """netgen's mesh at size ``h``; ``size_field`` adds local sizes, ``order`` 2 adds the mid-edge nodes.
 
     ``size_field`` is ``{"faces": {key: size_mm}, "points": [[x, y, z, size_mm], ...], "radius_mm": r}``:
@@ -279,7 +279,7 @@ def mesh_occurrence(
     """Mesh one placed occurrence with second-order tetrahedra (``order=1``: first-order, 4 nodes).
 
     ``refine`` also shrinks the elements at curved features by that ratio (:func:`_meshing`).
-    ``size_field`` sets local sizes, faces by cadgen ordinal (:func:`_generate`).
+    ``size_field`` sets local sizes, faces by cadgen ordinal (:func:`generate_mesh`).
     ``prepared`` (:class:`~cadgen._internal.fea.defeature.Prepared`, the fit ladder's) meshes its shape
     instead -- the part defeatured, or a symmetric half -- each of its faces under the occurrence's
     ordinal it came from (a symmetry plane under its own), so the study's faces mean the same faces.
@@ -296,7 +296,7 @@ def mesh_occurrence(
     if prepared is not None:
         from cadgen._internal.fea.assembly import part_faces
 
-        own = [FaceFingerprint(f"face {k}", k, *_area_center(face)) for k, face in enumerate(part_faces(prepared.shape), 1)]
+        own = [FaceFingerprint(f"face {k}", k, *area_center(face)) for k, face in enumerate(part_faces(prepared.shape), 1)]
         faces_of_occurrence, fingerprints, origin = fingerprints, own, list(prepared.origin)
     if not diagonal > 0:
         raise RuntimeError(f"{occurrence.ref} has no volume to mesh")
@@ -308,16 +308,16 @@ def mesh_occurrence(
 
     with tempfile.TemporaryDirectory(prefix="cadgen-fea-") as tmp:
         brep = Path(tmp) / "occurrence.brep"
-        _write_brep(shape.wrapped if prepared is None else prepared.shape, brep)
+        write_brep(shape.wrapped if prepared is None else prepared.shape, brep)
         # netgen's C++ side prints to fd 1, the JSON result channel of every door.
         with kernel_messages_on_stderr():
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
-            mapping = _match_faces(fingerprints, list(geometry.faces), diagonal)
+            mapping = match_faces(fingerprints, list(geometry.faces), diagonal)
             if origin is not None:  # netgen face -> the prepared shape's own face -> the occurrence's ordinal
                 mapping = {index: origin[own - 1] for index, own in mapping.items()}
             keys = {index: [ordinal] for index, ordinal in mapping.items()}
-            mesh = _generate(geometry, ngocc, h, refine, order, size_field, keys)
+            mesh = generate_mesh(geometry, ngocc, h, refine, order, size_field, keys)
             # Copies, deliberately: netgen hands out views into the mesh
             # object's own memory, and the mesh does not outlive this block.
             coordinates = np.array(mesh.Coordinates(), dtype=float, copy=True)
@@ -327,7 +327,7 @@ def mesh_occurrence(
 
     if len(e3) == 0:
         raise RuntimeError(f"the mesher produced no volume elements for {occurrence.ref}; is it a closed solid?")
-    _require_elements(e3, order)
+    require_elements(e3, order)
     width = 10 if order == 2 else 4
     ordinal_of = np.zeros(int(e2["index"].max()) + 1, dtype=np.int64)
     for index, ordinal in mapping.items():
@@ -345,7 +345,7 @@ def mesh_occurrence(
     )
 
 
-def _bbox_diagonal(shape) -> float:
+def shape_diagonal(shape) -> float:
     from OCP.Bnd import Bnd_Box
     from OCP.BRepBndLib import BRepBndLib
 
@@ -467,7 +467,7 @@ def mesh_assembly(
             f"{quoted(names[fused.first])} and {quoted(names[fused.second])} share a solid after gluing: they overlap, "
             "and bonding them would fuse them into one part; fix the geometry or mark them free"
         ) from None
-    diagonal = _bbox_diagonal(glued.shape)
+    diagonal = shape_diagonal(glued.shape)
     if not diagonal > 0:
         raise RuntimeError("the assembly has no volume to mesh")
     h = float(max_h) if max_h else default_mesh_size(diagonal)
@@ -477,7 +477,7 @@ def mesh_assembly(
     position_of: dict[tuple[int, int], int] = {}
     for i, part in enumerate(parts):
         for ordinal, face in enumerate(part_faces(part.shape), 1):
-            area, centre = _area_center(face)
+            area, centre = area_center(face)
             ref = f"{part.ref}.f{ordinal}"
             faces[ref] = FaceFingerprint(ref, ordinal, area, centre)
             position_of[(i, ordinal)] = len(faces)
@@ -508,7 +508,7 @@ def mesh_assembly(
             )
     glued_prints = []
     for k in range(1, glued_faces.Extent() + 1):
-        area, centre = _area_center(glued_faces.FindKey(k))
+        area, centre = area_center(glued_faces.FindKey(k))
         glued_prints.append(FaceFingerprint(f"face {k} of the glued shape", k, area, centre))
 
     started = time.perf_counter()
@@ -519,12 +519,12 @@ def mesh_assembly(
         log(f"meshing the glued shape at {h:.3g} mm")
     with tempfile.TemporaryDirectory(prefix="cadgen-fea-") as tmp:
         brep = Path(tmp) / "assembly.brep"
-        _write_brep(glued.shape, brep)
+        write_brep(glued.shape, brep)
         with kernel_messages_on_stderr():
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
-            mapping = _match_faces(glued_prints, list(geometry.faces), diagonal)
-            mesh = _generate(geometry, ngocc, h, refine, order, size_field,
+            mapping = match_faces(glued_prints, list(geometry.faces), diagonal)
+            mesh = generate_mesh(geometry, ngocc, h, refine, order, size_field,
                              {index: [refs[position - 1] for position in sources.get(image, ())] for index, image in mapping.items()})
             coordinates = np.array(mesh.Coordinates(), dtype=float, copy=True)
             e3 = mesh.Elements3D().NumPy().copy()
@@ -536,7 +536,7 @@ def mesh_assembly(
         raise RuntimeError("the mesher produced no volume elements for the assembly; is every part a closed solid?")
     if domains != len(glued.solid_part):
         raise RuntimeError(f"the mesher made {domains} volumes from {len(glued.solid_part)} solids")
-    _require_elements(e3, order)
+    require_elements(e3, order)
     width = 10 if order == 2 else 4
 
     solid_part = np.array(glued.solid_part, dtype=np.int64)

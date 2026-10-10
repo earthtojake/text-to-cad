@@ -260,12 +260,12 @@ conductors' resistivity does not change with their temperature (one way to therm
 
 `iterative` (multigrid CG, no accuracy cost), `local_refine`, `defeature` and `symmetry` (a
 potential solved on one part with no air: the half or quarter mirrored back, exact), and for a
-study with air `fluid_coarsen`: "Coarsened the air away from the parts to fit: the parts are still
+study with air `far_field` (the air box out past the parts meshed coarser): "Coarsened the air away from the parts to fit: the parts are still
 meshed at 1.5 mm, the air out at 10.6 mm", the field near the parts unchanged. Report each step with
 its note, as for every analysis.
 
 `ac_magnetic` takes, in order: `iterative` (multigrid GMRES on the complex system, falling back to
-the direct solve when it does not converge), `fluid_coarsen` (as above), then `local_refine`, which
+the direct solve when it does not converge), `far_field` (as above), then `local_refine`, which
 here keeps the conductors' surfaces as fine as the budget allows for their skin: "Meshed the
 conductors' surfaces at 1 mm to fit, coarser than the 0.4 mm their 0.8 mm skin depth at 15.8 kHz
 asks for; the rest of the parts at 1 mm", with the note that the loss and AC resistance then read

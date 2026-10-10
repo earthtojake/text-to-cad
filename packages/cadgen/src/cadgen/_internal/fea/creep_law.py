@@ -152,9 +152,9 @@ def norton_update(strain: "np.ndarray", state: CreepState, params: CreepParams, 
     """
     import numpy as np
 
-    from cadgen._internal.fea.plasticity import _identities, elastic_tensor
+    from cadgen._internal.fea.plasticity import identities, elastic_tensor
 
-    delta, _, _ = _identities()
+    delta, _, _ = identities()
     shape = strain.shape[2:]
     K, G, A, n = params.bulk, params.shear, params.A, params.n
     dtau = hardening_time(t0, t1, params.m) if t1 > t0 else np.zeros(np.shape(params.m))

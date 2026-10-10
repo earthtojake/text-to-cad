@@ -76,12 +76,12 @@ function controlValue(control, chosen) {
 }
 
 // Study's setup rows by the marker kind they stand for: a row `<row kind>:<group>` chooses its entry's markers.
-const ROW_MARKERS = Object.freeze({ load: "load", fixed: "fixture", body: "body_load", shaken: "base_excitation", temperature: "temperature",
+const ROW_MARKERS = Object.freeze({ load: "load", fixed: "fixture", roller: "roller", body: "body_load", shaken: "base_excitation", temperature: "temperature",
   heat: "heat", convection: "convection", drop: "drop", inlet: "inlet", outlet: "outlet", rigid: "rigid_plane" });
 
 /**
  * Whether a marker is of what Study chose: a setup row's markers (a load's arrows on its faces, a
- * fixed row's cones, a heat input's wavy arrows, ...; a body load, an opening or a floor by its
+ * fixed row's cones, a roller row's cones on their plates, a heat input's wavy arrows, ...; a body load, an opening or a floor by its
  * row alone, standing on no face), and every marker on a face picked on the result. A part or a joint has none.
  */
 function markerChosen(faces, site) {

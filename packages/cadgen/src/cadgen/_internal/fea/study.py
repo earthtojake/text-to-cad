@@ -54,15 +54,22 @@ from cadgen._internal.fea.analyses.base import Rung
 from cadgen._internal.fea.materials import Material, material_from_spec, requires
 
 __all__ = [
-    "CHECK_KINDS", "COMMON_KEYS", "Connection", "Fixture", "Load", "Study", "VIEW_SECTIONS", "parse_fixtures",
+    "CHECK_KINDS", "COMMON_KEYS", "Connection", "Fixture", "Load", "ORTHOTROPIC_ANALYSES", "Study", "VIEW_SECTIONS",
+    "parse_fixtures",
     "parse_loads", "parse_study",
 ]
 
-FIXTURE_TYPES = ("fixed",)
+#: A fixed face is held still; a roller face slides in its own plane but never moves along its normal (supports.py).
+FIXTURE_TYPES = ("fixed", "roller")
 LOAD_TYPES = ("force", "pressure")
 #: Loads on the whole part, with no faces: a static study's gravity and acceleration (in g).
 BODY_LOAD_TYPES = ("gravity", "acceleration")
 #: The keys every analysis's study may carry; each analysis adds its own (``study_keys``).
+#: The analyses whose stiffness follows an orthotropic material's directions (the operators' anisotropic path); an
+#: analysis with ``isotropic_only`` refuses one, naming these.
+ORTHOTROPIC_ANALYSES = (
+    "static", "modal", "buckling", "harmonic", "random_vibration", "shock", "transient", "fatigue", "drop", "thermal_stress",
+)
 COMMON_KEYS = (
     "analysis", "material", "mesh", "output", "margin", "parts", "connections", "contact_tolerance_mm", "view", "fit",
 )
@@ -87,7 +94,7 @@ VIEW_SECTIONS = ("verdict", "setup", "controls", "details")
 CONTROL_WHEN = ("always", "failing", "passing")
 # The controls the viewer shows when a view declares none: every field, and the exaggeration from
 # zero up (its top is the viewer's, from the result's own scale, so a preset is held only to >= 0).
-_DEFAULT_CONTROLS = {
+DEFAULT_CONTROLS = {
     "field": {"drives": "field", "type": "enum", "options": list(VIEW_FIELDS)},
     "deformation": {"drives": "deformation", "type": "number", "min": 0.0, "max": None},
 }
@@ -164,6 +171,8 @@ class Study:
     fit: dict | None = None
     #: Element order: 2 (quadratic) unless the analysis allows and the study asks for 1.
     mesh_order: int = 2
+    #: ``mesh.refine``: balls meshed finer, ``(centre (x, y, z), radius_mm, size_mm)`` each.
+    mesh_refine: tuple = ()
 
     @property
     def face_refs(self) -> tuple[str, ...]:
@@ -496,7 +505,7 @@ def _view(raw: Any, analysis=None) -> dict | None:
         if not isinstance(raw["presets"], list):
             raise ValueError("view.presets: expected a list of named states")
         # With no controls declared the viewer shows the analysis's own, so a preset may set those.
-        settable = controls or (spec.default_controls if spec else _DEFAULT_CONTROLS)
+        settable = controls or (spec.default_controls if spec else DEFAULT_CONTROLS)
         view["presets"] = [_preset(entry, settable, where=f"view.presets[{index}]") for index, entry in enumerate(raw["presets"])]
     if "show" in raw:
         show = raw["show"]
@@ -603,6 +612,42 @@ def _fit(raw: Any) -> dict | None:
     return fit
 
 
+def _mesh_refine(raw) -> tuple:
+    """``mesh.refine``: ``[{"center_mm": [x, y, z], "radius_mm": r, "size_mm": h}]``, each ball meshed at ``h``."""
+    if raw is None:
+        return ()
+    example = '[{"center_mm": [0, 0, 0], "radius_mm": 3, "size_mm": 0.3}]'
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"study.mesh.refine: a list of balls to mesh finer, like {example}")
+    balls = []
+    for index, entry in enumerate(raw):
+        where = f"mesh.refine[{index}]"
+        if not isinstance(entry, dict) or set(entry) != {"center_mm", "radius_mm", "size_mm"}:
+            raise ValueError(f"{where}: give center_mm, radius_mm and size_mm, like {example[1:-1]}")
+        centre = _vector(entry, "center_mm", where=where, words="the ball's centre as [x, y, z] in mm")
+        radius = _number(entry["radius_mm"], where=f"{where}.radius_mm", positive=True)
+        size = _number(entry["size_mm"], where=f"{where}.size_mm", positive=True)
+        if (radius / size) ** 3 > 2e5:
+            raise ValueError(f"{where}: a {radius:g} mm ball at {size:g} mm is too many local sizes to place; "
+                             "make the ball smaller or the size larger")
+        balls.append((centre, radius, size))
+    return tuple(balls)
+
+
+def refine_points(balls) -> list[list[float]]:
+    """``mesh.refine``'s balls as a size field's points: a grid at each ball's size, inside it."""
+    points = []
+    for (x0, y0, z0), radius, size in balls:
+        steps = int(radius // size)
+        span = [k * size for k in range(-steps, steps + 1)]
+        for dx in span:
+            for dy in span:
+                for dz in span:
+                    if dx * dx + dy * dy + dz * dz <= radius * radius:
+                        points.append([x0 + dx, y0 + dy, z0 + dz, size])
+    return points
+
+
 def parse_study(study: str | dict | Path | None) -> Study:
     """Validate a study document and return the typed :class:`Study`.
 
@@ -642,6 +687,7 @@ def parse_study(study: str | dict | Path | None) -> Study:
     mesh_size = None
     if mesh.get("size_mm") is not None:
         mesh_size = _number(mesh["size_mm"], where="mesh.size_mm", positive=True)
+    refine = _mesh_refine(mesh.get("refine"))
     order = mesh.get("order", analysis.mesh_orders[0])
     if order not in analysis.mesh_orders or isinstance(order, bool):
         if tuple(analysis.mesh_orders) == (2,):
@@ -683,9 +729,15 @@ def parse_study(study: str | dict | Path | None) -> Study:
         needs = (*needs, "yield_strength")
     for each in ([material] if material is not None else []) + list(parts.values()):
         requires(each, needs, name)
+        if getattr(each, "orthotropic", None) and getattr(analysis, "isotropic_only", False):
+            supported = ", ".join(ORTHOTROPIC_ANALYSES[:-1]) + f" and {ORTHOTROPIC_ANALYSES[-1]}"
+            raise ValueError(
+                f"material: {name} studies treat a material as the same in every direction, and {each.name} is "
+                f"orthotropic; {supported} studies take an orthotropic material"
+            )
 
     return Study(
         material, fixtures, loads, mesh_size, deformation_scale, margin, document,
         parts=parts, connections=connections, contact_tolerance_mm=tolerance, view=view,
-        analysis=name, inputs=inputs, fit=fit, mesh_order=int(order),
+        analysis=name, inputs=inputs, fit=fit, mesh_order=int(order), mesh_refine=refine,
     )

@@ -7,16 +7,18 @@ Benchmarks (spec section 13):
 - the same blocks pulled apart: no contact pressure, and the fixed block takes
   no load (a contact never pulls), the loose block said to come loose;
 - a sphere on a flat (Hertz): a quarter of a steel hemisphere pressed on a
-  steel block, symmetric about two planes, on the engine with a mesh refined
-  where they touch: the contact radius a = (3FR/4E*)^(1/3) and the peak pressure
-  p0 = 3F/(2πa²) within 15 %. The radius is read from the contact forces'
-  second moment (a Hertz pressure has Σ p r² / Σ p = 2a²/5), so it does not
-  hang on which point happens to be the last one touching;
+  steel block, a whole ``fea.solve`` study with rollers on its two symmetry
+  planes and the mesh refined where they touch (``mesh.refine``): the contact
+  radius a = (3FR/4E*)^(1/3), from the contact area, and the peak pressure
+  p0 = 3F/(2πa²) within 15 %;
 - a block on a rigid plane with friction 0.4, pushed sideways at half and at
   twice what friction holds: it sticks, then slides with a friction force of
   μ N exactly;
 - a tiny budget: the stacked blocks still complete, by growing their load steps,
-  and say so everywhere.
+  and say so everywhere;
+- a step whose contact does not settle (its Uzawa re-solve finds no
+  equilibrium) is first cut, and at the smallest step kept and marked: the
+  result says plainly it is not reliable, and every check fails.
 
 Every geometry is a build123d box or sphere written to a temporary STEP. Parse
 tests are stdlib only; the solves need the fea extra.
@@ -296,22 +298,17 @@ class RigidPlaneFriction(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class Hertz(unittest.TestCase):
-    """A quarter of a steel hemisphere (R = 10 mm) pressed on a steel block by 20 kN, symmetric about x = 0 and y = 0."""
+    """A quarter of a steel hemisphere (R = 10 mm) pressed on a steel block by 20 kN, as a whole study: the quarter
+    on rollers on its two symmetry planes (x = 0 and y = 0), meshed finer where they touch (mesh.refine)."""
 
     R, FORCE = 10.0, 20_000.0
 
     def test_the_contact_radius_and_peak_pressure_are_hertz_s(self):
-        import numpy as np
         from build123d import Align, Box, Compound, Pos, Sphere, export_step
-        from skfem import LinearForm, asm
 
-        from cadgen._internal.fea import contact_ops, nonlinear_driver, operators
-        from cadgen._internal.fea.femspace import FemSpace
-        from cadgen._internal.fea.materials import lookup_material
-        from cadgen._internal.fea.mesh import mesh_assembly
         from cadgen.step_scene import read_scene
 
-        R, height, fine = self.R, 6.0, 0.3
+        R, height = self.R, 6.0
         with tempfile.TemporaryDirectory() as name:
             ball = Pos(0, 0, R) * Sphere(R) & Box(R, R, R, align=Align.MIN)
             ball.label = "ball"
@@ -320,49 +317,29 @@ class Hertz(unittest.TestCase):
             step = Path(name) / "hertz.step"
             export_step(Compound(children=[ball, block]), str(step))
             scene = read_scene(step)
-            leaves = list(scene.leaves())
-            grid = np.arange(0.0, 2.5 + 1e-9, fine)
-            points = [[float(x), float(y), z, fine] for x in grid for y in grid for z in (-fine / 2, fine / 2) if math.hypot(x, y) <= 2.5]
-            volume = mesh_assembly(scene, [leaf.ref for leaf in leaves], [], 0.1, 3.0, size_field={"points": points, "radius_mm": 0.0})
-        space = FemSpace.build(volume, 2)
-        steel = lookup_material("steel")
-        names = [leaf.label for leaf in leaves]
-        basis, where, component = space.basis, space.locations, space.component
-        held = (np.isclose(where[:, 0], 0) & (component == 0)) | (np.isclose(where[:, 1], 0) & (component == 1)) | np.isclose(where[:, 2], -height)
-        free = np.flatnonzero(~held)
-        top = np.flatnonzero(np.isclose(space.dof_locations[space.boundary_quadratic[:, :3]][:, :, 2], R).all(axis=1))
-        facets = basis.boundary(space.facets_of_rows(top))
-        traction = self.FORCE / 4 / float(facets.dx.sum())
-
-        @LinearForm
-        def push(v, w):
-            return -traction * v[2]
-
-        external = asm(push, facets)
-        K = operators.stiffness(space, [steel, steel]).tocsr()
-        node_part, node_body = contact_ops.body_of_nodes(space)
-        pair = contact_ops.PairSpec(names.index("ball"), names.index("block"), 0.0, 0)
-        constraints = contact_ops.pair_constraints(space, pair, node_part, steel.E, search_mm=1.5, tolerance_mm=0.1)
-        vdofs = contact_ops.vector_dofs(space)
-        ball_body = int(node_body[space.boundary_quadratic[top[0], 0]])
-        stabilise = contact_ops.stabilising_springs(K, basis.N, [vdofs[node_body == ball_body].ravel()])
-        moved = contact_ops.close_gaps(constraints, node_body, vdofs, external, [ball_body])
-        self.assertGreater(np.abs(moved).max(), 0.0)  # the ball first drops onto the block, rigidly
-        problem = contact_ops.ContactProblem(space, K, free, external, constraints, stabilise)
-        path = nonlinear_driver.solve_path(problem, steps=3, runaway=None)
-        self.assertFalse(path.collapsed)
-
-        p = problem.response(path.u).normal_force
-        self.assertAlmostEqual(4 * p.sum() / self.FORCE, 1.0, delta=2e-3)
-        r = np.hypot(constraints.position[:, 0], constraints.position[:, 1])
-        radius = math.sqrt(2.5 * float((p * r ** 2).sum()) / float(p.sum()))
-        pressure = contact_ops.pressure_field(space, constraints, p)
-        peak = float(pressure[constraints.node].max())
-        e_star = steel.E / (2 * (1 - steel.nu ** 2))
+            refs = {leaf.label: leaf.ref for leaf in scene.leaves()}
+            planes = [_face(scene, refs[part], axis, 0.0) for part in ("ball", "block") for axis in (0, 1)]
+            study = {
+                "analysis": "contact", "material": "steel", "steps": 3,
+                "mesh": {"size_mm": 3.0, "refine": [{"center_mm": [0, 0, 0], "radius_mm": 1.8, "size_mm": 0.3}]},
+                "parts": {"ball": {"material": "steel"}, "block": {"material": "steel"}},
+                "connections": [{"between": ["ball", "block"], "type": "contact"}],
+                "fixtures": [{"faces": [_face(scene, refs["block"], 2, -height)], "type": "fixed"},
+                             {"faces": planes, "type": "roller"}],
+                "loads": [{"faces": [_face(scene, refs["ball"], 2, R)], "type": "force", "vector_N": [0, 0, -self.FORCE / 4]}],
+            }
+            result, extras, _ = _solve(step, study, "hertz")
+        (contact,) = result.summary["contacts"]
+        self.assertFalse(result.summary["collapsed"])
+        self.assertAlmostEqual(4 * contact["force_N"] / self.FORCE, 1.0, delta=5e-3)
+        # The quarter's contact area is a quarter of the circle the contact radius bounds.
+        radius = math.sqrt(4 * contact["area_mm2"] / math.pi)
+        e_star = 200_000.0 / (2 * (1 - 0.3 ** 2))
         a = (3 * self.FORCE * R / (4 * e_star)) ** (1 / 3)
         p0 = 3 * self.FORCE / (2 * math.pi * a ** 2)
         self.assertAlmostEqual(radius / a, 1.0, delta=0.15)
-        self.assertAlmostEqual(peak / p0, 1.0, delta=0.15)
+        self.assertAlmostEqual(contact["peak_MPa"] / p0, 1.0, delta=0.15)
+        self.assertEqual([fixture["type"] for fixture in extras["study"]["fixtures"]], ["fixed", "roller"])
 
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
@@ -390,6 +367,93 @@ class Ladder(unittest.TestCase):
         self.assertIn(words, [step["words"] for step in sidecar["fit"]])
         self.assertTrue(any(line.startswith(f"adapted: {words}") for line in result.human_lines()))
         self.assertIn("fit_adaptive_steps", [finding["type"] for finding in result.findings])
+
+
+class Unsettled(unittest.TestCase):
+    """The driver's settle protocol on a one-spring problem: cut first, then kept and marked, never refused."""
+
+    def test_a_step_that_does_not_settle_is_cut_then_kept_and_marked(self):
+        import numpy as np
+        import scipy.sparse as sparse
+
+        from cadgen._internal.fea import nonlinear_driver
+        from cadgen._internal.fea.nonlinear_driver import Settled
+
+        class Spring:
+            size, free, external, locations, component = 1, np.array([0]), np.array([1.0]), None, None
+
+            def __init__(self):
+                self.rolled, self.committed = 0, []
+
+            def evaluate(self, u, *, tangent):
+                return u.copy(), (sparse.csr_matrix([[1.0]]) if tangent else None)
+
+            def settle(self, u, factor):
+                return Settled(u * 1.0, abs(factor - 1.0) > 1e-9)  # never settles at the full load
+
+            def rollback(self):
+                self.rolled += 1
+
+            def commit(self, u, factor):
+                self.committed.append(factor)
+
+        problem = Spring()
+        path = nonlinear_driver.solve_path(problem, steps=2, runaway=None, max_halvings=3)
+        self.assertFalse(path.collapsed)
+        self.assertEqual(path.factor, 1.0)
+        self.assertEqual(problem.rolled, 3)  # cut as far as it goes first
+        self.assertEqual(path.unsettled, [1.0])
+        self.assertEqual([record.settled for record in path.records][-1], False)
+        self.assertTrue(all(record.settled for record in path.records[:-1]))
+        self.assertEqual(problem.committed[-1], 1.0)
+        self.assertIn("did not settle even at the smallest step", path.warnings[0])
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class UnsettledContact(unittest.TestCase):
+    """A plate pressed on a rigid floor whose contact re-solve at the full load never converges (forced)."""
+
+    def test_the_result_says_it_is_not_reliable_and_every_check_fails(self):
+        from unittest import mock
+
+        from build123d import Align, Box, export_step
+
+        from cadgen import fea
+        from cadgen._internal.fea import contact_ops, nonlinear_driver
+
+        real = nonlinear_driver.newton
+
+        def newton(problem, linear, u0, factor, *args, **kwargs):
+            # The contact's own re-solves (sliding allowed, stick False) find nothing at the full load.
+            if getattr(problem, "stick", True) is False and factor > 0.9999:
+                return None, 1, float("inf")
+            return real(problem, linear, u0, factor, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as name:
+            step = Path(name) / "plate.step"
+            export_step(Box(20, 20, 4, align=Align.MIN), str(step))
+            top = next(face.ref for face in fea.faces(step).faces if face.normal and face.normal[2] > 0.999)
+            study = {"analysis": "contact", "material": "steel", "mesh": {"size_mm": 5.0}, "steps": 2,
+                     "rigid_planes": [{"point_mm": [0, 0, 0], "normal": [0, 0, 1]}],
+                     "loads": [{"faces": [top], "type": "force", "vector_N": [0, 0, -FORCE]}],
+                     "view": {"checks": [{"kind": "stress"}, {"kind": "contact_pressure", "limit_MPa": 1000}]}}
+            # Forces that never count as settled, so each step re-solves at the full penalty, which fails at 100%.
+            with mock.patch.object(nonlinear_driver, "newton", newton), mock.patch.object(contact_ops, "AUGMENT_TOLERANCE", -1.0):
+                result, extras, sidecar = _solve(step, study, "unsettled")
+        sentence = "Contact did not settle at 100% of the load: the forces here do not balance, so this result is not reliable"
+        summary = result.summary
+        self.assertFalse(summary["collapsed"])
+        self.assertEqual(summary["unsettled_at_percent"], [100.0])
+        self.assertGreater(summary["step_cuts"], 0)  # the step cut was tried first
+        self.assertEqual(summary["status"], "Not reliable: contact did not settle at 100% of the load")
+        self.assertEqual([check["status"] for check in summary["checks"]], ["fails", "fails"])
+        self.assertTrue(all(check["unsettled_at_percent"] == 100.0 for check in summary["checks"]))
+        found = {finding["type"]: finding for finding in result.findings}
+        self.assertEqual((found["contact_unsettled"]["severity"], found["contact_unsettled"]["summary"]), ("error", sentence))
+        self.assertIn(sentence, extras["analysis"]["warnings"])
+        self.assertEqual(extras["analysis"]["unsettled"], {"at_percent": [100.0], "first_percent": 100.0})
+        self.assertEqual(extras["series"]["frames"][-1]["label"], "100 % load · did not settle")
+        self.assertEqual([check["status"] for check in extras["checks"]], ["fails", "fails"])
 
 
 if __name__ == "__main__":

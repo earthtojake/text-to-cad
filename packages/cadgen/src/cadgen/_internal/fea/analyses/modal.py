@@ -84,13 +84,20 @@ def raw_checks(document: dict, spec) -> tuple[dict, ...]:
     return tuple(found)
 
 
-def fixed_dofs(space, fixtures: tuple[Fixture, ...], ordinal_of: dict[str, int]) -> "np.ndarray":
-    """Every vector DOF the fixtures clamp."""
-    import numpy as np
+def held_supports(space, fixtures: tuple[Fixture, ...], ordinal_of: dict[str, int], *, require: bool = False):
+    """The fixtures as :class:`~cadgen._internal.fea.supports.Supports` (fixed faces and rollers); ``require``
+    refuses, in a sentence, rollers that leave the part free to move."""
+    from cadgen._internal.fea.supports import check_held, supports_of
 
-    if not fixtures:
-        return np.zeros(0, dtype=np.int64)
-    return np.unique(np.concatenate([space.basis.get_dofs(space.facets_of(f.faces, ordinal_of)).all() for f in fixtures]))
+    supports = supports_of(space, fixtures, ordinal_of)
+    if require:
+        check_held(space, supports)
+    return supports
+
+
+def fixed_dofs(space, fixtures: tuple[Fixture, ...], ordinal_of: dict[str, int]) -> "np.ndarray":
+    """Every vector DOF the fixtures hold (a roller's in its nodes' own axes: :func:`held_supports`)."""
+    return held_supports(space, fixtures, ordinal_of).fixed
 
 
 def floating_bodies(space, fixtures: tuple[Fixture, ...], ordinal_of: dict[str, int]) -> "np.ndarray":
@@ -480,11 +487,19 @@ class ModalAnalysis:
         materials = materials_of(ctx)
         K = operators.stiffness(space, materials)
         M = operators.mass(space, materials)
-        fixed = fixed_dofs(space, inputs.fixtures, ctx.ordinal_of)
+        held = held_supports(space, inputs.fixtures, ctx.ordinal_of)
+        fixed = held.fixed
         free = np.setdiff1d(np.arange(space.dofs), fixed)
-        Kff, Mff = K[free][:, free].tocsr(), M[free][:, free].tocsr()
+        Kl, Ml = held.local(K), held.local(M)   # a sloped or curved roller: in its nodes' own axes
+        Kff, Mff = Kl[free][:, free].tocsr(), Ml[free][:, free].tocsr()
         body = floating_bodies(space, inputs.fixtures, ctx.ordinal_of)
         floating = int(body.max()) + 1 if len(body) else 0
+        # Rollers hold a body only along their normals: the motions they leave free are rigid-body modes too.
+        loose = 0
+        if held.rollers and floating == 0:
+            from cadgen._internal.fea.supports import unheld_motions
+
+            loose = unheld_motions(space, held)
         timings["assemble_s"] = time.perf_counter() - started
         if ctx.log:
             ctx.log(f"modal: {space.dofs} DOF, {len(free)} free, {floating} bod{'y' if floating == 1 else 'ies'} held by nothing")
@@ -492,8 +507,8 @@ class ModalAnalysis:
         started = time.perf_counter()
         method = solver_method(ctx, len(free))
         wanted = self._wanted(ctx, inputs)
-        rigid_expected = 6 * floating
-        constraints = rigid_modes(space, body)[free] if method == "lobpcg" and floating else None
+        rigid_expected = 6 * floating + loose
+        constraints = rigid_modes(space, body)[free] if method == "lobpcg" and floating and not held.rollers else None
         omega2, vectors, how = self._search(Kff, Mff, space, free, wanted, rigid_expected, inputs, method, constraints,
                                             warnings)
         timings["eigen_s"] = time.perf_counter() - started
@@ -526,6 +541,7 @@ class ModalAnalysis:
 
         full = np.zeros((space.dofs, len(elastic)))
         full[free] = vectors[:, elastic]
+        full = held.global_vector(full)
         # Mass-normalised (φᵀMφ = 1), whatever the solver normalised by; equal frequencies lined up with the axes.
         full /= np.sqrt(np.einsum("ij,ij->j", full, M @ full))
         full = align_degenerate(full, M, frequencies[elastic], space.component)

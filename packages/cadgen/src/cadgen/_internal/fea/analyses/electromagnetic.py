@@ -72,8 +72,8 @@ SKIN_ELEMENTS = 2.0
 #: The skin counts as resolved while the surface elements are at most this share of the skin depth.
 RESOLVED_AT = 0.55
 #: The ladder's ac rungs: no accuracy cost first, then the air, then the skin.
-AC_LADDER = ("iterative", "fluid_coarsen", "local_refine")
-#: Out in the air the elements grow to this many times the parts' size, by default; fluid_coarsen grows it by COARSEN.
+AC_LADDER = ("iterative", "far_field", "local_refine")
+#: Out in the air the elements grow to this many times the parts' size, by default; far_field grows it by COARSEN.
 FAR, COARSEN = 3.0, 2.5
 #: A check is close once its value passes this share of its limit.
 CLOSE_AT = 0.9
@@ -548,7 +548,7 @@ class ElectromagneticAnalysis:
     }
     upstream: ClassVar[tuple[str, ...]] = ()
     #: The static and DC modes' rungs; an AC study takes :data:`AC_LADDER` (``ladder`` follows the parsed mode).
-    dc_ladder: ClassVar[tuple[str, ...]] = ("iterative", "local_refine", "defeature", "fluid_coarsen", "symmetry")
+    dc_ladder: ClassVar[tuple[str, ...]] = ("iterative", "local_refine", "defeature", "far_field", "symmetry")
     noun: ClassVar[str] = "this voltage"
     governing_word: ClassVar[str] = "the peak field"
 
@@ -678,7 +678,7 @@ class ElectromagneticAnalysis:
         if inputs.mode == "ac_magnetic" and rung == "local_refine":
             return self._skin_rung(ctx, inputs)
 
-        if rung == "fluid_coarsen":
+        if rung == "far_field":  # the air box out past the parts, meshed coarser
             if not inputs.air:
                 return None
             plan = ctx.plan
@@ -695,7 +695,7 @@ class ElectromagneticAnalysis:
                 plan.fluid_far_size_mm = saved
                 return None
             return fit.Step(
-                "fluid_coarsen",
+                "far_field",
                 f"Coarsened the air away from the parts to fit: the parts are still meshed at {size:.3g} mm, "
                 f"the air out at {coarser:.3g} mm",
                 "the field far out in the air is resolved more coarsely; near the parts, where the answer is read, "
@@ -776,9 +776,9 @@ class ElectromagneticAnalysis:
 
         from cadgen._internal.fea import em_ops
         from cadgen._internal.fea.assembly import part_faces
-        from cadgen._internal.fea.mesh import _area_center
+        from cadgen._internal.fea.mesh import area_center
 
-        low, high = em_ops._bounds(parts.shapes)
+        low, high = em_ops.bounds_of(parts.shapes)
         span = max(h - lo for lo, h in zip(low, high))
         below, above = [around] * 3, [around] * 3
         for entry in inputs.electrodes:
@@ -787,7 +787,7 @@ class ElectromagneticAnalysis:
                 part, ordinal = parts.face_of[ref]
                 face = TopoDS.Face_s(part_faces(parts.shapes[part])[ordinal - 1])
                 surface = BRepAdaptor_Surface(face)
-                centre = _area_center(face)[1]
+                centre = area_center(face)[1]
                 onto = None
                 if surface.GetType() == GeomAbs_Plane:
                     normal = surface.Plane().Axis().Direction()
@@ -1283,7 +1283,7 @@ class ElectromagneticAnalysis:
         import numpy as np
 
         from cadgen._internal.fea import solve
-        from cadgen._internal.fea.analyses.static import _solved, _solved_part
+        from cadgen._internal.fea.analyses.static import solved_record, solved_part_record
 
         if inputs.structure_part is not None:
             target = _find(parts, inputs.structure_part, "map_to_structure.part")
@@ -1307,10 +1307,10 @@ class ElectromagneticAnalysis:
         margin = getattr(ctx.study, "margin", 2.0) if ctx.study is not None else 2.0
         if ctx.assembly is None:
             study = types.SimpleNamespace(material=parts.materials[0], margin=margin)
-            result.solved = [_solved(volume, outcome, study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
+            result.solved = [solved_record(volume, outcome, study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
         else:
             study = types.SimpleNamespace(material=parts.materials[0], margin=margin)
-            result.solved = [_solved_part(volume, outcome, study, ctx.assembly, i, ctx.ordinal_of, inputs.fixtures)
+            result.solved = [solved_part_record(volume, outcome, study, ctx.assembly, i, ctx.ordinal_of, inputs.fixtures)
                              for i in range(len(parts.names))]
         result.fields["von_mises"] = outcome.von_mises
         result.fields["displacement"] = outcome.displacement

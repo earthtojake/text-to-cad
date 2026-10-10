@@ -517,7 +517,7 @@ def _expand(scalar, table, n: int):
     return sparse.csr_matrix((np.tile(coo.data, 3), (rows, cols)), shape=(n, n))
 
 
-def _rotation(space, normals_of, held, table):
+def wall_rotation(space, normals_of, held, table):
     """The wall nodes' rotation to (normal, tangent, tangent), and the rotated DOFs to hold.
 
     Returns T (velocity DOFs, sparse, orthogonal) and the DOFs (in the rotated frame) held at zero: each
@@ -556,7 +556,7 @@ def _rotation(space, normals_of, held, table):
     return T, np.array(zero, dtype=np.int64)
 
 
-def _wall_geometry(space, wall_rows):
+def wall_geometry(space, wall_rows):
     """Each wall row's skfem facet and its element's depth (3 V / A), and the wall's normals by node."""
     import numpy as np
 
@@ -661,7 +661,7 @@ class _Krylov:
         return x
 
 
-def _factor(K):
+def factor_saddle(K):
     """SuperLU of the saddle-point system: the symmetric-structure ordering on diagonal pivots first (several
     times faster here), checked on a test vector, and the default partial pivoting when that is not accurate."""
     import numpy as np
@@ -724,8 +724,8 @@ def solve_rans(problem: RansProblem, *, solver: str = "direct", cfl: tuple[float
         dof_node[table[:, c]] = np.arange(space.scalar_count)
     held_nodes = set(np.unique(dof_node[np.asarray(problem.dirichlet, dtype=np.int64)]).tolist())
     if has_walls:
-        facets, depth, normals_of = _wall_geometry(space, wall_rows)
-        T, rotated_zero = _rotation(space, normals_of, held_nodes, table)
+        facets, depth, normals_of = wall_geometry(space, wall_rows)
+        T, rotated_zero = wall_rotation(space, normals_of, held_nodes, table)
         fbV = FacetBasis(space.mesh, ElementVector(ElementTetP2()), facets=facets)
         fbS = FacetBasis(space.mesh, ElementTetP2(), facets=facets)
         wall_points = fbV.global_coordinates().value.reshape(3, -1).T
@@ -824,7 +824,7 @@ def solve_rans(problem: RansProblem, *, solver: str = "direct", cfl: tuple[float
             if np.all(np.isfinite(x)) and np.linalg.norm(K @ x - b) <= 10 * LAGGED_TOL * max(np.linalg.norm(b), 1e-300):
                 factor["reused"] = factor.get("reused", 0) + 1
                 return x
-        lu = _factor(K)
+        lu = factor_saddle(K)
         factor["lu"], factor["fresh"] = lu, factor["fresh"] + 1
         return lu.solve(b)
 

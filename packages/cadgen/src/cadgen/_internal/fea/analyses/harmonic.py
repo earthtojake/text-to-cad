@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Inputs, Series, SeriesFrame, SolveContext
 from cadgen._internal.fea.analyses.modal import (
-    align_degenerate, apply_eigen_rung, eigen_estimate, fixed_dofs, hz_text, materials_of, max_frames, solver_method,
+    align_degenerate, apply_eigen_rung, eigen_estimate, held_supports, hz_text, materials_of, max_frames, solver_method,
 )
 from cadgen._internal.fea.study import Fixture, Load, parse_fixtures, parse_loads
 
@@ -284,7 +284,8 @@ class HarmonicAnalysis:
         materials = materials_of(ctx)
         K = operators.stiffness(space, materials)
         M = operators.mass(space, materials)
-        fixed = fixed_dofs(space, inputs.fixtures, ctx.ordinal_of)
+        held = held_supports(space, inputs.fixtures, ctx.ordinal_of, require=True)
+        fixed = held.fixed
         low, high = inputs.sweep_Hz
         zeta = inputs.damping_ratio
         base = inputs.excitation == "base"
@@ -314,7 +315,7 @@ class HarmonicAnalysis:
         started = time.perf_counter()
         free_count = space.dofs - len(fixed)
         method = solver_method(ctx, free_count)
-        found = sp.find_modes(K, M, fixed, inputs.top_Hz, method=method, locations=space.locations,
+        found = sp.find_modes(K, M, held, inputs.top_Hz, method=method, locations=space.locations,
                               component=space.component, enough=enough)
         warnings.extend(found.warnings)
         frequencies = found.frequencies_Hz
@@ -514,7 +515,7 @@ class HarmonicAnalysis:
 
     def judge(self, check: dict, index: int, ctx: SolveContext, result: AnalysisResult, inputs: HarmonicInputs) -> dict:
         from cadgen._internal.fea import checks
-        from cadgen._internal.fea.analyses.static import _peak_face
+        from cadgen._internal.fea.analyses.static import peak_face
 
         kind = check["kind"]
         if kind == "stress":
@@ -523,7 +524,7 @@ class HarmonicAnalysis:
             at = tuple(float(c) for c in result.dof_locations[node])
             solved = checks.Solved(
                 material_name="", yield_MPa=self._yield_at(result, node), peak_MPa=peak, peak_gauss_MPa=peak, peak_at=at,
-                peak_face=_peak_face(ctx.volume, result, node, fixed), fixed_faces=(), max_displacement_mm=0.0,
+                peak_face=peak_face(ctx.volume, result, node, fixed), fixed_faces=(), max_displacement_mm=0.0,
                 displacement_at=at, bbox_diagonal_mm=0.0, margin=result.scalars["margin"], coarser_peak_MPa=None, part="",
             )
             return {**checks.stress_check(solved, label=check.get("label")), "at": self._at(result, frame)}

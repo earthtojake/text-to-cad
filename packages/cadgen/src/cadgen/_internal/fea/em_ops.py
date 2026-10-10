@@ -130,7 +130,7 @@ def part_region(space, volume, face_keys: dict[tuple[int, int], int], parts: int
                   size_mm=float(volume.max_h), far_mm=float(volume.max_h))
 
 
-def _bounds(shapes) -> tuple[list[float], list[float]]:
+def bounds_of(shapes) -> tuple[list[float], list[float]]:
     from OCP.Bnd import Bnd_Box
     from OCP.BRepBndLib import BRepBndLib
 
@@ -144,7 +144,7 @@ def _bounds(shapes) -> tuple[list[float], list[float]]:
 def air_box(shapes, around_mm) -> tuple[list[float], list[float]]:
     """The box of air: the parts' bounding box grown by ``around_mm`` on every side, or by
     ``(low, high)`` per side (each [x, y, z]; 0 leaves that wall flush with the parts)."""
-    low, high = _bounds(shapes)
+    low, high = bounds_of(shapes)
     if isinstance(around_mm, (int, float)):
         below = above = [float(around_mm)] * 3
     else:
@@ -178,7 +178,7 @@ def build_region(shapes: list, *, around_mm, size_mm: float, far_mm: float, orde
 
     from cadgen._internal.fea import mesh as part_mesh
     from cadgen._internal.fea.assembly import SharedSolid, glue
-    from cadgen._internal.fea.mesh import FaceFingerprint, VolumeMesh, _area_center, require_fea_stack
+    from cadgen._internal.fea.mesh import FaceFingerprint, VolumeMesh, area_center, require_fea_stack
     from cadgen._internal.fea.femspace import FemSpace
     from cadgen._internal.step_scene_loader import kernel_messages_on_stderr
 
@@ -206,7 +206,7 @@ def build_region(shapes: list, *, around_mm, size_mm: float, far_mm: float, orde
     TopExp.MapShapes_s(glued.shape, TopAbs_FACE, faces)
     prints = []
     for k in range(1, faces.Extent() + 1):
-        area, centre = _area_center(faces.FindKey(k))
+        area, centre = area_center(faces.FindKey(k))
         prints.append(FaceFingerprint(f"face {k} of the region", k, area, centre))
     # Which part face each glued face is an image of; the air's own faces belong to no part.
     source: dict[int, list[tuple[int, int]]] = {}
@@ -227,20 +227,20 @@ def build_region(shapes: list, *, around_mm, size_mm: float, far_mm: float, orde
 
     with tempfile.TemporaryDirectory(prefix="cadgen-em-") as tmp:
         brep = Path(tmp) / "region.brep"
-        part_mesh._write_brep(glued.shape, brep)
+        part_mesh.write_brep(glued.shape, brep)
         with kernel_messages_on_stderr():
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
-            mapping = part_mesh._match_faces(prints, list(geometry.faces), diagonal)
+            mapping = part_mesh.match_faces(prints, list(geometry.faces), diagonal)
             keys = {index: [k] for index, k in mapping.items()}
-            mesh = part_mesh._generate(geometry, ngocc, far, 1.0, order, size_field, keys)
+            mesh = part_mesh.generate_mesh(geometry, ngocc, far, 1.0, order, size_field, keys)
             coordinates = np.array(mesh.Coordinates(), dtype=float, copy=True)
             e3 = mesh.Elements3D().NumPy().copy()
             e2 = mesh.Elements2D().NumPy().copy()
             del mesh, geometry
     if len(e3) == 0:
         raise RuntimeError("the mesher produced no elements for the parts and the air")
-    part_mesh._require_elements(e3, order)
+    part_mesh.require_elements(e3, order)
     width = 10 if order == 2 else 4
     solid_part = np.array(glued.solid_part, dtype=np.int64)
     domain = solid_part[e3["index"].astype(np.int64) - 1]

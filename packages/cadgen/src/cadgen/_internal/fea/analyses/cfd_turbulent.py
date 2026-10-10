@@ -42,7 +42,7 @@ from typing import Any, ClassVar
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, SolveContext
 from cadgen._internal.fea.analyses.cfd import (
-    DENSITY, PASCAL, RE_LIMIT, SPEED, VISCOSITY, CfdAnalysis, CfdInputs, _flux_of, _post, _to_part, _triangles,
+    DENSITY, PASCAL, RE_LIMIT, SPEED, VISCOSITY, CfdAnalysis, CfdInputs, flux_of, flow_numbers, wall_to_part, wall_triangles,
 )
 
 __all__ = ["CfdTurbulentAnalysis", "CfdTurbulentInputs", "LIMITS", "laminar_sentence"]
@@ -225,9 +225,9 @@ class CfdTurbulentAnalysis(CfdAnalysis):
             ctx.log(f"turbulent flow: {flow.steps} pseudo-time steps, last change {flow.residual:.1e}")
 
         started = time.perf_counter()
-        post = _post(space, fluid, face_of, row_kind, flow, inputs)
+        post = flow_numbers(space, fluid, face_of, row_kind, flow, inputs)
         self._wall_function_shear(space, row_kind, flow, post, inputs.fluid.density_kg_m3 * DENSITY)
-        pressure, shear = _to_part(ctx, space, fluid, face_of, row_kind, post)
+        pressure, shear = wall_to_part(ctx, space, fluid, face_of, row_kind, post)
         timings["post_s"] = time.perf_counter() - started
 
         warnings = list(flow.warnings)
@@ -322,7 +322,7 @@ class CfdTurbulentAnalysis(CfdAnalysis):
                     ks = {int(node): k0 for node in nodes}
                     ws = {int(node): w0 for node in nodes}
                 # The mean speed over the opening's true area: scale the profile so its flux is V A.
-                flux = _flux_of(space, rows, shape, axis)
+                flux = flux_of(space, rows, shape, axis)
                 scale = mean * area / flux if flux > 0 else 1.0
                 for node, w in shape.items():
                     for c in range(3):
@@ -364,7 +364,7 @@ class CfdTurbulentAnalysis(CfdAnalysis):
         walls = np.flatnonzero(row_kind == "wall")
         if len(walls):
             # Force of the fluid on the part: its pressure along the wall's normal (out of the fluid) and its drag.
-            triangles, area, normal = _triangles(space, walls)
+            triangles, area, normal = wall_triangles(space, walls)
             mids = triangles[:, 3:]
             pressure = post["pressure_nodes_Pa"] / PASCAL
             per = pressure[mids].mean(axis=1)[:, None] * normal + traction[mids].mean(axis=1)
@@ -457,7 +457,7 @@ class CfdTurbulentAnalysis(CfdAnalysis):
                                            for opening, entry in developed.items()}
         if result.solved:
             from cadgen._internal.fea import checks
-            from cadgen._internal.fea.analyses.static import _floored
+            from cadgen._internal.fea.analyses.static import floored
 
             outcome = result.scalars["outcome"]
             magnitude = np.linalg.norm(outcome.displacement, axis=1)
@@ -467,7 +467,7 @@ class CfdTurbulentAnalysis(CfdAnalysis):
                 "max_von_mises_at_mm": [round(c, 3) for c in solved.peak_at],
                 "yield_MPa": solved.yield_MPa,
                 "max_displacement_mm": round(float(magnitude.max()), 6),
-                "safety_factor": _floored(checks.safety_factor(solved)),
+                "safety_factor": floored(checks.safety_factor(solved)),
             })
         summary["checks"] = check_results
         return summary

@@ -48,7 +48,7 @@ class Feature:
     size_mm: float
 
 
-def _face_map(shape):
+def face_map(shape):
     from cadgen._internal.entity_ordinals import entity_map
 
     return entity_map(shape, "face")
@@ -126,7 +126,7 @@ def small_features(geometry: "Geometry", size_mm: float, named: set[int]) -> lis
     """The fillets, chamfers and holes under two elements of ``size_mm`` that lie more than three element
     sizes from every face in ``named`` (ordinals). Named faces are never among them."""
     shape = geometry.shape
-    faces = _face_map(shape)
+    faces = face_map(shape)
     near = _neighbours(shape, faces)
     info = {face.ordinal: face for face in geometry.faces}
     small = SMALL * size_mm
@@ -180,7 +180,7 @@ def defeature(geometry: "Geometry", features: list[Feature], prepared: Prepared 
     from OCP.BRepCheck import BRepCheck_Analyzer
 
     shape = geometry.shape
-    faces = _face_map(shape)
+    faces = face_map(shape)
     tool = BRepAlgoAPI_Defeaturing()
     tool.SetShape(shape)
     tool.SetRunParallel(False)
@@ -204,8 +204,8 @@ def trace(operation, before, after, origin_before: list[int] | None = None) -> l
     """Per face of ``after``: the ordinal (through ``origin_before``) of the face of ``before`` it came from, else 0."""
     from OCP.TopTools import TopTools_ListOfShape
 
-    old = _face_map(before)
-    new = _face_map(after)
+    old = face_map(before)
+    new = face_map(after)
     origin = [0] * new.Extent()
     for k in range(1, old.Extent() + 1):
         face = old.FindKey(k)

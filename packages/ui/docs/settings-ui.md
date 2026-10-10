@@ -555,7 +555,10 @@ the person comes back to the page.
 
 A GLB that `cadgen fea solve` wrote is a result: its mesh carries every field, the true
 displacement, a plain-language summary, the study it was solved for and the source face of
-every triangle (`glb/feaResult.js`). Its choices are Study's, and what the colours mean is on
+every triangle (`glb/feaResult.js`). The study is read once there (`result.study`: what every
+analysis shares, and what one alone echoes, an electromagnetic study's voltages, currents, coils and
+AC source, a composite's layup and ply materials), and every analysis reads it from there, never the
+file's raw echo. Its choices are Study's, and what the colours mean is on
 the view; Display is the view's alone, as a STEP's is. It has no mode of its own.
 
 A result is of one analysis (`extras.analysis.type`; none is static): Strength (static),
@@ -613,7 +616,12 @@ exactly as it always was.
         "Estimate · "; a Tier 3 analysis leads with its short limit word ("Laminar · ", "Rigid floor · ",
         "Lite · " where it has none), and a flow the file warns ran past the laminar range with
         "Laminar · unreliable above Re 2000 · " (1000 for an external flow, or the number the warning
-        names); a result that took a step to fit the run that cost some accuracy (`extras.fit`, a
+        names); a fast gas flow the file warns of (`analysis.mach` not `checked`) adds what it ran past
+        after its word, "Ideal gas · past Mach 1.8 · " (the limit the file names), or "Ideal gas ·
+        supersonic outlet · " where the peak is within it but the gas leaves faster than sound. A
+        contact (or bolt) solve whose forces did not settle at a load step (`analysis.unsettled`)
+        leads with that before anything else, "Not reliable · contact did not settle at 80% · ", the
+        first step it names; its checks are ordinary fails, shown as any are. A result that took a step to fit the run that cost some accuracy (`extras.fit`, a
         step with an accuracy note) ends with " · adapted". A Tier 1 result that took none is as
         ever.
       - **Each check, the same way**, worst first (failing before close before passing, then the
@@ -641,8 +649,14 @@ exactly as it always was.
       checks it knows has no verdict.
     - **The setup**, read as sentences, each heading muted with, in the disclosure column, the glyph
       its marker is drawn as on the model (`glb/feaGlyphs.jsx`, lucide's grid at the trees' light
-      stroke): **Held at** (a cone pointing into a face, the fixtures' grey), one row per fixed face,
-      its name alone ("Face 17"; in an assembly "post · face 17"); **Pushed** (an arrow with a cone
+      stroke): **Held at** (a cone pointing into a face, the fixtures' grey), one row per fixed face
+      (a fixture of `type` "fixed", or none given), its name alone ("Face 17"; in an assembly "post ·
+      face 17"); right after it **Slides on** (the same cone on a plate that rolls on the face, the
+      same grey), one row per face of a roller fixture (`type` "roller", a frictionless sliding
+      support), named as Held at's are, its hint "May slide along the face, not move off it", chosen
+      as Held at's are, tinting its faces and its markers ("Slides on face 3"; loaded too, "Sliding
+      and loaded face 3"); every analysis that says where it is held says where it slides;
+      **Pushed** (an arrow with a cone
       for its head, the loads' ink), one row per load, how much and which way ("2500 N down": "down"
       and "up" are CAD Z, else "along −X" or the unit vector; or "2 MPa pressure"), its faces under
       it by name, shut until its chevron opens them (choosing the load row still tints all its faces
@@ -658,11 +672,12 @@ exactly as it always was.
       A body load is Pushed's too, a row of its own with no faces ("1 g down", "5 g along +X"),
       chosen with the whole result ("Its weight, 1 g down", "Accelerated 5 g along +X"). Another
       analysis's setup is the groups whose entries its study records, in this order, each in the
-      same two tones as its marker: **Held at**; **Kept at** (a thermometer, grey: each fixed
+      same two tones as its marker: **Held at**; **Slides on**; **Kept at** (a thermometer, grey: each fixed
       temperature, "25 °C", its faces under it); **Pushed**; **Heated** (a flame, ink: "15 W",
       "2000 W/m²", its faces under it); **Cooled by air** (wind, grey: "Air at 25 °C", how well it cools
       its hint, "Heat transfer coefficient 10 W/m²K"); **Shaken** (a wave, ink: "1 g along Z", "At
-      random along Z", "A shock along Z", chosen with every fixed face, where the shaker is); **Dropped**
+      random along Z", "A shock along Z", chosen with every face that holds it, rollers' too, where
+      the shaker is); **Dropped**
       (a drop, ink: "1 m drop", how it stops its hint, the faces that land under it); **Flow in/out**
       (the flow, ink: "In 0.5 m/s at the low X side", "Out at 0 Pa, the high X side", chosen with the
       whole result); **Rigid floor** (a plane, grey: "Facing up", "Under the drop"); **Made of**. An
@@ -714,7 +729,12 @@ exactly as it always was.
       features left out), else carrying the whole result. A Tier 3 result then has **Limits**, one
       row per sentence its model leaves out ("Laminar, steady, incompressible; no turbulence
       model."), each chosen with the whole result. A flow the file warns ran past the laminar range
-      has that warning as its own row, first ("Re 4200 is past the laminar range: ..."). The fit
+      has that warning as its own row, first ("Re 4200 is past the laminar range: ..."). A fast gas
+      flow has a row for its Mach number after it: "Fastest flow Mach 0.53", its regime and the Mach
+      its solver is checked to its hint ("Subsonic, checked to Mach 1.8"), or where the file warns,
+      the warning's sentence ("Mach 2.10 is past Mach 1.8, ..."). A contact solve that did not settle
+      has its sentence as the first row of all ("Contact did not settle at 80% of the load: ...").
+      Each is chosen with the whole result. The fit
       steps are findings for the agent too; the viewer shows them only here. Details shows for a
       result whose study was not recorded where it has steps to say.
 
@@ -730,10 +750,10 @@ exactly as it always was.
   (two thirds of the way to magenta, which no colour of the ramp is, so it reads at either end
   of the ramp while the stress still shows through) and carries
   them into Quick Edit by the STEP the result was solved from, with what they are: "Fixed face
-  17", "2500 N load on face 22", and a face that is both "Fixed and loaded face 17". A press on the result under Select picks the face under the
+  17", "Slides on face 3", "2500 N load on face 22", and a face that is both "Fixed and loaded face 17". A press on the result under Select picks the face under the
   pointer the same way, called what Study calls it ("Face 3" for a face the study does nothing
   to), and one face chosen shows the **Reference** under Study: headed "Face 17", its ref and
-  what the study does to it ("fixed", "2500 N load, down", "free"), with **Copy** (the STEP's
+  what the study does to it ("fixed", "slides along it", "2500 N load, down", "free"), with **Copy** (the STEP's
   path and the ref, as a STEP's Copy writes it). Escape, the Reference's X, Quick Edit's clear
   and a press on nothing let go. In an assembly the
   Reference has one more row, **Part**: the part's material and what it holds at the load shown
@@ -785,14 +805,16 @@ exactly as it always was.
   model's diagonal long whatever the load, pointing along the force with its tip on the face (a
   pulling force stands on the face by its tail); a pressure's arrows run along the inward normal;
   a label beside each load's arrows, past their free ends (a push's tails, a pull's tips, so off the part), says its amount at the load shown ("300 N",
-  "2 MPa"). On each fixed face, small cones point into it. They stand on the deformed shape as it is
+  "2 MPa"). On each fixed face, small cones point into it; on a roller's face (Slides on), the
+  same grey cone stands on a small plate on two balls resting on the face, pointing into it along
+  its normal, unlabelled, drawn wherever fixtures are. They stand on the deformed shape as it is
   drawn, in two passes, the x-ray look: what is in view solid, depth-tested as the model is,
   and what the model hides as a faint ghost (a quarter opacity) over the surface, so a fixture
   under the base reads as under it, never as standing on the face in front; a load's label the
   part hides is ghosted the same way (a ray from the eye to it, cast at most every 100 ms while
   the view moves). The theme has no colour to spare (every saturated hue
   is the ramp's or the chosen faces' magenta): loads are the ink, fixtures a muted grey, and a
-  chosen load row's arrows, or a chosen fixed row's cones, take the chosen magenta.
+  chosen load row's arrows, or a chosen fixed or roller row's cones, take the chosen magenta.
   Every other kind is one row of a table (`MARKER_KINDS` in `glb/feaMarkers.js`), drawn only where
   the analysis lists it (`markers`) and the study records it, each solid and ghosted as above, in
   the ink (what drives the part) or the muted grey (what holds it or takes from it), never a hue of

@@ -58,7 +58,8 @@ class Material:
     creep: dict | None = field(default=None, hash=False)
     #: Orthotropic stiffness, object only: E1_MPa..E3_MPa, nu12, nu13, nu23, G12_MPa..G23_MPa and ``axes``
     #: (directions 1 and 2, unit and perpendicular). Set, it replaces E and nu wherever the operators assemble
-    #: stiffness; E and nu stay as its stand-in (E1, nu12) for what has no orthotropic path.
+    #: stiffness; E and nu (E1, nu12) are what reads one number (a penalty's scale). An analysis whose solids are
+    #: isotropic only (``isotropic_only``: nonlinear, impact, creep, contact, bolt) refuses it (study.parse_study).
     orthotropic: dict | None = field(default=None, hash=False)
     #: Electrical resistivity, ohm m (electromagnetic: steady current; under 1 ohm m a conductor).
     resistivity: float | None = None

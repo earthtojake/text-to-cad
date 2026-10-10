@@ -3,7 +3,7 @@
 A part is a thin plate when it is unambiguously one: every face is a skin face
 (planar, at one of two levels a thickness ``t`` apart, facing out of them) or
 a side face (its normal everywhere across the thickness), the two skins have
-the same area, the volume is that area times ``t``, :func:`assembly._thickness`
+the same area, the volume is that area times ``t``, :func:`assembly.solid_thickness`
 reads the same ``t``, and ``t`` is under :data:`THIN` of the plate's smaller
 span. Anything else (a step in thickness, a rib, a bend) is left solid.
 
@@ -63,7 +63,7 @@ EDGE_REFINE = 4.0
 CARRIER_ACROSS = 12
 #: Skins must agree with each other and with the volume this closely to be one plate (relative).
 AGREE = 0.01
-#: _thickness and the skins' separation must agree this closely (relative).
+#: solid_thickness and the skins' separation must agree this closely (relative).
 THICKNESS_AGREE = 0.02
 #: A normal is "along" or "across" the plate normal within this (cosine).
 PARALLEL = 1e-6
@@ -165,7 +165,7 @@ def obb_half_sizes(shape) -> list[tuple[float, tuple[float, float, float]]]:
     return sorted((float(size), (d.X(), d.Y(), d.Z())) for size, d in pairs)
 
 
-def _dot(a, b) -> float:
+def dot(a, b) -> float:
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 
@@ -189,12 +189,12 @@ def detect(geometry: "Geometry") -> Plate | None:
     """The part as a thin plate, or ``None`` when it is not unambiguously one (see the module's rules)."""
     if geometry is None or geometry.shape is None:
         return None
-    return cached(geometry.shape, "shell", lambda shape: _detect(shape, geometry.volume_mm3, geometry.area_mm2))
+    return cached(geometry.shape, "shell", lambda shape: detect_plate(shape, geometry.volume_mm3, geometry.area_mm2))
 
 
-def _detect(shape, volume: float, area: float, thin: float = THIN) -> Plate | None:
+def detect_plate(shape, volume: float, area: float, thin: float = THIN) -> Plate | None:
     """The plate rules of the module; ``thin`` is the thickness-to-span ceiling (a laminate reads thick plates too)."""
-    from cadgen._internal.fea.assembly import _thickness
+    from cadgen._internal.fea.assembly import solid_thickness
 
     records = face_records(shape)
     planes = [r for r in records if r.kind == "plane" and r.normals]
@@ -202,18 +202,18 @@ def _detect(shape, volume: float, area: float, thin: float = THIN) -> Plate | No
         return None
     largest = max(planes, key=lambda r: r.area)
     n = largest.normals[0]
-    top_level = _dot(n, largest.centroid)
+    top_level = dot(n, largest.centroid)
     top, bottom, sides, levels = [], [], [], []
     for record in records:
         if not record.normals:
             return None
-        along = [_dot(n, m) for m in record.normals]
+        along = [dot(n, m) for m in record.normals]
         if record.kind == "plane" and all(abs(a - 1.0) < PARALLEL for a in along):
-            if abs(_dot(n, record.centroid) - top_level) > 1e-6 * max(1.0, abs(top_level)) + 1e-9:
+            if abs(dot(n, record.centroid) - top_level) > 1e-6 * max(1.0, abs(top_level)) + 1e-9:
                 return None   # a second top level: a step, a boss, a pocket
             top.append(record)
         elif record.kind == "plane" and all(abs(a + 1.0) < PARALLEL for a in along):
-            levels.append(_dot(n, record.centroid))
+            levels.append(dot(n, record.centroid))
             bottom.append(record)
         elif all(abs(a) < ACROSS_TOL for a in along):
             sides.append(record)
@@ -227,7 +227,7 @@ def _detect(shape, volume: float, area: float, thin: float = THIN) -> Plate | No
     top_area, bottom_area = sum(r.area for r in top), sum(r.area for r in bottom)
     if abs(top_area - bottom_area) > AGREE * top_area or abs(volume - top_area * t) > AGREE * volume:
         return None
-    if abs(_thickness(shape, volume, area) - t) > THICKNESS_AGREE * t:
+    if abs(solid_thickness(shape, volume, area) - t) > THICKNESS_AGREE * t:
         return None
     halves = obb_half_sizes(shape)
     span, length = 2.0 * halves[1][0], 2.0 * halves[2][0]
@@ -240,11 +240,15 @@ def _detect(shape, volume: float, area: float, thin: float = THIN) -> Plate | No
 # -- the rung -----------------------------------------------------------------------------------------
 
 
-def _usable(analysis, ctx) -> bool:
-    """Static, one part, solid so far, and not yet cut by symmetry."""
+def usable(analysis, ctx) -> bool:
+    """Static, one part, solid so far, not yet cut by symmetry, and held by fixed faces only (a roller's sliding
+    along its face is the solid's: the mid-surface and the bar hold whole nodes)."""
+    from cadgen._internal.fea.supports import has_rollers
+
     plan = ctx.plan
     return (getattr(analysis, "name", None) == "static" and getattr(ctx, "assembly", None) is None
-            and plan.idealisation == "solid" and not plan.symmetry and ctx.geometry is not None)
+            and plan.idealisation == "solid" and not plan.symmetry and ctx.geometry is not None
+            and not has_rollers(getattr(ctx.study, "fixtures", ())))
 
 
 def element_size(plate: Plate, requested: float | None) -> float:
@@ -270,7 +274,7 @@ def idealise(analysis, ctx, inputs) -> "Step | None":
     """The ``idealise`` rung for a thin plate: the plan solves its mid-surface as a shell."""
     from cadgen._internal.fea.fit import Step
 
-    if not _usable(analysis, ctx):
+    if not usable(analysis, ctx):
         return None
     plate = detect(ctx.geometry)
     if plate is None:
@@ -287,7 +291,7 @@ def idealise(analysis, ctx, inputs) -> "Step | None":
     return Step("idealise", words, accuracy, model_error_pct(plate.slenderness), detail={
         "idealisation": "shell", "thickness_mm": round(plate.thickness, 6), "span_mm": round(plate.span, 4),
         "slenderness": round(plate.slenderness, 6), "element_size_mm": round(h, 4),
-        "elements": int(round(_triangles(plate.area, h))), "surface_mesh_mm": round(carrier, 4),
+        "elements": int(round(triangles_for(plate.area, h))), "surface_mesh_mm": round(carrier, 4),
     })
 
 
@@ -301,7 +305,7 @@ def undo_solid_rungs(plan) -> None:
     plan.refine_to_mm, plan.size_field = None, None
 
 
-def _triangles(area: float, h: float) -> float:
+def triangles_for(area: float, h: float) -> float:
     return 4.0 * area / (math.sqrt(3.0) * h * h)
 
 
@@ -310,7 +314,7 @@ def estimate(ctx) -> "Estimate":
     solve of six DOF per mid-surface node."""
     plate = detect(ctx.geometry)
     h = element_size(plate, ctx.plan.requested_mm)
-    nodes = _triangles(plate.area, h) + 1   # twice the uniform mesh's: the edges are graded finer
+    nodes = triangles_for(plate.area, h) + 1   # twice the uniform mesh's: the edges are graded finer
     return idealised_cost(ctx, 6 * nodes, 42.0)
 
 
@@ -422,7 +426,7 @@ class ShellModel:
         return np.einsum("tki,tkl,tlj->tij", T, K, T), membrane, bending, frame, area
 
 
-def _laminate_rotation(frame, normal, axis):
+def laminate_rotation(frame, normal, axis):
     """Each element's x axis against the laminate's 0° direction: (cos, sin) of the angle, (T,) each."""
     import numpy as np
 
@@ -463,7 +467,7 @@ def laminate_matrices(self, abd):
         bending[:, 0, o + 4], bending[:, 1, o + 3] = dx[:, i], -dy[:, i]
         bending[:, 2, o + 4], bending[:, 2, o + 3] = dy[:, i], -dx[:, i]
     # The element's x axis is at angle phi from the laminate's 0°: laminate strain = T(-phi) element strain.
-    c, s = _laminate_rotation(frame, self.normal, abd["axis"])
+    c, s = laminate_rotation(frame, self.normal, abd["axis"])
     T = strain_rotation(c, -s)
     A, B, D = (np.einsum("tki,kl,tlj->tij", T, np.asarray(abd[key], dtype=float), T) for key in ("A", "B", "D"))
     P = np.zeros((count, 2, 2))
@@ -989,10 +993,10 @@ def outcome_on_carrier(ctx, displacement, stress, element_peak: float, reactions
 
 def finish(analysis, ctx, inputs, outcome, detail: dict):
     """The outcome as static's result (its per-part numbers through static's own helpers)."""
-    from cadgen._internal.fea.analyses.static import _solved
+    from cadgen._internal.fea.analyses.static import solved_record
 
-    solved = [_solved(ctx.volume, outcome, ctx.study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
-    result = analysis._result(outcome, solved, None)
+    solved = [solved_record(ctx.volume, outcome, ctx.study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
+    result = analysis.static_result(outcome, solved, None)
     result.scalars["idealisation"] = detail
     return result
 

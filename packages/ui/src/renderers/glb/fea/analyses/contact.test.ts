@@ -115,4 +115,22 @@ describe('contact', () => {
     expect(checkTitle(check, 'passes')).toBe('Within the limit');
     expect(checkLine(check).replace(/[  ]/g, ' ')).toBe('Peak 380 MPa, limit 400 MPa');
   });
+
+  it('says it is not reliable where its contact did not settle, in the takeaway and in Details, its checks still failing', () => {
+    const sentence = 'Contact did not settle at 80% of the load: the forces here do not balance, so this result is not reliable';
+    const result = pressedResult({
+      analysis: { type: 'contact', tier: 3, word: 'Contact', estimate: false, limits: [LIMIT], noun: 'this load', reference_C: null,
+        warnings: [sentence], unsettled: { at_percent: [80], first_percent: 80 } },
+      checks: [{ kind: 'contact_pressure', label: 'Contact', value: 4, limit: 8, unit: 'MPa', ratio: 0.5, close_at: 0.9, status: 'fails',
+        unsettled_at_percent: 80, where: { ref: '#o1.2.f6', at: [0, 0, 0] } }],
+    });
+    expect(result.analysis.unsettled).toEqual({ atPercent: [80], firstPercent: 80 });
+    const verdict = feaVerdict(result);
+    expect(verdict.caption.startsWith(`Not reliable · contact did not settle at 80% · ${contact.limitWord} · `)).toBe(true);
+    expect(verdict.status).toBe('weak');
+    expect(verdict.rows.map((row: { status: string }) => row.status)).toEqual(['weak']);
+    const details = studyRows(result).find((row: { id: string }) => row.id === 'details');
+    expect(details.children[0]).toMatchObject({ id: 'unsettled', label: sentence, summary: sentence });
+    expect(feaVerdict(pressedResult()).caption.startsWith('Not reliable')).toBe(false);
+  });
 });

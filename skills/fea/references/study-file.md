@@ -1,10 +1,11 @@
 # The study file
 
 One JSON object, passed as `--study study.json` (or inline: `--study '{...}'`).
-For the `static` analysis (the default, and the only one that runs today),
-every key other than `material`, `fixtures` and `loads` is optional.
-The assembly keys (`parts`, `connections`, `contact_tolerance_mm`) are in
-[Assemblies](#assemblies); a study without them on a one-part document is
+This page is the keys every analysis shares, and the `static` analysis's (the
+default): for it, every key other than `material`, `fixtures` and `loads` is
+optional. Each other analysis adds its own keys, in its reference (the table
+below). The assembly keys (`parts`, `connections`, `contact_tolerance_mm`) are
+in [Assemblies](#assemblies); a study without them on a one-part document is
 unchanged.
 
 ```json
@@ -30,10 +31,9 @@ unchanged.
 Which question the study answers. Optional; left out, it is `static`, and a
 study without it behaves exactly as one with `"analysis": "static"`.
 
-Only `static` runs in this cadgen. Every other name below is registered but
-planned: a study that names one is refused with "'<name>' is planned but not
-in this cadgen yet", and nothing else about it is checked. Do not write one;
-the skill's "Choose the analysis" table says what to do instead.
+Every analysis below runs in this cadgen. A name cadgen registers but does not
+solve yet would be refused with "'<name>' is planned but not in this cadgen
+yet", and nothing else about it checked; none is registered so today.
 
 | `analysis` | plain word | status | its keys |
 | --- | --- | --- | --- |
@@ -49,7 +49,7 @@ the skill's "Choose the analysis" table says what to do instead.
 | `transient` | Over time | runs today | [transient.md](transient.md) |
 | `fatigue` | Fatigue life | runs today, from a static load case, a harmonic dwell or a random vibration | [fatigue.md](fatigue.md) |
 | `drop` | Drop (estimate) | runs today, as an estimate | [drop.md](drop.md) |
-| `cfd` | Flow | coming, not in this cadgen yet | [cfd.md](cfd.md) |
+| `cfd` | Flow | runs today (lite: steady laminar, incompressible) | [cfd.md](cfd.md) |
 | `cfd_turbulent` | Turbulent flow | runs today (lite: steady RANS, k-omega SST, wall functions) | [cfd-turbulent.md](cfd-turbulent.md) |
 | `cfd_compressible` | Fast gas flow | runs today (lite: steady ideal gas, adiabatic, shocks captured) | [cfd-compressible.md](cfd-compressible.md) |
 | `impact` | Drop impact | runs today (lite) | [impact.md](impact.md) |
@@ -84,7 +84,7 @@ sentence naming the analysis and the keys it takes.
 ## Units
 
 Geometry in mm, force in N, stress, pressure and modulus in MPa, mass density
-in t/mm³, as always. Accelerations, and the heat and flow inputs of the coming
+in t/mm³, as always. Accelerations, and the heat and flow inputs of the other
 analyses, are written in the units people use; cadgen converts them inside.
 
 | quantity | unit in the study | example key |
@@ -107,7 +107,7 @@ analyses, are written in the units people use; cadgen converts them inside.
 | frequency | Hz | `range_Hz` |
 
 Of these, only length, force, stress, density and `vector_g` are read by
-`static`; the rest belong to analyses that are not in this cadgen yet.
+`static`; the rest belong to the other analyses, each in its reference.
 
 ## `material`
 
@@ -122,9 +122,33 @@ An object may also name a table entry and override some of its fields:
 
 ## `fixtures`
 
-At least one. Each entry lists faces and a type; only `fixed` exists (every
-displacement component clamped on those faces). A part with no fixture has no
-answer, so the run refuses it.
+At least one (a few analyses, like `modal` and `contact`, take none: their
+references say). Each entry lists faces and a type:
+
+| type | what the faces do | Viewer |
+| --- | --- | --- |
+| `fixed` (the default) | held still: every displacement component clamped | **Held at**, a grey cone into the face |
+| `roller` | slide freely in their own plane, but never move along their normal (a frictionless support: a part on a greased floor, or a symmetry plane) | **Slides on**, a grey cone on rollers |
+
+```json
+"fixtures": [
+  {"faces": ["#o1.f1"], "type": "fixed"},
+  {"faces": ["#o1.f5", "#o1.f6"], "type": "roller"}
+]
+```
+
+A roller on a curved face holds each point along the face's own normal there
+(per facet), so a roller on a bore lets the part turn in it and slide along it.
+Where two roller faces meet at an edge, the edge's points are held along both
+normals. A roller holds a part only along its normal: rollers alone must still
+stop the part moving and turning every way (three faces that are not parallel,
+like the corner of a block), or the run says the part is not held. Rollers
+apply to every analysis that takes `fixtures` (the static family, `modal`,
+`buckling`, `harmonic`, `random_vibration`, `shock`, `transient`,
+`thermal_stress`, `nonlinear`, `contact`, `bolt`, `creep`, `composite`, `drop`,
+and `fatigue` through its source); a shaker drives a roller face only along
+its normal. A part with no fixture at all has no answer under `static`, so the
+run refuses it.
 
 ## `loads`
 
@@ -213,6 +237,13 @@ usual pattern. `--mesh-size` on the command line overrides the file for one
 run. Elements are quadratic tetrahedra (`order` 2); a study cannot ask for
 another order under `static`, though the run may switch to simpler elements
 to fit a big model, and then says so ([`fit`](#fit)).
+
+`refine` meshes balls finer than the rest, where a small detail decides the
+answer (two curved parts touching, a sharp notch):
+`"mesh": {"size_mm": 3, "refine": [{"center_mm": [0, 0, 0], "radius_mm": 2, "size_mm": 0.3}]}`.
+Each ball is meshed at its `size_mm` within `radius_mm` of `center_mm`, graded
+to `size_mm` outside it. Keep a ball small: a large one at a fine size is
+refused, as too many local sizes to place.
 
 ## `output`
 

@@ -8,12 +8,30 @@ and how to tell a good answer from a bad one.
 - Small displacements, small strains: results scale linearly with the load.
   A part that deflects by more than a few percent of its own size, buckles,
   or contacts something else is outside the model.
-- Isotropic linear elastic material below yield. The safety factor tells you
+- Linear elastic material below yield (isotropic, or orthotropic where the
+  material gives its directions). The safety factor tells you
   whether that assumption held; below 1 the real part yields and the stresses
   reported are not what it sees.
-- Fixtures are perfectly rigid and perfectly bonded. A real bolt, weld or
-  clamp is softer and spreads load; a fixed face is the stiffest possible
-  support.
+- Fixtures are perfectly rigid. A `fixed` face is held still and bonded: a
+  real bolt, weld or clamp is softer and spreads load, so a fixed face is the
+  stiffest possible support. A `roller` face slides freely in its own plane
+  and is held only along its normal (on a curved face, its normal at each
+  point): a frictionless support.
+
+## Fixed or roller
+
+- `fixed` where the part is bolted, welded or clamped. It also stops the face
+  shrinking sideways as the part is squeezed (Poisson's effect), so the
+  stress right at it reads high: read the peak a little away from it.
+- `roller` where the part rests on a smooth support it can slide on, and on a
+  symmetry plane when you model half a part yourself (the cut face moves only
+  in its plane). A block on rollers on three faces that meet at a corner,
+  pulled on the opposite face, is in pure uniaxial stress: σ = F/A everywhere
+  and it narrows by ν times its stretch, the textbook answer, which a fixed
+  face would spoil at the clamp.
+- Rollers alone must stop the part sliding and turning every way: three faces
+  whose normals are not all in one plane do it; one flat face does not (the
+  part could slide along it), and the run says the part is not held.
 - Loads are static and do not follow the deformation. A `gravity` or
   `acceleration` load is a steady body load (the part's weight, or a constant
   g-load), not a moving one: no vibration, no impact, no fatigue, no thermal
@@ -21,9 +39,9 @@ and how to tell a good answer from a bad one.
 - An assembly's parts are bonded where they touch (within 0.1 mm): the glued
   faces carry load as if welded, with no slip, no clearance, no preload and no
   bolt stiffness. A bonded joint is stiffer than a real bolted one and
-  exaggerates the stress at its edge. Bolts, pins and contact are not yet
-  modelled, and a part resting on another without being bonded carries
-  nothing.
+  exaggerates the stress at its edge. Under `static`, a part resting on
+  another without being bonded carries nothing: parts that press and slide
+  are the `contact` analysis, and bolts the `bolt` analysis.
 
 ## Choosing faces
 

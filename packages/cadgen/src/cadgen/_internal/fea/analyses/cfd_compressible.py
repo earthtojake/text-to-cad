@@ -49,7 +49,7 @@ from typing import Any, ClassVar
 
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Inputs, SolveContext
-from cadgen._internal.fea.analyses.cfd import OPENINGS, PASCAL, RE_LIMIT, CfdAnalysis, _integral, _triangles
+from cadgen._internal.fea.analyses.cfd import OPENINGS, PASCAL, RE_LIMIT, CfdAnalysis, surface_integral, wall_triangles
 
 __all__ = ["CfdCompressibleAnalysis", "CfdCompressibleInputs", "GASES", "GasInletSpec", "LIMITS", "MACH_CHECKED", "mach_sentence"]
 
@@ -593,8 +593,8 @@ class CfdCompressibleAnalysis(CfdAnalysis):
         inlets, outlets = np.flatnonzero(row_kind == "inlet"), np.flatnonzero(row_kind == "outlet")
 
         def mean(rows, values) -> float:
-            area = _integral(space, rows, np.ones(space.scalar_count))
-            return _integral(space, rows, values) / area if area > 0 else 0.0
+            area = surface_integral(space, rows, np.ones(space.scalar_count))
+            return surface_integral(space, rows, values) / area if area > 0 else 0.0
 
         inflow, outflow = float(sum(flow.inflow_kg_s)), float(sum(flow.outflow_kg_s))
         speed = np.linalg.norm(space.nodal(flow.u), axis=1) / 1000.0          # m/s
@@ -608,12 +608,12 @@ class CfdCompressibleAnalysis(CfdAnalysis):
         force = np.zeros(3)
         walls = np.flatnonzero(row_kind == "wall")
         if len(walls):
-            triangles, area, normal = _triangles(space, walls)
+            triangles, area, normal = wall_triangles(space, walls)
             force = (area[:, None] * (p_abs - reference)[triangles[:, 3:]].mean(axis=1)[:, None] * normal).sum(axis=0) * 1e-6
         # Reynolds number from the solved mass flux through the inlet (internal), or the free stream (external).
         reynolds = setup.reynolds
         if inputs.kind == "internal" and len(inlets):
-            area_in = _integral(space, inlets, np.ones(space.scalar_count))
+            area_in = surface_integral(space, inlets, np.ones(space.scalar_count))
             mu = sutherland(flow_gas(inputs), setup.total_temperature_K)
             reynolds = inflow / (area_in * 1e-6) * setup.length_mm / 1000.0 / mu if area_in > 0 else setup.reynolds
         compression = flow.compression if flow.compression is not None else np.zeros(0)
@@ -774,7 +774,7 @@ class CfdCompressibleAnalysis(CfdAnalysis):
         }
         if result.solved:
             from cadgen._internal.fea import checks
-            from cadgen._internal.fea.analyses.static import _floored
+            from cadgen._internal.fea.analyses.static import floored
 
             outcome = result.scalars["outcome"]
             magnitude = np.linalg.norm(outcome.displacement, axis=1)
@@ -784,7 +784,7 @@ class CfdCompressibleAnalysis(CfdAnalysis):
                 "max_von_mises_at_mm": [round(c, 3) for c in solved.peak_at],
                 "yield_MPa": solved.yield_MPa,
                 "max_displacement_mm": round(float(magnitude.max()), 6),
-                "safety_factor": _floored(checks.safety_factor(solved)),
+                "safety_factor": floored(checks.safety_factor(solved)),
             })
         summary["checks"] = check_results
         return summary

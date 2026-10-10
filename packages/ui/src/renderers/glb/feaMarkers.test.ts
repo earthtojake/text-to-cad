@@ -268,6 +268,37 @@ describe('every other kind of marker', () => {
     markers.dispose();
   });
 
+  it('stands a roller\'s own cone on a plate on its face, grey, pointing into it, wherever fixtures are drawn', () => {
+    const rolling = { fixtures: [{ type: 'fixed', faces: ['#o1.f4'] }, { type: 'roller', faces: ['#o1.f2'] }], loads: [DOWN_ON_TOP] };
+    const result = cube(rolling);
+    const sites = markerSites(result).sites;
+    expect(sites.filter((site: any) => site.kind === 'fixture').every((site: any) => site.ref === '#o1.f4' && site.group === 0)).toBe(true);
+    const rollers = markerPoses(result, markerSites(result), positionsOf(result)).filter((pose: any) => pose.kind === 'roller');
+    expect(rollers.length).toBeGreaterThan(0);
+    for (const pose of rollers) {
+      // Numbered by its place among every fixture, as Study's "roller:1:<ref>" row is.
+      expect([pose.ref, pose.group]).toEqual(['#o1.f2', 1]);
+      expect(pose.tip[0]).toBeCloseTo(-0.5, 6);
+      near(pose.direction, [1, 0, 0]);
+    }
+    const markers = createFeaMarkers(THREE, result);
+    expect(markers.kinds).toEqual(['load', 'fixture', 'roller']);
+    markers.update(positionsOf(result));
+    markers.style(STYLE);
+    const names = markers.object3D.children.map((child) => child.name);
+    expect(names.filter((name) => name.startsWith('fea-roller'))).toEqual(['fea-roller-cones', 'fea-roller-cones-ghost', 'fea-roller-plates',
+      'fea-roller-plates-ghost', 'fea-roller-balls', 'fea-roller-balls-ghost', 'fea-roller-balls-2', 'fea-roller-balls-2-ghost']);
+    const cones = markers.object3D.getObjectByName('fea-roller-cones') as THREE.InstancedMesh;
+    expect(colourOf(cones)).toBe('71717a');
+    markers.style({ ...STYLE, visible: { loads: true, fixtures: false } });
+    expect(cones.visible).toBe(false);
+    expect(MARKER_KINDS.roller).toMatchObject({ tone: 'fixture', bucket: 'fixtures', on: 'faces' });
+    expect(markerGateText(['fixture', 'roller'])).toBe('Cones where it holds it, cones on rollers where it may slide.');
+    expect(markers.labels().map((label: any) => label.kind)).toEqual(['load']);
+    // A study with no roller draws none.
+    expect(createFeaMarkers(THREE, cube(STUDY)).kinds).not.toContain('roller');
+  });
+
   it('says in Display what it draws, and words a drop and a shake plainly', () => {
     expect(markerGateText(['fixture', 'load'])).toBe('Arrows where the study loads the part, cones where it holds it.');
     expect(markerGateText(['temperature', 'heat', 'convection'])).toBe('Dots where its temperature is fixed, wavy arrows where heat goes in, strokes where air cools it.');

@@ -1,12 +1,14 @@
 /**
  * Where an FEA result's loads and fixtures act, drawn on the model as every FEA tool draws them:
  * arrows on each loaded face (along the force, or along the inward normal for a pressure), with a
- * label naming the load, and small cones on each fixed face pointing into it. Other analyses add
+ * label naming the load, and small cones on each fixed face pointing into it (on a roller's face,
+ * the cone pressing on a small plate that rolls on the face, its sliding support). Other analyses add
  * their own kinds from one table (`MARKER_KINDS`): a body load's arrow through the model's middle,
  * a shaker's double arrows on the fixtures, a fixed temperature's dot, heat's wavy arrow, the air's
  * strokes, a drop's travel arrow, a flow's inlet and outlet arrows and a rigid floor's see-through
  * plane, each in the ink (what drives the part) or the muted grey (what holds or takes from it). An
- * analysis draws the kinds it lists (`markers`, ./fea/analyses), so a static result is as it was.
+ * analysis draws the kinds it lists (`markers`, ./fea/analyses), and one that draws fixtures draws
+ * rollers too, so a static result with no roller is as it was.
  *
  * The places are sampled once per result (`markerSites`): one to five per face, more on a bigger
  * face, spread over it, each a triangle of the face found by the result's `_FACE` attribute. Where
@@ -48,6 +50,7 @@ const PLANE_SIZE = 1.6;
 export const MARKER_KINDS = Object.freeze({
   load: Object.freeze({ shape: "arrow", tone: "load", bucket: "loads", on: "faces", most: MAX_PER_FACE, phrase: "arrows where the study loads the part" }),
   fixture: Object.freeze({ shape: "cone", tone: "fixture", bucket: "fixtures", on: "faces", most: MAX_PER_FACE, phrase: "cones where it holds it" }),
+  roller: Object.freeze({ shape: "roller", tone: "fixture", bucket: "fixtures", on: "faces", most: MAX_PER_FACE, phrase: "cones on rollers where it may slide" }),
   body_load: Object.freeze({ shape: "arrow", tone: "load", bucket: "loads", on: "middle", most: 1, phrase: "an arrow through its middle for its weight" }),
   base_excitation: Object.freeze({ shape: "double_arrow", tone: "load", bucket: "loads", on: "faces", most: 1, phrase: "double arrows where it is shaken" }),
   temperature: Object.freeze({ shape: "dot", tone: "fixture", bucket: "fixtures", on: "faces", most: MAX_PER_FACE, phrase: "dots where its temperature is fixed" }),
@@ -149,17 +152,22 @@ function spreadTriangles({ areas, centroids }, count) {
 /**
  * The study's entries each kind of marker stands for, in the order Study's rows number them
  * (`group`), each with the faces it stands on (`refs`; none for one that stands elsewhere): the
- * loads with faces, the fixtures, a body load (gravity, an acceleration: a load with no faces), the
+ * loads with faces, the fixtures (a roller's faces its own kind's, each numbered by its place among
+ * every fixture, as Study's rows number it), a body load (gravity, an acceleration: a load with no faces), the
  * shaker (on the fixtures), the fixed temperatures, the heat, the air, the faces a drop lands on,
  * the flow's openings and the rigid planes. Only the kinds the result's analysis draws.
  */
 function markerGroups(result) {
   const study = result.study;
   const drawn = new Set(feaAnalysis(result).markers);
+  // A roller is a fixture that lets its face slide: wherever fixtures are drawn, so are rollers.
+  if (drawn.has("fixture")) drawn.add("roller");
+  const roller = (fixture) => fixture.type === "roller";
   const entries = (list) => list || [];
   const groups = {
     load: study.loads.filter((load) => load.faces.length).map((load) => load.faces),
-    fixture: study.fixtures.map((fixture) => fixture.faces),
+    fixture: study.fixtures.map((fixture) => (roller(fixture) ? [] : fixture.faces)),
+    roller: study.fixtures.map((fixture) => (roller(fixture) ? fixture.faces : [])),
     body_load: study.loads.filter((load) => !load.faces.length && load.g).map(() => []),
     base_excitation: study.excitation?.kind && study.excitation.kind !== "force" ? [study.fixtures.flatMap((fixture) => fixture.faces)] : [],
     temperature: entries(study.temperatures).map((entry) => entry.faces),
@@ -297,7 +305,7 @@ function offFacePose(result, site, box, positions, arrow) {
  * `tail`, unit `direction` (the way it points) and whether it `pushes`; a cone's `tip` on the face and `direction` into
  * it. An arrow that pushes on its face (against the face's outward normal) has its tip on the face;
  * one that pulls stands on the face by its tail, pointing away. `normal` is the face's outward
- * normal there, from the triangle's winding. The other kinds: a shaker's double arrow stands off
+ * normal there, from the triangle's winding. A roller stands as a fixture's cone does. The other kinds: a shaker's double arrow stands off
  * its fixture along the shake (`tip` one end, `tail` the other); a temperature's dot sits on its
  * face; heat's wavy arrow points into its face, its tip on it; the air's strokes rise off their
  * face; a drop's arrow stands on the face that lands, pointing the way it falls.
@@ -311,7 +319,7 @@ export function markerPoses(result, { diagonal, sites }, positions) {
     const [a, b, c] = site.triangle.map((corner) => point(positions, corner));
     const at = scaled(plus(plus(a, b), c), 1 / 3);
     const normal = unit(cross(sub(b, a), sub(c, a)));
-    if (site.kind === "fixture" || site.kind === "temperature") return { ...site, normal, tip: at, direction: scaled(normal, -1) };
+    if (site.kind === "fixture" || site.kind === "roller" || site.kind === "temperature") return { ...site, normal, tip: at, direction: scaled(normal, -1) };
     if (site.kind === "convection") return { ...site, normal, tip: at, tail: plus(at, scaled(normal, arrow)), direction: normal };
     if (site.kind === "heat") return { ...site, normal, tip: at, tail: plus(at, scaled(normal, arrow)), direction: scaled(normal, -1), pushes: true };
     if (site.kind === "base_excitation") {
@@ -486,6 +494,23 @@ export function createFeaMarkers(THREE, result) {
       const wave = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wavePoints(THREE, -arrowLength, -head, arrowLength * 0.07, 2)), 48, arrowLength * 0.03, 6);
       geometries.push(wave);
       return [["shafts", wave], ["heads", headGeometry]];
+    },
+    // A roller, as it rolls on its face: two small balls on the face, a thin plate on them and the
+    // fixture's cone on the plate, its tip on the plate, all along the cone's axis into the face.
+    roller: () => {
+      const ball = coneHeight * 0.14;
+      const plate = coneHeight * 0.08;
+      const balls = [-1, 1].map((side) => {
+        const sphere = new THREE.SphereGeometry(ball, 12, 8);
+        sphere.translate(side * coneHeight * 0.2, -ball, 0);
+        return sphere;
+      });
+      const disc = new THREE.CylinderGeometry(coneHeight * 0.42, coneHeight * 0.42, plate, 20);
+      disc.translate(0, -2 * ball - plate / 2, 0);
+      const cone = new THREE.ConeGeometry(coneHeight * 0.4, coneHeight * 0.85, 12);
+      cone.translate(0, -2 * ball - plate - coneHeight * 0.425, 0);
+      geometries.push(...balls, disc, cone);
+      return [["cones", cone], ["plates", disc], ["balls", balls[0]], ["balls-2", balls[1]]];
     },
     strokes: () => {
       const stroke = (x) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wavePoints(THREE, arrowLength * 0.15, arrowLength * 0.75, arrowLength * 0.05, 1.5, x)), 40, arrowLength * 0.025, 6);
