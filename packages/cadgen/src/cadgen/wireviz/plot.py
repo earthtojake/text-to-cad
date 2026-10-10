@@ -2,7 +2,7 @@
 
 WireViz draws it: ``wireviz`` (with Graphviz's ``dot``) renders the document
 to SVG, and the payload carries that SVG unchanged, as one sheet. It is the
-plot payload a KiCad board's is (``cadgen.kicad.plot``: the same schema
+plot payload a KiCad board's is (``cadgen.plot``: the same schema
 version, the same sheet fields), so the viewer and ``cadgen snapshot`` draw a
 harness the way they draw a board: ``{schemaVersion, kind: "harness",
 unrouted: null, sheets: [{name, svg, width, height, background}]}``, sizes in
@@ -20,19 +20,19 @@ import json
 import re
 from pathlib import Path
 
-from cadgen.kicad.plot import PLOT_SCHEMA_VERSION, PlotError
+from cadgen.plot import PLOT_SCHEMA_VERSION, PlotError
+from cadgen.viewer.content_types import extension_of, format_of
 
-__all__ = ["HARNESS_BACKGROUND", "HARNESS_SUFFIX", "build_plot", "plot_payload_bytes"]
+__all__ = ["HARNESS_BACKGROUND", "build_plot", "plot_payload_bytes"]
 
 #: WireViz's default page colour, behind a diagram whose document sets none.
 HARNESS_BACKGROUND = "#ffffff"
-HARNESS_SUFFIX = ".harness.yml"
 _POINT_MM = 25.4 / 72.0
 _SHEET = "harness"
 
 
 def _stem(path: Path) -> str:
-    return path.name[: -len(HARNESS_SUFFIX)] if path.name.lower().endswith(HARNESS_SUFFIX) else path.stem
+    return path.name[: -len(extension_of(path))]
 
 
 def _size_mm(svg: str) -> tuple[float, float]:
@@ -50,8 +50,8 @@ def _background(svg: str) -> str:
 
 def _checked(path: Path) -> Path:
     path = Path(path).resolve()
-    if not path.name.lower().endswith(HARNESS_SUFFIX):
-        raise PlotError(f"{path.name} is not a harness document ({HARNESS_SUFFIX})")
+    if format_of(path) != "harness":
+        raise PlotError(f"{path.name} is not a harness document (.harness.yml)")
     if not path.is_file():
         raise PlotError(f"{path.name} does not exist")
     return path

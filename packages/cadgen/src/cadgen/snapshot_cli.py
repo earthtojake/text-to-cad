@@ -1607,36 +1607,22 @@ def plot_payload_file(source: Path) -> Path:
         )
     if not source.is_file():
         raise SnapshotError(f"snapshot input does not exist: {source}")
-    data = _plot_payload_bytes(kind, source)
+    data = _plot_payload_bytes(source)
     payload_path = _drawing_payload_dir() / f"{sha256(data).hexdigest()}.plot.json"
     if not payload_path.is_file():
         write_bytes_atomic(payload_path, data)
     return payload_path
 
 
-def _plot_payload_bytes(kind: str, source: Path) -> bytes:
-    """A plot's payload, from the tool that draws its kind; the tool's refusals as snapshot errors.
+def _plot_payload_bytes(source: Path) -> bytes:
+    """A plot's payload, from the tool that draws it (``cadgen.plot``, as the Viewer's
+    `GET /__cad/plot` draws it); the tool's refusals as snapshot errors."""
+    from cadgen.kicad.cli import KicadRunError
+    from cadgen.plot import PlotError, plot_payload_bytes
 
-    KiCad draws a board or a schematic (:mod:`cadgen.kicad.plot`), WireViz a wiring
-    harness (:mod:`cadgen.wireviz.plot`): the same two builders the Viewer's
-    `GET /__cad/plot` calls, each imported only when its kind is drawn.
-    """
-    from cadgen.kicad.plot import PlotError
-
-    if kind == "harness":
-        from cadgen.wireviz.install import WirevizMissingError
-        from cadgen.wireviz.plot import plot_payload_bytes
-
-        refusals: tuple[type[Exception], ...] = (WirevizMissingError, PlotError)
-    else:
-        from cadgen.kicad.cli import KicadRunError
-        from cadgen.kicad.install import KicadMissingError
-        from cadgen.kicad.plot import plot_payload_bytes
-
-        refusals = (KicadMissingError, KicadRunError, PlotError)
     try:
         return plot_payload_bytes(source)
-    except refusals as error:
+    except (PlotError, KicadRunError) as error:
         raise SnapshotError(str(error)) from None
 
 

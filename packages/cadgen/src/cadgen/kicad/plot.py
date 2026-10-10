@@ -59,6 +59,7 @@ from pathlib import Path
 
 from cadgen.kicad import sexpr
 from cadgen.kicad.sexpr import Sym
+from cadgen.plot import PLOT_SCHEMA_VERSION, PlotError
 
 __all__ = [
     "BOARD_BACKGROUND",
@@ -69,7 +70,6 @@ __all__ = [
     "plot_payload_bytes",
 ]
 
-PLOT_SCHEMA_VERSION = 2
 # The derivation's own revision, in the cache key beside the schema version: a fix that changes
 # what a payload holds, not its shape, bumps it so the store never serves the old payloads.
 _REVISION = 5
@@ -90,11 +90,6 @@ _DRILL_STYLE = re.compile(
     r"|fill:none; stroke:#(?:FFFFFF|000000); stroke-width:[0-9.]+; stroke-opacity:1; stroke-linecap:round; stroke-linejoin:round;)\">$"
 )
 _CIRCLE = re.compile(r'<circle\s+cx="([-\d.]+)"\s+cy="([-\d.]+)"\s+r="([-\d.]+)"')
-
-
-class PlotError(ValueError):
-    """A document KiCad could not plot, with the reason. A ``ValueError``: the
-    viewer's GET funnel answers it as a 400 with this message."""
 
 
 def _strip_stamps(svg: str) -> str:
