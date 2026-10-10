@@ -556,6 +556,26 @@ class WorkerStart(unittest.TestCase):
         self.assertEqual(list(worker.frames(silence_timeout=60)), [{"pong": worker.pid}])
 
 
+class InstallationGone(unittest.TestCase):
+    """What a worker starts from, removed under the daemon: a package manager replacing its environment."""
+
+    def test_an_installation_that_is_all_there_is_not_gone(self):
+        self.assertFalse(pool_mod.installation_gone())
+
+    def test_a_removed_interpreter_or_environment_is_gone(self):
+        temporary = generated_cad_directory(prefix="daemon-installation-")
+        self.addCleanup(temporary.cleanup)
+        environment = pathlib.Path(temporary.name).resolve()
+        with mock.patch.object(sys, "executable", str(environment / "python.exe")):
+            self.assertTrue(pool_mod.installation_gone())
+        # A virtual environment whose pyvenv.cfg went: on Windows its launcher exits 106 and starts nothing.
+        with mock.patch.object(sys, "prefix", str(environment)), \
+                mock.patch.object(sys, "base_prefix", str(environment / "base")):
+            self.assertTrue(pool_mod.installation_gone())
+            (environment / "pyvenv.cfg").write_text("home = elsewhere\n", encoding="utf-8")
+            self.assertFalse(pool_mod.installation_gone())
+
+
 class Status(_PoolFixture):
     def test_snapshot_reports_per_worker_model_busy_jobs_extra(self):
         with self._spares(0):

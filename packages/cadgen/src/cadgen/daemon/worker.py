@@ -258,6 +258,7 @@ def _run(request: dict, *, supervised: bool = False) -> int:
     out, err = _FrameWriter("stdout"), _FrameWriter("stderr")
     try:
         if not _enter(cwd, err):
+            telemetry.job_failed("missing_file")  # the folder it was asked from is gone
             return 1
         sys.argv = [prog or f"cadgen {tool}", *argv]
         main = _tool_main(tool)
@@ -280,6 +281,7 @@ def _run(request: dict, *, supervised: bool = False) -> int:
     except BaseException as error:  # noqa: BLE001 - a failed build must not kill the worker
         err.write(traceback.format_exc())
         _report(error, bugs_only=False)  # past the command's own reporting of what failed: never meant to
+        telemetry.job_ended(1, "bug" if isinstance(error, Exception) else None)
         return 1
     finally:
         sys.argv = previous_argv
@@ -393,6 +395,7 @@ def serve() -> int:
             telemetry.job_started()
             with _heartbeat():
                 code = _run(request, supervised=True)
+            telemetry.job_ended(code)  # a failure nothing named: argparse's 2 is its arguments refused
             # What telemetry learned of the job rides its exit frame: the daemon counts it (server._handle_request).
             _emit({"exit": code, "pid": os.getpid(), **telemetry.job_finished()})
     return 0

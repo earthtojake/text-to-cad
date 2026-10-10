@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import errno
 import json
 import ntpath
 import os
@@ -382,6 +383,31 @@ class SidebarAcrossThreadsTest(_Session):
             os.utime(published, (stale, stale))
         self.assertEqual(self.call("cad_view")["structuredContent"]["views"], [])
         self.assertEqual(self.call("cad_show", {"path": self.bracket, "view": "s1"})["structuredContent"], {"delivered": 0})
+
+    def test_a_disk_that_refuses_the_sidebars_file_fails_no_sync(self) -> None:
+        """0.7.19 raised the disk's refusal (a bare OSError: full, failing) out of every sync of the
+        sidebar, a crash each second, and the requests left for it stayed where they were."""
+        self.sync_sidebar(focused=True)
+        self.assertEqual(self.call("cad_show", {"path": self.loose, "view": "s1"})["structuredContent"]["delivered"], 1)
+        full = OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+        published = self.tmp / "state" / "sidebar-views" / "s1.json"
+        with mock.patch("cadgen.mcp.sidebar_views.write_bytes_atomic", side_effect=full), \
+                mock.patch.object(type(self.sidebar.analytics), "crashed") as crashed, \
+                self.assertLogs("cadgen.mcp", "WARNING") as said:
+            # Focused, so each sync has news to publish: each one tries, and fails, to write it.
+            (event,) = self.sync_sidebar(focused=True)["events"]
+            self.assertEqual((event["type"], event["launch"]["model"]), ("show", self.loose))
+            for _ in range(3):
+                self.assertEqual(self.sync_sidebar(focused=True)["events"], [])
+            # An agent's request it cannot leave is its tool's failure, not the server's crash.
+            refused = self.call("cad_show", {"path": self.loose, "view": "s1"})
+            self.assertTrue(refused["isError"])
+            self.assertIn("disk refused", refused["content"][0]["text"])
+        crashed.assert_not_called()
+        self.assertEqual(len([line for line in said.output if "cannot be published" in line]), 1)
+        # The disk takes files again: the next sync publishes what the view shows now.
+        self.sync_sidebar(focused=True, state={"model": self.loose})
+        self.assertEqual(json.loads(published.read_text(encoding="utf-8"))["state"], {"model": self.loose})
 
 
 class DeclaredTabServerTest(_Session):

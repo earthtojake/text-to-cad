@@ -151,10 +151,12 @@ class ResidentProcessLifecycle(unittest.TestCase):
         self.assertEqual(popen.call_args.kwargs["cwd"], tempfile.gettempdir())
         ensure.assert_not_called()
 
-    def test_the_daemon_takes_no_telemetry_switch_from_the_client_that_started_it(self):
-        # It serves every client; each client's switch travels with its own builds instead.
+    def test_the_daemon_takes_no_telemetry_switch_or_channel_from_the_client_that_started_it(self):
+        # It serves every client; each client's switch travels with its own builds instead, and the channel it
+        # reports is the one its installation's plugin wrote down (`cadgen/_internal/channel.py`).
         spawned = mock.Mock(pid=1234)
-        started_from = {"PATH": "/bin", "DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "0"}
+        started_from = {"PATH": "/bin", "DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "0",
+                        "CADGEN_INSTALL_CHANNEL": "claude-github"}
         with tempfile.TemporaryDirectory(prefix="cadgen-daemon-launch-") as tmp, \
                 mock.patch.object(client.transport, "ensure_authkey"), \
                 mock.patch.object(client, "daemon_identity", return_value="test"), \
@@ -167,7 +169,7 @@ class ResidentProcessLifecycle(unittest.TestCase):
 
         env = popen.call_args.kwargs["env"]
         self.assertEqual(env["PATH"], "/bin")
-        for name in ("DO_NOT_TRACK", "CADGEN_TELEMETRY"):
+        for name in ("DO_NOT_TRACK", "CADGEN_TELEMETRY", "CADGEN_INSTALL_CHANNEL"):
             self.assertNotIn(name, env)
 
     def test_replaced_key_is_retried_only_after_the_live_owner_republishes(self):
@@ -315,6 +317,34 @@ class ServerRelaysTheDeath(unittest.TestCase):
                 self.assertEqual(build.finish.call_args.args[1], ended)
                 self.assertEqual(worker_died.call_args_list, [mock.call(status)] if ended == "crashed" else [])
                 self.assertEqual(next(frame["workerDied"]["exitStatus"] for frame in conn.frames if "workerDied" in frame), status)
+
+
+class AWorkerThatCouldNotStart(unittest.TestCase):
+    """A worker that could not start is a crash, unless the daemon's installation was removed under it:
+    then no worker can start, and the daemon retires so its clients start the next from their own."""
+
+    def handle(self, gone: bool):
+        pool = mock.Mock()
+        pool.acquire.side_effect = pool_mod.WorkerGone("worker 777 exited with code 106 before announcing itself",
+                                                       exit_status=106)
+        conn = ServerRelaysTheDeath._Conn()
+        self.addCleanup(server._INSTALLATION_GONE.clear)
+        with mock.patch.object(server, "_JOBS", JobLedger()), mock.patch.object(server, "_POOL", pool), \
+                mock.patch.object(server, "_log"), \
+                mock.patch.object(server.pool_mod, "installation_gone", return_value=gone), \
+                mock.patch.object(server.telemetry, "worker_died") as worker_died:
+            server._handle_request(conn, {"tool": "step-compile", "argv": ["x.step"], "cwd": "/w",
+                                          "prog": "cadgen step compile"})
+        self.assertEqual(conn.frames[-1], {"exit": 1})
+        return worker_died
+
+    def test_a_start_that_failed_is_a_crash(self):
+        self.assertEqual(self.handle(gone=False).call_args_list, [mock.call(106)])
+        self.assertFalse(server._INSTALLATION_GONE.is_set())
+
+    def test_a_start_the_removed_installation_failed_is_none_and_retires_the_daemon(self):
+        self.assertEqual(self.handle(gone=True).call_args_list, [])
+        self.assertTrue(server._INSTALLATION_GONE.is_set())
 
 
 class ServerStatusIdentity(unittest.TestCase):

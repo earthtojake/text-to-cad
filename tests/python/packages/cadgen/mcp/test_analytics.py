@@ -8,15 +8,20 @@ import base64
 import http.server
 import io
 import json
+import os
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from unittest import mock
 
 from cadgen import cli
+from cadgen._internal import channel as install_channel
 from cadgen.analytics import (KEPT, NOTICE_ENV, NOTICE_TEXT, PRIVACY_URL, Recorder, _post, choose, forget_pending,
                               notify, status)
 from cadgen.cli import telemetry as telemetry_cli
@@ -277,7 +282,11 @@ class ServerCountsTest(_Tmp):
             {"name": "view", "calls": 1},
         ])
         self.assertEqual((payload["schema"], payload["process"], payload["channel"], payload["presentation"],
-                          payload["client"]["name"]), (4, "app", "claude-directory", "tabs", "codex-mcp-client"))
+                          payload["client"]["name"]), (5, "app", "claude-directory", "tabs", "codex-mcp-client"))
+        # Under an id of its own, stamped with the time it was made: a random id, and a whole second.
+        self.assertEqual(str(uuid.UUID(payload["batch"], version=4)), payload["batch"])
+        self.assertIsInstance(payload["at"], int)
+        self.assertLessEqual(abs(payload["at"] - time.time()), 60)
         self.assertNotIn("secret", json.dumps(payload))
         self.assertNotIn(str(self.tmp), json.dumps(payload))
         # A batch with no use is not sent.
@@ -298,25 +307,84 @@ class ServerCountsTest(_Tmp):
         server.analytics.close()
         self.assertEqual(sent, [])
 
-    def test_a_batch_the_receiver_did_not_take_waits_for_the_next(self) -> None:
-        answers: list = [False, True, "refused", True]
-        sent: list[dict] = []
+    def test_a_batch_the_receiver_did_not_take_is_sent_again_whole_before_anything_newer(self) -> None:
+        # Offline twice, then back: the receiver may have taken a batch whose answer was lost, so the batch goes
+        # again byte for byte, its id and all, and what came since goes in a later batch of its own.
+        answers: list = [False, False, True, True, "refused", True]
+        sent: list[str] = []
         choose(True, by="cli", path=self.path)
-        recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or answers.pop(0))
+        recorder = Recorder(path=self.path, send=lambda payload: sent.append(json.dumps(payload)) or answers.pop(0))
         recorder.called("cad_show", True)
         recorder.opened("/work/a.step")
-        self.assertFalse(recorder.flush())  # offline: kept
+        self.assertFalse(recorder.flush())  # offline: kept whole
         recorder.called("cad_show", False, "no_file")
+        self.assertFalse(recorder.flush())  # still offline: the kept one is all that is tried
+        self.assertEqual(sent, [sent[0]] * 2)
+        recorder.called("cad_view", True)
         self.assertTrue(recorder.flush())
-        self.assertEqual(sent[1]["events"], [{"name": "files", "kind": "step", "count": 1},
-                                             {"name": "tool", "tool": "cad_show", "calls": 2, "errors": 1},
-                                             {"name": "tool_failure", "tool": "cad_show", "reason": "no_file", "count": 1}])
+        self.assertEqual(sent[:3], [sent[0]] * 3)
+        first, later = json.loads(sent[0]), json.loads(sent[3])
+        self.assertEqual(first["events"], [{"name": "files", "kind": "step", "count": 1},
+                                           {"name": "tool", "tool": "cad_show", "calls": 1, "errors": 0}])
+        self.assertNotEqual(later["batch"], first["batch"])
+        self.assertEqual(later["events"], [{"name": "tool", "tool": "cad_show", "calls": 1, "errors": 1},
+                                           {"name": "tool", "tool": "cad_view", "calls": 1, "errors": 0},
+                                           {"name": "tool_failure", "tool": "cad_show", "reason": "no_file", "count": 1}])
         # One the receiver refused (a 4xx) is dropped: sent again, it would take what comes next down with it.
         recorder.called("cad_view", True)
         self.assertFalse(recorder.flush())
         recorder.called("cad_show", True)
         self.assertTrue(recorder.flush())
-        self.assertEqual([event["tool"] for event in sent[3]["events"]], ["cad_show"])
+        self.assertEqual([event["tool"] for event in json.loads(sent[5])["events"]], ["cad_show"])
+        self.assertEqual(len(sent), 6)
+
+    def test_a_batch_not_taken_is_kept_whole_at_exit_and_dropped_by_a_no(self) -> None:
+        sent: list[str] = []
+        answers: list = [False]
+        choose(True, by="cli", path=self.path)
+        recorder = Recorder(path=self.path, send=lambda payload: sent.append(json.dumps(payload)) or answers.pop(0))
+        recorder.called("cad_show", True)
+        self.assertFalse(recorder.flush())
+        recorder.called("cad_view", True)
+        recorder.close()  # the batch owed, then what came since: each whole, in that order
+        following: list[str] = []
+        Recorder(path=self.path, send=lambda payload: following.append(json.dumps(payload)) or True).send_kept()
+        self.assertEqual(following[0], sent[0])
+        self.assertEqual([event["tool"] for event in json.loads(following[1])["events"]], ["cad_view"])
+        self.assertEqual(len(following), 2)
+        # A no said elsewhere while a batch is owed: never sent, nor kept.
+        answers.append(False)
+        recorder = Recorder(path=self.path, send=lambda payload: sent.append(json.dumps(payload)) or answers.pop(0))
+        recorder.called("cad_show", True)
+        self.assertFalse(recorder.flush())
+        choose(False, by="cli", path=self.path, forget=lambda id: True)
+        self.assertFalse(recorder.flush())
+        recorder.close()
+        self.assertEqual(len(sent), 2)
+        self.assertFalse((self.tmp / KEPT).exists())
+
+    def test_a_batch_on_its_way_as_the_process_exits_is_kept_whole(self) -> None:
+        # The exit comes while the send is still out; it fails after: the batch is kept all the same, as it was.
+        choose(True, by="cli", path=self.path)
+        out, exiting, sent = threading.Event(), threading.Event(), []
+
+        def send(payload: dict) -> bool:
+            sent.append(json.dumps(payload))
+            out.set()
+            exiting.wait(10)
+            return False
+
+        recorder = Recorder(path=self.path, send=send)
+        recorder.called("cad_show", True)
+        flushing = threading.Thread(target=recorder.flush)
+        flushing.start()
+        self.assertTrue(out.wait(10))
+        recorder.close()
+        exiting.set()
+        flushing.join(10)
+        following: list[str] = []
+        Recorder(path=self.path, send=lambda payload: following.append(json.dumps(payload)) or True).send_kept()
+        self.assertEqual(following, sent)
 
     def test_a_failed_call_says_why_by_a_word_chosen_where_it_failed_never_what_it_said(self) -> None:
         server, sent = self.serve("claude-directory")
@@ -474,6 +542,100 @@ class ServerCountsTest(_Tmp):
         server.analytics.flush()
         self.assertEqual(sent, [])
         self.assertNotIn("id", json.loads(self.path.read_text(encoding="utf-8"))["telemetry"])
+
+
+class InstallChannelTest(_Tmp):
+    """Where the install came from (`cadgen/_internal/channel.py`): only the CAD server is told, by its plugin; it
+    writes the channel down for its installation, and every other process of it -- the build daemon, the Viewer a
+    skill opens -- reports that, unless it was told one itself."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.record = self.tmp / install_channel.RECORD  # beside the settings, where a recorder given them reads it
+        # Not a source tree: a checkout is a development install, whatever the record says.
+        for patched in (mock.patch("cadgen._internal.channel._source_tree", return_value=False),
+                        mock.patch.object(install_channel, "_record_path", return_value=self.record)):
+            patched.start()
+            self.addCleanup(patched.stop)
+        choose(True, by="cli", path=self.path)
+
+    def started(self, process: str, channel: str = "") -> tuple[Recorder, list[dict]]:
+        sent: list[dict] = []
+        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
+            recorder = Recorder(process=process, path=self.path, send=lambda payload: sent.append(payload) or True)
+        return recorder, sent
+
+    def channel_of(self, recorder: Recorder, sent: list[dict]) -> str:
+        recorder.called("cad_show", True)
+        self.assertTrue(recorder.flush())
+        return sent[-1]["channel"]
+
+    def server_starts(self, channel: str) -> str | None:
+        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
+            return install_channel.remember(path=self.record)
+
+    def test_every_process_of_the_installation_reports_the_channel_its_plugins_server_wrote_down(self) -> None:
+        daemon, from_daemon = self.started("daemon")
+        viewer, from_viewer = self.started("viewer")
+        app, from_app = self.started("app")
+        told, from_told = self.started("viewer", "codex-github")  # a Viewer the CAD server started: told its own
+        # A skills-only install: no plugin's server ever ran from it.
+        self.assertEqual([self.channel_of(*started) for started in ((daemon, from_daemon), (viewer, from_viewer))],
+                         ["unknown", "unknown"])
+        self.assertEqual(self.server_starts("claude-github"), "claude-github")
+        self.assertEqual(json.loads(self.record.read_text(encoding="utf-8")),
+                         {install_channel.installation(): "claude-github"})
+        # Read again for each batch: the daemon and the Viewer were running before the server started.
+        self.assertEqual(self.channel_of(daemon, from_daemon), "claude-github")
+        self.assertEqual(self.channel_of(viewer, from_viewer), "claude-github")
+        self.assertEqual(self.channel_of(told, from_told), "codex-github")  # what a process was told comes first
+        # A CAD server no plugin named is configured by hand: it never takes another's channel.
+        self.assertEqual(self.channel_of(app, from_app), "unknown")
+        # Two plugins pinning one release share its installation: the server that started last is written down.
+        self.server_starts("agent-plugins")
+        self.assertEqual(self.channel_of(daemon, from_daemon), "agent-plugins")
+
+    def test_the_record_holds_closed_tokens_for_the_newest_installations_and_never_fails_anything(self) -> None:
+        self.assertIsNone(self.server_starts(""))  # nothing named, nothing written
+        self.assertFalse(self.record.exists())
+        self.record.write_text("not json", encoding="utf-8")
+        self.assertIsNone(install_channel.recorded(path=self.record))
+        self.assertIsNone(self.server_starts("Not A Channel!"))
+        self.assertEqual(self.server_starts("claude-github"), "claude-github")  # a broken record is written afresh
+        with mock.patch("cadgen._internal.atomic_replace.write_bytes_atomic") as write:
+            self.assertEqual(self.server_starts("claude-github"), "claude-github")
+        write.assert_not_called()  # what the record holds already is not written again
+        for index in range(install_channel.KEPT_INSTALLATIONS + 3):
+            with mock.patch.object(install_channel, "installation", return_value=f"install-{index}"):
+                self.server_starts("codex-github")
+        kept = json.loads(self.record.read_text(encoding="utf-8"))
+        self.assertEqual(list(kept), [f"install-{index}" for index in range(3, install_channel.KEPT_INSTALLATIONS + 3)])
+        # A value no plugin could name is no channel, whatever wrote it.
+        self.record.write_text(json.dumps({install_channel.installation(): "unknown"}), encoding="utf-8")
+        self.assertIsNone(install_channel.recorded(path=self.record))
+        with mock.patch("cadgen._internal.channel._load", side_effect=PermissionError):
+            self.assertIsNone(install_channel.recorded(path=self.record))
+            self.assertIsNone(self.server_starts("claude-github"))
+
+    def test_a_development_install_stays_one(self) -> None:
+        # A development install's own server writes `dev` down for its installation, so its daemon, which takes no
+        # channel from whoever started it, still sends nothing by default.
+        self.path.write_text(json.dumps({"telemetry": {"notifiedAt": time.time(), "notice": 1}}), encoding="utf-8")
+        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": ""}):
+            self.assertEqual(status(path=self.path)["reason"], "default")
+            self.server_starts("dev")
+            self.assertEqual(install_channel.channel(), "dev")
+            self.assertEqual(install_channel.channel(recorded_too=False), "unknown")
+            self.assertEqual(status(path=self.path), {"sharing": False, "reason": "untold", "id": None})
+
+    def test_the_cad_server_writes_its_channel_down_as_it_starts(self) -> None:
+        environment = {**os.environ, "CADGEN_INSTALL_CHANNEL": "claude-github", "CADGEN_STATE_DIR": str(self.tmp),
+                       "DO_NOT_TRACK": "1", "CADGEN_UPDATE_CHECK": "0", "CADGEN_DAEMON": "0"}
+        # A host that starts a server only to list its tools, and closes it at once.
+        subprocess.run([sys.executable, "-m", "cadgen.cli", "mcp"], stdin=subprocess.DEVNULL, capture_output=True,
+                       env=environment, timeout=120, check=True)
+        self.assertEqual(json.loads(self.record.read_text(encoding="utf-8")),
+                         {install_channel.installation(): "claude-github"})
 
 
 class BeforeTelemetryTest(_Tmp):

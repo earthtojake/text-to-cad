@@ -22,6 +22,7 @@ import { FIELDS } from './events.mjs';
 export const EVENTS = {
   tool: 'tool_used', view: 'view_used', files: 'files_shown', build: 'models_built', snapshot: 'snapshots_rendered',
   feature: 'feature_used', health: 'daemon_health', exception: '$exception', tool_failure: 'tool_failed',
+  build_failure: 'build_failed', snapshot_failure: 'snapshot_failed',
 };
 // Frames that name no file of ours: never in the app, whatever the code around them.
 const NOT_OURS = new Set(['<user>', '<?>', '<frozen>']);
@@ -46,6 +47,9 @@ export function settingsOf(env) {
     projectId: env.POSTHOG_PROJECT_ID };
 }
 
+/** An exit status as its platform writes it: a Windows exception code in hex (0xC0000005), anything else as is. */
+const statusOf = status => (status >= 0xC0000000 ? `0x${status.toString(16).toUpperCase()}` : `${status}`);
+
 /**
  * A crash as PostHog's error tracking reads one (`$exception_list`): its type, a value that is only ever
  * a dead worker's exit status, whether the process went on, and its frames, oldest first -- Python's,
@@ -61,7 +65,7 @@ export function exceptionOf(row) {
     in_app: page ? !NOT_OURS.has(frame.file) : frame.file.startsWith('cadgen/'),
   }));
   return [{
-    type: row.type, value: row.status === undefined ? '' : `exit status ${row.status}`,
+    type: row.type, value: row.status === undefined ? '' : `exit status ${statusOf(row.status)}`,
     mechanism: { type: 'generic', handled: row.handled, synthetic: false },
     ...(frames.length ? { stacktrace: { type: 'raw', frames } } : {}),
   }];
@@ -78,6 +82,20 @@ export function propertiesOf(row, country) {
   if (row.event === 'exception') properties.$exception_list = exceptionOf(row);
   if (country) properties.country = country;
   return properties;
+}
+
+/**
+ * A row as one PostHog event. A row with an id (schema 5's, `events.mjs`: `idOf`) is sent under it as the event's
+ * `uuid`, and at its batch's time (`at`, the sender's clock): PostHog takes events with the same uuid, event,
+ * distinct id and timestamp as one (they are de-duplicated as its tables merge), so a batch sent again -- its
+ * sender never heard it was taken -- is the same events again, not more counts, however long after. Every earlier
+ * schema's row PostHog stamps as it arrives.
+ */
+export function eventOf(row, country) {
+  const event = { event: EVENTS[row.event], properties: propertiesOf(row, country) };
+  if (row.id) event.uuid = row.id;
+  if (Number.isInteger(row.at)) event.timestamp = new Date(row.at * 1000).toISOString();
+  return event;
 }
 
 /**
@@ -98,7 +116,7 @@ export function posthogStore({ region, projectKey, personalKey, projectId }, { f
   return {
     /** @param {object[]} rows @param {{ country?: string | null }} [context] */
     async insert(rows, { country = null } = {}) {
-      const batch = rows.map(row => ({ event: EVENTS[row.event], properties: propertiesOf(row, country) }));
+      const batch = rows.map(row => eventOf(row, country));
       await call(`${capture}/batch/`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ api_key: projectKey, batch }),
       });
