@@ -153,7 +153,9 @@ joined, through bonded neighbours, to a part that is fixed.
    contact area and gap and what it will be: `bonded`, or `not connected` for
    a near miss (up to 1 mm apart, beyond `contact_tolerance_mm`), or
    `overlapping · N mm³` when the solids share volume (such parts are never
-   bonded). An overlap no thicker than `contact_tolerance_mm` is an
+   bonded). An overlap no thicker than `contact_tolerance_mm` (a thin layer,
+   where a face sits a little into another; a corner sunk in on every axis is
+   a lump, measured by its full depth) is an
    interference instead (a press fit, or a modelling slip): it is listed
    `bonded` with `interference N mm`, and the solve closes it like a gap. The
    header counts touching pairs apart from near misses and overlaps. Read it against what you know of the design: is

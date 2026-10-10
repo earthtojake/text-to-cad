@@ -83,11 +83,19 @@ class Overlap:
     a: str
     b: str
     volume_mm3: float
-    #: The shared solid's thickness, mm: twice its volume over its surface area,
-    #: which is a thin slab's own thickness.
+    #: The shared solid's thickness, mm (:func:`_thickness`): a thin slab's own thickness,
+    #: a compact lump's full depth.
     thickness_mm: float = 0.0
     #: Half the shared solid's surface area, mm^2: a thin slab's footprint.
     area_mm2: float = 0.0
+
+
+class SharedSolid(RuntimeError):
+    """Two parts the glue fused into one solid, by their indices into the shapes glued."""
+
+    def __init__(self, first: int, second: int):
+        super().__init__(f"parts {first} and {second} share a solid after gluing: they overlap")
+        self.first, self.second = first, second
 
 
 @dataclass
@@ -309,14 +317,41 @@ def detect_overlaps(parts: list[Part], *, log=None) -> list[Overlap]:
             BRepGProp.SurfaceProperties_s(common.Shape(), surface)
             area = float(surface.Mass())
             a, b = sorted((parts[i], parts[j]), key=lambda part: part.volume_mm3)
-            overlaps.append(Overlap(a=a.ref, b=b.ref, volume_mm3=volume, thickness_mm=2 * volume / area, area_mm2=area / 2))
+            overlaps.append(Overlap(a=a.ref, b=b.ref, volume_mm3=volume, thickness_mm=_thickness(common.Shape(), volume, area), area_mm2=area / 2))
     return overlaps
+
+
+def _thickness(solid, volume: float, area: float) -> float:
+    """How thick a shared solid is, mm: the larger of two average thicknesses.
+
+    Twice the volume over the surface area is a thin slab's thickness, but the
+    side faces count too, so it reads a cube of side s as s/3: a corner sunk
+    0.25 mm into another part would pass for a 0.08 mm press. The volume over
+    the largest face is the thickness under that face, which reads the slab
+    and the cube (and a thin curved shell, whose largest face is one of its two
+    sides) at their true depth. Taking the larger means an overlap is called
+    thin only when both say so. A slab whose footprint is split into several
+    faces reads thicker than it is, which errs towards leaving it an overlap.
+    """
+    from OCP.BRepGProp import BRepGProp
+    from OCP.GProp import GProp_GProps
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopExp import TopExp_Explorer
+
+    largest = 0.0
+    explorer = TopExp_Explorer(solid, TopAbs_FACE)
+    while explorer.More():
+        props = GProp_GProps()
+        BRepGProp.SurfaceProperties_s(explorer.Current(), props)
+        largest = max(largest, float(props.Mass()))
+        explorer.Next()
+    return max(2 * volume / area, volume / largest if largest > 0 else 0.0)
 
 
 def interferences(overlaps: list[Overlap], tolerance_mm: float) -> tuple[list[Contact], list[Overlap]]:
     """The overlaps no thicker than ``tolerance_mm``, as contacts to bond, and the overlaps left.
 
-    A shared solid that thin is two faces pressed a little into each other, a
+    A shared solid that thin (:func:`_thickness`) is two faces pressed a little into each other, a
     contact the glue closes like a gap; a thicker one is parts in each other's
     space, which the model may have wrong.
     """
@@ -455,7 +490,7 @@ def glue(shapes: list, bonded: list[tuple[int, int, float]], tolerance_mm: float
                     raise RuntimeError(f"part {index}'s solid {k} is missing from the glued shape")
                 if solid_part[found - 1] not in (-1, index):
                     # Overlapping parts fused into one solid: it would belong to one of them and the other would vanish.
-                    raise RuntimeError(f"parts {solid_part[found - 1]} and {index} share a solid after gluing: they overlap")
+                    raise SharedSolid(solid_part[found - 1], index)
                 solid_part[found - 1] = index
         per_face = []
         for ordinal, face in enumerate(part_faces(shape), 1):

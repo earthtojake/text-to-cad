@@ -39,13 +39,14 @@ def quiet():
 
 def _write_assembly(
     directory: Path, *, lift: float = 0.0, edge_block: bool = False, far_block: float | None = None,
-    cap: bool = False, overlap_block: bool = False, name: str = "assembly",
+    cap: bool = False, overlap_block: bool = False, corner_block: float | None = None, name: str = "assembly",
 ) -> Path:
     """Base at the origin, post centred on its top and lifted by ``lift``; with
     ``edge_block``, a block that meets the base only along its +X/+Y edge; with
     ``far_block``, a block that far (mm) beyond the base's +X end; with ``cap``,
     a plate on the post's top; with ``overlap_block``, a block sunk 1 mm into the base's
-    +X end (they share 100 mm^3)."""
+    +X end (they share 100 mm^3); with ``corner_block``, a block whose corner is sunk
+    that far (mm) into the base's +X/+Y top corner on all three axes."""
     from build123d import Align, Box, Compound, Pos, export_step
 
     base = Box(40, 20, 10, align=Align.MIN)
@@ -63,6 +64,10 @@ def _write_assembly(
         children.append(block)
     if overlap_block:
         block = Pos(39, 5, 0) * Box(10, 10, 10, align=Align.MIN)
+        block.label = "block"
+        children.append(block)
+    if corner_block is not None:
+        block = Pos(40 - corner_block, 20 - corner_block, 10 - corner_block) * Box(10, 10, 10, align=Align.MIN)
         block.label = "block"
         children.append(block)
     if cap:
@@ -187,8 +192,31 @@ class DetectContactsTest(unittest.TestCase):
 
         parts = list_parts(read_scene(_write_assembly(self.tmp, overlap_block=True, name="sunk")))
         (overlap,) = detect_overlaps(parts)
-        self.assertAlmostEqual(overlap.thickness_mm, 2 * 100.0 / 240.0, places=6)  # 1 x 10 x 10 mm: 2 V / A
+        self.assertAlmostEqual(overlap.thickness_mm, 1.0, places=6)  # 1 x 10 x 10 mm: its volume over its largest face
         self.assertEqual(interferences([overlap], TOLERANCE), ([], [overlap]))
+
+    def test_a_corner_sunk_into_the_base_on_every_axis_stays_an_overlap(self):
+        from cadgen._internal.fea.assembly import detect_overlaps, interferences, list_parts
+        from cadgen.step_scene import read_scene
+
+        # A 0.25 mm cube in common: 2 V / A alone reads a third of its depth (0.083 mm), inside the tolerance.
+        parts = list_parts(read_scene(_write_assembly(self.tmp, corner_block=0.25, name="corner")))
+        (overlap,) = detect_overlaps(parts)
+        self.assertAlmostEqual(overlap.volume_mm3, 0.25**3, places=6)
+        self.assertAlmostEqual(overlap.thickness_mm, 0.25, places=6)
+        self.assertEqual(interferences([overlap], TOLERANCE), ([], [overlap]))
+
+    def test_a_flat_press_fit_up_to_the_tolerance_is_an_interference(self):
+        from cadgen._internal.fea.assembly import detect_overlaps, interferences, list_parts
+        from cadgen.step_scene import read_scene
+
+        for depth in (0.05, 0.09):
+            with self.subTest(depth=depth):
+                parts = list_parts(read_scene(_write_assembly(self.tmp, lift=-depth, name=f"pressed{depth}")))
+                (overlap,) = detect_overlaps(parts)
+                (contact,), left = interferences([overlap], TOLERANCE)
+                self.assertEqual(left, [])
+                self.assertAlmostEqual(contact.interference_mm, depth, delta=1e-4)
 
     def test_parts_that_only_touch_do_not_overlap(self):
         from cadgen._internal.fea.assembly import detect_overlaps
@@ -376,6 +404,13 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertAlmostEqual(result.pairs[1].overlap_mm3, 100.0, places=3)
         self.assertTrue(result.human_lines()[0].endswith(": 3 parts, 1 touching pairs, 1 overlapping"))
         self.assertIn("block ↔ base · overlapping · 100 mm³", result.human_lines())
+
+    def test_a_corner_sunk_on_every_axis_is_listed_as_overlapping(self):
+        from cadgen import fea
+
+        with quiet():
+            result = fea.parts(_write_assembly(self.tmp, corner_block=0.25, name="corner"))
+        self.assertIn(("overlapping", ("block", "base")), [(pair.type, pair.between) for pair in result.pairs])
 
     def test_an_interference_within_the_tolerance_is_listed_as_bonded(self):
         from cadgen import fea
@@ -945,6 +980,58 @@ class SolveAssemblyTest(unittest.TestCase):
         self.assertAlmostEqual(result.summary["reaction_force_N"][0], -1000.0, delta=0.5)
         (joint,) = json.loads(result.sidecar.read_text(encoding="utf-8"))["connections"]
         self.assertEqual(joint["type"], "bonded")
+
+    def test_a_press_fit_just_inside_the_tolerance_is_closed_to_bond(self):
+        from cadgen import fea
+        from cadgen.step_scene import read_scene
+
+        step = _write_assembly(self.tmp, lift=-0.09, name="pressed-deep")
+        scene = read_scene(step)
+        refs = _refs(scene)
+        study = {
+            "material": "6061",
+            "fixtures": [{"faces": [_face_at(scene, refs["base"], 0.0)]}],
+            "loads": [{"faces": [_face_at(scene, refs["post"], 39.91)], "type": "force", "vector_N": [1000, 0, 0]}],
+            "mesh": {"size_mm": 4.0},
+        }
+        with quiet():
+            result = fea.solve(step, self.tmp / "pressed-deep.glb", study=study)
+        self.assertTrue(result.ok)
+        (finding,) = [f for f in result.findings if f["type"] == "gap_closed"]
+        self.assertEqual(finding["summary"], "Closed a 0.09 mm interference between 'post' and 'base' to bond them")
+        self.assertAlmostEqual(result.summary["reaction_force_N"][0], -1000.0, delta=0.5)
+
+    def test_a_corner_sunk_on_every_axis_is_refused_as_an_overlap(self):
+        from cadgen.step_scene import read_scene
+
+        step = _write_assembly(self.tmp, corner_block=0.25, name="corner")
+        scene = read_scene(step)
+        refs = _refs(scene)
+        study = {
+            "material": "6061",
+            "fixtures": [{"faces": [_face_at(scene, refs["base"], 0.0)]}],
+            "loads": [{"faces": [_face_at(scene, refs["block"], 19.75)], "type": "force", "vector_N": [1000, 0, 0]}],
+            "mesh": {"size_mm": 4.0},
+        }
+        (error,) = self._not_solved(step, study).findings
+        self.assertEqual(error["type"], "not_connected")
+        self.assertEqual(
+            error["summary"],
+            "'block' isn't connected to anything that is held: it overlaps 'base' by 0.0156 mm³ instead of touching it, "
+            "so it isn't bonded to it; fix the geometry or move them apart",
+        )
+
+    def test_parts_the_glue_would_fuse_are_named_in_a_study_error(self):
+        from cadgen._internal.fea.assembly import Contact, list_parts
+        from cadgen._internal.fea.mesh import mesh_assembly
+        from cadgen.step_scene import read_scene
+
+        scene = read_scene(_write_assembly(self.tmp, corner_block=0.25, name="corner-forced"))
+        refs = _refs_of(list_parts(scene))
+        # Bonded by hand, as the old 2 V / A estimate did: gluing fuses the corner into one solid.
+        forced = Contact(a=refs["block"], b=refs["base"], area_mm2=0.19, gap_mm=0.0, interference_mm=0.083)
+        with self.assertRaisesRegex(ValueError, r"'base' and 'block' share a solid after gluing: they overlap"):
+            mesh_assembly(scene, [refs["base"], refs["block"]], [forced], TOLERANCE, 4.0)
 
     def _not_solved(self, step, study):
         from unittest import mock

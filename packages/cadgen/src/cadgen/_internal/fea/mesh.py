@@ -378,7 +378,8 @@ def mesh_assembly(
     require_fea_stack()
     import numpy as np
 
-    from cadgen._internal.fea.assembly import glue, list_parts, part_faces
+    from cadgen._internal.fea.assembly import SharedSolid, display_names, glue, list_parts, part_faces
+    from cadgen._internal.fea.checks import quoted
     from cadgen._internal.step_scene_loader import kernel_messages_on_stderr
     from OCP.TopAbs import TopAbs_FACE
     from OCP.TopExp import TopExp
@@ -392,11 +393,18 @@ def mesh_assembly(
     index_of = {ref: i for i, ref in enumerate(part_refs)}
     if log:
         log(f"gluing {len(bonded)} bonded pairs of {len(parts)} parts")
-    glued = glue(
-        [part.shape for part in parts],
-        [(index_of[c.a], index_of[c.b], max(c.gap_mm, c.interference_mm)) for c in bonded if c.a in index_of and c.b in index_of],
-        tolerance_mm,
-    )
+    try:
+        glued = glue(
+            [part.shape for part in parts],
+            [(index_of[c.a], index_of[c.b], max(c.gap_mm, c.interference_mm)) for c in bonded if c.a in index_of and c.b in index_of],
+            tolerance_mm,
+        )
+    except SharedSolid as fused:
+        names = display_names(parts)
+        raise ValueError(
+            f"{quoted(names[fused.first])} and {quoted(names[fused.second])} share a solid after gluing: they overlap, "
+            "and bonding them would fuse them into one part; fix the geometry or mark them free"
+        ) from None
     diagonal = _bbox_diagonal(glued.shape)
     if not diagonal > 0:
         raise RuntimeError("the assembly has no volume to mesh")
