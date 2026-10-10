@@ -52,7 +52,7 @@ def read_sdf_source(sdf_path: Path) -> SdfSource:
 
     try:
         root = ET.fromstring(resolved_path.read_text(encoding="utf-8"))
-    except (OSError, ET.ParseError) as exc:
+    except (OSError, UnicodeDecodeError, ET.ParseError) as exc:
         raise SdfSourceError(f"{display_path(resolved_path)} could not be parsed as SDF XML") from exc
     return parse_sdf_root(root, source_path=resolved_path, base_dir=resolved_path.parent)
 

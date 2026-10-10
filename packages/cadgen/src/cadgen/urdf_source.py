@@ -123,7 +123,7 @@ def validate_urdf_file(
         return None, result
     try:
         xml_text = resolved_path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         result.add("error", "unreadable_file", f"{display_path(resolved_path)} could not be read: {exc}", path="/")
         return None, result
     return validate_urdf_xml(xml_text, source_path=resolved_path, package_map=package_map)
