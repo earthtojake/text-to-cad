@@ -19,8 +19,20 @@ export const FIELDS = Object.freeze({
   _fatigue_factor: field("Fatigue margin"),
   _pressure: field("Pressure", { signed: true }),
   _wall_shear: field("Wall shear"),
+  // A gas flow's speed over the local speed of sound, at its wetted walls.
+  _mach: field("Mach number"),
   _plastic_strain: field("Plastic strain"),
   _contact_pressure: field("Contact pressure"),
+  _creep_strain: field("Creep strain"),
+  // A laminate's failure index, the envelope over its plies (1 is the first ply failing).
+  _failure_index: field("Failure index"),
+  // Electric and magnetic fields: the voltage (signed), the field's strength, the current's, the flux density's.
+  _potential: field("Voltage", { signed: true }),
+  _electric_field: field("Electric field"),
+  _current_density: field("Current density"),
+  _magnetic_field: field("Magnetic field"),
+  // An AC field's eddy currents (and a fed conductor's current crowding to its skin), their amplitude.
+  _eddy_current: field("Eddy current"),
   // Random vibration's RMS fields, one standard deviation; the viewer's sigma control multiplies them.
   _von_mises_rms: field("Stress (1σ)"),
   _displacement_rms: field("Displacement (1σ)"),

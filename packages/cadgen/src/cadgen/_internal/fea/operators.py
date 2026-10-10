@@ -9,7 +9,12 @@ its free DOF (direct when small, AMG + CG otherwise), and
 by element chunk, for when the assembled matrix does not fit.
 
 Materials come as one :class:`~cadgen._internal.fea.materials.Material` or one
-per domain (``space.domain`` indexes them). Units are the engine's: mm, N, MPa,
+per domain (``space.domain`` indexes them). A material with an ``orthotropic``
+block, or a laminate's plies (:class:`~cadgen._internal.fea.laminate.LayeredMaterial`,
+a stiffness per ply chosen at each quadrature point by its height), takes the
+anisotropic path: a 6 x 6 elasticity matrix in global axes (Voigt order 11, 22,
+33, 23, 13, 12, engineering shear) per part or ply. Isotropic materials keep
+the Lamé path they always took, so their numbers are unchanged to the bit. Units are the engine's: mm, N, MPa,
 tonne/mm^3, s; heat in mW (``W x 1000``), conductivity in mW/(mm K) (numerically
 W/(m K)). Numeric imports live inside the functions.
 """
@@ -26,9 +31,10 @@ if TYPE_CHECKING:
     from cadgen._internal.fea.materials import Material
 
 __all__ = [
-    "AMG_ATTEMPTS", "CHUNK_ELEMENTS", "DIRECT_SOLVE_BELOW", "G0_MM_S2", "ElementChunkOperator", "body_force",
-    "capacity", "conduction", "convection", "domain_values", "geometric_stiffness", "initial_strain_load", "lame",
-    "mass", "project", "rigid_body_modes", "solve_spd", "stiffness", "stress", "von_mises",
+    "AMG_ATTEMPTS", "CHUNK_ELEMENTS", "DIRECT_SOLVE_BELOW", "G0_MM_S2", "ElementChunkOperator", "anisotropic", "body_force",
+    "capacity", "conduction", "convection", "domain_values", "elasticity_matrix", "geometric_stiffness",
+    "initial_strain_load", "isotropic_matrix", "lame", "mass", "orthotropic_matrix", "project", "rigid_body_modes",
+    "rotate_voigt", "solve_spd", "stiffness", "stress", "von_mises",
 ]
 
 #: Standard gravity, mm/s^2: a study's g in the engine's units.
@@ -66,12 +72,171 @@ def lame(space: "FemSpace", materials: "Material | Sequence[Material]"):
     return domain_values(space, [p[0] for p in per_part]), domain_values(space, [p[1] for p in per_part])
 
 
+# -- anisotropic elasticity (orthotropic materials and laminate plies) --------------------------------
+
+#: Voigt's order of the symmetric tensor's components: 11, 22, 33, 23, 13, 12.
+VOIGT = ((0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1))
+
+
+def anisotropic(materials: "Material | Sequence[Material]") -> bool:
+    """Whether any material needs the anisotropic path (an ``orthotropic`` block, or a laminate's plies)."""
+    return any(getattr(m, "orthotropic", None) or getattr(m, "layers", None) is not None for m in _materials(materials))
+
+
+def isotropic_matrix(E: float, nu: float) -> "np.ndarray":
+    """The 6 x 6 elasticity matrix of an isotropic material (Voigt, engineering shear)."""
+    import numpy as np
+
+    lam, mu = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu)), E / (2.0 * (1.0 + nu))
+    C = np.zeros((6, 6))
+    C[:3, :3] = lam
+    C[[0, 1, 2], [0, 1, 2]] = lam + 2.0 * mu
+    C[[3, 4, 5], [3, 4, 5]] = mu
+    return C
+
+
+def _tensor(C: "np.ndarray") -> "np.ndarray":
+    import numpy as np
+
+    T = np.zeros((3, 3, 3, 3))
+    for I, (i, j) in enumerate(VOIGT):
+        for J, (k, l) in enumerate(VOIGT):
+            for a, b in ((i, j), (j, i)):
+                for c, d in ((k, l), (l, k)):
+                    T[a, b, c, d] = C[I, J]
+    return T
+
+
+def rotate_voigt(C: "np.ndarray", R: "np.ndarray") -> "np.ndarray":
+    """A 6 x 6 elasticity matrix given in a material frame whose axes are the rows of ``R`` (global
+    coordinates), in global axes: C'_ijkl = R_ai R_bj R_ck R_dl C_abcd."""
+    import numpy as np
+
+    T = np.einsum("ai,bj,ck,dl,abcd->ijkl", R, R, R, R, _tensor(C))
+    return np.array([[T[i, j, k, l] for (k, l) in VOIGT] for (i, j) in VOIGT])
+
+
+def orthotropic_compliance(block: dict) -> "np.ndarray":
+    """The 6 x 6 compliance in the material's own axes from E1..E3, nu12..nu23 and G12..G23 (nu_ji = nu_ij Ej / Ei)."""
+    import numpy as np
+
+    E1, E2, E3 = block["E1_MPa"], block["E2_MPa"], block["E3_MPa"]
+    n12, n13, n23 = block["nu12"], block["nu13"], block["nu23"]
+    S = np.zeros((6, 6))
+    S[0, 0], S[1, 1], S[2, 2] = 1.0 / E1, 1.0 / E2, 1.0 / E3
+    S[0, 1] = S[1, 0] = -n12 / E1
+    S[0, 2] = S[2, 0] = -n13 / E1
+    S[1, 2] = S[2, 1] = -n23 / E2
+    S[3, 3], S[4, 4], S[5, 5] = 1.0 / block["G23_MPa"], 1.0 / block["G13_MPa"], 1.0 / block["G12_MPa"]
+    return S
+
+
+def orthotropic_matrix(block: dict) -> "np.ndarray":
+    """An ``orthotropic`` block's 6 x 6 elasticity matrix in global axes (its ``axes`` give directions 1 and 2)."""
+    import numpy as np
+
+    C = np.linalg.inv(orthotropic_compliance(block))
+    C = 0.5 * (C + C.T)
+    a1, a2 = (np.asarray(a, dtype=float) for a in block.get("axes", ([1, 0, 0], [0, 1, 0])))
+    R = np.array([a1, a2, np.cross(a1, a2)])
+    if np.allclose(R, np.eye(3), rtol=0.0, atol=1e-15):
+        return C
+    return rotate_voigt(C, R)
+
+
+def elasticity_matrix(material: "Material") -> "np.ndarray":
+    """A material's 6 x 6 elasticity matrix in global axes: its orthotropic block's, else isotropic from E and nu."""
+    block = getattr(material, "orthotropic", None)
+    if block:
+        return orthotropic_matrix(block)
+    return isotropic_matrix(material.E, material.nu)
+
+
+def voigt(tensor: "np.ndarray") -> "np.ndarray":
+    """A symmetric (3, 3, ...) strain as Voigt's 6-vector with engineering shears (2 e23, 2 e13, 2 e12)."""
+    import numpy as np
+
+    return np.stack([tensor[0, 0], tensor[1, 1], tensor[2, 2], 2.0 * tensor[1, 2], 2.0 * tensor[0, 2], 2.0 * tensor[0, 1]])
+
+
+def _unvoigt(vector: "np.ndarray") -> "np.ndarray":
+    """A Voigt 6-vector stress as the (3, 3, ...) tensor."""
+    import numpy as np
+
+    out = np.zeros((3, 3, *vector.shape[1:]))
+    for I, (i, j) in enumerate(VOIGT):
+        out[i, j] = vector[I]
+        out[j, i] = vector[I]
+    return out
+
+
+def voigt_parts(space: "FemSpace", materials: "Material | Sequence[Material]", basis=None, rows=None) -> list:
+    """The anisotropic stiffness as ``[(C 6x6, weight)]``: each part's (or ply's) matrix with where it acts, an
+    (elements, quadrature) 0/1 array at ``basis``'s points (``None``: everywhere). ``rows`` limits the elements
+    (a chunk's basis is built on those alone)."""
+    import numpy as np
+
+    basis = basis or space.basis
+    parts = _materials(materials)
+    shape = basis.dx.shape
+    out = []
+    points = None
+    for index, material in enumerate(parts):
+        weight = None
+        if space.domain is not None and len(parts) > 1:
+            domain = np.asarray(space.domain) if rows is None else np.asarray(space.domain)[rows]
+            weight = np.repeat((domain == index).astype(float)[:, None], shape[1], axis=1)
+        layers = getattr(material, "layers", None)
+        if layers is None:
+            out.append((elasticity_matrix(material), weight))
+            continue
+        if points is None:
+            points = np.asarray(basis.global_coordinates().value)
+        for C, inside in layers.parts(points):
+            mask = inside.astype(float)
+            out.append((C, mask if weight is None else mask * weight))
+    return out
+
+
+def _anisotropic_stiffness(space: "FemSpace", materials):
+    from skfem import BilinearForm, asm
+    from skfem.helpers import sym_grad
+
+    parts = voigt_parts(space, materials)
+    weights = {f"w{k}": weight for k, (_, weight) in enumerate(parts) if weight is not None}
+
+    @BilinearForm
+    def form(u, v, w):
+        eu, ev = voigt(sym_grad(u)), voigt(sym_grad(v))
+        total = 0.0
+        for k, (C, weight) in enumerate(parts):
+            energy = sum(ev[i] * sum(C[i, j] * eu[j] for j in range(6) if C[i, j] != 0.0) for i in range(6))
+            total = total + (energy if weight is None else w[f"w{k}"] * energy)
+        return total
+
+    return asm(form, space.basis, **weights)
+
+
+def _anisotropic_stress(space: "FemSpace", materials, strain: "np.ndarray") -> "np.ndarray":
+    """σ = C ε at the quadrature points, (3, 3, elements, quadrature), from a (3, 3, ...) strain."""
+    import numpy as np
+
+    e = voigt(strain)
+    s = np.zeros_like(e)
+    for C, weight in voigt_parts(space, materials):
+        part = np.einsum("ij,j...->i...", C, e)
+        s += part if weight is None else part * weight
+    return _unvoigt(s)
+
+
 def stiffness(space: "FemSpace", materials: "Material | Sequence[Material]"):
-    """K = ∫ C:ε(u):ε(v), with E and nu per domain."""
+    """K = ∫ C:ε(u):ε(v), with E and nu per domain (or each part's anisotropic C)."""
     from skfem import BilinearForm, asm
     from skfem.helpers import ddot, sym_grad, trace
     from skfem.models.elasticity import lame_parameters, linear_elasticity
 
+    if anisotropic(materials):
+        return _anisotropic_stiffness(space, materials)
     if space.domain is None:
         lam, mu = lame_parameters(_materials(materials)[0].E, _materials(materials)[0].nu)
         return asm(linear_elasticity(lam, mu), space.basis)
@@ -142,6 +307,14 @@ def initial_strain_load(space: "FemSpace", materials: "Material | Sequence[Mater
     from skfem import LinearForm, asm
     from skfem.helpers import ddot, sym_grad
 
+    if anisotropic(materials):
+        sigma0 = _anisotropic_stress(space, materials, _initial_strain_tensor(strain))
+
+        @LinearForm
+        def aniso(v, w):
+            return ddot(w["sigma0"], sym_grad(v))
+
+        return asm(aniso, space.basis, sigma0=np.asarray(sigma0))
     lam, mu = lame(space, materials)
     eps0 = _initial_strain_tensor(strain)
     trace = eps0[0, 0] + eps0[1, 1] + eps0[2, 2]
@@ -160,6 +333,12 @@ def stress(space: "FemSpace", materials: "Material | Sequence[Material]", u: "np
     """σ = C:(ε(u) - ε0) at the quadrature points, (3, 3, elements, quadrature) MPa."""
     import numpy as np
 
+    if anisotropic(materials):
+        grad = space.basis.interpolate(u).grad
+        strain = 0.5 * (grad + np.transpose(grad, (1, 0, 2, 3)))
+        if initial_strain is not None:
+            strain = strain - _initial_strain_tensor(initial_strain)
+        return _anisotropic_stress(space, materials, strain)
     lam, mu = lame(space, materials)
     grad = space.basis.interpolate(u).grad                          # (3, 3, elements, quadrature)
     strain = 0.5 * (grad + np.transpose(grad, (1, 0, 2, 3)))
@@ -349,6 +528,8 @@ class ElementChunkOperator:
         self.space = space
         self.chunk = int(chunk)
         parts = _materials(materials)
+        #: The anisotropic path: each chunk's parts and weights (voigt_parts) instead of Lamé's numbers.
+        self._materials = parts if anisotropic(parts) else None
         per_part = [lame_parameters(m.E, m.nu) for m in parts]
         elements = space.mesh.t.shape[1]
         domain = np.zeros(elements, dtype=np.int64) if space.domain is None else np.asarray(space.domain)
@@ -377,15 +558,28 @@ class ElementChunkOperator:
             local = x[dofs]
             grad = sum(local[i][None, None, :, None] * basis.basis[i][0].grad for i in range(dofs.shape[0]))
             strain = 0.5 * (grad + np.transpose(grad, (1, 0, 2, 3)))
-            trace = strain[0, 0] + strain[1, 1] + strain[2, 2]
-            lam, mu = self._lam[rows][:, None], self._mu[rows][:, None]
-            sigma = 2.0 * mu * strain
-            for i in range(3):
-                sigma[i, i] = sigma[i, i] + lam * trace
+            if self._materials is not None:
+                sigma = self._chunk_stress(rows, basis, strain)
+            else:
+                trace = strain[0, 0] + strain[1, 1] + strain[2, 2]
+                lam, mu = self._lam[rows][:, None], self._mu[rows][:, None]
+                sigma = 2.0 * mu * strain
+                for i in range(3):
+                    sigma[i, i] = sigma[i, i] + lam * trace
             weighted = sigma * basis.dx
             work = np.stack([np.einsum("ijeq,ijeq->e", weighted, basis.basis[i][0].grad) for i in range(dofs.shape[0])])
             y += np.bincount(dofs.ravel(), weights=work.ravel(), minlength=self.shape[0])
         return y
+
+    def _chunk_stress(self, rows, basis, strain):
+        import numpy as np
+
+        e = voigt(strain)
+        s = np.zeros_like(e)
+        for C, weight in voigt_parts(self.space, self._materials, basis, rows):
+            part = np.einsum("ij,j...->i...", C, e)
+            s += part if weight is None else part * weight
+        return _unvoigt(s)
 
     def __matmul__(self, x):
         return self.matvec(x)
@@ -402,8 +596,11 @@ class ElementChunkOperator:
                 for i in range(dofs.shape[0]):
                     g = basis.basis[i][0].grad
                     strain = 0.5 * (g + np.transpose(g, (1, 0, 2, 3)))
-                    trace = strain[0, 0] + strain[1, 1] + strain[2, 2]
-                    energy = 2.0 * mu * np.einsum("ijeq,ijeq->eq", strain, strain) + lam * trace * trace
+                    if self._materials is not None:
+                        energy = np.einsum("ijeq,ijeq->eq", self._chunk_stress(rows, basis, strain), strain)
+                    else:
+                        trace = strain[0, 0] + strain[1, 1] + strain[2, 2]
+                        energy = 2.0 * mu * np.einsum("ijeq,ijeq->eq", strain, strain) + lam * trace * trace
                     d += np.bincount(dofs[i], weights=(energy * basis.dx).sum(axis=1), minlength=self.shape[0])
             self._diagonal = d
         return self._diagonal

@@ -24,6 +24,114 @@ For printed polymers the model's assumptions are loose: layer adhesion,
 infill and orientation change stiffness and strength by a factor of two or
 more. Say so, and use a larger safety factor than for a machined metal part.
 
+## Electrical and magnetic
+
+What `electromagnetic` reads: resistivity (steady current; a material under
+1 ohm·m is a conductor, an equipotential in electrostatics; over 1000 ohm·m
+it carries no current), relative permittivity (electrostatics, dielectrics
+only) and relative permeability (magnetostatics). Override them in the material
+object: `resistivity_ohm_m`, `relative_permittivity`, `relative_permeability`.
+Room temperature, DC (permittivity at the frequency given). The air around
+the parts is eps_r 1.00059 [HyperPhysics dielectrics], mu_r 1.00000037
+[EngToolbox permeability]; vacuum eps0 8.8541878188e-12 F/m [NIST eps0] and
+mu0 1.25663706127e-6 N/A² [NIST mu0]. Dry air breaks down at about 3 kV/mm
+[Physics Factbook air], less at sharp edges and over long gaps.
+
+| name | resistivity (ohm·m) | eps_r | mu_r | sources |
+| --- | --- | --- | --- | --- |
+| `steel` | 1.4368e-7 | none | none | [MakeItFrom A36] (12 % IACS), [EngToolbox permeability] |
+| `stainless-304` | 7.2e-7 | none | 1.008 | [ASM 304] |
+| `aluminum-6061-t6` | 3.99e-8 | none | 1.000022 | [ASM 6061-T6 e], [EngToolbox permeability] |
+| `aluminum-7075-t6` | 5.15e-8 | none | 1.000022 | [ASM 7075-T6], [EngToolbox permeability] |
+| `titanium-6al-4v` | 1.78e-6 | none | 1.00005 | [ASM Ti-6Al-4V] |
+| `brass` | 6.6312e-8 | none | 1.0 (unverified) | [CDA C36000 e] (26 % IACS) |
+| `abs` | 1e13 | 3.1 | 1.0 (unverified) | [Röchling ABS], [Novodur P2H-AT] |
+| `pla` | 1e14 (unverified) | 3.0 (unverified) | 1.0 (unverified) | [PLA printed permittivity] |
+| `petg` | 1e13 | 2.6 | 1.0 (unverified) | [Eastar 6763] |
+| `nylon-pa12` | 1e12 | 3.8 | 1.0 (unverified) | [EOS PA 2200 e], [Professional Plastics] |
+
+Notes, value by value:
+
+- Resistivity from % IACS is 1.7241e-8 ohm·m / (% IACS / 100): A36 12 % gives
+  1.4368e-7, C36000 26 % gives 6.6312e-8. ASM's metals are given in ohm·cm
+  (x 0.01).
+- `aluminum-*`: the permeability is Engineering Toolbox's for aluminium, not
+  for the alloy. `titanium-6al-4v`: ASM's 1.00005 at 1.6 kA/m.
+- `brass`: no brass permeability was found; copper's is 0.999994
+  ([EngToolbox permeability]), so 1.0 is used, unverified.
+- `abs`: Röchling SustaABS gives 10^15 ohm·cm and eps_r 3.1 (IEC 60250, frequency
+  not stated); INEOS Novodur P2H-AT gives eps_r 2.9 at 1 MHz and > 1e13 ohm·m.
+- `pla`: no datasheet with PLA's resistivity or permittivity could be fetched;
+  1e14 ohm·m and 3.0 are typical polyester values, unverified. A study of 3D
+  printed PLA measured eps_r 1.78 to 2.81, falling with infill
+  ([PLA printed permittivity]).
+- `petg`: Eastman Eastar 6763, 10^15 ohm·cm (ASTM D257) and eps_r 2.6 at 1 kHz
+  (2.4 at 1 MHz).
+- `nylon-pa12`: EOS PA 2200 gives 10^13 to 10^15 ohm·cm and eps_r 3.8 at 1 kHz,
+  both strongly dependent on temperature and humidity; 1e12 ohm·m is the
+  middle of that range.
+- Polymers' permeability: 1.0 for all four, the usual assumption for a
+  non-magnetic plastic; no source states it for these grades (Engineering
+  Toolbox gives 1 for PTFE), so it is unverified.
+
+### Why some values are none (electrical)
+
+- Permittivity, for every metal: a metal conducts, so it has no permittivity: in an electric study it is an equipotential (one voltage throughout), held or floating
+- Permeability, for `steel`: structural steel is ferromagnetic: its permeability depends on the field and saturates (Engineering Toolbox lists about 100 for carbon steel); give relative_permeability from the grade's B-H curve at the field expected
+
+### Sources (electrical)
+
+- [NIST eps0]: https://physics.nist.gov/cgi-bin/cuu/Value?ep0
+- [NIST mu0]: https://physics.nist.gov/cgi-bin/cuu/Value?mu0
+- [HyperPhysics dielectrics]: http://hyperphysics.phy-astr.gsu.edu/hbase/Tables/diel.html ("Air(1 atm) 1.00059")
+- [Physics Factbook air]: https://hypertextbook.com/facts/2000/AliceHong.shtml ("approximately 3 kV/mm")
+- [EngToolbox permeability]: https://www.engineeringtoolbox.com/permeability-d_1923.html
+- [ASM 6061-T6 e]: https://web.archive.org/web/20241217181844id_/https://asm.matweb.com/search/SpecificMaterial.asp?bassnum=MA6061T6
+- [CDA C36000 e]: https://web.archive.org/web/20260504212850id_/https://alloys.copper.org/alloy/C36000
+- [Novodur P2H-AT]: https://plasticker.de/docs/recybase/35956_1785994693.pdf
+- [PLA printed permittivity]: https://pmc.ncbi.nlm.nih.gov/articles/PMC9942642/
+- [Eastar 6763]: https://eastman.com/content/dam/eastman/corporate/en/literature/m/mbs80.pdf (table 3)
+- [EOS PA 2200 e]: https://www.amf.uzh.ch/dam/jcr:59a8b14a-c212-4693-8443-d5e543aeabe2/Material-Data-PA2200-ENGLISH.pdf
+- [Professional Plastics]: https://www.professionalplastics.com/professionalplastics/ElectricalPropertiesofPlastics.pdf
+- [MakeItFrom A36], [ASM 304], [ASM 7075-T6], [ASM Ti-6Al-4V] and [Röchling ABS]: as listed under Sources below.
+
+## Orthotropic materials
+
+A material stiffer one way than another (unidirectional carbon or glass in a solid block, wood, a
+part treated as directional) takes an `orthotropic` block in its material object: nine constants
+and, optionally, its axes. The table has no orthotropic entries: take the numbers from the
+material's datasheet or test data, never make them up.
+
+```json
+{"name": "UD carbon block", "density_t_per_mm3": 1.6e-9, "yield_MPa": 60,
+ "orthotropic": {"E1_MPa": 135000, "E2_MPa": 10000, "E3_MPa": 10000,
+                 "nu12": 0.3, "nu13": 0.3, "nu23": 0.45,
+                 "G12_MPa": 5000, "G13_MPa": 5000, "G23_MPa": 3500,
+                 "axes": [[1, 0, 0], [0, 1, 0]]}}
+```
+
+- `E1_MPa`, `E2_MPa`, `E3_MPa`: the moduli along material directions 1, 2 and 3.
+- `nu12`, `nu13`, `nu23`: ν_ij is the contraction along j under a stress along i (so ν21 =
+  ν12 E2 / E1). They must be physically possible: |ν_ij| < √(E_i / E_j), and the compliance
+  positive definite; an impossible set is refused with a sentence saying so.
+- `G12_MPa`, `G13_MPa`, `G23_MPa`: the shear moduli.
+- `axes` (optional): directions 1 and 2 in the part's coordinates, perpendicular; 3 is 1 × 2.
+  Default: the global X and Y axes.
+- `E_MPa` and `nu` are not needed; E1 and ν12 stand in for them where an analysis has no
+  orthotropic path. `yield_MPa` is optional, and needed only for a `stress` check (judged, as for
+  any material, by von Mises against it: a rough measure for a directional material; say so).
+
+Where it is used: every analysis that assembles the solid stiffness takes the full 6 × 6 tensor
+(rotated into the part's axes): `static`, `modal`, `buckling`, `harmonic`, `random_vibration`,
+`shock`, `transient`, `thermal_stress` (with the isotropic expansion the material gives) and the
+static solve under `fatigue` and `drop`. `nonlinear`, `impact`, `creep` and `contact` use the E1
+and ν12 stand-in: do not give them an orthotropic material. The symmetry ladder rung cuts an
+orthotropic part only across a plane normal to one of its material directions.
+
+A laminate (plies at angles) is not one orthotropic material: use the `composite` analysis
+([composite.md](composite.md)), whose ply materials (`laminae`) are given as E1, E2, ν12, G12
+and strengths.
+
 ## Strength, fatigue and heat
 
 The properties other analyses read. Ultimate strength and fatigue (`fatigue`,

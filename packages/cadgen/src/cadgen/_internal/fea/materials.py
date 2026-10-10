@@ -18,12 +18,12 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 __all__ = [
-    "MATERIALS", "MATERIAL_PROPERTIES", "NONE_REASONS", "TABLE_PROPERTIES", "Material", "lookup_material",
-    "material_from_spec", "requires",
+    "CREEP_UNITS", "MATERIALS", "MATERIAL_PROPERTIES", "NONE_REASONS", "ORTHOTROPIC_KEYS", "TABLE_PROPERTIES", "Material",
+    "lookup_material", "material_from_spec", "mirror_symmetric", "requires",
 ]
 
 
@@ -54,6 +54,18 @@ class Material:
     tangent: float | None = None
     #: Hyperelastic model, object only: ``{"model": "neo_hookean", "mu_MPa": ..., "bulk_MPa": ...}``.
     hyperelastic: dict | None = field(default=None, hash=False)
+    #: Norton creep law, object only: ``{"A": ..., "n": ..., "m": 0, "units": "MPa, hours"}`` (strain rate A σ^n t^m).
+    creep: dict | None = field(default=None, hash=False)
+    #: Orthotropic stiffness, object only: E1_MPa..E3_MPa, nu12, nu13, nu23, G12_MPa..G23_MPa and ``axes``
+    #: (directions 1 and 2, unit and perpendicular). Set, it replaces E and nu wherever the operators assemble
+    #: stiffness; E and nu stay as its stand-in (E1, nu12) for what has no orthotropic path.
+    orthotropic: dict | None = field(default=None, hash=False)
+    #: Electrical resistivity, ohm m (electromagnetic: steady current; under 1 ohm m a conductor).
+    resistivity: float | None = None
+    #: Relative permittivity (dielectric constant), unitless (electromagnetic: electrostatics); none for a conductor.
+    permittivity: float | None = None
+    #: Relative magnetic permeability, unitless (electromagnetic: magnetostatics).
+    permeability: float | None = None
 
     def as_dict(self) -> dict:
         out = {
@@ -84,14 +96,21 @@ MATERIAL_PROPERTIES: dict[str, tuple[str, str]] = {
     "specific_heat": ("specific_heat_J_kgK", "specific heat"),
     "tangent": ("tangent_MPa", "plastic tangent modulus"),
     "hyperelastic": ("hyperelastic", "hyperelastic model"),
+    "creep": ("creep", "creep law (Norton A and n)"),
+    "orthotropic": ("orthotropic", "orthotropic stiffness"),
+    "resistivity": ("resistivity_ohm_m", "electrical resistivity"),
+    "permittivity": ("relative_permittivity", "relative permittivity (dielectric constant)"),
+    "permeability": ("relative_permeability", "relative magnetic permeability"),
 }
 _BASE = ("E", "nu", "yield_strength", "density")
 #: The properties every table entry carries, or explains the absence of in :data:`NONE_REASONS`.
-TABLE_PROPERTIES = ("uts", "endurance", "endurance_cycles", "conductivity", "expansion", "specific_heat")
+TABLE_PROPERTIES = ("uts", "endurance", "endurance_cycles", "conductivity", "expansion", "specific_heat",
+                    "resistivity", "permittivity", "permeability")
 #: What an example of each property looks like, for the error that asks for one.
 _EXAMPLE = {
     "density": "7.85e-9", "yield_MPa": "10", "uts_MPa": "400", "endurance_MPa": "200", "endurance_cycles": "1e6",
     "conductivity_W_mK": "50", "expansion_per_K": "11.7e-6", "specific_heat_J_kgK": "486", "tangent_MPa": "2000",
+    "resistivity_ohm_m": "1.7e-8", "relative_permittivity": "3.0", "relative_permeability": "1.0",
 }
 _POLYMER_FATIGUE = (
     "polymers have no endurance limit, and their fatigue strength depends on frequency, temperature, "
@@ -134,6 +153,37 @@ NONE_REASONS: dict[tuple[str, str], str] = {
     for key in ("abs", "pla", "nylon-pa12", "petg")
     for attribute in ("endurance", "endurance_cycles")
 }
+
+# Electrical and magnetic properties (electromagnetic), sources in references/materials.md "Electrical and
+# magnetic": resistivity ohm m, relative permittivity, relative permeability. A metal conducts, so it has no
+# permittivity; structural steel is ferromagnetic, so no single permeability holds for it.
+_ELECTRICAL: dict[str, tuple[float, float | None, float | None]] = {
+    "steel": (1.4368e-7, None, None),
+    "stainless-304": (7.2e-7, None, 1.008),
+    "aluminum-6061-t6": (3.99e-8, None, 1.000022),
+    "aluminum-7075-t6": (5.15e-8, None, 1.000022),
+    "titanium-6al-4v": (1.78e-6, None, 1.00005),
+    "brass": (6.6312e-8, None, 1.0),
+    "abs": (1e13, 3.1, 1.0),
+    "pla": (1e14, 3.0, 1.0),
+    "petg": (1e13, 2.6, 1.0),
+    "nylon-pa12": (1e12, 3.8, 1.0),
+}
+MATERIALS.update({
+    key: replace(material, resistivity=_ELECTRICAL[key][0], permittivity=_ELECTRICAL[key][1],
+                 permeability=_ELECTRICAL[key][2])
+    for key, material in MATERIALS.items() if key in _ELECTRICAL
+})
+_CONDUCTOR_PERMITTIVITY = (
+    "a metal conducts, so it has no permittivity: in an electric study it is an equipotential (one voltage "
+    "throughout), held or floating"
+)
+_FERROMAGNETIC = (
+    "structural steel is ferromagnetic: its permeability depends on the field and saturates (Engineering Toolbox "
+    "lists about 100 for carbon steel); give relative_permeability from the grade's B-H curve at the field expected"
+)
+NONE_REASONS.update({(key, "permittivity"): _CONDUCTOR_PERMITTIVITY for key, values in _ELECTRICAL.items() if values[1] is None})
+NONE_REASONS[("steel", "permeability")] = _FERROMAGNETIC
 
 _ALIASES = {
     "6061": "aluminum-6061-t6",
@@ -219,6 +269,116 @@ def _hyperelastic(raw: Any) -> dict:
     }
 
 
+#: The units a creep block's A may be given in: σ in MPa, the time (and the rate) per hour or per second.
+CREEP_UNITS = {"mpa, hours": "MPa, hours", "mpa, hour": "MPa, hours", "mpa, h": "MPa, hours",
+               "mpa, seconds": "MPa, seconds", "mpa, second": "MPa, seconds", "mpa, s": "MPa, seconds"}
+
+
+def _creep(raw: Any) -> dict:
+    """A Norton creep block: creep strain rate A σ^n t^m (σ in MPa), A and n required, m (time hardening) 0 by default."""
+    where = "material.creep"
+    example = '{"A": 1e-20, "n": 5, "m": 0, "units": "MPa, hours"}'
+    if not isinstance(raw, dict):
+        raise ValueError(f"{where}: expected an object like {example}, from the grade's creep data at its temperature")
+    unknown = set(raw) - {"A", "n", "m", "units", "temperature_C", "source"}
+    if unknown:
+        raise ValueError(f"{where}: unknown keys {sorted(unknown)}; it takes A, n, m, units, temperature_C and source")
+    for key in ("A", "n"):
+        if key not in raw:
+            raise ValueError(f"{where}.{key}: a Norton creep law needs A and n (creep strain rate = A σ^n), like {example}; "
+                             "take them from the grade's creep data at the temperature it runs at")
+    A = _number(raw["A"], where=f"{where}.A", positive=True)
+    n = _number(raw["n"], where=f"{where}.n")
+    if not 1.0 <= n <= 20.0:
+        raise ValueError(f"{where}.n: the stress exponent must be from 1 to 20 (metals: about 3 to 8), got {n:g}")
+    m = _number(raw.get("m", 0.0), where=f"{where}.m")
+    if not -1.0 < m <= 0.0:
+        raise ValueError(f"{where}.m: the time exponent must be over -1 and at most 0 (0 is steady creep), got {m:g}")
+    units = raw.get("units", "MPa, hours")
+    key = " ".join(units.lower().split()).replace(" ,", ",") if isinstance(units, str) else None
+    if key not in CREEP_UNITS:
+        raise ValueError(f'{where}.units: "MPa, hours" (A per hour, the stress in MPa) or "MPa, seconds", got {_json_text(units)}')
+    out: dict = {"A": A, "n": n, "m": m, "units": CREEP_UNITS[key]}
+    if "temperature_C" in raw:
+        out["temperature_C"] = _number(raw["temperature_C"], where=f"{where}.temperature_C")
+    if "source" in raw:
+        if not isinstance(raw["source"], str) or not raw["source"].strip():
+            raise ValueError(f"{where}.source: where the numbers come from, as a short piece of text")
+        out["source"] = raw["source"].strip()
+    return out
+
+
+#: An orthotropic block's numbers: three moduli, three Poisson's ratios (nu_ij: contraction along j under stress along i),
+#: three shear moduli. ``axes`` (optional) gives directions 1 and 2; 3 is 1 x 2.
+ORTHOTROPIC_KEYS = ("E1_MPa", "E2_MPa", "E3_MPa", "nu12", "nu13", "nu23", "G12_MPa", "G13_MPa", "G23_MPa")
+
+
+def _direction(raw: Any, where: str) -> tuple[float, float, float]:
+    if not isinstance(raw, list) or len(raw) != 3:
+        raise ValueError(f"{where}: a direction as [x, y, z], like [1, 0, 0]")
+    vector = [_number(c, where=where) for c in raw]
+    size = math.sqrt(sum(c * c for c in vector))
+    if not size > 0:
+        raise ValueError(f"{where}: the direction is zero")
+    return tuple(c / size for c in vector)  # type: ignore[return-value]
+
+
+def _orthotropic(raw: Any) -> dict:
+    """An orthotropic block, checked: every constant positive, the axes perpendicular, the compliance positive definite."""
+    where = "material.orthotropic"
+    example = ('{"E1_MPa": 135000, "E2_MPa": 10000, "E3_MPa": 10000, "nu12": 0.3, "nu13": 0.3, "nu23": 0.45, '
+               '"G12_MPa": 5000, "G13_MPa": 5000, "G23_MPa": 3500}')
+    if not isinstance(raw, dict):
+        raise ValueError(f"{where}: expected an object like {example}")
+    unknown = set(raw) - {*ORTHOTROPIC_KEYS, "axes"}
+    if unknown:
+        raise ValueError(f"{where}: unknown keys {sorted(unknown)}; it takes {', '.join(ORTHOTROPIC_KEYS)} and axes")
+    missing = [key for key in ORTHOTROPIC_KEYS if key not in raw]
+    if missing:
+        raise ValueError(f"{where}: an orthotropic material needs all nine constants; missing {', '.join(missing)} (like {example})")
+    out: dict = {}
+    for key in ORTHOTROPIC_KEYS:
+        out[key] = _number(raw[key], where=f"{where}.{key}", positive=key.endswith("_MPa"))
+    axes = raw.get("axes", [[1, 0, 0], [0, 1, 0]])
+    if not isinstance(axes, list) or len(axes) != 2:
+        raise ValueError(f"{where}.axes: directions 1 and 2 as [[x, y, z], [x, y, z]], like [[1, 0, 0], [0, 1, 0]]")
+    a1, a2 = _direction(axes[0], f"{where}.axes[0]"), _direction(axes[1], f"{where}.axes[1]")
+    cosine = sum(p * q for p, q in zip(a1, a2))
+    if abs(cosine) > 1e-6:
+        raise ValueError(f"{where}.axes: directions 1 and 2 must be perpendicular (their cosine is {cosine:.3g})")
+    # Exactly perpendicular, so 1, 2 and 1 x 2 are an orthonormal frame.
+    a2 = tuple(q - cosine * p for p, q in zip(a1, a2))
+    size = math.sqrt(sum(c * c for c in a2))
+    out["axes"] = [list(a1), [c / size for c in a2]]
+    E = (out["E1_MPa"], out["E2_MPa"], out["E3_MPa"])
+    nu = {(0, 1): out["nu12"], (0, 2): out["nu13"], (1, 2): out["nu23"]}
+    for (i, j), value in nu.items():
+        # |nu_ij| < sqrt(Ei / Ej) for each pair, and the 3x3 normal compliance positive definite.
+        if not abs(value) < math.sqrt(E[i] / E[j]):
+            raise ValueError(f"{where}.nu{i + 1}{j + 1}: {value:g} is not physically possible with E{i + 1} and E{j + 1} "
+                             f"(it must be under {math.sqrt(E[i] / E[j]):.3g} in size)")
+    n12, n13, n23 = out["nu12"], out["nu13"], out["nu23"]
+    n21, n31, n32 = n12 * E[1] / E[0], n13 * E[2] / E[0], n23 * E[2] / E[1]
+    if not 1.0 - n12 * n21 - n23 * n32 - n13 * n31 - 2.0 * n21 * n32 * n13 > 0:
+        raise ValueError(f"{where}: these Poisson's ratios with these moduli are not physically possible "
+                         "(the material would gain energy when squeezed); check nu12, nu13 and nu23")
+    return out
+
+
+def mirror_symmetric(material: Material, axis: int) -> bool:
+    """Whether the material is its own mirror image about a plane normal to global ``axis`` (0, 1, 2):
+    always for an isotropic one; for an orthotropic one when that axis is one of its material directions."""
+    own = getattr(material, "mirrors_onto_itself", None)
+    if callable(own):  # a laminate's plies (laminate.LayeredMaterial)
+        return bool(own(axis))
+    block = getattr(material, "orthotropic", None)
+    if not block:
+        return True
+    a1, a2 = block["axes"]
+    a3 = (a1[1] * a2[2] - a1[2] * a2[1], a1[2] * a2[0] - a1[0] * a2[2], a1[0] * a2[1] - a1[1] * a2[0])
+    return any(abs(abs(direction[axis]) - 1.0) < 1e-9 for direction in (a1, a2, a3))
+
+
 def material_from_spec(spec: Any) -> Material:
     """The study's ``material``: a table name, or an object that gives the numbers or extends a table entry.
 
@@ -245,19 +405,24 @@ def material_from_spec(spec: Any) -> Material:
             pass
     hyperelastic = _hyperelastic(spec["hyperelastic"]) if "hyperelastic" in spec else None
     rubber = base is None and hyperelastic is not None
-    if base is None and not rubber and not {"E_MPa", "nu", "yield_MPa"} <= set(spec):
+    orthotropic = _orthotropic(spec["orthotropic"]) if "orthotropic" in spec else None
+    # An orthotropic object needs no E or nu (E1 and nu12 stand in for them) and no yield unless a stress check asks.
+    aniso = base is None and orthotropic is not None and not rubber
+    if base is None and not rubber and not aniso and not {"E_MPa", "nu", "yield_MPa"} <= set(spec):
         raise ValueError("material: an object needs E_MPa, nu and yield_MPa (density_t_per_mm3 optional)")
     if rubber:
         # A rubber's small-strain E and nu, from its shear and bulk moduli: what a linear analysis would use.
         mu, bulk = hyperelastic["mu_MPa"], hyperelastic["bulk_MPa"]
         default_E, default_nu = 9.0 * bulk * mu / (3.0 * bulk + mu), (3.0 * bulk - 2.0 * mu) / (2.0 * (3.0 * bulk + mu))
+    elif aniso:
+        default_E, default_nu = orthotropic["E1_MPa"], orthotropic["nu12"] if 0 <= orthotropic["nu12"] < 0.5 else 0.3
     else:
         default_E, default_nu = (base.E, base.nu) if base else (None, None)
     E = _number(spec.get("E_MPa", default_E), where="material.E_MPa", positive=True)
     nu = _number(spec.get("nu", default_nu), where="material.nu")
     if not 0 <= nu < 0.5:
         raise ValueError(f"material.nu: Poisson's ratio must be in [0, 0.5), got {nu}")
-    if rubber and "yield_MPa" not in spec:
+    if (rubber or aniso) and "yield_MPa" not in spec:
         yield_strength = None
     else:
         yield_strength = _number(
@@ -289,6 +454,11 @@ def material_from_spec(spec: Any) -> Material:
         specific_heat=_optional(spec, ("specific_heat_J_kgK",), table("specific_heat"), where="material"),
         tangent=tangent,
         hyperelastic=hyperelastic if hyperelastic is not None else table("hyperelastic"),
+        creep=_creep(spec["creep"]) if "creep" in spec else table("creep"),
+        orthotropic=orthotropic if orthotropic is not None else table("orthotropic"),
+        resistivity=_optional(spec, ("resistivity_ohm_m",), table("resistivity"), where="material"),
+        permittivity=_optional(spec, ("relative_permittivity",), table("permittivity"), where="material"),
+        permeability=_optional(spec, ("relative_permeability",), table("permeability"), where="material"),
     )
 
 
@@ -310,6 +480,8 @@ def requires(material: Material, needs: Iterable[str], analysis: str) -> None:
         example = _EXAMPLE.get(key, _EXAMPLE.get(attribute, "..."))
         if attribute == "hyperelastic":
             example = '{"model": "neo_hookean", "mu_MPa": 0.6, "bulk_MPa": 300}'
+        if attribute == "creep":
+            example = '{"A": 1e-20, "n": 5, "m": 0, "units": "MPa, hours"}'
         raise ValueError(
             f"material: {analysis} studies need the {words}, and {material.name} has none; "
             f'add {key} to the material object, like {{"name": "{material.name}", "{key}": {example}}}'

@@ -191,7 +191,7 @@ class _Plan:
     freed_overlaps: set
     #: Per part, the group of parts bonded to it (directly or through others).
     group_of: list[int]
-    #: The pairs (part indices) a contact study's ``contact`` connections name: meshed apart, like free ones.
+    #: The pairs (part indices) a contact or bolt study's ``contact`` and ``bolt`` connections name: meshed apart, like free ones.
     contact: set = dataclasses.field(default_factory=set)
 
 
@@ -241,15 +241,19 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
     freed_overlaps: set[frozenset[int]] = set()
     contact: set[frozenset[int]] = set()
     seen: set[frozenset[int]] = set()
+    bolted: set[frozenset[int]] = set()
     for n, connection in enumerate(parsed.connections):
         where = f"connections[{n}]"
         i, j = (_find_part(parts, names, key, f"{where}.between") for key in connection.between)
         pair = frozenset((i, j))
         if i == j:
             raise ValueError(f"{where}.between: both names are {quoted(names[i])}")
-        if pair in seen:
+        # Several bolts may clamp the same two parts (a bolt study meshes them apart and presses them together).
+        if pair in seen and not (connection.type == "bolt" and pair in bolted):
             raise ValueError(f"{where}: {quoted(names[i])} and {quoted(names[j])} are connected twice")
         seen.add(pair)
+        if connection.type == "bolt":
+            bolted.add(pair)
         if connection.type == "bonded" and pair in overlap_of:
             raise ValueError(
                 f"{where}: {quoted(names[i])} and {quoted(names[j])} overlap by {overlap_of[pair].volume_mm3:.3g} mm³, "
@@ -260,9 +264,9 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
                 f"{where}: {quoted(names[i])} and {quoted(names[j])} don't touch within {parsed.contact_tolerance_mm:g} mm, "
                 "so they can't be bonded; raise contact_tolerance_mm or move them together"
             )
-        if connection.type in ("free", "contact") and pair in pair_of:
+        if connection.type in ("free", "contact", "bolt") and pair in pair_of:
             freed.add(pair)
-        if connection.type == "contact":
+        if connection.type in ("contact", "bolt"):
             contact.add(pair)
         if connection.type == "free" and pair in overlap_of:
             freed_overlaps.add(pair)

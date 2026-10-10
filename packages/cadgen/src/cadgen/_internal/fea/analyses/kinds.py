@@ -23,8 +23,9 @@ if TYPE_CHECKING:
     import numpy as np
 
 __all__ = [
-    "ACCELERATION", "BUCKLING", "CHECK_SPECS", "CONTACT_PRESSURE", "DISPLACEMENT", "FATIGUE", "FREQUENCY", "FieldMax",
-    "PLASTIC_STRAIN", "PRESSURE_DROP", "STRESS", "TEMPERATURE", "VELOCITY", "faces", "field_max_over", "json_text",
+    "ACCELERATION", "BOLT_LOAD", "BUCKLING", "CHECK_SPECS", "CONTACT_PRESSURE", "CREEP_STRAIN", "DISPLACEMENT", "ELECTRIC_FIELD", "FATIGUE", "FREQUENCY", "FieldMax",
+    "JOINT_SEPARATION", "JOINT_SLIP", "MACH",
+    "PLASTIC_STRAIN", "PLY_FAILURE", "PRESSURE_DROP", "STRESS", "TEMPERATURE", "VELOCITY", "faces", "field_max_over", "json_text",
     "number", "parse_check", "text",
 ]
 
@@ -177,6 +178,11 @@ def _plastic_strain(entry: dict, where: str) -> dict:
                                     "a plastic_strain check needs the most permanent strain allowed, in percent")}
 
 
+def _creep_strain(entry: dict, where: str) -> dict:
+    return {"limit_percent": _limit(entry, "limit_percent", where,
+                                    "a creep_strain check needs the most creep strain allowed, in percent")}
+
+
 def _contact_pressure(entry: dict, where: str) -> dict:
     check = {"limit_MPa": _limit(entry, "limit_MPa", where, "a contact_pressure check needs the most it may press, in MPa")}
     return _with_faces(entry, check, where)
@@ -192,12 +198,67 @@ FATIGUE = _spec("fatigue", ("cycles", "margin"), "Fatigue life", "none", _fatigu
 PRESSURE_DROP = _spec("pressure_drop", ("limit_Pa",), "Flow resistance", "none", _pressure_drop)
 VELOCITY = _spec("velocity", ("limit_m_s",), "Flow speed", "none", _velocity)
 PLASTIC_STRAIN = _spec("plastic_strain", ("limit_percent",), "Permanent bend", "none", _plastic_strain)
+def _electric_field(entry: dict, where: str) -> dict:
+    check = {"limit_kV_mm": _limit(entry, "limit_kV_mm", where, "an electric_field check needs the strongest field "
+                                   "allowed, in kV/mm (dry air breaks down at about 3)")}
+    return _with_faces(entry, check, where)
+
+
 CONTACT_PRESSURE = _spec("contact_pressure", ("limit_MPa", "faces"), "Contact", "none", _contact_pressure)
+CREEP_STRAIN = _spec("creep_strain", ("limit_percent",), "Creep", "none", _creep_strain)
+
+
+def _ply_failure(entry: dict, where: str) -> dict:
+    """A laminate's worst ply against a failure index of 1: Tsai-Wu and max-stress (the larger) by default."""
+    if "criterion" not in entry:
+        return {}
+    if entry["criterion"] not in PLY_CRITERIA:
+        raise ValueError(f"{where}.criterion: {json_text(entry['criterion'])} is not one of {list(PLY_CRITERIA)} "
+                         "(leave it out to judge by the larger of the two)")
+    return {"criterion": entry["criterion"]}
+
+
+#: The ply failure criteria a ply_failure check may name.
+PLY_CRITERIA = ("tsai_wu", "max_stress")
+PLY_FAILURE = _spec("ply_failure", ("criterion",), "Ply failure", "none", _ply_failure, unique=True)
 
 #: Every kind, by name, in the order of spec section 6.
+ELECTRIC_FIELD = _spec("electric_field", ("limit_kV_mm", "faces"), "Arcing", "linear", _electric_field)
+
+
+def _bolt_load(entry: dict, where: str) -> dict:
+    """A bolt's force after loading against ``limit_N``, else (no limit given) its proof load from its size and grade."""
+    if "limit_N" in entry:
+        return {"limit_N": number(entry["limit_N"], where=f"{where}.limit_N", positive=True)}
+    return {}
+
+
+def _joint_separation(entry: dict, where: str) -> dict:
+    """The clamp a bolted joint loses against what it has: it opens at none left, or under ``min_clamp_N``."""
+    if "min_clamp_N" in entry:
+        clamp = number(entry["min_clamp_N"], where=f"{where}.min_clamp_N")
+        if clamp < 0:
+            raise ValueError(f"{where}.min_clamp_N: the clamp force the joint must keep, N, zero or more; got {clamp:g}")
+        return {"min_clamp_N": clamp}
+    return {}
+
+
+BOLT_LOAD = _spec("bolt_load", ("limit_N",), "Bolt load", "none", _bolt_load)
+JOINT_SEPARATION = _spec("joint_separation", ("min_clamp_N",), "Joint separation", "none", _joint_separation)
+JOINT_SLIP = _spec("joint_slip", (), "Joint slip", "none", lambda entry, where: {})
+
+
+def _mach(entry: dict, where: str) -> dict:
+    """The fastest Mach number a gas flow may reach (the flow speed over the local speed of sound)."""
+    return {"limit": _limit(entry, "limit", where, "a mach check needs the fastest Mach number allowed, like 0.8")}
+
+
+MACH = _spec("mach", ("limit",), "Mach number", "none", _mach)
+
 CHECK_SPECS: dict[str, CheckSpec] = {spec.kind: spec for spec in (
     STRESS, DISPLACEMENT, FREQUENCY, BUCKLING, TEMPERATURE, ACCELERATION, FATIGUE, PRESSURE_DROP, VELOCITY,
-    PLASTIC_STRAIN, CONTACT_PRESSURE,
+    PLASTIC_STRAIN, CONTACT_PRESSURE, CREEP_STRAIN, PLY_FAILURE, ELECTRIC_FIELD,
+    BOLT_LOAD, JOINT_SEPARATION, JOINT_SLIP, MACH,
 )}
 
 

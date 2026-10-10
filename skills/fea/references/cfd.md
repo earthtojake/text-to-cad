@@ -15,8 +15,11 @@ Quote them whenever you quote a flow number.
 - "How hard does the water push on this part?" (`map_to_structure`: "will the pressure crack it?")
 - Flow around a body (`external`): the force of a slow air or water stream on it.
 - Not for fast or turbulent flow (most air ducts at fan speeds, most water pipes above a few cm/s
-  in a 1 cm bore): it still runs and warns (below), but the numbers are a laminar lower bound. Not
-  for gases near the speed of sound, heat transfer, free surfaces or anything time-varying.
+  in a 1 cm bore): it still runs and warns (below), but the numbers are a laminar lower bound; use
+  `cfd_turbulent` ([cfd-turbulent.md](cfd-turbulent.md)) for those. Not for gas faster than about
+  Mach 0.3 (about 100 m/s in air), where its density changes: use `cfd_compressible`
+  ([cfd-compressible.md](cfd-compressible.md)). Not for heat transfer, free surfaces or anything
+  time-varying.
 
 ## The study
 
@@ -98,10 +101,13 @@ Re = ρ V D / μ, with D the inlet's hydraulic diameter (4 × area / perimeter) 
 the part's largest extent for external flow. Above **Re 2000 internal** or **Re 1000 external**
 the run still solves (reaching that Re by continuation when it must) and warns: "Re 4200 is past
 the laminar range (laminar above Re 2000 is unreliable): real flow is likely turbulent, so this
-pressure drop is a lower bound and the flow pattern may be wrong". The number is also data:
+pressure drop is a lower bound and the flow pattern may be wrong; run the same study as
+cfd_turbulent for the turbulent answer". The number is also data:
 `summary.reynolds` (and `extras.analysis.reynolds`), so the viewer's verdict reads "Laminar ·
 unreliable above Re 2000". Tell the user the number and what it means; do not quote the pressure
-drop as the answer, only as a lower bound. A turbulent model is planned, not here.
+drop as the answer, only as a lower bound. Then run the same study with `"analysis":
+"cfd_turbulent"` ([cfd-turbulent.md](cfd-turbulent.md)): the same keys, a turbulence model (k-omega
+SST with wall functions), and the pressure drop to report.
 
 ## Judging the answer (a hand check)
 

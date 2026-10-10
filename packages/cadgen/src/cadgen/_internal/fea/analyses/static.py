@@ -253,6 +253,11 @@ class StaticAnalysis:
         if ctx.assembly is not None:
             return False
         axis = plane.component
+        from cadgen._internal.fea.materials import mirror_symmetric
+
+        # An orthotropic material mirrors onto itself only about a plane across one of its own directions.
+        if not all(material is None or mirror_symmetric(material, axis) for material in (getattr(ctx, "materials", None) or ())):
+            return False
 
         def maps_onto_itself(refs) -> bool:
             ordinals = {ctx.ordinal_of[ref] for ref in refs}

@@ -19,7 +19,11 @@ the real part), so the GLB shows the part, its faces and their refs, never a
 sheet. Loads and fixtures keep their meaning: a skin face is the mid-surface
 under it, a side face the mid-surface's edge along it.
 
-Static is the first adopter (:func:`solve`). Modal and buckling would add, on
+Static is the first adopter (:func:`solve`). A laminate (the composite
+analysis) takes the same mid-surface, loads and fixtures
+(:func:`solve_mid_surface`) with classical laminate theory's A, B and D and a
+transverse shear stiffness in place of the isotropic plane-stress matrices
+(:meth:`ShellModel.element_matrices`'s ``abd``). Modal and buckling would add, on
 the same mesh and DOF numbering: a consistent mass (rho t on the translations,
 rho t^3/12 on the two bending rotations, none on the drilling one) and, for
 buckling, the membrane geometric stiffness from this solve's membrane forces
@@ -188,7 +192,8 @@ def detect(geometry: "Geometry") -> Plate | None:
     return cached(geometry.shape, "shell", lambda shape: _detect(shape, geometry.volume_mm3, geometry.area_mm2))
 
 
-def _detect(shape, volume: float, area: float) -> Plate | None:
+def _detect(shape, volume: float, area: float, thin: float = THIN) -> Plate | None:
+    """The plate rules of the module; ``thin`` is the thickness-to-span ceiling (a laminate reads thick plates too)."""
     from cadgen._internal.fea.assembly import _thickness
 
     records = face_records(shape)
@@ -226,7 +231,7 @@ def _detect(shape, volume: float, area: float) -> Plate | None:
         return None
     halves = obb_half_sizes(shape)
     span, length = 2.0 * halves[1][0], 2.0 * halves[2][0]
-    if not span > 0 or t / span >= THIN:
+    if not span > 0 or t / span >= thin:
         return None
     return Plate(tuple(n), top_level, t, span, length, top_area, tuple(r.ordinal for r in top),
                  tuple(r.ordinal for r in bottom), tuple(r.ordinal for r in sides), [r.face for r in top])
@@ -355,9 +360,16 @@ class ShellModel:
         local = np.einsum("tij,tkj->tki", frame, corners - corners[:, :1])
         return frame, area, local
 
-    def element_matrices(self, E: float, nu: float):
-        """Per triangle: the global 18 x 18 stiffness, and the membrane and bending strain operators (local)."""
+    def element_matrices(self, E: float, nu: float, abd: dict | None = None):
+        """Per triangle: the global 18 x 18 stiffness, and the membrane and bending strain operators (local).
+
+        ``abd`` (a laminate) replaces the isotropic constitutive matrices: ``A``, ``B``, ``D`` (3 x 3) and the
+        transverse shear ``H`` (2 x 2, shear correction included), all in the laminate's frame whose 0° direction
+        is ``axis`` (a unit vector in the plate's plane; its 90° direction is the normal x axis)."""
         import numpy as np
+
+        if abd is not None:
+            return laminate_matrices(self, abd)
 
         t = self.thickness
         frame, area, local = self.frames()
@@ -408,6 +420,87 @@ class ShellModel:
                 K[:, 6 * i + 5, 6 * j + 5] += drilling * relative[i, j]
         T = rotation_blocks(frame, 6)
         return np.einsum("tki,tkl,tlj->tij", T, K, T), membrane, bending, frame, area
+
+
+def _laminate_rotation(frame, normal, axis):
+    """Each element's x axis against the laminate's 0° direction: (cos, sin) of the angle, (T,) each."""
+    import numpy as np
+
+    x0 = np.asarray(axis, dtype=float)
+    y0 = np.cross(np.asarray(normal, dtype=float), x0)
+    return frame[:, 0] @ x0, frame[:, 0] @ y0
+
+
+def strain_rotation(c, s):
+    """(T, 3, 3): ε in a frame turned by angle (c, s) from this one, Voigt with engineering shear: ε' = T ε."""
+    import numpy as np
+
+    c, s = np.asarray(c, dtype=float), np.asarray(s, dtype=float)
+    out = np.zeros((*c.shape, 3, 3))
+    out[..., 0, 0], out[..., 0, 1], out[..., 0, 2] = c * c, s * s, c * s
+    out[..., 1, 0], out[..., 1, 1], out[..., 1, 2] = s * s, c * c, -c * s
+    out[..., 2, 0], out[..., 2, 1], out[..., 2, 2] = -2.0 * c * s, 2.0 * c * s, c * c - s * s
+    return out
+
+
+def laminate_matrices(self, abd):
+    """:meth:`ShellModel.element_matrices` for a laminate: each element's A, B, D and H turned into its own frame."""
+    import numpy as np
+
+    t = self.thickness
+    frame, area, local = self.frames()
+    corners = self.nodes[self.triangles]
+    x, y = local[..., 0], local[..., 1]
+    twice = 2.0 * area
+    dx = np.stack([y[:, 1] - y[:, 2], y[:, 2] - y[:, 0], y[:, 0] - y[:, 1]], 1) / twice[:, None]
+    dy = np.stack([x[:, 2] - x[:, 1], x[:, 0] - x[:, 2], x[:, 1] - x[:, 0]], 1) / twice[:, None]
+    count = len(self.triangles)
+    membrane, bending = np.zeros((count, 3, 18)), np.zeros((count, 3, 18))
+    for i in range(3):
+        o = 6 * i
+        membrane[:, 0, o], membrane[:, 1, o + 1] = dx[:, i], dy[:, i]
+        membrane[:, 2, o], membrane[:, 2, o + 1] = dy[:, i], dx[:, i]
+        bending[:, 0, o + 4], bending[:, 1, o + 3] = dx[:, i], -dy[:, i]
+        bending[:, 2, o + 4], bending[:, 2, o + 3] = dy[:, i], -dx[:, i]
+    # The element's x axis is at angle phi from the laminate's 0°: laminate strain = T(-phi) element strain.
+    c, s = _laminate_rotation(frame, self.normal, abd["axis"])
+    T = strain_rotation(c, -s)
+    A, B, D = (np.einsum("tki,kl,tlj->tij", T, np.asarray(abd[key], dtype=float), T) for key in ("A", "B", "D"))
+    P = np.zeros((count, 2, 2))
+    P[:, 0, 0], P[:, 0, 1], P[:, 1, 0], P[:, 1, 1] = c, -s, s, c
+    H = np.einsum("tki,kl,tlj->tij", P, np.asarray(abd["H"], dtype=float), P)
+    h = np.max(np.linalg.norm(corners - np.roll(corners, 1, axis=1), axis=2), axis=1)
+    stabilised = (t * t / (t * t + ALPHA * h * h))[:, None, None] * H
+    coupling = np.einsum("tki,tkl,tlj->tij", membrane, B, bending)
+    K = area[:, None, None] * (
+        np.einsum("tki,tkl,tlj->tij", membrane, A, membrane) + coupling + np.transpose(coupling, (0, 2, 1))
+        + np.einsum("tki,tkl,tlj->tij", bending, D, bending)
+    )
+    gradient = np.stack([dx, dy], axis=2)
+    for q in range(3):
+        weights = np.full(3, 0.5)
+        weights[(q + 2) % 3] = 0.0
+        strain = np.zeros((count, 2, 18))
+        for i, j in ((0, 1), (1, 2), (2, 0)):
+            whitney = weights[i] * gradient[:, j, :] - weights[j] * gradient[:, i, :]
+            edge = local[:, j, :2] - local[:, i, :2]
+            tied = np.zeros((count, 18))
+            tied[:, 6 * j + 2] += 1.0
+            tied[:, 6 * i + 2] -= 1.0
+            for k in (i, j):
+                tied[:, 6 * k + 4] += 0.5 * edge[:, 0]
+                tied[:, 6 * k + 3] -= 0.5 * edge[:, 1]
+            strain += whitney[:, :, None] * tied[:, None, :]
+        K += (area / 3.0)[:, None, None] * np.einsum("tki,tkl,tlj->tij", strain, stabilised, strain)
+    # The drilling rotation only keeps the system regular: its stiffness from the laminate's mean membrane modulus.
+    drilling = DRILLING * 0.5 * (abd["A"][0][0] + abd["A"][1][1]) * area
+    relative = np.eye(3) - 1.0 / 3.0
+    for i in range(3):
+        for j in range(3):
+            K[:, 6 * i + 5, 6 * j + 5] += drilling * relative[i, j]
+    R = rotation_blocks(frame, 6)
+    return np.einsum("tki,tkl,tlj->tij", R, K, R), membrane, bending, frame, area
+
 
 
 def plane_stress(E: float, nu: float):
@@ -553,13 +646,86 @@ def solve(analysis, ctx, inputs):
 
     import numpy as np
 
-    started = time.perf_counter()
     plate = detect(ctx.geometry)
     if plate is None:
         raise RuntimeError("the shell idealisation lost its plate between the ladder and the solve")
     material = ctx.study.material
     E, nu, t = float(material.E), float(material.nu), plate.thickness
     h = element_size(plate, ctx.plan.requested_mm)
+    mid = solve_mid_surface(ctx, inputs, plate, h, E=E, nu=nu, density=float(material.density or 0.0))
+    model, u, timings, count, size = mid.model, mid.u, mid.timings, mid.count, mid.size
+    membrane, bending, frame, triangles, nodes, n = mid.membrane, mid.bending, mid.frame, mid.model.triangles, mid.model.nodes, mid.model.normal
+    reactions, applied, connectivity = mid.reactions, mid.applied, mid.connectivity
+
+    # Fibre stresses: membrane plus or minus half the thickness times the bending curvature, per element.
+    started = time.perf_counter()
+    T = rotation_blocks(frame, 6)
+    local = np.einsum("tij,tj->ti", T, u[connectivity])
+    Q = plane_stress(E, nu)
+    strain = np.einsum("tki,ti->tk", membrane, local)
+    curvature = np.einsum("tki,ti->tk", bending, local)
+    tensors = []
+    for z in (0.5 * t, -0.5 * t):
+        s = (strain + z * curvature) @ Q.T                                    # (T, 3) local sx, sy, sxy
+        plane = np.zeros((len(triangles), 3, 3))
+        plane[:, 0, 0], plane[:, 1, 1] = s[:, 0], s[:, 1]
+        plane[:, 0, 1] = plane[:, 1, 0] = s[:, 2]
+        tensors.append(np.einsum("tki,tkl,tlj->tij", frame, plane, frame))    # global
+    element_peak = np.maximum(von_mises(tensors[0]), von_mises(tensors[1]))
+    flat = np.c_[nodes @ model.e1, nodes @ model.e2]
+    upper = node_patch_fit(flat, triangles, tensors[0].reshape(-1, 9)).reshape(-1, 3, 3)
+    lower = node_patch_fit(flat, triangles, tensors[1].reshape(-1, 9)).reshape(-1, 3, 3)
+
+    # Onto the carrier: each point's mid-surface spot, its height z in the plate, and the fields there.
+    points = ctx.space.dof_locations if ctx.space is not None else ctx.volume.nodes
+    z = np.clip(points @ n - plate.mid_level, -0.5 * t, 0.5 * t)
+    where, weights = locate(np.c_[points @ model.e1, points @ model.e2], flat, triangles)
+    corner = triangles[where]
+    U = u.reshape(-1, 6)
+    translation = np.einsum("pk,pkc->pc", weights, U[corner, :3])
+    rotation = np.einsum("pk,pkc->pc", weights, U[corner, 3:])
+    displacement = translation + np.cross(rotation, z[:, None] * n[None, :])
+    top = np.einsum("pk,pkij->pij", weights, upper[corner])
+    bottom = np.einsum("pk,pkij->pij", weights, lower[corner])
+    share = (z / t + 0.5)[:, None, None]
+    stress = von_mises(bottom + share * (top - bottom))
+    timings["stress_s"] = time.perf_counter() - started
+
+    detail = {"idealisation": "shell", "nodes": int(count), "elements": int(len(triangles)), "element_size_mm": round(h, 4),
+              "thickness_mm": round(t, 6)}
+    outcome = outcome_on_carrier(ctx, displacement, stress, float(element_peak.max()), reactions, applied, size,
+                                 timings, "direct (shell)")
+    return finish(analysis, ctx, inputs, outcome, detail)
+
+
+@dataclass
+class MidSurface:
+    """A solved mid-surface: the model, its displacement (6 per node), the element operators and the balance."""
+
+    model: Any
+    u: Any
+    membrane: Any
+    bending: Any
+    frame: Any
+    area: Any
+    connectivity: Any
+    reactions: list
+    applied: tuple
+    size: int
+    count: int
+    timings: dict
+
+
+def solve_mid_surface(ctx, inputs, plate: Plate, h: float, *, E: float, nu: float, density: float,
+                      abd: dict | None = None) -> MidSurface:
+    """The plate's mid-surface meshed at ``h``, loaded and held as the study says (a skin face is the mid-surface
+    under it, a side face its edge along it) and solved: isotropic (E, nu) or a laminate (``abd``)."""
+    import time
+
+    import numpy as np
+
+    started = time.perf_counter()
+    t = plate.thickness
     model = mesh_mid_surface(plate, h)
     timings = {"shell_mesh_s": time.perf_counter() - started}
     n = model.normal
@@ -568,7 +734,7 @@ def solve(analysis, ctx, inputs):
     size = 6 * count
 
     started = time.perf_counter()
-    Ke, membrane, bending, frame, area = model.element_matrices(E, nu)
+    Ke, membrane, bending, frame, area = model.element_matrices(E, nu, abd)
     connectivity = (6 * triangles[:, :, None] + np.arange(6)).reshape(len(triangles), 18)
     K = assemble(Ke, connectivity, size)
     timings["assemble_s"] = time.perf_counter() - started
@@ -638,7 +804,7 @@ def solve(analysis, ctx, inputs):
                     add(triangles[tris], (area[tris] / weight)[:, None] * vector[None, :], np.full(len(tris), z))
                 if len(rows):
                     add(edges[rows], (lengths[rows] * t / weight)[:, None] * vector[None, :], np.zeros(len(rows)))
-    rho = float(material.density or 0.0)
+    rho = density
     for b in inputs.body_accelerations:
         add(triangles, rho * t * area[:, None] * np.asarray(b, dtype=float)[None, :], np.zeros(len(triangles)))
     applied = tuple(float(f[c::6].sum()) for c in range(3))
@@ -662,45 +828,7 @@ def solve(analysis, ctx, inputs):
     residual = K @ u - f
     reactions = [tuple(float(residual[6 * held + c].sum()) for c in range(3)) for held in fixture_nodes]
 
-    # Fibre stresses: membrane plus or minus half the thickness times the bending curvature, per element.
-    started = time.perf_counter()
-    T = rotation_blocks(frame, 6)
-    local = np.einsum("tij,tj->ti", T, u[connectivity])
-    Q = plane_stress(E, nu)
-    strain = np.einsum("tki,ti->tk", membrane, local)
-    curvature = np.einsum("tki,ti->tk", bending, local)
-    tensors = []
-    for z in (0.5 * t, -0.5 * t):
-        s = (strain + z * curvature) @ Q.T                                    # (T, 3) local sx, sy, sxy
-        plane = np.zeros((len(triangles), 3, 3))
-        plane[:, 0, 0], plane[:, 1, 1] = s[:, 0], s[:, 1]
-        plane[:, 0, 1] = plane[:, 1, 0] = s[:, 2]
-        tensors.append(np.einsum("tki,tkl,tlj->tij", frame, plane, frame))    # global
-    element_peak = np.maximum(von_mises(tensors[0]), von_mises(tensors[1]))
-    flat = np.c_[nodes @ model.e1, nodes @ model.e2]
-    upper = node_patch_fit(flat, triangles, tensors[0].reshape(-1, 9)).reshape(-1, 3, 3)
-    lower = node_patch_fit(flat, triangles, tensors[1].reshape(-1, 9)).reshape(-1, 3, 3)
-
-    # Onto the carrier: each point's mid-surface spot, its height z in the plate, and the fields there.
-    points = ctx.space.dof_locations if ctx.space is not None else ctx.volume.nodes
-    z = np.clip(points @ n - plate.mid_level, -0.5 * t, 0.5 * t)
-    where, weights = locate(np.c_[points @ model.e1, points @ model.e2], flat, triangles)
-    corner = triangles[where]
-    U = u.reshape(-1, 6)
-    translation = np.einsum("pk,pkc->pc", weights, U[corner, :3])
-    rotation = np.einsum("pk,pkc->pc", weights, U[corner, 3:])
-    displacement = translation + np.cross(rotation, z[:, None] * n[None, :])
-    top = np.einsum("pk,pkij->pij", weights, upper[corner])
-    bottom = np.einsum("pk,pkij->pij", weights, lower[corner])
-    share = (z / t + 0.5)[:, None, None]
-    stress = von_mises(bottom + share * (top - bottom))
-    timings["stress_s"] = time.perf_counter() - started
-
-    detail = {"idealisation": "shell", "nodes": int(count), "elements": int(len(triangles)), "element_size_mm": round(h, 4),
-              "thickness_mm": round(t, 6)}
-    outcome = outcome_on_carrier(ctx, displacement, stress, float(element_peak.max()), reactions, applied, size,
-                                 timings, "direct (shell)")
-    return finish(analysis, ctx, inputs, outcome, detail)
+    return MidSurface(model, u, membrane, bending, frame, area, connectivity, reactions, applied, size, count, timings)
 
 
 def _classify(points, carrier, ordinals):

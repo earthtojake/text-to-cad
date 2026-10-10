@@ -9,10 +9,16 @@
  * and its Display gate's title (`displayTitle`). Pure: no three.js, no React.
  */
 import { FEA_CHECK_KINDS } from "../checkKinds.js";
+import bolt from "./bolt.js";
 import buckling from "./buckling.js";
 import cfd from "./cfd.js";
+import cfd_compressible from "./cfd_compressible.js";
+import cfd_turbulent from "./cfd_turbulent.js";
+import composite from "./composite.js";
 import contact from "./contact.js";
+import creep from "./creep.js";
 import drop from "./drop.js";
+import electromagnetic from "./electromagnetic.js";
 import fatigue from "./fatigue.js";
 import harmonic from "./harmonic.js";
 import impact from "./impact.js";
@@ -29,7 +35,7 @@ import transient from "./transient.js";
 
 export const ANALYSES = Object.freeze({
   static: staticAnalysis, modal, buckling, thermal, thermal_transient, thermal_stress, harmonic, random_vibration, shock, transient,
-  fatigue, drop, cfd, impact, nonlinear, contact,
+  fatigue, drop, cfd, impact, nonlinear, contact, bolt, creep, composite, electromagnetic, cfd_turbulent, cfd_compressible,
 });
 
 /** Every analysis this viewer knows, by name. */

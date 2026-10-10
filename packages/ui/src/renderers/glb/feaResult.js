@@ -194,6 +194,8 @@ function readChecks(raw, kinds) {
       ...(Number.isFinite(check.need) && check.need > 0 ? { need: Number(check.need) } : {}),
       ...(Number.isFinite(check.life) && check.life > 0 ? { life: Number(check.life) } : {}),
       ...(Number.isFinite(check.reference) ? { reference: Number(check.reference) } : {}),
+      // A laminate's worst ply (ply_failure): its number from the bottom face and its angle.
+      ...(Number.isInteger(check.ply) && check.ply >= 1 ? { ply: check.ply, angle: finiteOrNull(check.angle_deg) ?? 0 } : {}),
     }));
 }
 
@@ -1022,7 +1024,9 @@ function captionFrame(result, analysis) {
   if (result.analysis?.estimate || (result.analysis?.tier ?? analysis.tier) === 2) lead.push("Estimate");
   if ((result.analysis?.tier ?? analysis.tier) === 3) {
     const reynolds = reynoldsWarning(result);
-    lead.push(analysis.limitWord || "Lite", ...(reynolds ? [`unreliable above Re ${reynolds.limit}`] : []));
+    // An analysis whose limit word follows what the file solved (electromagnetic: "Static", or "AC" at a frequency).
+    const word = (typeof analysis.limitWordOf === "function" && analysis.limitWordOf(result)) || analysis.limitWord;
+    lead.push(word || "Lite", ...(reynolds ? [`unreliable above Re ${reynolds.limit}`] : []));
   }
   return { lead: lead.length ? `${lead.join(" · ")} · ` : "", tail: feaAdapted(result) ? " · adapted" : "" };
 }

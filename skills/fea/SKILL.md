@@ -1,6 +1,6 @@
 ---
 name: fea
-description: Run finite element studies on a STEP part, or a bonded assembly of parts, with cadgen. Fix faces, apply forces, pressures, gravity or a steady acceleration, choose a material, and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Strength (linear static), vibration, buckling, heat (steady, over time and the stress it causes), shock from a response spectrum, fatigue life from a static load, a drop estimate and a drop impact simulated through time (lite) solve today; shaking, flow, permanent bending and contact are planned, and the skill maps each question to its analysis and says which are not available yet. Use when the user asks whether a part or an assembly is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part, or asks about its vibration, buckling, heat, fatigue life, drop, flow or contact.
+description: Run finite element studies on a STEP part, or a bonded assembly of parts, with cadgen. Fix faces, apply forces, pressures, gravity or a steady acceleration, choose a material, and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Strength (linear static), vibration, buckling, heat (steady, over time and the stress it causes), shaking, random vibration, shock from a response spectrum, loads over time, fatigue life, a drop estimate, and as lite solvers flow (laminar and turbulent), permanent bending and stretch, creep, composite plates, contact, bolted joints (preload, separation, slip), a drop impact simulated through time and electric and magnetic fields (static, DC and AC: eddy currents, skin effect, induction heating) solve today; fast gas flow is planned, and the skill maps each question to its analysis and says which are not available yet. Use when the user asks whether a part or an assembly is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part, or asks about its vibration, buckling, heat, fatigue life, drop, flow, contact or a bolted joint.
 license: MIT
 ---
 
@@ -21,24 +21,35 @@ repeated static load, a shaker dwell or a random vibration spec (`fatigue`), a d
 (`shock`), loads that change over time (`transient`), buckling (`buckling`) and heat: steady
 temperatures (`thermal`), temperatures over time (`thermal_transient`) and the
 stress heat puts in a part (`thermal_stress`), and flow (`cfd`, lite: steady laminar
-flow through or around the part, its pressure drop and its push on the part), and
+flow through or around the part, its pressure drop and its push on the part), turbulent
+flow (`cfd_turbulent`, lite: steady RANS with the k-omega SST model and wall functions, the
+step up from `cfd` past the laminar range), fast gas flow (`cfd_compressible`, lite: a steady
+ideal gas past about Mach 0.3, choking and normal shocks in a nozzle, the mass flow and Mach number), and
 permanent bending and stretch (`nonlinear`, lite: metal past yield or rubber, the
-load in steps, a collapse found and reported), and a drop impact simulated through
+load in steps, a collapse found and reported), creep under a load held for a long time
+(`creep`, lite: Norton's power law, the stress relaxing as it creeps), laminated fibre plates ply by ply
+(`composite`, lite: classical laminate theory, Tsai-Wu and max-stress ply failure), parts pressing or
+sliding on each other or resting on a rigid floor (`contact`, lite: small sliding, frictionless or Coulomb
+friction, the contact pressure), bolted joints (`bolt`, lite: bolts with a preload clamping parts in frictional
+contact, the bolt's force, whether the joint opens or slips), electric and magnetic fields (`electromagnetic`, lite: a static electric
+field and its capacitance, a DC current with its resistance and Joule heat, a coil's magnetic field with
+its inductance and force, and an AC field at a frequency with its eddy currents, skin effect, loss, impedance
+and induction heating), and a drop impact simulated through
 time (`impact`, lite: the part dropped onto a rigid floor, its peak g, peak stress
 and any permanent strain).** Static answers
 "will it hold, and by how much" under forces, pressures, the part's own weight
-(`gravity`) and a steady acceleration (`acceleration`). Every other analysis in
-[Choose the analysis](#choose-the-analysis) is planned: its study format and
-its words are settled, but this cadgen does not solve it yet, and `cadgen fea
-solve` refuses a study that names one ("'contact' is planned but not in this
-cadgen yet"). Do not write such a study; follow [When the question needs an
+(`gravity`) and a steady acceleration (`acceleration`). Every analysis in
+[Choose the analysis](#choose-the-analysis) runs today. A name this cadgen
+registers but does not solve yet is refused ("'<name>' is planned but not in
+this cadgen yet"): do not write such a study; follow [When the question needs an
 analysis that is not here yet](#when-the-question-needs-an-analysis-that-is-not-here-yet).
 
 The static solve uses quadratic tetrahedra and isotropic linear elasticity. It
 is a first-pass engineering check, not a certification: it assumes small
 displacements, a linear material below yield, perfectly rigid fixtures and
 loads that do not move. In an assembly every joint is also perfectly rigid
-(bonded): bolts, pins and contact are not modelled yet. Say so when you report.
+(bonded) unless the study names `contact` pairs (the `contact` analysis) or
+`bolt`s (the `bolt` analysis). Say so when you report.
 
 ## Choose the analysis
 
@@ -62,9 +73,15 @@ study names it; left out, it is `static`.
 | "What if I drop it" (a quick answer) | `drop` | Drop (estimate) | **Runs today** (an estimate; `"dynamic": true` adds a transient check) | [drop.md](references/drop.md) |
 | "What if I drop it" (a deeper check, after `drop`) | `impact` | Drop impact | **Runs today** (lite: rigid floor, linear tets, elastic unless plasticity is given) | [impact.md](references/impact.md) |
 | Flow through or around it, pressure drop, the push of air or water on it | `cfd` | Flow | **Runs today** (lite: laminar, steady, incompressible) | [cfd.md](references/cfd.md) |
+| The same when the flow is fast (past Re 2000 in a pipe, Re 1000 around a body): water in a pipe, air in a duct or past a body | `cfd_turbulent` | Turbulent flow | **Runs today** (lite: steady RANS, k-omega SST, wall functions, incompressible) | [cfd-turbulent.md](references/cfd-turbulent.md) |
 | "Does it bend for good", "at what load does it give way", rubber or other stretchy parts | `nonlinear` | Permanent bend / Stretch | **Runs today** (lite: small-strain metal plasticity, Neo-Hookean rubber) | [nonlinear.md](references/nonlinear.md) |
-| Parts pressing or sliding on each other | `contact` | Contact | Coming, not in this cadgen yet | [contact.md](references/contact.md) |
-| Turbulent or fast gas flow, creep, composites, bolted joints, magnetic or electric fields | not yet named in a study | Planned next | Coming after the rest | [planned-next.md](references/planned-next.md) |
+| "Does it slowly stretch or sag under a load held for years, hot", "does the clamp relax" | `creep` | Creep | **Runs today** (lite: Norton power law, steady creep; needs the grade's creep data) | [creep.md](references/creep.md) |
+| "Will this carbon or glass fibre plate hold", "which ply fails first", a layup | `composite` | Composite | **Runs today** (lite: flat plates of even thickness, classical laminate theory, first ply failure; no delamination) | [composite.md](references/composite.md) |
+| Parts pressing or sliding on each other, "how hard do they press", a part resting on a floor | `contact` | Contact | **Runs today** (lite: small sliding, node-to-surface, static, elastic parts) | [contact.md](references/contact.md) |
+| A bolted joint: "is the bolt strong enough", "does the joint open", "does it slip", tightening torque to preload | `bolt` | Bolted joint | **Runs today** (lite: a pretensioned spring per bolt, frictional contact between the clamped parts, linear elastic, no thread) | [bolt.md](references/bolt.md) |
+| "Will it arc", capacitance, resistance, Joule heating from a current, a coil's magnetic field, inductance or magnet force | `electromagnetic` | Magnetic / electric | **Runs today** (lite: static and DC, linear materials) | [electromagnetic.md](references/electromagnetic.md) |
+| Eddy currents, skin effect, AC resistance, a coil's impedance at a frequency, induction heating, the loss in a part near an AC field | `electromagnetic` with `"mode": "ac_magnetic"` | Magnetic / electric | **Runs today** (lite: time-harmonic at one frequency, linear materials, stranded coils; no saturation, hysteresis or waves) | [electromagnetic.md](references/electromagnetic.md#ac-magnetic-fields-ac_magnetic) |
+| Fast gas flow (past about Mach 0.3, 100 m/s in air): a nozzle, valve or orifice under a real pressure ratio, "does it choke", "what Mach number", "where is the shock" | `cfd_compressible` | Fast gas flow | **Runs today** (lite: steady ideal gas, adiabatic, an inviscid core past the laminar range, shocks captured; no supersonic outlet) | [cfd-compressible.md](references/cfd-compressible.md) |
 
 Each reference marked "Coming" says at its top that it is not available in
 this cadgen yet, and lists the study keys it will take. When an analysis
@@ -110,13 +127,16 @@ runs.
 - **Estimates.** A `drop` result, or a static study standing in for one, is an
   estimate of an equivalent steady load, not a simulation of the impact. Say
   "estimate" every time you quote it.
-- **Lite limits.** `cfd`, `impact`, `nonlinear` and `contact` are lite solvers
+- **Lite limits.** `cfd`, `cfd_turbulent`, `cfd_compressible`, `impact`, `nonlinear`, `creep`, `composite`, `contact`, `bolt` and `electromagnetic` are lite solvers
   with stated limits (for flow: laminar, steady, incompressible, no turbulence
-  model). Quote the limits the result carries whenever you quote its numbers.
+  model; for turbulent flow: steady RANS (k-omega SST), wall functions,
+  incompressible; for fast gas flow: steady, ideal gas, adiabatic, frictionless walls past the
+  laminar range). Quote the limits the result carries whenever you quote its numbers.
 - **The Reynolds warning.** When a flow result warns that its Reynolds number
   is past the laminar range, say so with its number: the real flow is likely
   turbulent, the pressure drop is a lower bound and the flow pattern may be
-  wrong.
+  wrong. Then run the same study as `cfd_turbulent`
+  ([cfd-turbulent.md](references/cfd-turbulent.md)) and report that answer.
 
 ## Big models: run first, then report what was adapted
 
@@ -136,7 +156,7 @@ leave `defeature` out of `fit.allow`) or names a memory or time budget.
 
 | Task | First action | Reference |
 | --- | --- | --- |
-| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `harmonic`, `random_vibration`, `transient`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate), `fatigue` (from a static load, a harmonic dwell or a random vibration) and `nonlinear` (lite) run today. | [Choose the analysis](#choose-the-analysis) |
+| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `harmonic`, `random_vibration`, `transient`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate), `fatigue` (from a static load, a harmonic dwell or a random vibration), `nonlinear` (lite), `creep` (lite), `composite` (lite), `contact` (lite), `bolt` (lite) and `electromagnetic` (lite) run today. | [Choose the analysis](#choose-the-analysis) |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
 | **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`part.step#o1.f17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |
@@ -359,8 +379,8 @@ Findings an assembly adds:
 A `fixture` or `load` on a face that is wholly a joint (the foot of a post)
 is refused before the solve with an error naming the face: move it to a face
 that is not covered. On a face only partly covered it applies to the exposed
-area alone. `bolt` and `contact`
-connection types are refused ("not yet"); a pair set `free` inside a group
+area alone. `contact` connections run under the `contact` analysis and `bolt`
+connections under `bolt`; every other analysis refuses them ("not yet supported"); a pair set `free` inside a group
 that is glued through other parts is refused too. When the weakest part's
 safety factor is under 3 the run meshes again at half the size, as for one
 part.

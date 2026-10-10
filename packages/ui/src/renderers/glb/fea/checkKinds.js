@@ -89,6 +89,39 @@ function fatigueLine(check) {
   return unbrokenHalves([`Factor ${flooredFactor(check.shown)}${at}`, `needs ${plainNumber(check.margin ?? check.limit)}`]);
 }
 
+/** A force as people say it: "5 kN", "1.3 kN", "800 N". */
+export function forceWords(newtons) {
+  const n = Number(newtons) || 0;
+  return Math.abs(n) >= 1000 ? `${plainNumber(n / 1000)} kN` : `${plainNumber(n)} N`;
+}
+
+/** A time held in hours as a sentence says it: "10,000 h", "250 h", "2.5 h". */
+export function hoursWords(hours) {
+  const h = Number(hours) || 0;
+  return `${h >= 1000 ? Math.round(h).toLocaleString("en-US") : plainNumber(h)} h`;
+}
+
+/** A ply's angle as a layup writes it: "0°", "+45°", "−45°" (a true minus). */
+export function plyAngle(angle) {
+  const value = Number(angle) || 0;
+  if (Math.abs(value) < 1e-9) return "0°";
+  return `${value > 0 ? "+" : "−"}${plainNumber(Math.abs(value))}°`;
+}
+
+/** "Worst ply 3 (+45°), failure index 0.82"; with no ply on the check, "Failure index 0.82, limit 1". */
+function plyLine(check) {
+  const index = Number(check.shown).toFixed(2);
+  if (Number.isInteger(check.ply)) return unbrokenHalves([`Worst ply ${check.ply} (${plyAngle(check.angle)})`, `failure index ${index}`]);
+  return unbrokenHalves([`Failure index ${index}`, `limit ${plainNumber(check.limit)}`]);
+}
+
+/** "0.8 % creep after 10,000 h, limit 1 %"; with no time, "0.8 % creep, limit 1 %". */
+function creepLine(check) {
+  const unit = unitOf(check, "%");
+  const hours = check.at?.unit === "h" && Number.isFinite(check.at.value) ? ` after ${hoursWords(check.at.value)}` : "";
+  return unbrokenHalves([`${plainNumber(check.shown)} ${unit} creep${hours}`, `limit ${plainNumber(check.limit)} ${unit}`]);
+}
+
 export const CHECK_KINDS = Object.freeze({
   // The peak von Mises stress against the yield; how far it is from yield is the safety factor.
   stress: kind({
@@ -142,6 +175,41 @@ export const CHECK_KINDS = Object.freeze({
   contact_pressure: kind({
     titles: titles("Presses too hard", "Close to the limit", "Within the limit"), defaultLabel: "Contact", unit: "MPa",
     line: peakLine("Peak", "MPa"),
+  }),
+  // The equivalent creep strain at the end of the hold (`at.value`, in hours), against its limit.
+  creep_strain: kind({
+    titles: titles("Creeps too far", "Close to the limit", "Holds its shape"), defaultLabel: "Creep", unit: "%",
+    line: creepLine,
+  }),
+  // A laminate's worst ply against a failure index of 1 (Tsai-Wu or max stress, the larger): "Worst ply 3 (+45°), failure index 0.82".
+  ply_failure: kind({
+    titles: titles("A ply fails", "Close to failing", "Every ply holds"), defaultLabel: "Ply failure", unit: "",
+    line: plyLine,
+  }),
+  // The strongest electric field against the field the gap holds (dry air: about 3 kV/mm); it grows with the voltage.
+  electric_field: kind({
+    titles: titles("Arcs over", "Close to arcing", "Holds the voltage"), defaultLabel: "Arcing", unit: "kV/mm", scaling: "linear",
+    line: peakLine("Peak", "kV/mm"),
+  }),
+  // A bolt's force after loading (its preload plus its share of the load) against its proof load or a limit.
+  bolt_load: kind({
+    titles: titles("Bolt overloaded", "Close to the limit", "Bolt holds"), defaultLabel: "Bolt load", unit: "N",
+    line: (check) => unbrokenHalves([`Bolt ${forceWords(check.shown)}`, `limit ${forceWords(check.limit)}`]),
+  }),
+  // The clamp a bolted joint has lost against what it had to lose: all of it, and the faces open.
+  joint_separation: kind({
+    titles: titles("Joint opens", "Close to opening", "Joint stays shut"), defaultLabel: "Joint separation", unit: "N",
+    line: (check) => unbrokenHalves([`Lost ${forceWords(check.shown)}`, `of ${forceWords(check.limit)} clamp`]),
+  }),
+  // The sideways force a bolted joint carries against what friction holds (μ times its clamp).
+  joint_slip: kind({
+    titles: titles("Joint slips", "Close to slipping", "Joint holds by friction"), defaultLabel: "Joint slip", unit: "N",
+    line: (check) => unbrokenHalves([`Sideways ${forceWords(check.shown)}`, `friction holds ${forceWords(check.limit)}`]),
+  }),
+  // A gas flow's fastest Mach number (its speed over the local speed of sound) against the most allowed.
+  mach: kind({
+    titles: titles("Too fast", "Close to the limit", "Within the speed limit"), defaultLabel: "Mach number", unit: "",
+    line: (check) => unbrokenHalves([`Peak Mach ${plainNumber(check.shown)}`, `limit ${plainNumber(check.limit)}`]),
   }),
 });
 

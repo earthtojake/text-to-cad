@@ -50,12 +50,17 @@ the skill's "Choose the analysis" table says what to do instead.
 | `fatigue` | Fatigue life | runs today, from a static load case, a harmonic dwell or a random vibration | [fatigue.md](fatigue.md) |
 | `drop` | Drop (estimate) | runs today, as an estimate | [drop.md](drop.md) |
 | `cfd` | Flow | coming, not in this cadgen yet | [cfd.md](cfd.md) |
+| `cfd_turbulent` | Turbulent flow | runs today (lite: steady RANS, k-omega SST, wall functions) | [cfd-turbulent.md](cfd-turbulent.md) |
+| `cfd_compressible` | Fast gas flow | runs today (lite: steady ideal gas, adiabatic, shocks captured) | [cfd-compressible.md](cfd-compressible.md) |
 | `impact` | Drop impact | runs today (lite) | [impact.md](impact.md) |
 | `nonlinear` | Permanent bend / Stretch | runs today (lite) | [nonlinear.md](nonlinear.md) |
-| `contact` | Contact | coming, not in this cadgen yet | [contact.md](contact.md) |
+| `creep` | Creep | runs today (lite) | [creep.md](creep.md) |
+| `composite` | Composite | runs today (lite) | [composite.md](composite.md) |
+| `electromagnetic` | Magnetic / electric | runs today (lite: electrostatic, DC current, magnetostatic, AC magnetic) | [electromagnetic.md](electromagnetic.md) |
+| `contact` | Contact | runs today (lite) | [contact.md](contact.md) |
+| `bolt` | Bolted joint | runs today (lite: pretensioned bolts, frictional contact between the clamped parts) | [bolt.md](bolt.md) |
 
-Turbulent and compressible flow, creep, composites, bolted joints and
-electromagnetic analysis come after these: [planned-next.md](planned-next.md).
+Nothing is planned beyond these today: [planned-next.md](planned-next.md).
 
 ## Common keys
 
@@ -139,8 +144,8 @@ a sentence saying so. Their total (mass times acceleration) joins the applied
 force in the sidecar's `applied_force_N`, so the reactions still balance it.
 More in [linear-static.md](linear-static.md#body-loads-gravity-and-acceleration).
 
-Remote loads, bearing loads, moments and bolt preloads are not in this
-version; approximate a moment with a pair of opposite forces on two faces.
+Remote loads, bearing loads and moments are not in this version (a bolt's
+preload is, in the `bolt` analysis: [bolt.md](bolt.md)); approximate a moment with a pair of opposite forces on two faces.
 
 ## Faces
 
@@ -183,7 +188,9 @@ Run `cadgen fea parts assembly.step` first to see the parts and the pairs.
   is bonded. `bonded` needs the pair to touch within the tolerance; `free`
   leaves them unjoined (their faces stay separate and may not pass load). A
   `free` pair that is still joined through other bonded parts is refused.
-  `bolt` and `contact` are refused with "not yet".
+  `contact` (parts that press and slide) runs under the `contact` analysis and
+  `bolt` under the `bolt` analysis; every other analysis refuses them with
+  "not yet supported". Several `bolt`s may join the same two parts.
 - `contact_tolerance_mm`: default 0.1. Faces this close are touching; a gap
   within it is closed to bond the pair, and so is an overlap no thicker than
   it (an interference; a `gap_closed` finding says which). A thicker overlap

@@ -10,7 +10,8 @@ const result = { fields: [{ attribute: '_von_mises', name: 'von Mises stress' },
 describe('the analyses', () => {
   it('register every analysis the engine has, each of its own name', () => {
     expect(FEA_ANALYSES).toEqual(['static', 'modal', 'buckling', 'thermal', 'thermal_transient', 'thermal_stress', 'harmonic', 'random_vibration',
-      'shock', 'transient', 'fatigue', 'drop', 'cfd', 'impact', 'nonlinear', 'contact']);
+      'shock', 'transient', 'fatigue', 'drop', 'cfd', 'impact', 'nonlinear', 'contact', 'bolt', 'creep', 'composite', 'electromagnetic',
+      'cfd_turbulent', 'cfd_compressible']);
     for (const name of FEA_ANALYSES) {
       const analysis = ANALYSES[name];
       expect(analysis.name).toBe(name);
@@ -24,10 +25,10 @@ describe('the analyses', () => {
     expect(feaAnalysis({})).toBe(staticAnalysis);
     expect(feaAnalysis({ analysis: { type: 'static' } })).toBe(staticAnalysis);
     expect(feaAnalysis({ analysis: { type: 'modal' } })).toBe(ANALYSES.modal);
-    const newer = analysisNamed('electromagnetic', 'Magnetic');
-    expect(newer).toMatchObject({ name: 'electromagnetic', word: 'Magnetic', family: null, scalesWithLoad: false });
+    const newer = analysisNamed('cfd_multiphase', 'Multiphase flow');
+    expect(newer).toMatchObject({ name: 'cfd_multiphase', word: 'Multiphase flow', family: null, scalesWithLoad: false });
     expect(newer.checks).toEqual(Object.keys(CHECK_KINDS));
-    expect(analysisNamed('electromagnetic', 'Magnetic')).toBe(newer);
+    expect(analysisNamed('cfd_multiphase', 'Multiphase flow')).toBe(newer);
   });
 
   it('say which follow the load control, which are of the static family, and their words for a stress check', () => {
@@ -44,7 +45,8 @@ describe('the analyses', () => {
     expect(FEA_ANALYSES.map((name) => [name, routine(name, { frames: [] })])).toEqual([
       ['static', 'Load ramp'], ['modal', 'Vibrate'], ['buckling', 'Buckle'], ['thermal', null], ['thermal_transient', 'Play'],
       ['thermal_stress', 'Load ramp'], ['harmonic', 'Vibrate'], ['random_vibration', null], ['shock', null], ['transient', 'Play'],
-      ['fatigue', null], ['drop', 'Load ramp'], ['cfd', null], ['impact', 'Play'], ['nonlinear', 'Play'], ['contact', null]]);
+      ['fatigue', null], ['drop', 'Load ramp'], ['cfd', null], ['impact', 'Play'], ['nonlinear', 'Play'], ['contact', 'Play'], ['bolt', 'Play'],
+      ['creep', 'Play'], ['composite', null], ['electromagnetic', null], ['cfd_turbulent', null], ['cfd_compressible', null]]);
     // Play needs frames to play.
     expect(routine('transient')).toBeNull();
   });

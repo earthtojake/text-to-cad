@@ -61,12 +61,12 @@ REGISTRY: dict[str, Entry] = {entry.name: entry for entry in (
     _entry("nonlinear", 3, "NonlinearAnalysis", "Permanent bend / Stretch"),
     _entry("contact", 3, "ContactAnalysis", "Contact"),
     # Planned next (spec 2.1): registered so they answer plainly; built after Tier 3.
-    _entry("cfd_turbulent", 3, "CfdTurbulentAnalysis", "Turbulent flow", planned=True),
-    _entry("cfd_compressible", 3, "CfdCompressibleAnalysis", "Fast gas flow", planned=True),
-    _entry("creep", 3, "CreepAnalysis", "Creep", planned=True),
-    _entry("composite", 3, "CompositeAnalysis", "Composite", planned=True),
-    _entry("bolt", 3, "BoltAnalysis", "Bolted joint", planned=True),
-    _entry("electromagnetic", 3, "ElectromagneticAnalysis", "Magnetic / electric", planned=True),
+    _entry("cfd_turbulent", 3, "CfdTurbulentAnalysis", "Turbulent flow"),
+    _entry("cfd_compressible", 3, "CfdCompressibleAnalysis", "Fast gas flow"),
+    _entry("creep", 3, "CreepAnalysis", "Creep"),
+    _entry("composite", 3, "CompositeAnalysis", "Composite"),
+    _entry("bolt", 3, "BoltAnalysis", "Bolted joint"),
+    _entry("electromagnetic", 3, "ElectromagneticAnalysis", "Magnetic / electric"),
 )}
 ANALYSIS_NAMES: tuple[str, ...] = tuple(REGISTRY)
 

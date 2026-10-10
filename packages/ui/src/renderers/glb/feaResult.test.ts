@@ -860,7 +860,7 @@ describe('another analysis\'s setup', () => {
       excitation: { type: 'base', direction: [0, 0, 1], amplitude_g: 1 }, drop: { height_mm: 1000, onto: ['#o1.f2'], stop_mm: 2 },
       flow: { kind: 'internal', inlets: [{ opening: 'x_min', velocity_m_s: 0.5 }], outlets: [{ opening: 'x_max', pressure_Pa: 0 }] },
       rigid_planes: [{ point_mm: [0, 0, 0], normal: [0, 0, 1] }] };
-    const result = studyResult({ analysis: { type: 'contact' }, study, faces: ['#o1.f1', '#o1.f2', '#o1.f3', '#o1.f4'], occurrence: 'o1' }).result;
+    const result = studyResult({ analysis: { type: 'cfd_multiphase' }, study, faces: ['#o1.f1', '#o1.f2', '#o1.f3', '#o1.f4'], occurrence: 'o1' }).result;
     expect(ids(studyRows(result) as any[]).slice(0, -2)).toEqual([['Held at', ['Face 1']], ['Pushed', ['2500 N down', '2 MPa pressure', '1 g down']],
       ['Shaken', ['1 g along Z']], ['Dropped', ['1 m drop']], ['Flow in/out', ['In 0.5 m/s at the low X side', 'Out at 0 Pa, the high X side']],
       ['Rigid floor', ['Facing up']]]);

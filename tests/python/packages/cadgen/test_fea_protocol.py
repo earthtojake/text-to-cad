@@ -34,6 +34,19 @@ except RuntimeError:
 TIER_1 = ("static", "modal", "buckling", "thermal", "thermal_transient", "thermal_stress", "harmonic",
           "random_vibration", "shock", "transient", "fatigue")
 PLANNED = ("cfd_turbulent", "cfd_compressible", "creep", "composite", "bolt", "electromagnetic")
+# Of section 2.1's names, those built since (registered in the same place, no longer planned).
+BUILT_SINCE = ("cfd_turbulent", "cfd_compressible", "creep", "composite", "bolt", "electromagnetic")
+
+
+
+def planned_entry(name: str):
+    """A registry entry registered as planned whose module is not in this cadgen (every name of spec 2.1 is built)."""
+    from unittest import mock
+
+    from cadgen._internal.fea.analyses import Entry
+
+    return mock.patch.dict(REGISTRY, {name: Entry(name, 3, f"cadgen._internal.fea.analyses.{name}", "Unbuilt", "Not built", True)})
+
 
 # netgen's edge order of a 10-node tet, and of a 6-node triangle's mid-edge nodes.
 _TET_EDGES = ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))
@@ -86,7 +99,7 @@ class Registry(unittest.TestCase):
         self.assertEqual(ANALYSIS_NAMES[-len(PLANNED):], PLANNED)
         self.assertEqual([REGISTRY[name].tier for name in ("static", "drop", "cfd")], [1, 2, 3])
         self.assertEqual(REGISTRY["modal"].word, "Vibration")
-        self.assertTrue(all(REGISTRY[name].planned for name in PLANNED))
+        self.assertTrue(all(REGISTRY[name].planned != (name in BUILT_SINCE) for name in PLANNED))
 
     def test_an_unknown_name_lists_every_name(self):
         with self.assertRaises(ValueError) as caught:
@@ -95,8 +108,9 @@ class Registry(unittest.TestCase):
         self.assertIn("modal", str(caught.exception))
 
     def test_an_unbuilt_name_says_it_is_planned_never_an_import_error(self):
-        for name in ("creep", "bolt"):
-            with self.subTest(name=name), self.assertRaises(ValueError) as caught:
+        # Every name of spec 2.1 is built now: a planned entry whose module is not in this cadgen stands in.
+        for name in ("cfd_multiphase",):
+            with self.subTest(name=name), self.assertRaises(ValueError) as caught, planned_entry(name):
                 get_analysis(name)
             self.assertIn(f"'{name}' is planned but not in this cadgen yet; available: static", str(caught.exception))
 
@@ -255,9 +269,9 @@ class StudyDispatch(unittest.TestCase):
     def test_an_unknown_or_planned_analysis_is_a_plain_error(self):
         from cadgen._internal.fea.study import parse_study
 
-        for name, fragment in (("vibration", "is not an analysis cadgen knows"), ("creep", "planned but not in this cadgen yet"),
+        for name, fragment in (("vibration", "is not an analysis cadgen knows"), ("cfd_multiphase", "planned but not in this cadgen yet"),
                                (3, "expected the analysis's name")):
-            with self.subTest(name=name), self.assertRaises(ValueError) as caught:
+            with self.subTest(name=name), self.assertRaises(ValueError) as caught, planned_entry("cfd_multiphase"):
                 parse_study({**BASE, "analysis": name})
             self.assertIn(fragment, str(caught.exception))
 
@@ -323,7 +337,9 @@ class CheckKinds(unittest.TestCase):
         from cadgen._internal.fea.analyses.kinds import CHECK_SPECS
 
         self.assertEqual(list(CHECK_SPECS), ["stress", "displacement", "frequency", "buckling", "temperature", "acceleration",
-                                             "fatigue", "pressure_drop", "velocity", "plastic_strain", "contact_pressure"])
+                                             "fatigue", "pressure_drop", "velocity", "plastic_strain", "contact_pressure",
+                                             "creep_strain", "ply_failure", "electric_field", "bolt_load", "joint_separation",
+                                             "joint_slip", "mach"])
         parse = {kind: spec.parse for kind, spec in CHECK_SPECS.items()}
         self.assertEqual(parse["frequency"]({"kind": "frequency", "min_Hz": 60, "mode": 2}, "c"), {"kind": "frequency", "min_Hz": 60.0, "mode": 2})
         self.assertEqual(parse["frequency"]({"kind": "frequency", "avoid_Hz": [110, 130]}, "c")["avoid_Hz"], [110.0, 130.0])

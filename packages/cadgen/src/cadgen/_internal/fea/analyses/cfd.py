@@ -104,7 +104,8 @@ class CfdInputs(Inputs):
 def reynolds_sentence(value: float, limit: int) -> str:
     """The warning past the laminar range, the same words everywhere."""
     return (f"Re {value:.0f} is past the laminar range (laminar above Re {limit} is unreliable): real flow is likely "
-            "turbulent, so this pressure drop is a lower bound and the flow pattern may be wrong")
+            "turbulent, so this pressure drop is a lower bound and the flow pattern may be wrong; "
+            "run the same study as cfd_turbulent for the turbulent answer")
 
 
 # -- parse --------------------------------------------------------------------------------------------
