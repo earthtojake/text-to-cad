@@ -245,9 +245,20 @@ class AssemblyChecksTest(unittest.TestCase):
         self.assertTrue(f["summary"].startswith("In 'post': the peak sits on the edge of the bonded joint with 'base'"))
         self.assertEqual(findings(solved(part="post", assembly=True, joint_with="base")), [])
 
-    def test_a_peak_that_a_finer_mesh_confirmed_is_not_blamed_on_the_joint(self):
+    def test_a_peak_on_the_joint_is_still_blamed_on_the_joint_after_a_finer_mesh_agreed(self):
+        # A rigid bond's edge is singular, so two meshes agreeing proves nothing there.
         got = findings(solved(part="post", assembly=True, peak_MPa=150.0, peak_gauss_MPa=160.0, joint_with="base", coarser_peak_MPa=148.0))
-        self.assertEqual([f["type"] for f in got], ["low_margin"])
+        self.assertEqual([f["type"] for f in got], ["low_margin", "bonded_edge_peak"])
+
+    def test_a_part_that_yields_at_a_converged_joint_peak_is_told_so(self):
+        # The rover's bulkhead block: 421 then 405 MPa on 2.3x the DOF, peak on the joint.
+        yielding = solved(
+            part="block", assembly=True, peak_MPa=405.0, peak_gauss_MPa=410.0, joint_with="base",
+            coarser_peak_MPa=421.0, dofs=703_350, coarser_dofs=303_735,
+        )
+        (error, warning) = findings(yielding)
+        self.assertEqual((error["type"], warning["type"]), ("yields", "bonded_edge_peak"))
+        self.assertTrue(warning["summary"].startswith("In 'block': the peak sits on the edge of the bonded joint with 'base'"))
 
     def test_one_part_without_a_load_is_nothing_to_report(self):
         loaded = solved(part="post", assembly=True)

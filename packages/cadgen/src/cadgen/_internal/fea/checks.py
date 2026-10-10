@@ -248,13 +248,8 @@ def findings(solved: Solved) -> list[dict]:
         add("warning", *peak_finding)
 
     # A bonded joint is perfectly rigid where it meets the free surface, which a real joint is not.
-    if (
-        solved.joint_with is not None
-        and factor is not None
-        and factor < solved.margin
-        and not resolved
-        and peak_finding is None
-    ):
+    # That edge is singular, so a finer mesh agreeing (resolved) does not clear it.
+    if solved.joint_with is not None and factor is not None and factor < solved.margin and peak_finding is None:
         add(
             "warning",
             "bonded_edge_peak",
