@@ -302,7 +302,7 @@ RULES: tuple[Rule, ...] = (
         ".github/dependabot.yml", ".github/release.yml", ".githooks/**",
         ".claude-plugin/**", ".codex-plugin/**", ".cursor-plugin/**", "gemini-extension.json",
         "*.mcp.json", "plugin.json", "mcp.json", "skills.sh.json",
-        "README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "docs/**",
+        "README.md","README-*.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE", "docs/**",
         ".gitignore",
         "models/**",
     ), NOTHING),
