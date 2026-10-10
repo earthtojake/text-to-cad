@@ -145,7 +145,7 @@ of the study and copies it into the GLB (`extras.view`) and the sidecar
     {"drives": "field", "type": "enum", "label": "Show", "options": ["von_mises", "displacement"], "default": "von_mises"},
     {"drives": "deformation", "type": "number", "label": "Exaggerate", "min": 0, "max": 50, "default": 12},
     {"drives": "load_scale", "type": "number", "label": "Rider weight", "min": 0.5, "max": 3, "default": 1, "unit": "×"},
-    {"drives": "threshold", "type": "number", "label": "Over half yield", "field": "von_mises", "min": 0, "max": 300, "default": 138, "unit": "MPa"}
+    {"drives": "threshold", "type": "number", "label": "Over half yield", "field": "von_mises", "min": 0, "max": 300, "default": 0, "unit": "MPa"}
   ],
   "presets": [{"label": "Landing (3×)", "load_scale": 3}],
   "show": {"loads": true, "fixtures": true}
@@ -174,7 +174,10 @@ those of the solved load whatever `load_scale` is set to.
   option for `field`). A preset is a full state: controls it does not name go
   back to their defaults.
 - Use `threshold` to show only the regions over a limit: half yield, an
-  allowable stress, a deflection limit on `displacement`.
+  allowable stress, a deflection limit on `displacement`. A threshold usually
+  defaults to its minimum, so it is off until dragged; give it a non-zero
+  `default` only when the user asked to see where the stress is over a limit
+  (a high default greys most of the model when the result opens).
 - `show`: `loads` and `fixtures`, `true` or `false` (default both true): whether
   the arrows on the loaded faces and the cones on the fixed faces are drawn
   when the result opens. The person can still turn them on in Display.

@@ -109,9 +109,12 @@ stress. Restate every load in those units before you write it down.
      second solve (the study is linear).
    - Named load cases ("landing", "half load"): `presets`, each setting the
      controls to that case.
-   - "Where is it over the limit?": a `threshold` on `von_mises` at the
-     limit (half yield, an allowable), so only the regions over it carry
-     colour.
+   - "Where is it over the limit?": a `threshold` on `von_mises` ranging up
+     to the limit (half yield, an allowable), so dragging it leaves only the
+     regions over it in colour. A threshold defaults to its minimum (off);
+     set a non-zero `default` only when the user asked to see where the
+     stress is over a limit, since a high one greys most of the model on
+     opening.
    - A study about deflection: a `field` control opening on `displacement`.
 
 3. **Solve.**
