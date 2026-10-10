@@ -406,7 +406,8 @@ src/cadgen/
   kicad/                 # boards: the s-expression reader/writer, KiCad's
                          #   libraries, the board model (design), the KiCad
                          #   10 project writers, every kicad-cli run (check,
-                         #   plot, solid, fab), simulation (spice, ngspice,
+                         #   plot, solid, fab), a @pcb model's build
+                         #   (build), simulation (spice, ngspice,
                          #   sim), autorouting (specctra, route: the
                          #   Freerouting program, GPL-3.0, never shipped) and
                          #   board and schematic references read back (refs,
@@ -414,8 +415,8 @@ src/cadgen/
                          #   pcb.read_schematic, KiCad's netlist naming nets)
   wireviz/               # harnesses: the harness model and its checks
                          #   (design), colour codes, the WireViz YAML
-                         #   writer (document), and every wireviz run
-                         #   (plot, bom)
+                         #   writer (document), a @harness model's build
+                         #   (build), and every wireviz run (plot, bom)
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
   step_scene.py          # read_step and read_scene
