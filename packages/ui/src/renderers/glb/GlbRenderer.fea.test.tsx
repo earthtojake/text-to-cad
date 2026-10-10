@@ -86,11 +86,11 @@ const openDisplay = () => act(() => { fireEvent.click(screen.getByRole('button',
 const studyPanel = () => screen.queryByRole('region', { name: 'Study' });
 const rowTexts = (panel: HTMLElement) => Array.from(panel.querySelectorAll('[data-study-row]')).map(row => row.textContent);
 
-it('puts the field and deformation in Study, under Select, and a colour bar with one plain line on the view', () => {
+it('puts the field and deformation in Study, under Select, and on the view a colour bar that is only the scale', () => {
   const { container } = mount(RESULT);
   const bar = container.querySelector('[role="group"][aria-label="von Mises stress colour bar"]')!;
-  expect(bar.querySelector('[data-fea-summary]')!.textContent).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
-  expect(bar.textContent).toContain('47.3 MPa');
+  // The field in Show's words and its range; what it means for the part is the verdict's.
+  expect(bar.textContent).toBe('Stress047.3 MPa');
   // The bar is a reading: nothing on it to press or drag.
   expect(bar.querySelectorAll('button, input, [role="slider"], [role="combobox"]').length).toBe(0);
   expect(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
@@ -104,7 +104,7 @@ it('puts the field and deformation in Study, under Select, and a colour bar with
   expect(screen.getAllByRole('combobox', { name: 'Result field' })).toHaveLength(1);
 });
 
-it('the field switch recolours the mesh and changes the bar\'s line', () => {
+it('the field switch recolours the mesh and changes the bar\'s field and range', () => {
   const { mesh, container } = mount(RESULT);
   const stress = colourBytes(mesh);
   expect(stress.slice(0, 4)).toEqual([13, 26, 230, 255]);
@@ -112,7 +112,8 @@ it('the field switch recolours the mesh and changes the bar\'s line', () => {
   act(() => { fireEvent.click(screen.getByRole('option', { name: 'Displacement' })); });
   expect(colourBytes(mesh)).not.toEqual(stress);
   const bar = container.querySelector('[role="group"][aria-label="displacement colour bar"]')!;
-  expect(bar.querySelector('[data-fea-summary]')!.textContent).toBe('Moves up to 0.029 mm');
+  expect(bar.querySelector('[data-fea-field]')!.textContent).toBe('Displacement');
+  expect(bar.querySelector('[data-fea-max]')!.textContent).toBe('0.0288 mm');
 });
 
 it('the deformation value rescales the drawn displacement from the file\'s positions, and the choice is saved with the file', () => {
@@ -136,17 +137,6 @@ it('takes the stored choice back for the same result, and not for a re-solved on
   cleanup();
   const resolved = mount({ ...RESULT, deformation_scale: 20 }, stored);
   expect(resolved.container.querySelector('[role="group"][aria-label="von Mises stress colour bar"]')).toBeTruthy();
-});
-
-it('the colour bar shows its whole line: it is never truncated, and the card grows to fit it', () => {
-  const { container } = mount({ ...RESULT });
-  const summary = container.querySelector('[data-fea-summary]') as HTMLElement;
-  expect(summary.textContent).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
-  expect(summary.className).not.toMatch(/truncate|ellipsis|overflow-hidden|whitespace-nowrap/);
-  const card = container.querySelector('[aria-label$="colour bar"]') as HTMLElement;
-  expect(card.className).toContain('w-max');
-  expect(card.className).toContain('max-w-full');
-  expect(card.className).not.toMatch(/(^|\s)w-72(\s|$)/);
 });
 
 it('a GLB that is not a result has no colour bar, no Select tool, no Study and its colours untouched', () => {
@@ -379,7 +369,6 @@ it('an assembly has a Parts panel above Study, each part with its joints, the we
   // Study no longer lists parts or joints; what the parts are made of, which differ, is how many.
   expect(study.querySelector('[data-study-row="material:name"]')!.textContent!.replace(/\u00a0/g, ' ')).toBe('2 materials');
   expect(study.querySelector('[data-study-row^="part:"], [data-study-row^="joint:"], [data-study-row="parts"], [data-study-row="connections"]')).toBeNull();
-  expect(document.querySelector('[data-fea-summary]')!.textContent).toBe('Weakest: post · peak stress 180 MPa · holds 1.4× this load · the assembly moves up to 0.029 mm');
 });
 
 it('Select carries the mark while Parts or Study is closed, and a press brings back the closed ones', () => {
@@ -482,7 +471,6 @@ const choose = (combobox: string, option: string) => {
   act(() => { fireEvent.click(screen.getByRole('combobox', { name: combobox })); });
   act(() => { fireEvent.click(screen.getByRole('option', { name: option })); });
 };
-const summary = (container: HTMLElement) => container.querySelector('[data-fea-summary]')!.textContent;
 
 it('Result shows the view\'s controls in its order, with its words and ranges, skipping what it does not know; no view shows today\'s two', () => {
   mount(VIEWED);
@@ -523,7 +511,7 @@ it('each slider\'s thumb stands at its control\'s value, and the slider takes th
   expect(sliderBox.querySelector('[data-slot="slider"]')).toBeTruthy();
 });
 
-it('at twice the load, the bar, its line and the deformation are twice the solved ones, what each part holds is half, and a part flips to yields', () => {
+it('at twice the load, the bar and the deformation are twice the solved ones, what each part holds is half, and a part flips to yields', () => {
   const parts = [{ ref: '#o1.1', name: 'post', material: 'steel', safety_factor: 5.83 }, { ref: '#o1.2', name: 'base', material: 'steel', safety_factor: 1.5 }];
   const { container, mesh } = mount({ ...VIEWED, view: { controls: [VIEWED.view.controls[0], VIEWED.view.controls[5]], show: { parts: true } }, parts });
   const colours = colourBytes(mesh);
@@ -531,7 +519,6 @@ it('at twice the load, the bar, its line and the deformation are twice the solve
   const partDetails = () => Array.from(screen.getByRole('region', { name: 'Parts' }).querySelectorAll('[data-study-detail]')).map(detail => detail.textContent!.replace(/\u00a0/g, ' '));
   expect(partDetails()).toEqual(['steel · holds 5.8×', 'steel · holds 1.5×']);
   setValue('Rider weight slider value', '2');
-  expect(summary(container)).toBe('Peak stress 95 MPa · holds 2.9× this load · moves up to 0.058 mm · at 2× the load');
   expect(container.querySelector('[data-fea-max]')!.textContent).toBe('94.6 MPa');
   expect(partDetails()).toEqual(['steel · holds 2.9×', 'steel · yields']);
   // The colours keep their place on a bar that now reads twice as high; the displacement is drawn twice as far.
@@ -556,7 +543,7 @@ it('a preset sets the values it names, and moving any control is Custom', () => 
   const { container } = mount(VIEWED);
   choose('Preset', 'Landing (3×)');
   expect(screen.getByRole('textbox', { name: 'Rider weight slider value' }).getAttribute('value')).toBe('×3.00');
-  expect(summary(container)).toContain('at 3× the load');
+  expect(container.querySelector('[data-fea-max]')!.textContent).toBe('142 MPa');
   expect(screen.getByRole('combobox', { name: 'Preset' }).textContent).toBe('Landing (3×)');
   setValue('Exaggerate slider value', '20');
   expect(screen.getByRole('combobox', { name: 'Preset' }).textContent).toBe('Custom');
@@ -604,11 +591,13 @@ it('a view that turns the markers off opens with the switch off', () => {
   expect(group.children.map(child => child.visible)).toEqual([true, true, true, true, true, true]);
 });
 
-// The answer at a glance, at the top of Study.
+// The answer at a glance, at the top of Study: its headline, the load the weakest check takes, then each check.
 const verdictOf = () => {
   const section = screen.getByRole('region', { name: 'Verdict' });
-  const text = (key: string) => section.querySelector(`[data-fea-verdict-${key}]`)?.textContent?.replace(/ /g, ' ') ?? null;
-  return { status: section.getAttribute('data-fea-verdict'), title: text('title'), part: text('part'), line: text('line'), caption: text('caption'), section };
+  const text = (key: string) => section.querySelector(`[data-fea-verdict-${key}]`)?.textContent ?? null;
+  const rows = Array.from(section.querySelectorAll('[data-fea-check]')).map(row => [row.getAttribute('data-fea-check'),
+    row.querySelector('[data-fea-check-label]')!.textContent, row.querySelector('[data-fea-check-line]')!.textContent!.replace(/\u00a0/g, ' ')]);
+  return { status: section.getAttribute('data-fea-verdict'), title: text('title'), caption: text('caption'), rows, section };
 };
 
 it('leads Study with the verdict: too weak, close to the limit or strong enough, each in its status tone', () => {
@@ -617,45 +606,45 @@ it('leads Study with the verdict: too weak, close to the limit or strong enough,
     const verdict = verdictOf();
     expect([verdict.status, verdict.title]).toEqual([status, title]);
     expect(verdict.section.querySelector('[data-fea-verdict-title]')!.parentElement!.className).toContain(tone);
-    expect(verdict.line).toBe('Peak 47 MPa, limit 276 MPa');
+    expect(verdict.rows).toEqual([[status, 'Strength', '47 MPa, limit 276 MPa']]);
     // It comes before the setup.
     expect(verdict.section.compareDocumentPosition(studyPanel()!.querySelector('[data-study-row="fixed"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     cleanup();
   }
 });
 
-it('draws how hard the part is working: filled to the peak over the limit, held at full and striped past it, with a tick at the margin', () => {
+it('draws how hard each check works: filled to the value over the limit, held at full and striped past it, with a tick at the margin', () => {
   mount({ ...STUDIED, safety_factor: 1.6 }, undefined, { faces: FACES });
-  const bar = () => screen.getByRole('meter', { name: 'How hard the part is working' });
+  const bar = () => screen.getByRole('meter', { name: 'Strength: how much of its limit' });
   const fill = () => (bar().querySelector('[data-fea-verdict-fill]') as HTMLElement).style.width;
   expect(fill()).toBe('62.5%');
   expect(bar().getAttribute('aria-valuenow')).toBe('63');
   expect(bar().hasAttribute('data-over')).toBe(false);
-  // The margin of 2: the tick at half the limit, and its words.
+  // The margin of 2: the tick at half the limit, said to assistive technology.
   expect((bar().querySelector('[data-fea-verdict-tick]') as HTMLElement).style.left).toBe('50%');
-  expect(verdictOf().section.textContent).toContain('your 2× margin');
+  expect(bar().getAttribute('aria-valuetext')).toBe('63% of its limit, your 2× margin at 50%');
   cleanup();
   mount({ ...STUDIED, safety_factor: 0.5 }, undefined, { faces: FACES });
   expect(fill()).toBe('100%');
   expect(bar().getAttribute('aria-valuenow')).toBe('200');
   expect(bar().hasAttribute('data-over')).toBe(true);
-  expect(verdictOf().caption).toBe('Holds only 0.5× this load');
+  expect(verdictOf().caption).toBe('OK only to 0.5× this load');
 });
 
 it('the verdict follows the load control, and can change its word', () => {
   const controls = [VIEWED.view.controls[0]];
   mount({ ...STUDIED, safety_factor: 1.5, view: { controls } }, undefined, { faces: FACES });
-  expect([verdictOf().status, verdictOf().caption]).toEqual(['close', 'Would hold 1.5× this load']);
+  expect([verdictOf().status, verdictOf().caption]).toEqual(['close', 'OK up to 1.5× this load']);
   setValue('Rider weight slider value', '2');
-  expect([verdictOf().status, verdictOf().caption, verdictOf().line]).toEqual(['weak', 'Holds only 0.7× this load', 'Peak 95 MPa, limit 276 MPa']);
+  expect([verdictOf().status, verdictOf().caption, verdictOf().rows]).toEqual(['weak', 'OK only to 0.7× this load', [['weak', 'Strength', '95 MPa, limit 276 MPa']]]);
   setValue('Rider weight slider value', '0.5');
-  expect([verdictOf().status, verdictOf().caption]).toEqual(['strong', 'Would hold 3.0× this load']);
+  expect([verdictOf().status, verdictOf().caption]).toEqual(['strong', 'OK up to 3.0× this load']);
 });
 
-it('with no stress, says to check the load reaches the part, in no tone and with no bar; an assembly names its weakest part', () => {
+it('with no stress, says to check the load reaches the part, in no tone and with no bar; an assembly\'s numbers are its weakest part\'s', () => {
   const unloaded = { ...STUDIED, safety_factor: null, fields: [{ ...RESULT.fields[0], max: 0 }, RESULT.fields[1]] };
   mount(unloaded, undefined, { faces: FACES });
-  expect(verdictOf()).toMatchObject({ status: 'none', title: 'No stress', line: 'Check the load reaches the part', caption: null });
+  expect(verdictOf()).toMatchObject({ status: 'none', title: 'No stress', caption: 'Check the load reaches the part', rows: [] });
   expect(screen.queryByRole('meter')).toBeNull();
   cleanup();
   // A result with a stress but no safety factor (older than it) has no verdict, and still opens.
@@ -664,7 +653,7 @@ it('with no stress, says to check the load reaches the part, in no tone and with
   expect(studyPanel()).toBeTruthy();
   cleanup();
   mountAssembly([]);
-  expect(verdictOf()).toMatchObject({ status: 'close', part: 'Weakest: post', line: 'Peak 180 MPa, limit 276 MPa' });
+  expect(verdictOf()).toMatchObject({ status: 'close', rows: [['close', 'Strength', '180 MPa, limit 276 MPa']] });
 });
 
 it('a slider\'s thumb stands where its value is on its range, not at the left end', () => {
@@ -685,27 +674,41 @@ it('a slider\'s thumb stands where its value is on its range, not at the left en
 const STRESS_CHECK = { kind: 'stress', label: 'Strength', value: 47.3, limit: 276, unit: 'MPa', ratio: 0.171527, close_at: 0.5, margin: 2, status: 'passes', where: { ref: '#o1.f1', at: [0, 0, 0] } };
 const SAG_CHECK = { kind: 'displacement', label: 'Tip sag', value: 0.62, limit: 0.5, unit: 'mm', ratio: 1.24, close_at: 0.9, status: 'fails', where: { ref: '#o1.f2', at: [1, 0, 0] }, faces: ['#o1.f2'] };
 const LOAD_WHEN_FAILING = { drives: 'load_scale', type: 'number', label: 'Load', min: 0.1, max: 2, default: 1, unit: '×', when: 'failing' };
-const checkRows = () => Array.from(verdictOf().section.querySelectorAll('[data-fea-check]')).map(row => [row.getAttribute('data-fea-check'),
-  row.querySelector('[data-fea-check-label]')!.textContent, row.querySelector('[data-fea-check-line]')!.textContent!.replace(/ /g, ' '),
-  row.querySelector('[data-fea-check-caption]')!.textContent]);
 
-it('heads the verdict with the worst check and gives each other check a compact row, all following the load', () => {
+it('heads the verdict with how many checks fail and the load the weakest takes, then each check the same way, all following the load', () => {
   mount({ ...STUDIED, checks: [STRESS_CHECK, SAG_CHECK], view: { controls: [{ ...LOAD_WHEN_FAILING, when: undefined }] } }, undefined, { faces: FACES });
-  expect(verdictOf()).toMatchObject({ status: 'weak', title: 'Moves too much', part: null, line: 'Moves 0.62 mm, limit 0.5 mm', caption: 'OK only to 0.8× this load' });
-  expect(verdictOf().section.querySelector('[data-fea-verdict-label]')!.textContent).toBe('Tip sag');
+  expect(verdictOf()).toMatchObject({ status: 'weak', title: 'Fails 1 of 2 checks', caption: 'OK only to 0.8× this load',
+    rows: [['weak', 'Tip sag', '0.62 mm, limit 0.5 mm'], ['strong', 'Strength', '47 MPa, limit 276 MPa']] });
   // No margin tick on a displacement: its limit is the person's.
-  expect(screen.getByRole('meter', { name: 'How hard the part is working' }).querySelector('[data-fea-verdict-tick]')).toBeNull();
-  expect(checkRows()).toEqual([['strong', 'Strength', 'Peak 47 MPa, limit 276 MPa', 'Would hold 5.8× this load']]);
+  expect(screen.getByRole('meter', { name: 'Tip sag: how much of its limit' }).querySelector('[data-fea-verdict-tick]')).toBeNull();
   expect(screen.getByRole('meter', { name: 'Strength: how much of its limit' }).getAttribute('aria-valuenow')).toBe('17');
   setValue('Load slider value', '0.5');
-  expect(verdictOf()).toMatchObject({ status: 'strong', title: 'Stiff enough', line: 'Moves 0.31 mm, limit 0.5 mm' });
-  expect(checkRows()).toEqual([['strong', 'Strength', 'Peak 24 MPa, limit 276 MPa', 'Would hold 11× this load']]);
+  expect(verdictOf()).toMatchObject({ status: 'strong', title: 'Passes all checks', caption: 'OK up to 1.6× this load',
+    rows: [['strong', 'Tip sag', '0.31 mm, limit 0.5 mm'], ['strong', 'Strength', '24 MPa, limit 276 MPa']] });
 });
 
-it('a result with no checks in the file has today\'s verdict and no check rows', () => {
+it('every part of Study is chattable: a check in the verdict, the material and the mesh each go to Quick Edit with what they say', async () => {
+  const prompt = async (names: string[]) => {
+    cleanup();
+    const copied: string[] = [];
+    const { mesh } = mount({ ...STUDIED, checks: [STRESS_CHECK, SAG_CHECK] }, undefined, { faces: FACES, host: clipboardHost(copied) });
+    const plain = colourBytes(mesh);
+    for (const name of names) act(() => { fireEvent.click(screen.getByRole('button', { name })); });
+    const tinted = colourBytes(mesh).some((byte, index) => byte !== plain[index]);
+    return { tinted, pressed: screen.getByRole('button', { name: names.at(-1) }).getAttribute('aria-pressed'), text: (await copiedPrompt(copied))!.split('\n').at(-1) };
+  };
+  // A check by the faces it is over, which it tints; another by the face it peaks on.
+  expect(await prompt(['Select Tip sag'])).toEqual({ tinted: true, pressed: 'true',
+    text: 'Tip sag fails: moves 0.62 mm, limit 0.5 mm (OK only to 0.8× this load) · /models/part.step#o1.f2' });
+  expect((await prompt(['Select Strength'])).text).toBe('Strength passes: peak 47 MPa, limit 276 MPa (OK up to 5.8× this load) · /models/part.step#o1.f1');
+  // The material and the mesh are about the whole part, so they tint nothing.
+  expect(await prompt(['Select 6061-T6'])).toEqual({ tinted: false, pressed: 'true', text: 'Made of 6061-T6 (yield 276 MPa) · /models/part.step#o1' });
+  expect((await prompt(['Expand Details', 'Select Mesh'])).text).toBe('Mesh of 1.9 mm elements, refined from 2.8 mm · /models/part.step#o1');
+});
+
+it('a result with no checks in the file has today\'s verdict: its one check, from the safety factor', () => {
   mount({ ...STUDIED, safety_factor: 1.5 }, undefined, { faces: FACES });
-  expect(verdictOf()).toMatchObject({ status: 'close', title: 'Close to the limit', line: 'Peak 47 MPa, limit 276 MPa', caption: 'Would hold 1.5× this load' });
-  expect(verdictOf().section.querySelector('[data-fea-check], [data-fea-verdict-label]')).toBeNull();
+  expect(verdictOf()).toMatchObject({ status: 'close', title: 'Close to the limit', caption: 'OK up to 1.5× this load', rows: [['close', 'Strength', '47 MPa, limit 276 MPa']] });
   // The verdict leads, then one list: the setup, What you see, Details.
   const body = verdictOf().section.parentElement!.parentElement!;
   expect(body.querySelectorAll('ul[aria-label="Study"]')).toHaveLength(1);

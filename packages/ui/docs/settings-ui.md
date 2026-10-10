@@ -567,7 +567,7 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     are told apart on the model: a face picked there names its part, and its Reference says the
     part's material and what it holds; the findings name the joints. The study's `view.show.parts`
     shows or hides it whatever the count. One row per part, its name, then its material and "holds 1.5×", or "yields"
-    under 1, as the colour bar words it. Under each part, the joints it is in, each naming only the
+    under 1. Under each part, the joints it is in, each naming only the
     OTHER part ("↔ chassis bulkhead"), then "bonded · 88 mm²", with "· 0.1 mm gap closed" when a gap
     was closed to bond it, or "not connected" and how far apart for a free pair. A joint is so under
     both its parts, and either row is the same choice (both rows show it chosen). The weakest part
@@ -581,32 +581,36 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     viewer does not know), each only where the file has something for it; with none named, all four,
     top to bottom:
     - **The verdict** (`glb/FeaVerdict.jsx`, from `feaVerdict` in `glb/feaResult.js`), a block on
-      the status tone's own background at the top of the panel's body: a status word with its icon,
-      in the theme's status tones (the findings card's and its alert icon's): **Too weak** under a
-      safety factor of 1 (error, a crossed circle), **Close to the limit** under the study's margin
-      (`study.margin`, else cadgen's 2; warning, a triangle) and **Strong enough** from it up
-      (success, a ticked circle). Under it, in an assembly, the weakest part ("Weakest: bulkhead
-      right support block"), whose numbers these are, then the peak against the limit ("Peak
-      405 MPa, limit 276 MPa", the limit the part's yield, each half kept whole so the narrow panel
-      breaks it at its comma). Then a bar of how hard the part is working (a `meter`): filled to the
-      peak over the limit in the status tone, held at full past the limit with its end striped, and
-      a tick at the margin (the limit over the margin) labelled "your 2× margin"; and its caption,
-      "Holds only 0.6× this load" under 1, else "Would hold 1.5× this load" (the factor floored, as
-      the findings say it). It follows the load shown (`load_scale`), so it can change its word.
-      With no stress it says **No stress** and "Check the load reaches the part", in no tone and
-      with no bar; at a load of 0, **No load**. A result with a stress but no safety factor (older
-      than it) has no verdict.
-      The verdict judges the study's **checks** (`extras.checks`, `feaChecks`: each judged by cadgen,
-      value against limit, `ratio`, `status`), a kind the viewer does not know skipped; a result
-      older than them has the one check above, derived from its fields, so it looks as it always did.
-      The worst check heads it (failing before close before passing, then the most of its limit
-      used); a `displacement` check heads as **Moves too much**, **Close to the limit** (within a
-      tenth of its limit) or **Stiff enough**, with its name in the person's words where the part
-      would be ("Tip sag"), "Moves 0.62 mm, limit 0.5 mm" (three figures: 1.04 is not 1), a bar with
-      no margin tick, and "OK only to 0.8× this load" or "OK up to 1.6× this load". Each further
-      check is one compact row under a hairline, in its own tone: its icon and name (its value against
-      its limit their hint), a thin bar and its caption. Every check follows the load shown, its value
-      and share of its limit k times the solved ones.
+      the status tone's own background at the top of the panel's body, in the theme's status tones:
+      error (a crossed circle), warning (a triangle), success (a ticked circle). Three parts, top to
+      bottom:
+      - **A headline**, in the worst check's tone. One check says it in its own words: a stress
+        check **Too weak** under a safety factor of 1, **Close to the limit** under the study's
+        margin (`study.margin`, else cadgen's 2) and **Strong enough** from it up; a displacement
+        check **Moves too much**, **Close to the limit** (within a tenth of its limit) or **Stiff
+        enough**. Several say how many fail ("Fails both checks", "Fails 1 of 2 checks"), else
+        **Close to the limit** or **Passes all checks**.
+      - **What it means for the load**, one line: how many times this load the weakest check takes
+        before its limit, floored ("OK only to 0.4× this load" under 1, "OK up to 1.6× this load").
+      - **Each check, the same way**, worst first (failing before close before passing, then the
+        most of its limit used), under a hairline: its icon and name in its own tone (its name in
+        the person's words, "Bulkhead top sag", or Strength), a thin bar of how much of its limit it
+        uses (a `meter`: filled to the value over the limit, held at full past it with its end
+        striped, and for a stress check a tick at the margin, which the meter's text names), and its
+        value against its limit ("1.04 mm, limit 0.5 mm", three figures for a displacement: 1.04 is
+        not 1; "405 MPa, limit 276 MPa", the limit an assembly's weakest part's yield). Each check is
+        chosen on a press, as Study's rows are: it tints the faces it is over (`faces`), else the face
+        it peaks on (`where.ref`), else names the whole result, and carries its sentence into Quick
+        Edit ("Tip sag fails: moves 0.62 mm, limit 0.5 mm (OK only to 0.8× this load)"; an
+        assembly's stress check names its part there: "Strength fails in bulkhead right support
+        block: ...").
+      Everything follows the load shown (`load_scale` k): each value and share of its limit is k
+      times the solved one, so a check, and the headline, can change its word. With no stress it
+      says **No stress** and "Check the load reaches the part", in no tone and with no checks; at a
+      load of 0, **No load**. The checks are the study's (`extras.checks`, `feaChecks`: each judged
+      by cadgen, value against limit, `ratio`, `status`), a kind the viewer does not know skipped; a
+      result older than them has the one stress check, derived from its safety factor, so it says
+      what it always did. A result with a stress but no safety factor and no checks has no verdict.
     - **The setup**, read as sentences, each heading muted with, in the disclosure column, the glyph
       its marker is drawn as on the model (`glb/feaGlyphs.jsx`, lucide's grid at the trees' light
       stroke): **Held at** (a cone pointing into a face, the fixtures' grey), one row per fixed face,
@@ -617,7 +621,10 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
       and its arrows); and **Made of** (a swatch), the material's name ("Aluminum 6061-T6"; its
       yield is the verdict's to say). In an assembly whose parts differ, "Mostly Aluminum 6061-T6"
       where one material has most of the parts, else "2 materials", each part's own in its hint and
-      in Parts and a picked face's Reference; a part with none of its own takes the study's. A
+      in Parts and a picked face's Reference; a part with none of its own takes the study's. The
+      material row is chosen like a face, tinting nothing: it carries the whole result (every part in
+      an assembly) into Quick Edit with what it is made of ("Made of Aluminum 6061-T6 (yield 276 MPa)",
+      or each material with its parts). A
       heading neither chooses nor folds; its rows hang from a faint line under its glyph. A face or
       material row too long for the one width wraps between words, never cut off.
     - **What you see**: the controls the study's
@@ -631,8 +638,7 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     The load control's own `when` is judged at its default load, where it opens, so dragging it never
     hides it: a load slider shown while the part fails stays while the person drags it to a load that
     passes. What each moves is the viewer's, from a closed set (`drives`): **field** (a select
-    of the fields the file carries, in plain words: Stress, Displacement; the file's own name, von
-    Mises stress, is the colour bar's), **deformation** (how many times the displacement is drawn,
+    of the fields the file carries, in plain words, as the colour bar names it too: Stress, Displacement), **deformation** (how many times the displacement is drawn,
     "×12.0"), **load_scale** (the load as a multiple of the solved one, "×1.50") and **threshold**
     (values of its field under it drawn neutral grey, "138 MPa"). A control whose `drives` or type
     the viewer does not know is skipped. With no `view`, or none of its controls the viewer can draw (an empty list, or all from a newer cadgen), What you see is as it always was, and a preset may set those two: a Field select
@@ -642,7 +648,8 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     labelled "Preset": Default, each preset (a full state: every control at its default but what
     the preset sets), and Custom once any control moves.
     - **Details**, shut until its chevron opens it: the mesh, its size ("Mesh 1.9 mm elements"), how
-      it got there ("refined from 2.8 mm", "not refined") its hint.
+      it got there ("refined from 2.8 mm", "not refined") its hint. The mesh row is chosen as the
+      material is, carrying "Mesh of 1.9 mm elements, refined from 2.8 mm" with the whole result.
 
     Each group shows only where the file records something for it (`STUDY_GROUPS` and
     `DETAIL_GROUPS` in `glb/feaResult.js`: a result kind with more to say adds a group there,
@@ -672,21 +679,17 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   both parts' refs ("'post' and 'lid' aren't connected"). A part or a joint has no Reference panel, and
   in an assembly a picked face's Reference is headed with its part ("post · face 1").
 - **A colour bar** floats at bottom-centre on the playbar's line
-  (`FLOATING_CHROME_SURFACE_CLASS`, no pointer events): one plain line over the field's range
-  and units along the ramp, one playbar's height higher while the playbar is under the model (in preview). Stress: "Peak stress 47 MPa · holds 5.8× this load · moves up to
-  0.029 mm", with "holds" left out when the result has no safety factor and "yields under this
-  load" in its place when the safety factor is under 1; displacement: "Moves up
-  to 0.029 mm". The card is at least 18rem wide and grows to fit the line, up to the viewport less its margins, wrapping
-  to a second line only past that: the line is never truncated. It has no controls. The safety factor is the result's own, the conservative one. An assembly's stress line
-  leads with its weakest part, whose peak and factor these are, and says the displacement is the
-  assembly's: "Weakest: post · peak stress 180 MPa · holds 1.4× this load · the assembly moves up to 0.2 mm".
+  (`FLOATING_CHROME_SURFACE_CLASS`, no pointer events), one playbar's height higher while the
+  playbar is under the model (in preview). It is only the scale, on one row 20rem wide (less on a
+  narrow viewport): the field in Show's words ("Stress", "Displacement"), then its range and units
+  along the ramp ("0", "47.3 MPa"). What the numbers mean for the part is the verdict's, so the bar
+  says none of it. It has no controls.
 - **Findings stay in the file for the agent.** The result's checks (`findings` in the GLB's extras,
   the sidecar and the CLI's lines) are what the agent reads and acts on; the viewer raises no alert
   card and puts no icon in the navbar for them (a board's findings keep theirs). The verdict at the top of Study is
   the viewer's status. Only a failure to load has the alert card.
 - **A load other than the solved one** (`load_scale` k; the study is linear, so it scales exactly):
-  the colour bar's range and its line are k times the solved ones ("at 1.5× the load" ends the
-  line when k ≠ 1), the safety factor and every part's "holds" (in Parts and a picked face's Reference) are divided by k, so a part
+  the colour bar's range is k times the solved one, the safety factor and every part's "holds" (in Parts and a picked face's Reference) are divided by k, so a part
   can turn to "yields" (at no load there is no factor, and "holds" is left out), and the displacement is drawn k times further. The colours keep their place
   on the bar, which reads k times higher. A threshold compares its field at the load shown.
 - **Load ramp.** Every result has one routine of the viewer's own, "Load ramp" (`useGlbAnimation`'s

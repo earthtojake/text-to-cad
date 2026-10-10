@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh, Ray, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import {
-  applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaControls, feaMarkerShow, feaPresets, feaRamp, feaSummaryLine, fieldValues, forceDirection,
+  applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaControls, feaMarkerShow, feaPresets, feaRamp, fieldValues, forceDirection,
   feaVerdict, formatValue, pickFace, readFeaResult, partRows, recolorByField, resultSourcePath, studyRows, weakestPartIndex,
   feaChecks, feaFailing, feaSections, feaShownControls, feaDefaults
 } from './feaResult.js';
@@ -107,42 +107,6 @@ describe('legend helpers', () => {
 
   it('formats ticks with the figures that tell them apart', () => {
     expect(['0', '47', '4.7', '0.470', '0.0288'].map((v) => formatValue(Number(v)))).toEqual(['0', '47.0', '4.70', '0.470', '0.0288']);
-  });
-});
-
-describe('the plain line', () => {
-  it('says the peak, what it holds and how far it moves for the stress field', () => {
-    const result = readFeaResult(resultMesh().root)!;
-    expect(feaSummaryLine(result, result.fields[0])).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
-  });
-
-  it('says only how far it moves for the displacement field', () => {
-    const result = readFeaResult(resultMesh().root)!;
-    expect(feaSummaryLine(result, result.fields[1])).toBe('Moves up to 0.029 mm');
-  });
-
-  it('says it yields under a safety factor below 1, and holds 1.0× at exactly 1', () => {
-    const under = readFeaResult(resultMesh({ safetyFactor: 0.4 }).root)!;
-    expect(feaSummaryLine(under, under.fields[0])).toBe('Peak stress 47 MPa · yields under this load · moves up to 0.029 mm');
-    const exactly = readFeaResult(resultMesh({ safetyFactor: 1 }).root)!;
-    expect(feaSummaryLine(exactly, exactly.fields[0])).toBe('Peak stress 47 MPa · holds 1.0× this load · moves up to 0.029 mm');
-  });
-
-  it('floors the factor as the findings do, so the bar and the finding agree', () => {
-    const line = (safetyFactor: number) => {
-      const result = readFeaResult(resultMesh({ safetyFactor }).root)!;
-      return feaSummaryLine(result, result.fields[0]);
-    };
-    expect(line(1.96)).toContain('holds 1.9× this load');
-    expect(line(12.9)).toContain('holds 12× this load');
-    expect(line(0.9996)).toContain('yields under this load');
-  });
-
-  it('leaves out "holds" when there is no safety factor, and says nothing for a field it does not know', () => {
-    const result = readFeaResult(resultMesh({ safetyFactor: null }).root)!;
-    expect(result.safetyFactor).toBeNull();
-    expect(feaSummaryLine(result, result.fields[0])).toBe('Peak stress 47 MPa · moves up to 0.029 mm');
-    expect(feaSummaryLine(result, { ...result.fields[0], attribute: '_other' })).toBe('');
   });
 });
 
@@ -358,13 +322,7 @@ describe('an assembly result', () => {
     expect(colours(mesh)).toEqual(plain);
   });
 
-  it('names the weakest part on the colour bar, and the assembly as what moves', () => {
-    const { result } = assemblyResult();
-    expect(feaSummaryLine(result, result.fields[0])).toBe('Weakest: post · peak stress 180 MPa · holds 1.4× this load · the assembly moves up to 0.029 mm');
-    expect(feaSummaryLine(result, result.fields[1])).toBe('Moves up to 0.029 mm');
-  });
-
-  it('spaces a part\'s underscores so names wrap at words, in rows, titles and the colour bar line only', () => {
+  it('spaces a part\'s underscores so names wrap at words, in rows and titles', () => {
     const named = [{ ...ASSEMBLY.parts[0], name: 'bulkhead_right_support_block' }, ASSEMBLY.parts[1]];
     const { result } = studyResult({ ...ASSEMBLY, parts: named, weakest_part: 'bulkhead_right_support_block',
       connections: [{ ...ASSEMBLY.connections[0], names: ['bulkhead_right_support_block', 'base'] }] });
@@ -373,7 +331,6 @@ describe('an assembly result', () => {
     expect(base.children[0]).toMatchObject({ label: '↔ bulkhead right support block', name: 'bulkhead right support block ↔ base',
       summary: "Bonded joint between 'bulkhead_right_support_block' and 'base'" });
     expect(faceTitle(result, '#o1.1.f1')).toBe('bulkhead right support block · face 1');
-    expect(feaSummaryLine(result, result.fields[0])).toMatch(/^Weakest: bulkhead right support block · /);
   });
 
   it('names the part on an assembly\'s fixed and load rows, and leaves a single part\'s as Face N', () => {
@@ -411,12 +368,11 @@ describe('an assembly result', () => {
     expect(post.children[1].softParts).toEqual([0]);
   });
 
-  it('leaves a single part exactly as it was: no groups, the plain line', () => {
+  it('leaves a single part exactly as it was: no groups', () => {
     const { result } = studyResult();
     expect(result.parts).toEqual([]);
     expect(partRows(result)).toEqual([]);
     expect(studyRows(result).map((row) => row.id)).toEqual(['fixed', 'loads', 'material', 'details']);
-    expect(feaSummaryLine(result, result.fields[0])).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
   });
 });
 
@@ -453,6 +409,9 @@ describe('the study\'s view', () => {
     expect(controls.map((control: any) => control.id)).toEqual(['field', 'deformation']);
     expect(controls[0]).toMatchObject({ defaultValue: '_von_mises', hideLabel: true, ariaLabel: 'Result field' });
     expect(controls[1]).toMatchObject({ min: 0, max: 40, step: 0.5, defaultValue: 10, ariaLabel: 'Deformation scale' });
+    // A view's deformation with no range is that slider, under the view's own label.
+    expect(feaControls(withView({ controls: [{ drives: 'deformation', type: 'number', label: 'Exaggerate' }] }))[0])
+      .toMatchObject({ label: 'Exaggerate', min: 0, max: 40, step: 0.5, defaultValue: 10, unit: '×' });
   });
 
   it('skips what this viewer does not know: a drives or a type, a field the file lacks, a range it cannot use', () => {
@@ -487,16 +446,6 @@ describe('the study\'s view', () => {
 });
 
 describe('a load other than the solved one', () => {
-  it('scales the line: twice the stress and the displacement, half what it holds, at 2× the load', () => {
-    const result = readFeaResult(resultMesh().root)!;
-    expect(feaSummaryLine(result, result.fields[0], 2)).toBe('Peak stress 95 MPa · holds 2.9× this load · moves up to 0.058 mm · at 2× the load');
-    expect(feaSummaryLine(result, result.fields[1], 0.5)).toBe('Moves up to 0.014 mm · at 0.5× the load');
-    expect(feaSummaryLine(result, result.fields[0], 1)).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
-    expect(feaSummaryLine({ ...result, safetyFactor: 1.5 }, result.fields[0], 2)).toContain('yields under this load');
-    // No load has no factor to say: "holds" is left out, never "holds Infinity×".
-    expect(feaSummaryLine(result, result.fields[0], 0)).toBe('Peak stress 0 MPa · moves up to 0 mm · at 0× the load');
-  });
-
   it('halves what each part holds at twice the load, and a part can flip to yields', () => {
     const { mesh, root } = resultMesh();
     mesh.userData.parts = [{ ref: '#o1.1', name: 'post', material: 'steel', safety_factor: 3.1 }, { ref: '#o1.2', name: 'base', material: 'steel', safety_factor: 1.5 }];
@@ -558,39 +507,41 @@ describe('the verdict', () => {
   const single = (safety_factor: number | null, extras: Record<string, unknown> = {}) => studyResult({ study: STUDY, faces: [], safety_factor, ...extras }).result;
 
   it('says too weak under a safety factor of 1, close to the limit under the margin, strong enough from it up', () => {
-    expect(feaVerdict(single(0.68))).toMatchObject({ status: 'weak', title: 'Too weak', caption: 'Holds only 0.6× this load', margin: 2, part: '' });
-    expect(feaVerdict(single(1.5))).toMatchObject({ status: 'close', title: 'Close to the limit', caption: 'Would hold 1.5× this load' });
-    expect(feaVerdict(single(2))).toMatchObject({ status: 'strong', title: 'Strong enough', caption: 'Would hold 2.0× this load' });
-    // The peak against the limit, each half kept whole; how hard the part works is the peak over the limit.
-    const weak = feaVerdict(single(0.68))!;
-    expect(weak.line.replace(/ /g, ' ')).toBe('Peak 47 MPa, limit 276 MPa');
-    expect(weak.use).toBeCloseTo(1 / 0.68, 6);
+    expect(feaVerdict(single(0.68))).toMatchObject({ status: 'weak', title: 'Too weak', caption: 'OK only to 0.6× this load' });
+    expect(feaVerdict(single(1.5))).toMatchObject({ status: 'close', title: 'Close to the limit', caption: 'OK up to 1.5× this load' });
+    expect(feaVerdict(single(2))).toMatchObject({ status: 'strong', title: 'Strong enough', caption: 'OK up to 2.0× this load' });
+    // Its one check: the peak against the limit, each half kept whole; how hard the part works is the peak over the limit.
+    const [row] = feaVerdict(single(0.68))!.rows;
+    expect(row).toMatchObject({ status: 'weak', label: 'Strength', margin: 2, part: '' });
+    expect(plain(row.line)).toBe('47 MPa, limit 276 MPa');
+    expect(row.use).toBeCloseTo(1 / 0.68, 6);
     // The study's own margin sets where "close" ends.
-    expect(feaVerdict(single(2.5, { study: { ...STUDY, margin: 3 } }))).toMatchObject({ status: 'close', margin: 3 });
+    expect(feaVerdict(single(2.5, { study: { ...STUDY, margin: 3 } }))).toMatchObject({ status: 'close', rows: [{ margin: 3 }] });
     // A study that records no margin is held to cadgen's default.
-    expect(feaVerdict(single(1.9, { study: { ...STUDY, margin: undefined } }))).toMatchObject({ status: 'close', margin: 2 });
+    expect(feaVerdict(single(1.9, { study: { ...STUDY, margin: undefined } }))).toMatchObject({ status: 'close', rows: [{ margin: 2 }] });
   });
 
   it('follows the load shown: twice the load halves the factor and can change the word, half of it doubles it', () => {
     const result = single(1.5);
-    expect(feaVerdict(result, 2)).toMatchObject({ status: 'weak', caption: 'Holds only 0.7× this load' });
-    expect(feaVerdict(result, 2)!.line.replace(/ /g, ' ')).toBe('Peak 95 MPa, limit 276 MPa');
-    expect(feaVerdict(result, 0.5)).toMatchObject({ status: 'strong', caption: 'Would hold 3.0× this load' });
+    expect(feaVerdict(result, 2)).toMatchObject({ status: 'weak', caption: 'OK only to 0.7× this load' });
+    expect(plain(feaVerdict(result, 2)!.rows[0].line)).toBe('95 MPa, limit 276 MPa');
+    expect(feaVerdict(result, 0.5)).toMatchObject({ status: 'strong', caption: 'OK up to 3.0× this load' });
   });
 
   it('with no stress says so in a neutral tone, and a result too old to judge has no verdict', () => {
     const none = single(null);
     none.fields[0].max = 0;
-    expect(feaVerdict(none)).toMatchObject({ status: 'none', title: 'No stress', line: 'Check the load reaches the part', caption: '' });
-    expect(feaVerdict(single(1.5), 0)).toMatchObject({ status: 'none', title: 'No load' });
+    expect(feaVerdict(none)).toEqual({ status: 'none', title: 'No stress', caption: 'Check the load reaches the part', rows: [] });
+    expect(feaVerdict(single(1.5), 0)).toMatchObject({ status: 'none', title: 'No load', rows: [] });
     expect(feaVerdict(single(null))).toBeNull();
   });
 
-  it('in an assembly names the weakest part, whose peak and limit these are', () => {
+  it('in an assembly, the stress check\'s numbers are the weakest part\'s, which its choice names', () => {
     const { result } = studyResult(ASSEMBLY);
-    const verdict = feaVerdict(result)!;
-    expect(verdict).toMatchObject({ status: 'close', part: 'post' });
-    expect(verdict.line.replace(/ /g, ' ')).toBe('Peak 180 MPa, limit 276 MPa');
+    const [row] = feaVerdict(result)!.rows;
+    expect(row).toMatchObject({ status: 'close', part: 'post' });
+    expect(plain(row.line)).toBe('180 MPa, limit 276 MPa');
+    expect(row.choice.summary).toMatch(/^Strength is close to its limit in post: peak 180 MPa/);
   });
 
   it('says what an assembly is mostly made of, a part with no material of its own taking the study\'s', () => {
@@ -611,27 +562,26 @@ const checked = (checks: unknown, extras: Record<string, unknown> = {}) => study
 const plain = (text: string) => text.replace(/\u00a0/g, ' ');
 
 describe('the study\'s checks', () => {
-  it('head the verdict with the worst check, one compact row for each other', () => {
+  it('head the verdict with how many fail and the load the weakest takes, then every check, worst first', () => {
     const verdict = feaVerdict(checked([STRESS_CHECK, SAG_CHECK]))!;
-    expect(verdict).toMatchObject({ status: 'weak', title: 'Moves too much', label: 'Tip sag', part: '', margin: null, caption: 'OK only to 0.8× this load' });
-    expect(plain(verdict.line)).toBe('Moves 0.62 mm, limit 0.5 mm');
-    expect(verdict.use).toBeCloseTo(1.24, 6);
-    expect(verdict.rows.map((row: any) => [row.status, row.label, plain(row.line), row.caption])).toEqual([
-      ['strong', 'Strength', 'Peak 47 MPa, limit 276 MPa', 'Would hold 5.8× this load']]);
-    // A failing check heads the card over one that uses more of its limit but passes; then the most used.
+    expect(verdict).toMatchObject({ status: 'weak', title: 'Fails 1 of 2 checks', caption: 'OK only to 0.8× this load' });
+    expect(verdict.rows.map((row: any) => [row.status, row.label, plain(row.line), row.margin])).toEqual([
+      ['weak', 'Tip sag', '0.62 mm, limit 0.5 mm', null], ['strong', 'Strength', '47 MPa, limit 276 MPa', 2]]);
+    expect(verdict.rows[0].use).toBeCloseTo(1.24, 6);
+    expect(feaVerdict(checked([{ ...STRESS_CHECK, status: 'fails', ratio: 1.2 }, SAG_CHECK]))!.title).toBe('Fails both checks');
+    // A failing check comes before one that uses more of its limit but passes; then the most used.
     const big = { ...SAG_CHECK, label: 'Base sag', value: 0.3, ratio: 0.6, status: 'passes' };
-    expect(feaVerdict(checked([big, STRESS_CHECK]))!.label).toBe('Base sag');
-    expect(feaVerdict(checked([STRESS_CHECK, { ...big, status: 'close', close_at: 0.5 }, SAG_CHECK]))!.rows.map((row: any) => row.label)).toEqual(['Strength', 'Base sag']);
+    expect(feaVerdict(checked([big, STRESS_CHECK]))!.rows.map((row: any) => row.label)).toEqual(['Base sag', 'Strength']);
+    expect(feaVerdict(checked([STRESS_CHECK, { ...big, status: 'close', close_at: 0.5 }, SAG_CHECK]))!.rows.map((row: any) => row.label))
+      .toEqual(['Tip sag', 'Base sag', 'Strength']);
   });
 
   it('scale with the load: every value and share of its limit k times the solved, and a check can change its word', () => {
     const result = checked([STRESS_CHECK, SAG_CHECK]);
     const half = feaVerdict(result, 0.5)!;
-    // At half the load the sag uses 0.62 of its limit: it passes, and the stress check leads only if it uses more.
-    expect(half).toMatchObject({ status: 'strong', title: 'Stiff enough', caption: 'OK up to 1.6× this load' });
-    expect(plain(half.line)).toBe('Moves 0.31 mm, limit 0.5 mm');
-    expect(half.rows[0]).toMatchObject({ status: 'strong', caption: 'Would hold 11× this load' });
-    expect(plain(half.rows[0].line)).toBe('Peak 24 MPa, limit 276 MPa');
+    // At half the load the sag uses 0.62 of its limit: both pass, and the sag still takes the least load.
+    expect(half).toMatchObject({ status: 'strong', title: 'Passes all checks', caption: 'OK up to 1.6× this load' });
+    expect(half.rows.map((row: any) => [row.status, plain(row.line)])).toEqual([['strong', '0.31 mm, limit 0.5 mm'], ['strong', '24 MPa, limit 276 MPa']]);
     expect(feaFailing(result, 1)).toBe(true);
     expect(feaFailing(result, 0.5)).toBe(false);
     expect(feaFailing(result, 0.75)).toBe(true); // 0.93 of the limit: close, within the model's own tenth
@@ -643,7 +593,9 @@ describe('the study\'s checks', () => {
       const old = studyResult({ study: STUDY, faces: [], safety_factor: factor }).result;
       const fresh = checked([{ ...STRESS_CHECK, ratio: Number((1 / factor).toFixed(6)), status: factor < 1 ? 'fails' : factor < 2 ? 'close' : 'passes' }], { safety_factor: factor });
       expect(feaChecks(old).map((check: any) => check.kind)).toEqual(['stress']);
-      for (const k of [1, 2, 0.5, 1.5]) expect(feaVerdict(fresh, k)).toEqual(feaVerdict(old, k));
+      // What each says is the same; only the file's check names the face it peaks on, for a prompt.
+      const said = (verdict: any) => JSON.parse(JSON.stringify(verdict, (key, value) => (key === 'choice' ? undefined : value)));
+      for (const k of [1, 2, 0.5, 1.5]) expect(said(feaVerdict(fresh, k))).toEqual(said(feaVerdict(old, k)));
     }
   });
 

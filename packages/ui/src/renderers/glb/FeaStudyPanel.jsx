@@ -21,13 +21,14 @@ const controlText = (value, control) => (control.unit === "×" ? `×${formatValu
  */
 function FeaResultControls({ controls, values, presets, preset, onChange, onPreset, onReset }) {
   return (
-    <>
+    // A select gives way before its label in the narrow panel ("Displacement" would squeeze "Show" away).
+    <div className="flex flex-col gap-1.5 [&_span:has(+span>[data-slot=select-trigger])]:shrink-0 [&_span:has(>[data-slot=select-trigger])]:min-w-0 [&_span:has(>[data-slot=select-trigger])]:shrink [&_[data-slot=select-trigger]]:min-w-0 [&_[data-slot=select-trigger]]:max-w-full">
       {presets.length ? <KinematicsPoseRow label="Preset" poses={presets} activeValue={preset} onSelect={onPreset} onReset={onReset} /> : null}
       {controls.map((control) => parameterRow({
         parameter: control, value: values[control.id], labelTitle: control.labelTitle, valueText: controlText, step: control.step, wideLabel: control.wideLabel === true,
         onChange: (value) => onChange(control.id, value),
       }))}
-    </>
+    </div>
   );
 }
 
@@ -83,7 +84,8 @@ function StudyFactRow({ row, depth }) {
  */
 function StudyHeadingRow({ row, depth, ...rest }) {
   const Glyph = STUDY_GLYPHS[row.glyph];
-  return <li className="min-w-0">
+  // A little air above each heading after the first, so the setup reads as separate sentences.
+  return <li className="min-w-0 [&:not(:first-child)]:pt-1">
     <div className="relative flex h-6 min-w-0 items-center text-tiny text-muted-foreground" style={{ paddingLeft: depth * TREE_INDENT_PX }} data-study-row={row.id} data-study-heading="">
       <span className="grid w-4 shrink-0 place-items-center">{Glyph ? <Glyph /> : null}</span>
       <span className="min-w-0 truncate pl-1.5">{row.label}</span>
@@ -106,14 +108,14 @@ function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, contents })
   const branch = Boolean(row.children?.length || content);
   const open = branch && !collapsed.has(row.id);
   const active = chosen === row.id;
-  return <li className="min-w-0">
+  return <li className={cn("min-w-0", depth === 0 && "[&:not(:first-child)]:pt-1")}>
     <TreeRowSurface dense active={active} className={cn("gap-0 pr-0", row.wrap && "h-auto min-h-6")}
       style={{ paddingLeft: depth * TREE_INDENT_PX, ...(row.wrap ? { height: "auto" } : {}) }} data-study-row={row.id}>
       <TreeRowGuides depth={depth} column={16} />
       {branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${row.label}`} aria-expanded={open}
         className="grid h-6 w-4 shrink-0 place-items-center self-start rounded focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => toggle(row.id)}><TreeRowChevron expanded={open} /></button> : <span className="w-4 shrink-0" />}
-      {choosable ? <TooltipHint content={row.wrap ? null : [row.label, row.detail].filter(Boolean).join(" ")} overflowOnly>
+      {choosable ? <TooltipHint content={row.hint || (row.wrap ? null : [row.label, row.detail].filter(Boolean).join(" "))} overflowOnly={!row.hint}>
         <button type="button" aria-label={`Select ${row.name || row.label}`} aria-pressed={active} onClick={() => onChoose(row)}
           className={cn("flex min-w-0 flex-1 gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             row.wrap ? "flex-wrap items-baseline py-1" : "h-full items-center")}>
@@ -213,7 +215,7 @@ export default function FeaStudyPanel({ active, parts = NONE, openPart = -1, set
     parts.length ? { id: FEA_PARTS_PANEL_ID, title: "Parts", blocks: [{ rows: parts }], startsCollapsed: parts.filter((_, index) => index !== openPart).map((row) => row.id), fit: "tree" } : null,
     // Under Parts, Study gives way only after Parts has, as a details panel does, so Result stays in view.
     { id: FEA_STUDY_PANEL_ID, title: "Study", startsCollapsed: collapsedIds([...setup, ...details]), fit: parts.length ? "details" : "tree",
-      blocks: studyBlocks(sections, { verdict: verdict ? <FeaVerdict verdict={verdict} /> : null, setup, controls, details }) },
+      blocks: studyBlocks(sections, { verdict: verdict ? <FeaVerdict verdict={verdict} chosen={chosen} onChoose={onChoose} /> : null, setup, controls, details }) },
   ].filter(Boolean);
   return <>
     {/* Each headed with its X; Select, pressed while it is the tool, opens the closed ones again. */}

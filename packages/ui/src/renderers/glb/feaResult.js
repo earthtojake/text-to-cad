@@ -164,6 +164,7 @@ function readChecks(raw) {
       ratio: Number(check.ratio), closeAt: Number.isFinite(check.close_at) ? Number(check.close_at) : 1,
       margin: Number.isFinite(check.margin) && check.margin >= 1 ? Number(check.margin) : null,
       status: ["fails", "close", "passes"].includes(check.status) ? check.status : null, part: text(check.part),
+      faces: faceRefs(check.faces), where: text(check.where?.ref),
     }));
 }
 
@@ -422,8 +423,7 @@ export function deformationRange(baseScale) {
   return { min: 0, max, step };
 }
 
-// The fields in plain words, short enough for the panel's one width; the file's own names (von
-// Mises stress) are the colour bar's.
+// The fields in plain words, short enough for the panel's one width, in Show and on the colour bar.
 export const FIELD_WORDS = Object.freeze({ _von_mises: "Stress", _displacement: "Displacement" });
 
 /** What a view's control can move, the closed set the viewer knows how to apply. */
@@ -486,8 +486,11 @@ function viewControls(result, every) {
       controls.push({ id: drives, drives, type, label, options, defaultValue: opening.value, wideLabel: true, ...whenOf(raw) });
       continue;
     }
-    const min = finiteNumber(raw.min) ? raw.min : 0;
-    const max = raw.max;
+    // A deformation with no range is the default slider's: none to four times the file's own exaggeration.
+    const ranged = !(drives === "deformation" && !finiteNumber(raw.max));
+    const own = ranged ? null : deformationRange(result.deformationScale);
+    const min = own ? own.min : finiteNumber(raw.min) ? raw.min : 0;
+    const max = own ? own.max : raw.max;
     if (!finiteNumber(max) || !(min < max)) continue;
     const measured = drives === "threshold" ? result.fields.find((entry) => entry.attribute === fieldAttribute(raw.field)) : null;
     if (drives === "threshold" && !measured) continue;
@@ -495,7 +498,7 @@ function viewControls(result, every) {
     const unit = typeof raw.unit === "string" && raw.unit.trim() ? raw.unit.trim() : measured ? measured.units : "×";
     controls.push({
       id: drives, drives, type, label, min, max, defaultValue: clamp(finiteNumber(raw.default) ? raw.default : fallback, min, max), unit, wideLabel: true,
-      ...(measured ? { field: measured.attribute } : {}), ...whenOf(raw),
+      ...(measured ? { field: measured.attribute } : {}), ...(own ? { step: own.step } : {}), ...whenOf(raw),
     });
   }
   return controls;
@@ -594,41 +597,6 @@ function flooredFactor(value) {
 }
 
 /**
- * The one line under the colour bar, in plain words, from the numbers the file
- * carries: the peak stress and what it means for the part, and how far it moves.
- * At `loadScale` times the solved load (a linear study scales exactly), the stress
- * and the displacement are that many times larger, the safety factor that many
- * times smaller, and the line ends "at 1.5× the load".
- * "" for a field this does not know how to say.
- */
-export function feaSummaryLine(result, field, loadScale = 1) {
-  const k = Number(loadScale) >= 0 ? Number(loadScale) : 1;
-  const at = k === 1 ? "" : `at ${plainNumber(k)}× the load`;
-  const peak = (attribute) => result.fields.find((entry) => entry.attribute === attribute);
-  const stress = peak("_von_mises");
-  const displacement = peak("_displacement");
-  const moves = displacement ? `${plainNumber(displacement.max * k)} ${displacement.units}`.trim() : "";
-  if (field.attribute === "_displacement") {
-    return moves ? [`Moves up to ${moves}`, at].filter(Boolean).join(" · ") : "";
-  }
-  if (field.attribute !== "_von_mises") {
-    return "";
-  }
-  const factor = scaledFactor(result.safetyFactor, k);
-  // Under 1 the part yields: "holds 0.4×" would read as a pass.
-  const holds = factor === null ? "" : factor < 1 ? "yields under this load" : `holds ${flooredFactor(factor)}× this load`;
-  // An assembly leads with its weakest part, whose peak (not the assembly's) and factor these are.
-  const weakest = result.weakestPart && result.weakestPartPeakMPa !== null;
-  return [
-    weakest ? `Weakest: ${spaced(result.weakestPart)}` : "",
-    `${weakest ? "peak stress" : "Peak stress"} ${plainNumber((weakest ? result.weakestPartPeakMPa : stress.max) * k)} ${stress.units}`.trim(),
-    holds,
-    moves ? `${weakest ? "the assembly moves" : "moves"} up to ${moves}` : "",
-    at,
-  ].filter(Boolean).join(" · ");
-}
-
-/**
  * A safety factor at `loadScale` times the solved load: yield over a stress that many times larger.
  * No load has no factor to say (null, so "holds" is left out rather than "holds Infinity×").
  */
@@ -713,7 +681,7 @@ function faceSummary(study, ref) {
   return loads.length ? `Loaded ${facesWords([ref])}` : "";
 }
 
-/** A part's row detail: its material and what it holds ("yields" under a factor of 1, as the colour bar says), at `loadScale` times the load. */
+/** A part's row detail: its material and what it holds ("yields" under a factor of 1), at `loadScale` times the load. */
 function partDetail(part, loadScale) {
   const factor = scaledFactor(part.safetyFactor, loadScale);
   const holds = factor === null ? "" : factor < 1 ? "yields" : `holds ${flooredFactor(factor)}×`;
@@ -831,18 +799,35 @@ function checkAt(result, check, k) {
 }
 
 /** A check's line, its value against its limit: "Peak 405 MPa, limit 276 MPa", "Moves 0.62 mm, limit 0.5 mm". */
-function checkLine(check) {
+function checkLine(check, { bare = false } = {}) {
   const unit = check.unit || (check.kind === "stress" ? "MPa" : "mm");
   // A displacement keeps three figures: its limit is often under a millimetre, and 1.04 is not 1.
   const figure = check.kind === "stress" ? plainNumber : (value) => String(Number(Number(value).toPrecision(3)));
-  return unbrokenHalves([`${check.kind === "stress" ? "Peak" : "Moves"} ${figure(check.shown)} ${unit}`, `limit ${figure(check.limit)} ${unit}`]);
+  const value = `${figure(check.shown)} ${unit}`;
+  return unbrokenHalves([bare ? value : `${check.kind === "stress" ? "Peak" : "Moves"} ${value}`, `limit ${figure(check.limit)} ${unit}`]);
 }
 
-/** What a check says of the load: "Would hold 1.5× this load", "Holds only 0.6× this load"; a displacement's "OK up to 1.6× this load". */
-function checkCaption(check) {
-  const times = flooredFactor(check.times);
-  if (check.kind === "stress") return check.times < 1 ? `Holds only ${times}× this load` : `Would hold ${times}× this load`;
-  return check.times < 1 ? `OK only to ${times}× this load` : `OK up to ${times}× this load`;
+/** The whole result, for a prompt: its occurrence, else every part it holds. */
+const wholeRefs = (result) => (result.occurrence ? [result.occurrence] : result.parts.map((part) => part.ref).filter(Boolean));
+
+const STATUS_WORDS = Object.freeze({ fails: "fails", close: "is close to its limit", passes: "passes" });
+
+/**
+ * What a check chosen in the verdict carries into a prompt: the faces it is over, else the face it
+ * peaks on, else the whole result; and what it says, in one sentence ("Tip sag fails: moves 0.62 mm,
+ * limit 0.5 mm (OK only to 0.8× this load)"). `part`: whose numbers a stress check's are, in an assembly.
+ */
+function checkChoice(result, check, part) {
+  const faces = check.faces?.length ? check.faces : check.where ? [check.where] : [];
+  const line = checkLine(check).replace(/\u00a0/g, " ");
+  const where = check.kind === "stress" && part ? ` in ${part}` : "";
+  const summary = `${checkLabel(check)} ${STATUS_WORDS[check.status]}${where}: ${line[0].toLowerCase()}${line.slice(1)} (${loadCaption(check.times)})`;
+  return { id: `check:${check.index}`, ...(faces.length ? { faces } : { refs: wholeRefs(result) }), summary };
+}
+
+/** What this many times the load means: "OK up to 1.6× this load", "OK only to 0.4× this load" (floored, so it never overstates). */
+function loadCaption(times) {
+  return `OK ${times < 1 ? "only to" : "up to"} ${flooredFactor(times)}× this load`;
 }
 
 /**
@@ -856,42 +841,49 @@ export function feaFailing(result, loadScale = 1) {
   return checks.some((check) => checkAt(result, check, k).status !== "passes");
 }
 
+// The headline over several checks: how many fail, else whether any is close.
+const failedTitle = (failing, total) => (failing === total ? (total === 2 ? "Fails both checks" : `Fails all ${total} checks`)
+  : `Fails ${failing} of ${total} checks`);
+
 /**
  * The answer at a glance, at `loadScale` times the solved load, for the verdict at the top of Study:
- * the worst check (`feaChecks`; the first by status, failing before close before passing, then by
- * how much of its limit it uses) as the headline, and one compact row per further check (`rows`).
- * The headline: `status` (the tone: "weak" failing, "close", "strong" passing, "none" with no stress:
- * no load reaches the part, or the load is set to 0), its `title` in plain words ("Too weak", "Moves
- * too much"), `part` (an assembly's weakest part, whose numbers a stress check's are; "" else),
- * `label` (a check named in the person's words), `line` (the value against the limit: "Peak 405 MPa,
- * limit 276 MPa"), `use` (the share of the limit, 1 at it; past 1 it is over), the stress check's
- * `margin` (null for another) and the `caption` ("Holds only 0.6× this load"). null where the file
- * cannot say (no stress field, or a stress with no safety factor and no checks: a result older than both).
+ * a headline, one line of what it means for the load, then every check the same way. `status` is
+ * the worst check's tone ("weak" failing, "close", "strong" passing; "none" with no stress: no load
+ * reaches the part, or the load is set to 0). `title`: one check's own words ("Too weak", "Moves too
+ * much", "Stiff enough"), or over several, how many fail ("Fails both checks"), else "Close to the
+ * limit" or "Passes all checks". `caption`: how much of this load the weakest check takes ("OK only to
+ * 0.4× this load"; with no stress, what to do). `rows`: each check, worst first (failing before
+ * close before passing, then the most of its limit used), with its `label` in the person's words, the
+ * `part` a stress check's numbers are for in an assembly, its `line` (the value against the limit,
+ * the label saying what it is: "405 MPa, limit 276 MPa"), `use` (the share of the limit, 1 at it), the stress check's `margin`
+ * (null for another) and its `choice` for Quick Edit. null where the file cannot say (no stress
+ * field, or a stress with no safety factor and no checks: a result older than both).
  */
 export function feaVerdict(result, loadScale = 1) {
   const stress = result.fields.find((entry) => entry.attribute === "_von_mises");
   if (!stress) return null;
   const k = Number(loadScale) >= 0 ? Number(loadScale) : 1;
-  const margin = result.study?.margin ?? DEFAULT_MARGIN;
-  const weakest = result.parts[weakestPartIndex(result)] || null;
-  const part = result.weakestPart ? spaced(result.weakestPart) : weakest?.name ? spaced(weakest.name) : "";
-  const base = { part, margin, label: "", rows: [] };
-  if (!(k > 0)) return { ...base, status: "none", title: "No load", line: "The load is set to 0", use: 0, caption: "" };
+  if (!(k > 0)) return { status: "none", title: "No load", caption: "The load is set to 0", rows: [] };
   const checks = feaChecks(result);
   const unloaded = checks.some((check) => check.kind === "stress" && !(check.value > 0));
   if (!checks.length || unloaded) {
-    return stress.max > 0 && !unloaded ? null : { ...base, status: "none", title: "No stress", line: "Check the load reaches the part", use: 0, caption: "" };
+    return stress.max > 0 && !unloaded ? null : { status: "none", title: "No stress", caption: "Check the load reaches the part", rows: [] };
   }
-  const judged = checks.map((check, index) => ({ ...checkAt(result, check, k), index }));
-  const [worst] = [...judged].sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.use - a.use || a.index - b.index);
-  const named = (check) => check.label && check.label !== DEFAULT_LABELS[check.kind];
+  const weakest = result.parts[weakestPartIndex(result)] || null;
+  const weakestName = result.weakestPart ? spaced(result.weakestPart) : weakest?.name ? spaced(weakest.name) : "";
+  const judged = checks.map((check, index) => ({ ...checkAt(result, check, k), index }))
+    .sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.use - a.use || a.index - b.index);
+  const [worst] = judged;
+  const failing = judged.filter((check) => check.status === "fails").length;
+  const title = judged.length === 1 ? TITLES[worst.kind][worst.status]
+    : failing ? failedTitle(failing, judged.length) : worst.status === "close" ? "Close to the limit" : "Passes all checks";
   return {
-    ...base, part: worst.kind === "stress" ? part : "", margin: worst.margin, label: named(worst) ? checkLabel(worst) : "",
-    status: TONE_OF[worst.status], title: TITLES[worst.kind][worst.status], use: worst.use, line: checkLine(worst), caption: checkCaption(worst),
-    rows: judged.filter((check) => check !== worst).map((check) => ({
-      id: `check:${check.index}`, kind: check.kind, status: TONE_OF[check.status], label: checkLabel(check), line: checkLine(check),
-      use: check.use, margin: check.margin, caption: checkCaption(check),
-    })),
+    status: TONE_OF[worst.status], title, caption: loadCaption(Math.min(...judged.map((check) => check.times))),
+    rows: judged.map((check) => {
+      const part = check.kind === "stress" ? (check.part ? spaced(check.part) : weakestName) : "";
+      return { id: `check:${check.index}`, kind: check.kind, status: TONE_OF[check.status], label: checkLabel(check), part, line: checkLine(check, { bare: true }),
+        use: check.use, margin: check.margin, choice: checkChoice(result, check, part) };
+    }),
   };
 }
 
@@ -942,16 +934,31 @@ function madeOfRows(result) {
     hint = [...counts].map(([name, n]) => `${name}: ${n} ${n === 1 ? "part" : "parts"}`).join(", ");
   }
   if (!label) return [];
-  return [{ id: "material", label: "Made of", detail: "", glyph: "material", children: [{ id: "material:name", label, detail: "", wrap: true, ...(hint ? { hint } : {}) }] }];
+  // Chosen, it carries the whole result into a prompt, each material with the parts made of it.
+  const refs = result.parts.length ? result.parts.map((part) => part.ref).filter(Boolean) : wholeRefs(result);
+  const yieldMPa = result.study.material?.yieldMPa;
+  const byMaterial = new Map();
+  for (const part of result.parts) {
+    const name = part.material || fallback;
+    if (name) byMaterial.set(name, [...(byMaterial.get(name) || []), spaced(part.name || part.ref)]);
+  }
+  const summary = byMaterial.size > 1
+    ? `Made of ${[...byMaterial].map(([name, names]) => `${name} (${names.join(", ")})`).join(" and ")}`
+    : `Made of ${counts.size === 1 ? each[0] : label}${counts.size <= 1 && yieldMPa !== null && yieldMPa !== undefined ? ` (yield ${plainNumber(yieldMPa)} MPa)` : ""}`;
+  return [{ id: "material", label: "Made of", detail: "", glyph: "material", children: [{ id: "material:name", label, detail: "", wrap: true,
+    ...(hint ? { hint } : {}), ...(refs.length ? { refs, summary } : {}) }] }];
 }
 
 /** Details, shut until opened: the mesh, "3.7 mm elements", how it got there its hint ("refined from 2.8 mm", "not refined"). */
-function detailRows({ study }) {
-  const mesh = study.mesh;
+function detailRows(result) {
+  const mesh = result.study.mesh;
   if (mesh?.sizeMm === null || mesh?.sizeMm === undefined) return [];
   const refined = mesh.refinedFromMm === null ? "not refined" : `refined from ${plainNumber(mesh.refinedFromMm)} mm`;
+  // Chosen, it carries the whole result into a prompt with how fine the mesh is.
+  const refs = wholeRefs(result);
   return [{ id: "details", label: "Details", detail: "", collapsed: true,
-    children: [{ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements`, hint: refined }] }];
+    children: [{ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements`, hint: refined,
+      ...(refs.length ? { refs, summary: `Mesh of ${plainNumber(mesh.sizeMm)} mm elements, ${refined}` } : {}) }] }];
 }
 
 // Study's setup, in order, each from what the file records and none when it records nothing for it:
