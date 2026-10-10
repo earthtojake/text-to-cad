@@ -49,14 +49,13 @@ from typing import Callable, Iterable, Mapping, Sequence
 from cadgen.kicad import sexpr
 from cadgen.kicad.geometry import XY, arc_points, area, bezier_points, board_origin, box, format_xy, hull, inside, script_frame
 from cadgen.kicad.naming import natural, netclass_of, project_netclasses, unescape_net_name
+from cadgen.kicad.phrasing import Finding
 from cadgen.kicad.refs import BoardSelector, ReferenceView, format_board_selector, selector_or_none
 
 __all__ = [
     "BoardIndex",
     "BoardView",
     "Copper",
-    "Finding",
-    "FindingItem",
     "Hole",
     "Net",
     "Pad",
@@ -225,23 +224,6 @@ class Hole:
     def __repr__(self) -> str:
         owner = f" of {self.part}" if self.part else ""
         return f"Hole({self.diameter:g} mm{owner} at {format_xy(self.at)})"
-
-
-@dataclass(frozen=True)
-class FindingItem:
-    text: str
-    ref: str | None  # a board reference to the item: a pad, a part, or copper at a point
-    at: XY | None
-
-
-@dataclass(frozen=True)
-class Finding:
-    check: str  # "drc", "unconnected", "parity"
-    severity: str
-    type: str
-    description: str
-    items: tuple[FindingItem, ...] = ()
-    summary: str = ""  # one plain sentence (`cadgen.kicad.phrasing`); KiCad's own words when empty
 
 
 @dataclass(frozen=True)

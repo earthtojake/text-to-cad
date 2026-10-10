@@ -1,4 +1,4 @@
-"""A KiCad finding as one plain sentence naming what it is about.
+"""What KiCad and the review find, each finding as one plain sentence naming what it is about.
 
 KiCad's messages name the rule ("Clearance violation (netclass 'Default' clearance 0.2000 mm;
 actual 0.1500 mm)") and list the items apart. A person reviewing a board, and an agent fixing
@@ -10,6 +10,52 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+
+__all__ = ["Finding", "FindingItem", "name_item", "summarize"]
+
+
+@dataclass(frozen=True)
+class FindingItem:
+    """What a finding is about: KiCad's words for it, a board reference to it when it has one
+    (a pad, a part, or copper at a point), and where it is."""
+
+    text: str
+    ref: str | None = None
+    at: tuple[float, float] | None = None
+
+
+@dataclass(frozen=True)
+class Finding:
+    """One thing KiCad or the review reported, positions in the frame of whoever read it."""
+
+    check: str  # "erc", "drc", "parity", "unconnected" or "review"
+    severity: str  # "error" or "warning"
+    type: str  # KiCad's own key, e.g. "clearance", "pin_not_connected"
+    description: str
+    items: tuple[FindingItem, ...] = ()
+    summary: str = ""  # one plain sentence (:func:`summarize`); KiCad's own words when empty
+
+    def render(self) -> str:
+        where = "; ".join(
+            item.text + (f" at ({item.at[0]:g}, {item.at[1]:g})" if item.at is not None else "") for item in self.items
+        )
+        return f"{self.severity} [{self.check} {self.type}] {self.summary or self.description}" + (f": {where}" if where else "")
+
+    def as_json(self) -> dict:
+        """The finding as ``cadgen pcb validate --json`` and a build's report write it."""
+        return {
+            "check": self.check,
+            "severity": self.severity,
+            "type": self.type,
+            "description": self.description,
+            "summary": self.summary or self.description,
+            "items": [
+                {"description": item.text, "position": list(item.at) if item.at is not None else None}
+                for item in self.items
+            ],
+        }
+
 
 _EDGE = "the board edge"
 

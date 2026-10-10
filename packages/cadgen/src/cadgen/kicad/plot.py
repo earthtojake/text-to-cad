@@ -358,8 +358,8 @@ def _decoded(path: Path, data: bytes) -> str:
 def _findings(report: list[tuple], index) -> tuple:
     """The DRC report's findings on the index (KiCad's frame), each item with a board reference to
     what it names. KiCad places an arc at its centre: its reference names the arc's middle."""
-    from cadgen.kicad.board_index import Finding, FindingItem, script_frame
-    from cadgen.kicad.phrasing import summarize
+    from cadgen.kicad.geometry import script_frame
+    from cadgen.kicad.phrasing import Finding, FindingItem, summarize
 
     to_script = script_frame(index.origin)
     return tuple(

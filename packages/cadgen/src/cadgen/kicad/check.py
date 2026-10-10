@@ -31,7 +31,7 @@ import copy
 import shutil
 import tempfile
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from cadgen.kicad import sexpr
@@ -92,11 +92,7 @@ def _reviewed(tree: list, project: Path, currents: Mapping[str, float] | None = 
     index = read_index(tree, project=project)
     to_script = script_frame(board_origin(tree), digits=4)
     return [
-        Finding(
-            check=found.check, severity=found.severity, type=found.type, description=found.description,
-            items=tuple((item.text, to_script(*item.at) if item.at else None) for item in found.items),
-            summary=found.summary,
-        )
+        replace(found, items=tuple(replace(item, at=to_script(*item.at) if item.at else None) for item in found.items))
         for found in review(index, net_currents(project) if currents is None else currents)
     ]
 

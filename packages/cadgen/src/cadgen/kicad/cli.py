@@ -23,12 +23,11 @@ import shutil
 import subprocess
 import tempfile
 import threading
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
 from cadgen.kicad.install import KicadInstall
-from cadgen.kicad.phrasing import summarize
+from cadgen.kicad.phrasing import Finding, FindingItem, summarize
 
 __all__ = ["Finding", "KicadRunError", "erc_findings", "drc_findings", "run_kicad_cli"]
 
@@ -88,38 +87,6 @@ def run_kicad_cli(install: KicadInstall, args: Sequence[str], *, cwd: Path, time
     return completed
 
 
-@dataclass(frozen=True)
-class Finding:
-    """One thing KiCad reported, positions in the board script's coordinates."""
-
-    check: str  # "erc", "drc", "parity" or "unconnected"
-    severity: str  # "error" or "warning"
-    type: str  # KiCad's own key, e.g. "clearance", "pin_not_connected"
-    description: str
-    items: tuple[tuple[str, tuple[float, float] | None], ...]
-    summary: str = ""  # one plain sentence (`cadgen.kicad.phrasing`); KiCad's own words when empty
-
-    def render(self) -> str:
-        where = "; ".join(
-            text + (f" at ({position[0]:g}, {position[1]:g})" if position is not None else "")
-            for text, position in self.items
-        )
-        return f"{self.severity} [{self.check} {self.type}] {self.summary or self.description}" + (f": {where}" if where else "")
-
-    def as_json(self) -> dict:
-        return {
-            "check": self.check,
-            "severity": self.severity,
-            "type": self.type,
-            "description": self.description,
-            "summary": self.summary or self.description,
-            "items": [
-                {"description": text, "position": list(position) if position is not None else None}
-                for text, position in self.items
-            ],
-        }
-
-
 def _items(raw: list, to_script: Callable[[float, float], tuple[float, float]] | None) -> tuple:
     items = []
     for item in raw or []:
@@ -127,7 +94,7 @@ def _items(raw: list, to_script: Callable[[float, float], tuple[float, float]] |
         point = None
         if isinstance(position, dict) and to_script is not None:
             point = to_script(float(position.get("x", 0.0)), float(position.get("y", 0.0)))
-        items.append((str(item.get("description", "")), point))
+        items.append(FindingItem(text=str(item.get("description", "")), at=point))
     return tuple(items)
 
 
@@ -152,7 +119,7 @@ def erc_findings(report: Path) -> list[Finding]:
                     type=kind,
                     description=description,
                     items=items,
-                    summary=summarize("erc", kind, description, [text for text, _ in items]),
+                    summary=summarize("erc", kind, description, [item.text for item in items]),
                 )
             )
     return _unique(found)
@@ -174,7 +141,7 @@ def drc_findings(report: Path, *, to_script: Callable[[float, float], tuple[floa
                     type=kind,
                     description=description,
                     items=items,
-                    summary=summarize(check, kind, description, [text for text, _ in items]),
+                    summary=summarize(check, kind, description, [item.text for item in items]),
                 )
             )
     return _unique(found)
