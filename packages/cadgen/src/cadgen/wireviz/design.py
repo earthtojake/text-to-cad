@@ -46,16 +46,18 @@ class HarnessError(ValueError):
 # connection as "a new instance of a template" and a run of "-" or "=" as an arrow, so
 # designators keep to letters, digits, "_", "+" and "-", starting with a letter or "_".
 _DESIGNATOR = re.compile(r"[A-Za-z_][A-Za-z0-9_+-]*")
-_PART_TEXT = ("pn", "manufacturer", "mpn", "supplier", "spn")
+# The part-number fields a connector or a cable may carry, and an additional component's fields,
+# in the order the document writes them (cadgen.wireviz.document).
+PART_TEXT = ("pn", "manufacturer", "mpn", "supplier", "spn")
 _CONNECTOR_KEYS = (
     "name", "type", "subtype", "color", "style", "pins", "pinlabels", "pincount", "pincolors",
-    "hide_disconnected_pins", "notes", "additional_components", *_PART_TEXT,
+    "hide_disconnected_pins", "notes", "additional_components", *PART_TEXT,
 )
 _CABLE_KEYS = (
     "wirecount", "colors", "color_code", "wirelabels", "gauge", "length", "shield", "category",
-    "type", "color", "notes", "additional_components", *_PART_TEXT,
+    "type", "color", "notes", "additional_components", *PART_TEXT,
 )
-_COMPONENT_KEYS = ("type", "subtype", "manufacturer", "mpn", "supplier", "spn", "pn", "qty", "unit", "qty_multiplier")
+COMPONENT_KEYS = ("type", "subtype", "manufacturer", "mpn", "supplier", "spn", "pn", "qty", "unit", "qty_multiplier")
 _CONNECTOR_MULTIPLIERS = ("pincount", "populated", "unpopulated")
 _CABLE_MULTIPLIERS = ("wirecount", "terminations", "length", "total_length")
 _CATEGORIES = ("bundle",)
@@ -114,7 +116,7 @@ def _color(value: Any, *, what: str) -> str:
     )
 
 
-def _decimal(number: float) -> str:
+def decimal(number: float) -> str:
     """A number as WireViz's YAML reads it: always a decimal point, never an exponent."""
     text = f"{number:.6f}".rstrip("0")
     return text + "0" if text.endswith(".") else text
@@ -136,7 +138,7 @@ def _gauge(value: Any, *, what: str) -> str:
                 f"{what}={value!r} reads as {number:g} mm² (WireViz's unit for a bare number): for AWG write "
                 f"\"{value} AWG\"; for a cable that thick write \"{value} mm2\""
             )
-        return f"{_decimal(number)} mm2"
+        return f"{decimal(number)} mm2"
     if isinstance(value, str):
         match = re.fullmatch(r"\s*([0-9]+(?:\.[0-9]+)?)\s*(AWG|awg|mm2|mm²|MM2)\s*", value)
         if match is not None:
@@ -147,7 +149,7 @@ def _gauge(value: Any, *, what: str) -> str:
                 return f"{int(number)} AWG"
             if float(number) <= 0:
                 raise HarnessError(hint)
-            return f"{_decimal(float(number))} mm2"
+            return f"{decimal(float(number))} mm2"
     raise HarnessError(hint)
 
 
@@ -200,12 +202,12 @@ def _components(value: Any, *, what: str, multipliers: Sequence[str]) -> tuple[d
     for index, item in enumerate(value):
         where = f"{what}[{index}]"
         if not isinstance(item, dict):
-            raise HarnessError(f"{where} is a dict of {', '.join(_COMPONENT_KEYS)}; got {item!r}")
-        _check_keys(where, item, _COMPONENT_KEYS)
+            raise HarnessError(f"{where} is a dict of {', '.join(COMPONENT_KEYS)}; got {item!r}")
+        _check_keys(where, item, COMPONENT_KEYS)
         if "type" not in item:
             raise HarnessError(f"{where} needs a type, what the part is (\"Crimp terminal\")")
         component: dict[str, Any] = {}
-        for key in _COMPONENT_KEYS:
+        for key in COMPONENT_KEYS:
             if key not in item:
                 continue
             raw = item[key]
@@ -224,7 +226,7 @@ def _components(value: Any, *, what: str, multipliers: Sequence[str]) -> tuple[d
 
 
 def _part_text(fields: dict, *, where: str) -> dict[str, str]:
-    return {key: _text(fields.pop(key), what=f"{where} {key}") for key in _PART_TEXT if key in fields}
+    return {key: _text(fields.pop(key), what=f"{where} {key}") for key in PART_TEXT if key in fields}
 
 
 def _is_geometry(value: Any) -> bool:

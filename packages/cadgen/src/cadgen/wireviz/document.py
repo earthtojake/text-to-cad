@@ -19,12 +19,9 @@ from __future__ import annotations
 
 from typing import Any, Sequence
 
-from cadgen.wireviz.design import Harness, HarnessError, _decimal
+from cadgen.wireviz.design import COMPONENT_KEYS, PART_TEXT, Harness, HarnessError, decimal
 
 __all__ = ["harness_document"]
-
-_PART_NUMBERS = ("pn", "manufacturer", "mpn", "supplier", "spn")
-_COMPONENT_ORDER = ("type", "subtype", "manufacturer", "mpn", "supplier", "spn", "pn", "qty", "unit", "qty_multiplier")
 
 
 def _quote(text: str) -> str:
@@ -39,7 +36,7 @@ def _scalar(value: Any) -> str:
     if isinstance(value, int):
         return str(value)
     if isinstance(value, float):
-        return _decimal(value)
+        return decimal(value)
     if isinstance(value, str):
         return _quote(value)
     raise TypeError(f"no YAML spelling for {value!r}")
@@ -58,7 +55,7 @@ def _fields(lines: list[str], fields: dict[str, Any], keys: Sequence[str]) -> No
         if key == "additional_components":
             lines.append("    additional_components:")
             for component in value:
-                names = [name for name in _COMPONENT_ORDER if name in component]
+                names = [name for name in COMPONENT_KEYS if name in component]
                 for index, name in enumerate(names):
                     lead = "      - " if index == 0 else "        "
                     lines.append(f"{lead}{name}: {_scalar(component[name])}")
@@ -81,7 +78,7 @@ def harness_document(harness: Harness) -> str:
     lines.append("connectors:")
     for connector in harness.connectors:
         lines.append(f"  {_quote(connector.name)}:")
-        _fields(lines, connector.fields, ("type", "subtype", "color", "style", *_PART_NUMBERS))
+        _fields(lines, connector.fields, ("type", "subtype", "color", "style", *PART_TEXT))
         lines.append(f"    pins: {_flow([pin.id for pin in connector.pins])}")
         if any(pin.label for pin in connector.pins):
             lines.append(f"    pinlabels: {_flow([pin.label for pin in connector.pins])}")
@@ -97,7 +94,7 @@ def harness_document(harness: Harness) -> str:
             lines.append(f"    wirelabels: {_flow(cable.wirelabels)}")
         if cable.shield is not None:
             lines.append("    shield: true")
-        _fields(lines, cable.fields, ("color", *_PART_NUMBERS, "notes", "additional_components"))
+        _fields(lines, cable.fields, ("color", *PART_TEXT, "notes", "additional_components"))
     lines.append("connections:")
     for rows in _connection_sets(harness):
         lines.append("  -")
