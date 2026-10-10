@@ -1,9 +1,12 @@
 import {
   Bot,
   Box,
+  Cable,
+  CircuitBoard,
   DraftingCompass,
   FileBox,
   LoaderCircle,
+  Microchip,
   Printer,
   Triangle
 } from "lucide-react";
@@ -27,6 +30,11 @@ const ENTRY_ICON_COMPONENTS = {
   [ENTRY_ICON_KIND.THREE_MF_MESH]: Printer,
   [ENTRY_ICON_KIND.GLB_MESH]: FileBox,
   [ENTRY_ICON_KIND.DXF]: DraftingCompass,
+  // A KiCad board is the board; its schematic, the part symbols it is drawn with.
+  [ENTRY_ICON_KIND.KICAD_PCB]: CircuitBoard,
+  [ENTRY_ICON_KIND.KICAD_SCH]: Microchip,
+  // A wiring harness is a cable between connectors.
+  [ENTRY_ICON_KIND.HARNESS]: Cable,
   [ENTRY_ICON_KIND.ROBOT]: Bot
 };
 

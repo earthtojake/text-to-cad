@@ -8,7 +8,11 @@ shared. Missing optional methods mean an operation is unsupported.
 
 The host contains `files`, optional native `fileActions`, `clipboard`,
 `promptContext`, the optional `attachments`, `navigation` (the optional `openFile(path)` and
-`home()`), the optional `links` (the app menu's), the optional `usage`
+`home()`), the optional `links` (the app menu's), the optional `crossProbe` (a
+board and its schematic open in two views select together: each view publishes its
+selection, in board references, and subscribes to the others'; selection only, nothing
+edited or kept; the web app's is a `BroadcastChannel` between its pages,
+`apps/web/src/host/crossProbe.ts`), the optional `usage`
 (`used(feature)`: what the person used, for the host's telemetry to count, never what
 they made; absent, nothing is counted) and `environment`. `environment` carries the resolved `colorScheme`,
 the keyboard `platform` (`darwin` shows ⌘, anything else Ctrl), the app's own
@@ -46,13 +50,14 @@ are for reading and maintaining the contracts.
 | `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, the view of the file on screen, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@text-to-cad/ui/tab-store` |
 | `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@text-to-cad/ui/renderers/workspace` |
 | `DxfRendererOptions` (2D drawings; declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@text-to-cad/ui/renderers/dxf` |
+| `PlotRendererOptions` (KiCad boards and schematics as KiCad plots them, wiring harnesses as WireViz draws them; declines every camera and display command; a board or a schematic with its index answers `select` and `clearSelection` in board references, `#U3`, `#U3.9`, `#net:VIN`, which a harness declines) | [Plot registration](../src/renderers/plot/index.ts) | `@text-to-cad/ui/renderers/plot` |
 | `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@text-to-cad/ui/renderers/glb` |
 | `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@text-to-cad/ui/renderers/mesh` |
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@text-to-cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@text-to-cad/ui/renderers/workspace` |
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@text-to-cad/ui/host` |
 | `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail` (a host's home: the CAD title over the host's links (GitHub, Discord, X), then the models opened before, pinned first, as cards or rows, and with none, where the host has a chooser, an "Open File" card that opens it; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles; `pick` only where the host has a file chooser) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
-| `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the five CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@text-to-cad/ui/cad-viewer` |
+| `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the six CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@text-to-cad/ui/cad-viewer` |
 | `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`, `list` through `folder`, `search` through `search`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@text-to-cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the version, GitHub, Discord, where a new issue opens, the newest release and how to update, and how a link is followed), `issueUrl` (a new issue filled in — its title, labels and body — its address kept under `ISSUE_URL_MAX`) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@text-to-cad/ui/links` |
 
@@ -65,7 +70,7 @@ use the [explicit fake host](../src/host/testing/host.ts).
 
 ## A CAD renderer's controls
 
-The controls of a CAD renderer (STEP, GLB, mesh, robot, DXF) are panels of its own tool
+The controls of a CAD renderer (STEP, GLB, mesh, robot, DXF, plot) are panels of its own tool
 stack over the viewport (`settings-ui.md#the-tool-stack`), and nothing it does opens or
 closes the explorer (only the file's name opens that). The tool stack's layout — the
 sizes a person dragged the tree, the Reference and Position panels to, the folded panels
@@ -197,7 +202,8 @@ references do not promise to survive edits. Shared serialization handles quoting
 
 `formatPromptMessage(context, { attachmentPath })` is the one
 message a Quick Edit is, whether sent, queued or copied: what the person wrote;
-then `File: <path>`; then `References:` and one reference per line; then
+then `File: <path>`; then `References:` and one reference per line (a selection with a summary, a board's
+check, reads its sentence, then its references); then
 `Sketch: <path>` (the attachment's label) when the picture travels as a file,
 where `attachmentPath` says where it was saved. A picture sent beside the text
 as an image block is not named.
@@ -264,8 +270,8 @@ drawn, never a timer — then draws the model framed whole from the default
 direction at the card's aspect, on its own (no floor, grid or axes, whatever the
 person turned on) and on transparency, so it suits either scheme, off to the side of the view, so
 the person's camera, panels and window never show in it and nothing on screen
-changes (`kit/viewport/thumbnail.js`; a DXF paints its fitted drawing on a canvas
-of its own). A view that goes before it settles rejects it. `useModelThumbnail`
+changes (`kit/viewport/thumbnail.js`; a DXF paints its fitted drawing, and a plot (KiCad's,
+WireViz's) its fitted sheets, on a canvas of its own). A view that goes before it settles rejects it. `useModelThumbnail`
 keeps one per revision of a file per mounted view (a model rebuilt while it is
 open is pictured again once its new revision is drawn), and only for the file the
 view still shows.

@@ -11,6 +11,7 @@ import { useFeatures } from '@text-to-cad/ui/features';
 import { UpdateButton, useUpdateNotice, type UpdateNotice } from '@text-to-cad/ui/update';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
+import { createBroadcastCrossProbe } from './host/crossProbe';
 import { useViewerLinks } from './host/viewerLinks.js';
 import ViewerAppearance from './client/components/workbench/ViewerAppearance.jsx';
 import { readDefaultFileParam, readFileParam, resolveFileParam, writeFileParam } from './client/workbench/fileParam.js';
@@ -52,6 +53,8 @@ export default function App({ client, server, tabStore, notice = null }: { clien
   const attachments = useMemo(() => createHttpAttachmentStore({ origin: client.origin }), [client]);
   // The view on screen, for the library's pictures of what was opened.
   const live = useMemo(() => createLiveRegistry(), []);
+  // A board and its schematic in two windows select together (cross-probing): selection only.
+  const crossProbe = useMemo(() => createBroadcastCrossProbe(), []);
   const links = useViewerLinks();
   // The file the URL names (a developer's relative path resolved where this viewer started), or the
   // build's default; the URL then names it in full.
@@ -117,11 +120,11 @@ export default function App({ client, server, tabStore, notice = null }: { clien
     return () => { window.removeEventListener('pointerdown', touched, true); window.removeEventListener('keydown', touched, true); };
   }, [client]);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
-    files: source, fileActions, clipboard: browserClipboard, promptContext, attachments, links,
+    files: source, fileActions, clipboard: browserClipboard, promptContext, attachments, links, crossProbe,
     // A Quick Edit copied, counted by this Viewer's server for its telemetry, as a touch is.
     usage: { used: feature => { if (feature === 'quickEdit') client.reportActivity({ quickEdit: true }); } },
     environment: { colorScheme: appearance.colorScheme, platform: keyboardPlatform() },
-  }), [client, source, fileActions, promptContext, attachments, links, appearance.colorScheme]);
+  }), [client, source, fileActions, promptContext, attachments, links, crossProbe, appearance.colorScheme]);
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings} features={features}

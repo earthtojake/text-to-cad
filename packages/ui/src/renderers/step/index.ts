@@ -18,9 +18,10 @@ export interface PreparedStepDocument extends PreparedWorkspaceEntry {
   services: Omit<StepRendererOptions, 'client'>;
 }
 
-// A 2D drawing, a native glTF scene, a triangle mesh and a robot description have their own
-// renderers (`renderers/dxf`, `renderers/glb`, `renderers/mesh`, `renderers/robot`).
-const OTHER_RENDERERS_FILE = /\.(?:dxf|glb|stl|3mf|urdf|srdf|sdf)$/i;
+// A 2D drawing, a KiCad board or schematic, a wiring harness, a native glTF scene, a triangle mesh
+// and a robot description have their own renderers (`renderers/dxf`, `renderers/plot`,
+// `renderers/glb`, `renderers/mesh`, `renderers/robot`).
+const OTHER_RENDERERS_FILE = /\.(?:dxf|kicad_pcb|kicad_sch|harness\.yml|glb|stl|3mf|urdf|srdf|sdf)$/i;
 
 /** Registers STEP without loading Three.js, a viewport, or a backend connection. */
 export function createStepRenderer({ client, ...services }: StepRendererOptions) {

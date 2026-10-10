@@ -8,7 +8,7 @@ the loaders the verb already uses; library-side a real dict through the same
 parameter — so the signature IS the surface and ``cli_from_function`` derives
 the CLI exactly as it does for ``build`` and ``validate``.
 
-Four signature shapes cover the seven doors honestly (the old shared
+Four signature shapes cover the nine doors honestly (the old shared
 signature advertised STEP-only options to every door and refused them at
 runtime):
 
@@ -18,6 +18,9 @@ runtime):
 - dxf: a DRAWING, not a scene. Where, how big, and light or dark — nothing
   else, because a flat 2D drawing has no camera to pose, no surfaces to
   shade and no parts to list.
+  The pcb and harness doors' PLOT — a KiCad board or schematic as KiCad
+  draws it, a wiring harness as WireViz draws it — is as flat, and takes the
+  same shape: light or dark is the surround.
 
 The polymorphic ``cadgen snapshot`` binds the UNION shape (STEP surface +
 ``joint_values``) over every kind at once: a job packet may mix formats, and
@@ -33,6 +36,7 @@ from __future__ import annotations
 import contextvars
 import functools
 from pathlib import Path
+from typing import NamedTuple
 
 from cadgen.results import SnapshotResult
 
@@ -45,6 +49,8 @@ DOOR_KINDS: dict[str, tuple[str, ...]] = {
     "3mf": ("3mf",),
     "glb": ("glb",),
     "dxf": ("dxf",),
+    "pcb": ("kicad_pcb", "kicad_sch"),
+    "harness": ("harness",),
     "urdf": ("urdf",),
     "srdf": ("srdf",),
     "sdf": ("sdf",),
@@ -292,27 +298,33 @@ DRAWING_NO_VIEW_NAME = (
 )
 
 
-def drawing_camera_refusal(subject: str) -> str:
-    """Why ``camera`` is refused -- ``subject`` is the file, or ``a drawing``."""
+def drawing_camera_refusal(subject: str, *, is_: str = DRAWING_IS) -> str:
+    """Why ``camera`` is refused -- ``subject`` is the file, or ``a drawing``.
+
+    ``is_`` is what the flat picture IS: a drawing's sentence, or a plot's
+    (:data:`PLOT_KINDS`).
+    """
     return (
-        f"camera poses a model in space; {DRAWING_IS}, so {subject} has no camera and no "
+        f"camera poses a model in space; {is_}, so {subject} has no camera and no "
         "views to choose between — it is always shown whole, the way it was drawn."
     )
 
 
-def drawing_mode_refusal(subject: str) -> str:
-    """Why ``view`` is the only render mode a drawing has."""
+def drawing_mode_refusal(subject: str, *, is_: str = DRAWING_IS) -> str:
+    """Why ``view`` is the only render mode a drawing (or a plot) has."""
     return (
-        f"{DRAWING_IS}: it has no parts to list and no solid to section, so view is the "
+        f"{is_}: it has no parts to list and no solid to section, so view is the "
         f"only mode {subject} renders in."
     )
 
 
-def drawing_scene_refusal(named: str, subject: str, *, plural: bool) -> str:
+def drawing_scene_refusal(
+    named: str, subject: str, *, plural: bool, is_: str = DRAWING_IS, hint: str = DRAWING_APPEARANCE_HINT
+) -> str:
     """Why display settings are refused -- ``named`` is the flag or the job keys."""
     return (
-        f"{named} {'describe' if plural else 'describes'} {DRAWING_SCENE}; {DRAWING_IS}, "
-        f"so {subject} has none of them. {DRAWING_APPEARANCE_HINT}"
+        f"{named} {'describe' if plural else 'describes'} {DRAWING_SCENE}; {is_}, "
+        f"so {subject} has none of them. {hint}"
     )
 
 
@@ -425,6 +437,148 @@ def drawing_snapshot_verb(door: str):
     # therefore from `--help`, but still REFUSED BY NAME rather than reported
     # as noise: the parser keeps them as hidden entries that only ever raise.
     snapshot.__cadgen_retired_options__ = dict(DRAWING_RETIRED_OPTIONS)
+    return snapshot
+
+
+# --- what a plot is not -------------------------------------------------------
+# A PLOT is a document drawn by its own tool: a KiCad board or schematic, as
+# `kicad-cli` plots it, or a wiring harness, as WireViz draws it, its sheets
+# fitted to the image -- the picture the CAD Viewer's plot pane shows
+# (`GET /__cad/plot`). It is as flat as a drawing, and refused the same requests
+# in its own words: per input kind for a job packet
+# (`cadgen.snapshot_cli.check_plot_render_job`), per door for the help text.
+
+class PlotKind(NamedTuple):
+    """How a refusal speaks of one kind of plot, and the file suffix that is one."""
+
+    is_: str  # What it IS: every refusal about one opens with it.
+    noun: str  # "a KiCad board"
+    plural: str  # "KiCad boards"
+    suffix: str  # ".kicad_pcb"
+
+
+#: Every plotted input kind, and the words for it.
+PLOT_KINDS: dict[str, PlotKind] = {
+    "kicad_pcb": PlotKind(
+        "a KiCad board is drawn as KiCad plots it, flat, fitted to the image",
+        "a KiCad board", "KiCad boards", ".kicad_pcb",
+    ),
+    "kicad_sch": PlotKind(
+        "a KiCad schematic is drawn as KiCad plots it, its sheets one under another, "
+        "fitted to the image",
+        "a KiCad schematic", "KiCad schematics", ".kicad_sch",
+    ),
+    "harness": PlotKind(
+        "a wiring harness is drawn as WireViz draws it, flat, fitted to the image",
+        "a wiring harness", "wiring harnesses", ".harness.yml",
+    ),
+}
+#: What each plot door draws, said in its help: the paragraph after the summary.
+PLOT_DOOR_PICTURES: dict[str, str] = {
+    "pcb": (
+        "A KiCad board or schematic is drawn as KiCad plots it — a board's layers on "
+        "KiCad's board background, with any unrouted connection as a ratsnest line; a "
+        "schematic's sheets one under another, root first — fitted to the image, on the "
+        "appearance's background. Needs KiCad installed."
+    ),
+    "harness": (
+        "A wiring harness document is drawn as WireViz draws it — every connector with "
+        "its pins and labels, every cable with its wires' colours, and the runs between "
+        "them, on WireViz's page — fitted to the image, on the appearance's background. "
+        "Needs WireViz and Graphviz installed."
+    ),
+}
+#: The one display key that survives, said of a plot.
+PLOT_APPEARANCE_HINT = (
+    "Light or dark is the whole of a plot's appearance — the background around its "
+    "sheets, which keep their own colours: pass --appearance light|dark (in a job, "
+    '"display": {"appearance": "dark"}).'
+)
+
+
+def plot_snapshot_verb(door: str):
+    """The PLOT-shaped verb: a document drawn by its own tool, flat, as the viewer shows it.
+
+    The drawing's shape exactly: where, how big, and light or dark. A plot is
+    its tool's own picture of the document (KiCad's of a board, every layer on
+    KiCad's board background with its unrouted connections as a ratsnest, or of
+    a schematic, its sheets root first, one under another; WireViz's of a wiring
+    harness), fitted to the image.
+    So no ``camera`` (nothing to pose), no ``display`` (no surfaces, lighting or
+    render mode: the colours are the tool's), no ``mode`` (nothing to list or
+    section) and no ``view_labels`` (no view to name). ``appearance`` is the
+    surround the sheets sit on.
+
+    Those four are absent rather than retired: this door never took them. A
+    job packet that asks for one -- or ``cadgen snapshot``, which routes a plot
+    here too -- is refused by name (``check_plot_render_job``). Each door says
+    what it draws in :data:`PLOT_DOOR_PICTURES`.
+    """
+    kinds = DOOR_KINDS[door]
+    picture = PLOT_DOOR_PICTURES[door]
+    suffixes = ", ".join(PLOT_KINDS[kind].suffix for kind in kinds)
+
+    @_track_explicit_options
+    def snapshot(
+        target: Path | None = None,
+        out: Path | None = None,
+        *,
+        job: Path | None = None,
+        appearance: str = "light",
+        width: int | None = None,
+        height: int | None = None,
+        size_profile: str = "",
+        debug: bool = False,
+    ) -> SnapshotResult:
+        """Render TARGET as its own tool draws it, flat, and report the files written.
+
+        {picture}
+
+        An explicit OUT is written exactly there. A refused request leaves an
+        existing OUT untouched; once the request is accepted OUT is cleared,
+        so a failed render leaves no file at all. A directory gets a generated
+        timestamped name inside it.
+
+        target: the document to render. It accepts: {suffixes}.
+        out: destination .png path, written EXACTLY there, or a directory
+            for a generated timestamped name.
+        job: a render-job JSON file — one job, an array of them, or
+            {"jobs": [...]}. When given it wins: target/out are ignored, and
+            the other flags override every job in it.
+        appearance: light (default) or dark — the background around the
+            sheets, which keep their own.
+        width: output width in pixels (1..8192), overriding the size profile;
+            with --job it sizes every output in the packet.
+        height: output height in pixels (1..8192), overriding the size profile.
+        size_profile: simple (1200x900), simple-square (1024x1024), diagnostic
+            (1600x1200, the default), labeled (1600x1200), assembly (1800x1200),
+            assembly-large (1920x1440), presentation (2400x1600),
+            presentation-large (2800x1800), or contact-sheet (2400x1600).
+        debug: report artifact resolution and measured browser stages in the
+            result's debug field (read it with --json).
+        """
+        from cadgen.snapshot_core import DISPLAY_APPEARANCES
+
+        if appearance not in DISPLAY_APPEARANCES:
+            raise ValueError(
+                f"appearance is {' or '.join(sorted(DISPLAY_APPEARANCES))}; got {appearance!r}"
+            )
+        return _run(
+            kinds,
+            target=target, out=out, job=job, mode="view",
+            camera=None,
+            # As a drawing's: passed only when asked for, so a `--job` file's
+            # own appearance is not overwritten by this default.
+            display=(
+                {"appearance": appearance}
+                if "appearance" in _EXPLICIT_SNAPSHOT_OPTIONS.get()
+                else None
+            ),
+            width=width, height=height, size_profile=size_profile,
+            view_labels=False, debug=debug,
+        )
+
+    snapshot.__doc__ = snapshot.__doc__.replace("{suffixes}", suffixes).replace("{picture}", picture)
     return snapshot
 
 
@@ -594,8 +748,9 @@ def polymorphic_snapshot_verb():
     ) -> SnapshotResult:
         """Render any supported input, routed by suffix.
 
-        target: the document to render — STEP/STP, STL/3MF/GLB, DXF, or a
-            robot description (URDF/SRDF/SDF). Run model scripts first, then
+        target: the document to render — STEP/STP, STL/3MF/GLB, DXF, a KiCad
+            board or schematic, a wiring harness (.harness.yml), or a robot
+            description (URDF/SRDF/SDF). Run model scripts first, then
             snapshot the document they write.
         out: destination path, written EXACTLY there — .png (a STEP section
             also writes .svg, a STEP --video writes .mp4/.gif) — or a directory
@@ -604,21 +759,23 @@ def polymorphic_snapshot_verb():
         job: a render-job JSON file — one job, an array of them, or
             {"jobs": [...]}; jobs may mix formats. When given it wins, and the
             other flags override every job in it.
-        mode: view (default), section (STEP only), or list (not DXF: a
-            drawing has no parts to list).
+        mode: view (default), section (STEP only), or list (not a DXF or a
+            plot — KiCad, harness: a drawing or a plot has no parts to list).
         section: where a STEP --mode section cuts, as PLANE[:OFFSET] — XY, XZ
             or YZ, offset along the plane's normal in model units: XZ:12.5.
         camera: a preset (front, back, left, right, top, bottom, iso), an
             "azimuth:elevation" pair, or camera JSON;
             orthographicHalfHeight preserves an orthographic view's scale.
             Projection and focalLength (20..200 mm) belong in display.camera.
-            A DXF is drawn flat and head on, and refuses a camera.
+            A DXF or a plot (KiCad, harness) is drawn flat and head on, and
+            refuses a camera.
         display: solid (default), render, xray, hidden-line, wireframe or grid, grouped
             display JSON, or a JSON file path. appearance defaults to light.
             Omitted groups inherit the preset. edges, clip, exploded, the xray,
             hidden-line and wireframe modes and the hidden/off surface styles
             describe a STEP model; every other input takes solid or render. A
-            DXF takes appearance alone (`cadgen dxf snapshot --appearance`).
+            DXF or a plot takes appearance alone (`--appearance` on `cadgen
+            dxf snapshot`, `cadgen pcb snapshot` and `cadgen harness snapshot`).
         kinematics: pose values for a STEP model's kinematics — a preset
             name or {dof: value} JSON; available in every display mode.
         animation: one still frame of a STEP model's clip — the clip name

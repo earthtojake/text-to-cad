@@ -73,3 +73,13 @@ test("entryIconKind gives STEP, STL, 3MF, and GLB distinct file explorer icons",
   assert.equal(staleStepIcon, ENTRY_ICON_KIND.STEP);
   assert.equal(new Set([stepIcon, stlIcon, threeMfIcon, glbIcon]).size, 4);
 });
+
+test("a KiCad board, its schematic and a wiring harness each have an icon of their own, whatever the source format says", () => {
+  const board = entryIconKind({ file: "boards/blinky.kicad_pcb", kind: "kicad_pcb" }, { sourceFormat: "step" });
+  const schematic = entryIconKind({ file: "boards/blinky.kicad_sch", kind: "kicad_sch" });
+  const harness = entryIconKind({ file: "cable.harness.yml", kind: "harness" });
+  assert.equal(board, ENTRY_ICON_KIND.KICAD_PCB);
+  assert.equal(schematic, ENTRY_ICON_KIND.KICAD_SCH);
+  assert.equal(harness, ENTRY_ICON_KIND.HARNESS);
+  assert.equal(new Set([board, schematic, harness, ENTRY_ICON_KIND.DXF, ENTRY_ICON_KIND.STEP]).size, 5);
+});

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Harness"
+  short_description: "Design wiring harnesses in Python as checked WireViz documents."
+  default_prompt: "Use $harness to design or edit a wiring harness as a Python @harness model between @pcb boards, motors, sensors and batteries, build it into a WireViz document checked against the boards' nets, add its bill of materials when needed, and launch CAD Viewer to show the harness."

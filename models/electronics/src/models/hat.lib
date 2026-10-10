@@ -1,0 +1,77 @@
+* Simulation models for the bus servo HAT's parts (bus_servo_hat_circuits.py), read by ngspice.
+*
+* These are GENERIC models, not the makers': SPICE's built-in devices, and small subcircuits,
+* with numbers fitted to each part's datasheet as its comment says. A result that leans on one
+* of them is worth confirming with the maker's model, or on the bench.
+
+* ---- transistors -------------------------------------------------------------------------
+
+* MMBT3906 (onsemi MMBT3906LT1G): the 2N3906 die in SOT-23. The classic Q2N3906 Gummel-Poon
+* model of SPICE's standard libraries; its reverse transit time (tr) sets how long the PNP
+* stays on after its base is released, which the servo bus's timing rests on.
+.model MMBT3906 PNP(is=1.41f xti=3 eg=1.11 vaf=18.7 bf=180.7 ne=1.5 ise=0 ikf=80m xtb=1.5
++ br=4.977 nc=2 isc=0 ikr=0 rc=2.5 cjc=9.728p mjc=0.5776 vjc=0.75 fc=0.5 cje=8.063p
++ mje=0.3677 vje=0.75 tr=33.42n tf=179.3p itf=0.4 vtf=4 xtf=6 rb=10)
+
+* AO4407A (Alpha & Omega, rev 11.1): -30 V P-channel. Fitted to its datasheet: VGS(th) -2.3 V,
+* RDS(on) 10 mOhm at VGS -10 V and 12.7 mOhm at -6 V, Ciss 2060 pF, Crss 295 pF and Coss
+* 370 pF at VDS -15 V, Rg 2.4 Ohm; body diode 0.7 V at 1 A, recovering in 30 ns.
+.model AO4407A VDMOS(pchan vto=-2.3 kp=52 rd=5m rs=2.5m rg=2.4 cgs=1.76n cgdmax=1n cgdmin=0.2n
++ a=0.5 is=2p n=1 rb=10m cjo=400p vj=0.8 m=0.5 tt=30n bv=33)
+
+* ---- diodes ------------------------------------------------------------------------------
+
+* B5819WS (UTC, and others alike): 40 V 1 A Schottky in SOD-323. Fitted to VF 0.50 V at 1 A
+* (0.60 V max; 0.90 V max at 3 A) and its junction capacitance, 120 pF at VR 4 V.
+.model B5819WS D(is=0.41u n=1 rs=0.12 cjo=398p vj=0.4 m=0.5 bv=45 ibv=1m)
+
+* BZT52C6V8S: 6.8 V zener, 5 mA test current (6.4 to 7.2 V), SOD-323.
+.model BZT52C6V8 D(is=1e-14 n=1 rs=1 bv=6.8 ibv=5m nbv=1.2 cjo=100p)
+
+* SMAJ15CA: 15 V standoff bidirectional TVS (SMA). Two breakdown junctions in series, fitted to
+* VBR 16.7 to 18.5 V at 1 mA (17.6 V taken) and VC 24.4 V at its peak pulse current, 16.4 A.
+.subckt SMAJ15CA A1 A2
+D1 mid A1 SMAJ15CA_J
+D2 mid A2 SMAJ15CA_J
+.model SMAJ15CA_J D(is=1e-12 n=1 rs=0.2 bv=16.9 ibv=1m cjo=1n vj=0.8 m=0.33)
+.ends SMAJ15CA
+
+* ---- capacitors --------------------------------------------------------------------------
+
+* An aluminium electrolytic: its capacitance, series resistance (esr) and inductance (esl). The
+* resistance damps a supply's ringing when it is plugged in, so a testbench varies it.
+.subckt ECAP P N params: c=220u esr=0.3 esl=10n
+C1 P a {c}
+R1 a b {esr}
+L1 b N {esl}
+.ends ECAP
+
+* ---- logic -------------------------------------------------------------------------------
+
+* 74LVC1G126 / 74LVC1G125 at 3.3 V: a generic tri-state buffer. The makers publish IBIS, not
+* SPICE, so these are behavioural: an input threshold at VCC/2, about 4 ns from input or
+* enable to output, a 30 Ohm output, 4 pF inputs. Ports: OE (active high on the '126, OEN
+* active low on the '125), A in, GND, Y out, VCC.
+.subckt LVC1G126 OE A GND Y VCC params: rout=30 tdel=4n cin=4p
+Ca A GND {cin}
+Ce OE GND {cin}
+Bl l0 GND V = 0.5 + 0.5*tanh(20*(V(A,GND) - 0.5*V(VCC,GND)))
+Rl l0 l1 1k
+Cl l1 GND {tdel/1000}
+Be e0 GND V = 0.5 + 0.5*tanh(20*(V(OE,GND) - 0.5*V(VCC,GND)))
+Re e0 e1 1k
+Ce1 e1 GND {tdel/1000}
+Bo Y GND I = V(e1,GND) * (V(Y,GND) - V(l1,GND)*V(VCC,GND)) / {rout}
+.ends LVC1G126
+
+.subckt LVC1G125 OEN A GND Y VCC params: rout=30 tdel=4n cin=4p
+Ca A GND {cin}
+Ce OEN GND {cin}
+Bl l0 GND V = 0.5 + 0.5*tanh(20*(V(A,GND) - 0.5*V(VCC,GND)))
+Rl l0 l1 1k
+Cl l1 GND {tdel/1000}
+Be e0 GND V = 0.5 - 0.5*tanh(20*(V(OEN,GND) - 0.5*V(VCC,GND)))
+Re e0 e1 1k
+Ce1 e1 GND {tdel/1000}
+Bo Y GND I = V(e1,GND) * (V(Y,GND) - V(l1,GND)*V(VCC,GND)) / {rout}
+.ends LVC1G125

@@ -15,7 +15,7 @@ FIDELITY NOTES (each one is a place a "natural" Python spelling diverges)
 ------------------------------------------------------------------------
 * ``file`` is spelled with ``/`` BY CONTRACT, on Windows too (``C:/models/part.step``):
   it is what the page puts back into a URL.
-* ``path.extname`` is not ``os.path.splitext`` (see ``content_types``).
+* ``path.extname`` is not ``os.path.splitext`` (see ``cadgen.file_types``).
 * JS ``\\s`` and ``\\w`` are not Python's, so ``_xml_root_name`` spells both
   character classes out.
 * A ``kinematics: {}`` object is a declaration even though Python considers it
@@ -35,7 +35,7 @@ import threading
 
 from cadgen._internal.shared_read import open_shared_for_read
 
-from .content_types import extension_of
+from .content_types import COMPOUND_EXTENSIONS, extension_of, format_of
 from .encoding import encode_uri_component, file_version, local_asset_url_for_path
 from .store_paths import (
     SOURCE_SIDECAR_NAMES,
@@ -67,7 +67,8 @@ __all__ = [
 CAD_CATALOG_SCHEMA_VERSION = 4
 
 SOURCE_EXTENSIONS = frozenset(
-    {".step", ".stp", ".stl", ".3mf", ".glb", ".dxf", ".urdf", ".srdf", ".sdf"}
+    {".step", ".stp", ".stl", ".3mf", ".glb", ".dxf", ".urdf", ".srdf", ".sdf", ".kicad_pcb", ".kicad_sch",
+     *COMPOUND_EXTENSIONS}
 )
 
 # The folders the explorer's search never walks (``folders.py``), beside every hidden one. Matched
@@ -251,10 +252,8 @@ def asset_for_path(file_path) -> dict | None:
 # --- classification -------------------------------------------------------
 
 
-def source_format_for_path(source_path, extension=None) -> str:
-    r"""``extension.toLowerCase().replace(/^\./, "")`` — ONE leading dot."""
-    ext = (extension_of(source_path) if extension is None else extension).lower()
-    return ext[1:] if ext.startswith(".") else ext
+#: A file's format, as the catalog names it (``cadgen.file_types.format_of``).
+source_format_for_path = format_of
 
 
 # --- URDF/SRDF pairing ----------------------------------------------------

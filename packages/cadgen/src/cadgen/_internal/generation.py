@@ -8,18 +8,17 @@ import time
 
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from cadgen.catalog import (
     StepImportOptions,
     source_from_path,
 )
 from cadgen.cli_logging import CliLogger
+from cadgen.metadata import MODEL_FORMATS, ModelFormat, format_named
 from cadgen._internal.glb_topology import build_step_topology_index_manifest
 from cadgen.coordination import (
-    DRAWING_PACKAGE,
     PHASE_GENERATE,
-    STEP_PACKAGE,
     ProgressEvent,
     artifact_build,
     resolve as resolve_progress,
@@ -50,6 +49,10 @@ from cadgen._internal.generation_spec import (
     _entry_spec_from_source,
     _selector_options_for_part,
 )
+
+if TYPE_CHECKING:
+    from cadgen.kicad.build import BoardWritten
+
 
 def _pinned_child_records(scene: object) -> Iterator[tuple[str, dict]]:
     """Each child tree the body pinned, with that child's record, only while the
@@ -666,6 +669,9 @@ def _generate_part_outputs(
                 )
             ),
         }
+        # A board's KiCad project rides the same record: its files as more outputs, listed
+        # only now so the document hash above stays the STEP's.
+        outputs.update({path: dict(facts) for path, facts in scene.extra_outputs.items()})
         from cadgen.store.trees import get_tree
 
         unannotated = get_tree(str(record["unannotatedTree"]))
@@ -1126,14 +1132,18 @@ def _validate_step_target(spec: EntrySpec, *, tool_name: str) -> None:
     )
 
 
-def _validate_dxf_target(spec: EntrySpec) -> None:
+def _validate_tree_less_target(spec: EntrySpec, fmt: ModelFormat) -> None:
     metadata = spec.generator_metadata
     if spec.source != "generated" or spec.script_path is None or metadata is None:
-        raise ValueError(f"dxf expected a generated Python source target: {spec.source_ref}")
-    if metadata.format != "dxf":
-        raise ValueError(f"dxf target is not a @dxf model: {spec.source_ref}")
-    if spec.dxf_path is None:
-        raise ValueError(f"dxf target has no configured DXF output: {spec.source_ref}")
+        raise ValueError(f"{fmt.name} expected a generated Python source target: {spec.source_ref}")
+    if metadata.format != fmt.name:
+        raise ValueError(f"{fmt.name} target is not a @{fmt.name} model: {spec.source_ref}")
+    if getattr(spec, fmt.spec_path) is None:
+        raise ValueError(f"{fmt.name} target has no configured {fmt.document} output: {spec.source_ref}")
+
+
+def _generated_document_summary(spec: EntrySpec, fmt: ModelFormat) -> str:
+    return f"wrote {fmt.wrote}: {_display_path(getattr(spec, fmt.spec_path))}"
 
 
 def _generated_output_summary(spec: EntrySpec) -> str:
@@ -1154,13 +1164,6 @@ def _generated_python_glb_summary(spec: EntrySpec) -> str:
     return f"processed: {spec.source_ref}"
 
 
-def _generated_dxf_summary(spec: EntrySpec) -> str:
-    output = spec.dxf_path
-    if output is not None:
-        return f"wrote DXF: {_display_path(output)}"
-    return f"processed: {spec.source_ref}"
-
-
 def _tree_event(spec: EntrySpec, state: str, **extra: object) -> None:
     """One model transition for the build tree (cadgen.cli_tree). Generated models only:
     an imported document has no body and no children to show."""
@@ -1173,8 +1176,13 @@ def _tree_event(spec: EntrySpec, state: str, **extra: object) -> None:
 
 
 def _current_source_result(spec: EntrySpec, tree: str | None) -> None:
-    """Capture the current source result now; consumers never reread the record."""
-    if spec.source != "generated" or spec.dxf_path is not None:
+    """Capture the current source result now; consumers never reread the record.
+
+    Tree-less models (a drawing, a board without a 3D export, a harness) have none;
+    a board WITH a 3D export is a geometry model, whose tree its caller waits for.
+    """
+    metadata = spec.generator_metadata
+    if spec.source != "generated" or metadata is None or format_named(metadata.format).tree_less:
         return
     from cadgen.daemon.executors import emit_source_result
     model = _model_for_spec(spec)
@@ -1232,7 +1240,7 @@ def _run_with_spec_generation_status(
     ``action`` is called as ``action(spec, run)``; ``run`` is the progress reporter.
     """
     del logger
-    kind = DRAWING_PACKAGE if model_format == "dxf" else STEP_PACKAGE
+    kind = format_named(model_format).package
     started = time.perf_counter()
     checked_tree = None
 
@@ -1337,6 +1345,9 @@ def _reported_document(spec: EntrySpec) -> str | None:
     -- the first mesh it declares. A STEP model that also declares meshes still
     names its STEP: the line names the model's primary document, not everything
     the build wrote."""
+    if spec.pcb_path is not None:
+        # A board names its board file, whatever 3D exports it also writes.
+        return str(spec.pcb_path.expanduser().resolve())
     if spec.step_output:
         return str(spec.step_path.expanduser().resolve()) if spec.step_path is not None else None
     for export in spec.mesh_exports:
@@ -1436,23 +1447,24 @@ def generate_step_targets(
         from cadgen.store.trees import tree_kind_for
 
         job_reused(outcome in ("current", "skipped-peer"))  # in a build worker: telemetry's cache hit, or not
-        reported.append(
-            {
-                "ok": True,
-                # Read off the tree (store.trees.tree_kind): part or assembly is
-                # what the returned shape was, never something a model declares.
-                "kind": tree_kind_for(tree) or "part",
-                "outcome": outcome,
-                # The document the run wrote, and the hash of the result tree it came
-                # from. A mesh-only model declares no STEP, so it answers with the mesh
-                # it wrote -- a path the caller can open, never the tree hash, which
-                # names nothing on disk. ABSOLUTE in the JSON result, as every door's
-                # is (a machine reader may not share this cwd); the human line below
-                # shows it relative to the cwd.
-                "document": _reported_document(spec),
-                "tree": tree,
-            }
-        )
+        entry = {
+            "ok": True,
+            # Read off the tree (store.trees.tree_kind): part or assembly is
+            # what the returned shape was, never something a model declares.
+            "kind": tree_kind_for(tree) or "part",
+            "outcome": outcome,
+            # The document the run wrote, and the hash of the result tree it came
+            # from. A mesh-only model declares no STEP, so it answers with the mesh
+            # it wrote -- a path the caller can open, never the tree hash, which
+            # names nothing on disk. ABSOLUTE in the JSON result, as every door's
+            # is (a machine reader may not share this cwd); the human line below
+            # shows it relative to the cwd.
+            "document": _reported_document(spec),
+            "tree": tree,
+        }
+        if spec.pcb_path is not None:
+            entry["unrouted"] = _board_unrouted(spec)
+        reported.append(entry)
 
     def _flush() -> None:
         # STDOUT IS THE RESULT, on every CLI: the logger's prose goes to stderr, so a
@@ -1465,7 +1477,11 @@ def generate_step_targets(
                 print(json.dumps(entry, separators=(",", ":")))
             else:
                 document = entry["document"]
-                print(f"{entry['outcome']} {_display_path(Path(document)) if document else entry['tree']}")
+                line = f"{entry['outcome']} {_display_path(Path(document)) if document else entry['tree']}"
+                unrouted = entry.get("unrouted")
+                if unrouted:
+                    line += f" (draft: {unrouted} unrouted connection{'s' if unrouted != 1 else ''})"
+                print(line)
     all_specs, selected_specs = _selected_specs_for_targets(targets, step_options=step_options)
     for spec in selected_specs:
         _validate_step_target(spec, tool_name=tool_name)
@@ -1576,27 +1592,97 @@ def generate_dxf_targets(
     verbose: bool = False,
     json_output: bool = False,
 ) -> int:
-    """Build drawings. A drawing is a model (STORE.md §3), so its run answers on
-    stdout exactly as a STEP model's does: one `outcome document` line per
-    target, upgraded to JSON by ``json_output`` (``tree`` is null — a drawing
-    has no geometry tree)."""
+    """Build drawings (``tree`` is null -- a drawing has no geometry tree)."""
+    return _generate_tree_less_targets(
+        MODEL_FORMATS["dxf"], targets, force=force, verbose=verbose, json_output=json_output
+    )
+
+
+def generate_pcb_targets(
+    targets: Sequence[str],
+    *,
+    force: bool = False,
+    verbose: bool = False,
+    json_output: bool = False,
+) -> int:
+    """Build boards. The document is the board's ``.kicad_pcb`` (the rest of its
+    project is written beside it). A board with unrouted connections is a DRAFT: it
+    is written and says so."""
+    return _generate_tree_less_targets(
+        MODEL_FORMATS["pcb"], targets, force=force, verbose=verbose, json_output=json_output, facts=_board_facts
+    )
+
+
+def generate_harness_targets(
+    targets: Sequence[str],
+    *,
+    force: bool = False,
+    verbose: bool = False,
+    json_output: bool = False,
+) -> int:
+    """Build harnesses. The document is the harness's ``.harness.yml`` (``tree`` is
+    null -- a harness has no geometry)."""
+    return _generate_tree_less_targets(
+        MODEL_FORMATS["harness"], targets, force=force, verbose=verbose, json_output=json_output
+    )
+
+
+def _board_facts(spec: EntrySpec, built: BoardWritten | None) -> dict[str, object]:
+    """A board's result says how much is left to route: what this build left, or else
+    what its record says the last one left."""
+    return {"unrouted": built.unrouted if built is not None else _board_unrouted(spec)}
+
+
+def _board_unrouted(spec: EntrySpec) -> int | None:
+    """What the board's record says its last build left unrouted (None if unknown)."""
+    model = _model_for_spec(spec)
+    if model is None or spec.pcb_path is None:
+        return None
+    from cadgen.store.records import read_record
+
+    record = read_record(model) or {}
+    meta = (record.get("outputs") or {}).get(str(spec.pcb_path.expanduser().resolve())) or {}
+    unrouted = meta.get("unrouted")
+    return int(unrouted) if isinstance(unrouted, int) else None
+
+
+def _generate_tree_less_targets(
+    fmt: ModelFormat,
+    targets: Sequence[str],
+    *,
+    force: bool,
+    verbose: bool,
+    json_output: bool,
+    facts: Callable[[EntrySpec, object | None], dict[str, object]] | None = None,
+) -> int:
+    """Build drawings, boards or harnesses. Each is a model (STORE.md §3), so its run
+    answers on stdout exactly as a STEP model's does: one `outcome document` line per
+    target, upgraded to JSON by ``json_output``, ``tree`` null. ``facts`` adds what a
+    format's result says beside (a board's unrouted count), given the build's result,
+    or None when it did not build."""
     from cadgen.store.gate import stale
 
     reported: list[dict[str, object]] = []
 
-    def _emit(spec: EntrySpec, outcome: str) -> None:
+    # Every target is validated first (`_validate_tree_less_target`): each has its document.
+    def document_of(spec: EntrySpec) -> Path:
+        return getattr(spec, fmt.spec_path)
+
+    def _emit(spec: EntrySpec, outcome: str, built: object | None = None) -> None:
         from cadgen.daemon.telemetry import job_reused
 
         job_reused(outcome in ("current", "skipped-peer"))  # in a build worker: telemetry's cache hit, or not
+        document = document_of(spec)
         reported.append(
             {
                 "ok": True,
-                "kind": "drawing",
+                "kind": fmt.record_kind,
                 "outcome": outcome,
                 # Absolute in the JSON result, like every door's; the human line
                 # shows it relative to the cwd.
-                "document": str(spec.dxf_path.expanduser().resolve()) if spec.dxf_path is not None else None,
+                "document": str(document.expanduser().resolve()),
                 "tree": None,
+                **(facts(spec, built) if facts is not None else {}),
             }
         )
 
@@ -1604,70 +1690,52 @@ def generate_dxf_targets(
         for entry in reported:
             if json_output:
                 print(json.dumps(entry, separators=(",", ":")))
-            else:
-                document = entry["document"]
-                print(f"{entry['outcome']} {_display_path(Path(document)) if document else None}")
+                continue
+            document = entry["document"]
+            line = f"{entry['outcome']} {_display_path(Path(document))}"
+            unrouted = entry.get("unrouted")
+            if unrouted:
+                line += f" (draft: {unrouted} unrouted connection{'s' if unrouted != 1 else ''})"
+            print(line)
 
-    def dxf_output_current(spec: EntrySpec, output_path: Path | None) -> bool:
-        # The ONE gate every model answers to (STORE.md §4): the drawing's record,
-        # its closure, its pinned children and its .dxf output.
-        #
-        # Ask it by the model's IDENTITY (``script::fn``), never by the bare script
-        # path: a file may hold several models, and a bare path is ambiguous there --
-        # cadgen.store.index.resolve_model_ref refuses it rather than guessing, which
-        # would fail the drawing before it ever reached its own gate.
-        if output_path is None:
-            return False
+    def is_current(spec: EntrySpec) -> bool:
+        # The ONE gate every model answers to (STORE.md §4): its record, its closure,
+        # its pinned children and its outputs' bytes. Asked by the model's IDENTITY
+        # (``script::fn``), never by the bare script path: a file may hold several
+        # models, and cadgen.store.index.resolve_model_ref refuses a bare path there
+        # rather than guessing.
         model = _model_for_spec(spec)
         if model is None:
             return False
-        verdict = stale(model)
-        return not verdict.stale
+        return not stale(model).stale
 
     logger = CliLogger("cadgen", verbose=verbose)
-    all_specs, selected_specs = _selected_specs_for_targets(targets)
+    _all_specs, selected_specs = _selected_specs_for_targets(targets)
     for spec in selected_specs:
-        _validate_dxf_target(spec)
-
-    # The .dxf IS the product: every drawing writes the `.dxf` its decorator
-    # declares (`out=`, else the sibling `<name>.dxf`). The viewer parses that
-    # file directly; there is no drawing package.
-    def _effective_output(spec: EntrySpec) -> Path | None:
-        return spec.dxf_path
-
-    # No-op fast path: skip regenerating a drawing whose source closure is
-    # unchanged and whose recorded output still verifies byte-for-byte.
+        _validate_tree_less_target(spec, fmt)
+    # No-op fast path: a model whose closure is unchanged and whose recorded outputs
+    # still verify byte-for-byte is not run.
     if not force:
-        current_specs = [
-            spec
-            for spec in selected_specs
-            if spec.script_path is not None
-            and dxf_output_current(spec, _effective_output(spec))
-        ]
+        current_specs = [spec for spec in selected_specs if is_current(spec)]
         for spec in current_specs:
-            logger.info(
-                f"{_display_path(spec.dxf_path) if spec.dxf_path is not None else spec.cad_ref} "
-                "is current; not rebuilt"
-            )
+            logger.info(f"{_display_path(document_of(spec))} is current; not rebuilt")
             _emit(spec, "current")
         current_refs = {spec.source_ref for spec in current_specs}
         selected_specs = [spec for spec in selected_specs if spec.source_ref not in current_refs]
     if selected_specs:
         # Re-checked when the run opens, like the STEP path: a run that started behind
-        # a concurrent build of this drawing must not regenerate it.
+        # a concurrent build of this model must not build it again.
         def _built_by_a_peer(spec: EntrySpec) -> bool:
-            if force or spec.script_path is None:
-                return False
-            return dxf_output_current(spec, _effective_output(spec))
+            return not force and is_current(spec)
 
         results = _run_selected_specs(
             selected_specs,
             action=lambda spec, progress_sink=None: _run_with_spec_generation_status(
                 spec,
-                "dxf",
+                fmt.name,
                 lambda tracked_spec, reporter: run_script_generator(
                     tracked_spec,
-                    "dxf",
+                    fmt.name,
                     logger=logger,
                     progress=reporter,
                     model_prints_to_stdout=True,
@@ -1677,10 +1745,13 @@ def generate_dxf_targets(
                 logger=logger,
             ),
             logger=logger,
-            success_message=_generated_dxf_summary,
+            success_message=lambda spec: _generated_document_summary(spec, fmt),
         )
         for spec, result in zip(selected_specs, results):
-            _emit(spec, "skipped-peer" if isinstance(result, _SkippedGeneration) else "built")
+            if isinstance(result, _SkippedGeneration):
+                _emit(spec, "skipped-peer")
+            else:
+                _emit(spec, "built", result)
     logger.total()
     _flush()
     return 0

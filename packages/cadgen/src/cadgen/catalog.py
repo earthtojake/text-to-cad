@@ -8,7 +8,14 @@ from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
 
-from .metadata import GeneratorMetadata, normalize_mesh_numeric, parse_generator_metadata
+from .metadata import (
+    TREE_LESS_FORMATS,
+    GeneratorMetadata,
+    ModelFormat,
+    format_named,
+    normalize_mesh_numeric,
+    parse_generator_metadata,
+)
 
 from ._internal.doors import STEP_SUFFIXES
 from ._internal.shared_read import open_shared_for_read
@@ -63,6 +70,10 @@ class CadSource:
     generator_metadata: GeneratorMetadata | None = None
     step_path: Path | None = None
     dxf_path: Path | None = None
+    # A @pcb board's .kicad_pcb; its .kicad_sch and .kicad_pro sit beside it.
+    pcb_path: Path | None = None
+    # A @harness model's one document, its .harness.yml.
+    harness_path: Path | None = None
     mesh_tolerance: float | None = None
     mesh_angular_tolerance: float | None = None
     color: tuple[float, float, float, float] | None = None
@@ -84,6 +95,12 @@ class CadSource:
                 paths.append(self.step_path)
             if self.dxf_path is not None:
                 paths.append(self.dxf_path)
+            if self.pcb_path is not None:
+                from cadgen.metadata import PCB_PROJECT_SUFFIXES
+
+                paths.extend(self.pcb_path.with_suffix(suffix) for suffix in PCB_PROJECT_SUFFIXES)
+            if self.harness_path is not None:
+                paths.append(self.harness_path)
         return tuple(path.resolve() for path in paths)
 
 
@@ -176,6 +193,8 @@ def find_source_by_path(path: Path, root: Path | None = None) -> CadSource | Non
             source.step_path,
             source.script_path,
             source.dxf_path,
+            source.pcb_path,
+            source.harness_path,
             *source.generated_paths,
         ]
         if any(candidate is not None and candidate.resolve() == resolved_path for candidate in paths):
@@ -205,16 +224,16 @@ def cad_ref_from_step_path(path: Path) -> str:
     raise CadSourceError(f"{_display_path(path)} is not a CAD STEP source")
 
 
-def cad_ref_from_dxf_path(path: Path) -> str:
-    # DXF refs KEEP the `.dxf` suffix so a `<name>.dxf.py` drawing and a `<name>.step.py`
-    # model in the same folder never collide on cad_ref.
+def cad_ref_from_document_path(path: Path, fmt: ModelFormat) -> str:
+    # A tree-less model's ref KEEPS its document's suffix, so a `<name>.dxf` drawing, a
+    # `<name>.kicad_pcb` board and a `<name>.step` part in one folder never collide on cad_ref.
     resolved = path.resolve()
     try:
         relative = resolved.relative_to(Path.cwd().resolve())
     except ValueError:
         relative = PurePosixPath(resolved.as_posix())
-    if relative.suffix.lower() != ".dxf":
-        raise CadSourceError(f"{_display_path(path)} is not a CAD DXF output path")
+    if not relative.name.lower().endswith(fmt.suffix):
+        raise CadSourceError(f"{_display_path(path)} is not a {fmt.document} output path")
     return relative.as_posix()
 
 
@@ -484,24 +503,26 @@ def _model_source_ref(script_path: Path, metadata: GeneratorMetadata) -> str:
     return base
 
 
-def _dxf_generator_source(resolved_script_path: Path, metadata: GeneratorMetadata) -> CadSource:
+def _tree_less_generator_source(resolved_script_path: Path, metadata: GeneratorMetadata) -> CadSource:
+    """A drawing's, a board's (without a 3D export) or a harness's source: its one document."""
     from cadgen.metadata import resolve_model_output_path
 
-    dxf_path = resolve_model_output_path(
-        resolved_script_path, fmt="dxf", explicit_out=metadata.out_target, function=metadata.entry_function
+    fmt = format_named(metadata.format)
+    document = resolve_model_output_path(
+        resolved_script_path,
+        fmt=fmt.name,
+        explicit_out=metadata.pcb_out_target if fmt.name == "pcb" else metadata.out_target,
+        function=metadata.entry_function,
     )
     return CadSource(
         source_ref=_model_source_ref(resolved_script_path, metadata),
-        cad_ref=cad_ref_from_dxf_path(dxf_path),
+        cad_ref=cad_ref_from_document_path(document, fmt),
         source_path=resolved_script_path,
         source="generated",
         origin_path=resolved_script_path,
         script_path=resolved_script_path,
         generator_metadata=metadata,
-        step_path=None,
-        dxf_path=dxf_path,
-        mesh_tolerance=None,
-        mesh_angular_tolerance=None,
+        **{fmt.spec_path: document},
     )
 
 
@@ -512,12 +533,20 @@ def _read_python_source(
     metadata = parse_generator_metadata(resolved_script_path, function)
     if metadata is None:
         return None
-    if metadata.format == "dxf":
-        return _dxf_generator_source(resolved_script_path, metadata)
+    if metadata.format in TREE_LESS_FORMATS:
+        return _tree_less_generator_source(resolved_script_path, metadata)
     from cadgen.metadata import resolve_model_output_path
 
     step_path = resolve_model_output_path(
         resolved_script_path, fmt="step", explicit_out=metadata.out_target, function=metadata.entry_function
+    )
+    # A board with a 3D export: a geometry model that ALSO writes its KiCad project.
+    pcb_path = (
+        resolve_model_output_path(
+            resolved_script_path, fmt="pcb", explicit_out=metadata.pcb_out_target, function=metadata.entry_function
+        )
+        if metadata.board
+        else None
     )
     return CadSource(
         source_ref=_model_source_ref(resolved_script_path, metadata),
@@ -529,6 +558,7 @@ def _read_python_source(
         generator_metadata=metadata,
         step_path=step_path,
         dxf_path=None,
+        pcb_path=pcb_path,
         mesh_tolerance=metadata.mesh_tolerance,
         mesh_angular_tolerance=metadata.mesh_angular_tolerance,
     )

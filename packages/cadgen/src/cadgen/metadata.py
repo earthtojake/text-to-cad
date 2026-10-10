@@ -6,7 +6,61 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from cadgen.coordination.kinds import DRAWING_PACKAGE, HARNESS_PACKAGE, PCB_PACKAGE, STEP_PACKAGE, ArtifactKind
 from cadgen.render import relative_to_cwd as _display_path
+from cadgen.file_types import extension_of
+
+
+@dataclass(frozen=True)
+class ModelFormat:
+    """What a model's format -- the decorator that declares it -- is to the rest of cadgen.
+
+    A format with ``tree_less`` has no geometry tree: its record's tree is null, its
+    document is its output, and called inside another build it is just its body. A
+    board with a 3D export is not one: it is format "step", its tree the populated board.
+    """
+
+    name: str  # the decorator: "step", "dxf", "pcb", "harness"
+    suffix: str  # its document's: ``<name>.step``, ``.dxf``, ``.kicad_pcb``, ``.harness.yml``
+    kind: str  # its document's format, as the viewer, snapshots and telemetry name it
+    tree_less: bool
+    spec_path: str  # the CadSource/EntrySpec field that holds the document
+    package: ArtifactKind  # the phase set its build reports over
+    document: str  # what its document is, as a refusal names it ("not a CAD DXF output path")
+    wrote: str  # what its build's summary line names ("wrote DXF: ...")
+    # A tree-less build's record entryKind and its JSON result's "kind".
+    record_kind: str = ""
+
+
+MODEL_FORMATS = {
+    fmt.name: fmt
+    for fmt in (
+        ModelFormat("step", ".step", "step", False, "step_path", STEP_PACKAGE, "STEP", "STEP"),
+        ModelFormat("dxf", ".dxf", "dxf", True, "dxf_path", DRAWING_PACKAGE, "CAD DXF", "DXF", "drawing"),
+        ModelFormat("pcb", ".kicad_pcb", "kicad_pcb", True, "pcb_path", PCB_PACKAGE, "KiCad board", "KiCad project", "pcb"),
+        ModelFormat(
+            "harness", ".harness.yml", "harness", True, "harness_path", HARNESS_PACKAGE, "harness document", "harness", "harness"
+        ),
+    )
+}
+TREE_LESS_FORMATS = frozenset(name for name, fmt in MODEL_FORMATS.items() if fmt.tree_less)
+
+
+def format_named(name: str | None) -> ModelFormat:
+    """The format ``name``; a mesh-only model, or no name, is a STEP model's."""
+    return MODEL_FORMATS.get(str(name or ""), MODEL_FORMATS["step"])
+
+
+@dataclass(frozen=True)
+class DocumentWritten:
+    """What a tree-less model's writer wrote: its document and every file beside it."""
+
+    paths: tuple[Path, ...]
+
+    @property
+    def facts(self) -> dict[Path, dict[str, object]]:
+        """What a door reads off an output's record entry beside its hash, by path."""
+        return {}
 
 
 class InvalidModelScriptError(ValueError):
@@ -22,7 +76,8 @@ class GeneratorMetadata:
     script_path: Path
     display_name: str | None
     generator_names: tuple[str, ...]
-    # The decorator kind this model script declares: "step" (@step) or "dxf" (@dxf).
+    # The decorator kind this model script declares: "step" (@step), "dxf" (@dxf), "pcb" (@pcb)
+    # or "harness" (@harness).
     format: str
     mesh_tolerance: float | None
     mesh_angular_tolerance: float | None
@@ -39,6 +94,41 @@ class GeneratorMetadata:
     step_output: bool = True
     materials: object | None = None
     animation: object | None = None
+    # A @pcb board (see cadgen.authoring.ModelDef.board): its KiCad project is among
+    # the outputs, at ``pcb_out_target`` (else the sibling ``<name>.kicad_pcb``).
+    board: bool = False
+    pcb_out_target: str | None = None
+    # Declared manufacturing exports: a board's @pcb(gerber=, bom=, pos=), a harness's @harness(bom=).
+    fab_exports: "tuple[FabExportDecl, ...]" = ()
+
+
+@dataclass(frozen=True)
+class FabExportDecl:
+    """One declared manufacturing export: ``@pcb(gerber=, bom=, pos=)`` or ``@harness(bom=)``.
+
+    ``out`` is the raw script-relative target, ``None`` meaning the sibling of the
+    board file (``board.gerbers.zip``, ``board.bom.csv``, ``board.pos.csv``)."""
+
+    fmt: str
+    out: str | None = None
+
+
+#: The file a manufacturing export writes beside its board by default.
+FAB_SUFFIX = {"gerber": ".gerbers.zip", "bom": ".bom.csv", "pos": ".pos.csv"}
+
+
+def fab_output_path(script_path: Path | str, decl: "FabExportDecl", board_file: Path) -> Path:
+    """Where a declared manufacturing export lands (``out=`` resolves against the script)."""
+    if decl.out:
+        target = Path(decl.out)
+        return (target if target.is_absolute() else Path(script_path).resolve().parent / target).resolve()
+    return fab_sibling(board_file, decl.fmt).resolve()
+
+
+def fab_sibling(document: Path, fmt: str) -> Path:
+    """The ``fmt`` export's default file: beside the document, named by its stem
+    (``board.kicad_pcb`` -> ``board.bom.csv``, ``cable.harness.yml`` -> ``cable.bom.csv``)."""
+    return document.with_name(document.name[: -len(extension_of(document)) or None] + FAB_SUFFIX[fmt])
 
 
 @dataclass(frozen=True)
@@ -108,16 +198,24 @@ def resolve_model_output_path(
     if explicit_out:
         target = Path(explicit_out)
         return (target if target.is_absolute() else script.parent / target).resolve()
+    # A board's primary document is its KiCad board file; a mesh's, its own format.
+    suffix = MODEL_FORMATS[fmt].suffix if fmt in MODEL_FORMATS else f".{fmt}"
     # A file's sole model writes `<file>.<fmt>` (what `python bracket.py` is expected
     # to leave beside it, whatever the function is called); models SHARING a file
     # each write `<function>.<fmt>`, so two models never collide on one default.
     stem = script.stem
     if function and function != stem and len(model_function_names(script)) > 1:
         stem = function
-    return (script.parent / f"{stem}.{fmt}").resolve()
+    return (script.parent / f"{stem}{suffix}").resolve()
 
+
+# A board's project is four files (the last its custom design rules, empty
+# when it has none); the board file is its primary document.
+PCB_PROJECT_SUFFIXES = (".kicad_pcb", ".kicad_sch", ".kicad_pro", ".kicad_dru")
 
 _MESH_DECORATOR_NAMES = ("stl", "glb", "threemf")
+#: Every decorator that declares a model: a format's, or a mesh export's alone.
+MODEL_DECORATORS = frozenset({*MODEL_FORMATS, *_MESH_DECORATOR_NAMES})
 _MESH_DECORATOR_FMT = {"stl": "stl", "glb": "glb", "threemf": "3mf"}
 _MESH_SUFFIX = {"stl": ".stl", "3mf": ".3mf", "glb": ".glb"}
 
@@ -142,13 +240,29 @@ def declared_output_paths(script_path: Path | str, *, function: str | None = Non
         for metadata in models:
             if metadata is None:
                 continue
-            fmt = "dxf" if str(getattr(metadata, "format", "step") or "step") == "dxf" else "step"
+            fmt = format_named(metadata.format).name
+            if metadata.board:
+                board_file = resolve_model_output_path(
+                    script, fmt="pcb", explicit_out=metadata.pcb_out_target, function=metadata.entry_function
+                )
+                outputs.extend(board_file.with_suffix(suffix) for suffix in PCB_PROJECT_SUFFIXES)
+                outputs.extend(fab_output_path(script, decl, board_file) for decl in metadata.fab_exports)
+            if fmt == "pcb":
+                continue
+            if fmt in TREE_LESS_FORMATS:
+                # One document, and the BOM a harness's bom= writes beside it.
+                document = resolve_model_output_path(
+                    script, fmt=fmt, explicit_out=metadata.out_target, function=metadata.entry_function
+                )
+                outputs.append(document)
+                outputs.extend(fab_output_path(script, decl, document) for decl in metadata.fab_exports)
+                continue
             primary = resolve_model_output_path(
                 script, fmt=fmt, explicit_out=metadata.out_target, function=metadata.entry_function
             )
-            if fmt == "dxf" or getattr(metadata, "step_output", True):
+            if metadata.step_output:
                 outputs.append(primary)
-            for decl in getattr(metadata, "mesh_exports", ()) or ():
+            for decl in metadata.mesh_exports:
                 if decl.out is not None:
                     outputs.append(
                         resolve_model_output_path(
@@ -167,11 +281,10 @@ def _cadgen_decorator_aliases(tree: ast.Module) -> tuple[dict[str, str], set[str
     names bound to the cadgen module itself (for ``@cadgen.step(...)``)."""
     names: dict[str, str] = {}
     module_aliases: set[str] = set()
-    tracked = {"step", "dxf", *_MESH_DECORATOR_NAMES}
     for node in tree.body:
         if isinstance(node, ast.ImportFrom) and node.module in {"cadgen", "cadgen.authoring"}:
             for alias in node.names:
-                if alias.name in tracked:
+                if alias.name in MODEL_DECORATORS:
                     names[alias.asname or alias.name] = alias.name
         elif isinstance(node, ast.Import):
             for alias in node.names:
@@ -188,8 +301,13 @@ def _match_model_decorator(
     """(fmt, decorator kwargs, mesh_only) when the function carries a cadgen model
     decorator. ``@step``/``@dxf`` name the format; mesh decorators alone
     (``@stl``/``@glb``/``@threemf`` with no ``@step``) declare a MESH-ONLY model:
-    format "step" — the same tree and record — whose .step is never written."""
-    mesh_only = False
+    format "step" — the same tree and record — whose .step is never written.
+    ``@pcb`` alone is format "pcb" (a tree-less board); ``@pcb`` with a 3D export
+    (``@step`` or a mesh decorator) is format "step": the board's tree is its
+    populated 3D board. ``@harness`` is format "harness" whatever else is stacked on
+    it (the decorators refuse a harness that carries any other model decorator).
+    Stacking order never changes the answer."""
+    seen: list[tuple[str, dict[str, ast.expr]]] = []
     for decorator in function.decorator_list:
         call_kwargs: dict[str, ast.expr] = {}
         target = decorator
@@ -198,33 +316,35 @@ def _match_model_decorator(
             for keyword in decorator.keywords:
                 if keyword.arg is not None:
                     call_kwargs[keyword.arg] = keyword.value
-        fmt: str | None = None
+        resolved: str | None = None
         if isinstance(target, ast.Name):
-            # Only MODEL formats may match here. `names` tracks all five
-            # decorator aliases, so an unrestricted get() let the first
-            # cadgen decorator top-down win — a mesh decorator stacked ABOVE
-            # @step was mis-taken as the model format, breaking the
-            # documented stacking-order neutrality (runtime was neutral, the
-            # parser was not).
             resolved = names.get(target.id)
-            if resolved in {"step", "dxf"}:
-                fmt = resolved
-            elif resolved in _MESH_DECORATOR_NAMES:
-                mesh_only = True
         elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
-            if target.value.id in module_aliases and target.attr in {"step", "dxf"}:
-                fmt = target.attr
-            elif target.value.id in module_aliases and target.attr in _MESH_DECORATOR_NAMES:
-                mesh_only = True
-        if fmt is not None:
-            return fmt, call_kwargs, False
-    if mesh_only:
-        return "step", {}, True
-    return None
+            if target.value.id in module_aliases and target.attr in MODEL_DECORATORS:
+                resolved = target.attr
+        if resolved is not None:
+            seen.append((resolved, call_kwargs))
+    kinds = [kind for kind, _kwargs in seen]
+    if not kinds:
+        return None
+    meshes = any(kind in _MESH_DECORATOR_NAMES for kind in kinds)
+    if "harness" in kinds:
+        return "harness", next(kwargs for kind, kwargs in seen if kind == "harness"), False
+    if "pcb" in kinds:
+        board_kwargs = next(kwargs for kind, kwargs in seen if kind == "pcb")
+        if "step" in kinds or meshes:
+            return "step", board_kwargs, "step" not in kinds
+        return "pcb", board_kwargs, False
+    for kind, kwargs in seen:
+        # The first MODEL format top-down wins; a mesh decorator stacked above
+        # @step must not be taken for the model's format.
+        if kind in ("step", "dxf"):
+            return kind, kwargs, False
+    return "step", {}, True
 
 
 def model_function_formats(source: bytes | str, filename: str = "<model>") -> dict[str, str]:
-    """``{function: "step" | "dxf"}`` for every model a module's source declares,
+    """``{function: "step" | "dxf" | "pcb" | "harness"}`` for every model a module's source declares,
     in file order; a mesh-only model reads as "step". A pure function of the
     bytes: ``{}`` for source that declares none or does not parse."""
     try:
@@ -375,6 +495,9 @@ def parse_generator_metadata(script_path: Path, function: str | None = None) -> 
         step_output=bool(defn.step_output),
         materials=defn.materials,
         animation=defn.animation,
+        board=defn.board,
+        pcb_out_target=defn.pcb_out,
+        fab_exports=defn.fab_exports,
     )
 
 

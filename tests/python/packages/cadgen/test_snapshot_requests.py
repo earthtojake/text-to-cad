@@ -213,6 +213,155 @@ class CrossKindOptionsAreRefusedByName(_Workspace):
         self.assertIn("grid, hidden-line, render, solid, wireframe, xray", said)
 
 
+class PlotRequestsAreRefusedByName(_Workspace):
+    """A KiCad board or schematic is a PLOT: drawn as KiCad plots it, flat.
+
+    Everything that describes a scene is refused BY NAME, in a plot's words,
+    and before KiCad is ever run — so none of this needs KiCad. Routing is the
+    other half: a plot resolves to a `plot` job whose payload the page fetches.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.write("blinky.kicad_pcb", "(kicad_pcb (version 20240108))\n")
+        self.write("blinky.kicad_sch", "(kicad_sch (version 20231120))\n")
+
+    def job(self, name="blinky.kicad_pcb", **overrides) -> dict:
+        return {"input": name, "outputs": [{"path": "review.png"}], **overrides}
+
+    def refused(self, job, pattern, **kwargs) -> None:
+        # Resolving is where KiCad would run: a refusal must come first.
+        with mock.patch.object(snapshot_cli, "plot_payload_file", side_effect=AssertionError("plotted")), \
+                self.assertRaisesRegex(SnapshotError, pattern):
+            self.resolve(job, **kwargs)
+
+    def test_a_scene_request_is_refused_in_a_plots_words(self) -> None:
+        for job, pattern in (
+            (self.job(camera="top"), r"camera poses a model in space; a KiCad board is drawn as KiCad plots it"),
+            (self.job(outputs=[{"path": "review.png", "camera": "iso"}]), r"camera poses a model in space"),
+            (self.job("blinky.kicad_sch", display={"mode": "render"}),
+             r"display\.mode describes a 3D scene.*a KiCad schematic is drawn as KiCad plots it, its sheets one under another"),
+            (self.job(display={"floor": {"enabled": True}}), r"--appearance light\|dark"),
+            (self.job(mode="list", outputs=[]), r"no parts to list and no solid to section, so view is the only mode blinky\.kicad_pcb"),
+            (self.job(section={"plane": "XY"}), r"no parts to list and no solid to section"),
+            (self.job(scale="urdf"), r"scale picks the units a 3D scene.*in millimetres, so blinky\.kicad_pcb has no scene to scale"),
+            (self.job(outputs=[{"path": "review.png", "label": "TOP"}]), r"names the view burnt into the image"),
+            (self.job(output={"padding": 0.1}), r"output\.padding has no meaning for a KiCad board"),
+            (self.job(jointValues={"j1": 10}), r"KiCad boards have no joints"),
+            (self.job("blinky.kicad_sch", quality={"tessellation": {"chordTolerance": 0.01}}),
+             r"a KiCad schematic is the picture its own tool draws, not a tessellated surface"),
+        ):
+            with self.subTest(job=sorted(set(job) - {"input"})):
+                self.refused(job, pattern)
+
+    def test_appearance_and_the_flat_output_settings_survive(self) -> None:
+        single, prepared = snapshot_cli.prepare_render_job_packet(
+            self.job(display={"appearance": "dark"}, output={"renderScale": 2, "transparent": True}), cwd=self.root
+        )
+        self.assertTrue(single)
+        self.assertEqual("dark", prepared[0].job["display"]["appearance"])
+        self.assertEqual("kicad_pcb", prepared[0].kind)
+
+    def test_each_door_routes_a_plot_only_where_it_should(self) -> None:
+        pcb = snapshot_cli.enabled_kinds(("kicad_pcb", "kicad_sch"))
+        snapshot_cli.prepare_render_job_packet(self.job("blinky.kicad_sch"), cwd=self.root, kinds=pcb)
+        self.refused(self.job(), r"does not render \.kicad_pcb inputs.*It accepts: \.step, \.stp",
+                     kinds=snapshot_cli.enabled_kinds(("step", "stp")))
+        self.write("panel.dxf", "0\nEOF\n")
+        self.refused(self.job("panel.dxf"), r"does not render \.dxf inputs.*It accepts: \.kicad_pcb, \.kicad_sch", kinds=pcb)
+
+    def test_a_plot_resolves_to_a_plot_job_whose_payload_the_page_fetches(self) -> None:
+        payload = b'{"schemaVersion":1,"kind":"board","unrouted":0,"sheets":[]}'
+        with mock.patch("cadgen.kicad.plot.plot_payload_bytes", return_value=payload) as plot:
+            packet = self.resolve(self.job(debug=True))
+        plot.assert_called_once_with(self.root / "blinky.kicad_pcb")
+        resolved = packet["jobs"][0]["resolved"]
+        self.assertEqual(("plot", "kicad_pcb"), (resolved["kind"], resolved["inputKind"]))
+        self.assertTrue(resolved["plotUrl"].startswith("/__render_asset/"))
+        served = Path(resolved["rootPath"]) / resolved["plotUrl"].split("/__render_asset/", 1)[1].split("?", 1)[0]
+        self.assertEqual(payload, served.read_bytes())
+        self.assertEqual(len(payload), resolved["debug"]["plotSource"]["payloadBytes"])
+
+    def test_a_machine_without_kicad_is_told_how_to_get_it(self) -> None:
+        from cadgen.kicad.install import KicadMissingError
+
+        missing = KicadMissingError("KiCad's command line, kicad-cli, was not found: install KiCad 10 from kicad.org")
+        with mock.patch("cadgen.kicad.plot.plot_payload_bytes", side_effect=missing), \
+                self.assertRaisesRegex(SnapshotError, r"kicad-cli, was not found: install KiCad 10"):
+            self.resolve(self.job())
+
+
+class HarnessRequestsAreRefusedByName(_Workspace):
+    """A wiring harness (`<name>.harness.yml`) is a plot too: WireViz's diagram, flat.
+
+    The same refusals a board gets, in a harness's words and before WireViz is
+    ever run; and a harness resolves to a `plot` job drawn from WireViz's payload,
+    never KiCad's. None of this needs WireViz.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.write("cable.harness.yml", "connectors: {}\n")
+
+    def job(self, name="cable.harness.yml", **overrides) -> dict:
+        return {"input": name, "outputs": [{"path": "review.png"}], **overrides}
+
+    def refused(self, job, pattern, **kwargs) -> None:
+        with mock.patch.object(snapshot_cli, "plot_payload_file", side_effect=AssertionError("plotted")), \
+                self.assertRaisesRegex(SnapshotError, pattern):
+            self.resolve(job, **kwargs)
+
+    def test_a_scene_request_is_refused_in_a_harness_words(self) -> None:
+        for job, pattern in (
+            (self.job(camera="top"), r"camera poses a model in space; a wiring harness is drawn as WireViz draws it"),
+            (self.job(display={"mode": "render"}), r"display\.mode describes a 3D scene.*a wiring harness is drawn as WireViz draws it"),
+            (self.job(mode="list", outputs=[]), r"so view is the only mode cable\.harness\.yml renders in"),
+            (self.job(output={"tightFrame": True}), r"output\.tightFrame has no meaning for a wiring harness"),
+            (self.job(jointValues={"j1": 10}), r"wiring harnesses have no joints"),
+        ):
+            with self.subTest(job=sorted(set(job) - {"input"})):
+                self.refused(job, pattern)
+
+    def test_each_door_routes_a_harness_only_where_it_should(self) -> None:
+        harness = snapshot_cli.enabled_kinds(("harness",))
+        _single, prepared = snapshot_cli.prepare_render_job_packet(self.job(), cwd=self.root, kinds=harness)
+        self.assertEqual("harness", prepared[0].kind)
+        self.refused(self.job(), r"does not render \.harness\.yml inputs.*It accepts: \.kicad_pcb, \.kicad_sch",
+                     kinds=snapshot_cli.enabled_kinds(("kicad_pcb", "kicad_sch")))
+        self.write("blinky.kicad_pcb", "(kicad_pcb (version 20240108))\n")
+        self.refused(self.job("blinky.kicad_pcb"), r"does not render \.kicad_pcb inputs.*It accepts: \.harness\.yml", kinds=harness)
+        # Only the pair is a harness: a plain YAML file is no input, and `cadgen snapshot` says what is.
+        self.write("config.yml", "a: 1\n")
+        self.refused(self.job("config.yml"), r"does not render \.yml inputs.*\.harness\.yml",
+                     kinds=snapshot_cli.enabled_kinds(snapshot_cli.KIND_RESOLVERS))
+
+    def test_a_harness_resolves_to_a_plot_job_drawn_from_wirevizs_payload(self) -> None:
+        payload = b'{"schemaVersion":1,"kind":"harness","unrouted":null,"sheets":[]}'
+        with mock.patch("cadgen.wireviz.plot.plot_payload_bytes", return_value=payload) as plot, \
+                mock.patch("cadgen.kicad.plot.plot_payload_bytes", side_effect=AssertionError("KiCad drew a harness")):
+            packet = self.resolve(self.job())
+        plot.assert_called_once_with(self.root / "cable.harness.yml")
+        resolved = packet["jobs"][0]["resolved"]
+        self.assertEqual(("plot", "harness"), (resolved["kind"], resolved["inputKind"]))
+        served = Path(resolved["rootPath"]) / resolved["plotUrl"].split("/__render_asset/", 1)[1].split("?", 1)[0]
+        self.assertEqual(payload, served.read_bytes())
+
+    def test_a_machine_without_wireviz_is_told_how_to_get_it_and_a_bad_document_why(self) -> None:
+        from cadgen.plot import PlotError
+        from cadgen.wireviz.install import WirevizMissingError
+
+        for raised, pattern in (
+            (WirevizMissingError("WireViz's command line, wireviz, was not found: install Graphviz and WireViz"),
+             r"wireviz, was not found: install Graphviz and WireViz"),
+            (PlotError("WireViz could not draw cable.harness.yml: X2:9 not found"),
+             r"WireViz could not draw cable\.harness\.yml: X2:9 not found"),
+        ):
+            with self.subTest(raised=type(raised).__name__), \
+                    mock.patch("cadgen.wireviz.plot.plot_payload_bytes", side_effect=raised), \
+                    self.assertRaisesRegex(SnapshotError, pattern):
+                self.resolve(self.job())
+
+
 class SrdfPairingTests(_Workspace):
     """S9: an SRDF renders its paired URDF, found the way `cadgen srdf validate` finds it."""
 

@@ -18,6 +18,11 @@
       ]
     },
     {
+      "title": "Electronics",
+      "description": "Design, check and manufacture circuit boards and the harnesses that wire them.",
+      "skills": ["pcb", "harness"]
+    },
+    {
       "title": "Robotics",
       "description": "Robot descriptions for ROS, MoveIt2 and Gazebo.",
       "skills": ["urdf", "srdf", "sdf"]

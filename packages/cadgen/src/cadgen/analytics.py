@@ -138,6 +138,7 @@ from cadgen._internal.api import api_url
 from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
 from cadgen._internal.file_lock import exclusive
 from cadgen.settings import LOCK, read_section, settings_path, update_section
+from cadgen.file_types import COMPOUND_EXTENSIONS, extension_of
 
 LOG = logging.getLogger("cadgen.analytics")
 
@@ -181,7 +182,8 @@ HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take
 UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply"})
 # A file's format, by extension: what the viewer opens (``cadgen.viewer.scanner.SOURCE_EXTENSIONS``).
 FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
-              ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf"}
+              ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf", ".kicad_pcb": "kicad_pcb", ".kicad_sch": "kicad_sch",
+              **COMPOUND_EXTENSIONS}
 KINDS = frozenset(FILE_KINDS.values())  # a format, as every event names it
 PROCESSES = frozenset({"app", "viewer", "daemon"})
 # Who asked for a build: a model script (``python model.py``) or a ``cadgen`` command (``cadgen step build``, ...).
@@ -1218,7 +1220,8 @@ class Recorder:
         its path here and never sent."""
         if not isinstance(path, str) or not path:
             return
-        kind = FILE_KINDS.get(os.path.splitext(path)[1].lower())
+        # A compound suffix is one extension: `cable.harness.yml` is a harness, a plain `.yml` nothing.
+        kind = FILE_KINDS.get(extension_of(path))
         if kind is None:
             return
         path, day = os.path.abspath(path), _day()  # one file, however a view spelled it

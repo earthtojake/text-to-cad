@@ -45,6 +45,24 @@ export interface ViewerLinks {
    */
   open?(url: string): Promise<void>;
 }
+/**
+ * One view's selection, told to the others: `project` is the KiCad project it belongs to (the
+ * file's absolute path without its `.kicad_pcb` or `.kicad_sch`), `from` the view that selected,
+ * `selectors` its board references (`#U3`, `#U3.9`, `#net:VIN`), none when it cleared.
+ */
+export interface CrossProbeMessage {
+  project: string;
+  from: string;
+  selectors: string[];
+}
+/**
+ * The channel cross-probing views share: every view's messages reach every other view's
+ * listeners (a view filters by `project`, and ignores its own). `subscribe` answers the unsubscribe.
+ */
+export interface CrossProbePort {
+  publish(message: CrossProbeMessage): void;
+  subscribe(listener: (message: CrossProbeMessage) => void): () => void;
+}
 export interface ViewerHost {
   files: FileSource;
   fileActions?: FileActions;
@@ -65,6 +83,12 @@ export interface ViewerHost {
   };
   /** The navbar's links: the version, X, Discord, GitHub and new issues. A host with none gets none. */
   links?: ViewerLinks;
+  /**
+   * Cross-probing: a KiCad board and its schematic, open in two views, select together. Each view
+   * tells the others what it selected, in board references, and selects what they tell it. A
+   * selection only: nothing is edited, and nothing is kept. Absent: each view selects alone.
+   */
+  crossProbe?: CrossProbePort;
   /**
    * What the person used, for the host to count: its telemetry, never what they made. Absent, nothing is
    * counted. `quickEdit`: a Quick Edit reached its destination -- copied, queued or sent.

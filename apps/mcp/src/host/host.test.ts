@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { encodeBase64 } from '@text-to-cad/core/client';
-import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
+import { createPromptContext, referencePart, textPart } from '@text-to-cad/core/prompt';
 import { createBridge, HostError, type ToolResult } from './bridge';
 import { frameClipboard } from './clipboard';
 import { chatReach, createChatPromptContext } from './prompt';
@@ -435,6 +435,28 @@ describe('a Quick Edit in the chat', () => {
     expect((await port.send!(edit(sketch()))).status).toBe('sent');
     expect(sent.at(-1).params.content).toEqual([{ type: 'text', text: 'Round it.\n\nFile: /project/parts/a.step\nSketch: /tmp/cadgen-sketches/a-sketch.png' }]);
     expect(saved).toEqual(['a-sketch.png']);
+  });
+
+  it('sends a board check with its sentence and its references', async () => {
+    const sent: any[] = [];
+    const bridge = {
+      hostContext: {}, onHostContext: () => () => {},
+      request: async (method: string, params: any) => {
+        sent.push({ method, params });
+        return {};
+      },
+    } as any;
+    const attachments = { save: async (_png: Blob, name: string) => { return `/tmp/cadgen-sketches/${name}`; } };
+    const port = createChatPromptContext(bridge, { reach: { queue: false, send: true, sendImages: true }, attachments });
+    const board = { kind: 'workspace-file', path: '/project/hat/hat.kicad_pcb' } as const;
+    const context = createPromptContext([
+      textPart('fix this'),
+      referencePart({ resource: board, target: { kind: 'cad-selector', selectors: ['#U2.7', '#C4.1'] },
+        summary: "U2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm)" }),
+    ]);
+    expect((await port.send!(context)).status).toBe('sent');
+    expect(sent.at(-1).params.content[0].text).toBe(
+      "fix this\n\nReferences:\nU2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm) · /project/hat/hat.kicad_pcb#U2.7,C4.1");
   });
 });
 

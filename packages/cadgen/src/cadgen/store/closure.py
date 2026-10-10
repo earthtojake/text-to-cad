@@ -254,10 +254,12 @@ def _model_formats_of(payload: bytes, filename: str) -> dict[str, str]:
 
 
 def _pinned(formats: Mapping[str, str]) -> frozenset[str]:
-    """The models a call PINS. A drawing is not one: called inside another
-    build, a ``@dxf`` function runs its body inline, so taking it is taking
-    source."""
-    return frozenset(name for name, fmt in formats.items() if fmt != "dxf")
+    """The models a call PINS. A drawing, a board or a harness is not one: called
+    inside another build, a ``@dxf``, ``@pcb`` or ``@harness`` function runs its
+    body inline, so taking it is taking source."""
+    from cadgen.metadata import TREE_LESS_FORMATS
+
+    return frozenset(name for name, fmt in formats.items() if fmt not in TREE_LESS_FORMATS)
 
 
 # --- static reach: import resolution and the walk ------------------------------

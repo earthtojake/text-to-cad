@@ -64,12 +64,22 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from cadgen.kinematics import KinematicsDef, normalize_kinematics
-from cadgen.metadata import MeshExportDecl, normalize_mesh_numeric, resolve_model_output_path
+from cadgen.metadata import (
+    MODEL_FORMATS,
+    TREE_LESS_FORMATS,
+    FabExportDecl,
+    MeshExportDecl,
+    format_named,
+    normalize_mesh_numeric,
+    resolve_model_output_path,
+)
 from cadgen.store.index import model_ref
 
 __all__ = [
     "step",
     "dxf",
+    "pcb",
+    "harness",
     "stl",
     "glb",
     "threemf",
@@ -254,7 +264,7 @@ class ModelDef:
     """One registered model: the decorated function plus its durable options."""
 
     func: Callable[..., Any]
-    fmt: str  # "step" | "dxf"
+    fmt: str  # "step" | "dxf" | "pcb" | "harness"
     script_path: Path
     out: str | None
     mesh_tolerance: float | None
@@ -272,6 +282,16 @@ class ModelDef:
     # tree and record as any model, but the .step is not among its outputs and
     # is never written. STEP is one output kind, not the primary.
     step_output: bool = True
+    # A @pcb board: the function returns a pcb.Board and the build writes its KiCad
+    # project to ``pcb_out`` (else the sibling ``<name>.kicad_pcb``). A board alone
+    # is fmt "pcb", a tree-less model like a drawing; a board that also declares a
+    # 3D export (@step, @glb, @stl, @threemf) is fmt "step", its tree the populated
+    # board, so assemblies compose it like any part.
+    board: bool = False
+    pcb_out: str | None = None
+    # Declared manufacturing exports: a board's @pcb(gerber=, bom=, pos=), a harness's
+    # @harness(bom=).
+    fab_exports: tuple[FabExportDecl, ...] = ()
     # (mtime_ns, size) of the script when this definition was registered: the
     # metadata reader reuses the entry while the file on disk is those bytes.
     stamp: tuple[int, int] | None = None
@@ -288,8 +308,17 @@ class ModelDef:
 
     @property
     def output_path(self) -> Path:
+        if self.fmt == "pcb":
+            return self.board_path
         return resolve_model_output_path(
             self.script_path, fmt=self.fmt, explicit_out=self.out, function=self.name
+        )
+
+    @property
+    def board_path(self) -> Path:
+        """The board's ``.kicad_pcb`` (its ``.kicad_sch`` and ``.kicad_pro`` sit beside it)."""
+        return resolve_model_output_path(
+            self.script_path, fmt="pcb", explicit_out=self.pcb_out, function=self.name
         )
 
 
@@ -475,7 +504,21 @@ def _checked_tolerance(value: Any, field_name: str, *, where: str) -> float | No
         raise TypeError(f"{where} {exc}") from exc
 
 
+_EXPORT_KWARGS = frozenset({"gerber", "bom", "pos"})
+
+
 def _reject_unknown_kwargs(deco_name: str, kwargs: dict[str, Any]) -> None:
+    exports = sorted(_EXPORT_KWARGS & set(kwargs))
+    if exports:
+        named = ", ".join(f"{name}=" for name in exports)
+        owner = (
+            "a @pcb board's manufacturing files (@pcb(gerber=True, pos=True)); a harness's one export is its bill "
+            "of materials, @harness(bom=True)"
+            if deco_name == "harness"
+            else "a @pcb board's manufacturing files (@pcb(gerber=True, bom=True, pos=True)), and a harness's bill "
+            "of materials (@harness(bom=True))"
+        )
+        raise ValueError(f"@{deco_name} takes no {named}: those are {owner}")
     if kwargs:
         unexpected = ", ".join(sorted(kwargs))
         raise TypeError(f"@{deco_name} got an unexpected keyword argument: {unexpected}")
@@ -515,12 +558,18 @@ def _decorator(
         prior: ModelDef | None = getattr(func, "__cadgen_model__", None)
         if prior is not None:
             prior = _REGISTRY.get(prior.ref, prior)  # the registry is authoritative
+            if prior.fmt == "harness":
+                raise ValueError(_NOT_ON_A_HARNESS.format(deco=fmt, script=prior.script_path.name, name=prior.name))
+        board, pcb_out = False, None
+        fab_exports: tuple[FabExportDecl, ...] = ()
         if prior is not None and not prior.step_output:
-            # A mesh decorator BELOW this one already declared the function a
-            # mesh-only model (and handed back its wrapper). @step takes the RAW
-            # function and its declarations over (stacking order stays neutral);
-            # a drawing cannot.
+            # A mesh decorator (or @pcb) BELOW this one already declared the function a
+            # model without a STEP (and handed back its wrapper). @step takes the RAW
+            # function and its declarations over (stacking order stays neutral); a
+            # drawing cannot.
             if fmt != "step":
+                if prior.board:
+                    raise ValueError(f"{prior.script_path.name} stacks @{fmt} on a @pcb board")
                 names = ", ".join(f"@{_MESH_FMT_DECORATOR[d.fmt]}" for d in prior.mesh_exports)
                 raise ValueError(
                     f"{prior.script_path.name} stacks {names} on a @{fmt} drawing; "
@@ -528,6 +577,8 @@ def _decorator(
                 )
             pending = prior.mesh_exports
             func = prior.func
+            board, pcb_out = prior.board, prior.pcb_out
+            fab_exports = prior.fab_exports
         _validate_signature(func, fmt=fmt)
         script_path = _script_path_of(func)
         if animation_def is not None:
@@ -551,68 +602,95 @@ def _decorator(
             animation=animation_def,
             mesh_exports=pending,
             step_output=step_output,
+            board=board,
+            pcb_out=pcb_out,
+            fab_exports=fab_exports,
             stamp=_script_stamp(script_path),
         )
         _register(defn)
         func.__cadgen_model__ = defn  # type: ignore[attr-defined]
-
-        @functools.wraps(func)
-        def model(*args: Any, **kwargs: Any) -> Any:
-            frame = current_frame()
-            if frame is not None:
-                if args or kwargs:
-                    raise TypeError(f"{func.__name__}() takes no arguments: a model is one configuration of one output.")
-                if (
-                    frame.script_path is not None
-                    and _same_file(frame.script_path, script_path)
-                    and (frame.function is None or frame.function == func.__name__)
-                ):
-                    # The pipeline building THIS model is asking for its body. (Another
-                    # model of the same file is a child like any other.)
-                    return func()
-                if fmt == "dxf":
-                    # A drawing composes models, never the reverse: called inside
-                    # another build it is just its body (2D geometry), nothing to pin.
-                    return func()
-                # Composition: a parent's body asked for this child. Same rule as the
-                # top level — stale → build, then hand back its geometry — except the
-                # geometry is materialized from the child's tree and the call is
-                # pinned into the parent's record.
-                return _compose_child(_REGISTRY.get(defn.ref, defn))
-            if args or kwargs:
-                raise TypeError(
-                    f"{func.__name__}() takes no arguments: a model is one configuration "
-                    "of one output. Calling it builds that output."
-                )
-            # A top-level call builds. The registry entry may have been extended by a
-            # mesh decorator stacked ABOVE @step since `defn` was captured, so read it
-            # back rather than closing over the original.
-            current = _REGISTRY.get(defn.ref, defn)
-            from cadgen.daemon.executors import capture_source_result
-
-            with capture_source_result(current.ref) as built:
-                code = _build(current)
-                built._finish(code)
-            if code != 0:
-                raise SystemExit(code)
-            tree = built.wait_result() if current.fmt == "step" else None
-            if current.fmt == "step" and _caller_discards_model_result():
-                return None
-            # ...and hands back the geometry it built (or found current), so a plain
-            # used return, notebook or REPL gets the shape a parent would: the model's
-            # tree materialized. A drawing has no tree and returns None. The bare-call
-            # shortcut above still waits for the checked source result before deciding,
-            # so persistence failures remain observable.
-            return _built_geometry(current, tree=tree)
-
-        model.__cadgen_model__ = defn  # type: ignore[attr-defined]
-        # A model's body runs in its own build, reached through a pin -- never
-        # inline behind a caller's closure. functools.wraps would hand it out as
-        # __wrapped__ (``arm.__wrapped__()``, ``inspect.unwrap``).
-        del model.__wrapped__
-        return model
+        return _model_wrapper(func, defn)
 
     return apply
+
+
+def _model_wrapper(func: Callable[..., Any], defn: ModelDef) -> Callable[..., Any]:
+    """The callable a model decorator hands back: build at top level, compose inside a body.
+
+    It reads the model's CURRENT registry entry on every call: a decorator stacked
+    above may have extended it (mesh exports) or changed its kind (a board that
+    gained a 3D export is a geometry model) since this wrapper was made.
+    """
+    script_path = defn.script_path
+
+    @functools.wraps(func)
+    def model(*args: Any, **kwargs: Any) -> Any:
+        frame = current_frame()
+        if frame is not None:
+            if args or kwargs:
+                raise TypeError(f"{func.__name__}() takes no arguments: a model is one configuration of one output.")
+            if (
+                frame.script_path is not None
+                and _same_file(frame.script_path, script_path)
+                and (frame.function is None or frame.function == func.__name__)
+            ):
+                # The pipeline building THIS model is asking for its body. (Another
+                # model of the same file is a child like any other.)
+                return func()
+            if _REGISTRY.get(defn.ref, defn).fmt in TREE_LESS_FORMATS:
+                # A drawing, a board without a 3D export or a harness composes models,
+                # never the reverse: called inside another build it is just its body
+                # (2D geometry, the pcb.Board, the harness.Harness), nothing to pin.
+                return func()
+            building_model = _REGISTRY.get(frame.model) if frame.model is not None else None
+            if building_model is not None and building_model.fmt == "harness":
+                # A harness reads boards' netlists, never geometry. A board with a 3D export is
+                # a part to a geometry model, but its body is still its pcb.Board: that is what
+                # a harness gets. Any other geometry model has nothing a harness reads, and is
+                # refused at the call, before a child build is submitted for it.
+                if _REGISTRY.get(defn.ref, defn).board:
+                    return func()
+                raise TypeError(
+                    f"{building_model.name}() is a @harness, which reads boards' netlists (a @pcb model returns its "
+                    f"pcb.Board inside a harness); {func.__name__}() is a geometry model, which has none"
+                )
+            # Composition: a parent's body asked for this child. Same rule as the
+            # top level — stale → build, then hand back its geometry — except the
+            # geometry is materialized from the child's tree and the call is
+            # pinned into the parent's record.
+            return _compose_child(_REGISTRY.get(defn.ref, defn))
+        if args or kwargs:
+            raise TypeError(
+                f"{func.__name__}() takes no arguments: a model is one configuration "
+                "of one output. Calling it builds that output."
+            )
+        # A top-level call builds. The registry entry may have been extended by a
+        # mesh decorator stacked ABOVE @step since `defn` was captured, so read it
+        # back rather than closing over the original.
+        current = _REGISTRY.get(defn.ref, defn)
+        from cadgen.daemon.executors import capture_source_result
+
+        with capture_source_result(current.ref) as built:
+            code = _build(current)
+            built._finish(code)
+        if code != 0:
+            raise SystemExit(code)
+        tree = built.wait_result() if current.fmt == "step" else None
+        if current.fmt == "step" and _caller_discards_model_result():
+            return None
+        # ...and hands back the geometry it built (or found current), so a plain
+        # used return, notebook or REPL gets the shape a parent would: the model's
+        # tree materialized. A drawing has no tree and returns None. The bare-call
+        # shortcut above still waits for the checked source result before deciding,
+        # so persistence failures remain observable.
+        return _built_geometry(current, tree=tree)
+
+    model.__cadgen_model__ = defn  # type: ignore[attr-defined]
+    # A model's body runs in its own build, reached through a pin -- never
+    # inline behind a caller's closure. functools.wraps would hand it out as
+    # __wrapped__ (``arm.__wrapped__()``, ``inspect.unwrap``).
+    del model.__wrapped__
+    return model
 
 
 def step(
@@ -668,6 +746,167 @@ def dxf(
         "dxf", out=out, mesh_tolerance=None, mesh_angular_tolerance=None
     )
     return decorator(func) if func is not None else decorator
+
+
+def pcb(
+    func: Callable[..., Any] | None = None,
+    *,
+    out: str | None = None,
+    gerber: bool | str = False,
+    bom: bool | str = False,
+    pos: bool | str = False,
+    **unsupported: Any,
+):
+    """Declare a printed circuit board. Usable bare (``@pcb``) or configured (``@pcb(out=..., gerber=True)``).
+
+    The function returns a ``pcb.Board``; the build writes its KiCad project
+    (``.kicad_pro``, ``.kicad_sch``, ``.kicad_pcb``, ``.kicad_dru``) after KiCad
+    fills its zones and checks it. ``out=`` names the ``.kicad_pcb``; the rest
+    land beside it. ``gerber=``, ``bom=`` and ``pos=`` also write its
+    manufacturing files: ``True`` beside the board, a path elsewhere. They are
+    arguments rather than decorators because they never stand alone: each is a
+    file of a board.
+    """
+    with _declaring_here():
+        _reject_unknown_kwargs("pcb", unsupported)
+        checked = _checked_out(out, where="@pcb")
+        if checked is not None and not checked.lower().endswith(MODEL_FORMATS["pcb"].suffix):
+            raise ValueError(
+                f"@pcb out= names the board file and must end with '.kicad_pcb' (got {checked!r}); "
+                "the .kicad_sch and .kicad_pro are written beside it"
+            )
+        exports = _declared_exports("pcb", gerber=gerber, bom=bom, pos=pos)
+
+    def apply(target: Callable[..., Any]) -> Callable[..., Any]:
+        with _declaring(target):
+            return _apply_pcb(target, checked, exports)
+
+    return apply(func) if func is not None else apply
+
+
+# What each manufacturing export's own path must end with.
+_EXPORT_SUFFIX = {"gerber": ".zip", "bom": ".csv", "pos": ".csv"}
+
+
+def _declared_exports(model: str, **exports: Any) -> tuple[FabExportDecl, ...]:
+    """A model's ``gerber=``/``bom=``/``pos=``: off, ``True`` (beside its document) or a path."""
+    declared = []
+    for fmt, value in exports.items():
+        if value is False or value is None:
+            continue
+        if value is True:
+            declared.append(FabExportDecl(fmt=fmt))
+            continue
+        if not isinstance(value, (str, os.PathLike)):
+            document = "board" if model == "pcb" else "harness document"
+            raise TypeError(f"@{model} {fmt}= is True (the file beside the {document}) or a path; got {value!r}")
+        out = _checked_out(os.fspath(value), where=f"@{model} {fmt}=")
+        if not out.lower().endswith(_EXPORT_SUFFIX[fmt]):
+            raise ValueError(f"@{model} {fmt}= is True or a path ending '{_EXPORT_SUFFIX[fmt]}'; got {value!r}")
+        declared.append(FabExportDecl(fmt=fmt, out=out))
+    return tuple(declared)
+
+
+def _apply_pcb(target: Callable[..., Any], pcb_out: str | None, exports: tuple[FabExportDecl, ...] = ()) -> Callable[..., Any]:
+    from dataclasses import replace as _replace
+
+    prior: ModelDef | None = getattr(target, "__cadgen_model__", None)
+    if prior is not None:
+        prior = _REGISTRY.get(prior.ref, prior)
+        if prior.fmt == "harness":
+            raise ValueError(_NOT_ON_A_HARNESS.format(deco="pcb", script=prior.script_path.name, name=prior.name))
+        if prior.fmt == "dxf":
+            raise ValueError(f"{prior.script_path.name}: a @dxf drawing cannot also be a @pcb board")
+        if prior.board:
+            raise ValueError(f"{prior.script_path.name}: @pcb is declared twice on {prior.name}()")
+        # @step or a mesh decorator below: a board with a 3D export, a geometry model.
+        func = prior.func
+        defn = _replace(prior, board=True, pcb_out=pcb_out, fab_exports=exports)
+    else:
+        func = target
+        _validate_signature(func, fmt="pcb")
+        script_path = _script_path_of(func)
+        defn = ModelDef(
+            func=func,
+            fmt="pcb",
+            script_path=script_path,
+            out=None,
+            mesh_tolerance=None,
+            mesh_angular_tolerance=None,
+            step_output=False,
+            board=True,
+            pcb_out=pcb_out,
+            fab_exports=exports,
+            stamp=_script_stamp(script_path),
+        )
+    _register(defn)
+    func.__cadgen_model__ = defn  # type: ignore[attr-defined]
+    return _model_wrapper(func, defn)
+
+
+# A harness is a document, never geometry or a board: nothing that makes one stacks on it.
+_NOT_ON_A_HARNESS = (
+    "{script}: @{deco} cannot stack on {name}(), a @harness: a harness is one WireViz document, with no geometry "
+    "and no board. Its one export is its bill of materials, @harness(bom=True)"
+)
+
+
+def harness(
+    func: Callable[..., Any] | None = None,
+    *,
+    out: str | None = None,
+    bom: bool | str = False,
+    **unsupported: Any,
+):
+    """Declare a wiring harness. Usable bare (``@harness``) or configured (``@harness(out=..., bom=True)``).
+
+    The function returns a ``harness.Harness``; the build checks it (each wire
+    whose ends are on boards joins pins carrying the same net, a pin takes one
+    wire, every connector and cable is used) and writes it as one WireViz
+    document, ``<name>.harness.yml``. ``out=`` names that file. ``bom=`` also
+    writes its bill of materials: ``True`` beside the document, a path elsewhere.
+    """
+    with _declaring_here():
+        _reject_unknown_kwargs("harness", unsupported)
+        checked = _checked_out(out, where="@harness")
+        if checked is not None and not checked.lower().endswith(MODEL_FORMATS["harness"].suffix):
+            raise ValueError(f"@harness out= names the harness document and must end with '.harness.yml' (got {checked!r})")
+        exports = _declared_exports("harness", bom=bom)
+
+    def apply(target: Callable[..., Any]) -> Callable[..., Any]:
+        with _declaring(target):
+            return _apply_harness(target, checked, exports)
+
+    return apply(func) if func is not None else apply
+
+
+def _apply_harness(target: Callable[..., Any], out: str | None, exports: tuple[FabExportDecl, ...] = ()) -> Callable[..., Any]:
+    prior: ModelDef | None = getattr(target, "__cadgen_model__", None)
+    if prior is not None:
+        prior = _REGISTRY.get(prior.ref, prior)
+        kind = "@harness" if prior.fmt == "harness" else ("@pcb" if prior.board else f"@{prior.fmt}")
+        raise ValueError(
+            f"{prior.script_path.name}: {prior.name}() is already a {kind} model; a @harness is a model of its own, "
+            "whose function returns a harness.Harness (its one export is its bill of materials, @harness(bom=True))"
+        )
+    _validate_signature(target, fmt="harness")
+    script_path = _script_path_of(target)
+    defn = ModelDef(
+        func=target,
+        fmt="harness",
+        script_path=script_path,
+        out=out,
+        mesh_tolerance=None,
+        mesh_angular_tolerance=None,
+        step_output=False,
+        fab_exports=exports,
+        stamp=_script_stamp(script_path),
+    )
+    _register(defn)
+    target.__cadgen_model__ = defn  # type: ignore[attr-defined]
+    return _model_wrapper(target, defn)
+
+
 
 
 _MESH_FMT_DECORATOR = {"stl": "stl", "glb": "glb", "3mf": "threemf"}
@@ -734,8 +973,19 @@ def _mesh_export_decorator(deco_name: str, fmt: str):
 
         def _attach(target: Callable[..., Any]) -> Callable[..., Any]:
             existing_model: ModelDef | None = getattr(target, "__cadgen_model__", None)
+            if existing_model is not None and existing_model.fmt == "pcb":
+                # Above @pcb: the board gains a 3D export, so it is a geometry model
+                # (fmt "step", no STEP of its own) whose tree is the populated board.
+                updated = _replace(existing_model, fmt="step", step_output=False, mesh_exports=(decl,))
+                _REGISTRY[updated.ref] = updated
+                target.__cadgen_model__ = updated  # type: ignore[attr-defined]
+                return target
             if existing_model is not None:
                 # Above @step: extend the registered model in place.
+                if existing_model.fmt == "harness":
+                    raise ValueError(_NOT_ON_A_HARNESS.format(
+                        deco=deco_name, script=existing_model.script_path.name, name=existing_model.name
+                    ))
                 if existing_model.fmt != "step":
                     raise ValueError(
                         f"@{deco_name} declares a mesh export of a @step model; "
@@ -912,7 +1162,7 @@ def _build(defn: ModelDef) -> int:
 
         # Counted here as the daemon counts the builds it answers: no daemon answered this one.
         return telemetry.cold_build(
-            "dxf" if defn.fmt == "dxf" else "step", "script",
+            format_named(defn.fmt).kind, "script",
             lambda: run_model_argv([*target, *argv], prog=f"python {defn.script_path.name}"),
             meshes=bool(defn.mesh_exports),
         )

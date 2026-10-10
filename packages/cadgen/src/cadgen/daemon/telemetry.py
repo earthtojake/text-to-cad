@@ -231,6 +231,16 @@ class Build:
             recorder.used("declared_mesh")
 
 
+def _run_kind(outputs: list[str]) -> str:
+    """A model script's format, by the documents it declares: a board's ``.kicad_pcb``, a harness's
+    ``.harness.yml``, a drawing's ``.dxf``, else a STEP model's."""
+    from cadgen.metadata import MODEL_FORMATS
+
+    # A model declares one tree-less document at most (a board with a 3D export, its board file).
+    declared = (fmt for fmt in MODEL_FORMATS.values() if fmt.tree_less and any(out.endswith(fmt.suffix) for out in outputs))
+    return next(declared, MODEL_FORMATS["step"]).kind
+
+
 @_quiet
 def build(request: dict[str, Any], job: dict[str, Any]) -> Build | None:
     """The build a request asks for, to be counted as it ends -- or ``None``: no recorder, a request
@@ -248,7 +258,7 @@ def build(request: dict[str, Any], job: dict[str, Any]) -> Build | None:
         return None
     outputs = [str(output).lower() for output in job.get("outputs") or ()]
     if tool == "run":
-        kind = "dxf" if any(output.endswith(".dxf") for output in outputs) else "step"
+        kind = _run_kind(outputs)
         return Build(kind, "script", str(job.get("id") or ""), any(output.endswith(_MESHES) for output in outputs))
     return Build(_COMMANDS[tool], "command", str(job.get("id") or ""), False)
 

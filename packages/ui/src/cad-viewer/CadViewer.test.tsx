@@ -50,7 +50,7 @@ test('the CAD viewer shows one file by its absolute path, the home with none, an
     library={homed ? library : undefined} onShow={next => shows.push(next)} onShown={next => shown.push(next)} />;
   const { rerender } = render(view('C:\\models\\a.step'));
   // One renderer per file family, every one reading the tab's settings.
-  expect(props().renderers.map(renderer => renderer.id)).toEqual(['step', 'dxf', 'glb', 'mesh', 'robot']);
+  expect(props().renderers.map(renderer => renderer.id)).toEqual(['step', 'dxf', 'plot', 'glb', 'mesh', 'robot']);
   // The file in the viewer's one spelling, which the host hears of once the catalog has it.
   expect([props().file, shown]).toEqual(['C:/models/a.step', [null]]);
   await act(async () => client.publish([{ file: 'C:/models/a.step' }]));

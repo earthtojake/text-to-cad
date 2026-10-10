@@ -8,9 +8,15 @@ system's mime.types — which would make the wire format vary by machine.
 
 from __future__ import annotations
 
-import posixpath
+from cadgen.file_types import COMPOUND_EXTENSIONS, extension_of, format_of
 
-__all__ = ["content_type_for_static_asset", "content_type_for_path", "extension_of"]
+__all__ = [
+    "COMPOUND_EXTENSIONS",
+    "content_type_for_static_asset",
+    "content_type_for_path",
+    "extension_of",
+    "format_of",
+]
 
 # Static dist/SPA assets. Unknown extension -> "" and the caller sets NO
 # content-type header at all (not octet-stream).
@@ -42,23 +48,13 @@ _ASSET_CONTENT_TYPES = {
     ".step": "application/step",
     ".stp": "application/step",
     ".dxf": "application/dxf",
+    ".kicad_pcb": "text/plain; charset=utf-8",
+    ".kicad_sch": "text/plain; charset=utf-8",
+    ".harness.yml": "application/yaml; charset=utf-8",
     ".urdf": "application/xml; charset=utf-8",
     ".srdf": "application/xml; charset=utf-8",
     ".sdf": "application/xml; charset=utf-8",
 }
-
-
-def extension_of(file_path) -> str:
-    """``path.extname(...).toLowerCase()``.
-
-    Node's semantics, which ``os.path.splitext`` does not share for leading-dot
-    names: ``extname(".step")`` is ``""`` while ``splitext`` answers ``".step"``.
-    """
-    name = posixpath.basename(str(file_path or "").replace("\\", "/"))
-    dot = name.rfind(".")
-    if dot <= 0:
-        return ""
-    return name[dot:].lower()
 
 
 def content_type_for_static_asset(file_path) -> str:

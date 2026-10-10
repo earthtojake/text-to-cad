@@ -247,7 +247,8 @@ def _stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verd
     clauses.append({"clause": 3, "stale": any(c["stale"] for c in child_clauses), "children": child_clauses})
 
     if "tree" in record and record.get("tree") is None:
-        # A drawing (@dxf): its output is the .dxf and it has no tree. Vacuous.
+        # A drawing (@dxf), a board (@pcb) or a harness (@harness): its outputs are
+        # files and it has no tree. Vacuous.
         tree, complete = "", True
     else:
         tree = str(record.get("tree") or "")

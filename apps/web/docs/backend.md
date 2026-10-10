@@ -194,6 +194,7 @@ cache reads and writes.
 | `GET /__cad/asset?file=...` | A CAD file's or sidecar's bytes. |
 | `GET /__cad/store?file=...` | Virtual render assets from the shared store. |
 | `GET /__cad/drawing?file=...` | A `.dxf` flattened to 2D render primitives; the DXF pane's only source. |
+| `GET /__cad/plot?file=...` | A KiCad board or schematic as KiCad plots it (a board's layers and its index), or a wiring harness as WireViz draws it, one SVG per sheet; the plot pane's only source. |
 | `GET /__cad/artifact?file=...` | Artifact status and advisory progress. |
 | `POST /__cad/artifact?file=...` | Start importing a foreign STEP and answer at once (`compiling`; `compiled` when there is nothing to build); `&force=1` requests a rebuild. The import is followed through `GET /__cad/artifact`, whose `failed` carries the job's reason until the file's bytes change. |
 | `GET /__cad/recents` | The model library every CAD view shares. |
@@ -310,3 +311,127 @@ Rendering is CPU-bound Python (~0.2 s for 2,000 lines of text, ~1 s for 6,000,
 server's other threads while it runs. If drawings that size become routine, the
 escalation is cadgen's build pool — the same move the STEP import made — not a
 thread pool here.
+
+## `GET /__cad/plot`
+
+A document drawn by its own tool, on the SERVER: a KiCad board or schematic is
+`kicad-cli`'s SVG plot of it (`cadgen.kicad.plot`), and a wiring harness
+(`<name>.harness.yml`) is WireViz's diagram of it (`cadgen.wireviz.plot`), so the plot
+pane draws what the tool draws and never parses its files. A board is one sheet of
+layers, back to front, on KiCad's board background, with any unrouted connection drawn
+as a ratsnest line (a draft never looks finished), and the board's index beside it:
+what a person can point at, for picks and references. A schematic is one sheet per
+page, in KiCad's page order (the root first), and the schematic's index on those sheets;
+a harness is one sheet on WireViz's page colour (`kind: "harness"`, sizes converted from
+Graphviz's points).
+
+`cadgen pcb snapshot` and `cadgen harness snapshot` draw the SAME payload: their
+resolver calls the same builder (`plot_payload_bytes`), writes the bytes where the
+headless page can fetch them, and the page draws them with `@text-to-cad/core/lib/plot2d`
+— the module the plot pane draws with.
+
+`?file=` names the document by its absolute path, as every route does: a relative
+ref, or anything that is not a `.kicad_pcb`, `.kicad_sch` or `.harness.yml`, is 400,
+and a missing file 404. A document its tool cannot plot, and a machine without the
+tool, are 400 with the teaching message — the latter names how to install it, which
+the pane shows on its alert card.
+
+```jsonc
+{
+  "schemaVersion": 2,
+  "kicadVersion": "10.0.6",          // the tool's version; not every kind carries one
+  "kind": "board",                   // "board" | "schematic" | "harness": wording only
+  "unrouted": 1,                     // a board's unconnected pairs (in its ratsnest); null otherwise
+  "sheets": [{ "name": "blinky", "width": 40, "height": 30, "background": "#001023",
+               "layers": [            // a board's; a schematic or harness sheet has "svg" instead
+                 { "id": "B.Fab", "kind": "fab", "side": "back", "svg": "<svg …>" },
+                 { "id": "B.Cu", "kind": "copper", "side": "back", "svg": "<svg …>", "unpoured": "<svg …>" },
+                 …,                   // inner copper deepest first ("both"), F.Cu, F.SilkS, F.Fab
+                 { "id": "Edge.Cuts", "kind": "outline", "side": "both", "svg": "<svg …>" },
+                 { "id": "ratsnest", "kind": "ratsnest", "side": "both", "svg": "<svg …>" },  // a draft's
+                 { "id": "drills", "kind": "drill", "side": "both", "svg": "<svg …>" }] }],
+  "board": {                         // the board's index, in SHEET millimetres
+    "origin": [20, 15],              // the script's origin (the drill/place origin) on the sheet
+    "parts": [{ "ref": "R1", "value": "1k", "footprint": "Resistor_SMD:R_0603_1608Metric",
+                "side": "top", "at": [35.8, 15], "rotation": 0, "fields": { "Script": "blinky.py:12" },
+                "script": "blinky.py:12", "dnp": false, "outline": [[x, y], …] }],
+    "pads":   [{ "part": "R1", "number": "2", "name": null, "net": "Net-(D1-A)", "type": "passive",
+                 "side": "top", "at": [36.65, 15], "polygon": [[x, y], …] }],
+    "tracks": [{ "net": "VBUS", "layer": "F.Cu", "width": 1, "points": [[5, 15], [35, 15]] }],
+    "vias":   [{ "net": "GND", "at": [x, y], "diameter": 0.6, "drill": 0.3 }],
+    "zones":  [{ "net": "GND", "layer": "B.Cu", "outline": [[x, y], …] }],
+    "holes":  [{ "at": [x, y], "diameter": 3, "part": "H1" }],
+    "outline": [[[x, y], …]],        // Edge.Cuts polylines; a closed one repeats its first point
+    "nets":   [{ "name": "TX/RX", "class": "Default" }],
+    "findings": [{ "check": "unconnected", "severity": "error", "type": "unconnected_items",
+                   "description": "Missing connection between items",
+                   "summary": "R1 pad 2 isn't connected to D1 pad 1", "title": "Missing connection between items",
+                   "items": [{ "text": "Pad 2 [Net-(D1-A)] of R1 on F.Cu", "ref": "#R1.2", "at": [36.65, 15] }] }]
+  }
+}
+```
+
+A schematic's payload has `"kind": "schematic"`, a sheet per page (each with `svg`), and
+the schematic's index:
+
+```jsonc
+"schematic": {                       // in each sheet's millimetres; "sheet" indexes "sheets"
+  "sheets": [{ "name": "blinky", "path": "/", "file": "blinky.kicad_sch", "title": "blinky" }],
+  "parts":  [{ "ref": "R1", "value": "1k", "lib": "Device:R", "footprint": "Resistor_SMD:R_0603_1608Metric",
+               "fields": { "Script": "blinky.py:12" }, "script": "blinky.py:12", "dnp": false,
+               "units": [{ "unit": 1, "sheet": 0, "at": [x, y], "rotation": 0, "mirror": null,  // or "x", "y"
+                           "outline": [[x, y], …] }] }],
+  "pins":   [{ "part": "R1", "number": "2", "name": null, "type": "passive", "unit": 1, "sheet": 0,
+               "net": "Net-(D1-A)", "at": [x, y], "end": [x, y], "hidden": false }],
+  "wires":  [{ "net": "VBUS", "sheet": 0, "points": [[x, y], [x, y]] }],
+  "labels": [{ "net": "VBUS", "sheet": 0, "text": "VBUS", "kind": "global", "at": [x, y], "outline": [[x, y], …] }],
+  "junctions":  [{ "net": "GND", "sheet": 0, "at": [x, y] }],
+  "noConnects": [{ "sheet": 0, "at": [x, y], "part": "U3", "pin": "10" }],   // part, pin: null off a pin
+  "nets":   [{ "name": "/Power/EN", "class": "Default" }]
+}
+```
+
+- **Layers and sheets** are KiCad's SVGs, unchanged but for the timestamped `<title>`
+  KiCad stamps on them and, for a board, its drill holes: KiCad draws them on every
+  layer it plots alone, so they are cut from each and drawn once, last, as the `drills`
+  layer, as KiCad draws them when it plots the whole stack. User units are millimetres,
+  y down, viewBox `0 0 width height`, every layer of a board on the same page; each sheet
+  says the colour it sits on (`#001023` behind a board, `#F5F4EF` behind a schematic
+  sheet). One `kicad-cli pcb export svg --mode-multi` run plots the layers, a second the
+  copper without its pours (`unpoured`, on a layer whose pours have fills).
+- **The board's index** (`cadgen.kicad.board_index`, read from the `.kicad_pcb` alone) is
+  in SHEET millimetres: y down, from the corner of the page KiCad fitted to the board,
+  whose offset from KiCad's own frame the server measures with a calibration mark it
+  plots in the same run. A point in the script's frame is `(x - origin[0], origin[1] - y)`.
+  Net names are as KiCad shows them (`TX/RX`), a pad's polygon is its copper's outline
+  and its `type` the pin's electrical type, a part's `outline` is its courtyard (else the
+  box round its pads), its `script` the line that made it (the hidden `Script` field a
+  cadgen build writes). `findings` is every finding of the plot's DRC (custom rules
+  applied) and the review, each with its sentence (`summary`) and what every finding of its
+  type is called (`title`: KiCad's message without its numbers, or the review check's name), each item with a board reference when it is a pad (`#R1.2`), something a
+  part draws (`#R1`) or a track or via (`#net:VIN@x..y..`); an item's `at` is where
+  KiCad places it, which for an arc is its centre, so an arc's reference names its middle.
+- **The schematic's index** (`cadgen.kicad.schematic_index`) is in KiCad's schematic
+  frame, which is each sheet's SVG frame: millimetres, y down, from the page's corner.
+  Its `sheets` are the payload's, in KiCad's page order (a sheet used twice in a
+  hierarchy is two, each with its own references; `path` is the one KiCad prefixes local
+  nets with). Net names are KiCad's netlist's (`GND`, `/Power/EN`, `unconnected-(…)` for
+  a pin left open); a wire, label or junction is on its pins' net, a label no pin reaches
+  on the net it names if KiCad has one, else `null`. A unit's `outline` is the box round its body, a
+  pin's `at` where a wire connects and `end` where it meets the body; a label's `kind` is
+  `local`, `global`, `hierarchical` or `power` (a power symbol, its text the symbol's
+  value), its `outline` a generous box round its text.
+- The client stacks the sheets top to bottom, each centred on the widest, and draws
+  them as images on a canvas (`packages/ui/docs/cad-renderer.md#plot-renderer`): a
+  board's layers in order, poured, seen from the top, unless its view says otherwise.
+
+The payload is derived data, cached in the store's `drawing` index under the names and
+bytes of the files the plot reads, each read once, so KiCad plots the bytes the key names
+(a board with the `.kicad_pro` and `.kicad_dru` beside it; a schematic's root and every
+sheet under it, wherever the sheet lies, with the `.kicad_pro` and `sym-lib-table` beside
+the root: two schematics in one folder are two plots), the plot scheme and the tool's
+version (WireViz's and Graphviz's for a harness), so a second request re-serves stored
+bytes without running the tool. A cold plot runs it on the request thread — for a board
+a DRC and one or two SVG exports, a couple of seconds for a small board, tens of seconds for a large
+one; for a schematic an SVG and a netlist export — which is why the client waits up to
+three minutes for this route.

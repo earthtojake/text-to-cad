@@ -9,10 +9,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const temporary = await mkdtemp(join(tmpdir(), 'web-host-adapters-'));
 const output = join(temporary, 'adapters.mjs');
 await build({
-  stdin: { contents: `export {createWebPromptContext} from './promptContext.ts';export {browserClipboard} from './clipboard.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: `export {createWebPromptContext} from './promptContext.ts';export {browserClipboard} from './clipboard.ts';export {createBroadcastCrossProbe} from './crossProbe.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', outfile: output,
 });
-const { createWebPromptContext, browserClipboard } = await import(pathToFileURL(output).href);
+const { createWebPromptContext, browserClipboard, createBroadcastCrossProbe } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 const reference = { id: 'ref', kind: 'reference', reference: { resource: { kind: 'workspace-file', path: '/Car project/folder/part.step', revision: 'r4' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } } };
 const context = (operationId, parts) => ({ schemaVersion: 1, operationId, parts });
@@ -88,4 +88,29 @@ test('viewport PNG copy uses the guarded local endpoint without browser clipboar
     assert.equal(calls[0][1].headers['x-cadgen-viewer'], '1');
     assert.equal(calls[0][1].body, png);
   } finally { restore(); }
+});
+
+test('cross-probing reaches the other viewer pages, never the page that selected, and closes with its last listener', async () => {
+  // Two pages' ports on one channel (a name of this test's own), as a board's window and its schematic's.
+  const name = `cross-probe-test-${process.pid}`;
+  const board = createBroadcastCrossProbe(name);
+  const schematic = createBroadcastCrossProbe(name);
+  const heardByBoard = [];
+  const heardBySchematic = [];
+  const stopBoard = board.subscribe(message => heardByBoard.push(message));
+  const stopSchematic = schematic.subscribe(message => heardBySchematic.push(message));
+  const until = async (done) => { while (!done()) await new Promise(resolve => setImmediate(resolve)); };
+  board.publish({ project: '/models/blinky', from: 'board', selectors: ['#U3.9'] });
+  await until(() => heardBySchematic.length === 1);
+  assert.deepEqual(heardBySchematic, [{ project: '/models/blinky', from: 'board', selectors: ['#U3.9'] }]);
+  assert.deepEqual(heardByBoard, [], 'a page does not hear itself');
+  stopSchematic();
+  board.publish({ project: '/models/blinky', from: 'board', selectors: [] });
+  schematic.publish({ project: '/models/blinky', from: 'schematic', selectors: ['#net:VIN'] });
+  await until(() => heardByBoard.length === 1);
+  assert.equal(heardBySchematic.length, 1, 'unsubscribed, the schematic hears nothing more');
+  // The last listener gone, each page's channel is closed: this process can end.
+  stopBoard();
+  const restore = replaceGlobal('BroadcastChannel', undefined);
+  try { assert.equal(createBroadcastCrossProbe(name), undefined, 'without BroadcastChannel there is no cross-probing'); } finally { restore(); }
 });

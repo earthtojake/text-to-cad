@@ -165,7 +165,27 @@ def _run(args: argparse.Namespace, script: Path, prog: str) -> int:
         if source is None:
             raise ValueError(
                 f"{script.name} declares no CAD model — decorate one function with "
-                "@step, @dxf, or a mesh decorator (@stl/@glb/@threemf) from cadgen"
+                "@step, @dxf, @pcb, @harness, or a mesh decorator (@stl/@glb/@threemf) from cadgen"
+            )
+        if source.harness_path is not None:
+            from cadgen.generation import generate_harness_targets
+
+            return generate_harness_targets(
+                [target],
+                force=bool(args.force),
+                verbose=bool(args.verbose),
+                json_output=bool(args.json),
+            )
+        if source.pcb_path is not None and source.step_path is None:
+            # A board without a 3D export. One WITH one is a geometry model: the
+            # STEP route below, whose runner also writes the KiCad project.
+            from cadgen.generation import generate_pcb_targets
+
+            return generate_pcb_targets(
+                [target],
+                force=bool(args.force),
+                verbose=bool(args.verbose),
+                json_output=bool(args.json),
             )
         if source.dxf_path is not None and source.step_path is None:
             from cadgen.generation import generate_dxf_targets

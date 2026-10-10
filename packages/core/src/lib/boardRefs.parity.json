@@ -1,0 +1,307 @@
+{
+  "about": "The board-reference language (.kicad_pcb, .kicad_sch), asserted by packages/core/src/lib/boardRefs.js and cadgen/kicad/refs.py alike. A part is its reference designator (a letter or '_', then letters, digits, '_', '+' or '-': what KiCad boards and board.part(ref=...) use), a pad or pin follows a dot, a net is net:<name> (JSON-quoted when the name holds whitespace, a quote, a comma, '@' or '#'), and a point is @x<x>y<y> in the script's millimetres (y up): comma-free, because a token joins several selectors with commas, as STEP tokens do (split outside quotes); whitespace inside a quoted name is the name's, anywhere else it ends the token. Canonical points drop trailing zeros and a negative zero.",
+  "selectorCases": [
+    {
+      "selector": "#U3",
+      "kind": "part",
+      "ref": "U3",
+      "canonical": "#U3"
+    },
+    {
+      "selector": "U3",
+      "kind": "part",
+      "ref": "U3",
+      "canonical": "#U3",
+      "why": "the hash is optional, as in STEP selectors"
+    },
+    {
+      "selector": "#TP12",
+      "kind": "part",
+      "ref": "TP12",
+      "canonical": "#TP12"
+    },
+    {
+      "selector": "#U3.9",
+      "kind": "pad",
+      "ref": "U3",
+      "pad": "9",
+      "canonical": "#U3.9"
+    },
+    {
+      "selector": "#J4.A4",
+      "kind": "pad",
+      "ref": "J4",
+      "pad": "A4",
+      "canonical": "#J4.A4",
+      "why": "USB-C pad names"
+    },
+    {
+      "selector": "#U2.EP",
+      "kind": "pad",
+      "ref": "U2",
+      "pad": "EP",
+      "canonical": "#U2.EP"
+    },
+    {
+      "selector": "#net:VIN",
+      "kind": "net",
+      "net": "VIN",
+      "canonical": "#net:VIN"
+    },
+    {
+      "selector": "#net:+3V3",
+      "kind": "net",
+      "net": "+3V3",
+      "canonical": "#net:+3V3"
+    },
+    {
+      "selector": "#net:Net-(D5-A)",
+      "kind": "net",
+      "net": "Net-(D5-A)",
+      "canonical": "#net:Net-(D5-A)",
+      "why": "KiCad's names for unnamed nets"
+    },
+    {
+      "selector": "#net:TX/RX",
+      "kind": "net",
+      "net": "TX/RX",
+      "canonical": "#net:TX/RX",
+      "why": "names as KiCad displays them, unescaped"
+    },
+    {
+      "selector": "#net:\"a b\"",
+      "kind": "net",
+      "net": "a b",
+      "canonical": "#net:\"a b\""
+    },
+    {
+      "selector": "#net:\"x@y\"",
+      "kind": "net",
+      "net": "x@y",
+      "canonical": "#net:\"x@y\""
+    },
+    {
+      "selector": "#net:\"VIN\"",
+      "kind": "net",
+      "net": "VIN",
+      "canonical": "#net:VIN",
+      "why": "quoting only when needed"
+    },
+    {
+      "selector": "#net:VIN@x40.1y21.6",
+      "kind": "copper",
+      "net": "VIN",
+      "at": [
+        40.1,
+        21.6
+      ],
+      "canonical": "#net:VIN@x40.1y21.6"
+    },
+    {
+      "selector": "#net:\"a b\"@x1y2",
+      "kind": "copper",
+      "net": "a b",
+      "at": [
+        1,
+        2
+      ],
+      "canonical": "#net:\"a b\"@x1y2"
+    },
+    {
+      "selector": "#@x40.1y21.6",
+      "kind": "point",
+      "at": [
+        40.1,
+        21.6
+      ],
+      "canonical": "#@x40.1y21.6"
+    },
+    {
+      "selector": "#@x-3y0.5",
+      "kind": "point",
+      "at": [
+        -3,
+        0.5
+      ],
+      "canonical": "#@x-3y0.5"
+    },
+    {
+      "selector": "#@x40.100y21.600",
+      "kind": "point",
+      "at": [
+        40.1,
+        21.6
+      ],
+      "canonical": "#@x40.1y21.6"
+    },
+    {
+      "selector": "#@x-0y2",
+      "kind": "point",
+      "at": [
+        0,
+        2
+      ],
+      "canonical": "#@x0y2"
+    },
+    {
+      "selector": "#net:\"a,b\"",
+      "kind": "net",
+      "net": "a,b",
+      "canonical": "#net:\"a,b\"",
+      "why": "a comma joins selectors, so a name holding one is quoted"
+    },
+    {
+      "selector": "#@x1y-2.25",
+      "kind": "point",
+      "at": [
+        1,
+        -2.25
+      ],
+      "canonical": "#@x1y-2.25"
+    },
+    {
+      "selector": "#J2-J4.1",
+      "kind": "pad",
+      "ref": "J2-J4",
+      "pad": "1",
+      "canonical": "#J2-J4.1",
+      "why": "a reference holds what KiCad and board.part(ref=...) allow: letters, digits, _ + -"
+    },
+    {
+      "selector": "#_U1",
+      "kind": "part",
+      "ref": "_U1",
+      "canonical": "#_U1"
+    }
+  ],
+  "invalidSelectors": [
+    "",
+    "#",
+    "#3U",
+    "#U 3",
+    "#U3.",
+    "#U3.9.1",
+    "#.9",
+    "#net:",
+    "#net:\"unterminated",
+    "#net:VIN@x1",
+    "#net:VIN@xay2",
+    "#@x1",
+    "#@1,2",
+    "#@x1y2z3",
+    "#@xay1",
+    "#@x1 y2",
+    "#U3@x1y2",
+    "#net:a,b",
+    "#-U1",
+    "#+R1"
+  ],
+  "formatCases": [
+    {
+      "kind": "part",
+      "ref": "C14",
+      "selector": "#C14"
+    },
+    {
+      "kind": "pad",
+      "ref": "J4",
+      "pad": "A4",
+      "selector": "#J4.A4"
+    },
+    {
+      "kind": "net",
+      "net": "GND",
+      "selector": "#net:GND"
+    },
+    {
+      "kind": "net",
+      "net": "a b",
+      "selector": "#net:\"a b\""
+    },
+    {
+      "kind": "net",
+      "net": "say \"hi\"",
+      "selector": "#net:\"say \\\"hi\\\"\""
+    },
+    {
+      "kind": "copper",
+      "net": "VIN",
+      "at": [
+        57.6,
+        21.6
+      ],
+      "selector": "#net:VIN@x57.6y21.6"
+    },
+    {
+      "kind": "point",
+      "at": [
+        12.5,
+        30
+      ],
+      "selector": "#@x12.5y30"
+    },
+    {
+      "kind": "point",
+      "at": [
+        0.12345,
+        -7.1
+      ],
+      "selector": "#@x0.123y-7.1"
+    },
+    {
+      "kind": "net",
+      "net": "a,b",
+      "selector": "#net:\"a,b\""
+    }
+  ],
+  "tokenCases": [
+    {
+      "token": "PCB/board.kicad_pcb#U3",
+      "path": "PCB/board.kicad_pcb",
+      "selectors": [
+        "#U3"
+      ]
+    },
+    {
+      "token": "\"my board.kicad_pcb\"#net:VIN",
+      "path": "my board.kicad_pcb",
+      "selectors": [
+        "#net:VIN"
+      ]
+    },
+    {
+      "token": "PCB/board.kicad_sch#U3.9",
+      "path": "PCB/board.kicad_sch",
+      "selectors": [
+        "#U3.9"
+      ]
+    },
+    {
+      "token": "board.kicad_pcb#U3,C14.2,net:\"a,b\",@x1y2",
+      "path": "board.kicad_pcb",
+      "selectors": [
+        "#U3",
+        "#C14.2",
+        "#net:\"a,b\"",
+        "#@x1y2"
+      ],
+      "why": "several selectors, comma-joined, split outside quotes, in the order written"
+    },
+    {
+      "token": "board.kicad_sch#net:\"/Power Stage/VLOC\",U3",
+      "path": "board.kicad_sch",
+      "selectors": [
+        "#net:\"/Power Stage/VLOC\"",
+        "#U3"
+      ],
+      "why": "a hierarchical sheet's name puts a space in its nets: inside quotes it is the name's"
+    }
+  ],
+  "invalidTokens": [
+    "board.kicad_pcb#U3, U4",
+    "board.kicad_pcb#U 3",
+    "board.kicad_pcb",
+    "board.kicad_pcb#",
+    "board.kicad_pcb#net:\"a b\" ,U3"
+  ]
+}

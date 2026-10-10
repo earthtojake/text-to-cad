@@ -58,19 +58,24 @@ FINISHED_SECONDS = 30.0
 FINISHED_MAX = 8
 
 
-def resolve_drawing_path(file_ref) -> str | None:
-    """The absolute ``.dxf`` this ref names, or ``None`` for a 404.
+def resolve_drawing_path(
+    file_ref,
+    *,
+    suffixes: tuple[str, ...] = (DRAWING_SUFFIX,),
+    route: str = DRAWING_ROUTE_PATH,
+    noun: str = "DXF drawings",
+) -> str | None:
+    """The absolute document this ref names, or ``None`` for a 404.
 
-    Raises ``ValueError`` for a ref this route will not take.
+    Raises ``ValueError`` for a ref this route will not take. The KiCad route
+    (``kicad.py``) uses the same rule with its own suffixes.
     """
+    wanted = " or ".join(suffixes)
     if not file_ref:
-        raise ValueError(f"GET {DRAWING_ROUTE_PATH} needs ?file=<the absolute path of a .dxf>")
+        raise ValueError(f"GET {route} needs ?file=<the absolute path of a {wanted}>")
     candidate = absolute_path(file_ref)
-    if not candidate.lower().endswith(DRAWING_SUFFIX):
-        raise ValueError(
-            f"{DRAWING_ROUTE_PATH} renders DXF drawings; "
-            f"{node_basename(candidate)} is not a {DRAWING_SUFFIX} file"
-        )
+    if not candidate.lower().endswith(tuple(suffixes)):
+        raise ValueError(f"{route} renders {noun}; {node_basename(candidate)} is not a {wanted} file")
     return candidate if os.path.isfile(candidate) else None
 
 

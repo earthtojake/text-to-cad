@@ -430,5 +430,29 @@ class ColdRerunSpelling(unittest.TestCase):
                 self.assertIn(client.cold_rerun_instructions(PAYLOAD), message)
                 self.assertIn("was NOT", message)
 
+
+class ToolLocationsTravel(unittest.TestCase):
+    def test_the_programs_a_board_build_runs_are_the_callers(self):
+        # A warm worker's environment is whatever shell started the daemon: a KiCad or
+        # Freerouting the caller named was "not found" in the build that runs it.
+        import os
+
+        from cadgen.daemon import worker
+
+        named = {
+            "CADGEN_KICAD_CLI": "/opt/kicad/bin/kicad-cli",
+            "CADGEN_FREEROUTING": "/opt/freerouting.jar",
+            "CADGEN_JAVA": "/opt/jdk/bin/java",
+            "JAVA_HOME": "/opt/jdk",
+            "CADGEN_WIREVIZ": "/opt/wireviz",
+        }
+        with mock.patch.dict(os.environ, named, clear=False):
+            env = client.forwarded_env()
+        self.assertEqual({name: env.get(name) for name in named}, named)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            worker._apply_request_env({"env": env})
+            self.assertEqual({name: os.environ.get(name) for name in named}, named)
+
+
 if __name__ == "__main__":
     unittest.main()

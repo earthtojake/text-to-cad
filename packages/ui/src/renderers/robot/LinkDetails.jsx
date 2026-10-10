@@ -1,5 +1,5 @@
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { CoordValue, InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
+import { CoordValue, InfoRow, MonoValue, REFERENCE_LINK_CLASS } from "../kit/inspector/referenceRows.jsx";
 
 // The Reference panel under Links in the tool stack: what the selection IS. Its heading names
 // what is selected (`LinksSection.jsx`), so the rows never repeat the name.
@@ -40,7 +40,6 @@ function Section({ label, children }) {
   return <div className="mt-1 border-t border-sidebar-border/60 pt-1" aria-label={label}>{children}</div>;
 }
 
-const LINK_CLASS = "rounded-sm text-left text-sidebar-foreground underline decoration-muted-foreground/50 underline-offset-2 hover:decoration-current focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring [overflow-wrap:anywhere]";
 const isZero = vector => vector.every(value => Math.abs(value) < 1e-12);
 const isUnit = vector => vector.every(value => Math.abs(value - 1) < 1e-12);
 const vectorText = (vector, digits = 4) => vector.map(value => formatValue(value, digits)).join("  ");
@@ -48,7 +47,7 @@ const vectorText = (vector, digits = 4) => vector.map(value => formatValue(value
 /** Another link of the same robot: pressing it selects that link in the tree and the viewport. */
 function LinkName({ name, onSelect, selectable = true }) {
   if (!onSelect || !selectable) return name;
-  return <TooltipHint content="Select link"><button type="button" className={LINK_CLASS} onClick={() => onSelect(name)} >{name}</button></TooltipHint>;
+  return <TooltipHint content="Select link"><button type="button" className={REFERENCE_LINK_CLASS} onClick={() => onSelect(name)} >{name}</button></TooltipHint>;
 }
 
 // What a primitive IS, in the description's own metres.
@@ -74,7 +73,7 @@ function GeometryEntry({ entry, meshPath, onOpenFile }) {
       {entry.color && <TooltipHint content={entry.materialName || entry.color}><span className="size-2.5 shrink-0 self-center rounded-sm border border-border/70" style={{ backgroundColor: entry.color }}  aria-hidden="true"/></TooltipHint>}
       {entry.filename
         ? path && onOpenFile
-          ? <TooltipHint content="Open file"><button type="button" className={LINK_CLASS} onClick={() => onOpenFile(path)} >{entry.filename}</button></TooltipHint>
+          ? <TooltipHint content="Open file"><button type="button" className={REFERENCE_LINK_CLASS} onClick={() => onOpenFile(path)} >{entry.filename}</button></TooltipHint>
           : <span>{entry.filename}</span>
         : <span>{entry.type}</span>}
     </span>

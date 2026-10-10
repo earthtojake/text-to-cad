@@ -50,7 +50,8 @@ const meshPath = (filename: string) => (filename.includes(':') ? '' : `robots/ar
 let highlight: Record<string, unknown> = {};
 const scene = { hasComponent: (id: string) => components.some(component => component.id === id), setHighlight(next: Record<string, unknown>) { highlight = next; } };
 const drawn = () => JSON.stringify([highlight.selectedLinks || [], highlight.selectedComponents || []]);
-function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNamesByLink = null as Map<string, string[]> | null, onOpenFile = undefined as ((path: string) => void) | undefined }) {
+function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNamesByLink = null as Map<string, string[]> | null, onOpenFile = undefined as ((path: string) => void) | undefined,
+  hiddenPartIds = undefined as string[] | undefined, onVisibilityChange = undefined as ((ids: string[], visible: boolean) => void) | undefined }) {
   const selection = useLinkSelection({ scene, hidden: false, requestRender() {} });
   const observed = {
     ...selection,
@@ -58,7 +59,8 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, groupNa
     selectLink: (name: string, options?: any) => { spy.selectLink?.(name); selection.selectLink(name, options); },
     hoverLink: (name: string) => { spy.hoverLink?.(name); selection.hoverLink(name); },
   };
-  return <LinksSection description={description} components={components} parts={parts} selection={observed} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={onOpenFile}/>;
+  return <LinksSection description={description} components={components} parts={parts} selection={observed} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={onOpenFile}
+    hiddenPartIds={hiddenPartIds} onVisibilityChange={onVisibilityChange}/>;
 }
 const rows = () => within(screen.getByRole('list', { name: 'Robot links' })).getAllByRole('button', { name: /^Select / }).map(row => row.getAttribute('aria-label'));
 const filter = () => screen.getByRole('textbox', { name: 'Filter links' });
@@ -265,4 +267,20 @@ it('a modified click adds a link to the selection, as it adds an object, and a p
   expect(drawn()).toBe('[["shoulder_link"],[]]');
   fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }));
   expect(drawn()).toBe('[["base_link"],[]]');
+});
+
+it('a link with geometry wears the kit’s Hide eye, which hides it without selecting it, and reveals it once hidden', () => {
+  const changed = vi.fn();
+  const spy = { selectLink: vi.fn() };
+  const { rerender } = render(<Harness spy={spy} hiddenPartIds={[]} onVisibilityChange={changed}/>);
+  // A link that draws nothing has no eye.
+  expect(screen.queryByRole('button', { name: 'Hide shoulder_link' })).toBeNull();
+  const eye = screen.getByRole('button', { name: 'Hide base_link' });
+  expect(eye.getAttribute('aria-pressed')).toBeNull();
+  fireEvent.click(eye);
+  expect(changed).toHaveBeenCalledWith(['base_link:v1'], false);
+  expect(spy.selectLink).not.toHaveBeenCalled();
+  rerender(<Harness spy={spy} hiddenPartIds={['base_link:v1']} onVisibilityChange={changed}/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Reveal base_link' }));
+  expect(changed).toHaveBeenLastCalledWith(['base_link:v1'], true);
 });

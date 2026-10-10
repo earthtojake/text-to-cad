@@ -1,0 +1,843 @@
+{
+ "schemaVersion": 2,
+ "kicadVersion": "10.0.6",
+ "kind": "board",
+ "sheets": [
+  {
+   "name": "blinky",
+   "width": 39.9796,
+   "height": 29.9974,
+   "background": "#001023",
+   "layers": [
+    {
+     "id": "B.Fab",
+     "kind": "fab",
+     "side": "back",
+     "svg": "<?xml version=\"1.0\" standalone=\"no\"?>\n <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"> \n<svg\n  xmlns:svg=\"http://www.w3.org/2000/svg\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n  xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n  version=\"1.1\"\n  width=\"39.9796mm\" height=\"29.9974mm\" viewBox=\"0.0000 0.0000 39.9796 29.9974\">\n\n  \n<g style=\"fill:#000000; fill-opacity:1.0000;stroke:#000000; stroke-opacity:1.0000;\nstroke-linecap:round; stroke-linejoin:round;\"\n transform=\"translate(0 0) scale(1 1)\">\n</g>\n</svg>\n"
+    },
+    {
+     "id": "B.SilkS",
+     "kind": "silk",
+     "side": "back",
+     "svg": "<?xml version=\"1.0\" standalone=\"no\"?>\n <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"> \n<svg\n  xmlns:svg=\"http://www.w3.org/2000/svg\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n  xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n  version=\"1.1\"\n  width=\"39.9796mm\" height=\"29.9974mm\" viewBox=\"0.0000 0.0000 39.9796 29.9974\">\n\n  \n<g style=\"fill:#000000; fill-opacity:1.0000;stroke:#000000; stroke-opacity:1.0000;\nstroke-linecap:round; stroke-linejoin:round;\"\n transform=\"translate(0 0) scale(1 1)\">\n</g>\n</svg>\n"
+    },
+    {
+     "id": "B.Cu",
+     "kind": "copper",
+     "side": "back",
+     "svg": "<?xml version=\"1.0\" standalone=\"no\"?>\n <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"> \n<svg\n  xmlns:svg=\"http://www.w3.org/2000/svg\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n  xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n  version=\"1.1\"\n  width=\"39.9796mm\" height=\"29.9974mm\" viewBox=\"0.0000 0.0000 39.9796 29.9974\">\n\n  \n<g style=\"fill:#000000; fill-opacity:1.0000;stroke:#000000; stroke-opacity:1.0000;\nstroke-linecap:round; stroke-linejoin:round;\"\n transform=\"translate(0 0) scale(1 1)\">\n<path style=\"fill:#4D7FC4; fill-opacity:1.0000; stroke:none;fill-rule:evenodd;\"\nd=\"M 4.1500,15.8500\n4.1500,14.1500\n5.8500,14.1500\n5.8500,15.8500\nZ\" /> \n</g>\n<g style=\"fill:#4D7FC4; fill-opacity:1.0000; stroke:none;\">\n<circle cx=\"5.0000\" cy=\"17.5400\" r=\"0.8500\" /> \n<path style=\"fill:#4D7FC4; fill-opacity:1.0000; stroke:none;fill-rule:evenodd;\"\nd=\"M 4.0386,16.0167\n4.0419,16.0189\n4.0718,16.0389\n4.1162,16.0477\n4.1302,16.0505\n4.1302,16.0505\n4.1303,16.0505\n4.1303,16.0505\n5.8697,16.0505\n5.8697,16.0505\n5.9282,16.0389\n5.9581,16.0189\n5.9614,16.0167\n6.0164,16.0000\n13.9010,16.0000\n13.9592,16.0189\n13.9952,16.0684\n14.0000,16.0990\n14.0000,25.9010\n13.9811,25.9592\n13.9316,25.9952\n13.9010,26.0000\n2.0990,26.0000\n2.0408,25.9811\n2.0048,25.9316\n2.0000,25.9010\n2.0000,16.0990\n2.0189,16.0408\n2.0684,16.0048\n2.0990,16.0000\n3.9836,16.0000\nZ\" /> \n</g>\n</svg>\n",
+     "unpoured": "<?xml version=\"1.0\" standalone=\"no\"?>\n <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"> \n<svg\n  xmlns:svg=\"http://www.w3.org/2000/svg\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n  xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n  version=\"1.1\"\n  width=\"39.9796mm\" height=\"29.9974mm\" viewBox=\"0.0000 0.0000 39.9796 29.9974\">\n\n  \n<g style=\"fill:#000000; fill-opacity:1.0000;stroke:#000000; stroke-opacity:1.0000;\nstroke-linecap:round; stroke-linejoin:round;\"\n transform=\"translate(0 0) scale(1 1)\">\n<path style=\"fill:#4D7FC4; fill-opacity:1.0000; stroke:none;fill-rule:evenodd;\"\nd=\"M 4.1500,15.8500\n4.1500,14.1500\n5.8500,14.1500\n5.8500,15.8500\nZ\" /> \n</g>\n<g style=\"fill:#4D7FC4; fill-opacity:1.0000; stroke:none;\">\n<circle cx=\"5.0000\" cy=\"17.5400\" r=\"0.8500\" /> \n</g>\n</svg>\n"
+    },
+    {
+     "id": "F.Cu",
+     "kind": "copper",
+     "side": "front",
+     "svg": "<?xml version=\"1.0\" standalone=\"no\"?>\n <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"> \n<svg\n  xmlns:svg=\"http://www.w3.org/2000/svg\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n  xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n  version=\"1.1\"\n  width=\"39.9796mm\" height=\"29.9974mm\" viewBox=\"0.0000 0.0000 39.9796 29.9974\">\n\n  \n<g style=\"fill:#000000; fill-opacity:1.0000;stroke:#000000; stroke-opacity:1.0000;\nstroke-linecap:round; stroke-linejoin:round;\"\n transform=\"translate(0 0) scale(1 1)\">\n<path style=\"fill:#C83434; fill-opacity:1.0000; stroke:none;fill-rule:evenodd;\"\nd=\"M 18.7750,23.7437\n18.7917,23.6600\n18.8391,23.5891\n18.9100,23.5417\n18.9937,23.5250\n19.4312,23.5250\n19.5150,23.5417\n19.5859,23.5891\n19.6333,23.6600\n19.6500,23.7437\n19.6500,24.2562\n19.6333,24.3400\n19.5859,24.4109\n19.5150,24.4583\n19.4312,24.4750\n18.9937,24.4750\n18.9100,24.4583\n18.8391,24.4109\n18.7917,24.3400\n18.7750,24.2562\nZ\" /> \n<path style=\"fill:#C83434; fill-opacity:1.0000; stroke:none;fill-rule:evenodd;\"\nd=\"M 20.3500,23.7437\n20.3667,23.6600\n20.4141,23.5891\n20.4850,23.5417\n20.5687,23.5250\n21.0062,23.5250\n21.0900,23.5417\n21.1609,23.5891\n21.2083,23.6600\n21.2250,23.7437\n21.2250,24.2562\n21.2083,24.3400\n21.1609,24.4109\n21.0900,24.4583\n21.0062,24.4750\n20.5687,24.4750\n20.4850,24.4583\n20.4141,24.4109\n20.3667,24.3400\n20.3500,24.2562\nZ\" /> \n<path style=\"fill:#C83434; fill-opacity:1.0000; stroke:none;fill-rule:evenodd;\"\nd=\"M 4.1500,15.8500\n4.1500,14.1500\n5.8500,14.1500\n5.8500,15.8500\nZ\" /> \n</g>\n<g style=\"fill:#C83434; fill-opacity:1.0000; stroke:none;\">\n<circle cx=\"5.0000\" cy=\"17.5400\" r=\"0.8500\" /> \n<path style=\"fill:#C83434; fill-opacity:1.0000; stroke:none;fill-rule:evenodd;\"\nd=\"M 34.6000,14.7250\n34.6152,14.6485\n34.6586,14.5836\n34.7235,14.5402\n34.8000,14.5250\n35.2000,14.5250\n35.2765,14.5402\n35.3414,14.5836\n35.3848,14.6485\n35.4000,14.7250\n35.4000,15.2750\n35.3848,15.3515\n35.3414,15.4164\n35.2765,15.4598\n35.2000,15.4750\n34.8000,15.4750\n34.7235,15.4598\n34.6586,15.4164\n34.6152,15.3515\n34.6000,15.2750\nZ\" /> \n<path style=\"fill:#C83434; fill-opacity:1.0000; stroke:none;fill-rule:evenodd;\"\nd=\"M 36.2500,14.7250\n36.2652,14.6485\n36.3086,14.5836\n36.3735,14.5402\n36.4500,14.5250\n36.8500,14.5250\n36.9265,14.5402\n36.9914,14.5836\n37.0348,14.6485\n37.0500,14.7250\n37.0500,15.2750\n37.0348,15.3515\n36.9914,15.4164\n36.9265,15.4598\n36.8500,15.4750\n36.4500,15.4750\n36.3735,15.4598\n36.3086,15.4164\n36.2652,15.3515\n36.2500,15.2750\nZ\" /> \n</g>\n<g style=\"fill:none; \nstroke:#C83434; stroke-width:1.0000; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<path d=\"M5.0000 15.0000\nL35.0000 15.0000\n\" />\n</g>\n<g style=\"fill:none; \nstroke:#C83434; stroke-width:0.2500; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<path d=\"M19.2125 24.0000\nL8.0000 24.0000\n\" />\n<path d=\"M8.0000 24.0000\nL5.0000 17.5400\n\" />\n</g>\n</svg>\n"
+    },
+    {
+     "id": "F.SilkS",
+     "kind": "silk",
+     "side": "front",
+     "svg": "<?xml version=\"1.0\" standalone=\"no\"?>\n <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"> \n<svg\n  xmlns:svg=\"http://www.w3.org/2000/svg\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n  xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n  version=\"1.1\"\n  width=\"39.9796mm\" height=\"29.9974mm\" viewBox=\"0.0000 0.0000 39.9796 29.9974\">\n\n  \n<g style=\"fill:#000000; fill-opacity:1.0000;stroke:#000000; stroke-opacity:1.0000;\nstroke-linecap:round; stroke-linejoin:round;\"\n transform=\"translate(0 0) scale(1 1)\">\n</g>\n<g style=\"fill:none; \nstroke:#F2EDA1; stroke-width:0.1500; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<text x=\"20.0000\" y=\"23.0700\"\ntextLength=\"2.2024\" font-size=\"1.3333\" lengthAdjust=\"spacingAndGlyphs\"\ntext-anchor=\"middle\" opacity=\"0\" stroke-opacity=\"0\">D1</text>\n<g class=\"stroked-text\"><desc>D1</desc>\n<path d=\"M19.2619 23.0248\nL19.2619 22.0248\n\" />\n<path d=\"M19.2619 22.0248\nL19.5000 22.0248\n\" />\n<path d=\"M19.5000 22.0248\nL19.6429 22.0724\n\" />\n<path d=\"M19.6429 22.0724\nL19.7381 22.1677\n\" />\n<path d=\"M19.7381 22.1677\nL19.7857 22.2629\n\" />\n<path d=\"M19.7857 22.2629\nL19.8333 22.4534\n\" />\n<path d=\"M19.8333 22.4534\nL19.8333 22.5962\n\" />\n<path d=\"M19.8333 22.5962\nL19.7857 22.7867\n\" />\n<path d=\"M19.7857 22.7867\nL19.7381 22.8820\n\" />\n<path d=\"M19.7381 22.8820\nL19.6429 22.9772\n\" />\n<path d=\"M19.6429 22.9772\nL19.5000 23.0248\n\" />\n<path d=\"M19.5000 23.0248\nL19.2619 23.0248\n\" />\n<path d=\"M20.7857 23.0248\nL20.2143 23.0248\n\" />\n<path d=\"M20.5000 23.0248\nL20.5000 22.0248\n\" />\n<path d=\"M20.5000 22.0248\nL20.4048 22.1677\n\" />\n<path d=\"M20.4048 22.1677\nL20.3095 22.2629\n\" />\n<path d=\"M20.3095 22.2629\nL20.2143 22.3105\n\" />\n</g><text x=\"5.0000\" y=\"13.1200\"\ntextLength=\"1.9643\" font-size=\"1.3333\" lengthAdjust=\"spacingAndGlyphs\"\ntext-anchor=\"middle\" opacity=\"0\" stroke-opacity=\"0\">J1</text>\n<g class=\"stroked-text\"><desc>J1</desc>\n<path d=\"M4.6667 12.0748\nL4.6667 12.7891\n\" />\n<path d=\"M4.6667 12.7891\nL4.6190 12.9320\n\" />\n<path d=\"M4.6190 12.9320\nL4.5238 13.0272\n\" />\n<path d=\"M4.5238 13.0272\nL4.3810 13.0748\n\" />\n<path d=\"M4.3810 13.0748\nL4.2857 13.0748\n\" />\n<path d=\"M5.6667 13.0748\nL5.0952 13.0748\n\" />\n<path d=\"M5.3810 13.0748\nL5.3810 12.0748\n\" />\n<path d=\"M5.3810 12.0748\nL5.2857 12.2177\n\" />\n<path d=\"M5.2857 12.2177\nL5.1905 12.3129\n\" />\n<path d=\"M5.1905 12.3129\nL5.0952 12.3605\n\" />\n</g><text x=\"35.8250\" y=\"14.0700\"\ntextLength=\"2.2024\" font-size=\"1.3333\" lengthAdjust=\"spacingAndGlyphs\"\ntext-anchor=\"middle\" opacity=\"0\" stroke-opacity=\"0\">R1</text>\n<g class=\"stroked-text\"><desc>R1</desc>\n<path d=\"M35.6583 14.0248\nL35.3250 13.5486\n\" />\n<path d=\"M35.0869 14.0248\nL35.0869 13.0248\n\" />\n<path d=\"M35.0869 13.0248\nL35.4679 13.0248\n\" />\n<path d=\"M35.4679 13.0248\nL35.5631 13.0724\n\" />\n<path d=\"M35.5631 13.0724\nL35.6107 13.1201\n\" />\n<path d=\"M35.6107 13.1201\nL35.6583 13.2153\n\" />\n<path d=\"M35.6583 13.2153\nL35.6583 13.3582\n\" />\n<path d=\"M35.6583 13.3582\nL35.6107 13.4534\n\" />\n<path d=\"M35.6107 13.4534\nL35.5631 13.5010\n\" />\n<path d=\"M35.5631 13.5010\nL35.4679 13.5486\n\" />\n<path d=\"M35.4679 13.5486\nL35.0869 13.5486\n\" />\n<path d=\"M36.6107 14.0248\nL36.0393 14.0248\n\" />\n<path d=\"M36.3250 14.0248\nL36.3250 13.0248\n\" />\n<path d=\"M36.3250 13.0248\nL36.2298 13.1677\n\" />\n<path d=\"M36.2298 13.1677\nL36.1345 13.2629\n\" />\n<path d=\"M36.1345 13.2629\nL36.0393 13.3105\n\" />\n</g></g>\n<g style=\"fill:none; \nstroke:#F2EDA1; stroke-width:0.1200; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<path d=\"M18.5150 23.2650\nL18.5150 24.7350\n\" />\n<path d=\"M18.5150 24.7350\nL20.8000 24.7350\n\" />\n<path d=\"M20.8000 23.2650\nL18.5150 23.2650\n\" />\n<path d=\"M3.6200 13.6200\nL5.0000 13.6200\n\" />\n<path d=\"M3.6200 15.0000\nL3.6200 13.6200\n\" />\n<path d=\"M3.6200 16.2700\nL3.6200 18.9200\n\" />\n<path d=\"M3.6200 16.2700\nL6.3800 16.2700\n\" />\n<path d=\"M3.6200 18.9200\nL6.3800 18.9200\n\" />\n<path d=\"M6.3800 16.2700\nL6.3800 18.9200\n\" />\n<path d=\"M35.5877 14.4775\nL36.0623 14.4775\n\" />\n<path d=\"M35.5877 15.5225\nL36.0623 15.5225\n\" />\n</g>\n</svg>\n"
+    },
+    {
+     "id": "F.Fab",
+     "kind": "fab",
+     "side": "front",
+     "svg": "<?xml version=\"1.0\" standalone=\"no\"?>\n <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"> \n<svg\n  xmlns:svg=\"http://www.w3.org/2000/svg\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n  xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n  version=\"1.1\"\n  width=\"39.9796mm\" height=\"29.9974mm\" viewBox=\"0.0000 0.0000 39.9796 29.9974\">\n\n  \n<g style=\"fill:#000000; fill-opacity:1.0000;stroke:#000000; stroke-opacity:1.0000;\nstroke-linecap:round; stroke-linejoin:round;\"\n transform=\"translate(0 0) scale(1 1)\">\n</g>\n<g style=\"fill:none; \nstroke:#AFAFAF; stroke-width:0.1500; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<text x=\"20.0000\" y=\"25.9300\"\ntextLength=\"2.6310\" font-size=\"1.3333\" lengthAdjust=\"spacingAndGlyphs\"\ntext-anchor=\"middle\" opacity=\"0\" stroke-opacity=\"0\">red</text>\n<g class=\"stroked-text\"><desc>red</desc>\n<path d=\"M19.0476 25.8848\nL19.0476 25.2182\n\" />\n<path d=\"M19.0476 25.4086\nL19.0952 25.3134\n\" />\n<path d=\"M19.0952 25.3134\nL19.1429 25.2658\n\" />\n<path d=\"M19.1429 25.2658\nL19.2381 25.2182\n\" />\n<path d=\"M19.2381 25.2182\nL19.3333 25.2182\n\" />\n<path d=\"M20.0476 25.8372\nL19.9524 25.8848\n\" />\n<path d=\"M19.9524 25.8848\nL19.7619 25.8848\n\" />\n<path d=\"M19.7619 25.8848\nL19.6667 25.8372\n\" />\n<path d=\"M19.6667 25.8372\nL19.6190 25.7420\n\" />\n<path d=\"M19.6190 25.7420\nL19.6190 25.3610\n\" />\n<path d=\"M19.6190 25.3610\nL19.6667 25.2658\n\" />\n<path d=\"M19.6667 25.2658\nL19.7619 25.2182\n\" />\n<path d=\"M19.7619 25.2182\nL19.9524 25.2182\n\" />\n<path d=\"M19.9524 25.2182\nL20.0476 25.2658\n\" />\n<path d=\"M20.0476 25.2658\nL20.0952 25.3610\n\" />\n<path d=\"M20.0952 25.3610\nL20.0952 25.4562\n\" />\n<path d=\"M20.0952 25.4562\nL19.6190 25.5515\n\" />\n<path d=\"M20.9524 25.8848\nL20.9524 24.8848\n\" />\n<path d=\"M20.9524 25.8372\nL20.8571 25.8848\n\" />\n<path d=\"M20.8571 25.8848\nL20.6667 25.8848\n\" />\n<path d=\"M20.6667 25.8848\nL20.5714 25.8372\n\" />\n<path d=\"M20.5714 25.8372\nL20.5238 25.7896\n\" />\n<path d=\"M20.5238 25.7896\nL20.4762 25.6943\n\" />\n<path d=\"M20.4762 25.6943\nL20.4762 25.4086\n\" />\n<path d=\"M20.4762 25.4086\nL20.5238 25.3134\n\" />\n<path d=\"M20.5238 25.3134\nL20.5714 25.2658\n\" />\n<path d=\"M20.5714 25.2658\nL20.6667 25.2182\n\" />\n<path d=\"M20.6667 25.2182\nL20.8571 25.2182\n\" />\n<path d=\"M20.8571 25.2182\nL20.9524 25.2658\n\" />\n</g></g>\n<g style=\"fill:none; \nstroke:#AFAFAF; stroke-width:0.0600; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<text x=\"20.0000\" y=\"24.2000\"\ntextLength=\"0.8810\" font-size=\"0.5333\" lengthAdjust=\"spacingAndGlyphs\"\ntext-anchor=\"middle\" opacity=\"0\" stroke-opacity=\"0\">D1</text>\n<g class=\"stroked-text\"><desc>D1</desc>\n<path d=\"M19.7048 24.1819\nL19.7048 23.7819\n\" />\n<path d=\"M19.7048 23.7819\nL19.8000 23.7819\n\" />\n<path d=\"M19.8000 23.7819\nL19.8571 23.8010\n\" />\n<path d=\"M19.8571 23.8010\nL19.8952 23.8391\n\" />\n<path d=\"M19.8952 23.8391\nL19.9143 23.8772\n\" />\n<path d=\"M19.9143 23.8772\nL19.9333 23.9534\n\" />\n<path d=\"M19.9333 23.9534\nL19.9333 24.0105\n\" />\n<path d=\"M19.9333 24.0105\nL19.9143 24.0867\n\" />\n<path d=\"M19.9143 24.0867\nL19.8952 24.1248\n\" />\n<path d=\"M19.8952 24.1248\nL19.8571 24.1629\n\" />\n<path d=\"M19.8571 24.1629\nL19.8000 24.1819\n\" />\n<path d=\"M19.8000 24.1819\nL19.7048 24.1819\n\" />\n<path d=\"M20.3143 24.1819\nL20.0857 24.1819\n\" />\n<path d=\"M20.2000 24.1819\nL20.2000 23.7819\n\" />\n<path d=\"M20.2000 23.7819\nL20.1619 23.8391\n\" />\n<path d=\"M20.1619 23.8391\nL20.1238 23.8772\n\" />\n<path d=\"M20.1238 23.8772\nL20.0857 23.8962\n\" />\n</g></g>\n<g style=\"fill:none; \nstroke:#AFAFAF; stroke-width:0.1500; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<text x=\"5.0000\" y=\"20.4200\"\ntextLength=\"9.3452\" font-size=\"1.3333\" lengthAdjust=\"spacingAndGlyphs\"\ntext-anchor=\"middle\" opacity=\"0\" stroke-opacity=\"0\">Conn_01x02</text>\n<g class=\"stroked-text\"><desc>Conn_01x02</desc>\n<path d=\"M1.2619 20.2796\nL1.2143 20.3272\n\" />\n<path d=\"M1.2143 20.3272\nL1.0714 20.3748\n\" />\n<path d=\"M1.0714 20.3748\nL0.9762 20.3748\n\" />\n<path d=\"M0.9762 20.3748\nL0.8333 20.3272\n\" />\n<path d=\"M0.8333 20.3272\nL0.7381 20.2320\n\" />\n<path d=\"M0.7381 20.2320\nL0.6905 20.1367\n\" />\n<path d=\"M0.6905 20.1367\nL0.6429 19.9462\n\" />\n<path d=\"M0.6429 19.9462\nL0.6429 19.8034\n\" />\n<path d=\"M0.6429 19.8034\nL0.6905 19.6129\n\" />\n<path d=\"M0.6905 19.6129\nL0.7381 19.5177\n\" />\n<path d=\"M0.7381 19.5177\nL0.8333 19.4224\n\" />\n<path d=\"M0.8333 19.4224\nL0.9762 19.3748\n\" />\n<path d=\"M0.9762 19.3748\nL1.0714 19.3748\n\" />\n<path d=\"M1.0714 19.3748\nL1.2143 19.4224\n\" />\n<path d=\"M1.2143 19.4224\nL1.2619 19.4701\n\" />\n<path d=\"M1.8333 20.3748\nL1.7381 20.3272\n\" />\n<path d=\"M1.7381 20.3272\nL1.6905 20.2796\n\" />\n<path d=\"M1.6905 20.2796\nL1.6429 20.1843\n\" />\n<path d=\"M1.6429 20.1843\nL1.6429 19.8986\n\" />\n<path d=\"M1.6429 19.8986\nL1.6905 19.8034\n\" />\n<path d=\"M1.6905 19.8034\nL1.7381 19.7558\n\" />\n<path d=\"M1.7381 19.7558\nL1.8333 19.7082\n\" />\n<path d=\"M1.8333 19.7082\nL1.9762 19.7082\n\" />\n<path d=\"M1.9762 19.7082\nL2.0714 19.7558\n\" />\n<path d=\"M2.0714 19.7558\nL2.1190 19.8034\n\" />\n<path d=\"M2.1190 19.8034\nL2.1667 19.8986\n\" />\n<path d=\"M2.1667 19.8986\nL2.1667 20.1843\n\" />\n<path d=\"M2.1667 20.1843\nL2.1190 20.2796\n\" />\n<path d=\"M2.1190 20.2796\nL2.0714 20.3272\n\" />\n<path d=\"M2.0714 20.3272\nL1.9762 20.3748\n\" />\n<path d=\"M1.9762 20.3748\nL1.8333 20.3748\n\" />\n<path d=\"M2.5952 19.7082\nL2.5952 20.3748\n\" />\n<path d=\"M2.5952 19.8034\nL2.6429 19.7558\n\" />\n<path d=\"M2.6429 19.7558\nL2.7381 19.7082\n\" />\n<path d=\"M2.7381 19.7082\nL2.8810 19.7082\n\" />\n<path d=\"M2.8810 19.7082\nL2.9762 19.7558\n\" />\n<path d=\"M2.9762 19.7558\nL3.0238 19.8510\n\" />\n<path d=\"M3.0238 19.8510\nL3.0238 20.3748\n\" />\n<path d=\"M3.5000 19.7082\nL3.5000 20.3748\n\" />\n<path d=\"M3.5000 19.8034\nL3.5476 19.7558\n\" />\n<path d=\"M3.5476 19.7558\nL3.6429 19.7082\n\" />\n<path d=\"M3.6429 19.7082\nL3.7857 19.7082\n\" />\n<path d=\"M3.7857 19.7082\nL3.8810 19.7558\n\" />\n<path d=\"M3.8810 19.7558\nL3.9286 19.8510\n\" />\n<path d=\"M3.9286 19.8510\nL3.9286 20.3748\n\" />\n<path d=\"M4.1667 20.4701\nL4.9286 20.4701\n\" />\n<path d=\"M5.3571 19.3748\nL5.4524 19.3748\n\" />\n<path d=\"M5.4524 19.3748\nL5.5476 19.4224\n\" />\n<path d=\"M5.5476 19.4224\nL5.5952 19.4701\n\" />\n<path d=\"M5.5952 19.4701\nL5.6429 19.5653\n\" />\n<path d=\"M5.6429 19.5653\nL5.6905 19.7558\n\" />\n<path d=\"M5.6905 19.7558\nL5.6905 19.9939\n\" />\n<path d=\"M5.6905 19.9939\nL5.6429 20.1843\n\" />\n<path d=\"M5.6429 20.1843\nL5.5952 20.2796\n\" />\n<path d=\"M5.5952 20.2796\nL5.5476 20.3272\n\" />\n<path d=\"M5.5476 20.3272\nL5.4524 20.3748\n\" />\n<path d=\"M5.4524 20.3748\nL5.3571 20.3748\n\" />\n<path d=\"M5.3571 20.3748\nL5.2619 20.3272\n\" />\n<path d=\"M5.2619 20.3272\nL5.2143 20.2796\n\" />\n<path d=\"M5.2143 20.2796\nL5.1667 20.1843\n\" />\n<path d=\"M5.1667 20.1843\nL5.1190 19.9939\n\" />\n<path d=\"M5.1190 19.9939\nL5.1190 19.7558\n\" />\n<path d=\"M5.1190 19.7558\nL5.1667 19.5653\n\" />\n<path d=\"M5.1667 19.5653\nL5.2143 19.4701\n\" />\n<path d=\"M5.2143 19.4701\nL5.2619 19.4224\n\" />\n<path d=\"M5.2619 19.4224\nL5.3571 19.3748\n\" />\n<path d=\"M6.6429 20.3748\nL6.0714 20.3748\n\" />\n<path d=\"M6.3571 20.3748\nL6.3571 19.3748\n\" />\n<path d=\"M6.3571 19.3748\nL6.2619 19.5177\n\" />\n<path d=\"M6.2619 19.5177\nL6.1667 19.6129\n\" />\n<path d=\"M6.1667 19.6129\nL6.0714 19.6605\n\" />\n<path d=\"M6.9762 20.3748\nL7.5000 19.7082\n\" />\n<path d=\"M6.9762 19.7082\nL7.5000 20.3748\n\" />\n<path d=\"M8.0714 19.3748\nL8.1667 19.3748\n\" />\n<path d=\"M8.1667 19.3748\nL8.2619 19.4224\n\" />\n<path d=\"M8.2619 19.4224\nL8.3095 19.4701\n\" />\n<path d=\"M8.3095 19.4701\nL8.3571 19.5653\n\" />\n<path d=\"M8.3571 19.5653\nL8.4048 19.7558\n\" />\n<path d=\"M8.4048 19.7558\nL8.4048 19.9939\n\" />\n<path d=\"M8.4048 19.9939\nL8.3571 20.1843\n\" />\n<path d=\"M8.3571 20.1843\nL8.3095 20.2796\n\" />\n<path d=\"M8.3095 20.2796\nL8.2619 20.3272\n\" />\n<path d=\"M8.2619 20.3272\nL8.1667 20.3748\n\" />\n<path d=\"M8.1667 20.3748\nL8.0714 20.3748\n\" />\n<path d=\"M8.0714 20.3748\nL7.9762 20.3272\n\" />\n<path d=\"M7.9762 20.3272\nL7.9286 20.2796\n\" />\n<path d=\"M7.9286 20.2796\nL7.8810 20.1843\n\" />\n<path d=\"M7.8810 20.1843\nL7.8333 19.9939\n\" />\n<path d=\"M7.8333 19.9939\nL7.8333 19.7558\n\" />\n<path d=\"M7.8333 19.7558\nL7.8810 19.5653\n\" />\n<path d=\"M7.8810 19.5653\nL7.9286 19.4701\n\" />\n<path d=\"M7.9286 19.4701\nL7.9762 19.4224\n\" />\n<path d=\"M7.9762 19.4224\nL8.0714 19.3748\n\" />\n<path d=\"M8.7857 19.4701\nL8.8333 19.4224\n\" />\n<path d=\"M8.8333 19.4224\nL8.9286 19.3748\n\" />\n<path d=\"M8.9286 19.3748\nL9.1667 19.3748\n\" />\n<path d=\"M9.1667 19.3748\nL9.2619 19.4224\n\" />\n<path d=\"M9.2619 19.4224\nL9.3095 19.4701\n\" />\n<path d=\"M9.3095 19.4701\nL9.3571 19.5653\n\" />\n<path d=\"M9.3571 19.5653\nL9.3571 19.6605\n\" />\n<path d=\"M9.3571 19.6605\nL9.3095 19.8034\n\" />\n<path d=\"M9.3095 19.8034\nL8.7381 20.3748\n\" />\n<path d=\"M8.7381 20.3748\nL9.3571 20.3748\n\" />\n</g><g transform=\"rotate(-90.000000 5.0000 16.2700)\">\n<text x=\"5.0000\" y=\"16.7700\"\ntextLength=\"1.9643\" font-size=\"1.3333\" lengthAdjust=\"spacingAndGlyphs\"\ntext-anchor=\"middle\" opacity=\"0\" stroke-opacity=\"0\">J1</text>\n</g>\n<g class=\"stroked-text\"><desc>J1</desc>\n<path d=\"M4.4548 16.6033\nL5.1691 16.6033\n\" />\n<path d=\"M5.1691 16.6033\nL5.3120 16.6510\n\" />\n<path d=\"M5.3120 16.6510\nL5.4072 16.7462\n\" />\n<path d=\"M5.4072 16.7462\nL5.4548 16.8890\n\" />\n<path d=\"M5.4548 16.8890\nL5.4548 16.9843\n\" />\n<path d=\"M5.4548 15.6033\nL5.4548 16.1748\n\" />\n<path d=\"M5.4548 15.8890\nL4.4548 15.8890\n\" />\n<path d=\"M4.4548 15.8890\nL4.5977 15.9843\n\" />\n<path d=\"M4.5977 15.9843\nL4.6929 16.0795\n\" />\n<path d=\"M4.6929 16.0795\nL4.7405 16.1748\n\" />\n</g><text x=\"35.8250\" y=\"16.9300\"\ntextLength=\"2.0119\" font-size=\"1.3333\" lengthAdjust=\"spacingAndGlyphs\"\ntext-anchor=\"middle\" opacity=\"0\" stroke-opacity=\"0\">1k</text>\n<g class=\"stroked-text\"><desc>1k</desc>\n<path d=\"M35.7060 16.8848\nL35.1345 16.8848\n\" />\n<path d=\"M35.4202 16.8848\nL35.4202 15.8848\n\" />\n<path d=\"M35.4202 15.8848\nL35.3250 16.0277\n\" />\n<path d=\"M35.3250 16.0277\nL35.2298 16.1229\n\" />\n<path d=\"M35.2298 16.1229\nL35.1345 16.1705\n\" />\n<path d=\"M36.1345 16.8848\nL36.1345 15.8848\n\" />\n<path d=\"M36.2298 16.5039\nL36.5155 16.8848\n\" />\n<path d=\"M36.5155 16.2182\nL36.1345 16.5991\n\" />\n</g></g>\n<g style=\"fill:none; \nstroke:#AFAFAF; stroke-width:0.0600; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<text x=\"35.8250\" y=\"15.2000\"\ntextLength=\"0.8810\" font-size=\"0.5333\" lengthAdjust=\"spacingAndGlyphs\"\ntext-anchor=\"middle\" opacity=\"0\" stroke-opacity=\"0\">R1</text>\n<g class=\"stroked-text\"><desc>R1</desc>\n<path d=\"M35.7583 15.1819\nL35.6250 14.9915\n\" />\n<path d=\"M35.5298 15.1819\nL35.5298 14.7819\n\" />\n<path d=\"M35.5298 14.7819\nL35.6821 14.7819\n\" />\n<path d=\"M35.6821 14.7819\nL35.7202 14.8010\n\" />\n<path d=\"M35.7202 14.8010\nL35.7393 14.8200\n\" />\n<path d=\"M35.7393 14.8200\nL35.7583 14.8581\n\" />\n<path d=\"M35.7583 14.8581\nL35.7583 14.9153\n\" />\n<path d=\"M35.7583 14.9153\nL35.7393 14.9534\n\" />\n<path d=\"M35.7393 14.9534\nL35.7202 14.9724\n\" />\n<path d=\"M35.7202 14.9724\nL35.6821 14.9915\n\" />\n<path d=\"M35.6821 14.9915\nL35.5298 14.9915\n\" />\n<path d=\"M36.1393 15.1819\nL35.9107 15.1819\n\" />\n<path d=\"M36.0250 15.1819\nL36.0250 14.7819\n\" />\n<path d=\"M36.0250 14.7819\nL35.9869 14.8391\n\" />\n<path d=\"M35.9869 14.8391\nL35.9488 14.8772\n\" />\n<path d=\"M35.9488 14.8772\nL35.9107 14.8962\n\" />\n</g></g>\n<g style=\"fill:none; \nstroke:#AFAFAF; stroke-width:0.1000; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<path d=\"M19.2000 23.9000\nL19.2000 24.4000\n\" />\n<path d=\"M19.2000 24.4000\nL20.8000 24.4000\n\" />\n<path d=\"M19.5000 23.6000\nL19.2000 23.9000\n\" />\n<path d=\"M20.8000 23.6000\nL19.5000 23.6000\n\" />\n<path d=\"M20.8000 24.4000\nL20.8000 23.6000\n\" />\n<path d=\"M3.7300 14.3650\nL4.3650 13.7300\n\" />\n<path d=\"M3.7300 18.8100\nL3.7300 14.3650\n\" />\n<path d=\"M4.3650 13.7300\nL6.2700 13.7300\n\" />\n<path d=\"M6.2700 13.7300\nL6.2700 18.8100\n\" />\n<path d=\"M6.2700 18.8100\nL3.7300 18.8100\n\" />\n<path style=\"fill:none; \nstroke:#AFAFAF; stroke-width:0.1000; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;fill:none\"\nd=\"M 35.0250,14.5875\n36.6250,14.5875\n36.6250,15.4125\n35.0250,15.4125\nZ\" /> \n</g>\n</svg>\n"
+    },
+    {
+     "id": "Edge.Cuts",
+     "kind": "outline",
+     "side": "both",
+     "svg": "<?xml version=\"1.0\" standalone=\"no\"?>\n <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"> \n<svg\n  xmlns:svg=\"http://www.w3.org/2000/svg\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n  xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n  version=\"1.1\"\n  width=\"39.9796mm\" height=\"29.9974mm\" viewBox=\"0.0000 0.0000 39.9796 29.9974\">\n\n  \n<g style=\"fill:#000000; fill-opacity:1.0000;stroke:#000000; stroke-opacity:1.0000;\nstroke-linecap:round; stroke-linejoin:round;\"\n transform=\"translate(0 0) scale(1 1)\">\n</g>\n<g style=\"fill:none; \nstroke:#D0D2CD; stroke-width:0.0500; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<path d=\"M0.0000 0.0000\nL0.0000 30.0000\n\" />\n<path d=\"M0.0000 30.0000\nL40.0000 30.0000\n\" />\n<path d=\"M40.0000 30.0000\nL40.0000 0.0000\n\" />\n<path d=\"M40.0000 0.0000\nL0.0000 0.0000\n\" />\n</g>\n</svg>\n"
+    },
+    {
+     "id": "ratsnest",
+     "kind": "ratsnest",
+     "side": "both",
+     "svg": "<?xml version=\"1.0\" standalone=\"no\"?>\n <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"> \n<svg\n  xmlns:svg=\"http://www.w3.org/2000/svg\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n  xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n  version=\"1.1\"\n  width=\"39.9796mm\" height=\"29.9974mm\" viewBox=\"0.0000 0.0000 39.9796 29.9974\">\n\n  \n<g style=\"fill:#000000; fill-opacity:1.0000;stroke:#000000; stroke-opacity:1.0000;\nstroke-linecap:round; stroke-linejoin:round;\"\n transform=\"translate(0 0) scale(1 1)\">\n</g>\n<g style=\"fill:none; \nstroke:#C2C2C2; stroke-width:0.1000; stroke-opacity:1; \nstroke-linecap:round; stroke-linejoin:round;\">\n<path d=\"M20.7875 24.0000\nL36.6500 15.0000\n\" />\n</g>\n</svg>\n"
+    },
+    {
+     "id": "drills",
+     "kind": "drill",
+     "side": "both",
+     "svg": "<?xml version=\"1.0\" standalone=\"no\"?>\n <!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \n \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\"> \n<svg\n  xmlns:svg=\"http://www.w3.org/2000/svg\"\n  xmlns=\"http://www.w3.org/2000/svg\"\n  xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n  xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n  version=\"1.1\"\n  width=\"39.9796mm\" height=\"29.9974mm\" viewBox=\"0.0000 0.0000 39.9796 29.9974\">\n<g style=\"fill:#FFFFFF; fill-opacity:1.0000; stroke:none;\">\n<circle cx=\"5.0000\" cy=\"15.0000\" r=\"0.5000\" /> \n</g>\n<g style=\"fill:#FFFFFF; fill-opacity:1.0000; stroke:none;\">\n<circle cx=\"5.0000\" cy=\"17.5400\" r=\"0.5000\" /> \n</g>\n</svg>\n"
+    }
+   ]
+  }
+ ],
+ "board": {
+  "origin": [
+   20.0,
+   15.0
+  ],
+  "parts": [
+   {
+    "ref": "D1",
+    "value": "red",
+    "footprint": "LED_SMD:LED_0603_1608Metric",
+    "side": "top",
+    "at": [
+     20.0,
+     24.0
+    ],
+    "rotation": 0.0,
+    "fields": {
+     "KiLib_Generator": "SMD_2terminal_chip_molded",
+     "Description": "Light emitting diode",
+     "Script": "blinky.py:13",
+     "Sim.Pins": "1=K 2=A"
+    },
+    "script": "blinky.py:13",
+    "dnp": false,
+    "outline": [
+     [
+      18.52,
+      23.27
+     ],
+     [
+      21.48,
+      23.27
+     ],
+     [
+      21.48,
+      24.73
+     ],
+     [
+      18.52,
+      24.73
+     ]
+    ]
+   },
+   {
+    "ref": "J1",
+    "value": "Conn_01x02",
+    "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+    "side": "top",
+    "at": [
+     5.0,
+     15.0
+    ],
+    "rotation": 0.0,
+    "fields": {
+     "KiLib_Generator": "connector/pin_header_socket",
+     "Description": "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)",
+     "Script": "blinky.py:11"
+    },
+    "script": "blinky.py:11",
+    "dnp": false,
+    "outline": [
+     [
+      3.23,
+      13.23
+     ],
+     [
+      6.77,
+      13.23
+     ],
+     [
+      6.77,
+      19.32
+     ],
+     [
+      3.23,
+      19.32
+     ]
+    ]
+   },
+   {
+    "ref": "R1",
+    "value": "1k",
+    "footprint": "Resistor_SMD:R_0603_1608Metric",
+    "side": "top",
+    "at": [
+     35.825,
+     15.0
+    ],
+    "rotation": 0.0,
+    "fields": {
+     "KiLib_Generator": "SMD_2terminal_chip_molded",
+     "Description": "Resistor",
+     "Script": "blinky.py:12"
+    },
+    "script": "blinky.py:12",
+    "dnp": false,
+    "outline": [
+     [
+      34.345,
+      14.27
+     ],
+     [
+      37.305,
+      14.27
+     ],
+     [
+      37.305,
+      15.73
+     ],
+     [
+      34.345,
+      15.73
+     ]
+    ]
+   }
+  ],
+  "pads": [
+   {
+    "part": "D1",
+    "number": "1",
+    "name": "K",
+    "net": "GND",
+    "type": "passive",
+    "side": "top",
+    "at": [
+     19.2125,
+     24.0
+    ],
+    "polygon": [
+     [
+      18.775,
+      23.7438
+     ],
+     [
+      18.7917,
+      23.66
+     ],
+     [
+      18.8391,
+      23.5891
+     ],
+     [
+      18.91,
+      23.5417
+     ],
+     [
+      18.9938,
+      23.525
+     ],
+     [
+      19.4313,
+      23.525
+     ],
+     [
+      19.515,
+      23.5417
+     ],
+     [
+      19.5859,
+      23.5891
+     ],
+     [
+      19.6333,
+      23.66
+     ],
+     [
+      19.65,
+      23.7438
+     ],
+     [
+      19.65,
+      24.2562
+     ],
+     [
+      19.6333,
+      24.34
+     ],
+     [
+      19.5859,
+      24.4109
+     ],
+     [
+      19.515,
+      24.4583
+     ],
+     [
+      19.4313,
+      24.475
+     ],
+     [
+      18.9938,
+      24.475
+     ],
+     [
+      18.91,
+      24.4583
+     ],
+     [
+      18.8391,
+      24.4109
+     ],
+     [
+      18.7917,
+      24.34
+     ],
+     [
+      18.775,
+      24.2562
+     ]
+    ]
+   },
+   {
+    "part": "D1",
+    "number": "2",
+    "name": "A",
+    "net": "Net-(D1-A)",
+    "type": "passive",
+    "side": "top",
+    "at": [
+     20.7875,
+     24.0
+    ],
+    "polygon": [
+     [
+      20.35,
+      23.7438
+     ],
+     [
+      20.3667,
+      23.66
+     ],
+     [
+      20.4141,
+      23.5891
+     ],
+     [
+      20.485,
+      23.5417
+     ],
+     [
+      20.5687,
+      23.525
+     ],
+     [
+      21.0062,
+      23.525
+     ],
+     [
+      21.09,
+      23.5417
+     ],
+     [
+      21.1609,
+      23.5891
+     ],
+     [
+      21.2083,
+      23.66
+     ],
+     [
+      21.225,
+      23.7438
+     ],
+     [
+      21.225,
+      24.2562
+     ],
+     [
+      21.2083,
+      24.34
+     ],
+     [
+      21.1609,
+      24.4109
+     ],
+     [
+      21.09,
+      24.4583
+     ],
+     [
+      21.0062,
+      24.475
+     ],
+     [
+      20.5687,
+      24.475
+     ],
+     [
+      20.485,
+      24.4583
+     ],
+     [
+      20.4141,
+      24.4109
+     ],
+     [
+      20.3667,
+      24.34
+     ],
+     [
+      20.35,
+      24.2562
+     ]
+    ]
+   },
+   {
+    "part": "J1",
+    "number": "1",
+    "name": "Pin_1",
+    "net": "VBUS",
+    "type": "passive",
+    "side": "both",
+    "at": [
+     5.0,
+     15.0
+    ],
+    "polygon": [
+     [
+      4.15,
+      14.15
+     ],
+     [
+      5.85,
+      14.15
+     ],
+     [
+      5.85,
+      15.85
+     ],
+     [
+      4.15,
+      15.85
+     ]
+    ]
+   },
+   {
+    "part": "J1",
+    "number": "2",
+    "name": "Pin_2",
+    "net": "GND",
+    "type": "passive",
+    "side": "both",
+    "at": [
+     5.0,
+     17.54
+    ],
+    "polygon": [
+     [
+      5.85,
+      17.54
+     ],
+     [
+      5.821,
+      17.76
+     ],
+     [
+      5.7361,
+      17.965
+     ],
+     [
+      5.601,
+      18.141
+     ],
+     [
+      5.425,
+      18.2761
+     ],
+     [
+      5.22,
+      18.361
+     ],
+     [
+      5.0,
+      18.39
+     ],
+     [
+      4.78,
+      18.361
+     ],
+     [
+      4.575,
+      18.2761
+     ],
+     [
+      4.399,
+      18.141
+     ],
+     [
+      4.2639,
+      17.965
+     ],
+     [
+      4.179,
+      17.76
+     ],
+     [
+      4.15,
+      17.54
+     ],
+     [
+      4.179,
+      17.32
+     ],
+     [
+      4.2639,
+      17.115
+     ],
+     [
+      4.399,
+      16.939
+     ],
+     [
+      4.575,
+      16.8039
+     ],
+     [
+      4.78,
+      16.719
+     ],
+     [
+      5.0,
+      16.69
+     ],
+     [
+      5.22,
+      16.719
+     ],
+     [
+      5.425,
+      16.8039
+     ],
+     [
+      5.601,
+      16.939
+     ],
+     [
+      5.7361,
+      17.115
+     ],
+     [
+      5.821,
+      17.32
+     ]
+    ]
+   },
+   {
+    "part": "R1",
+    "number": "1",
+    "name": null,
+    "net": "VBUS",
+    "type": "passive",
+    "side": "top",
+    "at": [
+     35.0,
+     15.0
+    ],
+    "polygon": [
+     [
+      34.6,
+      14.725
+     ],
+     [
+      34.6152,
+      14.6485
+     ],
+     [
+      34.6586,
+      14.5836
+     ],
+     [
+      34.7235,
+      14.5402
+     ],
+     [
+      34.8,
+      14.525
+     ],
+     [
+      35.2,
+      14.525
+     ],
+     [
+      35.2765,
+      14.5402
+     ],
+     [
+      35.3414,
+      14.5836
+     ],
+     [
+      35.3848,
+      14.6485
+     ],
+     [
+      35.4,
+      14.725
+     ],
+     [
+      35.4,
+      15.275
+     ],
+     [
+      35.3848,
+      15.3515
+     ],
+     [
+      35.3414,
+      15.4164
+     ],
+     [
+      35.2765,
+      15.4598
+     ],
+     [
+      35.2,
+      15.475
+     ],
+     [
+      34.8,
+      15.475
+     ],
+     [
+      34.7235,
+      15.4598
+     ],
+     [
+      34.6586,
+      15.4164
+     ],
+     [
+      34.6152,
+      15.3515
+     ],
+     [
+      34.6,
+      15.275
+     ]
+    ]
+   },
+   {
+    "part": "R1",
+    "number": "2",
+    "name": null,
+    "net": "Net-(D1-A)",
+    "type": "passive",
+    "side": "top",
+    "at": [
+     36.65,
+     15.0
+    ],
+    "polygon": [
+     [
+      36.25,
+      14.725
+     ],
+     [
+      36.2652,
+      14.6485
+     ],
+     [
+      36.3086,
+      14.5836
+     ],
+     [
+      36.3735,
+      14.5402
+     ],
+     [
+      36.45,
+      14.525
+     ],
+     [
+      36.85,
+      14.525
+     ],
+     [
+      36.9265,
+      14.5402
+     ],
+     [
+      36.9914,
+      14.5836
+     ],
+     [
+      37.0348,
+      14.6485
+     ],
+     [
+      37.05,
+      14.725
+     ],
+     [
+      37.05,
+      15.275
+     ],
+     [
+      37.0348,
+      15.3515
+     ],
+     [
+      36.9914,
+      15.4164
+     ],
+     [
+      36.9265,
+      15.4598
+     ],
+     [
+      36.85,
+      15.475
+     ],
+     [
+      36.45,
+      15.475
+     ],
+     [
+      36.3735,
+      15.4598
+     ],
+     [
+      36.3086,
+      15.4164
+     ],
+     [
+      36.2652,
+      15.3515
+     ],
+     [
+      36.25,
+      15.275
+     ]
+    ]
+   }
+  ],
+  "tracks": [
+   {
+    "net": "VBUS",
+    "layer": "F.Cu",
+    "width": 1.0,
+    "points": [
+     [
+      5.0,
+      15.0
+     ],
+     [
+      35.0,
+      15.0
+     ]
+    ]
+   },
+   {
+    "net": "GND",
+    "layer": "F.Cu",
+    "width": 0.25,
+    "points": [
+     [
+      19.2125,
+      24.0
+     ],
+     [
+      8.0,
+      24.0
+     ]
+    ]
+   },
+   {
+    "net": "GND",
+    "layer": "F.Cu",
+    "width": 0.25,
+    "points": [
+     [
+      8.0,
+      24.0
+     ],
+     [
+      5.0,
+      17.54
+     ]
+    ]
+   }
+  ],
+  "vias": [],
+  "zones": [
+   {
+    "net": "GND",
+    "layer": "B.Cu",
+    "outline": [
+     [
+      2.0,
+      16.0
+     ],
+     [
+      2.0,
+      26.0
+     ],
+     [
+      14.0,
+      26.0
+     ],
+     [
+      14.0,
+      16.0
+     ]
+    ]
+   }
+  ],
+  "holes": [],
+  "outline": [
+   [
+    [
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     30.0
+    ],
+    [
+     40.0,
+     30.0
+    ],
+    [
+     40.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0
+    ]
+   ]
+  ],
+  "nets": [
+   {
+    "name": "GND",
+    "class": "Default"
+   },
+   {
+    "name": "Net-(D1-A)",
+    "class": "Default"
+   },
+   {
+    "name": "VBUS",
+    "class": "Default"
+   }
+  ],
+  "findings": [
+   {
+    "check": "unconnected",
+    "severity": "error",
+    "type": "unconnected_items",
+    "description": "Missing connection between items",
+    "items": [
+     {
+      "text": "Pad 2 [Net-(D1-A)] of D1 on F.Cu",
+      "ref": "#D1.2",
+      "at": [
+       20.7875,
+       24.0
+      ]
+     },
+     {
+      "text": "Pad 2 [Net-(D1-A)] of R1 on F.Cu",
+      "ref": "#R1.2",
+      "at": [
+       36.65,
+       15.0
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "unrouted": 1
+}

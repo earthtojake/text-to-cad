@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 // or a container query — never the window's `sm:`/`md:` breakpoints. Document content
 // (markdown, code) keeps its own content styles and is not chrome.
 const root = fileURLToPath(new URL(".", import.meta.url));
-const CHROME = ["file-viewer", "host", "primitives", "loading", "drawing", "library", "cad-viewer", "renderers/kit", "renderers/glb", "renderers/mesh", "renderers/dxf",
+const CHROME = ["file-viewer", "host", "primitives", "loading", "drawing", "library", "cad-viewer", "renderers/kit", "renderers/glb", "renderers/mesh", "renderers/dxf", "renderers/plot",
   "renderers/workspace"];
 const sources = dir => readdirSync(dir).flatMap(name => {
   const path = join(dir, name);

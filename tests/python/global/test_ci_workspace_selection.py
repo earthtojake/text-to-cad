@@ -71,6 +71,8 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^scripts/bench/viewer-memory/[^/]*\.test\.mjs$",          # test-js.sh --select core
             r"^scripts/test/check-(dependencies|kit-boundaries)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cadgen/(.*/)?test_[^/]*\.py$",      # test-python.sh cadgen
+            r"^tests/python/packages/kicad/test_[^/]*\.py$",             # test-kicad.sh
+            r"^tests/python/packages/harness/test_[^/]*\.py$",           # test-harness.sh
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
             r"^tests/browser/viewer-e2e\.mjs$",                          # test-viewer-browser.sh
@@ -260,8 +262,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertIn(f"{CADGEN}/test_cli_from_function.py", viewer["cadgen_tests"])  # imports every command
         self.assertIn(f"{CADGEN}/test_atomic_replace.py", viewer["cadgen_tests"])  # reads every source
         self.assertEqual(viewer["skills_tests"], [])
+        # A harness test imports the viewer's plot route, so the harness job runs too; no KiCad test names the viewer.
         self.assertEqual(jobs_for("packages/cadgen/src/cadgen/viewer/scanner.py"),
-                         {"cadgen-linux", "cadgen-windows", "web", "skills", "packaging"})
+                         {"cadgen-linux", "cadgen-windows", "web", "skills", "packaging", "harness"})
         mcp = tests_for("packages/cadgen/src/cadgen/mcp/server.py")
         self.assertIn(f"{CADGEN}/mcp/test_server.py", mcp["cadgen_tests"])
         self.assertNotIn(f"{CADGEN}/viewer/test_launcher.py", mcp["cadgen_tests"])
@@ -269,6 +272,20 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                          {"cadgen-linux", "cadgen-windows", "skills", "packaging"})
         # The state directory's one definition is shared with the rest of cadgen.
         self.assertEqual(tests_for("packages/cadgen/src/cadgen/viewer/recents.py")["cadgen_tests"], [CADGEN])
+
+    def test_boards_and_harnesses_run_where_kicad_or_wireviz_is_reached(self):
+        # cadgen's boards and harnesses: both jobs, with the rest of cadgen's consumers.
+        self.assertTrue({"kicad", "harness"} <= jobs_for("packages/cadgen/src/cadgen/kicad/board_index.py"))
+        # A suite's own file, or its runner, runs its own job alone.
+        self.assertEqual(jobs_for("tests/python/packages/kicad/test_pcb_models.py") & {"kicad", "harness"}, {"kicad"})
+        self.assertEqual(jobs_for("scripts/test/test-kicad.sh") & {"kicad", "harness"}, {"kicad"})
+        self.assertEqual(jobs_for("tests/python/packages/harness/test_harness_wireviz.py") & {"kicad", "harness"}, {"harness"})
+        self.assertEqual(jobs_for("scripts/test/test-harness.sh") & {"kicad", "harness"}, {"harness"})
+        # A leaf only where one of their tests names it: the harness suite imports the viewer's plot route.
+        self.assertIn("harness", jobs_for("packages/cadgen/src/cadgen/viewer/plots.py"))
+        self.assertNotIn("kicad", jobs_for("packages/cadgen/src/cadgen/viewer/plots.py"))
+        self.assertEqual(jobs_for("packages/cadgen/src/cadgen/mcp/server.py") & {"kicad", "harness"}, set())
+        self.assertEqual(jobs_for("models/examples/src/part.py") & {"kicad", "harness"}, set())
 
     def test_ui_reaches_both_hosts_and_the_wheel_not_the_engine(self):
         self.assertEqual(jobs_for("packages/ui/src/index.ts"), {"web", "mcp", "skills", "packaging"})

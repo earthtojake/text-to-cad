@@ -64,6 +64,9 @@ class LoadedStepScene:
     source_closure_own: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # Literals imported from model files, tracked by value (record.constants).
     source_closure_constants: dict[str, dict[str, str]] = field(default_factory=dict)
+    # Files a generated model wrote beside its STEP, as the record's output entries
+    # (absolute path -> hash and facts): a board with a 3D export's KiCad project.
+    extra_outputs: dict[str, dict[str, Any]] = field(default_factory=dict)
     # `cadgen step build IN OUT` only: the INPUT document's content hash (the
     # closure a re-emitted document is fresh against) and a digest of the
     # annotation it was given (the kinematics declaration). Set on a scene

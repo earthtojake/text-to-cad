@@ -6,7 +6,7 @@ app), or the host's home with none, under a navbar — the logo that opens the a
 menu, the file's name and the explorer it opens, the file menu — with the file's
 content and the loading and error states ([FileViewer](docs/file-viewer.md)).
 `CadViewer` (`@text-to-cad/ui/cad-viewer`) is the CAD viewer every app shows:
-FileViewer over a CAD client, with the five CAD renderers, the home (the model
+FileViewer over a CAD client, with the six CAD renderers, the home (the model
 library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
 
@@ -79,16 +79,18 @@ these peers are not bundled into UI.
 src/
   host/              explicit host ports, prompt actions and React binding
   drawing/           reusable Excalidraw editor; desktop scratch drawing host
-  cad-viewer/        CadViewer (FileViewer + the five CAD renderers + the home), and a CAD client as a FileSource
+  cad-viewer/        CadViewer (FileViewer + the six CAD renderers + the home), and a CAD client as a FileSource
   file-viewer/       FileViewer, typed source/renderer contracts, the document lifecycle hook
     navigation/     the navbar, the app menu and its links, the folder explorer, the file menu
   library/           a host's home: the models opened before, to open again, and their pictures
   renderers/
-    kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
+    kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status,
+                    and the flat canvas the 2D renderers pan and zoom (plane/)
     step/           STEP: Features tree, Position, routines, feature recognition
     robot/          URDF, SRDF and SDF: Position and Links
     glb/, mesh/     GLB, and STL/3MF triangle meshes
     dxf/            2D drawings
+    plot/           KiCad boards and schematics, and wiring harnesses, as their tools plot them
     workspace/      a viewer file's catalog entry and document load
     harness/, shell-harness/  surfaces the browser suites drive
   primitives/       shared controls: buttons, menus, selects, sheets, tooltips, tree rows
@@ -117,6 +119,7 @@ fallback renderer (`fallback: true`) for the types nothing else matches.
 import { FileViewer } from '@text-to-cad/ui/file-viewer';
 import { createStepRenderer } from '@text-to-cad/ui/renderers/step';
 import { createDxfRenderer } from '@text-to-cad/ui/renderers/dxf';
+import { createPlotRenderer } from '@text-to-cad/ui/renderers/plot';
 import { createGlbRenderer } from '@text-to-cad/ui/renderers/glb';
 import { createMeshRenderer } from '@text-to-cad/ui/renderers/mesh';
 import { createRobotRenderer } from '@text-to-cad/ui/renderers/robot';
@@ -125,15 +128,15 @@ import '@text-to-cad/ui/styles.css';
 
 // One viewer renderer per file family, sharing one client and one preference source.
 const renderers = [createStepRenderer({ client, preferences }), createDxfRenderer({ client, preferences }),
-  createGlbRenderer({ client, preferences }), createMeshRenderer({ client, preferences }),
-  createRobotRenderer({ client, preferences })];
+  createPlotRenderer({ client, preferences }), createGlbRenderer({ client, preferences }),
+  createMeshRenderer({ client, preferences }), createRobotRenderer({ client, preferences })];
 // The host supplies storage, actions, navigation and environmental ports.
 <FileViewer file={selectedFile} host={host} renderers={renderers}
   state={state} onStateChange={setState} />;
 ```
 
 Public entry points include `/host`, `/file-viewer`, `/tab-store`, `/navigation`, `/renderers/step`,
-`/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/file-viewer/presentation`, `/file-viewer/empty`,
+`/renderers/dxf`, `/renderers/plot`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/file-viewer/presentation`, `/file-viewer/empty`,
 `/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Share usage stats row and its state), `/features` (the app menu's feature rows: `useFeatures`), `/drawing`, `/loading-icon`, `/utils`, `/primitives/*`,
 `/tokens.css`, and `/styles.css`. `/catalog` (a CAD client as a `FileSource`, the file menu's
 Copy path and Reveal, and the one spelling of an absolute path: `normalizePath`, `baseName`,

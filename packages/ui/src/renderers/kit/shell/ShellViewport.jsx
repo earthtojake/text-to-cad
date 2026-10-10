@@ -43,6 +43,7 @@ import { isKitScene } from "../scene.js";
 import LoadingIndicator from "../status/LoadingIndicator.js";
 import DrawingOverlay from "../tools/draw/DrawingOverlay.jsx";
 import { useDrawingViewLock } from "../tools/draw/useDrawingViewLock.js";
+import { cameraDrawingTarget } from "../tools/draw/cameraDrawingTarget.js";
 import { createViewerRenderStateResolver } from "../view-settings/renderState.js";
 import { shareSettingsValue } from "../view-settings/shareSettingsValue.js";
 import { createViewUpdateGate } from "../view-settings/viewUpdateGate.js";
@@ -350,8 +351,9 @@ const ShellViewport = forwardRef(function ShellViewport({
 
   const hasViewportContent = Boolean(scene);
   const drawingOverlayActive = drawingEnabled && !previewMode && hasViewportContent;
+  const drawingTarget = useMemo(() => cameraDrawingTarget(runtimeRef, mountRef), []);
   const { drawingControllerRef, handleDrawingContent, handleDrawingReady, followDrawingViewport } = useDrawingViewLock({
-    active: drawingOverlayActive, sketch: drawing?.sketch ?? 0, drawing, runtimeRef, mountRef, viewerReadyTick
+    active: drawingOverlayActive, sketch: drawing?.sketch ?? 0, drawing, target: drawingTarget, ready: viewerReadyTick
   });
 
   useImperativeHandle(ref, () => ({

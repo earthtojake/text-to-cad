@@ -165,6 +165,9 @@ src/
                    #   parsing and loading; the robot parts and scene builder),
                    #   drawing2d/ (a GET /__cad/drawing payload -> Canvas 2D, text by fillText:
                    #   fit/pan/zoom maths, batched Path2D, hairline strokes),
+                   #   plot2d/ (a GET /__cad/plot payload -> Canvas 2D:
+                   #   KiCad's and WireViz's SVG sheets laid out and
+                   #   drawn, drawing2d's view maths),
                    #   export/ (packageMeshExport), cadRefs (grammar,
                    #   parity-tested against cad_ref_syntax.py)
 bin/               # node builders the bundler ships into _runtime/node:
@@ -268,7 +271,8 @@ canonical release versions during normal development.
 `@text-to-cad/core/prompt` exports lightweight non-React bundle/reference types,
 runtime validation and canonical text serialization: `formatPromptContextText`, the
 parts as lines, and `formatPromptMessage`, the one message a Quick Edit is — what the
-person wrote, then `File:`, `References:` and, for a picture that travels as a file,
+person wrote, then `File:`, `References:` (a selection with a summary, a board's check,
+reads its sentence, then its references) and, for a picture that travels as a file,
 its label and path. Text, typed resource
 references and attachments travel in one ordered, immutable snapshot with an
 operation ID; attachment relationships name reference parts, and an attachment's

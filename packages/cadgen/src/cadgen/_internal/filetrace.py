@@ -18,6 +18,10 @@ An input file is one the build read and did not write, that is not code --
 Python source is tracked by reach, a compiled library belongs to the
 environment -- and that lies outside the machine: the interpreter and its
 packages, cadgen itself, the store, and the folders the operating system owns.
+An application whose data a model is made from may still live in one of the
+machine's folders (KiCad's symbol and footprint libraries under
+``/usr/share/kicad`` or Program Files): :func:`claim_inputs` names such a folder,
+and what a build reads there is an input like any other.
 """
 
 from __future__ import annotations
@@ -35,7 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Iterator
 
-__all__ = ["CHANGED", "Trace", "capture", "paused"]
+__all__ = ["CHANGED", "Trace", "capture", "claim_inputs", "paused"]
 
 #: The hash an input is recorded with when it changed after the build read it.
 #: It matches no file, so the next gate rebuilds.
@@ -49,6 +53,7 @@ _TRACER: ctypes.CDLL | None = None
 _OPEN: list["Trace"] = []  # the captures in progress, outermost first
 _LOG: str | None = None  # the outermost capture's log
 _HOOKED = False
+_CLAIMED: set[Path] = set()  # folders whose files are inputs even inside the machine's folders
 
 
 def _library_name() -> str:
@@ -123,6 +128,14 @@ class Trace:
         from cadgen._internal.source_hash import _sha256_file
 
         excluded = _environment_roots()
+        with _LOCK:
+            claimed = tuple(_CLAIMED)
+
+        def environments(path: Path) -> bool:
+            return any(path.is_relative_to(root) for root in excluded) and not any(
+                path.is_relative_to(root) for root in claimed
+            )
+
         written = {_resolved(path) for path in (*self.written, *outputs)}
         updated = {_resolved(path) for path in self.updated}
         opened: dict[Path, set[tuple[int, int]]] = {}
@@ -130,7 +143,7 @@ class Trace:
             path = _resolved(raw)
             if path is None or path in written or path.suffix.lower() in _CODE_SUFFIXES:
                 continue
-            if not any(path.is_relative_to(root) for root in excluded):
+            if not environments(path):
                 opened.setdefault(path, set()).update(seen)
         files: dict[Path, str] = {}
         for path, seen in opened.items():
@@ -152,9 +165,22 @@ class Trace:
         folders = {
             folder
             for folder in map(_resolved, self.listed)
-            if folder is not None and folder.is_dir() and not any(folder.is_relative_to(root) for root in excluded)
+            if folder is not None and folder.is_dir() and not environments(folder)
         }
         return files, folders
+
+
+def claim_inputs(folder: str | Path) -> None:
+    """Make what a build reads under ``folder`` an input, even where the machine's folders lie.
+
+    For an application's data a model is made from, installed where the
+    operating system keeps programs: KiCad's libraries in ``/usr/share/kicad``
+    are a board's inputs as much as they are in an app bundle.
+    """
+    resolved = _resolved(folder)
+    if resolved is not None:
+        with _LOCK:
+            _CLAIMED.add(resolved)
 
 
 def _resolved(path: str | Path) -> Path | None:

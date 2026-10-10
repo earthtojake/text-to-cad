@@ -8,7 +8,7 @@
     "listChanged": false
    }
   },
-  "instructions": "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. To show a model, call cad_show with its absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers refresh when files change, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
+  "instructions": "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF, KiCad boards and schematics, WireViz harnesses) in a viewer tab beside the chat. To show a model, call cad_show with its absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers refresh when files change, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
   "protocolVersion": "2025-06-18",
   "serverInfo": {
    "icons": [
@@ -280,6 +280,9 @@
         ".3mf",
         ".dxf",
         ".glb",
+        ".harness.yml",
+        ".kicad_pcb",
+        ".kicad_sch",
         ".sdf",
         ".srdf",
         ".step",
