@@ -980,7 +980,7 @@ def _first_child(parent: ET.Element, tag_name: str) -> ET.Element | None:
 
 def _child_text(parent: ET.Element, tag_name: str) -> str:
     child = _first_child(parent, tag_name)
-    return str(child.text if child is not None else "").strip()
+    return str((child.text or "") if child is not None else "").strip()
 
 
 def _name(element: ET.Element) -> str:
