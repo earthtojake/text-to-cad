@@ -16,6 +16,7 @@
  * nor anything finer.
  */
 import { Invalid, isUuid, MAX_BYTES, rowsOf } from './events.mjs';
+import { withoutNoise } from './noise.mjs';
 
 const COUNTRY = /^[A-Z]{2}$/; // ISO 3166-1 alpha-2, as the host gives it; anything else is no country
 const JSON_TYPE = /^application\/json\s*(?:;|$)/i; // a parameter, such as `; charset=utf-8`, is still JSON
@@ -106,8 +107,10 @@ export async function handle(request, store, { missing = [], country, versions }
     }
     if (path === '/v1/events' && request.method === 'POST') {
       batch = await json(request);
-      const rows = rowsOf(batch);
-      await store.insert(rows, { country: COUNTRY.test(country ?? '') ? country : null });
+      // Crashes that are never cadgen's bug go no further (noise.mjs), counted in one line by name.
+      const { rows, dropped } = withoutNoise(rowsOf(batch));
+      if (dropped.size) console.info(`telemetry dropped ${[...dropped].map(([name, n]) => `${name} ${n}`).join(', ')}${senderOf(batch)}`);
+      if (rows.length) await store.insert(rows, { country: COUNTRY.test(country ?? '') ? country : null });
       return reply(204);
     }
     // The id rides in the body, never the path: the host's request logs keep each path beside the

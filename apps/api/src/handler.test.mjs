@@ -88,6 +88,12 @@ test("the build daemon's counts are rows of their own, under the process that sa
 test('a crash is one row, its frames checked one by one, and nothing it said', async () => {
   const store = memory();
   const worker = { name: 'exception', where: 'build', type: 'WorkerDied', handled: false, status: -11, frames: [], count: 1 };
+  // Windows ends a faulted process with its exception code (STATUS_ACCESS_VIOLATION): an exit status too.
+  const fault = { ...worker, status: 0xC0000005 };
+  assert.equal((await send(memory(), 'POST', '/v1/events', { ...DAEMON, events: [fault] })).status, 204);
+  for (const status of [70000, -0xC0000005, 0x100000000, 1.5]) {
+    assert.equal((await send(memory(), 'POST', '/v1/events', { ...DAEMON, events: [{ ...worker, status }] })).status, 400, status);
+  }
   const page = { name: 'exception', where: 'page', type: 'TypeError', handled: false, count: 1,
     frames: [{ file: 'assets/index-Bx3k2.js', function: 'Kt', line: 1, column: 48213, chunk_id: '0de4d024-c159-4f6d-b15a-cc4ef7a6856d' }] };
   assert.equal((await send(store, 'POST', '/v1/events', { ...DAEMON, events: [CRASH, worker, page] })).status, 204);
@@ -116,6 +122,58 @@ test("schema 4 says why a tool's calls failed, one row per tool and reason, by a
     { ...BATCH, schema: 4, events: [{ ...failures[0], path: 'secret.step' }] },
     { ...BATCH, schema: 4, events: [failures[0], failures[0]] }, // one tool and reason, counted once
   ]) assert.equal((await send(memory(), 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
+});
+
+// Schema 5: the daemon's batch, named, with why its builds and snapshots failed.
+const NAMED = {
+  ...DAEMON, schema: 5, batch: '5d0f3c2e-8b1a-4c6e-9f2d-7a3b1e4c5d6f', at: 1_791_500_000,
+  events: [
+    DAEMON.events[0],
+    { name: 'build_failure', kind: 'step', via: 'script', reason: 'kernel_error', count: 1 },
+    { name: 'build_failure', kind: 'step', via: 'script', reason: 'model_error', count: 1 },
+    DAEMON.events[2],
+    { name: 'snapshot_failure', kind: 'step', reason: 'browser', count: 1 },
+  ],
+};
+
+test('schema 5 says why builds and snapshots failed, by a word cadgen chose, and names each row by its batch', async () => {
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', NAMED)).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf).map(({ id, at, ...fields }) => fields),
+    NAMED.events.map(({ name, ...counts }) => ({ event: name, ...counts })));
+  assert.ok(store.rows.every(row => row.at === NAMED.at && /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(row.id)));
+  // The same batch sent again is the same rows, id for id; another batch's are its own.
+  const ids = store.rows.map(row => row.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.equal((await send(store, 'POST', '/v1/events', NAMED)).status, 204);
+  assert.deepEqual(store.rows.slice(ids.length).map(row => row.id), ids);
+  assert.equal((await send(store, 'POST', '/v1/events', { ...NAMED, batch: 'f1e2d3c4-b5a6-4978-8a1b-2c3d4e5f6a7b' })).status, 204);
+  assert.ok(store.rows.slice(2 * ids.length).every(row => !ids.includes(row.id)));
+  // Schemas 1 to 4 name no batch: their rows carry no id and no time, as ever.
+  const earlier = memory();
+  await send(earlier, 'POST', '/v1/events', { ...BATCH, schema: 4 });
+  await send(earlier, 'POST', '/v1/events', SCHEMA_1);
+  assert.ok(earlier.rows.every(row => !('id' in row) && !('at' in row)));
+  for (const bad of [
+    { ...NAMED, batch: undefined },
+    { ...NAMED, batch: 'batch-1' },
+    { ...NAMED, at: undefined },
+    { ...NAMED, at: 1_791_500_000.5 },
+    { ...NAMED, at: -1 },
+    { ...NAMED, at: '1791500000' },
+    { ...BATCH, schema: 4, batch: NAMED.batch, at: NAMED.at }, // schema 4 never named a batch
+    { ...DAEMON, schema: 4, events: [NAMED.events[1]] }, // nor sent why a build failed
+    { ...NAMED, events: [{ ...NAMED.events[1], reason: 'ValueError: the secret part did not fit' }] }, // never a message
+    { ...NAMED, events: [{ ...NAMED.events[1], reason: 'disk_full' }] }, // a word outside the vocabulary
+    { ...NAMED, events: [{ ...NAMED.events[4], reason: 'kernel_error' }] }, // a build's word is no snapshot's
+    { ...NAMED, events: [{ ...NAMED.events[1], via: 'viewer' }] },
+    { ...NAMED, events: [{ ...NAMED.events[1], kind: 'docx' }] },
+    { ...NAMED, events: [{ ...NAMED.events[1], count: 0 }] },
+    { ...NAMED, events: [{ ...NAMED.events[1], model: 'secret.py' }] },
+    { ...NAMED, events: [{ ...NAMED.events[4], via: 'script' }] },
+    { ...NAMED, events: [NAMED.events[1], NAMED.events[1]] }, // one format, asker and reason, counted once
+    { ...NAMED, events: [NAMED.events[4], NAMED.events[4]] },
+  ]) assert.equal((await send(memory(), 'POST', '/v1/events', JSON.parse(JSON.stringify(bad)))).status, 400, JSON.stringify(bad));
 });
 
 test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
@@ -213,7 +271,7 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...SCHEMA_2, events: [CRASH] }, // crashes are schema 3's
     { ...BATCH, channel: 'store' },
     { ...BATCH, channel: 'github' }, // a channel no plugin names any more
-    { ...BATCH, schema: 5 }, // a schema no release sends
+    { ...BATCH, schema: 6 }, // a schema no release sends
     { ...BATCH, schema: '3' },
     { ...SCHEMA_2, process: 'app' }, // each schema's own fields, and only those
     { ...SCHEMA_1, channel: 'claude-github' },

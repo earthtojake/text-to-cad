@@ -171,6 +171,15 @@ class RestartHandoverTest(unittest.TestCase):
     """
 
     def test_the_lock_is_free_when_a_client_is_told_to_restart(self):
+        self.restart_with(token="current")
+
+    def test_a_daemon_whose_installation_is_gone_retires_as_a_stale_one_does(self):
+        # Its version is the client's, but no worker can start from what is left of it.
+        server._INSTALLATION_GONE.set()
+        self.addCleanup(server._INSTALLATION_GONE.clear)
+        self.restart_with(token="stale")
+
+    def restart_with(self, token: str):
         tmp = Path(tempfile.mkdtemp(prefix="cgr-", dir=None if os.name == "nt" else "/tmp"))
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         address = rf"\\.\pipe\cadgen-handover-{os.getpid()}" if os.name == "nt" else str(tmp / "d.sock")
@@ -200,7 +209,7 @@ class RestartHandoverTest(unittest.TestCase):
                 self.assertTrue(listening.wait(30), "the stale daemon never bound")
                 channel = transport.connect(address, transport.read_authkey(address))
                 try:
-                    channel.send(json.dumps({"tool": "run", "argv": [], "token": "current"}).encode("utf-8"))
+                    channel.send(json.dumps({"tool": "run", "argv": [], "token": token}).encode("utf-8"))
                     self.assertEqual(json.loads(channel.recv(30.0)), {"restart": True})
                 finally:
                     channel.close()
@@ -210,6 +219,7 @@ class RestartHandoverTest(unittest.TestCase):
             finally:
                 teardown.set()
                 stale.join(30)
+                self.assertFalse(stale.is_alive(), "the daemon told to restart did not exit")
                 if server._DAEMON_LOCK is not None:
                     server._DAEMON_LOCK.release()
 

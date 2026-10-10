@@ -538,6 +538,9 @@ def _spawn_daemon(address: str) -> subprocess.Popen | None:
     # daemon serves every client, so it takes no telemetry switch from the one that
     # started it: each client's travels with its own builds (FORWARDED_ENV_VARS).
     env = for_others(worker_env())
+    # Nor its install channel: it reports the one its installation's plugin wrote down, whoever started it
+    # (``cadgen/_internal/channel.py``).
+    env.pop("CADGEN_INSTALL_CHANNEL", None)
     env["CADGEN_DAEMON_CHILD"] = "1"
     env.setdefault("CADGEN_DAEMON_SOCKET", str(address))
     try:

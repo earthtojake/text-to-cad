@@ -792,8 +792,11 @@ What each store and installer reads:
 Each plugin's CAD server startup config says where its installs come from, its
 install channel, in the server's environment (`CADGEN_INSTALL_CHANNEL`), and adds
 `CADGEN_AUTO_UPDATED=1` where something other than the person keeps the copy up to
-date: the store that reviewed it, or the app that installed it. The processes the
-server starts (the Viewer, the daemon) inherit both. cadgen reports the channel
+date: the store that reviewed it, or the app that installed it. The Viewer the
+server starts inherits both. The server also writes its channel down in the state
+directory for its uv installation (`install-channels.json`), which its skills'
+commands share, so the build daemon (which takes no channel from whoever started
+it), a skill's Viewer and its commands report it too. cadgen reports the channel
 with telemetry and says a new release is out only to a copy that is not
 auto-updated (`cadgen/_internal/channel.py`, `cadgen/updates.py`); it never
 decides by a channel's name, since its core may not know a host. They are
@@ -965,9 +968,9 @@ draft release unless `--publish` is passed.
 
 ### Repository settings
 
-`main` requires a PR with eight stable status checks — `Version
+`main` requires a PR with nine stable status checks — `Version
 Check`, `cadgen (Linux)`, `cadgen (Windows)`, `core-js`, `web`, `skills`,
-`docs`, `packaging` — strict (up to date with `main`), squash merges only, a
+`docs`, `packaging`, `api` — strict (up to date with `main`), squash merges only, a
 linear history, no force pushes and no deletions. A job its selection skips
 satisfies its check, so a prose pull request merges on Version Check and the
 light contracts. Changing required check names also requires updating GitHub

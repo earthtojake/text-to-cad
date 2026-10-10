@@ -255,6 +255,39 @@ def process_cpu_seconds(pid: int) -> float | None:
 _TIMED_OUT = object()  # _read_frame: the wait elapsed; distinct from None (pipe closed)
 
 
+def interpreter() -> tuple[str, dict[str, str]]:
+    """The program a worker runs, and what its environment adds: this Python itself.
+
+    In a virtual environment on Windows -- every uv environment, the one ``uvx`` runs cadgen
+    in among them -- ``sys.executable`` is a launcher that starts the environment's base
+    interpreter as its child and waits on it. A worker started through it was two
+    processes, and everything the pool knows of the one it started was the launcher's:
+    its CPU clock, which never moves, so the hang watch killed every job whose native
+    call held the GIL past the silence window; its exit, a launcher's code (106: the
+    environment's ``pyvenv.cfg`` is missing) where the interpreter's was wanted. So the
+    base interpreter is started directly and told, as the launcher tells it, which
+    environment it runs: what ``multiprocessing`` does on Windows too."""
+    executable = sys.executable
+    base = getattr(sys, "_base_executable", None) or executable
+    if os.name == "nt" and os.path.normcase(os.path.abspath(base)) != os.path.normcase(os.path.abspath(executable)) \
+            and os.path.isfile(base):
+        return base, {"__PYVENV_LAUNCHER__": executable}
+    return executable, {}
+
+
+def installation_gone() -> bool:
+    """Whether what a worker starts from was removed under this daemon: its interpreter, its virtual
+    environment's ``pyvenv.cfg``, or the module a worker runs. A package manager replacing the
+    environment removes them while the daemon still runs -- on Windows only what no process holds
+    open goes, leaving the environment half there -- and then no worker can start: not a crash."""
+    from cadgen import daemon
+
+    needed = [sys.executable, os.path.join(os.path.dirname(daemon.__file__), "worker.py")]
+    if sys.prefix != sys.base_prefix:
+        needed.append(os.path.join(sys.prefix, "pyvenv.cfg"))
+    return not all(os.path.isfile(path) for path in needed)
+
+
 class Worker:
     """One warm subprocess. Owned by the pool; never shared between concurrent jobs."""
 
@@ -272,6 +305,8 @@ class Worker:
         # Guards against a worker's own top-level call routing back into the daemon
         # as a fresh request; nested SUBMITS ignore this on purpose (client.run_nested).
         env["CADGEN_DAEMON_CHILD"] = "1"
+        python, launched = interpreter()
+        env.update(launched)
         self.proc = subprocess.Popen(
             # -P: `python -m` would put its working directory, the temp folder below,
             # first on the import path. Whatever other programs leave there would then
@@ -279,7 +314,7 @@ class Worker:
             # lists that folder again once anything in it changes: tens of listings of a
             # folder of tens of thousands of entries per start, every start contending
             # for the same folder, so a burst of starts never finished importing.
-            [sys.executable, "-P", "-m", "cadgen.daemon.worker"],
+            [python, "-P", "-m", "cadgen.daemon.worker"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None,
             # Spares can remain idle before their first request.  Start them in the
             # same stable directory worker._park uses between jobs so they never pin
@@ -397,7 +432,8 @@ class Worker:
         while True:
             frame = self._read_frame(timeout=silence_timeout)
             if frame is _TIMED_OUT:
-                cpu_now = process_cpu_seconds(self.proc.pid)
+                # The clock of the process whose heartbeat this is: the pid it announced.
+                cpu_now = process_cpu_seconds(getattr(self, "pid", self.proc.pid))
                 if cpu_now is not None and (cpu_seen is None or cpu_now - cpu_seen >= BUSY_CPU_SECONDS):
                     # With no baseline (no beat yet) the next window decides.
                     cpu_seen = cpu_now
