@@ -421,7 +421,8 @@ def report_failure(
     A failure that is a mistake in cadgen's own code, not the person's or one cadgen
     raised on purpose, is also a crash telemetry reports (``cadgen.analytics.report``):
     a build worker's goes to the daemon with its exit frame, a command's is handed to a
-    running daemon. Reporting it changes nothing here.
+    running daemon. Reporting it changes nothing here. In a build, why it failed is decided here too
+    (``cadgen.analytics.build_failure``), for the build's count (``cadgen.daemon.telemetry.job_failed``).
     """
     _report_crash(exc)
     if as_json:
@@ -442,6 +443,8 @@ def _report_crash(exc: BaseException) -> None:
 
         building = bool(os.environ.get("CADGEN_DAEMON_CHILD")) or telemetry.building()
         analytics.report(exc, "build" if building else "command", bugs_only=True)
+        if telemetry.building():
+            telemetry.job_failed(analytics.build_failure(exc))
     except Exception:  # noqa: BLE001 - a crash report never fails a command's own report
         pass
 
