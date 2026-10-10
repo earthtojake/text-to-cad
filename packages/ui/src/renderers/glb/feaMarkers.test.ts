@@ -145,6 +145,17 @@ describe('loads and fixtures on the model', () => {
     const [first] = markers.labels(2);
     expect(first.text).toBe('600 N');
     expect(first.at[1]).toBeCloseTo(0.5 + ARROW_LENGTH * Math.sqrt(3), 6);
+    expect(first.face[1]).toBeCloseTo(0.5, 6);
+    markers.dispose();
+  });
+
+  it('labels a pulling force past its arrows\' tips, off the part, not over it at their tails', () => {
+    const result = cube({ fixtures: [], loads: [{ type: 'force', faces: ['#o1.f3'], vector_N: [0, 0, 300] }] });
+    const markers = createFeaMarkers(THREE, result);
+    markers.update(positionsOf(result));
+    const [label] = markers.labels();
+    expect(label.at[1]).toBeCloseTo(0.5 + ARROW_LENGTH * Math.sqrt(3), 6);
+    expect(label.face[1]).toBeCloseTo(0.5, 6);
     markers.dispose();
   });
 });

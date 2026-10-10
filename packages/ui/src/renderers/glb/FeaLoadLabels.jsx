@@ -3,7 +3,7 @@ import { GHOST_OPACITY } from "./feaMarkers.js";
 
 // The panels' 11px, in the viewer's own face.
 const FONT_SIZE = "500 11px";
-// Past the arrows' tails, away from their tips, clear of the shafts.
+// Past the arrows' free ends, away from the face, clear of the shafts.
 const OFFSET_PX = 10;
 // Whether the model hides a label is cast at most this often while the view moves, and once more
 // when it stops: a ray through the result mesh per label, not per frame.
@@ -50,14 +50,14 @@ export default function FeaLoadLabels({ runtimeRef, hostRef, mesh, labels, colou
       };
       const placed = [];
       for (const label of read()) {
-        const tail = screen(label.at);
-        const tip = label.tip ? screen(label.tip) : null;
-        if (!tail) continue;
-        // On the far side of the tail from the tip, the text running away from the arrow.
-        const dx = tip ? tail[0] - tip[0] : 1;
-        const dy = tip ? tail[1] - tip[1] : -1;
+        const free = screen(label.at);
+        const face = label.face ? screen(label.face) : null;
+        if (!free) continue;
+        // On the far side of the free end from the face, the text running away from the arrow.
+        const dx = face ? free[0] - face[0] : 1;
+        const dy = face ? free[1] - face[1] : -1;
         const span = Math.hypot(dx, dy) || 1;
-        placed.push({ text: label.text, at: label.at, x: tail[0] + (dx / span) * OFFSET_PX, y: tail[1] + (dy / span) * OFFSET_PX, align: dx < 0 ? "right" : "left" });
+        placed.push({ text: label.text, at: label.at, x: free[0] + (dx / span) * OFFSET_PX, y: free[1] + (dy / span) * OFFSET_PX, align: dx < 0 ? "right" : "left" });
       }
       const where = JSON.stringify(placed.map(({ text, x, y }) => [text, Math.round(x), Math.round(y)]));
       const now = window.performance.now();

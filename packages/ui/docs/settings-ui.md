@@ -645,7 +645,7 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   each loaded face one to five arrows (more on a bigger face), spread over it, each 8% of the
   model's diagonal long whatever the load, pointing along the force with its tip on the face (a
   pulling force stands on the face by its tail); a pressure's arrows run along the inward normal;
-  a label beside each load's arrows, past their tails, says its amount at the load shown ("300 N",
+  a label beside each load's arrows, past their free ends (a push's tails, a pull's tips, so off the part), says its amount at the load shown ("300 N",
   "2 MPa"). On each fixed face, small cones point into it. They stand on the deformed shape as it is
   drawn, in two passes, the x-ray look: what is in view solid, depth-tested as the model is,
   and what the model hides as a faint ghost (a quarter opacity) over the surface, so a fixture

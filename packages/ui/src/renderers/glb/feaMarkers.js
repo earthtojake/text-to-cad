@@ -151,7 +151,7 @@ function loadDirection(load, normal) {
 
 /**
  * Each marker at the positions on screen (`positions`, the mesh's own array): an arrow's `tip`,
- * `tail` and unit `direction` (the way it points); a cone's `tip` on the face and `direction` into
+ * `tail`, unit `direction` (the way it points) and whether it `pushes`; a cone's `tip` on the face and `direction` into
  * it. An arrow that pushes on its face (against the face's outward normal) has its tip on the face;
  * one that pulls stands on the face by its tail, pointing away. `normal` is the face's outward
  * normal there, from the triangle's winding.
@@ -167,7 +167,7 @@ export function markerPoses(result, { diagonal, sites }, positions) {
     const direction = loadDirection(loads[site.group], normal);
     const pushes = direction[0] * normal[0] + direction[1] * normal[1] + direction[2] * normal[2] <= 0;
     const tip = pushes ? at : plus(at, scaled(direction, arrow));
-    return { ...site, normal, tip, tail: pushes ? plus(at, scaled(direction, 0 - arrow)) : at, direction };
+    return { ...site, normal, tip, tail: pushes ? plus(at, scaled(direction, 0 - arrow)) : at, direction, pushes };
   });
 }
 
@@ -189,7 +189,7 @@ export function loadLabel(load, loadScale = 1) {
  * `object3D` (a group), `update(positions)` to stand them on the positions on screen,
  * `style({ colours, visible: { loads, fixtures }, chosen })` (`chosen(site)` true for a marker of the
  * load or fixture chosen in Study), `labels()`: each load's text and where it goes (`at`, the middle
- * of its arrows' tails, and `tip`, of their tips, in the mesh's space), and `dispose()`.
+ * of its arrows' free ends, off the part, and `face`, of the ends on the face, in the mesh's space), and `dispose()`.
  *
  * @param {typeof import("three")} THREE
  */
@@ -283,8 +283,11 @@ export function createFeaMarkers(THREE, result) {
       return studyLoads.map((entry, index) => {
         const arrows = poses.filter((pose) => pose.kind === "load" && pose.group === index);
         if (!arrows.length) return null;
-        const middle = (key) => scaled(arrows.map((pose) => pose[key]).reduce(plus, [0, 0, 0]), 1 / arrows.length);
-        return { group: index, text: loadLabel(entry, loadScale), at: middle("tail"), tip: middle("tip") };
+        // The label stands past the arrows' free end, off the part: a push's tails, a pull's tips.
+        const middle = (pick) => scaled(arrows.map(pick).reduce(plus, [0, 0, 0]), 1 / arrows.length);
+        const free = middle((pose) => (pose.pushes ? pose.tail : pose.tip));
+        const onFace = middle((pose) => (pose.pushes ? pose.tip : pose.tail));
+        return { group: index, text: loadLabel(entry, loadScale), at: free, face: onFace };
       }).filter(Boolean);
     },
     dispose() {
