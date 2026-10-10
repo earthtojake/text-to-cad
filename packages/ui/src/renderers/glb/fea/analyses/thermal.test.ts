@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import { feaControls, feaVerdict, readFeaResult, recolorByField, studyRows } from '../../feaResult.js';
-import { cooledRows, heatedRows, keptAtRows, madeOfRows } from '../setup.js';
+import { cooledRows, heatedRows, keptAtRows, madeOfRows, radiatesRows } from '../setup.js';
 import { feaAnalysis } from './index.js';
 import thermal, { HEAT_MARKERS, HEAT_SETUP } from './thermal.js';
 
@@ -60,12 +60,33 @@ describe('thermal', () => {
 
   it('sets up as kept at, heated, cooled by air, made of', () => {
     expect(thermal.setupGroups).toEqual(HEAT_SETUP);
-    expect(HEAT_SETUP).toEqual([keptAtRows, heatedRows, cooledRows, madeOfRows]);
+    expect(HEAT_SETUP).toEqual([keptAtRows, heatedRows, cooledRows, radiatesRows, madeOfRows]);
     const rows = studyRows(heatResult());
     expect(rows.slice(0, 4).map((row: { label: string }) => row.label)).toEqual(['Kept at', 'Heated', 'Cooled by air', 'Made of']);
     expect(rows[0].children[0]).toMatchObject({ label: '25 °C', summary: 'Kept at 25 °C on face 1' });
     expect(rows[1].children[0]).toMatchObject({ label: '15 W', summary: '15 W of heat into face 7' });
     expect(rows[2].children[0]).toMatchObject({ label: 'Air at 25 °C', hint: 'Heat transfer coefficient 10 W/m²K' });
+  });
+
+  it('says where it radiates: to the surroundings at a temperature, with its emissivity, and to other faces', () => {
+    const study = {
+      material: { name: 'Aluminum 6061-T6', yield_MPa: 276 },
+      temperatures: [{ faces: ['#o1.f1'], C: 25 }], heat: [], convection: [],
+      radiation: [{ faces: ['#o1.f7'], emissivity: 0.9, ambient_C: 25 }, { faces: ['#o1.f1', '#o1.f7'], emissivity: 0.8, ambient_C: 40, surface_to_surface: true }],
+      mesh: { size_mm: 2, order: 2, elements: 100, refined_from_mm: null },
+    };
+    const result = heatResult({ study });
+    expect(result.study.radiation).toEqual([
+      { faces: ['#o1.f7'], emissivity: 0.9, ambientC: 25, surfaceToSurface: false },
+      { faces: ['#o1.f1', '#o1.f7'], emissivity: 0.8, ambientC: 40, surfaceToSurface: true },
+    ]);
+    const rows = studyRows(result);
+    expect(rows.slice(0, 3).map((row: { label: string }) => row.label)).toEqual(['Kept at', 'Radiation', 'Made of']);
+    expect(rows[1].children[0]).toMatchObject({ label: 'Radiates to 25 °C, emissivity 0.9', summary: 'Radiates to 25 °C (emissivity 0.9) from face 7' });
+    expect(rows[1].children[0].hint).toBeUndefined();
+    expect(rows[1].children[1]).toMatchObject({ label: 'Radiates to 40 °C, emissivity 0.8', hint: 'And to the other faces that radiate to each other' });
+    // A study with none has no Radiation row.
+    expect(studyRows(heatResult()).some((row: { label: string }) => row.label === 'Radiation')).toBe(false);
   });
 
   it('says the hottest point against its limit, with no "No stress" and no load multiple', () => {

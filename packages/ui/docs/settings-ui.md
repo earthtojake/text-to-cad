@@ -680,7 +680,9 @@ exactly as it always was.
       the shaker is); **Dropped**
       (a drop, ink: "1 m drop", how it stops its hint, the faces that land under it); **Flow in/out**
       (the flow, ink: "In 0.5 m/s at the low X side", "Out at 0 Pa, the high X side", chosen with the
-      whole result); **Rigid floor** (a plane, grey: "Facing up", "Under the drop"); **Made of**. An
+      whole result); **Rigid floor** (a plane, grey: "Facing up", "Under the drop"); **Crack** (a
+      plane: "2 mm edge crack on face 4", its largest K its hint, "K 18 MPa√m at the deepest point",
+      chosen with the face it opens from); **Made of**. An
       entry on faces is chosen as a load is, tinting its faces and its markers and carrying what it is
       ("15 W of heat into face 7", "Kept at 25 °C on face 1"), its faces shut under it. A picked face's
       Reference says these too ("kept at 25 °C; 15 W of heat in", "cooled by air at 25 °C").
@@ -734,6 +736,9 @@ exactly as it always was.
       its solver is checked to its hint ("Subsonic, checked to Mach 1.8"), or where the file warns,
       the warning's sentence ("Mach 2.10 is past Mach 1.8, ..."). A contact solve that did not settle
       has its sentence as the first row of all ("Contact did not settle at 80% of the load: ...").
+      An analysis with rows of its own (its registry entry's `detailRows(result, whole)`) puts them
+      before the mesh: flow and bending's "Coupling: settled in 4 iterations", the change it reached
+      its hint, or "Coupling: did not settle in 25 iterations" with "the last state, not an answer".
       Each is chosen with the whole result. The fit
       steps are findings for the agent too; the viewer shows them only here. Details shows for a
       result whose study was not recorded where it has steps to say.
@@ -797,6 +802,8 @@ exactly as it always was.
   - **Play** (a series of times or load steps: heat over time, over time, drop impact, permanent
     bend): the frames in turn over three seconds, each colour and position blended linearly into the
     next's.
+  - **Ring** (sound's cavity modes): one swing a second, the chosen mode's signed pressure × cos 2πt,
+    its colours turning over through the cycle; nothing deforms. A sound sweep plays none.
   - None for heat, random vibration, shock, fatigue, flow and contact: what they show does not move.
   Letting go puts the model back at the frame and load chosen. The colour bar steps up above the
   playbar while it is there.
@@ -826,7 +833,8 @@ exactly as it always was.
   lands, the way it falls, "1 m drop"; a flow's **inlet** and grey **outlet**, an arrow into and out
   of the side of the part's box each names, "0.5 m/s" and "0 Pa"; a **rigid plane** (a contact
   floor, or a drop impact's floor through the lowest point along the fall), one see-through grey
-  quad, unlabelled. Choosing a setup row takes its own markers to the chosen magenta. Display has
+  quad, unlabelled; a **crack front** (fracture), an ink dot at each station along it where its K was
+  read (`extras.crack.front_mm`), unlabelled. Choosing a setup row takes its own markers to the chosen magenta. Display has
   one gate for them, after Surfaces, titled per analysis (**Loads and fixtures**, **Heat inputs and
   temperatures**, **Shaker and fixtures**, **Flow openings**), its line saying what it draws ("Arrows
   where the study loads the part, cones where it holds it."; "Dots where its temperature is fixed,

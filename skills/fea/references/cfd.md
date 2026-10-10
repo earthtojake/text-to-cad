@@ -18,8 +18,9 @@ Quote them whenever you quote a flow number.
   in a 1 cm bore): it still runs and warns (below), but the numbers are a laminar lower bound; use
   `cfd_turbulent` ([cfd-turbulent.md](cfd-turbulent.md)) for those. Not for gas faster than about
   Mach 0.3 (about 100 m/s in air), where its density changes: use `cfd_compressible`
-  ([cfd-compressible.md](cfd-compressible.md)). Not for heat transfer, free surfaces or anything
-  time-varying.
+  ([cfd-compressible.md](cfd-compressible.md)). For the heat a flow carries into or out of the part
+  (a coolant, a cold plate), use `conjugate_heat` ([conjugate-heat.md](conjugate-heat.md)), which
+  solves this flow first. Not for free surfaces or anything time-varying.
 
 ## The study
 
@@ -71,7 +72,9 @@ External flow (around the part):
   with the free stream four times coarser).
 - `map_to_structure`: `{"material", "fixtures"}` (fixtures as in a static study). The wall pressure
   is applied, face by face, as a pressure load on the part (one-way coupling; the wall shear is not
-  applied). The static fields and checks join the result.
+  applied). The static fields and checks join the result. When the part bends enough to change the
+  flow (a soft flap, a thin reed, a hose that swells), use `fsi` ([fsi.md](fsi.md)): two-way, the
+  wall shear applied too.
 - Checks: `pressure_drop` (`limit_Pa`, the drop from the inlets to the outlets) and `velocity`
   (`limit_m_s`, the fastest point anywhere in the fluid), each close past 0.9 of its limit; plus
   `stress` and `displacement` when mapped (refused without `map_to_structure`). No check is made by

@@ -347,6 +347,14 @@ class CfdTurbulentAnalysis(CfdAnalysis):
         )
         return problem, developed
 
+    def problem_of(self, space, fluid, face_of, row_kind, inputs: CfdTurbulentInputs, setup):
+        """The RANS problem on the fluid's space: what :func:`..turbulence.solve_rans` takes."""
+        return self._problem(space, fluid, face_of, row_kind, inputs, setup)[0]
+
+    def wall_function_shear(self, space, row_kind, flow, post: dict, rho: float) -> None:
+        """The wall shear (and the force on the part) from the wall function, into ``post``."""
+        self._wall_function_shear(space, row_kind, flow, post, rho)
+
     @staticmethod
     def _wall_function_shear(space, row_kind, flow, post: dict, rho: float) -> None:
         """The wall shear is the wall function's, rho u_tau^2 along the slip; the force on the part follows it."""

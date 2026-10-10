@@ -67,6 +67,22 @@ REGISTRY: dict[str, Entry] = {entry.name: entry for entry in (
     _entry("composite", 3, "CompositeAnalysis", "Composite"),
     _entry("bolt", 3, "BoltAnalysis", "Bolted joint"),
     _entry("electromagnetic", 3, "ElectromagneticAnalysis", "Magnetic / electric"),
+    # Sound: linear acoustics (Helmholtz) in air or another fluid.
+    _entry("acoustic", 3, "AcousticAnalysis", "Sound"),
+    # Design: where the material should go (density-based topology optimisation).
+    _entry("topology", 3, "TopologyAnalysis", "Lighten it"),
+    # Heat carried by a flowing fluid into and out of the part (conjugate heat transfer).
+    _entry("conjugate_heat", 3, "ConjugateHeatAnalysis", "Cooled by flow"),
+    # Cracks: linear-elastic fracture mechanics on a crack the study describes (K against K_IC, Paris crack growth).
+    _entry("fracture", 3, "FractureAnalysis", "Cracks"),
+    # Coupled electro-mechanical parts (actuators, sensors, buzzers): linear piezoelectricity, static, resonance, harmonic.
+    _entry("piezo", 3, "PiezoAnalysis", "Piezo"),
+    # Flow and bending together: steady two-way fluid-structure interaction (the flow moves the part, the part the flow).
+    _entry("fsi", 3, "FsiAnalysis", "Flow and bending"),
+    # Spinning shafts, rotors and discs: whirl, the Campbell diagram, critical speeds, unbalance response, spin stress.
+    _entry("rotordynamics", 3, "RotordynamicsAnalysis", "Spinning"),
+    # Two fluids: a liquid and a gas inside the part over time (sloshing, filling, draining, a rising bubble).
+    _entry("multiphase", 3, "MultiphaseAnalysis", "Two fluids"),
 )}
 ANALYSIS_NAMES: tuple[str, ...] = tuple(REGISTRY)
 

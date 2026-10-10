@@ -11,7 +11,8 @@ describe('the analyses', () => {
   it('register every analysis the engine has, each of its own name', () => {
     expect(FEA_ANALYSES).toEqual(['static', 'modal', 'buckling', 'thermal', 'thermal_transient', 'thermal_stress', 'harmonic', 'random_vibration',
       'shock', 'transient', 'fatigue', 'drop', 'cfd', 'impact', 'nonlinear', 'contact', 'bolt', 'creep', 'composite', 'electromagnetic',
-      'cfd_turbulent', 'cfd_compressible']);
+      'cfd_turbulent', 'cfd_compressible', 'topology', 'acoustic', 'conjugate_heat', 'fracture', 'rotordynamics', 'fsi', 'piezo',
+      'multiphase']);
     for (const name of FEA_ANALYSES) {
       const analysis = ANALYSES[name];
       expect(analysis.name).toBe(name);
@@ -33,7 +34,7 @@ describe('the analyses', () => {
 
   it('say which follow the load control, which are of the static family, and their words for a stress check', () => {
     expect(FEA_ANALYSES.filter((name) => ANALYSES[name].scalesWithLoad)).toEqual(['static', 'buckling', 'thermal_stress', 'harmonic',
-      'random_vibration', 'shock', 'transient', 'drop']);
+      'random_vibration', 'shock', 'transient', 'drop', 'fracture']);
     expect(FEA_ANALYSES.filter((name) => ANALYSES[name].family === 'static')).toEqual(['static', 'thermal_stress', 'drop']);
     expect(['shock', 'drop', 'random_vibration'].map((name) => ANALYSES[name].checkLabels.stress)).toEqual(['Shock', 'Drop', 'Random vibration']);
     expect(ANALYSES.drop).toMatchObject({ tier: 2, estimate: true, noun: 'this drop' });
@@ -46,7 +47,9 @@ describe('the analyses', () => {
       ['static', 'Load ramp'], ['modal', 'Vibrate'], ['buckling', 'Buckle'], ['thermal', null], ['thermal_transient', 'Play'],
       ['thermal_stress', 'Load ramp'], ['harmonic', 'Vibrate'], ['random_vibration', null], ['shock', null], ['transient', 'Play'],
       ['fatigue', null], ['drop', 'Load ramp'], ['cfd', null], ['impact', 'Play'], ['nonlinear', 'Play'], ['contact', 'Play'], ['bolt', 'Play'],
-      ['creep', 'Play'], ['composite', null], ['electromagnetic', null], ['cfd_turbulent', null], ['cfd_compressible', null]]);
+      ['creep', 'Play'], ['composite', null], ['electromagnetic', null], ['cfd_turbulent', null], ['cfd_compressible', null],
+      ['topology', 'Watch it form'], ['acoustic', null], ['conjugate_heat', null], ['fracture', 'Load ramp'], ['rotordynamics', 'Whirl'], ['fsi', null], ['piezo', null],
+      ['multiphase', 'Play']]);
     // Play needs frames to play.
     expect(routine('transient')).toBeNull();
   });

@@ -5,8 +5,8 @@
  * the cone pressing on a small plate that rolls on the face, its sliding support). Other analyses add
  * their own kinds from one table (`MARKER_KINDS`): a body load's arrow through the model's middle,
  * a shaker's double arrows on the fixtures, a fixed temperature's dot, heat's wavy arrow, the air's
- * strokes, a drop's travel arrow, a flow's inlet and outlet arrows and a rigid floor's see-through
- * plane, each in the ink (what drives the part) or the muted grey (what holds or takes from it). An
+ * strokes, a drop's travel arrow, a flow's inlet and outlet arrows, a rigid floor's see-through
+ * plane and a crack front's dots, each in the ink (what drives the part) or the muted grey (what holds or takes from it). An
  * analysis draws the kinds it lists (`markers`, ./fea/analyses), and one that draws fixtures draws
  * rollers too, so a static result with no roller is as it was.
  *
@@ -45,7 +45,7 @@ const PLANE_SIZE = 1.6;
  * the ink of what drives the part, the muted grey of what holds it or takes from it), which of the
  * study's `view.show` switches it follows (`bucket`: loads or fixtures), where it stands (`on`: its
  * faces, the model's middle, a side of its box, a plane) and at most how many stand on one face
- * (`most`). `phrase`: what Display's gate says of it.
+ * (`most`; `on: "front"` stands at a crack's front's stations). `phrase`: what Display's gate says of it.
  */
 export const MARKER_KINDS = Object.freeze({
   load: Object.freeze({ shape: "arrow", tone: "load", bucket: "loads", on: "faces", most: MAX_PER_FACE, phrase: "arrows where the study loads the part" }),
@@ -60,7 +60,15 @@ export const MARKER_KINDS = Object.freeze({
   inlet: Object.freeze({ shape: "arrow", tone: "load", bucket: "loads", on: "side", most: 1, phrase: "arrows where the flow comes in" }),
   outlet: Object.freeze({ shape: "arrow", tone: "fixture", bucket: "fixtures", on: "side", most: 1, phrase: "where it leaves" }),
   rigid_plane: Object.freeze({ shape: "plane", tone: "fixture", bucket: "fixtures", on: "plane", most: 1, phrase: "a see-through plane for the rigid floor" }),
+  // A crack's front (fracture): a dot at each station along it, where its K was read.
+  crack_front: Object.freeze({ shape: "dot", tone: "load", bucket: "loads", on: "front", most: 1, phrase: "dots along the crack's front" }),
 });
+
+/** A crack's front as the file records it (`extras.crack.front_mm`, CAD mm): its stations' points. [] for none. */
+function crackFront(result) {
+  const front = result.mesh?.userData?.crack?.front_mm;
+  return Array.isArray(front) ? front.filter((point) => Array.isArray(point) && point.length === 3 && point.every((c) => Number.isFinite(c))) : [];
+}
 
 /** What Display's gate says it draws, over these kinds, in the table's order: "Arrows where the study loads the part, cones where it holds it." */
 export function markerGateText(kinds) {
@@ -177,6 +185,7 @@ function markerGroups(result) {
     inlet: entries(study.flow?.inlets).map(() => []),
     outlet: entries(study.flow?.outlets).map(() => []),
     rigid_plane: [...entries(study.rigidPlanes), ...(study.drop?.floor === "rigid" ? [{ floor: true }] : [])].map(() => []),
+    crack_front: crackFront(result).map(() => []),
   };
   return Object.keys(MARKER_KINDS).filter((kind) => drawn.has(kind))
     .flatMap((kind) => groups[kind].map((refs, group) => ({ kind, group, refs })));
@@ -286,6 +295,11 @@ function offFacePose(result, site, box, positions, arrow) {
     const reach = Math.abs(along[0]) * (box.high[0] - box.low[0]) + Math.abs(along[1]) * (box.high[1] - box.low[1]) + Math.abs(along[2]) * (box.high[2] - box.low[2]);
     const tip = plus(box.centre, scaled(along, 0 - reach / 2 - arrow * 0.25));
     return { ...site, tip, tail: plus(tip, scaled(along, 0 - arrow)), direction: along, pushes: true };
+  }
+  // A crack's front: a dot at each of its stations, where the file puts it (CAD mm, in the mesh's metres and axes).
+  if (site.kind === "crack_front") {
+    const at = gltfAxes(scaled(crackFront(result)[site.group], 0.001));
+    return { ...site, tip: at, direction: [0, 1, 0] };
   }
   // A rigid plane: its own point and normal, or under a drop, through the lowest point along the fall.
   const plane = study.rigidPlanes?.[site.group];
@@ -623,7 +637,7 @@ export function createFeaMarkers(THREE, result) {
     labels(loadScale = 1, visible = { loads: true, fixtures: true }) {
       const entries = [];
       for (const pose of poses) {
-        if (visible[MARKER_KINDS[pose.kind].bucket] !== true || pose.kind === "rigid_plane" || pose.kind === "fixture") continue;
+        if (visible[MARKER_KINDS[pose.kind].bucket] !== true || pose.kind === "rigid_plane" || pose.kind === "fixture" || pose.kind === "crack_front") continue;
         let entry = entries.find((item) => item.kind === pose.kind && item.group === pose.group);
         if (!entry) entries.push(entry = { kind: pose.kind, group: pose.group, ends: [] });
         entry.ends.push(labelEnds(pose, arrowLength));

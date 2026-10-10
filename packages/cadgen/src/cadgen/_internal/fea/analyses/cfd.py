@@ -322,6 +322,14 @@ class CfdAnalysis:
         self._setups[key] = setup
         return setup
 
+    def setup_of(self, ctx: SolveContext, inputs: CfdInputs) -> _Setup:
+        """The fluid region and its numbers (Reynolds number, length, default wall size), as this flow solves it."""
+        return self._setup(ctx, inputs)
+
+    def problem_of(self, space, fluid, face_of, row_kind, inputs: CfdInputs, setup: _Setup):
+        """The flow problem on the fluid's space: what :func:`..navier_stokes.solve_flow` takes."""
+        return self._problem(space, fluid, face_of, row_kind, inputs)[0]
+
     def sizes(self, ctx: SolveContext, setup: _Setup) -> tuple[float, float]:
         """(wall, free-stream) element sizes, mm: the study's size (or the default) at walls and openings."""
         plan = ctx.plan

@@ -2,7 +2,7 @@
 
 It answers "how hot does it get during a warm-up or a duty cycle, and when is it hottest":
 temperature against time from a starting temperature, with heat, held temperatures and air that can
-switch on and off. The plain word is Heat over time.
+switch on and off, and faces that radiate. The plain word is Heat over time.
 
 ## When to use it
 
@@ -31,8 +31,10 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
 - `end_s`: how long to follow it, in seconds (required).
 - `step_s`: the time step, or `"auto"` (default): a two-hundredth of `end_s`. Smaller steps follow
   fast changes better; a step shorter than the fastest change you care about is enough.
+- `radiation`: as in [thermal.md](thermal.md#radiation) (to the surroundings, and between faces with
+  `surface_to_surface`), with no `history`. Each step solves its T⁴ by Newton's method.
 - No anchor is required: an insulated part warming up has an answer over time. Something must
-  change its temperature (a `heat`, `temperatures` or `convection` entry).
+  change its temperature (a `heat`, `temperatures`, `convection` or `radiation` entry).
 - The material needs a conductivity and a specific heat (`conductivity_W_mK`,
   `specific_heat_J_kgK`; every table material has both) and its density.
 - Check `temperature`: `max_C`, optional `faces`, judged on the highest temperature over all time.
@@ -48,6 +50,8 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
 - Summary: `max_temperature_C` and `max_at_s` (the hottest moment), `max_at_mm`,
   `final_max_temperature_C`, `min_temperature_C`, `max_heat_flux_W_m2`, `initial_C`, `end_s`,
   `step_s`, `steps`, `adaptive`, the smallest and largest step, `frames`, `reference_C`, `checks`.
+  With radiation, `radiation_at_end`: what each entry radiates at `end_s` (as `thermal`'s
+  `radiation`), and the CLI adds "at the end, radiated ...".
 - CLI: "hottest 64 °C at 5 min, at [x, y, z] mm; 41 °C at the end" and "followed from 25 °C for
   10 min in 200 steps".
 - Findings: the temperature check's (as `thermal`), and `still_heating` (info) when the hottest
@@ -62,10 +66,16 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
 - Heat into an insulated part raises its mean temperature by P t / (m c): 5 W into 2.7 g of
   aluminium for a minute is 124 °C. Every joule put in is stored.
 - Settling takes about 3 to 5 τ; if `still_heating` appears, the steady `thermal` gives where it ends.
+- Radiative cooling of a small part (one lump): ρ c V dT/dt = −ε σ A (T⁴ − T∞⁴), whose integral is
+  t = (ρ c V / ε σ A) [G(T0) − G(T)], G(T) = (ln((T − a)/(T + a)) − 2 atan(T/a)) / (4 a³), a = T∞ (in
+  kelvin). A 10 mm aluminium cube at ε 0.9 from 500 °C into 25 °C surroundings is at 161.1 °C after
+  300 s; the solver reads 161.6 °C at 1 s steps (0.4 % of the rise; backward Euler runs slightly
+  warm), 161.3 °C with adaptive steps.
 
 ## Limits
 
-- As [thermal.md](thermal.md#limits): conduction with constant properties, no radiation, `h` given.
+- As [thermal.md](thermal.md#limits): conduction with constant properties, grey diffuse radiation,
+  `h` given. A radiation entry has no schedule: its ambient and emissivity hold for the whole run.
 - Backward Euler takes each step's heat at the step's end: a heater that switches off between two
   steps is missed for that step. Keep `step_s` below the shortest on-time in the schedule.
 - Backward Euler damps fast changes a little: with the automatic step the lumped cube runs about

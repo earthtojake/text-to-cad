@@ -9,33 +9,49 @@
  * and its Display gate's title (`displayTitle`). Pure: no three.js, no React.
  */
 import { FEA_CHECK_KINDS } from "../checkKinds.js";
+import acoustic from "./acoustic.js";
 import bolt from "./bolt.js";
 import buckling from "./buckling.js";
 import cfd from "./cfd.js";
 import cfd_compressible from "./cfd_compressible.js";
 import cfd_turbulent from "./cfd_turbulent.js";
 import composite from "./composite.js";
+import conjugate_heat from "./conjugate_heat.js";
 import contact from "./contact.js";
 import creep from "./creep.js";
 import drop from "./drop.js";
 import electromagnetic from "./electromagnetic.js";
 import fatigue from "./fatigue.js";
+import fracture from "./fracture.js";
+import fsi from "./fsi.js";
 import harmonic from "./harmonic.js";
 import impact from "./impact.js";
 import modal from "./modal.js";
+import multiphase from "./multiphase.js";
 import nonlinear from "./nonlinear.js";
+import piezo from "./piezo.js";
 import random_vibration from "./random_vibration.js";
+import rotordynamics from "./rotordynamics.js";
 import shock from "./shock.js";
 import staticAnalysis from "./static.js";
 import { planned } from "./stub.js";
 import thermal from "./thermal.js";
 import thermal_stress from "./thermal_stress.js";
 import thermal_transient from "./thermal_transient.js";
+import topology from "./topology.js";
 import transient from "./transient.js";
 
 export const ANALYSES = Object.freeze({
   static: staticAnalysis, modal, buckling, thermal, thermal_transient, thermal_stress, harmonic, random_vibration, shock, transient,
   fatigue, drop, cfd, impact, nonlinear, contact, bolt, creep, composite, electromagnetic, cfd_turbulent, cfd_compressible,
+  topology,
+  acoustic,
+  conjugate_heat,
+  fracture,
+  rotordynamics,
+  fsi,
+  piezo,
+  multiphase,
 });
 
 /** Every analysis this viewer knows, by name. */

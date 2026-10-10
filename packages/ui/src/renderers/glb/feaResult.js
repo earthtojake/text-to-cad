@@ -196,6 +196,8 @@ function readChecks(raw, kinds) {
       ...(Number.isFinite(check.reference) ? { reference: Number(check.reference) } : {}),
       // A laminate's worst ply (ply_failure): its number from the bottom face and its angle.
       ...(Number.isInteger(check.ply) && check.ply >= 1 ? { ply: check.ply, angle: finiteOrNull(check.angle_deg) ?? 0 } : {}),
+      // Where along a crack's front its K is largest (fracture): "the deepest point", "the surface".
+      ...(typeof check.point === "string" && check.point ? { point: check.point } : {}),
     }));
 }
 
@@ -214,6 +216,8 @@ function readAnalysis(raw) {
     estimate: typeof own.estimate === "boolean" ? own.estimate : known.estimate, noun: text(own.noun) || known.noun,
     limits: sentences(own.limits), warnings: sentences(own.warnings), referenceC: finiteOrNull(own.reference_C),
     ...(readReynolds(own.reynolds) ? { reynolds: readReynolds(own.reynolds) } : {}),
+    // A flow that carries heat says which model it solved: "laminar" or "turbulent".
+    ...(own.regime === "laminar" || own.regime === "turbulent" ? { regime: own.regime } : {}),
     ...(readMach(own.mach) ? { mach: readMach(own.mach) } : {}),
     ...(readUnsettled(own.unsettled) ? { unsettled: readUnsettled(own.unsettled) } : {}),
   };
@@ -335,16 +339,23 @@ function readExcitation(raw) {
   return null;
 }
 
-/** A flow's openings, from the study's echo: its inlets (`speed` m/s, or an external flow's `velocity`) and outlets (`pressure` Pa). null for none. */
+/**
+ * A flow's openings, from the study's echo: its inlets (`speed` m/s, or an external flow's `velocity`) and outlets (`pressure` Pa).
+ * A flow that carries heat adds each inlet's `temperatureC` (an external free stream's), its `fluid`'s name and its `regime`. null for none.
+ */
 function readFlow(raw) {
   const flow = record(raw);
   if (!flow) return null;
   const external = vector(flow.velocity_m_s);
+  const fluid = record(flow.fluid);
   return {
     kind: flow.kind === "external" ? "external" : "internal",
-    inlets: external ? [{ opening: "", speed: Math.hypot(...external), velocity: external }]
-      : entries(flow.inlets).map((inlet) => ({ opening: text(inlet.opening), speed: finiteOrNull(inlet.velocity_m_s), velocity: null })),
+    inlets: external ? [{ opening: "", speed: Math.hypot(...external), velocity: external, temperatureC: finiteOrNull(flow.temperature_C) }]
+      : entries(flow.inlets).map((inlet) => ({ opening: text(inlet.opening), speed: finiteOrNull(inlet.velocity_m_s), velocity: null,
+        temperatureC: finiteOrNull(inlet.temperature_C) })),
     outlets: entries(flow.outlets).map((outlet) => ({ opening: text(outlet.opening), pressure: finiteOrNull(outlet.pressure_Pa) })),
+    fluid: typeof flow.fluid === "string" ? flow.fluid : fluid ? text(fluid.name) : "",
+    regime: text(flow.regime),
   };
 }
 
@@ -396,6 +407,49 @@ function readLayupEcho(raw) {
   return { plies, notation: text(layup.notation), thicknessMm: finiteOrNull(layup.thickness_mm), axis: vector(layup.axis), normal: vector(layup.normal) };
 }
 
+/**
+ * An acoustic study's echo: what it solved (`solve`, `domain`), its `fluid`, its `sources` (a speaker
+ * face's `faces` and `velocityMmS`, or a `point` and its `volumeVelocity`), its `absorbers` (`faces`,
+ * `absorption` or `impedanceRayl`), its `open` faces (one list per entry), its `probes` (`label`, `at`),
+ * its sweep and loss, and `from` ("harmonic" when the part's vibration drives it). null for none.
+ */
+function readAcoustic(raw) {
+  const block = record(raw);
+  if (!block) return null;
+  const fluid = record(block.fluid);
+  return {
+    solve: text(block.solve), domain: text(block.domain),
+    fluid: fluid ? { name: text(fluid.name), densityKgM3: finiteOrNull(fluid.density_kg_m3), speedMS: finiteOrNull(fluid.speed_m_s) } : null,
+    sources: entries(block.sources).map((source) => ({
+      faces: faceRefs(source.faces), velocityMmS: finiteOrNull(source.velocity_mm_s), point: vector(source.point_mm),
+      volumeVelocity: finiteOrNull(source.volume_velocity_m3_s),
+    })),
+    absorbers: entries(block.absorbers).map((entry) => ({
+      faces: faceRefs(entry.faces), absorption: finiteOrNull(entry.absorption), impedanceRayl: finiteOrNull(entry.impedance_rayl),
+    })),
+    open: entries(block.open).map((entry) => faceRefs(entry.faces)),
+    probes: entries(block.probes).map((probe) => ({ label: text(probe.label), at: vector(probe.at_mm) || [0, 0, 0] })),
+    sweepHz: band(block.sweep_Hz), lossFactor: finiteOrNull(block.loss_factor), from: text(block.from),
+  };
+}
+
+/**
+ * A piezo study's echo: what it solved (`solve`: static, resonance or harmonic), its `electrodes` (each its
+ * `faces`, `name`, `volts` held, or `open`) and each piezo part's `poling` (`part`, `material`, `direction`).
+ * null for a study with no electrodes.
+ */
+function readPiezo(raw) {
+  if (!Array.isArray(raw.electrodes)) return null;
+  return {
+    solve: text(raw.solve) || "static",
+    electrodes: entries(raw.electrodes).map((entry) => ({
+      faces: faceRefs(entry.faces), name: text(entry.name), volts: finiteOrNull(entry.V), open: entry.open === true,
+    })),
+    poling: entries(raw.poling).map((entry) => ({ part: text(entry.part), material: text(entry.material), direction: vector(entry.direction) }))
+      .filter((entry) => entry.direction),
+  };
+}
+
 /** A composite's ply materials by name (`laminae`), each its numeric properties as the file gives them. {} for none. */
 function readLaminae(raw) {
   const named = record(raw);
@@ -436,6 +490,9 @@ function readStudy(raw) {
     temperatures: entries(raw.temperatures).map((entry) => ({ faces: faceRefs(entry.faces), celsius: finiteOrNull(entry.C) })),
     heat: entries(raw.heat).map((entry) => ({ faces: faceRefs(entry.faces), watts: finiteOrNull(entry.W), fluxWm2: finiteOrNull(entry.W_per_m2) })),
     convection: entries(raw.convection).map((entry) => ({ faces: faceRefs(entry.faces), h: finiteOrNull(entry.h_W_m2K), ambientC: finiteOrNull(entry.ambient_C) })),
+    // Faces radiating to their surroundings (and, `surfaceToSurface`, to each other): a thermal study's.
+    radiation: entries(raw.radiation).map((entry) => ({ faces: faceRefs(entry.faces), emissivity: finiteOrNull(entry.emissivity),
+      ambientC: finiteOrNull(entry.ambient_C), surfaceToSurface: entry.surface_to_surface === true })),
     excitation: readExcitation(raw),
     drop: readDrop(raw.drop),
     flow: readFlow(raw.flow),
@@ -459,6 +516,13 @@ function readStudy(raw) {
     // Composite: the layup and the ply materials.
     layup: readLayupEcho(raw.layup),
     laminae: readLaminae(raw.laminae),
+    // Acoustic: where the air is, what makes and soaks up the sound, where it is listened to (null for none).
+    acoustic: readAcoustic(raw.acoustic),
+    // Topology: the share of the material to keep, and the faces whose nearby material stays solid.
+    volumeFraction: finiteOrNull(raw.volume_fraction),
+    keptSolid: faceRefs(raw.kept_solid),
+    // Piezo: what it solved, its electrodes (held at a voltage, or open) and each part's poling. null for none.
+    piezo: readPiezo(raw),
   };
 }
 
@@ -1271,7 +1335,9 @@ function detailsGroup(result) {
     id: `limit:${index}`, label: sentence, detail: "", wrap: true, ...whole(`Limits of this ${result.analysis.word.toLowerCase()} result: ${sentence}`) })) }] : [];
   const unsettled = unsettledWarning(result);
   const settle = unsettled ? [{ id: "unsettled", label: unsettled.sentence, detail: "", wrap: true, ...whole(unsettled.sentence) }] : [];
-  const children = [...settle, ...flow, ...machRows(result, whole), ...mesh, ...fit, ...limits];
+  // An analysis's own Details rows (`detailRows(result, whole)`: fsi's coupling iterations), before the mesh.
+  const own = typeof feaAnalysis(result).detailRows === "function" ? feaAnalysis(result).detailRows(result, whole) : [];
+  const children = [...settle, ...flow, ...machRows(result, whole), ...own, ...mesh, ...fit, ...limits];
   return children.length ? [{ id: "details", label: "Details", detail: "", collapsed: true, children }] : [];
 }
 
@@ -1326,6 +1392,7 @@ export function faceRole(result, ref) {
     ...study.temperatures.filter((entry) => entry.faces.includes(ref)).map((entry) => (entry.celsius === null ? "kept at a fixed temperature" : `kept at ${plainNumber(entry.celsius)} °C`)),
     ...study.heat.filter((entry) => entry.faces.includes(ref)).map((entry) => `${entry.watts !== null ? `${plainNumber(entry.watts)} W` : entry.fluxWm2 !== null ? `${plainNumber(entry.fluxWm2)} W/m²` : "some"} of heat in`),
     ...study.convection.filter((entry) => entry.faces.includes(ref)).map((entry) => `cooled by air${entry.ambientC === null ? "" : ` at ${plainNumber(entry.ambientC)} °C`}`),
+    ...(study.radiation || []).filter((entry) => entry.faces.includes(ref)).map((entry) => `radiates${entry.ambientC === null ? "" : ` to ${plainNumber(entry.ambientC)} °C`}`),
     ...(study.drop?.onto.includes(ref) ? ["lands on the drop"] : []),
   ];
   return roles.length ? roles.join("; ") : "free";

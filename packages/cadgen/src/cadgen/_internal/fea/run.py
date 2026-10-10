@@ -972,6 +972,8 @@ def solve_study(
             displacement=deformation[:vertex_count],
             values=colour[:vertex_count],
         )
+    # Files an analysis writes beside the GLB (topology's design surface); it may add their names to its summary.
+    extra_files = analysis.write_files(result, summary, glb_path) if hasattr(analysis, "write_files") else {}
 
     mesh_info = {
         "elements": int(len(volume.tets)),
@@ -1012,7 +1014,7 @@ def solve_study(
         ]}),
         # The first and the finer solve's size and peak, when the part was solved twice.
         "refined": refined,
-        "files": {"glb": glb_path.name, "vtu": vtu_path.name if vtu_path else None},
+        "files": {"glb": glb_path.name, "vtu": vtu_path.name if vtu_path else None, **extra_files},
         **({} if parsed.view is None else {"view": parsed.view}),
         **({} if not fit_steps else {"fit": fit_steps}),
     }

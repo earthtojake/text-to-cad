@@ -272,6 +272,22 @@ def generate_mesh(geometry, ngocc, h: float, refine: float, order: int, size_fie
     return mesh
 
 
+def _expanded(field: dict) -> list:
+    """A size field's points with its ``radius_mm`` spelled out: each point and the six at that distance along the axes."""
+    radius = float(field.get("radius_mm") or 0.0)
+    points = [list(point) for point in field.get("points") or ()]
+    if radius <= 0:
+        return points
+    offsets = [tuple(radius * sign if axis == k else 0.0 for k in range(3)) for axis in range(3) for sign in (-1.0, 1.0)]
+    return points + [[x + dx, y + dy, z + dz, size] for x, y, z, size in points for dx, dy, dz in offsets]
+
+
+def _merged_fields(given: dict, own: dict) -> dict:
+    """Two size fields as one: each one's points kept at its own radius (spelled out), the given one's faces kept."""
+    return {**{key: value for key, value in given.items() if key not in ("points", "radius_mm")},
+            "points": [*_expanded(given), *_expanded(own)], "radius_mm": 0.0}
+
+
 def mesh_occurrence(
     occurrence: "Occurrence", *, max_h: float | None = None, refine: float = 1.0, order: int = 2,
     size_field: dict | None = None, prepared=None,
@@ -301,6 +317,10 @@ def mesh_occurrence(
     if not diagonal > 0:
         raise RuntimeError(f"{occurrence.ref} has no volume to mesh")
     h = float(max_h) if max_h else default_mesh_size(diagonal)
+    # A prepared shape may carry local sizes of its own (a crack's front, kept fine): they join the caller's.
+    own = getattr(prepared, "size_field", None)
+    if own:
+        size_field = _merged_fields(size_field or {}, own)
 
     started = time.perf_counter()
     import netgen.meshing as ngmesh

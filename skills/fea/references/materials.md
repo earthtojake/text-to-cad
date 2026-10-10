@@ -132,6 +132,124 @@ A laminate (plies at angles) is not one orthotropic material: use the `composite
 ([composite.md](composite.md)), whose ply materials (`laminae`) are given as E1, E2, ν12, G12
 and strengths.
 
+## Piezoelectric ceramics
+
+What `piezo` reads ([piezo.md](piezo.md)): a `piezo` block in the material, the linear
+constants in the stress-charge form, in the ceramic's own axes with 3 along the poling.
+Three poled PZT ceramics are in a table of their own (they are not in the tables
+above, which every other analysis reads): name one in `material` (or a part's).
+
+| ceramic (name) | c11E | c12E | c13E | c33E | c44E | c66E | e31 | e33 | e15 | ε11S/ε0 | ε33S/ε0 | ρ (kg/m³) | sources |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| PZT-4 (`pzt-4`) | 139 | 77.8 | 74.3 | 115 | 25.6 | 30.6 | −5.2 | 15.1 | 12.7 | 730 | 635 | 7500 | [TP-226] section III |
+| PZT-5A (`pzt-5a`) | 121 | 75.4 | 75.2 | 111 | 21.1 | 22.6 | −5.4 | 15.8 | 12.3 | 916 | 830 | 7750 | [TP-226] section III |
+| PZT-5H (`pzt-5h`) | 126 | 79.5 | 84.1 | 117 | 23.0 | 23.5 | −6.55 | 23.3 | 17.0 | 1700 | 1470 | 7500 | [TP-226] section III |
+
+Stiffness in GPa (TP-226 lists them in 10¹⁰ N/m²), e in C/m², permittivity at constant
+strain over ε0. Also accepted: `pzt4`, `pzt5a`, `pzt5h`, and the US Navy types `navy-i`
+(PZT-4), `navy-ii` (PZT-5A) and `navy-vi` (PZT-5H).
+
+Notes:
+
+- Every number above was read from TP-226's own table (a copy is linked below),
+  checked on 2026-10-10. TP-226 also lists derived values; the table's constants
+  reproduce its d33, d31, k_t, k33 and ε33T within 2 % (a test holds them to it):
+  PZT-5A d33 373 pC/N (TP-226: 374), ε33T/ε0 1704 (1700), k_t 0.484 (0.486).
+- TP-226's c66 for PZT-5A (2.26) and PZT-5H (2.35) are not exactly (c11 − c12)/2
+  (2.28 and 2.325): its own rounding. The table keeps TP-226's numbers, so the
+  ceramic is very slightly anisotropic about its poling axis.
+- No yield strength: a ceramic is brittle. A `stress` check needs `yield_MPa` in
+  the material object; TP-226 section V gives a static tensile strength of
+  11 000 psi (76 MPa) for all three, and a dynamic (peak) one of 3 500 psi (24 MPa)
+  for PZT-4 and 4 000 psi (28 MPa) for PZT-5A and PZT-5H: use the dynamic one for a
+  part that is driven.
+- Room temperature, low field, freshly poled. Batches vary by several percent, and
+  the constants age (TP-226 section IV: PZT-4's k_p falls 1.7 % per decade of time, PZT-5A's
+  and PZT-5H's 0.2 % or less).
+  A study that matters uses the supplier's datasheet, in the block below.
+
+A ceramic of your own takes the full matrices (from the supplier's datasheet;
+never invent them):
+
+```json
+{"name": "my PZT", "density_t_per_mm3": 7.8e-9, "yield_MPa": 24,
+ "piezo": {"cE_GPa": [[121, 75.4, 75.2, 0, 0, 0], [75.4, 121, 75.2, 0, 0, 0], [75.2, 75.2, 111, 0, 0, 0],
+                      [0, 0, 0, 21.1, 0, 0], [0, 0, 0, 0, 21.1, 0], [0, 0, 0, 0, 0, 22.6]],
+           "e_C_m2": [[0, 0, 0, 0, 12.3, 0], [0, 0, 0, 12.3, 0, 0], [-5.4, -5.4, 15.8, 0, 0, 0]],
+           "epsS_rel": [[916, 0, 0], [0, 916, 0], [0, 0, 830]],
+           "poling": [0, 0, 1]}}
+```
+
+- `cE_GPa`: 6 × 6 stiffness at constant field, Voigt order 11, 22, 33, 23, 13, 12
+  (engineering shears), symmetric and positive definite.
+- `e_C_m2`: 3 × 6 piezoelectric stress constants (rows: field along 1, 2, 3).
+- `epsS_rel`: 3 × 3 permittivity at constant strain, over ε0; symmetric, positive definite.
+- `poling` (optional, default `[0, 0, 1]`): the poling direction in the part's
+  axes. A table ceramic turned over is `{"name": "pzt-5a", "piezo": {"poling": [0, 0, -1]}}`:
+  every key left out is the table's.
+- `density_kg_m3` (optional): used when the material gives no `density_t_per_mm3`.
+- `E_MPa`, `nu` and `yield_MPa` are not needed: E and ν are the compliance's own
+  (1/s11 and −s12/s11).
+
+A datasheet in the strain-charge form (s^E, d, ε^T) converts: c^E = (s^E)⁻¹,
+e = d c^E, ε^S = ε^T − d eᵀ.
+
+### Sources (piezoelectric)
+
+- [TP-226]: D. Berlincourt, H. H. A. Krueger, revised by C. Near, "Properties of Morgan
+  Electro Ceramic Ceramics", Morgan Electro Ceramics Technical Publication TP-226,
+  section III (typical room temperature data, low signal) and section V (high signal:
+  strengths); copy at https://www.ultrasonic-resonators.org/misc/references/articles/Berlincourt__'Properties_of_Morgan_Electro_Ceramic_Ceramics'_(Morgan_Technical_Publication_TP-226).pdf
+
+## Fracture
+
+What `fracture` reads: the plane-strain fracture toughness K_IC (the crack grows
+where its stress intensity K reaches it) and, for crack growth, Paris's law
+da/dN = C (ΔK)^m. Override them in the material object:
+`fracture_toughness_MPa_sqrt_m`, `paris_C` (m per cycle, with ΔK in MPa√m) and
+`paris_m`. Room temperature, in air. A value no source gives for the grade is
+none, and a study that needs it asks for it.
+
+| name | K_IC (MPa√m) | Paris C (m/cycle) | Paris m | sources |
+| --- | --- | --- | --- | --- |
+| `steel` | none | 6.9e-12 | 3.0 | [Norton Paris] (ferritic-pearlitic steels) |
+| `stainless-304` | none | 5.6e-12 | 3.25 | [Norton Paris] (austenitic stainless steels) |
+| `aluminum-6061-t6` | 29 | none | none | [ASM 6061-T6 e] (T-L) |
+| `aluminum-7075-t6` | 20 | none | none | [ASM 7075-T6] (S-L, the lowest of three) |
+| `titanium-6al-4v` | 75 | none | none | [ASM Ti-6Al-4V] |
+| `brass` | none | none | none | |
+| `abs` | none | none | none | |
+| `pla` | none | none | none | |
+| `petg` | none | none | none | |
+| `nylon-pa12` | none | none | none | |
+
+Notes, value by value:
+
+- `aluminum-7075-t6`: ASM gives K_IC 20 MPa√m in the S-L direction, 25 in T-L
+  and 29 in L-T. The table takes the lowest, 20; a crack whose orientation in
+  the plate or bar is known may use its own direction's value.
+- `aluminum-6061-t6`: ASM gives 29 MPa√m, T-L orientation.
+- `titanium-6al-4v`, annealed grade 5: ASM gives 75 MPa√m (no orientation stated).
+- `steel` and `stainless-304`: Barsom's Paris fits for ferritic-pearlitic and
+  austenitic stainless steels, from Norton's Machine Design table 6-2. The SI
+  column there is labelled mm/cycle, but its U.S. column (3.60e-10 in/cycle,
+  ksi√in, for ferritic-pearlitic) converts to 6.9e-12 m/cycle with ΔK in MPa√m,
+  so C is per metre, as Barsom gives it. They are fits over many steels: a
+  study that matters uses the grade's own da/dN data.
+- K_IC is a plane-strain value: thinner sections are tougher (plane stress),
+  so it is conservative for thin parts.
+
+### Why some values are none (fracture)
+
+- K_IC, for `steel`, `stainless-304` and `brass`: a tough, ductile metal like this tears plastically before a valid plane-strain K_IC can be measured, and no source cited here gives one for the grade; give fracture_toughness_MPa_sqrt_m from the supplier's test (or a J_IC converted to K), and treat LEFM as an approximation for it
+- Paris C and m, for the aluminium alloys, titanium and `brass`: no source cited here gives Paris constants for this grade; give paris_C (m/cycle, ΔK in MPa√m) and paris_m from the alloy's crack-growth (da/dN) data at the load ratio it sees
+- Every fracture value, for `abs`, `pla`, `petg` and `nylon-pa12`: a polymer's (and a printed part's) toughness and crack growth depend on grade, temperature, rate, moisture and layer orientation; give fracture_toughness_MPa_sqrt_m and paris_C, paris_m from the grade's own test data
+
+### Sources (fracture)
+
+- [Norton Paris]: Robert L. Norton, Machine Design: An Integrated Approach, 6th edition, table 6-2 (data from Barsom), https://designofmachinery.com/wp-content/uploads/2021/02/Chap-06-MD-6ed-p.360-361.pdf
+- [ASM 6061-T6 e], [ASM 7075-T6] and [ASM Ti-6Al-4V]: as listed under the electrical and the strength sources (asm.matweb.com).
+
 ## Strength, fatigue and heat
 
 The properties other analyses read. Ultimate strength and fatigue (`fatigue`,

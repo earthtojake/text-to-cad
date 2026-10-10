@@ -2,10 +2,14 @@
 
 The study (spec 5.5) names ``temperatures`` (faces held at °C), ``heat`` (a
 total power in W spread evenly over its faces, or a flux in W/m²) and
-``convection`` (a film coefficient in W/(m² K) and the ambient °C). At least
-one held temperature or convection is required: a part only heated, with
-nowhere for the heat to go, has no steady temperature. That is the anchor
-rule, about the study, never about its size.
+``convection`` (a film coefficient in W/(m² K) and the ambient °C), and
+optionally ``radiation`` (faces radiating with an ``emissivity`` to
+surroundings at ``ambient_C``; with ``surface_to_surface`` they also exchange
+heat with each other through view factors computed here, :mod:`..radiation`).
+At least one held temperature, convection or radiation is required: a part
+only heated, with nowhere for the heat to go, has no steady temperature. That
+is the anchor rule, about the study, never about its size. A study without
+radiation solves exactly as before; with it, Newton's method on the T⁴.
 
 The solve is :mod:`cadgen._internal.fea.thermal_ops` on the study's element
 space. It writes the ``temperature`` field (°C, signed: its colours run from
@@ -30,8 +34,8 @@ from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Inputs, SolveContext
 
 __all__ = [
-    "Convection", "FixedTemperature", "HeatInput", "ThermalAnalysis", "ThermalInputs", "ladder_estimate", "parse_heat_keys",
-    "temperature_check",
+    "Convection", "FixedTemperature", "HeatInput", "RADIATION_KEY", "Radiating", "ThermalAnalysis", "ThermalInputs",
+    "ladder_estimate", "parse_heat_keys", "parse_radiation", "radiation_summary", "temperature_check",
 ]
 
 #: A heat balance off by more than this share is a warning.
@@ -39,6 +43,8 @@ BALANCE_WARN = 0.01
 #: A temperature check is close once it has used this share of the room between the reference and its limit.
 CLOSE_AT = 0.9
 HEAT_KEYS = ("temperatures", "heat", "convection")
+#: Radiation, a key of thermal and thermal_transient studies beside the heat keys.
+RADIATION_KEY = "radiation"
 
 
 @dataclass(frozen=True)
@@ -68,12 +74,24 @@ class Convection:
 
 
 @dataclass(frozen=True)
+class Radiating:
+    """Faces radiating with an emissivity to surroundings at ``ambient`` °C, and (``surface_to_surface``) to each other."""
+
+    faces: tuple[str, ...]
+    emissivity: float
+    ambient: float
+    surface_to_surface: bool = False
+
+
+@dataclass(frozen=True)
 class ThermalInputs(Inputs):
     temperatures: tuple[FixedTemperature, ...] = ()
     heat: tuple[HeatInput, ...] = ()
     convection: tuple[Convection, ...] = ()
     #: The coolest temperature the study sets (held, ambient, the start): what a temperature check is measured from.
     reference_C: float = 20.0
+    #: Faces radiating (none in a study without ``radiation``).
+    radiation: tuple[Radiating, ...] = ()
 
     @property
     def heat_refs(self) -> tuple[str, ...]:
@@ -162,6 +180,39 @@ def parse_heat_keys(document: dict, *, transient: bool = False) -> tuple[tuple, 
     return tuple(temperatures), tuple(heat), tuple(convection)
 
 
+def parse_radiation(document: dict) -> tuple[Radiating, ...]:
+    """The study's ``radiation``: faces, emissivity (0 to 1), ambient_C, and optional surface_to_surface."""
+    radiation = []
+    seen: dict[str, int] = {}
+    example = '{"faces": ["#o1.f3"], "emissivity": 0.9, "ambient_C": 25}'
+    for index, entry in enumerate(_entries(document, RADIATION_KEY, example)):
+        where = f"radiation[{index}]"
+        _known(entry, {"faces", "emissivity", "ambient_C", "surface_to_surface"}, where,
+               "radiation takes faces, emissivity, ambient_C and surface_to_surface")
+        if "emissivity" not in entry:
+            raise ValueError(f"{where}.emissivity: how well the faces radiate, 0 to 1; it depends on the finish more than "
+                             "the metal (polished aluminium about 0.05, anodised or painted 0.8 to 0.95, oxidised steel 0.8)")
+        emissivity = kinds.number(entry["emissivity"], where=f"{where}.emissivity", positive=True)
+        if emissivity > 1:
+            raise ValueError(f"{where}.emissivity: a share from 0 to 1 (a black body is 1), got {emissivity:g}")
+        if "ambient_C" not in entry:
+            raise ValueError(f"{where}.ambient_C: the temperature of the surroundings the faces radiate to, in °C")
+        ambient = kinds.number(entry["ambient_C"], where=f"{where}.ambient_C")
+        if ambient < -273.15:
+            raise ValueError(f"{where}.ambient_C: {ambient:g} °C is below absolute zero")
+        exchange = entry.get("surface_to_surface", False)
+        if not isinstance(exchange, bool):
+            raise ValueError(f"{where}.surface_to_surface: true (these faces also radiate to each other and to every "
+                             f"other such face) or false, got {kinds.json_text(exchange)}")
+        faces = kinds.faces(entry, where=where)
+        for ref in faces:
+            if ref in seen:
+                raise ValueError(f"{where}: {ref} already radiates in radiation[{seen[ref]}]; name each face in one entry")
+            seen[ref] = index
+        radiation.append(Radiating(faces, emissivity, ambient, exchange))
+    return tuple(radiation)
+
+
 def reference_of(temperatures, convection, *extra: float) -> float:
     """The coolest temperature the study sets: held, ambient, or ``extra`` (a transient's start)."""
     values = [entry.celsius for entry in temperatures] + [entry.ambient for entry in convection] + list(extra)
@@ -237,17 +288,22 @@ def temperature_findings(check_results: list[dict], *, assembly: bool) -> list[d
 
 
 def heat_echo(inputs, bare: Callable[[tuple[str, ...]], list[str]]) -> dict:
-    """``extras.study``'s ``temperatures``, ``heat`` and ``convection``, faces bare, each schedule where it has one."""
+    """``extras.study``'s ``temperatures``, ``heat`` and ``convection``, faces bare, each schedule where it has one;
+    and ``radiation`` where the study has any."""
     def history(entry) -> dict:
         return {"history": [list(point) for point in entry.history]} if entry.history else {}
 
-    return {
+    radiating = getattr(inputs, "radiation", ())
+    extra = {"radiation": [{"faces": bare(entry.faces), "emissivity": entry.emissivity, "ambient_C": entry.ambient,
+                            **({"surface_to_surface": True} if entry.surface_to_surface else {})}
+                           for entry in radiating]} if radiating else {}
+    return {**{
         "temperatures": [{"faces": bare(entry.faces), "C": entry.celsius, **history(entry)} for entry in inputs.temperatures],
         "heat": [{"faces": bare(entry.faces), **({"W": entry.watts} if entry.watts is not None else {"W_per_m2": entry.per_m2}),
                   **history(entry)} for entry in inputs.heat],
         "convection": [{"faces": bare(entry.faces), "h_W_m2K": entry.h, "ambient_C": entry.ambient, **history(entry)}
                        for entry in inputs.convection],
-    }
+    }, **extra}
 
 
 def build_system(ctx: SolveContext, inputs):
@@ -259,12 +315,47 @@ def build_system(ctx: SolveContext, inputs):
     def facets(refs):
         return space.facets_of(refs, ctx.ordinal_of)
 
+    def rows(refs):
+        import numpy as np
+
+        found = np.flatnonzero(np.isin(space.volume.boundary_ordinal, [ctx.ordinal_of[ref] for ref in refs]))
+        if not len(found):
+            raise RuntimeError(f"no boundary triangles lie on {', '.join(refs)}")
+        return found
+
+    radiating = getattr(inputs, "radiation", ())
+    extra = {"radiation": [(rows(entry.faces), entry.emissivity, entry.ambient, entry.surface_to_surface) for entry in radiating],
+             "log": ctx.log} if radiating else {}
     return thermal_ops.assemble(
         space, list(ctx.materials),
         fixed=[(facets(entry.faces), entry.celsius, entry.history) for entry in inputs.temperatures],
         heat=[(facets(entry.faces), entry.watts, entry.per_m2, entry.history) for entry in inputs.heat],
         films=[(facets(entry.faces), entry.h, entry.ambient, entry.history) for entry in inputs.convection],
+        **extra,
     )
+
+
+def radiation_summary(system, inputs, T) -> dict | None:
+    """The radiation's numbers for a summary: each entry's net power out (W), and the view factors between the
+    entries that see each other. None without radiation."""
+    if system.radiation is None:
+        return None
+    from cadgen._internal.fea import radiation
+
+    powers = system.radiation.powers(T)
+    out: dict = {"entries": [
+        {"faces": list(entry.faces), "emissivity": entry.emissivity, "ambient_C": entry.ambient,
+         "surface_to_surface": entry.surface_to_surface, "net_W": round(power, 6)}
+        for entry, power in zip(inputs.radiation, powers)
+    ], "radiated_W": round(sum(powers), 6)}
+    factors = radiation.entry_view_factors(system.radiation)
+    if factors is not None:
+        enclosure = system.radiation.enclosure
+        out["view_factors"] = [[round(value, 6) for value in row] for row in factors]
+        out["patches"] = int(len(enclosure.area))
+        out["view_factor_method"] = enclosure.notes.get("method")
+        out["rays"] = int(enclosure.notes.get("rays", 0))
+    return out
 
 
 def plan_solver(ctx: SolveContext) -> str | None:
@@ -325,7 +416,7 @@ class ThermalAnalysis:
     word: ClassVar[str] = "Heat"
     estimate_only: ClassVar[bool] = False
     limits: ClassVar[tuple[str, ...]] = ()
-    study_keys: ClassVar[frozenset[str]] = frozenset(HEAT_KEYS)
+    study_keys: ClassVar[frozenset[str]] = frozenset({*HEAT_KEYS, RADIATION_KEY})
     material_needs: ClassVar[frozenset[str]] = frozenset({"conductivity"})
     mesh_orders: ClassVar[tuple[int, ...]] = (2,)
     connection_types: ClassVar[tuple[str, ...]] = ("bonded", "free")
@@ -349,22 +440,25 @@ class ThermalAnalysis:
 
     def parse(self, document: dict) -> ThermalInputs:
         temperatures, heat, convection = parse_heat_keys(document)
-        if not temperatures and not convection:
+        radiation = parse_radiation(document)
+        if not temperatures and not convection and not radiation:
             raise ValueError(
                 "study: a part only heated, with nowhere for the heat to go, has no steady temperature; add a "
-                "'temperatures' entry (faces held at a temperature) or a 'convection' entry (air or liquid carrying heat away)"
+                "'temperatures' entry (faces held at a temperature), a 'convection' entry (air or liquid carrying heat away) "
+                "or a 'radiation' entry (faces radiating to the surroundings)"
             )
-        reference = reference_of(temperatures, convection)
+        reference = reference_of(temperatures, convection, *(entry.ambient for entry in radiation))
         check_limits(document, reference)
-        refs = tuple(dict.fromkeys(ref for group in (*temperatures, *heat, *convection) for ref in group.faces))
-        anchors = tuple(dict.fromkeys(ref for group in (*temperatures, *convection) for ref in group.faces))
+        refs = tuple(dict.fromkeys(ref for group in (*temperatures, *heat, *convection, *radiation) for ref in group.faces))
+        anchors = tuple(dict.fromkeys(ref for group in (*temperatures, *convection, *radiation) for ref in group.faces))
         return ThermalInputs(refs, anchors, True, temperatures=temperatures, heat=heat, convection=convection,
-                             reference_C=reference)
+                             reference_C=reference, radiation=radiation)
 
     # -- the ladder ----------------------------------------------------------------------------------
 
     def estimate(self, ctx: SolveContext, inputs: ThermalInputs):
-        return ladder_estimate(ctx)
+        # Radiation: Newton on the T⁴, about this many solves.
+        return ladder_estimate(ctx, steps=6 if inputs.radiation else 0)
 
     def apply(self, rung, ctx: SolveContext, inputs: ThermalInputs):
         """The shared solid rungs (fit.apply_generic). ``symmetry`` is skipped: there is no ``symmetric_about``
@@ -397,6 +491,7 @@ class ThermalAnalysis:
             ctx.log(f"solved the temperatures with {how} in {timings['solve_s']:.1f}s")
         flux = thermal_ops.heat_flux(ctx.space, list(ctx.materials), T)
         balance = thermal_ops.heat_balance(system, T)
+        radiated = radiation_summary(system, inputs, T)
         analysis_warnings = []
         if balance["imbalance"] > BALANCE_WARN:
             analysis_warnings.append(
@@ -408,6 +503,8 @@ class ThermalAnalysis:
             warnings=warnings + analysis_warnings,
             scalars={"balance": balance, "reference_C": inputs.reference_C, "analysis_warnings": analysis_warnings},
         )
+        if radiated is not None:
+            result.scalars["radiation"] = radiated
         if ctx.assembly is not None:
             result.scalars["part_max"] = part_maxima(ctx, T)
             result.scalars["parts"] = ctx.assembly
@@ -439,7 +536,8 @@ class ThermalAnalysis:
                 "description": "the solve's residual leaves heat unaccounted for; a finer mesh or another solver should close it",
                 "items": [],
             })
-        if not inputs.heat and len({*(e.celsius for e in inputs.temperatures), *(e.ambient for e in inputs.convection)}) == 1:
+        if not inputs.heat and len({*(e.celsius for e in inputs.temperatures), *(e.ambient for e in inputs.convection),
+                                    *(e.ambient for e in inputs.radiation)}) == 1:
             found.append({
                 "check": "fea", "severity": "info", "type": "no_heat",
                 "summary": f"No heat goes in, so the whole part sits at {inputs.reference_C:g} °C",
@@ -466,6 +564,8 @@ class ThermalAnalysis:
             "heat_balance": round(balance["imbalance"], 6),
             "reference_C": round(inputs.reference_C, 4),
         }
+        if "radiation" in result.scalars:
+            summary["radiation"] = result.scalars["radiation"]
         if "part_max" in result.scalars:
             plan = result.scalars["parts"]
             summary["parts"] = [
@@ -493,8 +593,22 @@ class ThermalAnalysis:
         return heat_echo(inputs, bare)
 
     def human_lines(self, summary: dict) -> list[str]:
-        return [
+        lines = [
             f"hottest {summary['max_temperature_C']:g} °C at {summary['max_at_mm']} mm, coolest {summary['min_temperature_C']:g} °C",
             f"heat in {summary['heat_in_W']:.4g} W, out {summary['heat_out_W']:.4g} W; "
             f"peak heat flow {summary['max_heat_flux_W_m2']:.4g} W/m²",
         ]
+        if summary.get("radiation"):
+            lines.append(radiation_line(summary["radiation"]))
+        return lines
+
+
+def radiation_line(radiation: dict) -> str:
+    """The CLI's radiation line: what each entry radiates, and the view factors where faces see each other."""
+    parts = [f"{entry['net_W']:.4g} W from {', '.join(entry['faces'])} (emissivity {entry['emissivity']:g}, "
+             f"to {entry['ambient_C']:g} °C{' and each other' if entry['surface_to_surface'] else ''})"
+             for entry in radiation["entries"]]
+    line = "radiated " + "; ".join(parts)
+    if radiation.get("view_factors"):
+        line += f"; view factors {radiation['view_factors']} over {radiation['patches']} patches"
+    return line

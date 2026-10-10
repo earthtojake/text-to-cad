@@ -9,7 +9,8 @@ describe('the check kinds', () => {
   it('are every kind the engine judges, each with its own words for each status and its default label', () => {
     expect(FEA_CHECK_KINDS).toEqual(['stress', 'displacement', 'frequency', 'buckling', 'temperature', 'acceleration', 'fatigue', 'pressure_drop',
       'velocity', 'plastic_strain', 'contact_pressure', 'creep_strain', 'ply_failure', 'electric_field', 'bolt_load', 'joint_separation',
-      'joint_slip', 'mach']);
+      'joint_slip', 'mach', 'sound_level', 'mass_saved', 'fracture', 'crack_life', 'voltage', 'critical_speed', 'stability',
+      'fill_level', 'wall_pressure']);
     const words = Object.fromEntries(FEA_CHECK_KINDS.map((kind) => [kind, [CHECK_KINDS[kind].defaultLabel, ...['fails', 'close', 'passes'].map((status) => checkTitle({ kind }, status))]]));
     expect(words).toEqual({
       stress: ['Strength', 'Too weak', 'Close to the limit', 'Strong enough'],
@@ -30,6 +31,15 @@ describe('the check kinds', () => {
       joint_separation: ['Joint separation', 'Joint opens', 'Close to opening', 'Joint stays shut'],
       joint_slip: ['Joint slip', 'Joint slips', 'Close to slipping', 'Joint holds by friction'],
       mach: ['Mach number', 'Too fast', 'Close to the limit', 'Within the speed limit'],
+      sound_level: ['Sound', 'Too loud', 'Close to the limit', 'Quiet enough'],
+      mass_saved: ['Mass saved', 'Barely lighter', 'Close', 'Much lighter'],
+      fracture: ['Crack', 'Crack grows', 'Close to the limit', 'Crack is safe'],
+      crack_life: ['Crack life', 'Breaks too soon', 'Close to the limit', 'Lasts long enough'],
+      voltage: ['Signal', 'Signal too weak', 'Close to the limit', 'Strong enough signal'],
+      critical_speed: ['Critical speed', 'Runs at a critical speed', 'Close to a critical speed', 'Clear of critical speeds'],
+      stability: ['Stability', 'Unstable', 'Barely damped', 'Stable'],
+      fill_level: ['Fill level', 'Spills over', 'Close to the brim', 'Stays in'],
+      wall_pressure: ['Wall pressure', 'Presses too hard', 'Close to the limit', 'Within the limit'],
     });
     // A band to stay out of has its own words.
     expect(['fails', 'close', 'passes'].map((status) => checkTitle({ kind: 'frequency', band: [110, 130] }, status)))
@@ -37,7 +47,7 @@ describe('the check kinds', () => {
   });
 
   it('say how each moves with the load: stress, displacement and acceleration with it, buckling against it, the rest not at all', () => {
-    expect(FEA_CHECK_KINDS.filter((kind) => CHECK_KINDS[kind].scaling === 'linear')).toEqual(['stress', 'displacement', 'acceleration', 'electric_field']);
+    expect(FEA_CHECK_KINDS.filter((kind) => CHECK_KINDS[kind].scaling === 'linear')).toEqual(['stress', 'displacement', 'acceleration', 'electric_field', 'fracture']);
     expect(FEA_CHECK_KINDS.filter((kind) => CHECK_KINDS[kind].scaling === 'inverse')).toEqual(['buckling']);
   });
 
@@ -70,6 +80,7 @@ describe('the check kinds', () => {
       at('plastic_strain', 0.4, 0.2),
       at('contact_pressure', 380, 400),
       at('mach', 0.82, 0.8),
+      at('mass_saved', 62, 25),
     ].map((check) => [plain(checkLine(check, { bare: true })), plain(checkLine(check))]);
     for (const [bare, full] of lines) expect(bare).toBe(full);
     expect(lines.map(([line]) => line)).toEqual([
@@ -87,6 +98,7 @@ describe('the check kinds', () => {
       '0.4 % permanent, limit 0.2 %',
       'Peak 380 MPa, limit 400 MPa',
       'Peak Mach 0.82, limit 0.8',
+      'Saves 62 % of the mass, needs 25 %',
     ]);
     // Buckling says the analysis's noun.
     expect(plain(checkLine(at('buckling', 2.47, 3, { margin: 3 }), { noun: 'this push' }))).toBe('Buckles at 2.4× this push, needs 3×');

@@ -40,7 +40,7 @@ yet", and nothing else about it checked; none is registered so today.
 | `static` | Strength | runs today | this page, and [linear-static.md](linear-static.md) |
 | `modal` | Vibration | runs today | [modal.md](modal.md) |
 | `buckling` | Buckling | runs today | [buckling.md](buckling.md) |
-| `thermal` | Heat | runs today | [thermal.md](thermal.md) |
+| `thermal` | Heat | runs today (with radiation: to the surroundings and between faces) | [thermal.md](thermal.md) |
 | `thermal_transient` | Heat over time | runs today | [thermal-transient.md](thermal-transient.md) |
 | `thermal_stress` | Heat stress | runs today | [thermal-stress.md](thermal-stress.md) |
 | `harmonic` | Shaking | runs today | [harmonic.md](harmonic.md) |
@@ -52,6 +52,8 @@ yet", and nothing else about it checked; none is registered so today.
 | `cfd` | Flow | runs today (lite: steady laminar, incompressible) | [cfd.md](cfd.md) |
 | `cfd_turbulent` | Turbulent flow | runs today (lite: steady RANS, k-omega SST, wall functions) | [cfd-turbulent.md](cfd-turbulent.md) |
 | `cfd_compressible` | Fast gas flow | runs today (lite: steady ideal gas, adiabatic, shocks captured) | [cfd-compressible.md](cfd-compressible.md) |
+| `conjugate_heat` | Cooled by flow | runs today (lite: steady; the flow, laminar or turbulent, carries the heat but is not changed by it) | [conjugate-heat.md](conjugate-heat.md) |
+| `fsi` | Flow and bending | runs today (lite: steady two-way fluid-structure coupling, linear elastic part, ALE mesh motion) | [fsi.md](fsi.md) |
 | `impact` | Drop impact | runs today (lite) | [impact.md](impact.md) |
 | `nonlinear` | Permanent bend / Stretch | runs today (lite) | [nonlinear.md](nonlinear.md) |
 | `creep` | Creep | runs today (lite) | [creep.md](creep.md) |
@@ -59,6 +61,12 @@ yet", and nothing else about it checked; none is registered so today.
 | `electromagnetic` | Magnetic / electric | runs today (lite: electrostatic, DC current, magnetostatic, AC magnetic) | [electromagnetic.md](electromagnetic.md) |
 | `contact` | Contact | runs today (lite) | [contact.md](contact.md) |
 | `bolt` | Bolted joint | runs today (lite: pretensioned bolts, frictional contact between the clamped parts) | [bolt.md](bolt.md) |
+| `topology` | Lighten it | runs today (lite: density-based topology optimisation on a fixed design mesh, one part) | [topology.md](topology.md) |
+| `acoustic` | Sound | runs today (lite: linear acoustics; cavity modes, a driven response or a harmonic's vibration, in the part's air, inside it or in open air) | [acoustic.md](acoustic.md) |
+| `piezo` | Piezo | runs today (lite: linear piezoelectricity, small signal; static actuation and sensing, resonance and anti-resonance, a driven sweep) | [piezo.md](piezo.md) |
+| `fracture` | Cracks | runs today (lite: linear-elastic fracture mechanics on a crack the study describes, Paris crack growth) | [fracture.md](fracture.md) |
+| `rotordynamics` | Spinning | runs today (lite: a rotor line cut from the CAD, gyroscopic whirl, critical speeds, unbalance response, linear bearings; the spinning stress on the solid) | [rotordynamics.md](rotordynamics.md) |
+| `multiphase` | Two fluids | runs today (lite: a liquid and a gas inside the part over time, laminar, incompressible; sloshing, filling and draining, a rising bubble) | [multiphase.md](multiphase.md) |
 
 Nothing is planned beyond these today: [planned-next.md](planned-next.md).
 

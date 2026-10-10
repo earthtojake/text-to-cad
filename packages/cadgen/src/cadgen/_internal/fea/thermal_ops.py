@@ -5,7 +5,9 @@ module adds what a thermal study puts on the faces and solves it:
 
 - faces held at a temperature (fixed DOF, set and condensed out);
 - heat in, as a total power spread evenly over its faces or as a flux;
-- convection, a film ``h (T - T_inf)`` on its faces.
+- convection, a film ``h (T - T_inf)`` on its faces;
+- radiation (:mod:`.radiation`), to the surroundings and between faces: a
+  nonlinear term in T⁴, so a system with any is solved by Newton's method.
 
 Units are the engine's: mm, s, temperature in °C (only differences matter),
 power in mW, conductivity in mW/(mm K) (numerically W/(m K)), h and flux in
@@ -95,6 +97,8 @@ class ThermalSystem:
     fixed: list[Fixed] = field(default_factory=list)
     heat: list[Heat] = field(default_factory=list)
     films: list[Film] = field(default_factory=list)
+    #: The study's radiation (:class:`cadgen._internal.fea.radiation.Radiation`), or None: none makes it linear.
+    radiation: Any = None
 
     @property
     def size(self) -> int:
@@ -145,12 +149,15 @@ def assemble(
     fixed: Sequence[tuple["np.ndarray", float, tuple]] = (),
     heat: Sequence[tuple["np.ndarray", float | None, float | None, tuple]] = (),
     films: Sequence[tuple["np.ndarray", float, float, tuple]] = (),
+    radiation: Sequence[tuple["np.ndarray", float, float, bool]] = (),
+    log: Callable[[str], None] | None = None,
 ) -> ThermalSystem:
     """The thermal system of a study on ``space``, each entry by its skfem facets.
 
     ``fixed``: (facets, °C, history). ``heat``: (facets, W or None, W/m² or None,
     history), a power spread evenly over the faces' area or a flux. ``films``:
-    (facets, h in W/(m² K), ambient °C, history).
+    (facets, h in W/(m² K), ambient °C, history). ``radiation``: (boundary rows,
+    emissivity, ambient °C, whether it exchanges with the other such faces).
     """
     import numpy as np
     from skfem import LinearForm, asm
@@ -174,6 +181,13 @@ def assemble(
     for facets, h, ambient, history in films:
         matrix, load = operators.convection(space, facets, h * PER_M2, ambient)
         system.films.append(Film(matrix, load, float(ambient), tuple(history)))
+    if radiation:
+        from cadgen._internal.fea import radiation as radiating
+
+        system.radiation = radiating.assemble(
+            space, [rows for rows, _, _, _ in radiation], [e for _, e, _, _ in radiation],
+            [ambient for _, _, ambient, _ in radiation], [bool(flag) for _, _, _, flag in radiation], log=log,
+        )
     return system
 
 
@@ -194,8 +208,23 @@ def solve_steady(system: ThermalSystem, warnings: list[str], *, solver: str | No
     dofs, values = system.fixed_values()
     x[dofs] = values
     free = np.setdiff1d(np.arange(system.size), dofs)
+    if system.radiation is not None:
+        return _solve_radiating(system, K, f, x, free, warnings, solver)
     x[free], how = operators.solve_spd(K, f - K @ x, free, None, None, warnings, method=_method(solver))
     return x, how
+
+
+def _solve_radiating(system: ThermalSystem, K, f, x, free, warnings: list[str], solver: str | None):
+    """The steady temperature with radiation: Newton on the T⁴ from the warmest ambient the study sets."""
+    from cadgen._internal.fea import radiation
+
+    start = max([*system.radiation.ambients, *(film.ambient for film in system.films), *(e.celsius for e in system.fixed)])
+    x[free] = start
+    x, iterations = radiation.newton_solve(K, f, x, free, system.radiation, warnings, method=_method(solver))
+    exchange = system.radiation.enclosure is not None
+    how = ("superlu, bordered by the radiation patches" if exchange else
+           "multigrid CG" if _method(solver) or len(free) >= _direct_below() else "superlu")
+    return x, f"{how}, Newton ({iterations} iterations) on the radiation"
 
 
 def heat_balance(system: ThermalSystem, T: "np.ndarray", t: float | None = None) -> dict:
@@ -212,6 +241,8 @@ def heat_balance(system: ThermalSystem, T: "np.ndarray", t: float | None = None)
 
     K = system.stiffness
     residual = K @ T - system.load(t)
+    if system.radiation is not None:
+        residual = residual + system.radiation.residual(T)
     fixed = []
     seen = np.zeros(system.size, dtype=bool)
     for entry in system.fixed:
@@ -223,15 +254,19 @@ def heat_balance(system: ThermalSystem, T: "np.ndarray", t: float | None = None)
         -float((film.matrix @ T - film.load * (1.0 if t is None else factor_at(film.history, t))).sum()) / WATT
         for film in system.films
     ]
-    flows = [*fixed, *heat, *films]
+    radiated = [-power for power in system.radiation.powers(T)] if system.radiation is not None else []
+    flows = [*fixed, *heat, *films, *radiated]
     heat_in = sum(flow for flow in flows if flow > 0)
     heat_out = -sum(flow for flow in flows if flow < 0)
     larger = max(heat_in, heat_out)
-    return {
+    balance = {
         "fixed_W": fixed, "heat_W": heat, "films_W": films, "in_W": heat_in, "out_W": heat_out,
         # Under a microwatt nothing flows: what is left is the solver's rounding, not heat.
         "imbalance": abs(heat_in - heat_out) / larger if larger > 1e-6 else 0.0,
     }
+    if system.radiation is not None:
+        balance["radiation_W"] = radiated
+    return balance
 
 
 def heat_flux(space: "FemSpace", materials: "Material | Sequence[Material]", T: "np.ndarray") -> "np.ndarray":
@@ -299,6 +334,32 @@ class _Stepper:
         return x
 
 
+class _RadiatingStepper(_Stepper):
+    """Backward Euler with radiation: each step's C (T1 - T0) + dt (K T1 - f(t1) + R(T1)) = 0 by Newton on the T⁴."""
+
+    def __init__(self, system: ThermalSystem, capacity, warnings: list[str], solver: str | None):
+        super().__init__(system, capacity, warnings, solver)
+        self.newton = 0
+
+    def step(self, T: "np.ndarray", t: float, dt: float) -> "np.ndarray":
+        import numpy as np
+
+        from cadgen._internal.fea import radiation
+
+        t1 = t + dt
+        _, values = self.system.fixed_values(t1)
+        x = T.copy()
+        x[self.fixed] = values
+        base = (self.C + dt * self.K).tocsr()
+        load = self.C @ T + dt * self.system.load(t1)
+        method = "iterative" if self.iterative else None
+        x, iterations = radiation.newton_solve(base, load, x, self.free, self.system.radiation, self.warnings,
+                                               scale=dt, method=method)
+        self.solves += iterations
+        self.newton += iterations
+        return x
+
+
 def _direct_below() -> int:
     from cadgen._internal.fea.operators import DIRECT_SOLVE_BELOW
 
@@ -356,7 +417,7 @@ def march(
     """
     import numpy as np
 
-    stepper = _Stepper(system, capacity, warnings, solver)
+    stepper = (_RadiatingStepper if system.radiation is not None else _Stepper)(system, capacity, warnings, solver)
     T = np.full(system.size, float(initial_C))
     dofs, values = system.fixed_values(0.0)
     T[dofs] = values
@@ -374,6 +435,8 @@ def march(
     largest_step = end_s / 10.0
     # The temperature range the step error is judged against: the spread the study sets, at least one degree.
     span = [float(initial_C)] + [entry.celsius for entry in system.fixed] + [film.ambient for film in system.films]
+    if system.radiation is not None:
+        span += system.radiation.ambients
     scale = max(1.0, max(span) - min(span))
     finish = end_s * (1 - 1e-12)
     while t < finish:

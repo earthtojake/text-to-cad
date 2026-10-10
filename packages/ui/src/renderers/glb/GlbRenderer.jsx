@@ -35,8 +35,8 @@ const DRIVE_KEYS = Object.freeze({ field: "field", deformation: "scale", load_sc
 const NO_VALUES = Object.freeze({ field: null, scale: null, loadScale: null, threshold: null, mode: null, frame: null, sigma: null });
 // Each routine an analysis plays (`routine`, fea/analyses), and how long one pass of it is: the Load ramp
 // (the load going on, from none to all of it; buckling's Buckle), Vibrate (one swing a second) and
-// Play (a series' frames, start to end).
-const ROUTINE_SECONDS = Object.freeze({ load_ramp: 2, vibrate: 1, play: 3 });
+// Play (a series' frames, start to end); Ring (a sound mode's pressure swinging through its cycle, once a second).
+const ROUTINE_SECONDS = Object.freeze({ load_ramp: 2, vibrate: 1, play: 3, pulse: 1 });
 // What the markers are drawn in. The theme has no colour of its own to spare: every saturated hue is
 // the ramp's or the chosen faces' magenta, so a load is the ink and a fixture a muted grey.
 const MARKER_COLOURS = Object.freeze({
@@ -201,7 +201,8 @@ function GlbSurface({ view, data }) {
     const routine = fea ? feaAnalysis(fea).routine(fea) : null;
     const duration = routine ? ROUTINE_SECONDS[routine.kind] : 0;
     if (!duration) return EMPTY;
-    const valueAt = (elapsedSec) => (routine.kind === "vibrate" ? (2 * Math.PI * elapsedSec) / duration : clamp(elapsedSec / duration, 0, 1));
+    const swings = routine.kind === "vibrate" || routine.kind === "pulse";
+    const valueAt = (elapsedSec) => (swings ? (2 * Math.PI * elapsedSec) / duration : clamp(elapsedSec / duration, 0, 1));
     return [{
       id: routine.id, label: routine.label, duration,
       play: {
@@ -259,7 +260,8 @@ function GlbSurface({ view, data }) {
     const level = sigmaScale(activeField, sigma);
     const threshold = thresholdField ? { field: fieldAtFrame(fea, thresholdField, index), value: thresholdValue, scale: shownLoad } : null;
     let changed = recolorByField(fea.mesh, field, fea.ramp, tinted, faces.parts, faces.softParts,
-      { valueScale: shownLoad * level, rangeScale: fieldLoad * level, threshold, ...(blend ? { blend } : {}) });
+      { valueScale: shownLoad * level * (routine?.kind === "pulse" ? Math.cos(routine.value) : 1), rangeScale: fieldLoad * level, threshold,
+        ...(blend ? { blend } : {}) });
     const { attribute, imaginary } = deformationAt(fea, index);
     let vector = attribute;
     if (attribute && routine?.kind === "vibrate") {

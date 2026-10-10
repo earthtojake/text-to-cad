@@ -27,6 +27,12 @@ __all__ = [
     "JOINT_SEPARATION", "JOINT_SLIP", "MACH",
     "PLASTIC_STRAIN", "PLY_FAILURE", "PRESSURE_DROP", "STRESS", "TEMPERATURE", "VELOCITY", "faces", "field_max_over", "json_text",
     "number", "parse_check", "text",
+    "SOUND_LEVEL",
+    "MASS_SAVED",
+    "FRACTURE", "CRACK_LIFE",
+    "VOLTAGE",
+    "CRITICAL_SPEED", "STABILITY",
+    "FILL_LEVEL", "WALL_PRESSURE",
 ]
 
 
@@ -255,10 +261,141 @@ def _mach(entry: dict, where: str) -> dict:
 
 MACH = _spec("mach", ("limit",), "Mach number", "none", _mach)
 
+
+def _sound_level(entry: dict, where: str) -> dict:
+    """The loudest sound pressure level allowed, dB (re 20 µPa in air), over some faces, at named probes, or anywhere."""
+    check = {"limit_dB": _limit(entry, "limit_dB", where, "a sound_level check needs the loudest level allowed, in dB "
+                                "(a quiet office is about 40, a busy street 70, hearing damage starts near 85)")}
+    if "faces" in entry and "probes" in entry:
+        raise ValueError(f"{where}: a sound_level check judges faces or probes, not both")
+    if "probes" in entry:
+        labels = entry["probes"]
+        if isinstance(labels, str):
+            labels = [labels]
+        if not isinstance(labels, list) or not labels or not all(isinstance(label, str) and label.strip() for label in labels):
+            raise ValueError(f"{where}.probes: the labels of the study's probes to judge, like [\"ear\"]")
+        check["probes"] = [label.strip() for label in labels]
+    return _with_faces(entry, check, where)
+
+
+SOUND_LEVEL = _spec("sound_level", ("limit_dB", "faces", "probes"), "Sound", "none", _sound_level)
+
+def _mass_saved(entry: dict, where: str) -> dict:
+    """The least share of the part's mass a lightened design must save, percent (topology's; 25 when left out)."""
+    if "min_percent" not in entry:
+        return {"min_percent": 25.0}
+    value = number(entry["min_percent"], where=f"{where}.min_percent", positive=True)
+    if value >= 100:
+        raise ValueError(f"{where}.min_percent: the share of the mass to save, under 100 %, got {value:g}")
+    return {"min_percent": value}
+
+
+MASS_SAVED = _spec("mass_saved", ("min_percent",), "Mass saved", "none", _mass_saved, unique=True)
+
+
+def _fracture(entry: dict, where: str) -> dict:
+    """The crack's stress intensity K against the material's fracture toughness K_IC, held to a margin (1.5 when left out)."""
+    if "margin" in entry:
+        return {"margin": _margin(entry, where, words="a fracture margin below 1 means the crack grows at this load")}
+    return {"margin": 1.5}
+
+
+def _crack_life(entry: dict, where: str) -> dict:
+    """The cycles a growing crack lasts (Paris's law, to the size where K reaches K_IC) against the cycles needed."""
+    if "cycles" not in entry:
+        raise ValueError(f"{where}.cycles: a crack_life check needs the cycles the part must last with its crack, like 1e5")
+    check = {"cycles": number(entry["cycles"], where=f"{where}.cycles", positive=True)}
+    check["margin"] = (_margin(entry, where, words="a crack-life margin below 1 means it breaks before the cycles it needs")
+                       if "margin" in entry else 2.0)
+    return check
+
+
+FRACTURE = _spec("fracture", ("margin",), "Crack", "linear", _fracture, unique=True)
+CRACK_LIFE = _spec("crack_life", ("cycles", "margin"), "Crack life", "none", _crack_life, unique=True)
+
+def _voltage(entry: dict, where: str) -> dict:
+    """A piezo sensor's signal: the voltage an open electrode makes must reach ``min_V`` (piezo's sensing check)."""
+    check: dict = {"min_V": _limit(entry, "min_V", where, "a voltage check needs the least signal the sensor must make, "
+                                   "in volts, like 0.5")}
+    if "electrode" in entry:
+        if not isinstance(entry["electrode"], str) or not entry["electrode"].strip():
+            raise ValueError(f"{where}.electrode: the name of the open electrode whose voltage is judged")
+        check["electrode"] = entry["electrode"].strip()
+    return check
+
+
+VOLTAGE = _spec("voltage", ("min_V", "electrode"), "Signal", "none", _voltage)
+
+
+def _critical_speed(entry: dict, where: str) -> dict:
+    """Every critical speed kept clear of the operating speed range by ``margin_percent`` (15 when left out), at the
+    ``orders`` asked (once per revolution when left out); ``backward`` judges the backward-whirl criticals too."""
+    check: dict = {"margin_percent": 15.0}
+    if "margin_percent" in entry:
+        margin = number(entry["margin_percent"], where=f"{where}.margin_percent")
+        if not 0 <= margin < 100:
+            raise ValueError(f"{where}.margin_percent: the separation to keep between a critical speed and the operating "
+                             f"speeds, percent, 0 up to 100 (API 684 asks about 15), got {margin:g}")
+        check["margin_percent"] = margin
+    if "orders" in entry:
+        orders = entry["orders"]
+        if isinstance(orders, (int, float)) and not isinstance(orders, bool):
+            orders = [orders]
+        if not isinstance(orders, list) or not orders:
+            raise ValueError(f"{where}.orders: the multiples of the spin to judge, like [1] (once per revolution) or [1, 2]")
+        check["orders"] = [number(order, where=f"{where}.orders", positive=True) for order in orders]
+    if "backward" in entry:
+        if not isinstance(entry["backward"], bool):
+            raise ValueError(f"{where}.backward: true to judge the backward-whirl critical speeds too, got {json_text(entry['backward'])}")
+        check["backward"] = entry["backward"]
+    return check
+
+
+def _stability(entry: dict, where: str) -> dict:
+    """The smallest log decrement of the whirl modes over the operating speeds against ``min_log_dec`` (0.1 when
+    left out): below 0 a whirl grows (unstable), under the minimum it is barely damped."""
+    if "min_log_dec" not in entry:
+        return {"min_log_dec": 0.1}
+    return {"min_log_dec": number(entry["min_log_dec"], where=f"{where}.min_log_dec", positive=True)}
+
+
+CRITICAL_SPEED = _spec("critical_speed", ("margin_percent", "orders", "backward"), "Critical speed", "none", _critical_speed,
+                       unique=True)
+STABILITY = _spec("stability", ("min_log_dec",), "Stability", "none", _stability, unique=True)
+
+def _fill_level(entry: dict, where: str) -> dict:
+    """The highest a liquid may reach, mm above the inside's floor (the brim when left out), at named probes or anywhere."""
+    check: dict = {}
+    if "limit_mm" in entry:
+        check["limit_mm"] = number(entry["limit_mm"], where=f"{where}.limit_mm", positive=True)
+    if "probes" in entry:
+        labels = entry["probes"]
+        if isinstance(labels, str):
+            labels = [labels]
+        if not isinstance(labels, list) or not labels or not all(isinstance(label, str) and label.strip() for label in labels):
+            raise ValueError(f"{where}.probes: the labels of the study's probes to judge, like [\"left wall\"]")
+        check["probes"] = [label.strip() for label in labels]
+    return check
+
+
+def _wall_pressure(entry: dict, where: str) -> dict:
+    return {"limit_Pa": _limit(entry, "limit_Pa", where, "a wall_pressure check needs the most the fluid may press on "
+                               "the walls, in Pa")}
+
+
+FILL_LEVEL = _spec("fill_level", ("limit_mm", "probes"), "Fill level", "none", _fill_level)
+WALL_PRESSURE = _spec("wall_pressure", ("limit_Pa",), "Wall pressure", "none", _wall_pressure)
+
 CHECK_SPECS: dict[str, CheckSpec] = {spec.kind: spec for spec in (
     STRESS, DISPLACEMENT, FREQUENCY, BUCKLING, TEMPERATURE, ACCELERATION, FATIGUE, PRESSURE_DROP, VELOCITY,
     PLASTIC_STRAIN, CONTACT_PRESSURE, CREEP_STRAIN, PLY_FAILURE, ELECTRIC_FIELD,
     BOLT_LOAD, JOINT_SEPARATION, JOINT_SLIP, MACH,
+    SOUND_LEVEL,
+    MASS_SAVED,
+    FRACTURE, CRACK_LIFE,
+    VOLTAGE,
+    CRITICAL_SPEED, STABILITY,
+    FILL_LEVEL, WALL_PRESSURE,
 )}
 
 

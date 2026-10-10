@@ -1,8 +1,9 @@
 # Heat (`thermal`)
 
 It answers "how hot does it get once it has settled": the steady temperature across the part from
-faces held at a temperature, heat put in (a chip, a heater, a motor) and heat carried away by air
-or liquid (convection). The plain word is Heat.
+faces held at a temperature, heat put in (a chip, a heater, a motor), heat carried away by air
+or liquid (convection) and heat radiated (to the surroundings, and between faces that see each
+other). The plain word is Heat.
 
 ## When to use it
 
@@ -30,9 +31,10 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
 - `convection`: air or liquid carrying heat away. `h_W_m2K` is how well it does (still air about
   5-10, a fan 25-100, water 500 or more), `ambient_C` its temperature. A face with nothing on it is
   insulated: no heat crosses it.
-- **At least one `temperatures` or `convection` entry is required.** A part only heated, with
-  nowhere for the heat to go, has no steady temperature, and the study is refused with that
-  sentence. Add the air around it or the face it sits on.
+- `radiation` (optional): faces radiating heat, see [Radiation](#radiation) below.
+- **At least one `temperatures`, `convection` or `radiation` entry is required.** A part only
+  heated, with nowhere for the heat to go, has no steady temperature, and the study is refused with
+  that sentence. Add the air around it, the face it sits on, or what it radiates to.
 - The material needs a thermal conductivity (`conductivity_W_mK`; every table material has one). An
   assembly takes each part's own, and heat crosses bonded joints as if they were one piece (no
   contact resistance).
@@ -43,6 +45,45 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
   59/75 = 0.79 of its room; past 0.9 it is close, past 1 it fails. A limit at or under that
   reference is refused. The row reads "Hottest 84 °C, limit 100 °C"; with no check, the verdict
   shows none.
+
+## Radiation
+
+```json
+{"radiation": [{"faces": ["#o1.f3"], "emissivity": 0.9, "ambient_C": 25},
+               {"faces": ["#o1.f8", "#o1.f9"], "emissivity": 0.8, "ambient_C": 25, "surface_to_surface": true}]}
+```
+
+- Each entry's faces radiate as a grey, diffuse surface: `emissivity` (0 to 1, required) and the
+  surroundings' temperature `ambient_C`. Emissivity depends on the finish far more than on the
+  alloy, so there is no table value: polished aluminium about 0.05, bare machined aluminium 0.1,
+  anodised or painted 0.8-0.95, oxidised steel 0.8. Ask, or say which you assumed.
+- Without `surface_to_surface`, a face sees its surroundings whole: it loses ε σ (T⁴ − T∞⁴) per area,
+  as if nothing of the part stood in its way. Right for an outside face of a convex part.
+- With `"surface_to_surface": true`, the entry's faces also exchange heat with every other such
+  face (fins facing each other, the inside of a box, two plates). cadgen computes the view factors
+  itself: the faces' surface triangles grouped into at most 300 patches, each pair's view factor by
+  the contour integral from every triangle's centroid, obstruction by ray casting against every
+  surface triangle of the part. Whatever a face does not see of the other radiating faces goes to
+  its entry's `ambient_C`; a face nobody named counts as surroundings too (it blocks rays, but does
+  not radiate back). The radiosity of the patches is solved exactly for grey surfaces.
+- A face may be in one radiation entry only. Radiation is nonlinear (T⁴, in kelvin inside); the
+  solve is Newton's method from the warmest temperature the study sets. A study without
+  `radiation` solves exactly as before.
+- The summary adds `radiation`: each entry's `net_W` out (negative where it takes heat in),
+  `radiated_W`, and with surface-to-surface, the `view_factors` between the entries (row i: the
+  share of entry i's radiation that reaches entry j), the `patches`, the method and the rays cast.
+  The CLI adds "radiated 100 W from #o1.f6 (emissivity 0.9, to 25 °C)". `heat_out_W` counts it.
+
+Hand checks for radiation:
+
+- A plate radiating Q from area A to surroundings at T∞ (kelvin) settles at
+  T = (Q / (ε σ A) + T∞⁴)^¼: 100 W from 0.01 m² at ε 0.9 into 25 °C is 398.8 °C. The solver
+  matches the closed form to 0.001 % of the rise.
+- Two black, directly opposed 50 mm squares 50 mm apart see each other by F = 0.1998 (the analytic
+  formula); the solver's view factor is within 0.1 %, and the heat the cold one takes in,
+  A F σ (T_h⁴ − T_c⁴), within 0.1 %.
+- Radiation matters past about 100 °C, or for a dull part cooled only by still air: at 50 °C
+  a black face loses about 6 W/m²K, comparable to still air's convection.
 
 ## What comes out
 
@@ -74,8 +115,11 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
 
 ## Limits
 
-- Conduction with constant properties: no radiation (it matters above about 100 °C, or for a dull
-  part in still air), no temperature-dependent conductivity, no contact resistance at bonded joints.
+- Conduction with constant properties: no temperature-dependent conductivity or emissivity, no
+  contact resistance at bonded joints.
+- Radiation is grey and diffuse; a face that is not named radiates nothing and counts as the
+  surroundings for those that see it; a transparent medium (no gas absorbs). View factors are
+  between patches of up to a few hundred per study: a fine detail inside one patch is averaged.
 - `h` is a number you give, not a flow calculation: a range (5-10 still air, 25-100 forced) is
   often the largest uncertainty. Say which you assumed.
 - Steady state only: how long it takes to get there is `thermal_transient`.

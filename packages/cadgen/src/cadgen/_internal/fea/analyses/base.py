@@ -29,7 +29,9 @@ SeriesKind = Literal["mode", "time", "frequency"]
 Scaling = Literal["linear", "inverse", "none"]
 Rung = Literal["iterative", "local_refine", "defeature", "linear_elements", "idealise",
                "reduce_modes", "symmetry", "mass_scaling", "subcycling", "window",
-               "adaptive_steps", "frequency_grid", "fluid_coarsen", "far_field", "continuation"]
+               "adaptive_steps", "frequency_grid", "fluid_coarsen", "far_field", "continuation",
+               # topology: a coarser fixed design mesh (it cannot refine locally; it says the member size it resolves).
+               "coarse_design"]
 
 
 @dataclass(frozen=True)

@@ -202,6 +202,37 @@ export function cooledRows(result) {
   }) });
 }
 
+/**
+ * Study's "Radiation", under the warmth glyph: each radiating entry ("Radiates to 25 °C, emissivity 0.9"), its
+ * faces under it; faces that also radiate to each other say so in the hint.
+ */
+export function radiatesRows(result) {
+  return faceEntryGroup(result, { id: "radiation", label: "Radiation", glyph: "heat", entries: (result.study.radiation || []).map((entry) => {
+    const to = entry.ambientC === null ? "Radiates" : `Radiates to ${plainNumber(entry.ambientC)} °C`;
+    const label = entry.emissivity === null ? to : `${to}, emissivity ${plainNumber(entry.emissivity)}`;
+    return { faces: entry.faces, words: { label, hint: entry.surfaceToSurface ? "And to the other faces that radiate to each other" : "",
+      summary: (refs) => `${to}${entry.emissivity === null ? "" : ` (emissivity ${plainNumber(entry.emissivity)})`} from ${facesWords(refs)}` } };
+  }) });
+}
+
+/**
+ * Study's "Coolant", under the flow: the fluid and the temperature each inlet brings it in at ("Water in at
+ * 20 °C"), chosen with the whole part. [] for a flow that carries no heat.
+ */
+export function coolantRows(result) {
+  const flow = result.study.flow;
+  const inlets = (flow?.inlets || []).filter((inlet) => inlet.temperatureC !== null && inlet.temperatureC !== undefined);
+  if (!inlets.length) return [];
+  const refs = wholeRefs(result);
+  const fluid = flow.fluid ? `${flow.fluid.charAt(0).toUpperCase()}${flow.fluid.slice(1)}` : "Fluid";
+  return [{ id: "coolant", label: "Coolant", detail: "", glyph: "flow", children: inlets.map((inlet, index) => {
+    const label = `${fluid} in at ${plainNumber(inlet.temperatureC)} °C`;
+    const where = inlet.opening ? openingWords(inlet.opening) : "";
+    return { id: `coolant:${index}`, label, detail: "", wrap: true, ...(where ? { hint: `At ${where}` } : {}),
+      ...(refs.length ? { refs, summary: `${label}${where ? ` at ${where}` : ""}` } : {}) };
+  }) }];
+}
+
 /** Study's "Shaken", under a wave: the shaker on the fixtures ("1 g along Z", "At random along Z"), chosen with every fixed face. */
 export function shakenRows(result) {
   const study = result.study;
@@ -266,7 +297,7 @@ export function rigidFloorRows(result) {
 }
 
 /** Every setup group an analysis can show, in Study's order: each is [] where the study records nothing for it. */
-export const SETUP_GROUPS = Object.freeze([heldRows, keptAtRows, pushedRows, heatedRows, cooledRows, shakenRows, droppedRows, flowRows, rigidFloorRows, madeOfRows]);
+export const SETUP_GROUPS = Object.freeze([heldRows, keptAtRows, pushedRows, heatedRows, cooledRows, radiatesRows, shakenRows, droppedRows, flowRows, coolantRows, rigidFloorRows, madeOfRows]);
 
 /**
  * Study's "Made of", under a swatch: the material's name ("Aluminum 6061-T6"). In an assembly whose

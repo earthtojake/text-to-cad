@@ -96,7 +96,28 @@ class Registry(unittest.TestCase):
     def test_every_analysis_is_registered_in_order(self):
         self.assertEqual(ANALYSIS_NAMES[:len(TIER_1)], TIER_1)
         self.assertEqual(ANALYSIS_NAMES[len(TIER_1):len(TIER_1) + 5], ("drop", "cfd", "impact", "nonlinear", "contact"))
-        self.assertEqual(ANALYSIS_NAMES[-len(PLANNED):], PLANNED)
+        after = len(TIER_1) + 5
+        self.assertEqual(ANALYSIS_NAMES[after:after + len(PLANNED)], PLANNED)
+        # Built after spec 2.1's names, each registered after them: topology ("Lighten it") among them.
+        self.assertIn("topology", ANALYSIS_NAMES[after + len(PLANNED):])
+        self.assertEqual((REGISTRY["topology"].tier, REGISTRY["topology"].word, REGISTRY["topology"].planned), (3, "Lighten it", False))
+        self.assertIn("acoustic", ANALYSIS_NAMES[after + len(PLANNED):])
+        self.assertEqual((REGISTRY["acoustic"].tier, REGISTRY["acoustic"].word, REGISTRY["acoustic"].planned), (3, "Sound", False))
+        self.assertIn("fracture", ANALYSIS_NAMES[after + len(PLANNED):])
+        self.assertEqual((REGISTRY["fracture"].tier, REGISTRY["fracture"].word, REGISTRY["fracture"].planned), (3, "Cracks", False))
+        self.assertIn("conjugate_heat", ANALYSIS_NAMES[after + len(PLANNED):])
+        self.assertEqual((REGISTRY["conjugate_heat"].tier, REGISTRY["conjugate_heat"].word, REGISTRY["conjugate_heat"].planned),
+                         (3, "Cooled by flow", False))
+        self.assertIn("rotordynamics", ANALYSIS_NAMES[after + len(PLANNED):])
+        self.assertEqual((REGISTRY["rotordynamics"].tier, REGISTRY["rotordynamics"].word, REGISTRY["rotordynamics"].planned),
+                         (3, "Spinning", False))
+        self.assertIn("fsi", ANALYSIS_NAMES[after + len(PLANNED):])
+        self.assertEqual((REGISTRY["fsi"].tier, REGISTRY["fsi"].word, REGISTRY["fsi"].planned), (3, "Flow and bending", False))
+        self.assertIn("piezo", ANALYSIS_NAMES[after + len(PLANNED):])
+        self.assertEqual((REGISTRY["piezo"].tier, REGISTRY["piezo"].word, REGISTRY["piezo"].planned), (3, "Piezo", False))
+        self.assertIn("multiphase", ANALYSIS_NAMES[after + len(PLANNED):])
+        self.assertEqual((REGISTRY["multiphase"].tier, REGISTRY["multiphase"].word, REGISTRY["multiphase"].planned),
+                         (3, "Two fluids", False))
         self.assertEqual([REGISTRY[name].tier for name in ("static", "drop", "cfd")], [1, 2, 3])
         self.assertEqual(REGISTRY["modal"].word, "Vibration")
         self.assertTrue(all(REGISTRY[name].planned != (name in BUILT_SINCE) for name in PLANNED))
@@ -339,7 +360,9 @@ class CheckKinds(unittest.TestCase):
         self.assertEqual(list(CHECK_SPECS), ["stress", "displacement", "frequency", "buckling", "temperature", "acceleration",
                                              "fatigue", "pressure_drop", "velocity", "plastic_strain", "contact_pressure",
                                              "creep_strain", "ply_failure", "electric_field", "bolt_load", "joint_separation",
-                                             "joint_slip", "mach"])
+                                             "joint_slip", "mach", "sound_level", "mass_saved", "fracture",
+                                             "crack_life", "voltage", "critical_speed", "stability",
+                                             "fill_level", "wall_pressure"])
         parse = {kind: spec.parse for kind, spec in CHECK_SPECS.items()}
         self.assertEqual(parse["frequency"]({"kind": "frequency", "min_Hz": 60, "mode": 2}, "c"), {"kind": "frequency", "min_Hz": 60.0, "mode": 2})
         self.assertEqual(parse["frequency"]({"kind": "frequency", "avoid_Hz": [110, 130]}, "c")["avoid_Hz"], [110.0, 130.0])

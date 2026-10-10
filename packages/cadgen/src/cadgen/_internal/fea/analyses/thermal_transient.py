@@ -6,7 +6,9 @@ piecewise linear, multiplying its W, W/m², C or ambient_C), plus
 ``initial_C`` (the start, default 20 °C), ``end_s`` and ``step_s`` (a number,
 or ``"auto"``: a two-hundredth of the run). An insulated part warming up is
 well posed over time, so no anchor is required; something must change its
-temperature, though.
+temperature, though. ``radiation`` is the steady study's (to the surroundings,
+and between faces with ``surface_to_surface``), with no schedule: each step
+solves its T⁴ by Newton's method.
 
 Backward Euler (θ = 1), :func:`cadgen._internal.fea.thermal_ops.march`; the
 ladder's ``adaptive_steps`` rung controls the step by step doubling. It keeps
@@ -33,8 +35,9 @@ from typing import ClassVar
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Series, SeriesFrame, SolveContext
 from cadgen._internal.fea.analyses.thermal import (
-    HEAT_KEYS, ThermalAnalysis, ThermalInputs, build_system, check_limits, heat_echo, ladder_estimate,
-    parse_heat_keys, plan_solver, reference_of, space_result, temperature_check,
+    HEAT_KEYS, RADIATION_KEY, ThermalAnalysis, ThermalInputs, build_system, check_limits, heat_echo, ladder_estimate,
+    parse_heat_keys, parse_radiation, plan_solver, radiation_line, radiation_summary, reference_of, space_result,
+    temperature_check,
 )
 
 __all__ = ["ThermalTransientAnalysis", "TransientInputs", "time_label"]
@@ -77,7 +80,7 @@ def time_label(seconds: float) -> str:
 class ThermalTransientAnalysis(ThermalAnalysis):
     name: ClassVar[str] = "thermal_transient"
     word: ClassVar[str] = "Heat over time"
-    study_keys: ClassVar[frozenset[str]] = frozenset({*HEAT_KEYS, "initial_C", "end_s", "step_s"})
+    study_keys: ClassVar[frozenset[str]] = frozenset({*HEAT_KEYS, RADIATION_KEY, "initial_C", "end_s", "step_s"})
     material_needs: ClassVar[frozenset[str]] = frozenset({"conductivity", "specific_heat", "density"})
     fields: ClassVar[tuple[FieldSpec, ...]] = (
         FieldSpec("temperature", "_TEMPERATURE", "temperature", "°C", signed=True, per_frame=True),
@@ -94,10 +97,11 @@ class ThermalTransientAnalysis(ThermalAnalysis):
 
     def parse(self, document: dict) -> TransientInputs:
         temperatures, heat, convection = parse_heat_keys(document, transient=True)
-        if not (temperatures or heat or convection):
+        radiation = parse_radiation(document)
+        if not (temperatures or heat or convection or radiation):
             raise ValueError(
                 "study: nothing changes the part's temperature; add 'heat' (heat put in), 'temperatures' (faces held at a "
-                "temperature) or 'convection' (air or liquid at a temperature)"
+                "temperature), 'convection' (air or liquid at a temperature) or 'radiation' (faces radiating to the surroundings)"
             )
         initial = kinds.number(document.get("initial_C", 20.0), where="initial_C")
         if "end_s" not in document:
@@ -109,12 +113,12 @@ class ThermalTransientAnalysis(ThermalAnalysis):
             step = kinds.number(raw_step, where="step_s", positive=True)
             if step > end:
                 raise ValueError(f"step_s: the step ({step:g} s) is longer than the run ({end:g} s); use a shorter step or \"auto\"")
-        reference = reference_of(temperatures, convection, initial)
+        reference = reference_of(temperatures, convection, initial, *(entry.ambient for entry in radiation))
         check_limits(document, reference)
-        refs = tuple(dict.fromkeys(ref for group in (*temperatures, *heat, *convection) for ref in group.faces))
-        anchors = tuple(dict.fromkeys(ref for group in (*temperatures, *convection) for ref in group.faces))
+        refs = tuple(dict.fromkeys(ref for group in (*temperatures, *heat, *convection, *radiation) for ref in group.faces))
+        anchors = tuple(dict.fromkeys(ref for group in (*temperatures, *convection, *radiation) for ref in group.faces))
         return TransientInputs(refs, anchors, False, temperatures=temperatures, heat=heat, convection=convection,
-                               reference_C=reference, initial_C=initial, end_s=end, step_s=step)
+                               reference_C=reference, initial_C=initial, end_s=end, step_s=step, radiation=radiation)
 
     # -- the ladder ----------------------------------------------------------------------------------
 
@@ -124,6 +128,8 @@ class ThermalTransientAnalysis(ThermalAnalysis):
         steps = max(1, round(inputs.end_s / inputs.first_step))
         if ctx.plan.adaptive_steps:
             steps = max(1, steps // 2)
+        if inputs.radiation:
+            steps *= 3  # Newton on the T⁴: a few solves a step
         frames = int(getattr(ctx.budget, "max_frames", MAX_FRAMES) or MAX_FRAMES)
         return ladder_estimate(ctx, steps=steps, frames=frames)
 
@@ -185,6 +191,8 @@ class ThermalTransientAnalysis(ThermalAnalysis):
         ])
         how = ("multigrid CG" if plan_solver(ctx) or system.size >= operators.DIRECT_SOLVE_BELOW else "superlu") + \
             f", backward Euler, {run.steps} {'adaptive ' if adaptive else ''}steps"
+        if system.radiation is not None:
+            how += f", Newton on the radiation ({run.solves} solves)"
         result = space_result(
             ctx.space,
             # Frame 0 (t = 0) is the fields' own attribute; the viewer opens on the series' default, the hottest.
@@ -195,6 +203,10 @@ class ThermalTransientAnalysis(ThermalAnalysis):
             solver=how, timings=timings, warnings=warnings,
             scalars={"march": run, "reference_C": inputs.reference_C, "analysis_warnings": [], "adaptive": adaptive},
         )
+        radiated = radiation_summary(system, inputs, run.final)
+        if radiated is not None:
+            # What the faces radiate at the end of the run.
+            result.scalars["radiation"] = radiated
         if ctx.assembly is not None:
             from cadgen._internal.fea.analyses.thermal import part_maxima
 
@@ -260,6 +272,8 @@ class ThermalTransientAnalysis(ThermalAnalysis):
             "frames": len(run.frames),
             "reference_C": round(inputs.reference_C, 4),
         }
+        if "radiation" in result.scalars:
+            summary["radiation_at_end"] = result.scalars["radiation"]
         if "part_max" in result.scalars:
             plan = result.scalars["parts"]
             summary["parts"] = [
@@ -278,9 +292,12 @@ class ThermalTransientAnalysis(ThermalAnalysis):
                 "step_s": "auto" if inputs.step_s is None else inputs.step_s}
 
     def human_lines(self, summary: dict) -> list[str]:
-        return [
+        lines = [
             f"hottest {summary['max_temperature_C']:g} °C at {time_label(summary['max_at_s'])}, at {summary['max_at_mm']} mm; "
             f"{summary['final_max_temperature_C']:g} °C at the end",
             f"followed from {summary['initial_C']:g} °C for {time_label(summary['end_s'])} in {summary['steps']} "
             f"{'adaptive ' if summary['adaptive'] else ''}steps",
         ]
+        if summary.get("radiation_at_end"):
+            lines.append("at the end, " + radiation_line(summary["radiation_at_end"]))
+        return lines

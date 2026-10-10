@@ -5,14 +5,15 @@ describe('the fields', () => {
   it('name each in plain words, today\'s two as ever', () => {
     expect(FIELD_WORDS._von_mises).toBe('Stress');
     expect(FIELD_WORDS._displacement).toBe('Displacement');
-    expect(Object.values(FIELDS).map((entry) => entry.word)).toEqual(['Stress', 'Displacement', 'Peak stress', 'Peak displacement', 'Temperature', 'Heat flow', 'Mode shape', 'Life',
-      'Fatigue margin', 'Pressure', 'Wall shear', 'Mach number', 'Plastic strain', 'Contact pressure', 'Creep strain', 'Failure index', 'Voltage', 'Electric field', 'Current density', 'Magnetic field', 'Eddy current', 'Stress (1σ)', 'Displacement (1σ)']);
+    expect(Object.values(FIELDS).map((entry) => entry.word)).toEqual(['Stress', 'Displacement', 'Peak stress', 'Peak displacement', 'Temperature', 'Heat flow', 'Fluid temperature', 'Heat into the flow', 'Heat transfer coefficient', 'Mode shape', 'Life',
+      'Fatigue margin', 'Pressure', 'Wall shear', 'Mach number', 'Plastic strain', 'Contact pressure', 'Creep strain', 'Failure index', 'Voltage', 'Electric field', 'Current density', 'Magnetic field', 'Eddy current', 'Sound pressure', 'Sound level', 'Material kept', 'Stress (1σ)', 'Displacement (1σ)', 'Whirl',
+      'Water fraction']);
     // FIELD_WORDS is FIELDS' words, by attribute.
     expect(Object.keys(FIELD_WORDS)).toEqual(Object.keys(FIELDS));
   });
 
   it('say which run from their own minimum and which are powers of ten', () => {
-    expect(Object.keys(FIELDS).filter((attribute) => FIELDS[attribute].signed)).toEqual(['_temperature', '_pressure', '_potential']);
+    expect(Object.keys(FIELDS).filter((attribute) => FIELDS[attribute].signed)).toEqual(['_temperature', '_fluid_temperature', '_wall_heat_flux', '_pressure', '_potential', '_sound_pressure']);
     expect(Object.keys(FIELDS).filter((attribute) => FIELDS[attribute].log)).toEqual(['_life']);
   });
 

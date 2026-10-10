@@ -122,6 +122,57 @@ function creepLine(check) {
   return unbrokenHalves([`${plainNumber(check.shown)} ${unit} creep${hours}`, `limit ${plainNumber(check.limit)} ${unit}`]);
 }
 
+/** "Peak 84 dB at 500 Hz, limit 80 dB"; with no frequency on the check, "Peak 84 dB, limit 80 dB". */
+function soundLine(check) {
+  const unit = unitOf(check, "dB");
+  const at = Number.isFinite(check.at?.value) ? ` at ${plainNumber(check.at.value)} ${check.at.unit || "Hz"}` : "";
+  return unbrokenHalves([`Peak ${plainNumber(check.shown)} ${unit}${at}`, `limit ${plainNumber(check.limit)} ${unit}`]);
+}
+
+/** "K 18 MPa√m at the deepest point, toughness 29 MPa√m"; with no point on the check, "K 18 MPa√m, toughness 29 MPa√m". */
+function fractureLine(check) {
+  const unit = unitOf(check, "MPa√m");
+  const at = check.point ? ` at ${check.point}` : "";
+  return unbrokenHalves([`K ${plainNumber(check.shown)} ${unit}${at}`, `toughness ${plainNumber(check.limit)} ${unit}`]);
+}
+
+/** A speed as a row says it: "12,400 rpm" (three figures from 1,000 up), "850 rpm". */
+export function rpmWords(rpm) {
+  const value = Number(rpm) || 0;
+  if (Math.abs(value) >= 1000) return `${Number(value.toPrecision(3)).toLocaleString("en-US")} rpm`;
+  return `${plainNumber(value)} rpm`;
+}
+
+/**
+ * A critical speed against the operating speeds: "Critical at 12,400 rpm, 14% above the 10,800 rpm top speed",
+ * "… 12% below the 8,000 rpm lowest speed", "Critical at 9,200 rpm, inside 0–10,800 rpm"; with no critical in the
+ * sweep (no `mode`), "No critical up to 18,000 rpm, 66% above the 10,800 rpm top speed". `limit` is the operating
+ * edge the separation is measured from, `reference` the other edge; the percent is floored, so it never overstates.
+ */
+function criticalLine(check) {
+  const other = Number.isFinite(check.reference) ? check.reference : 0;
+  const low = Math.min(check.limit, other);
+  const high = Math.max(check.limit, other);
+  const percent = (gap, edge) => `${Math.floor((100 * gap) / edge + 1e-9)}%`;
+  if (!Number.isInteger(check.mode)) {
+    return unbrokenHalves([`No critical up to ${rpmWords(check.shown)}`, `${percent(check.shown - high, high)} above the ${rpmWords(high)} top speed`]);
+  }
+  const at = `Critical at ${rpmWords(check.shown)}`;
+  if (check.shown >= low && check.shown <= high) {
+    const from = low >= 1000 ? rpmWords(low).replace(/ rpm$/, "") : plainNumber(low);
+    return unbrokenHalves([at, `inside ${from}–${rpmWords(high)}`]);
+  }
+  if (check.shown > high) return unbrokenHalves([at, `${percent(check.shown - high, high)} above the ${rpmWords(high)} top speed`]);
+  return unbrokenHalves([at, `${percent(low - check.shown, low)} below the ${rpmWords(low)} lowest speed`]);
+}
+
+/** A whirl's damping: "Log decrement 0.08, needs 0.1"; an undamped rotor (0, no `mode`) neither grows nor dies away. */
+function stabilityLine(check) {
+  if (!Number.isInteger(check.mode) && check.shown === 0) return unbrokenHalves(["No damping modelled", "neither grows nor dies away"]);
+  if (!Number.isInteger(check.mode)) return unbrokenHalves(["No whirl in the speed range", `needs ${plainNumber(check.limit)}`]);
+  return unbrokenHalves([`Log decrement ${Number(check.shown.toPrecision(2))}`, `needs ${plainNumber(check.limit)}`]);
+}
+
 export const CHECK_KINDS = Object.freeze({
   // The peak von Mises stress against the yield; how far it is from yield is the safety factor.
   stress: kind({
@@ -210,6 +261,60 @@ export const CHECK_KINDS = Object.freeze({
   mach: kind({
     titles: titles("Too fast", "Close to the limit", "Within the speed limit"), defaultLabel: "Mach number", unit: "",
     line: (check) => unbrokenHalves([`Peak Mach ${plainNumber(check.shown)}`, `limit ${plainNumber(check.limit)}`]),
+  }),
+  // The loudest sound pressure level (dB) against the most allowed, and the frequency it peaks at: "Peak 84 dB at 500 Hz, limit 80 dB".
+  sound_level: kind({
+    titles: titles("Too loud", "Close to the limit", "Quiet enough"), defaultLabel: "Sound", unit: "dB",
+    line: soundLine,
+  }),
+  // A lightened design's share of the part's mass saved, against the least it must save: "Saves 62 % of the mass, needs 25 %".
+  mass_saved: kind({
+    titles: titles("Barely lighter", "Close", "Much lighter"), defaultLabel: "Mass saved", unit: "%",
+    line: (check) => {
+      const unit = unitOf(check, "%");
+      return unbrokenHalves([`Saves ${plainNumber(check.shown)} ${unit} of the mass`, `needs ${plainNumber(check.limit)} ${unit}`]);
+    },
+  }),
+  // A crack's largest stress intensity K (it grows with the load) against the toughness K_IC: "K 18 MPa√m at the deepest point, toughness 29 MPa√m".
+  fracture: kind({
+    titles: titles("Crack grows", "Close to the limit", "Crack is safe"), defaultLabel: "Crack", unit: "MPa√m", scaling: "linear", margin: true,
+    line: fractureLine,
+  }),
+  // The cycles a growing crack lasts (Paris's law, to where K reaches K_IC) against the cycles needed.
+  crack_life: kind({
+    titles: titles("Breaks too soon", "Close to the limit", "Lasts long enough"), defaultLabel: "Crack life", unit: "cycles",
+    line: (check) => unbrokenHalves([`Grows to critical in ${cyclesWords(check.shown)} cycles`, `needs ${cyclesWords(check.need ?? check.limit)}`]),
+  }),
+  // A piezo sensor's signal: the voltage its open electrode makes, against the least it must make ("0.82 V, needs at least 0.5 V").
+  voltage: kind({
+    titles: titles("Signal too weak", "Close to the limit", "Strong enough signal"), defaultLabel: "Signal", unit: "V",
+    line: (check) => {
+      const unit = unitOf(check, "V");
+      return unbrokenHalves([`${plainNumber(check.shown)} ${unit}`, `needs at least ${plainNumber(check.limit)} ${unit}`]);
+    },
+  }),
+  // The critical speed nearest the operating speeds, against the separation asked (15% by default): a speed, no load moves it.
+  critical_speed: kind({
+    titles: titles("Runs at a critical speed", "Close to a critical speed", "Clear of critical speeds"), defaultLabel: "Critical speed",
+    unit: "rpm", line: criticalLine,
+  }),
+  // The smallest log decrement of the whirl over the operating speeds: below 0 a whirl grows, under its minimum it is barely damped.
+  stability: kind({
+    titles: titles("Unstable", "Barely damped", "Stable"), defaultLabel: "Stability", unit: "",
+    line: stabilityLine,
+  }),
+  // The highest a liquid rises inside the part over time, above the inside's floor, against the brim or a limit: "Rises to 42 mm, limit 50 mm".
+  fill_level: kind({
+    titles: titles("Spills over", "Close to the brim", "Stays in"), defaultLabel: "Fill level", unit: "mm",
+    line: (check) => {
+      const unit = unitOf(check, "mm");
+      return unbrokenHalves([`Rises to ${plainNumber(check.shown)} ${unit}`, `limit ${plainNumber(check.limit)} ${unit}`]);
+    },
+  }),
+  // The hardest the fluids press on the part's walls over time, against the most allowed: "Peak 263 Pa, limit 1000 Pa".
+  wall_pressure: kind({
+    titles: titles("Presses too hard", "Close to the limit", "Within the limit"), defaultLabel: "Wall pressure", unit: "Pa",
+    line: peakLine("Peak", "Pa"),
   }),
 });
 
