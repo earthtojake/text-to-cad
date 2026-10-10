@@ -1165,10 +1165,12 @@ def resolve_step_render_job(
         from cadgen.snapshot_core import tube_skins_asset_url
 
         clip = [entry for entry in (animation or {}).get("clips") or [] if entry.get("id") == animation_request["clip"]]
+        # The page plays one clip: it is handed that clip alone, so another clip's tube is
+        # neither bound nor asked for.
+        animation = {**animation, "clips": clip}
+        resolved["animation"] = animation
         if bends_a_tube(animation):
-            # A clip bends a tube: cadgen binds them, and the page only skins them. Named
-            # for the whole section, as the catalog names them: the page loads every clip
-            # before it plays the one asked for, and the payload is the viewer's own.
+            # The clip bends a tube: cadgen binds it, and the page only skins it.
             resolved["tubeSkinsUrl"] = tube_skins_asset_url(
                 tree=selected_tree, document_hash=document_hash, animation=animation)
         if job.get("video") is not None and clip:

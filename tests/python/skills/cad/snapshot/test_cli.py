@@ -2529,9 +2529,11 @@ class StepAnimationFrameTests(unittest.TestCase):
         packet = self._resolve(self._job(animation={"clip": "demo", "time": 2}))
         resolved_job = packet["jobs"][0]
         resolved = resolved_job["resolved"]
-        # The baked section rides the job as cadgen read it; the frame request stays the job's own.
-        self.assertEqual(read_source_sidecar(step_path)["animation"], resolved["animation"])
-        self.assertEqual(["demo", "spin"], [clip["id"] for clip in resolved["animation"]["clips"]])
+        # The baked clip the frame plays rides the job as cadgen read it, alone (the model
+        # declares "demo" and "spin"); the frame request stays the job's own.
+        section = read_source_sidecar(step_path)["animation"]
+        self.assertEqual(["demo", "spin"], [clip["id"] for clip in section["clips"]])
+        self.assertEqual({**section, "clips": section["clips"][:1]}, resolved["animation"])
         self.assertNotIn("articulation", resolved)
         self.assertEqual({"clip": "demo", "time": 2.0}, resolved_job["animation"])
 

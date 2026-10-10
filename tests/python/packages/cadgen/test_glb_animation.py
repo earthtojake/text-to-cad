@@ -404,16 +404,21 @@ class ARealDocumentPlaysItsClip(unittest.TestCase):
                 return proc
 
             run("arm.py")
-            # A snapshot of the clip that only turns still names the tube skins: its page
-            # loads every clip of the section, and the others bend the cord.
+            # A snapshot plays one clip, and is handed that clip alone: the one that only
+            # turns names no tube skins though the other bends the cord; that one names them.
             snapshot = run("-c", "import json; from pathlib import Path\n"
                            "from cadgen.snapshot_cli import resolve_step_render_job\n"
                            "here = Path('.').resolve()\n"
-                           "job = resolve_step_render_job({'input': 'arm.step', 'mode': 'view', 'outputs': [],"
-                           " 'animation': {'clip': 'turn', 'time': 0.5}}, kind='step',"
+                           "out = {}\n"
+                           "for clip in ('turn', 'bend'):\n"
+                           "    job = resolve_step_render_job({'input': 'arm.step', 'mode': 'view', 'outputs': [],"
+                           " 'animation': {'clip': clip, 'time': 0.5}}, kind='step',"
                            " input_path=here / 'arm.step', root_path=here, reference_root=here)\n"
-                           "print(json.dumps(job['resolved'].get('tubeSkinsUrl')))")
-            self.assertTrue(json.loads(snapshot.stdout.strip().splitlines()[-1]), "the turn clip's snapshot names no tube skins")
+                           "    out[clip] = ([c['id'] for c in job['resolved']['animation']['clips']],"
+                           " bool(job['resolved'].get('tubeSkinsUrl')))\n"
+                           "print(json.dumps(out))")
+            self.assertEqual({"turn": [["turn"], False], "bend": [["bend"], True]},
+                             json.loads(snapshot.stdout.strip().splitlines()[-1]))
             door = run("-m", "cadgen.cli", "glb", "build", "arm.step", "arm-turn.glb", "--animation", "turn", "--json")
             (entry,) = json.loads(door.stdout.strip().splitlines()[-1])["files"]
             self.assertEqual({"clip": "turn", "seconds": 1.0, "start": 0.0, "pivots": 1, "skins": 0},
