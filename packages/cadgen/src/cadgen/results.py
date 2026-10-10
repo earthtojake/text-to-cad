@@ -402,7 +402,9 @@ class FeaResult:
     ``summary`` carries the answer an engineer asks for first: max von Mises
     (nodal and Gauss-point), safety factor against yield, max displacement,
     the applied-versus-reaction balance, and each check the study asked for
-    judged (``checks``: the verdict's). ``findings`` is what an engineer
+    judged (``checks``: the verdict's). Another ``analysis`` (modal, thermal,
+    ...) writes its own summary and CLI lines. ``fit`` lists the steps the
+    fit-the-budget ladder took, each printed as an "adapted: ..." line. ``findings`` is what an engineer
     would say about it, errors first, in the KiCad findings' shape. The GLB is
     what the viewer shows; the JSON sidecar holds this whole result plus the
     study it came from.
@@ -420,12 +422,18 @@ class FeaResult:
     timings: dict = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
     findings: tuple[dict, ...] = ()
+    #: The analysis that was run (``static`` unless the study named another).
+    analysis: str = "static"
+    #: The fit-the-budget ladder's steps, in order (``rung``, ``words``, ``accuracy``, ...); empty when none was taken.
+    fit: tuple[dict, ...] = ()
 
     def human_lines(self) -> list[str]:
         from cadgen._internal.fea.checks import safety_factor_text  # stdlib only; kept out of module import time
 
         if not self.ok:
             return [f"not solved: {_display(self.document)}"] + [f"{finding['severity']}: {finding['summary']}" for finding in self.findings]
+        if self.analysis != "static":
+            return self._analysis_lines()
         s = self.summary
         safety = s.get("safety_factor")
         lines = [
@@ -438,6 +446,30 @@ class FeaResult:
             f"wrote GLB: {_display(self.glb)} (deformation x{s.get('deformation_scale')}), sidecar: {_display(self.sidecar)}"
             + (f", VTU: {_display(self.vtu)}" if self.vtu else ""),
         ]
+        lines += self._fit_lines()
+        lines += [f"{finding['severity']}: {finding['summary']}" for finding in self.findings]
+        lines += [f"warning: {warning}" for warning in self.warnings]
+        return lines
+
+    def _fit_lines(self) -> list[str]:
+        """One line per fit-the-budget step: what was adapted, and what it may have cost."""
+        return [
+            f"adapted: {step['words']}" + (f" ({step['accuracy']})" if step.get("accuracy") else "")
+            for step in self.fit
+        ]
+
+    def _analysis_lines(self) -> list[str]:
+        """A non-static analysis: its own lines (``Analysis.human_lines``), then the files, fit steps, findings and warnings."""
+        from cadgen._internal.fea.analyses import get_analysis  # stdlib only; kept out of module import time
+
+        lines = [
+            f"solved {self.occurrence} of {_display(self.document)} ({self.analysis}): {self.mesh.get('elements')} tets, "
+            f"{self.mesh.get('dofs')} DOF, {self.mesh.get('size_mm')} mm elements",
+            *get_analysis(self.analysis).human_lines(self.summary),
+            *_check_lines(self.summary),
+            f"wrote GLB: {_display(self.glb)}, sidecar: {_display(self.sidecar)}" + (f", VTU: {_display(self.vtu)}" if self.vtu else ""),
+        ]
+        lines += self._fit_lines()
         lines += [f"{finding['severity']}: {finding['summary']}" for finding in self.findings]
         lines += [f"warning: {warning}" for warning in self.warnings]
         return lines

@@ -1,4 +1,11 @@
-"""The public ``fea`` namespace: linear static stress on a STEP part.
+"""The public ``fea`` namespace: finite element analysis of a STEP part or assembly.
+
+A study names its analysis (``"analysis"``; ``static`` when it names none):
+static strength, with face and body loads; and, registered with it, modal
+(vibration), buckling, thermal and thermal_transient (heat), thermal_stress,
+harmonic (shaking), random_vibration, shock, transient, fatigue, drop (an
+estimate), and the lite cfd, impact, nonlinear and contact solvers. A name
+this cadgen does not have built yet says so plainly.
 
 Three verbs, each mirrored by a generated CLI (``cadgen fea faces``,
 ``cadgen fea parts``, ``cadgen fea solve``; design/format-doors.md): ``faces`` lists a part's faces
@@ -59,14 +66,16 @@ def solve(
     vtu: bool = False,
     verbose: bool = False,
 ) -> FeaResult:
-    """Run one linear static study and write its result GLB and JSON sidecar.
+    """Run one study (static unless it names another analysis) and write its result GLB and JSON sidecar.
 
     target: the STEP/STP document holding the part.
     out: the result .glb path. Omitted, writes ``<document>.fea.glb`` beside the
         document; the sidecar is the same name with ``.json``.
     study: the study: a JSON file path, inline JSON, or (library callers) a
-        dict. It names the material, the fixed faces and the loads; see the
-        fea skill for the schema. Face refs are the ones ``cadgen fea faces``
+        dict. It names the analysis (default ``static``), the material, the
+        fixed faces and the loads (static: forces, pressures, gravity and
+        acceleration), and what the analysis reads of its own; see the fea
+        skill for the schema. Face refs are the ones ``cadgen fea faces``
         prints. A document of several parts is solved as one bonded assembly:
         ``parts`` gives each its material, ``connections`` overrides which
         touching pairs are bonded (``cadgen fea parts`` lists them).

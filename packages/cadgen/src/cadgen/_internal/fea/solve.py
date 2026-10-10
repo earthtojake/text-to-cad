@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import numpy as np
 
+    from cadgen._internal.fea.femspace import FemSpace
     from cadgen._internal.fea.mesh import VolumeMesh
     from cadgen._internal.fea.study import Fixture, Load, Material
 
@@ -39,10 +40,7 @@ _AMG_ATTEMPTS = 3
 #: Below this many free DOF the direct solver wins on setup cost.
 DIRECT_SOLVE_BELOW = 20_000
 
-# netgen's 10-node tetrahedron lists the four corners, then the mid-edge nodes of
-# edges (0,1) (0,2) (0,3) (1,2) (1,3) (2,3); skfem's quadratic tet wants them on
-# edges (0,1) (1,2) (0,2) (0,3) (1,3) (2,3). One fixed permutation maps the
-# former to the latter -- the mesher does not vary its order.
+# The mesher's 10-node tet order mapped to skfem's; it lives with the element space now.
 NETGEN_TET10_TO_SKFEM = (0, 1, 2, 3, 4, 7, 5, 6, 8, 9)
 
 
@@ -78,67 +76,22 @@ class SolveOutcome:
     #: (zero off the part), so stress jumps across a change of material as it does in the part.
     #: ``von_mises`` is then their envelope.
     von_mises_parts: "np.ndarray | None" = None
+    #: (N,) the displacement on the vector DOF, as solved.
+    u: "np.ndarray | None" = field(default=None, repr=False)
 
 
 def _element_mesh(volume: "VolumeMesh"):
-    """scikit-fem's quadratic tet mesh from netgen's arrays, and node -> scalar DOF.
+    """scikit-fem's quadratic tet mesh from netgen's arrays, and node -> scalar DOF (:func:`femspace.element_mesh`)."""
+    from cadgen._internal.fea.femspace import element_mesh
 
-    skfem renumbers on construction (corner vertices first, then edge nodes);
-    the map back to the mesher's node ids falls out of its element DOF table.
-    """
-    import numpy as np
-    from skfem import MeshTet2
-
-    connectivity = np.ascontiguousarray(volume.tets[:, NETGEN_TET10_TO_SKFEM].T)
-    mesh = MeshTet2(np.ascontiguousarray(volume.nodes.T), connectivity)
-    node_to_dof = np.full(len(volume.nodes), -1, dtype=np.int64)
-    node_to_dof[connectivity] = mesh.dofs.element_dofs
-    if (node_to_dof < 0).any():
-        raise RuntimeError("the mesher produced nodes that no element uses")
-    return mesh, node_to_dof
-
-
-class _FacetLookup:
-    """skfem facet ids for boundary triangles given as vertex triples; the
-    facet table is keyed once and reused for every fixture and load."""
-
-    def __init__(self, mesh, vertices: int):
-        import numpy as np
-
-        self._vertices = vertices
-        facets = np.sort(mesh.facets.astype(np.int64), axis=0)
-        keys = (facets[0] * vertices + facets[1]) * vertices + facets[2]
-        self._order = np.argsort(keys)
-        self._keys = keys[self._order]
-
-    def __call__(self, triangles: "np.ndarray") -> "np.ndarray":
-        import numpy as np
-
-        tri = np.sort(triangles.astype(np.int64), axis=1)
-        wanted = (tri[:, 0] * self._vertices + tri[:, 1]) * self._vertices + tri[:, 2]
-        where = np.clip(np.searchsorted(self._keys, wanted), 0, len(self._keys) - 1)
-        if not np.array_equal(self._keys[where], wanted):
-            raise RuntimeError("a boundary triangle of the mesher is not a facet of the element mesh")
-        return self._order[where]
+    return element_mesh(volume, 2)
 
 
 def _rigid_body_modes(locations: "np.ndarray", component: "np.ndarray") -> "np.ndarray":
-    """The near-nullspace pyamg needs for elasticity: 3 translations, 3 rotations."""
-    import numpy as np
+    """The near-nullspace pyamg needs for elasticity (:func:`operators.rigid_body_modes`)."""
+    from cadgen._internal.fea.operators import rigid_body_modes
 
-    n = len(component)
-    x, y, z = locations[:, 0], locations[:, 1], locations[:, 2]
-    B = np.zeros((n, 6))
-    for c in range(3):
-        B[component == c, c] = 1.0
-    # rotation about z: (-y, x, 0); about x: (0, -z, y); about y: (z, 0, -x)
-    B[component == 0, 3] = -y[component == 0]
-    B[component == 1, 3] = x[component == 1]
-    B[component == 1, 4] = -z[component == 1]
-    B[component == 2, 4] = y[component == 2]
-    B[component == 0, 5] = z[component == 0]
-    B[component == 2, 5] = -x[component == 2]
-    return B
+    return rigid_body_modes(locations, component)
 
 
 def dof_warning(dofs: int, automatic: bool, small_feature_mm: float | None = None) -> str:
@@ -156,61 +109,11 @@ def dof_warning(dofs: int, automatic: bool, small_feature_mm: float | None = Non
     return f"{dofs} degrees of freedom: expect a slow solve; a larger mesh.size_mm is usually enough"
 
 
-def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: "np.ndarray", warnings: list[str]):
-    """Displacement on the free DOF: direct for small systems, AMG+CG otherwise."""
-    import scipy.sparse.linalg as spla
+def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: "np.ndarray", warnings: list[str], method: str | None = None):
+    """Displacement on the free DOF: direct for small systems, AMG+CG otherwise (:func:`operators.solve_spd`)."""
+    from cadgen._internal.fea.operators import solve_spd
 
-    Kff = K[free][:, free].tocsr()
-    ff = f[free]
-    if Kff.shape[0] < DIRECT_SOLVE_BELOW:
-        return spla.spsolve(Kff.tocsc(), ff), "superlu"
-    import pyamg
-
-    B = _rigid_body_modes(locations[free], component[free])
-    # pyamg's default (Jacobi) prolongator smoothing scales by a spectral radius it
-    # estimates from numpy's global random generator: on a graded mesh a bad estimate
-    # made the solve 30% slower or, now and then, diverge. Energy smoothing draws no
-    # random numbers (and converges in fewer iterations), so the hierarchy repeats run
-    # to run and numpy's global generator is left alone. Still, an attempt that
-    # diverges is stopped early and tried again from another start: a small random
-    # guess from a generator of the solver's own, seeded by the attempt.
-    import numpy as np
-
-    class Diverged(Exception):
-        pass
-
-    start = float(np.linalg.norm(ff))
-    for seed in range(_AMG_ATTEMPTS):
-        ml = pyamg.smoothed_aggregation_solver(
-            Kff, B=B, symmetry="symmetric", strength="symmetric", smooth="energy", max_coarse=500
-        )
-        guess = None
-        if seed:
-            guess = np.random.default_rng(seed).standard_normal(len(ff))
-            guess *= 1e-3 * start / max(float(np.linalg.norm(Kff @ guess)), 1e-300)
-        count = 0
-
-        def watch(x):
-            nonlocal count
-            count += 1
-            if count % 25 == 0:
-                residual = float(np.linalg.norm(ff - Kff @ x))
-                if residual > 10.0 * start or (count >= 150 and residual > 0.5 * start):
-                    raise Diverged
-
-        residuals: list[float] = []
-        try:
-            u = ml.solve(ff, x0=guess, tol=1e-8, accel="cg", maxiter=600, residuals=residuals, callback=watch)
-        except Diverged:
-            continue
-        relative = residuals[-1] / max(residuals[0], 1e-300) if residuals else 1.0
-        if relative <= 1e-6:
-            return u, f"amg+cg ({len(residuals)} iterations)"
-    warnings.append(
-        f"the multigrid solve did not converge in {_AMG_ATTEMPTS} attempts; falling back to the direct solver "
-        "(slower). Check that the fixtures hold the part."
-    )
-    return spla.spsolve(Kff.tocsc(), ff), "superlu (after amg)"
+    return solve_spd(K, f, free, locations, component, warnings, method=method)
 
 
 def _project_on_elements(scalar, field: "np.ndarray", rows: "np.ndarray") -> "np.ndarray":
@@ -255,26 +158,41 @@ def solve_linear_static(
     *,
     log=None,
     automatic: bool = False,
+    body_loads: "Sequence[Sequence[float]]" = (),
+    initial_strain=None,
+    facet_pressures: "np.ndarray | None" = None,
+    solver: str | None = None,
+    space: "FemSpace | None" = None,
 ) -> SolveOutcome:
     """Solve one study on a meshed occurrence. ``ordinal_of`` maps face refs to ordinals.
 
     ``automatic`` marks the re-solve cadgen chose the size of, which words its warnings accordingly.
     For an assembly (``volume.domain`` set) ``material`` is one material per part, indexed by
     domain, and E and nu vary from element to element.
+
+    The keywords default to today's solve. ``body_loads`` are uniform body
+    accelerations b in mm/s^2, each adding ∫ ρ b·v (gravity is b = g; a part
+    accelerated by a carries b = -a); they count in ``applied``, so reactions
+    still balance. ``initial_strain`` is a stress-free strain at the vector
+    basis's quadrature points ((elements, quadrature) isotropic, like α ΔT, or a
+    (3, 3, elements, quadrature) tensor): its load is added and the stress is
+    recovered from the elastic part. ``facet_pressures`` is one pressure (MPa,
+    positive pushing in) per row of ``volume.boundary``. ``solver`` forces
+    ``"direct"``, ``"iterative"`` or ``"matrix_free"``; ``space`` reuses a
+    :class:`~cadgen._internal.fea.femspace.FemSpace` built on ``volume``.
     """
     import numpy as np
+    from cadgen._internal.fea import operators
+    from cadgen._internal.fea.femspace import FemSpace
     from cadgen._internal.fea.mesh import small_feature_mm
-    from skfem import Basis, BilinearForm, ElementTetP2, ElementVector, LinearForm, asm
-    from skfem.helpers import ddot, sym_grad, trace
-    from skfem.models.elasticity import lame_parameters, linear_elasticity
+    from skfem import LinearForm, asm
 
     timings: dict[str, float] = {}
     warnings: list[str] = []
     started = time.perf_counter()
-    mesh, node_to_dof = _element_mesh(volume)
-    vertices = int(mesh.t.max()) + 1
-    basis = Basis(mesh, ElementVector(ElementTetP2()))
-    scalar = basis.with_element(ElementTetP2())
+    if space is None:
+        space = FemSpace.build(volume)
+    mesh, basis, scalar = space.mesh, space.basis, space.scalar
     timings["mesh_to_fem_s"] = time.perf_counter() - started
     if log:
         log(f"element mesh: {mesh.t.shape[1]} tets, {basis.N} DOF")
@@ -285,50 +203,18 @@ def solve_linear_static(
         )
     if basis.N > DOF_WARN:
         warnings.append(dof_warning(basis.N, automatic, small_feature_mm(volume)))
-
-    # DOF bookkeeping: skfem numbers scalar DOF vertices first, then edges.
-    if not (np.array_equal(scalar.nodal_dofs[0], np.arange(vertices))
-            and np.array_equal(scalar.edge_dofs[0], vertices + np.arange(mesh.edges.shape[1]))):
-        raise RuntimeError("unexpected degree-of-freedom numbering in the element basis")
-    scalar_count = vertices + mesh.edges.shape[1]
-    locations = np.zeros((basis.N, 3))
-    component = np.zeros(basis.N, dtype=np.int64)
-    for c in range(3):
-        for dofs, where in ((basis.nodal_dofs[c], scalar.nodal_dofs[0]), (basis.edge_dofs[c], scalar.edge_dofs[0])):
-            locations[dofs] = mesh.doflocs[:, where].T
-            component[dofs] = c
-
-    boundary_quadratic = node_to_dof[volume.boundary]
-    boundary_vertices = boundary_quadratic[:, :3]
-    if (boundary_vertices >= vertices).any():
-        raise RuntimeError("a boundary triangle's corner is not a corner vertex of the element mesh")
-    facet_lookup = _FacetLookup(mesh, vertices)
+    locations, component = space.locations, space.component
+    materials = list(material) if volume.domain is not None else material
 
     def facets_of(refs) -> "np.ndarray":
-        ordinals = [ordinal_of[ref] for ref in refs]
-        mask = np.isin(volume.boundary_ordinal, ordinals)
-        if not mask.any():
-            raise RuntimeError(f"no boundary triangles lie on {', '.join(refs)}")
-        return facet_lookup(boundary_vertices[mask])
+        return space.facets_of(refs, ordinal_of)
 
     # Stiffness
     started = time.perf_counter()
-    if volume.domain is None:
-        lam, mu = lame_parameters(material.E, material.nu)
-        K = asm(linear_elasticity(lam, mu), basis)
+    if solver == "matrix_free":
+        K = operators.ElementChunkOperator(space, materials)
     else:
-        # One E and nu per element, the same at each of its quadrature points.
-        per_part = [lame_parameters(m.E, m.nu) for m in material]
-        domain = np.asarray(volume.domain)
-        quadrature = basis.X.shape[1]
-        lam = np.repeat(np.array([p[0] for p in per_part])[domain][:, None], quadrature, axis=1)
-        mu = np.repeat(np.array([p[1] for p in per_part])[domain][:, None], quadrature, axis=1)
-
-        @BilinearForm
-        def stiffness(u, v, w):
-            return 2.0 * w["mu"] * ddot(sym_grad(u), sym_grad(v)) + w["lam"] * trace(sym_grad(u)) * trace(sym_grad(v))
-
-        K = asm(stiffness, basis, lam=lam, mu=mu)
+        K = operators.stiffness(space, materials)
     timings["assemble_s"] = time.perf_counter() - started
 
     # Loads
@@ -350,6 +236,23 @@ def solve_linear_static(
                 return -pressure * (w.n[0] * v[0] + w.n[1] * v[1] + w.n[2] * v[2])
 
         f += asm(form, facet_basis)
+    for acceleration in body_loads:
+        f += operators.body_force(space, materials, acceleration)
+    if facet_pressures is not None:
+        pressures = np.asarray(facet_pressures, dtype=float)
+        loaded = np.flatnonzero(pressures)
+        if len(loaded):
+            facets = space.facets_of_rows(loaded)
+            facet_basis = basis.boundary(facets)
+            on_facet = np.repeat(pressures[loaded][:, None], facet_basis.X.shape[1], axis=1)
+
+            @LinearForm
+            def surface(v, w):
+                return -w["p"] * (w.n[0] * v[0] + w.n[1] * v[1] + w.n[2] * v[2])
+
+            f += asm(surface, facet_basis, p=on_facet)
+    if initial_strain is not None:
+        f += operators.initial_strain_load(space, materials, initial_strain)
     applied = tuple(float(f[component == c].sum()) for c in range(3))
 
     # Fixtures
@@ -359,10 +262,11 @@ def solve_linear_static(
 
     started = time.perf_counter()
     u = np.zeros(basis.N)
-    u[free], solver = _solve_system(K, f, free, locations, component, warnings)
+    method = {"direct": "direct", "iterative": "iterative"}.get(solver or "")
+    u[free], how = _solve_system(K, f, free, locations, component, warnings, method)
     timings["solve_s"] = time.perf_counter() - started
     if log:
-        log(f"solved with {solver} in {timings['solve_s']:.1f}s")
+        log(f"solved with {how} in {timings['solve_s']:.1f}s")
 
     # Reactions: K u - f on the fixed DOF, summed per fixture and component.
     residual = K @ u - f
@@ -373,16 +277,8 @@ def solve_linear_static(
 
     # Stress recovery
     started = time.perf_counter()
-    grad = basis.interpolate(u).grad                          # (3, 3, elements, quadrature)
-    strain = 0.5 * (grad + np.transpose(grad, (1, 0, 2, 3)))
-    trace = strain[0, 0] + strain[1, 1] + strain[2, 2]
-    s = 2.0 * mu * strain
-    for i in range(3):
-        s[i, i] += lam * trace
-    von_mises_q = np.sqrt(
-        0.5 * ((s[0, 0] - s[1, 1]) ** 2 + (s[1, 1] - s[2, 2]) ** 2 + (s[2, 2] - s[0, 0]) ** 2)
-        + 3.0 * (s[0, 1] ** 2 + s[1, 2] ** 2 + s[0, 2] ** 2)
-    )
+    s = operators.stress(space, materials, u, initial_strain)
+    von_mises_q = operators.von_mises(s)
     von_mises_parts = None
     if volume.domain is None:
         von_mises = np.maximum(scalar.project(von_mises_q), 0.0)
@@ -391,27 +287,25 @@ def solve_linear_static(
         for index in range(len(material)):
             von_mises_parts[index] = _project_on_elements(scalar, von_mises_q, np.asarray(volume.domain) == index)
         von_mises = von_mises_parts.max(axis=0)
-    displacement = np.zeros((scalar_count, 3))
-    for c in range(3):
-        displacement[scalar.nodal_dofs[0], c] = u[basis.nodal_dofs[c]]
-        displacement[scalar.edge_dofs[0], c] = u[basis.edge_dofs[c]]
+    displacement = space.nodal(u)
     timings["stress_s"] = time.perf_counter() - started
 
     return SolveOutcome(
-        dof_locations=np.ascontiguousarray(mesh.doflocs.T),
+        dof_locations=space.dof_locations,
         displacement=displacement,
         von_mises=von_mises,
         von_mises_gauss_max=float(von_mises_q.max()),
-        vertices=vertices,
-        tets=np.ascontiguousarray(mesh.t.T),
-        boundary_quadratic=boundary_quadratic,
+        vertices=space.vertices,
+        tets=space.tets,
+        boundary_quadratic=space.boundary_quadratic,
         reactions=reactions,
         applied=applied,
         dofs=int(basis.N),
-        element_dofs=np.ascontiguousarray(scalar.element_dofs.T),
+        element_dofs=space.element_dofs,
         element_von_mises_gauss=von_mises_q.max(axis=1),
         timings=timings,
         warnings=warnings,
-        solver=solver,
+        solver=how,
         von_mises_parts=von_mises_parts,
+        u=u,
     )

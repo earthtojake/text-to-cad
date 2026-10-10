@@ -1,4 +1,4 @@
-"""One STEP occurrence, or an assembly's glued parts -> quadratic tetrahedra, faces kept under their cadgen ordinal.
+"""One STEP occurrence, or an assembly's glued parts -> quadratic (or linear) tetrahedra, faces kept under their cadgen ordinal.
 
 The mesher is netgen (LGPL-2.1, the ``netgen-mesher`` wheel with its own
 OpenCascade). It cannot take an OCP shape object directly -- two pybind11 OCC
@@ -229,10 +229,57 @@ def _require_ten_node_tets(e3) -> None:
         raise RuntimeError("the mesher produced elements that are not 10-node tetrahedra")
 
 
-def mesh_occurrence(occurrence: "Occurrence", *, max_h: float | None = None, refine: float = 1.0) -> VolumeMesh:
-    """Mesh one placed occurrence with second-order tetrahedra.
+def _require_elements(e3, order: int) -> None:
+    if order == 2:
+        _require_ten_node_tets(e3)
+    elif e3["nodes"].shape[1] < 4 or not (e3["nodes"][:, :4] > 0).all():
+        raise RuntimeError("the mesher produced elements that are not 4-node tetrahedra")
+
+
+def _generate(geometry, ngocc, h: float, refine: float, order: int, size_field: dict | None, keys_of_face: dict[int, list]):
+    """netgen's mesh at size ``h``; ``size_field`` adds local sizes, ``order`` 2 adds the mid-edge nodes.
+
+    ``size_field`` is ``{"faces": {key: size_mm}, "points": [[x, y, z, size_mm], ...], "radius_mm": r}``:
+    a face's key is what ``keys_of_face`` lists for its netgen index (a cadgen
+    ordinal for one part, a face ref for an assembly); a point holds its size
+    within ``radius_mm`` of it (its centre and six points at that distance,
+    netgen grading the rest). With none, the call is today's.
+    """
+    import netgen.meshing as ngmesh
+
+    if not size_field:
+        mesh = geometry.GenerateMesh(maxh=h, **_meshing(refine))
+    else:
+        sizes = {key: float(size) for key, size in (size_field.get("faces") or {}).items()}
+        if sizes:
+            shape = geometry.shape
+            for index, face in enumerate(shape.faces):
+                wanted = [sizes[key] for key in keys_of_face.get(index, ()) if key in sizes]
+                if wanted:
+                    face.maxh = min(wanted)
+            geometry = ngocc.OCCGeometry(shape)
+        parameters = ngmesh.MeshingParameters(maxh=h, **_meshing(refine))
+        radius = float(size_field.get("radius_mm") or 0.0)
+        offsets = [(0.0, 0.0, 0.0)] + ([] if radius <= 0 else [
+            tuple(radius * sign if axis == k else 0.0 for k in range(3)) for axis in range(3) for sign in (-1.0, 1.0)
+        ])
+        for x, y, z, size in size_field.get("points") or ():
+            for dx, dy, dz in offsets:
+                parameters.RestrictH(x=float(x) + dx, y=float(y) + dy, z=float(z) + dz, h=float(size))
+        mesh = geometry.GenerateMesh(mp=parameters)
+    if order == 2:
+        mesh.SecondOrder()
+    return mesh
+
+
+def mesh_occurrence(
+    occurrence: "Occurrence", *, max_h: float | None = None, refine: float = 1.0, order: int = 2,
+    size_field: dict | None = None,
+) -> VolumeMesh:
+    """Mesh one placed occurrence with second-order tetrahedra (``order=1``: first-order, 4 nodes).
 
     ``refine`` also shrinks the elements at curved features by that ratio (:func:`_meshing`).
+    ``size_field`` sets local sizes, faces by cadgen ordinal (:func:`_generate`).
     """
     require_fea_stack()
     import numpy as np
@@ -258,8 +305,8 @@ def mesh_occurrence(occurrence: "Occurrence", *, max_h: float | None = None, ref
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
             mapping = _match_faces(fingerprints, list(geometry.faces), diagonal)
-            mesh = geometry.GenerateMesh(maxh=h, **_meshing(refine))
-            mesh.SecondOrder()
+            mesh = _generate(geometry, ngocc, h, refine, order, size_field,
+                             {index: [ordinal] for index, ordinal in mapping.items()})
             # Copies, deliberately: netgen hands out views into the mesh
             # object's own memory, and the mesh does not outlive this block.
             coordinates = np.array(mesh.Coordinates(), dtype=float, copy=True)
@@ -269,15 +316,16 @@ def mesh_occurrence(occurrence: "Occurrence", *, max_h: float | None = None, ref
 
     if len(e3) == 0:
         raise RuntimeError(f"the mesher produced no volume elements for {occurrence.ref}; is it a closed solid?")
-    _require_ten_node_tets(e3)
+    _require_elements(e3, order)
+    width = 10 if order == 2 else 4
     ordinal_of = np.zeros(int(e2["index"].max()) + 1, dtype=np.int64)
     for index, ordinal in mapping.items():
         ordinal_of[index + 1] = ordinal
 
     return VolumeMesh(
         nodes=coordinates,
-        tets=np.ascontiguousarray(e3["nodes"][:, :10].astype(np.int64) - 1),
-        boundary=np.ascontiguousarray(e2["nodes"][:, :6].astype(np.int64) - 1),
+        tets=np.ascontiguousarray(e3["nodes"][:, :width].astype(np.int64) - 1),
+        boundary=np.ascontiguousarray(e2["nodes"][:, :6 if order == 2 else 3].astype(np.int64) - 1),
         boundary_ordinal=ordinal_of[e2["index"].astype(np.int64)],
         faces={fp.ordinal: fp for fp in fingerprints},
         max_h=h,
@@ -366,6 +414,8 @@ def mesh_assembly(
     max_h: float | None = None,
     log=None,
     refine: float = 1.0,
+    order: int = 2,
+    size_field: dict | None = None,
 ) -> VolumeMesh:
     """Mesh the parts ``part_refs`` as one conforming mesh, bonded parts sharing nodes.
 
@@ -373,7 +423,8 @@ def mesh_assembly(
     The mesh's ``domain`` is the index into ``part_refs`` of each element's
     part, and ``faces`` holds every face of every part under its own ref, so a
     study's ``#o2.f6`` means the same face it does in the viewer. ``log``
-    is told when gluing and meshing start; ``refine`` is :func:`mesh_occurrence`'s.
+    is told when gluing and meshing start; ``refine``, ``order`` and
+    ``size_field`` are :func:`mesh_occurrence`'s, a size field's faces keyed by ref.
     """
     require_fea_stack()
     import numpy as np
@@ -462,8 +513,8 @@ def mesh_assembly(
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
             mapping = _match_faces(glued_prints, list(geometry.faces), diagonal)
-            mesh = geometry.GenerateMesh(maxh=h, **_meshing(refine))
-            mesh.SecondOrder()
+            mesh = _generate(geometry, ngocc, h, refine, order, size_field,
+                             {index: [refs[position - 1] for position in sources.get(image, ())] for index, image in mapping.items()})
             coordinates = np.array(mesh.Coordinates(), dtype=float, copy=True)
             e3 = mesh.Elements3D().NumPy().copy()
             e2 = mesh.Elements2D().NumPy().copy()
@@ -474,11 +525,12 @@ def mesh_assembly(
         raise RuntimeError("the mesher produced no volume elements for the assembly; is every part a closed solid?")
     if domains != len(glued.solid_part):
         raise RuntimeError(f"the mesher made {domains} volumes from {len(glued.solid_part)} solids")
-    _require_ten_node_tets(e3)
+    _require_elements(e3, order)
+    width = 10 if order == 2 else 4
 
     solid_part = np.array(glued.solid_part, dtype=np.int64)
     domain = solid_part[e3["index"].astype(np.int64) - 1]
-    tets = np.ascontiguousarray(e3["nodes"][:, :10].astype(np.int64) - 1)
+    tets = np.ascontiguousarray(e3["nodes"][:, :width].astype(np.int64) - 1)
     check_domains(coordinates, tets, domain, parts)
 
     # netgen keeps the faces where parts are glued as surface elements, but they
@@ -495,7 +547,7 @@ def mesh_assembly(
             joint_of_glued[index + 1] = (min(owners), max(owners))
         else:
             position_of_glued[index + 1] = sources[glued_index][0]
-    surface = np.ascontiguousarray(e2["nodes"][:, :6].astype(np.int64) - 1)
+    surface = np.ascontiguousarray(e2["nodes"][:, :6 if order == 2 else 3].astype(np.int64) - 1)
     surface_index = e2["index"].astype(np.int64)
     outer = np.isin(surface_index, list(joint_of_glued), invert=True)
     interface_triangles: dict[tuple[int, int], np.ndarray] = {}
