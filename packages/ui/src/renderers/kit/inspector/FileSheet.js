@@ -375,7 +375,22 @@ const valueInputWidth = value => {
  * left column, and a small committed value input (24px tall, as wide as its figure and unit need,
  * its figures tabular) in the right column (`docs/settings-ui.md`).
  */
-export function FileSheetSliderField({ label, value, onValueCommit, valueInputProps, labelTitle, children }) {
+/**
+ * A slider with its committed value. Its label sits tight above the slider in the flexible left
+ * column (Position's joints); `wideLabel` runs it over the value field too, for a narrow panel whose
+ * labels are sentences (an FEA result's controls), with the slider and its value on the line under it.
+ */
+export function FileSheetSliderField({ label, value, onValueCommit, valueInputProps, labelTitle, children, wideLabel = false }) {
+  if (wideLabel) {
+    return <FileSheetControlRow>
+      <div className="grid min-h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5" data-position-control="">
+        {label != null ? <TooltipHint content={labelTitle || label} overflowOnly><span className={cn(FILE_SHEET_FIELD_LABEL_CLASSES, "col-span-2 leading-4")}>{label}</span></TooltipHint> : null}
+        <div className="min-w-0">{children}</div>
+        {onValueCommit ? <FileSheetValueInput value={value} onValueCommit={onValueCommit} {...valueInputProps}
+          className={cn("h-6 px-1.5", valueInputWidth(value), valueInputProps?.className)} /> : null}
+      </div>
+    </FileSheetControlRow>;
+  }
   return <FileSheetControlRow>
     <div className="grid min-h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5" data-position-control="">
       <div className="min-w-0">

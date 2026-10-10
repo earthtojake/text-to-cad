@@ -19,6 +19,7 @@ vi.mock('../../../dist/renderers/glb/useGlbScene.js', () => ({
 vi.mock('../../../dist/renderers/glb/useGlbAnimation.js', () => ({ useGlbAnimation: () => loaded.animation }));
 import GlbRenderer from '../../../dist/renderers/glb/GlbRenderer.js';
 import { writeFileView } from '../../../dist/renderers/kit/shell/fileView.js';
+import { createAnimationClock } from '../../../dist/renderers/kit/tools/playbar/animationClock.js';
 import { ViewerElementContext, ViewerHostContext } from '../../../dist/host/context.js';
 import { testHost } from '../../../dist/host/testing/host.js';
 import * as THREE from 'three';
@@ -124,7 +125,7 @@ it('the deformation value rescales the drawn displacement from the file\'s posit
   expect(position.getZ(2)).toBeCloseTo(-0.02, 6);
   act(() => { vi.advanceTimersByTime(500); });
   vi.useRealTimers();
-  expect(save.mock.calls.at(-1)![0].renderer.fea.value).toEqual({ field: null, scale: 0 });
+  expect(save.mock.calls.at(-1)![0].renderer.fea.value).toMatchObject({ field: null, scale: 0, loadScale: null, threshold: null });
 });
 
 it('takes the stored choice back for the same result, and not for a re-solved one', () => {
@@ -158,15 +159,20 @@ it('a GLB that is not a result has no colour bar, no Select tool, no Study and i
   expect(colourBytes(mesh).every(byte => byte === 7)).toBe(true);
 });
 
-it('the colour bar steps up above the playbar when the result also has routines, and a stored scale is held to the slider\'s range', () => {
+it('the colour bar steps up above the playbar while it is there, in preview, and a stored scale is held to the slider\'s range', () => {
   const plain = mount(RESULT);
   const low = (plain.container.querySelector('[aria-label$="colour bar"]')!.parentElement as HTMLElement).style.bottom;
   expect(low).toBe('var(--cad-viewport-bottom-center, 1.75rem)');
   cleanup();
-  loaded.animation = { clips: [{ id: 'a' }] };
+  loaded.animation = { clips: [{ id: 'a', label: 'Load ramp', duration: 2 }], activeClipId: 'a', clock: createAnimationClock(), speed: 1, loopEnabled: true,
+    onClipSelect() {}, onPlayToggle() {}, onScrub() {}, onSpeedChange() {}, onLoopToggle() {}, onRelease() {} };
   const stored = writeFileView({ renderer: { fea: { field: null, scale: 9999 } }, signatures: { fea: '_von_mises,_displacement:10' } });
   const animated = mount(RESULT, stored);
-  const high = (animated.container.querySelector('[aria-label$="colour bar"]')!.parentElement as HTMLElement).style.bottom;
+  const bottom = () => (animated.container.querySelector('[aria-label$="colour bar"]')!.parentElement as HTMLElement).style.bottom;
+  // Out of preview there is no playbar under the model to clear.
+  expect(bottom()).toBe(low);
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Preview' })); });
+  const high = bottom();
   expect(high).not.toBe(low);
   expect(high).toContain('3rem');
   // The slider tops out at four times the file's own 10x.
@@ -527,4 +533,133 @@ it('a joint chosen under either of its parts is the same choice: both copies pre
   act(() => { fireEvent.click(copies[1]); });
   for (const copy of screen.getAllByRole('button', { name: 'Select post ↔ base' })) expect(copy.getAttribute('aria-pressed')).toBe('true');
   expect(await copiedPrompt(copied)).toBe("move it\n\nFile: /models/part.glb\nReferences:\nBonded joint between 'post' and 'base' · /models/part.step#o1.1.f1,o1.2.f1");
+});
+
+// The study's view: the agent chooses Result's controls, their order, ranges and words, and named presets.
+const VIEWED = {
+  ...RESULT,
+  view: {
+    controls: [
+      { drives: 'load_scale', type: 'number', label: 'Rider weight', min: 0.5, max: 3, default: 1, unit: '×' },
+      { drives: 'gravity', type: 'number', label: 'Gravity', max: 2 },
+      { drives: 'field', type: 'enum', label: 'Show', options: ['von_mises', 'displacement'], default: 'von_mises' },
+      { drives: 'deformation', type: 'slider', label: 'Wobble', max: 9 },
+      { drives: 'threshold', type: 'number', label: 'Show above', field: 'von_mises', min: 0, max: 100, default: 40, unit: 'MPa' },
+      { drives: 'deformation', type: 'number', label: 'Exaggerate', min: 0, max: 50, default: 12 },
+    ],
+    presets: [{ label: 'Landing (3×)', load_scale: 3 }],
+  },
+};
+const resultRows = () => Array.from(studyPanel()!.querySelectorAll('[data-study-result] [data-position-control], [data-study-result] [role="combobox"]'));
+const setValue = (name: string, value: string) => act(() => {
+  const box = screen.getByRole('textbox', { name });
+  fireEvent.change(box, { target: { value } });
+  fireEvent.blur(box);
+});
+const choose = (combobox: string, option: string) => {
+  act(() => { fireEvent.click(screen.getByRole('combobox', { name: combobox })); });
+  act(() => { fireEvent.click(screen.getByRole('option', { name: option })); });
+};
+const summary = (container: HTMLElement) => container.querySelector('[data-fea-summary]')!.textContent;
+
+it('Result shows the view\'s controls in its order, with its words and ranges, skipping what it does not know; no view shows today\'s two', () => {
+  mount(VIEWED);
+  const sliders = screen.getAllByRole('slider');
+  expect(sliders.map(slider => slider.getAttribute('aria-label'))).toEqual(['Rider weight', 'Show above', 'Exaggerate']);
+  expect(sliders.map(slider => [slider.getAttribute('aria-valuemin'), slider.getAttribute('aria-valuemax'), slider.getAttribute('aria-valuenow')]))
+    .toEqual([['0.5', '3', '1'], ['0', '100', '40'], ['0', '50', '12']]);
+  // In the view's order: the preset, the load, the field, the threshold, the deformation.
+  expect(resultRows().map(row => row.textContent?.replace(/\s+/g, ' ').trim())).toEqual(
+    ['Default', 'Rider weight', 'Stress', 'Show above', 'Exaggerate']);
+  expect(screen.queryByRole('slider', { name: 'Gravity' })).toBeNull();
+  expect(screen.queryByRole('slider', { name: 'Wobble' })).toBeNull();
+  expect(screen.getByRole('textbox', { name: 'Rider weight slider value' }).getAttribute('value')).toBe('×1.00');
+  expect(screen.getByRole('textbox', { name: 'Show above slider value' }).getAttribute('value')).toBe('40.0 MPa');
+  cleanup();
+  mount(RESULT);
+  expect(screen.getAllByRole('slider').map(slider => slider.getAttribute('aria-label'))).toEqual(['Deformation scale']);
+  expect(screen.getByRole('slider', { name: 'Deformation scale' }).getAttribute('aria-valuemax')).toBe('40');
+  expect(screen.getByRole('textbox', { name: 'Deformation scale value' }).getAttribute('value')).toBe('×10.0');
+  expect(screen.queryByRole('combobox', { name: 'Preset' })).toBeNull();
+});
+
+it('at twice the load, the bar, its line and the deformation are twice the solved ones, what each part holds is half, and a part flips to yields', () => {
+  const parts = [{ ref: '#o1.1', name: 'post', material: 'steel', safety_factor: 5.83 }, { ref: '#o1.2', name: 'base', material: 'steel', safety_factor: 1.5 }];
+  const { container, mesh } = mount({ ...VIEWED, view: { controls: [VIEWED.view.controls[0], VIEWED.view.controls[5]] }, parts });
+  const colours = colourBytes(mesh);
+  const tip = mesh.geometry.getAttribute('position').getZ(2);
+  const partDetails = () => Array.from(screen.getByRole('region', { name: 'Parts' }).querySelectorAll('[data-study-detail]')).map(detail => detail.textContent!.replace(/\u00a0/g, ' '));
+  expect(partDetails()).toEqual(['steel · holds 5.8×', 'steel · holds 1.5×']);
+  setValue('Rider weight slider value', '2');
+  expect(summary(container)).toBe('Peak stress 95 MPa · holds 2.9× this load · moves up to 0.058 mm · at 2× the load');
+  expect(container.querySelector('[data-fea-max]')!.textContent).toBe('94.6 MPa');
+  expect(partDetails()).toEqual(['steel · holds 2.9×', 'steel · yields']);
+  // The colours keep their place on a bar that now reads twice as high; the displacement is drawn twice as far.
+  expect(colourBytes(mesh)).toEqual(colours);
+  // The file baked in 10x of vertex 2's 0.002 m: 12x at the solved load, 24x at twice it.
+  expect(tip).toBeCloseTo(0.002 * (12 - 10), 6);
+  expect(mesh.geometry.getAttribute('position').getZ(2)).toBeCloseTo(0.002 * (24 - 10), 6);
+});
+
+it('a threshold greys every vertex whose value is under it, and the load moves what is over it', () => {
+  const { mesh } = mount({ ...VIEWED, view: { controls: [VIEWED.view.controls[0], VIEWED.view.controls[4]] } });
+  const grey = () => [0, 1, 2, 3].map(vertex => colourBytes(mesh).slice(vertex * 4, vertex * 4 + 3).every(byte => byte === 150));
+  // 0, 50, 100 and 25 MPa against 40.
+  expect(grey()).toEqual([true, false, false, true]);
+  setValue('Rider weight slider value', '2');
+  expect(grey()).toEqual([true, false, false, false]);
+  setValue('Show above slider value', '0');
+  expect(grey()).toEqual([false, false, false, false]);
+});
+
+it('a preset sets the values it names, and moving any control is Custom', () => {
+  const { container } = mount(VIEWED);
+  choose('Preset', 'Landing (3×)');
+  expect(screen.getByRole('textbox', { name: 'Rider weight slider value' }).getAttribute('value')).toBe('×3.00');
+  expect(summary(container)).toContain('at 3× the load');
+  expect(screen.getByRole('combobox', { name: 'Preset' }).textContent).toBe('Landing (3×)');
+  setValue('Exaggerate slider value', '20');
+  expect(screen.getByRole('combobox', { name: 'Preset' }).textContent).toBe('Custom');
+  choose('Preset', 'Default');
+  expect(screen.getByRole('textbox', { name: 'Rider weight slider value' }).getAttribute('value')).toBe('×1.00');
+  expect(screen.getByRole('combobox', { name: 'Preset' }).textContent).toBe('Default');
+});
+
+it('draws the loads and fixtures on the model, the chosen load\'s arrows in the chosen colour, and Display\'s switch hides them', () => {
+  const both = { ...STUDY, loads: [{ type: 'force', faces: ['#o1.f1'], vector_N: [0, 0, -2500] }] };
+  const { mesh, unmount } = mount({ ...STUDIED, study: both }, undefined, { faces: [0, 0, 0, 0] });
+  const group = mesh.children.find(child => child.name === 'fea-markers')!;
+  const [shafts, heads, cones] = group.children as THREE.InstancedMesh[];
+  expect([shafts.visible, heads.visible, cones.visible]).toEqual([true, true, true]);
+  expect([heads.count, cones.count]).toEqual([2, 2]);
+  const colour = new THREE.Color();
+  heads.getColorAt(0, colour);
+  expect(colour.getHexString()).toBe('18181b');
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select 2500 N' })); });
+  heads.getColorAt(0, colour);
+  expect(colour.getHexString()).toBe('ff40f2');
+  cones.getColorAt(0, colour);
+  expect(colour.getHexString()).toBe('71717a');
+  // The arrows stand on the deformed face: drawn at 0x, they come back with it.
+  const before = new THREE.Matrix4();
+  heads.getMatrixAt(0, before);
+  setValue('Deformation scale value', '0');
+  const after = new THREE.Matrix4();
+  heads.getMatrixAt(0, after);
+  expect(new THREE.Vector3().setFromMatrixPosition(after).z).toBeLessThan(new THREE.Vector3().setFromMatrixPosition(before).z);
+  openDisplay();
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Disable Loads and fixtures' })); });
+  expect([shafts.visible, heads.visible, cones.visible]).toEqual([false, false, false]);
+  unmount();
+  expect(group.parent).toBeNull();
+});
+
+it('a view that turns the markers off opens with the switch off', () => {
+  const both = { ...STUDY, loads: [{ type: 'force', faces: ['#o1.f1'], vector_N: [0, 0, -2500] }] };
+  const { mesh } = mount({ ...STUDIED, study: both, view: { show: { loads: false, fixtures: false } } }, undefined, { faces: [0, 0, 0, 0] });
+  const group = mesh.children.find(child => child.name === 'fea-markers')!;
+  expect(group.children.map(child => child.visible)).toEqual([false, false, false]);
+  openDisplay();
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Enable Loads and fixtures' })); });
+  expect(group.children.map(child => child.visible)).toEqual([true, true, true]);
 });

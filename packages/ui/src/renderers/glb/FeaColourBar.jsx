@@ -10,13 +10,15 @@ const PLAYBAR_CLEARANCE = "3rem";
  * What the colours of a GLB with an FEA result mean, over the bottom of its viewport: the
  * field's range and units along the ramp, and one plain line about the result. The card grows to fit that line, up to the viewport's width less
  * its margins, and the line wraps only past that; it is never cut short. It is only
- * a reading: the field and the deformation are chosen in Display (`FeaAnalysisSection.jsx`).
+ * a reading: the field and the deformation are chosen in Study. At `loadScale` times the solved
+ * load the range and the line are that load's (`feaSummaryLine`).
  *
- * Bottom-centre, on the line the playbar uses, or one playbar's height above it when the file has routines (`raised`). The card takes no pointer events, so
+ * Bottom-centre, on the line the playbar uses, or one playbar's height above it while the playbar
+ * is there (`raised`: in preview, for a file with routines). The card takes no pointer events, so
  * orbiting past it still works. `field` arrives resolved.
  */
-export default function FeaColourBar({ result, field, raised = false }) {
-  const line = feaSummaryLine(result, field);
+export default function FeaColourBar({ result, field, loadScale = 1, raised = false }) {
+  const line = feaSummaryLine(result, field, loadScale);
   return (
     <div className="pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3" style={{ bottom: raised ? `calc(${VIEWPORT_BOTTOM_CENTER} + ${PLAYBAR_CLEARANCE})` : VIEWPORT_BOTTOM_CENTER }}>
       <div
@@ -26,13 +28,13 @@ export default function FeaColourBar({ result, field, raised = false }) {
       >
         {line ? <div className="text-foreground" data-fea-summary="">{line}</div> : null}
         <div className="flex items-center gap-2 text-micro tabular-nums text-muted-foreground">
-          <span data-fea-min="">{formatValue(field.min)}</span>
+          <span data-fea-min="">{formatValue(field.min * loadScale)}</span>
           <div
             className="h-2 min-w-0 flex-1 rounded-sm border border-border"
             style={{ background: feaRampGradient(result.ramp) }}
             aria-hidden="true"
           />
-          <span data-fea-max="">{formatValue(field.max)}{field.units ? ` ${field.units}` : ""}</span>
+          <span data-fea-max="">{formatValue(field.max * loadScale)}{field.units ? ` ${field.units}` : ""}</span>
         </div>
       </div>
     </div>

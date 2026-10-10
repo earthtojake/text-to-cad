@@ -1,57 +1,29 @@
 import { useState } from "react";
-import { clamp } from "@text-to-cad/core/common/numbers.js";
 import { cn } from "@text-to-cad/ui/utils";
-import { Slider } from "@text-to-cad/ui/primitives/slider";
 import { TREE_INDENT_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@text-to-cad/ui/primitives/tree-row";
-import { FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetFieldGrid, FileSheetSelectRow, FileSheetSliderField, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
 import { InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
+import { KinematicsPoseRow } from "../kit/inspector/kinematicsControls.jsx";
+import { parameterRow } from "../kit/inspector/parameterRow.jsx";
 import ToolPanel, { ToolPanelClose, ToolPanelFooterButton } from "../kit/tools/ToolPanel.jsx";
-import { deformationRange, formatValue } from "./feaResult.js";
+import { formatValue } from "./feaResult.js";
 
-// The fields in plain words, short enough for the panel's one width; the file's own names (von
-// Mises stress) are the colour bar's.
-const FIELD_WORDS = Object.freeze({ _von_mises: "Stress", _displacement: "Displacement" });
+/** A control's number as its value field shows it: a multiple as "×12.0", others with their unit after ("138 MPa"). */
+const controlText = (value, control) => (control.unit === "×" ? `×${formatValue(value)}` : `${formatValue(value)}${control.unit ? ` ${control.unit}` : ""}`);
 
 /**
- * Which field the colours show and how much larger than life the displacement is drawn: Study's
- * Result. The file carries every field and the true displacement (feaResult.js), so both are
- * choices, not readouts. `field` and `scale` arrive resolved.
+ * Study's Result: the controls the study's view chose (`feaControls`), in its order, each a generic
+ * parameter row as Position's joints are (`parameterRow`), under a Preset select when the view names
+ * presets (Default, each preset, Custom once a control has moved). The file carries every field and
+ * the true displacement (feaResult.js), so each is a choice, not a readout. `values` by control id.
  */
-function FeaResultControls({ result, field, scale, onFieldChange, onScaleChange }) {
-  const range = deformationRange(result.deformationScale);
+function FeaResultControls({ controls, values, presets, preset, onChange, onPreset, onReset }) {
   return (
     <>
-      <FileSheetFieldGrid columns={1}>
-        <FileSheetSelectRow
-          hideLabel
-          className="px-0"
-          label="Field"
-          ariaLabel="Result field"
-          value={field.attribute}
-          onValueChange={onFieldChange}
-          options={result.fields.map((entry) => ({ value: entry.attribute, label: FIELD_WORDS[entry.attribute] || entry.name }))}
-        />
-      </FileSheetFieldGrid>
-      <FileSheetSliderField
-        label="Deformation"
-        labelTitle="How much larger than life the displacement is drawn"
-        value={`×${formatValue(scale)}`}
-        onValueCommit={(draft) => onScaleChange(parseFileSheetNumberInput(String(draft).replace(/^×/, ""), {
-          fallback: scale, min: range.min, max: range.max
-        }))}
-        valueInputProps={{ ariaLabel: "Deformation scale value" }}
-      >
-        <Slider
-          className={FILE_SHEET_PRECISION_SLIDER_CLASSES}
-          value={[scale]}
-          min={range.min}
-          max={range.max}
-          step={range.step}
-          aria-label="Deformation scale"
-          thumbProps={{ "aria-label": "Deformation scale" }}
-          onValueChange={(next) => onScaleChange(clamp(next[0], range.min, range.max))}
-        />
-      </FileSheetSliderField>
+      {presets.length ? <KinematicsPoseRow label="Preset" poses={presets} activeValue={preset} onSelect={onPreset} onReset={onReset} /> : null}
+      {controls.map((control) => parameterRow({
+        parameter: control, value: values[control.id], labelTitle: control.labelTitle, valueText: controlText, step: control.step, wideLabel: control.wideLabel === true,
+        onChange: (value) => onChange(control.id, value),
+      }))}
     </>
   );
 }
@@ -153,19 +125,21 @@ export const FEA_STUDY_PANEL_ID = "tree";
  * face picked on the result. They are composed from what the file holds: **Parts** only for an
  * assembly (`parts`: `partRows`, each part with its joints under it, the weakest part open), then
  * **Study** (`rows`: `studyRows`, the material, fixed faces, loads with their faces and mesh, each
- * only where the file records it), ending in Result: the field and deformation. A result written
- * before its study was recorded has Result alone. Choosing a row that stands for faces or parts is
+ * only where the file records it), ending in Result: the study view's controls (`result`:
+ * `FeaResultControls`' props), by default the field and deformation. A result written before its
+ * study was recorded has Result alone. Choosing a row that stands for faces or parts is
  * `onChoose(row)`; `chosen` is the row (or picked face) chosen.
  *
- * @param {{ active: boolean, result: object, parts?: object[], openPart?: number, rows: object[], chosen: string, onChoose(row: object): void,
- *   field: object, scale: number, onFieldChange(attribute: string): void, onScaleChange(scale: number): void,
+ * @param {{ active: boolean, parts?: object[], openPart?: number, rows: object[], chosen: string, onChoose(row: object): void,
+ *   result: { controls: object[], values: Record<string, unknown>, presets: object[], preset: string,
+ *     onChange(id: string, value: unknown): void, onPreset(value: string): void, onReset(): void },
  *   reference: { title: string, ref: string, role: string } | null, onClearSelection(): void,
  *   copy: { label: string, shortcut: string, onCopy(): unknown } | null }} props
  */
-export default function FeaStudyPanel({ active, result, parts = NONE, openPart = -1, rows, chosen, onChoose, field, scale, onFieldChange, onScaleChange,
+export default function FeaStudyPanel({ active, parts = NONE, openPart = -1, rows, chosen, onChoose, result,
   reference, onClearSelection, copy }) {
   const contents = {
-    [RESULT_ROW.id]: <FeaResultControls result={result} field={field} scale={scale} onFieldChange={onFieldChange} onScaleChange={onScaleChange} />,
+    [RESULT_ROW.id]: <FeaResultControls {...result} />,
   };
   const panels = [
     parts.length ? { id: FEA_PARTS_PANEL_ID, title: "Parts", rows: parts, startsCollapsed: parts.filter((_, index) => index !== openPart).map((row) => row.id), fit: "tree" } : null,

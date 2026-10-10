@@ -1,8 +1,8 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh, Ray, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import {
-  applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaRamp, feaSummaryLine, fieldValues, forceDirection, formatValue, pickFace, readFeaResult,
-  partRows, recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows, weakestPartIndex
+  applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaControls, feaMarkerShow, feaPresets, feaRamp, feaSummaryLine, fieldValues, forceDirection,
+  formatValue, pickFace, readFeaResult, partRows, recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows, weakestPartIndex
 } from './feaResult.js';
 
 /** A two-triangle "result" the way GLTFLoader hands one over: lower-cased custom attributes, extras in userData. */
@@ -431,3 +431,115 @@ describe('an assembly result', () => {
     expect(feaSummaryLine(result, result.fields[0])).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
   });
 });
+
+describe('the study\'s view', () => {
+  const VIEW = {
+    controls: [
+      { drives: 'load_scale', type: 'number', label: 'Rider weight', min: 0.5, max: 3, default: 1, unit: '×' },
+      { drives: 'field', type: 'enum', label: 'Show', options: ['displacement', 'von_mises'], default: 'von_mises' },
+      { drives: 'threshold', type: 'number', label: 'Show above', field: 'von_mises', min: 0, max: 300, default: 138, unit: 'MPa' },
+      { drives: 'deformation', type: 'number', label: 'Exaggerate', min: 0, max: 50, default: 12 },
+    ],
+    presets: [{ label: 'Landing (3×)', load_scale: 3 }],
+    show: { loads: true, fixtures: false },
+  };
+  const withView = (view: unknown) => {
+    const { mesh, root } = resultMesh();
+    mesh.userData.view = view;
+    return readFeaResult(root)!;
+  };
+
+  it('is the agent\'s controls in its order, labels and ranges, as generic parameters', () => {
+    const controls = feaControls(withView(VIEW));
+    expect(controls.map((control: any) => [control.id, control.type, control.label])).toEqual([
+      ['load_scale', 'number', 'Rider weight'], ['field', 'enum', 'Show'], ['threshold', 'number', 'Show above'], ['deformation', 'number', 'Exaggerate']]);
+    expect(controls[0]).toMatchObject({ min: 0.5, max: 3, defaultValue: 1, unit: '×' });
+    expect(controls[1].options.map((option: any) => option.label)).toEqual(['Displacement', 'Stress']);
+    expect(controls[1].defaultValue).toBe('_von_mises');
+    expect(controls[2]).toMatchObject({ field: '_von_mises', defaultValue: 138, unit: 'MPa' });
+    expect(controls[3]).toMatchObject({ min: 0, max: 50, defaultValue: 12, unit: '×' });
+  });
+
+  it('with no view, is today\'s: a field over every field opening on stress, and deformation from 0 to four times the file\'s', () => {
+    const controls = feaControls(readFeaResult(resultMesh().root)!);
+    expect(controls.map((control: any) => control.id)).toEqual(['field', 'deformation']);
+    expect(controls[0]).toMatchObject({ defaultValue: '_von_mises', hideLabel: true, ariaLabel: 'Result field' });
+    expect(controls[1]).toMatchObject({ min: 0, max: 40, step: 0.5, defaultValue: 10, ariaLabel: 'Deformation scale' });
+  });
+
+  it('skips what this viewer does not know: a drives or a type, a field the file lacks, a range it cannot use', () => {
+    const controls = feaControls(withView({ controls: [
+      { drives: 'speed', type: 'number', max: 3 },
+      { drives: 'deformation', type: 'enum', options: [] },
+      { drives: 'field', options: ['safety_factor'] },
+      { drives: 'threshold', field: 'strain', max: 3 },
+      { drives: 'load_scale', min: 2, max: 1 },
+      { drives: 'load_scale', max: 2, type: 'number' },
+    ] }));
+    expect(controls.map((control: any) => control.id)).toEqual(['load_scale']);
+    expect(controls[0]).toMatchObject({ min: 0, max: 2, defaultValue: 1 });
+  });
+
+  it('names its presets as full states over the controls, and says which markers it draws', () => {
+    const result = withView(VIEW);
+    const presets = feaPresets(result, feaControls(result));
+    expect(presets).toEqual([{ value: 'preset:0', label: 'Landing (3×)', values: { load_scale: 3, field: '_von_mises', threshold: 138, deformation: 12 } }]);
+    expect(feaMarkerShow(result)).toEqual({ on: true, loads: true, fixtures: false });
+    expect(feaMarkerShow(withView({ show: { loads: false, fixtures: false } }))).toEqual({ on: false, loads: true, fixtures: true });
+    expect(feaMarkerShow(readFeaResult(resultMesh().root)!)).toEqual({ on: true, loads: true, fixtures: true });
+  });
+});
+
+describe('a load other than the solved one', () => {
+  it('scales the line: twice the stress and the displacement, half what it holds, at 2× the load', () => {
+    const result = readFeaResult(resultMesh().root)!;
+    expect(feaSummaryLine(result, result.fields[0], 2)).toBe('Peak stress 95 MPa · holds 2.9× this load · moves up to 0.058 mm · at 2× the load');
+    expect(feaSummaryLine(result, result.fields[1], 0.5)).toBe('Moves up to 0.014 mm · at 0.5× the load');
+    expect(feaSummaryLine(result, result.fields[0], 1)).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
+    expect(feaSummaryLine({ ...result, safetyFactor: 1.5 }, result.fields[0], 2)).toContain('yields under this load');
+  });
+
+  it('halves what each part holds at twice the load, and a part can flip to yields', () => {
+    const { mesh, root } = resultMesh();
+    mesh.userData.parts = [{ ref: '#o1.1', name: 'post', material: 'steel', safety_factor: 3.1 }, { ref: '#o1.2', name: 'base', material: 'steel', safety_factor: 1.5 }];
+    const result = readFeaResult(root)!;
+    expect(partRows(result).map((row: any) => row.detail)).toEqual(['steel · holds 3.1×', 'steel · holds 1.5×']);
+    expect(partRows(result, 2).map((row: any) => row.detail)).toEqual(['steel · holds 1.5×', 'steel · yields']);
+  });
+
+  it('draws the values at the load over the range at that load, and the values alone climbing while a ramp plays', () => {
+    const { mesh, root } = resultMesh();
+    const [vm] = readFeaResult(root)!.fields;
+    recolorByField(mesh, vm);
+    const solved = Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
+    // Values and range both doubled: every colour keeps its place on the doubled bar.
+    expect(recolorByField(mesh, vm, undefined, null, null, null, { valueScale: 2, rangeScale: 2 })).toBe(true);
+    expect(Array.from(mesh.geometry.getAttribute('color').array as Uint8Array)).toEqual(solved);
+    // Halfway up the ramp to that load: half the values under the same doubled range, so cooler.
+    recolorByField(mesh, vm, undefined, null, null, null, { valueScale: 1, rangeScale: 2 });
+    const bytes = Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
+    expect(bytes.slice(4, 8)).toEqual(solvedAt(vm, 50 / 2));
+  });
+
+  it('greys every vertex under a threshold, comparing the threshold field at the load', () => {
+    const { mesh, root } = resultMesh();
+    const [vm, displacement] = readFeaResult(root)!.fields;
+    recolorByField(mesh, vm, undefined, null, null, null, { threshold: { field: vm, value: 40, scale: 1 } });
+    const bytes = Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
+    // 0 and 25 MPa are under 40: grey. 50 and 100 keep the ramp.
+    expect([bytes.slice(0, 3), bytes.slice(12, 15)]).toEqual([[150, 150, 150], [150, 150, 150]]);
+    expect(bytes.slice(8, 11)).toEqual([230, 20, 13]);
+    // At twice the load 25 MPa is 50: over it. On another field, the stress decides all the same.
+    recolorByField(mesh, displacement, undefined, null, null, null, { valueScale: 2, rangeScale: 2, threshold: { field: vm, value: 40, scale: 2 } });
+    const doubled = Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
+    expect(doubled.slice(0, 3)).toEqual([150, 150, 150]);
+    expect(doubled.slice(12, 15)).not.toEqual([150, 150, 150]);
+  });
+});
+
+/** The ramp's colour (with alpha) for a stress over the 47.3 MPa range. */
+function solvedAt(field: any, value: number) {
+  // The byte table rounds t to 1/255 first.
+  const [r, g, b] = feaRamp(Math.round(Math.min(1, value / field.max) * 255) / 255);
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), 255];
+}
