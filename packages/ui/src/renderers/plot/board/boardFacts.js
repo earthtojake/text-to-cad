@@ -1,7 +1,13 @@
+import { formatBoardRefSelector } from "@text-to-cad/core/lib/boardRefs.js";
+
 /**
  * What the Reference panel says about one board reference: its heading (what it is, as a person
  * names it — never the raw id, which is the ID row) and its rows, label and value, in script
  * millimetres. Pure data; the Reference panel (`BoardPanels.jsx`) draws it.
+ *
+ * A row that names other things on the document carries them as a third element, `links`: each
+ * `{ text, selector }` the panel draws as a button that selects it (a pad's net, a net's parts),
+ * as a robot's Reference selects the links it names; a `text` without a selector reads as words.
  */
 
 const mm = (value) => `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 3 })} mm`;
@@ -21,6 +27,23 @@ function trackLength(track) {
 }
 
 const name = (pad) => (pad.name && pad.name !== pad.number && pad.name !== "~" ? pad.name : "");
+
+const partSelector = (ref) => formatBoardRefSelector({ kind: "part", ref });
+const netSelector = (net) => formatBoardRefSelector({ kind: "net", net });
+/** A row whose value is one thing on the document, which its button selects. */
+const linked = (label, text, selector) => [label, text, [{ text, selector }]];
+/** A pad's or a pin's net row: the net selects, "None" is words. */
+const netRow = (net) => (net ? linked("Net", net, netSelector(net)) : ["Net", "None"]);
+/** A part's row, named by its reference and value. */
+const partRow = (part) => linked("Part", [part.ref, part.value].filter(Boolean).join(" · "), partSelector(part.ref));
+/** A net's Parts row: the first twelve select, the rest are counted. */
+function partsRow(refs) {
+  if (!refs.length) return ["Parts", "None"];
+  const shown = refs.slice(0, 12);
+  const more = refs.length > 12 ? `and ${refs.length - 12} more` : "";
+  return ["Parts", [shown.join(", "), more].filter(Boolean).join(" "),
+    [...shown.map((ref) => ({ text: ref, selector: partSelector(ref) })), ...(more ? [{ text: more }] : [])]];
+}
 
 /**
  * @param {object} resolved  `index.resolve(selector)` or a pick.
@@ -55,12 +78,12 @@ export function boardReferenceFacts(resolved, index) {
     return {
       heading: `${pad.ref} · pad ${pad.number}${name(pad) ? ` ${name(pad)}` : ""}`,
       rows: [
-        ["Net", pad.net || "None"],
+        netRow(pad.net),
         ...(name(pad) ? [["Pin", name(pad)]] : []),
         ...(pad.type ? [["Type", pad.type.replaceAll("_", " ")]] : []),
         ["Side", pad.side === "both" ? "Both (through-hole)" : titleCase(pad.side)],
         ["Position", position(index.toScript(pad.at))],
-        ["Part", [pad.part.ref, pad.part.value].filter(Boolean).join(" · ")],
+        partRow(pad.part),
         id,
       ],
     };
@@ -75,7 +98,7 @@ export function boardReferenceFacts(resolved, index) {
       rows: [
         ...(net.class ? [["Class", net.class]] : []),
         ["Pads", plural(net.pads.length, "pad")],
-        ["Parts", refs.length > 12 ? `${refs.slice(0, 12).join(", ")} and ${refs.length - 12} more` : refs.join(", ") || "None"],
+        partsRow(refs),
         ["Tracks", net.tracks.length ? `${net.tracks.length} · ${mm(length)}` : "None"],
         ["Vias", String(net.vias.length)],
         ...(pours.length ? [["Pours", pours.join(", ")]] : []),
@@ -86,7 +109,7 @@ export function boardReferenceFacts(resolved, index) {
   if (resolved.kind === "copper") {
     const item = resolved.item;
     const what = item?.kind === "via" ? "via" : item?.kind === "zone" ? "pour" : "track";
-    const rows = [["Net", resolved.net.name]];
+    const rows = [linked("Net", resolved.net.name, netSelector(resolved.net.name))];
     if (item?.kind === "track") rows.push(["Layer", item.layer], ["Width", mm(item.width)], ["Length", mm(trackLength(item))]);
     if (item?.kind === "via") rows.push(["Diameter", mm(item.diameter)], ["Drill", mm(item.drill)]);
     if (item?.kind === "zone") rows.push(["Layer", item.layer]);
@@ -131,10 +154,10 @@ export function schematicReferenceFacts(resolved, index) {
     return {
       heading: `${pin.ref} · pin ${pin.number}${name(pin) ? ` ${name(pin)}` : ""}`,
       rows: [
-        ["Net", pin.net || "None"],
+        netRow(pin.net),
         ...(name(pin) ? [["Name", name(pin)]] : []),
         ...(pin.type ? [["Type", pin.type.replaceAll("_", " ")]] : []),
-        ["Part", [pin.part.ref, pin.part.value].filter(Boolean).join(" · ")],
+        partRow(pin.part),
         id,
       ],
     };
@@ -148,7 +171,7 @@ export function schematicReferenceFacts(resolved, index) {
       rows: [
         ...(net.class ? [["Class", net.class]] : []),
         ["Pins", plural(net.pads.length, "pin")],
-        ["Parts", refs.length > 12 ? `${refs.slice(0, 12).join(", ")} and ${refs.length - 12} more` : refs.join(", ") || "None"],
+        partsRow(refs),
         ...(labels.length ? [["Labels", labels.join(", ")]] : []),
         id,
       ],
@@ -170,6 +193,9 @@ export function boardFindingFacts(finding, index) {
   // A schematic has no script frame: an item it cannot name reads as KiCad wrote it.
   const located = (item) => (item.at && index?.toScript ? position(index.toScript(item.at)) : item.text);
   const items = finding.items.map((item) => item.ref || located(item)).filter(Boolean);
+  // What it names by reference selects; what it can only place reads as words.
+  const links = finding.items.some((item) => item.ref)
+    ? finding.items.map((item) => (item.ref ? { text: item.ref, selector: item.ref } : { text: located(item) })).filter((link) => link.text) : null;
   return {
     heading: finding.summary || finding.description || finding.type.replaceAll("_", " "),
     rows: [
@@ -178,7 +204,7 @@ export function boardFindingFacts(finding, index) {
       ["Check", finding.check.toUpperCase()],
       ["Severity", titleCase(finding.severity)],
       ["Message", finding.description],
-      ...(items.length ? [["Items", items.join(", ")]] : []),
+      ...(items.length ? [links ? ["Items", items.join(", "), links] : ["Items", items.join(", ")]] : []),
     ],
   };
 }

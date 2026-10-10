@@ -305,7 +305,11 @@ plot without one is the picture alone.
   Connectors, Capacitors…), each with its pads; and **Nets**, each with the pads on it (KiCad's
   names for a pin on nothing are left out). The filter finds a part
   by its reference, value, footprint or MPN, a pad by its pin's name, a net by its name, and a
-  pasted reference exactly.
+  pasted reference exactly. A row under the pointer (or in keyboard focus) lights what it names on
+  the board, as a robot's Links rows do. A part's or a net's eye isolates it: the rest of the board
+  steps back, as it does for a net in focus, and what is isolated is lit; a second press lets the
+  board back in. What is isolated is the file's, kept through a rebuild for whatever still names
+  something on the board.
 - **Findings**, what KiCad reported and what the review found, are the viewport's alert card,
   the card and navbar icon a STEP's alerts use (`board/FindingsList.jsx`). Its title, and its
   icon's name, is the count: "2 to fix, 3 suggestions", "1 to fix" or "3 suggestions". Under it,
@@ -326,7 +330,9 @@ plot without one is the picture alone.
   (y up, from the board's drill/place origin): a part's footprint, side, position, rotation,
   pads, the script line that made it (`Script`), then its MPN, manufacturer, LCSC and
   description fields; a pad's net, pin, type, side and position; a net's class, pads, parts,
-  tracks and their length, vias and pours; copper's layer, width or drill. Its **Copy**
+  tracks and their length, vias and pours; copper's layer, width or drill. What a row names on the
+  board is a link that selects it, as a robot's Reference selects the links it names: a pad's net
+  and part, a net's parts, copper's net, a finding's items. Its **Copy**
   (**Copy All**) writes the references with the file's prefix, as the copy key does; a copy the
   host refuses is the alert card "Couldn’t copy from the board".
 - **References** are board references, the language `cadgen.pcb.read_board(path).resolve(ref)`
@@ -340,7 +346,7 @@ plot without one is the picture alone.
   it was.
 - **Draw** is the shared drawing editor laid over the board, its Drawing panel and Copy Drawing
   as a STEP's. While it is up the editor pans and zooms and the board follows it
-  (`board/boardViewLock.js`), so ink stays on what it was drawn over — through a change of the
+  (`kit/tools/draw/planeViewLock.js`), so ink stays on what it was drawn over — through a change of the
   pane's size too; the sketch goes with a Quick Edit as the view with its ink. A host's or the
   agent's selection while it is up shows under the ink and leaves the sketch alone, and a
   capture never carries the hover.
@@ -371,12 +377,13 @@ Reference, and having no layers it has no Display settings.
   symbol), **Parts** (a symbol, by its body or its pins), **Pins** and **Nets** (anything on a
   net). Shift-click adds; a double-click copies.
 - **The tree** is the board's, in pins: **Parts** by kind, each with its pins; **Nets**, each with
-  the pins on it. A symbol's units on several sheets are one row.
+  the pins on it. A symbol's units on several sheets are one row. Its rows light what they name
+  on hover and isolate parts and nets with their eye, as the board's do.
 - **Findings** are the board's alert card and navbar icon, from KiCad's ERC, which the
   schematic's plot runs: its errors to fix, its warnings suggestions.
 - **The Reference**: a symbol's library entry, footprint, units, sheets (on a schematic of
   several), pins, MPN and LCSC fields and `Script`; a pin's net, name and type; a net's class,
-  pins, parts and labels.
+  pins, parts and labels; a pin's net and part, and a net's parts, select what they name.
 - **Cross-probing**: a board and its schematic (one path but for `.kicad_pcb` and `.kicad_sch`)
   open in two views select together, through the host's `crossProbe` port (`viewer-host.md`):
   what one selects — a person's press, a tree row, the agent's `select` — the other selects too,
@@ -526,7 +533,9 @@ are; its filter row is a heading's 28px, the box 20px tall and close to the row'
 actions, shown on hover and kept while they are on, are **Isolate** then the **Hide/Reveal** eye; a part file has no
 Isolate. A Links row that draws something — a link with visuals, or one visual —
 has the eye alone, in its search hit too: a link's hides its own visuals, never its
-child links, and on a partly hidden link hides the rest. They float over the row's right end rather than taking width from it:
+child links, and on a partly hidden link hides the rest. A KiCad board's or schematic's part and
+net rows have the eye as **Isolate** (`TreeRowEye`'s `isolate`: lit and pressed while on, "Exit
+isolate"); a pad, a pin or a group has none. They float over the row's right end rather than taking width from it:
 the name runs the row's full width and, while an action shows, fades out half a
 rem before them (a mask, `ROW_NAME_UNDER_ACTIONS`), so nothing is drawn behind the
 buttons and the row keeps its own colour.

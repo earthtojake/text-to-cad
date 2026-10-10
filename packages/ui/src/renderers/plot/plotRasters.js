@@ -22,12 +22,12 @@
 import { drawPlot, rectsOverlap, sheetImages, visiblePageRect } from "@text-to-cad/core/lib/plot2d/index.js";
 
 /** What a patch covers beyond the pane, on each side, as a share of the pane. */
-export const PATCH_MARGIN = 0.15;
+const PATCH_MARGIN = 0.15;
 /** One patch's backing store, at most: a margin that would pass it is given up first. */
-export const PATCH_MAX_PIXELS = 32 * 1024 * 1024;
+const PATCH_MAX_PIXELS = 32 * 1024 * 1024;
 /** How many patches are kept, and how many pixels they may hold between them. */
 export const PATCH_LIMIT = 3;
-export const PATCH_BUDGET_PIXELS = 48 * 1024 * 1024;
+const PATCH_BUDGET_PIXELS = 48 * 1024 * 1024;
 /** How long a view must rest before it is drawn again at its own scale. */
 export const SETTLE_MS = 120;
 

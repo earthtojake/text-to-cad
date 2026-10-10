@@ -9,7 +9,8 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 import ToolPanel, { ToolPanelClose, ToolPanelFooterButton, TOOL_PANEL_HEADING_TEXT_CLASS } from "../../kit/tools/ToolPanel.jsx";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
-import { InfoRow } from "../../kit/inspector/referenceRows.jsx";
+import { InfoRow, REFERENCE_LINK_CLASS } from "../../kit/inspector/referenceRows.jsx";
+import TreeRowEye, { treeRowEyeLayout } from "../../kit/inspector/TreeRowEye.jsx";
 import { useTreeSearch } from "../../kit/inspector/modelTreeSearch.js";
 import { BoardMeasureModeMenu, BoardSelectModeMenu } from "./boardModes.jsx";
 import { boardTreeAncestors, boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
@@ -18,56 +19,76 @@ import { boardFindingFacts, referenceFacts } from "./boardFacts.js";
 const EMPTY = Object.freeze([]);
 const NO_IDS = Object.freeze(new Set());
 // What the panels call the document they list.
-const nounOf = (inspector) => (inspector.document === "schematic" ? "Schematic" : "Board");
+const nounOf = (documentKind) => (documentKind === "schematic" ? "Schematic" : "Board");
+// A part or a net can be isolated; a pad is seen with its part, a group is many things.
+const isolable = (node) => node.kind === "part" || node.kind === "net";
 
-function rowActions(node, select) {
+// What a row does: a press selects what it names (a modified press adds or takes it away); the
+// pointer over it, or keyboard focus on it, lights it on the canvas, as a robot's Links rows do.
+function rowActions(node, { select, hover }) {
   return {
     choose(event) {
       const add = event.ctrlKey || event.metaKey || event.shiftKey;
       if (node.selector) select([node.selector], { add });
     },
+    enter: () => hover(node.selector || null),
+    leave: () => hover(null),
   };
+}
+
+// A part's or a net's eye isolates it: everything else on the canvas steps back
+// (`kit/inspector/TreeRowEye.jsx`). It takes no width from the row; the name fades out under it.
+function rowEye(node, isolatedIds, isolate) {
+  if (!isolable(node) || !isolate) return { layout: { style: null, name: "" }, eye: null };
+  const on = isolatedIds.has(node.id);
+  return { layout: treeRowEyeLayout(on), eye: <TreeRowEye kind="isolate" on={on} label={node.label} onToggle={() => isolate(node.selector)} /> };
 }
 
 // A row of the board tree: a group (Parts, a kind, Nets), a part, a net or a pad.
 // A board's Nets can be thousands of rows: a row renders again only when it, or a row under it,
-// changed (`dirty`: the rows whose highlight or opening changed, and their owners).
+// changed (`dirty`: the rows whose highlight, isolation or opening changed, and their owners).
 // (Named apart from the memo it is wrapped in, so the rows under it are the memo too.)
-const BoardRow = memo(function BoardTreeRow({ node, depth, highlighted, expanded, dirty, toggle, select, rowRefs }) {
+const BoardRow = memo(function BoardTreeRow({ node, depth, highlighted, isolatedIds, expanded, dirty, toggle, actions, rowRefs }) {
   const branch = node.children.length > 0;
   const open = branch && expanded.has(node.id);
-  const { choose } = rowActions(node, select);
+  const { choose, enter, leave } = rowActions(node, actions);
+  const { layout, eye } = rowEye(node, isolatedIds, actions.isolate);
   const pickable = node.kind !== "group";
   return <li className="min-w-0" ref={(element) => { if (element) rowRefs.current.set(node.id, element); else rowRefs.current.delete(node.id); }}>
-    <TreeRowSurface dense active={highlighted.has(node.id)} className="gap-0 pr-0" style={{ paddingLeft: depth * 12 }} data-board-row={node.id}>
+    <TreeRowSurface dense active={highlighted.has(node.id)} className="group/row gap-0 pr-0" style={{ paddingLeft: depth * 12, ...layout.style }} data-board-row={node.id}
+      onMouseEnter={enter} onMouseLeave={leave}>
       {branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${node.label}`} aria-expanded={open}
         className="grid h-6 w-4 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => toggle(node)}><TreeRowChevron expanded={open} dense /></button> : <span className="w-4 shrink-0" />}
       <button type="button" aria-label={pickable ? `Select ${node.label}` : node.label} aria-pressed={pickable ? highlighted.has(node.id) : undefined}
-        onClick={pickable ? choose : () => toggle(node)}
-        className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        onClick={pickable ? choose : () => toggle(node)} onFocus={enter} onBlur={leave}
+        className={cn("flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", layout.name)}>
         <TreeRowLabel className="max-w-full shrink-0">{node.label}</TreeRowLabel>
         {node.detail ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{node.detail}</TreeRowLabel> : null}
       </button>
+      {eye}
     </TreeRowSurface>
-    {open ? <ul>{node.children.map((child) => <BoardRow key={child.id} {...{ node: child, depth: depth + 1, highlighted, expanded, dirty, toggle, select, rowRefs }} />)}</ul> : null}
+    {open ? <ul>{node.children.map((child) => <BoardRow key={child.id} {...{ node: child, depth: depth + 1, highlighted, isolatedIds, expanded, dirty, toggle, actions, rowRefs }} />)}</ul> : null}
   </li>;
 }, (before, after) => before.node === after.node && before.depth === after.depth && before.toggle === after.toggle
-  && before.select === after.select && !after.dirty.has(after.node.id));
+  && before.actions === after.actions && !after.dirty.has(after.node.id));
 
-function BoardSearchRow({ match, highlighted, cursor, select }) {
+function BoardSearchRow({ match, highlighted, isolatedIds, cursor, actions }) {
   const { entry, indices, alias } = match;
   const { node } = entry;
-  const { choose } = rowActions(node, select);
+  const { choose, enter, leave } = rowActions(node, actions);
+  const { layout, eye } = rowEye(node, isolatedIds, actions.isolate);
   return <li className="min-w-0" data-search-row={node.id}>
-    <TreeRowSurface dense active={highlighted.has(node.id)} cursor={cursor} className="gap-0 pr-0">
-      <button type="button" aria-label={`Select ${node.label}`} aria-pressed={highlighted.has(node.id)} onClick={choose}
-        className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pl-2 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <TreeRowSurface dense active={highlighted.has(node.id)} cursor={cursor} className="group/row gap-0 pr-0" style={layout.style || undefined}
+      onMouseEnter={enter} onMouseLeave={leave}>
+      <button type="button" aria-label={`Select ${node.label}`} aria-pressed={highlighted.has(node.id)} onClick={choose} onFocus={enter} onBlur={leave}
+        className={cn("flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pl-2 pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", layout.name)}>
         <TreeRowLabel className="max-w-full shrink-0"><TreeFilterHighlight indices={indices} text={entry.label} /></TreeRowLabel>
         <TreeRowLabel className="flex-1 text-micro text-muted-foreground">
           {alias ? <TreeFilterHighlight indices={alias.indices} text={alias.text} /> : node.detail || entry.prefix.slice(0, -1)}
         </TreeRowLabel>
       </button>
+      {eye}
     </TreeRowSurface>
   </li>;
 }
@@ -75,11 +96,12 @@ function BoardSearchRow({ match, highlighted, cursor, select }) {
 /**
  * Select's panel on a board or a schematic: its parts by kind, each with its pads or pins, and its
  * nets, each with the pads or pins on it. The filter is the top row, with Select's mode menu and the
- * X. It renders again only for what it shows — the document, the selection, the mode — not for
- * every render of the view under it.
+ * X. A row under the pointer lights what it names on the canvas (`hover`); a part's or a net's eye
+ * isolates it (`isolated`, `onIsolate`). It renders again only for what it shows — the document, the
+ * selection, what is isolated, the mode — not for every render of the view under it.
  */
-export const BoardTreePanel = memo(function BoardTreePanel({ index, documentKind, selection, selectMode, onSelectMode, select, clear, active }) {
-  const noun = nounOf({ document: documentKind });
+export const BoardTreePanel = memo(function BoardTreePanel({ index, documentKind, selection, isolated = EMPTY, selectMode, onSelectMode, select, hover, onIsolate = null, clear, active }) {
+  const noun = nounOf(documentKind);
   const tree = useMemo(() => (index ? buildBoardTree(index) : { roots: EMPTY, nodesById: new Map(), parents: new Map() }), [index]);
   const [expanded, setExpanded] = useState(() => new Set(["group:parts"]));
   const toggle = useCallback((node) => setExpanded((current) => {
@@ -88,19 +110,21 @@ export const BoardTreePanel = memo(function BoardTreePanel({ index, documentKind
     return next;
   }), []);
   const highlighted = useMemo(() => new Set(selection.flatMap(boardTreeNodeIds)), [selection]);
-  // The rows whose highlight or opening changed since the rows on screen were drawn, with their owners.
-  const drawn = useRef({ tree, highlighted: NO_IDS, expanded: NO_IDS });
+  const isolatedIds = useMemo(() => new Set(isolated.flatMap(boardTreeNodeIds)), [isolated]);
+  const actions = useMemo(() => ({ select, hover, isolate: onIsolate }), [select, hover, onIsolate]);
+  // The rows whose highlight, isolation or opening changed since the rows on screen were drawn, with their owners.
+  const drawn = useRef({ tree, highlighted: NO_IDS, isolatedIds: NO_IDS, expanded: NO_IDS });
   const dirty = useMemo(() => {
     const before = drawn.current;
     const ids = new Set();
     const mark = (id) => { for (let at = id; at && !ids.has(at); at = tree.parents.get(at)) ids.add(at); };
-    for (const [now, then] of [[highlighted, before.highlighted], [expanded, before.expanded]]) {
+    for (const [now, then] of [[highlighted, before.highlighted], [isolatedIds, before.isolatedIds], [expanded, before.expanded]]) {
       for (const id of now) if (!then.has(id)) mark(id);
       for (const id of then) if (!now.has(id)) mark(id);
     }
     return ids;
-  }, [tree, highlighted, expanded]);
-  useEffect(() => { drawn.current = { tree, highlighted, expanded }; });
+  }, [tree, highlighted, isolatedIds, expanded]);
+  useEffect(() => { drawn.current = { tree, highlighted, isolatedIds, expanded }; });
   const { query, searching, deferredQuery, found, cursorId, listRef, changeQuery, onKeyDown } = useTreeSearch(tree.roots);
   const rowRefs = useRef(new Map());
 
@@ -127,9 +151,9 @@ export const BoardTreePanel = memo(function BoardTreePanel({ index, documentKind
         </p> : null}
         {searching
           ? found.matches.length
-            ? <ul aria-label={`${noun} search results`}>{found.matches.map((match) => <BoardSearchRow key={match.entry.node.id} {...{ match, highlighted, cursor: match.entry.node.id === cursorId, select }} />)}</ul>
+            ? <ul aria-label={`${noun} search results`}>{found.matches.map((match) => <BoardSearchRow key={match.entry.node.id} {...{ match, highlighted, isolatedIds, cursor: match.entry.node.id === cursorId, actions }} />)}</ul>
             : deferredQuery.trim() ? <p className="px-3 py-6 text-center text-tiny text-muted-foreground">{`Nothing matches “${deferredQuery.trim()}”`}</p> : null
-          : <ul aria-label={noun}>{tree.roots.map((node) => <BoardRow key={node.id} {...{ node, depth: 0, highlighted, expanded, dirty, toggle, select, rowRefs }} />)}</ul>}
+          : <ul aria-label={noun}>{tree.roots.map((node) => <BoardRow key={node.id} {...{ node, depth: 0, highlighted, isolatedIds, expanded, dirty, toggle, actions, rowRefs }} />)}</ul>}
       </div>
     </div>
   </ToolPanel>;
@@ -154,24 +178,36 @@ function ReferencePicker({ items, browsed, onBrowse }) {
   </DropdownMenu>;
 }
 
+/** A row's value: words, or what it names, each a button that selects it (`boardFacts.js`'s `links`). */
+function FactValue({ value, links, onSelect }) {
+  if (!links || !onSelect) return <span className="tabular-nums">{value}</span>;
+  return <span className="tabular-nums">{links.map((link, at) => <span key={`${link.text}-${at}`}>
+    {at ? (link.selector ? ", " : " ") : null}
+    {link.selector ? <TooltipHint content="Select"><button type="button" className={REFERENCE_LINK_CLASS} onClick={() => onSelect([link.selector])}>{link.text}</button></TooltipHint>
+      : <span className="text-muted-foreground">{link.text}</span>}
+  </span>)}</span>;
+}
+
 /**
  * The Reference: what is selected, read back (on a board, in script millimetres). Its heading names
  * it (a picker over several), its X clears the selection, and its foot copies the references (⌘C).
+ * What a row names on the document — a pad's net and part, a net's parts, a check's items — selects
+ * it (`onSelect`), as a robot's Reference selects the links it names.
  */
-export function BoardReferencePanel({ inspector, active, onCopy, copyShortcut = "" }) {
-  const items = useMemo(() => inspector.resolved.map((resolved) => ({ selector: resolved.selector, ...referenceFacts(resolved, inspector.index) })), [inspector.resolved, inspector.index]);
+export function BoardReferencePanel({ index, resolved, finding: focused, active, onClear, onSelect, onCopy, copyShortcut = "" }) {
+  const items = useMemo(() => resolved.map((item) => ({ selector: item.selector, ...referenceFacts(item, index) })), [resolved, index]);
   const [browsed, setBrowsed] = useState(0);
   useEffect(() => { setBrowsed(Math.max(0, items.length - 1)); }, [items.length]);
-  const finding = inspector.finding ? boardFindingFacts(inspector.finding, inspector.index) : null;
+  const finding = focused ? boardFindingFacts(focused, index) : null;
   if (!items.length && !finding) return null;
   const shown = items[Math.min(browsed, items.length - 1)] || null;
   const picker = items.length > 1 ? <ReferencePicker items={items} browsed={Math.min(browsed, items.length - 1)} onBrowse={setBrowsed} /> : null;
   // A finding is headed by its sentence, its own rows first; what it names reads below them, behind
   // the picker when it names several things.
   const title = finding ? finding.heading : picker || shown?.heading;
-  const row = ([label, value], at) => <InfoRow key={`${label}-${at}`} label={label}><span className="tabular-nums">{value}</span></InfoRow>;
+  const row = ([label, value, links], at) => <InfoRow key={`${label}-${at}`} label={label}><FactValue value={value} links={links} onSelect={onSelect} /></InfoRow>;
   return <ToolPanel id="reference" title={title} label="Reference details" closeLabel="Clear selection" fit="details" resizable hidden={!active}
-    onClose={inspector.clear}
+    onClose={onClear}
     footer={items.length ? <ToolPanelFooterButton label={items.length > 1 ? "Copy All" : "Copy"} shortcut={copyShortcut} onClick={onCopy} /> : null}>
     <div className="px-2 pb-1.5" data-board-reference="">
       {finding ? finding.rows.map(row) : null}
@@ -186,24 +222,24 @@ const length = (value) => `${Number(value).toLocaleString(undefined, { maximumFr
 const end = (pick) => pick.label || "point";
 
 /** Measure's panel: its snapping in the heading, then each measurement, or a hint before the first. */
-export function BoardMeasurePanel({ inspector, shown, onClose }) {
+export function BoardMeasurePanel({ measure, shown, onClose }) {
   if (!shown) return null;
-  const items = inspector.measurements;
+  const items = measure.measurements;
   return <ToolPanel id="measure" title="Measure" label="Measure" collapsible={false} onClose={onClose} closeLabel="Clear measurements"
-    actions={<BoardMeasureModeMenu mode={inspector.measureMode} onModeChange={inspector.setMeasureMode} />}>
+    actions={<BoardMeasureModeMenu mode={measure.mode} onModeChange={measure.setMode} />}>
     {items.length ? <section aria-label="Measurements" className="flex min-w-0 flex-col gap-px px-1 pb-1" role="list">
       {items.map((item, at) => <TooltipHint key={item.id} content={`${end(item.a)} → ${end(item.b)} · dx ${length(item.dx)} · dy ${length(item.dy)}`}>
         <div role="listitem" tabIndex={0} className={cn("group/measure-row cursor-default text-sidebar-foreground/80 hover:bg-sidebar-accent", ROW)}>
           <span className="min-w-0 flex-1 truncate tabular-nums">{length(item.distance)}
             <span className="ml-1.5 text-muted-foreground">{`${end(item.a)} → ${end(item.b)}`}</span></span>
-          <button type="button" aria-label={`Delete measurement ${at + 1}`} onClick={() => inspector.removeMeasurement(item.id)}
+          <button type="button" aria-label={`Delete measurement ${at + 1}`} onClick={() => measure.remove(item.id)}
             className="grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground opacity-0 transition group-hover/measure-row:opacity-100 focus-visible:opacity-100 hover:text-foreground">
             <X className="size-3" strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
       </TooltipHint>)}
     </section> : <p className="flex min-w-0 flex-col gap-px px-1 pb-1 select-none" data-measure-hint="">
-      <span className={cn(ROW, "text-muted-foreground")}>{inspector.measureStart ? `From ${end(inspector.measureStart)}: pick the second point` : "Pick two points to measure"}</span>
+      <span className={cn(ROW, "text-muted-foreground")}>{measure.start ? `From ${end(measure.start)}: pick the second point` : "Pick two points to measure"}</span>
     </p>}
   </ToolPanel>;
 }
