@@ -80,7 +80,8 @@ function PlotSurface({ view, data }) {
     selectionText: selection.selection.length ? handover.copyText : null, capture, escape, report, displayInView: layered
   });
   const { copyText } = shell;
-  const copyReferences = useCallback((selectors) => copyText(handover.copyText(selectors)), [copyText, handover]);
+  const { copyText: referenceText } = handover;
+  const copyReferences = useCallback((selectors) => copyText(referenceText(selectors)), [copyText, referenceText]);
   const picking = useBoardPicking({ view: plotView, index, sheet: document.sheet, toolMode, selection, measure, isolated: isolation.resolved,
     side: shownDisplay?.side || "top", placement: boardDisplayAirwires(shownDisplay), onCopy: copyReferences });
   // A board and its schematic open in two views select together, through the host (selection only).
