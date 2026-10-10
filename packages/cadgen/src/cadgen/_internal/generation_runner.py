@@ -589,8 +589,9 @@ def _run_script_generator_body(
     read_files, listed = trace.inputs(outputs=own_outputs)
     # The closure a record carries: the script + its static closure (stopping at
     # child models — a result edge is tracked by pin, not by file), every file
-    # that executed (hashed AT execution), and the data files and folders the run
-    # read, as it read them. Paths are relative to the GENERATOR's folder, never
+    # that executed (hashed AT execution), the data files and folders the run
+    # read, as it read them, and the environment variables its code read. Paths
+    # are relative to the GENERATOR's folder, never
     # the output's: `out=` routes the output anywhere, and basing the closure
     # there would hash the same source differently depending on where its
     # document is written. Every child the body called, with the tree it resolved
@@ -605,6 +606,7 @@ def _run_script_generator_body(
         outputs=own_outputs,
         children=[child for child, _tree in child_trees],
         sources=executed_hashes.sources,
+        environment=trace.environment,
     )
     source_closure = PythonSourceClosure(
         closure_hash=store_closure.hash,

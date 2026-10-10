@@ -812,7 +812,7 @@ class ReachClosure(unittest.TestCase):
         self.assertEqual(closure.shas["!lib/geo/__init__.py"], "absent")
         (self.root / "lib/geo").mkdir()
         self.write("lib/geo/__init__.py", "SCALE = 9.0\n")
-        self.assert_clause_two(reference, True, "!lib/geo/__init__.py")
+        self.assert_clause_two(reference, True, "closure changed: lib/geo/__init__.py appeared")
         (self.root / "lib/geo/__init__.py").unlink()
         (self.root / "lib/geo").rmdir()
         self.assert_clause_two(reference, False)
@@ -821,7 +821,7 @@ class ReachClosure(unittest.TestCase):
         reference, closure = self.record()
         self.assertEqual(closure.shas["!lib/__init__.py"], "absent")
         self.write("lib/__init__.py", "")
-        self.assert_clause_two(reference, True, "!lib/__init__.py")
+        self.assert_clause_two(reference, True, "closure changed: lib/__init__.py appeared")
 
     def test_an_import_found_past_the_script_folder_tracks_the_roots_before_it(self):
         shared = self.root / "shared"
@@ -836,7 +836,7 @@ class ReachClosure(unittest.TestCase):
             self.assertEqual(closure.shas["!extra.py"], "absent", "the script's own folder would win")
             self.assert_clause_two(reference, False)
             self.write("extra.py", "def width():\n    return 3.0\n")
-            self.assert_clause_two(reference, True, "!extra.py")
+            self.assert_clause_two(reference, True, "closure changed: extra.py appeared")
             (self.root / "extra.py").unlink()
         with mock.patch.dict(os.environ, {"PYTHONPATH": os.pathsep.join([str(other), str(shared)])}):
             self.assert_clause_two(reference, True, "<import roots 2>")

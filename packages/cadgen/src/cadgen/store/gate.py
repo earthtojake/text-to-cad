@@ -7,9 +7,11 @@
    record sliced (``closure.names``) keeps its recorded slice while its
    whole-file hash is the recorded one (``closure.wholes``) and is re-sliced
    by those names when it moved, every other file hashed whole, a listed
-   folder by its entry names less the model's own outputs (``closure.own``)
-   — or a constant the model imported by value (``record.constants``) no
-   longer hashes the same;
+   folder by its entry names less the model's own outputs (``closure.own``), a
+   file recorded absent by whether it still is, an environment variable the
+   model read by its value in this process's environment (a daemon job's is
+   its caller's) — or a constant the model imported by value
+   (``record.constants``) no longer hashes the same;
 3. for any recorded child: ``stale(child)`` **or** its current tree hash != the
    pinned hash;
 4. the tree object or any object it (transitively) references is missing;
@@ -51,6 +53,7 @@ class Verdict:
 
     def reason(self) -> str:
         """The first stale clause as a phrase: ``no record``, ``closure changed: <file>``,
+        ``closure changed: <file> appeared``, ``environment variable <NAME> changed``,
         ``constant changed: <NAME> in <file>``, ``child stale: <child.py>``,
         ``child result moved: <child.py>``, ``tree or components missing``,
         ``never written: <path>`` / ``output missing: <path>`` / ``output changed: <path>``."""
@@ -270,16 +273,18 @@ def _stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verd
 
 
 def _closure_why(script: Path, closure: Mapping[str, Any], now: str | None) -> str:
-    """Clause 2's phrase: name the files that moved when the record can say."""
-    from cadgen.store.closure import changed_closure_files, source_files
+    """Clause 2's phrase: name what moved when the record can say -- a file
+    edited or gone, one that appeared where an import would find it, an
+    environment variable the model reads."""
+    from cadgen.store.closure import changed_closure_files, describe_changes, source_files
 
     changed = changed_closure_files(script, closure.get("shas") or {}, closure.get("names") or {},
                                     closure.get("wholes") or {}, closure.get("own") or {})
     if now is None:
-        # Only a file can be missing: an absent, roots or listing entry changed.
+        # Only a file can be missing: an absent, roots, environment or listing entry changed.
         missing = [rel for rel in source_files(changed) if not (Path(script).resolve().parent / rel).exists()]
         return f"closure file missing: {', '.join(missing or changed)}" if (missing or changed) else "closure file missing"
-    return f"closure changed: {', '.join(changed)}" if changed else "closure changed"
+    return describe_changes(changed)
 
 
 def is_current(model: Path | str) -> bool:

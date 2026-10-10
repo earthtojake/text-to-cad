@@ -656,7 +656,7 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   sidecar beside its STEP), when it is code (Python source is the reach above; a compiled
   library is the environment's), or when it lies in the environment: the
   interpreter and its packages, cadgen, the store, and the folders the
-  operating system owns (fonts, time zones). Three kinds of entry are not files: `<folder>/`, a folder
+  operating system owns (fonts, time zones). Four kinds of entry are not files: `<folder>/`, a folder
   the model's code listed (a glob of profiles), hashed by its sorted entry
   names, less the ones cadgen keeps only while it writes beside an output
   (a temp file, a STEP stage folder; `is_transient_name` in
@@ -664,10 +664,33 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   does not stale it; `!<path>`, a file that
   must stay absent — one the imports were resolved past (a package beside a
   module, an `__init__.py` a namespace package lacks, a module an earlier
-  search root lacks) and would resolve to if it appeared — hashed `absent`;
-  and `<import roots N>`, the digest of the first N search roots when an
-  import was found past the script's own folder (a root added before those
-  could shadow it). The clips declared by `@step(animation=...)` are code,
+  search root lacks) and would resolve to if it appeared, and every file
+  that would satisfy an import that resolved in no search root: an optional
+  part a model skips while it is missing (`try: from gear import gear`
+  `except ImportError`), `<root>/gear.py` and `<root>/gear/__init__.py` in
+  each root, a dotted name at the level its lookup stopped, a submodule a
+  from-import names that the package's `__init__.py` does not bind, and an
+  installed package's name, which a project file would shadow, but never a
+  standard-library name (`sys.stdlib_module_names`: cadgen and the kernel
+  import most of it before any model code runs, and how the interpreter was
+  built decides whether one is a file at all) — hashed `absent`, so the module
+  appearing is a change like any edit and `cadgen store why` says `closure
+  changed: gear.py appeared`; `<import roots N>`, the digest of the first N
+  search roots when an import was found past the script's own folder (a root
+  added before those could shadow it); and `<environment NAME>`, a variable
+  the model's own code read (`os.environ[...]`, `os.environ.get`,
+  `os.getenv`, `in os.environ`), hashed by the value it read (`env:<sha256>`,
+  never the value: it may be a secret) or `unset`. The reader is the frame
+  that asked, past `os`'s own functions, as a listing is attributed: what
+  cadgen, the standard library or an installed package reads, for itself or
+  for the model, is not an input (a library caches its configuration, so
+  whether it reads during a build depends on the process, not the model); a
+  copy of the whole environment (`dict(os.environ)`, `os.environ.copy()`,
+  its items) reads no one variable; and a variable the build set before
+  reading it is its own. The gate re-hashes it from the environment of the
+  process asking -- the caller's, which a daemon job runs in (§9) -- so a
+  changed value is `environment variable NAME changed`, and a change to a
+  variable the model never read changes nothing. The clips declared by `@step(animation=...)` are code,
   in the closure like the rest of the model's reach; the build bakes them to
   keyframes in the unified sidecar, and they never enter geometry identity. The
   boundary is decided statically by what the importer TAKES from a model
@@ -886,7 +909,9 @@ of:
    a body edit or a new helper in that file leaves the importer current; a
    changed value (or the name no longer bound to a literal) makes it stale.
    A listed folder is re-hashed less the model's own outputs its
-   `closure.own` records (§3).
+   `closure.own` records (§3); a file recorded absent by whether it still
+   is; an environment variable the model read by its value in the asking
+   process's environment, the caller's (§3, §9).
 3. **Any recorded child is stale, or its current tree hash differs from the
    pinned hash.** Protects against a child whose RESULT changed — and lets a
    child edit that yields identical geometry leave the parent current.
@@ -964,16 +989,20 @@ Each with the failure it prevents.
   Folders come from Python's `os.listdir` / `os.scandir` audit events, by
   frame: the import system's listings and cadgen's own are not the model's,
   and a listing leaves out the model's own outputs (§3).
-  The gate's own reading inside a build (a child's files and outputs, hashed
-  to decide whether it is current) is paused on its thread: a child is an
-  input by its result. Prevents: a model whose data changed reading as
-  current because nobody declared the file. Not seen: a data file the model
-  looked for and did not find (one that appears later is no change); a `.py`
-  file read as text and `exec`'d rather than imported (source counts by reach,
-  and reach follows imports); what a separate program the model runs reads; calls made inside the operating
-  system's own libraries (the macOS shared cache); a file a third-party
-  library caches for the life of a warm worker, after the first build that
-  reads it.
+  The environment variables the model's own code reads are seen the same
+  way, by frame (§3). The gate's own reading inside a build (a child's files
+  and outputs, hashed to decide whether it is current, a model file imported
+  for its constants) is paused on its thread: a child is an input by its
+  result. Prevents: a model whose data changed reading as current because
+  nobody declared the file. Not seen: a data file the model looked for and
+  did not find (one that appears later is no change -- a MODULE that appears
+  later is, §3); a `.py` file read as text and `exec`'d rather than imported
+  (source counts by reach, and reach follows imports); what a separate
+  program the model runs reads; a copy of
+  the whole environment, or a variable a library reads for the model; calls
+  made inside the operating system's own libraries (the macOS shared cache);
+  a file a third-party library caches for the life of a warm worker, after
+  the first build that reads it.
 - **Publish order.** Objects first (components, then the complete tree), the
   document-byte mapping, the outputs (`.step` moved into place atomically;
   digest-bound sidecar), output mappings, then the record. STEP export and
@@ -1942,7 +1971,9 @@ supersession does not cancel their exports.
   sliced helper as `lib/geo.py[plane, cyl_along, …]`, its reached names) and
   the tree's links. The verdict line names the first stale clause as a
   phrase: `no record`, `closure changed: <file>` (the record keeps each
-  closure file's hash under `closure.shas`), `constant changed: <NAME> in
+  closure file's hash under `closure.shas`), `closure changed: <file>
+  appeared` (a file the imports relied on not existing), `environment
+  variable <NAME> changed`, `constant changed: <NAME> in
   <file>`, `child stale: <child.py>`, `child result moved: <child.py>`,
   `tree or components missing`, `never written: <path>`, `output missing:
   <path>`, `output changed: <path>`.

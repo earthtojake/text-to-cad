@@ -146,8 +146,14 @@ def _cmd_why(target: str, as_json: bool) -> int:
 def _closure_file_label(rel: str, names: dict, own: dict) -> str:
     """``lib/geo.py[plane, cyl_along]`` for a sliced file (its reached names,
     the first six), the bare path for a file tracked whole, ``lib/__init__.py
-    (must stay absent)`` for a file the imports rely on not existing, and
-    ``./ (listing, less part.step)`` for a listed folder, less its own outputs."""
+    (must stay absent)`` for a file the imports rely on not existing,
+    ``./ (listing, less part.step)`` for a listed folder, less its own outputs,
+    and ``SIZE (environment variable)`` for a variable the model reads."""
+    from cadgen.store.closure import environment_name
+
+    variable = environment_name(rel)
+    if variable is not None:
+        return f"{variable} (environment variable)"
     if rel.startswith("!"):
         return f"{rel[1:]} (must stay absent)"
     if rel.endswith("/"):

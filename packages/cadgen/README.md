@@ -257,8 +257,10 @@ model body), on a constant by its VALUE, on a helper by its REACH (the part of
 the helper the script and every file the build executed can run, closed
 statically; the whole file — or the whole closure — wherever the analysis
 cannot see), on a data file by its BYTES (every file the build opened,
-whoever opened it: STORE.md §5, every read is seen),
-and on every file whose appearance would change what an import finds
+whoever opened it: STORE.md §5, every read is seen), on an environment
+variable its own code reads by its VALUE (a daemon job runs in its caller's
+environment), and on every file whose appearance would change what an import
+finds, a module an import looked for and did not find included
 ([`STORE.md`](STORE.md) §3) — and a model must never `read_step` its own
 output (14). The bundled runtime
 under `_runtime/` is the JS half of these; the laws' JS statements live in that

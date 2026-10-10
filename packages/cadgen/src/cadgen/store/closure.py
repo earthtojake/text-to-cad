@@ -54,6 +54,14 @@ Hashes are the semantic (AST) digest for ``.py`` (``ast1:``), the slice digest
 for a sliced file (``slice4:``), and the byte digest otherwise, via
 ``cadgen._internal.source_hash`` and ``cadgen.store.reach`` — a comment-only
 edit is not a change.
+
+**What is not a file is an entry too.** A file the imports relied on NOT
+existing (``!<path>``) -- one beside or before what an import found, and every
+file that would have satisfied an import that found nothing (an optional part
+a model skips while it is missing) -- hashed ``absent``; the search roots an
+import was found past (``<import roots N>``); a folder the model's code listed
+(``<folder>/``); and an environment variable the model's own code read
+(``<environment NAME>``), hashed by the value it read, or ``unset``.
 """
 
 from __future__ import annotations
@@ -291,7 +299,10 @@ class _Resolved:
     root: int = 0
 
 
-def _resolve_dotted(parts: list[str], roots: Iterable[Path]) -> _Resolved | None:
+def _resolve_dotted(parts: list[str], roots: Iterable[Path], *, misses: list[Path] | None = None) -> _Resolved | None:
+    """The first root ``parts`` resolves in, or None -- and then, into ``misses``,
+    every file that would have satisfied it in each root, at the level its walk
+    stopped there."""
     absent: list[Path] = []
     for position, root in enumerate(roots):
         executed: list[Path] = []
@@ -320,6 +331,8 @@ def _resolve_dotted(parts: list[str], roots: Iterable[Path]) -> _Resolved | None
         if ok:
             module = executed[-1] if executed else None
             return _Resolved(tuple(executed), module, current, tuple(absent), position)
+    if misses is not None:
+        misses.extend(absent)
     return None
 
 
@@ -490,18 +503,53 @@ class _Walk:
 
     # -- resolution --------------------------------------------------------------
 
-    def _dotted(self, parts: list[str], roots: list[Path]) -> _Resolved | None:
-        resolved = _resolve_dotted(parts, roots)
+    def _dotted(self, parts: list[str], roots: list[Path], *, missing: bool = False) -> _Resolved | None:
+        """``parts`` resolved in ``roots``. ``missing``: the lookup is an import the
+        model's code makes, and when it finds nothing there, every file that would
+        have satisfied it is recorded absent -- a module that appears later (an
+        optional part a model skips while it is missing) is a change like any
+        edit. So is an installed package's name: a project file of that name would
+        shadow it. The standard library's names are not recorded: cadgen and the
+        kernel import most of it before any model code runs, and recording each
+        would cost every model a dozen entries that differ with how the
+        interpreter was built (``math`` is builtin in one build, a file in another)."""
+        misses: list[Path] | None = [] if missing else None
+        resolved = _resolve_dotted(parts, roots, misses=misses)
         if resolved is not None and _first_party_target(resolved):
             self.absent.update(resolved.absent)
             if roots is self.roots:
                 self.root_used = max(self.root_used, resolved.root)
+        elif resolved is None and misses and not (roots is self.roots and parts[0] in sys.stdlib_module_names):
+            self.absent.update(misses)
         return resolved
 
-    def _sub(self, resolved: _Resolved, name: str) -> _Resolved | None:
+    def _sub(self, resolved: _Resolved, name: str, *, missing: bool = False) -> _Resolved | None:
         if resolved.package_dir is None:
             return None
-        return self._dotted([name], [resolved.package_dir])
+        return self._dotted([name], [resolved.package_dir], missing=missing)
+
+    def _may_appear(self, package: _Resolved, name: str) -> bool:
+        """Whether a submodule ``name`` appearing in ``package`` would change what
+        ``from package import name`` takes: the package is the project's own, and
+        its ``__init__.py`` -- a namespace package has none -- does not bind the
+        name itself (a binding there wins)."""
+        if not _first_party_target(package):
+            return False
+        init = package.module
+        if init is None or package.package_dir is None or init.parent != package.package_dir.resolve():
+            return True
+        state = self.files.get(init)
+        if state is not None:
+            syntax = state.syntax
+        else:
+            # Read, never walked: deciding this makes the file no part of the closure.
+            try:
+                payload = self.sources.get(str(init))
+                syntax = self.syntax.get(payload if payload is not None else init.read_bytes(), str(init))
+            except (OSError, *_UNANALYSABLE):
+                syntax = None
+        return syntax is None or not (
+            name in syntax.definitions or name in syntax.preamble_bound or name in syntax.aliases)
 
     # -- files -------------------------------------------------------------------
 
@@ -670,14 +718,14 @@ class _Walk:
 
     # -- edges -------------------------------------------------------------------
 
-    def _resolve(self, importer: Path, alias: Alias) -> _Resolved | None:
+    def _resolve(self, importer: Path, alias: Alias, *, missing: bool = False) -> _Resolved | None:
         if alias.level == 0:
-            return self._dotted(alias.module.split("."), self.roots) if alias.module else None
+            return self._dotted(alias.module.split("."), self.roots, missing=missing) if alias.module else None
         base = importer.parent
         for _ in range(alias.level - 1):
             base = base.parent
         if alias.module:
-            return self._dotted(alias.module.split("."), [base])
+            return self._dotted(alias.module.split("."), [base], missing=missing)
         init = base / "__init__.py"
         return _Resolved((init.resolve(),) if init.is_file() else (), init.resolve() if init.is_file() else None, base)
 
@@ -730,19 +778,23 @@ class _Walk:
             self.escape(module)
 
     def import_edge(self, importer: Path, alias: Alias, *, whole: bool = False) -> None:
+        # An import statement: what it finds, and -- when it finds nothing, as a
+        # guarded optional import does -- what would have satisfied it.
         if alias.executes:
             # ``import a.b.c`` binds ``a`` but executes every package on the way.
-            executes = self._dotted(alias.executes.split("."), self.roots)
+            executes = self._dotted(alias.executes.split("."), self.roots, missing=True)
             for executed in (executes.executed if executes is not None else ()):
                 self.touch(executed)
-        resolved = self._resolve(importer, alias)
+        resolved = self._resolve(importer, alias, missing=True)
         if resolved is None:
             return
         for executed in resolved.executed:
             self.touch(executed)
         target = resolved
         if alias.attr is not None:
-            sub = self._sub(resolved, alias.attr)
+            # A name the package does not bind is a submodule or nothing: one that
+            # appears satisfies the import.
+            sub = self._sub(resolved, alias.attr, missing=self._may_appear(resolved, alias.attr))
             if sub is None:
                 # A from-import reaches the name it binds -- the importer's body
                 # may call it. Importing alone runs none of it: an import-time walk
@@ -1045,6 +1097,7 @@ def build_closure(
     outputs: Iterable[Path] = (),
     children: Iterable[Path | str] = (),
     sources: Mapping[str, bytes] | None = None,
+    environment: Mapping[str, str | None] | None = None,
 ) -> Closure:
     """The closure a build records.
 
@@ -1055,7 +1108,9 @@ def build_closure(
     the hash it was read with -- minus files that belong to a child model (its
     script and files reached only through it), which the boundary rule
     excludes. ``listings`` are the folders its code listed, each hashed by its
-    entry names less the model's own ``outputs`` there (``Closure.own``). The
+    entry names less the model's own ``outputs`` there (``Closure.own``).
+    ``environment`` is the variables the model's own code read, each with the
+    value it read or None when it was unset (``cadgen._internal.filetrace``). The
     reach walk starts at the script, then at every
     executed first-party ``.py`` file it did not reach and no child owns, each
     walked whole; what the children's import-time code reaches in shared files
@@ -1177,6 +1232,10 @@ def build_closure(
     if root_used > 0:
         count = root_used + 1
         pairs.append((ROOTS_KEY.format(count=count), _roots_digest(walk.roots[:count], base)))
+    # A variable the model's own code read, by the value it read -- or its
+    # absence. Never the value itself: it may be a secret.
+    for name, value in sorted((environment or {}).items()):
+        pairs.append((environment_entry(name), environment_digest(value)))
     constants = {_relative(Path(module), base): dict(values) for module, values in statics.constants.items()}
     return Closure(
         hash=closure_hash(pairs),
@@ -1215,12 +1274,16 @@ def import_sliced_source_hash(path: Path, names: Iterable[str]) -> str:
 # A closure entry for a file the imports relied on NOT existing is its path
 # behind ABSENT_MARK, hashed ABSENT while it still does not exist; ROOTS_KEY is
 # the entry for the search roots past the script's own folder that an import
-# resolved in. Both describe themselves, so any re-hash reads them without the
-# recorded hashes.
+# resolved in; ENVIRONMENT_KEY is a variable the model's own code read, hashed
+# by its value (``environment_digest``), UNSET while it is not set. Each
+# describes itself, so any re-hash reads it without the recorded hashes.
 ABSENT_MARK = "!"
 ABSENT = "absent"
 ROOTS_KEY = "<import roots {count}>"
 _ROOTS_PREFIX = "<import roots "
+ENVIRONMENT_KEY = "<environment {name}>"
+_ENVIRONMENT_PREFIX = "<environment "
+UNSET = "unset"
 
 
 def _roots_count(rel: str) -> int | None:
@@ -1232,10 +1295,55 @@ def _roots_count(rel: str) -> int | None:
         return None
 
 
+def environment_entry(name: str) -> str:
+    """The closure entry for the environment variable ``name``."""
+    return ENVIRONMENT_KEY.format(name=name)
+
+
+def environment_name(rel: str) -> str | None:
+    """The variable an environment entry names, or None for any other entry."""
+    if rel.startswith(_ENVIRONMENT_PREFIX) and rel.endswith(">"):
+        return rel[len(_ENVIRONMENT_PREFIX):-1]
+    return None
+
+
+def environment_digest(value: str | None) -> str:
+    """A variable's value as a closure hash: UNSET when it is not set, else a
+    digest -- a record never holds the value, which may be a secret."""
+    if value is None:
+        return UNSET
+    return "env:" + hashlib.sha256(value.encode("utf-8", "surrogateescape")).hexdigest()
+
+
 def source_files(files: Iterable[str]) -> list[str]:
-    """The files a closure names that exist -- without its absent, roots and listing entries."""
+    """The files a closure names that exist -- without its absent, roots, environment and listing entries."""
     return [rel for rel in files
-            if _roots_count(rel) is None and not rel.startswith(ABSENT_MARK) and not rel.endswith("/")]
+            if _roots_count(rel) is None and environment_name(rel) is None
+            and not rel.startswith(ABSENT_MARK) and not rel.endswith("/")]
+
+
+def describe_changes(changed: Iterable[str]) -> str:
+    """Clause 2's phrase for the closure entries that moved: ``closure changed:``
+    and the files edited, each file that appeared where an import would find it,
+    a listed folder or the import roots; then the environment variables whose
+    value changed."""
+    moved: list[str] = []
+    variables: list[str] = []
+    for rel in changed:
+        name = environment_name(rel)
+        if name is not None:
+            variables.append(name)
+        elif rel.startswith(ABSENT_MARK):
+            moved.append(f"{rel[len(ABSENT_MARK):]} appeared")
+        else:
+            moved.append(rel)
+    phrases = []
+    if moved:
+        phrases.append(f"closure changed: {', '.join(moved)}")
+    if variables:
+        noun = "environment variable" if len(variables) == 1 else "environment variables"
+        phrases.append(f"{noun} {', '.join(variables)} changed")
+    return "; ".join(phrases) or "closure changed"
 
 
 def _listing_digest(directory: Path, own: Iterable[str] = ()) -> str:
@@ -1304,7 +1412,12 @@ def entry_hash_now(base: Path, rel: str, names: Mapping[str, Iterable[str]] | No
     """One recorded closure entry as it hashes now, relative to the model's
     folder ``base``: a file (``file_hash_now``), or None when it is gone; a file
     recorded absent, ABSENT while it still is; the search roots, their digest; a
-    listed folder, its entry names less the recorded ``own`` ones."""
+    listed folder, its entry names less the recorded ``own`` ones; an
+    environment variable, its value in this process's environment -- the
+    caller's, which a daemon job applies (``cadgen.daemon.worker``)."""
+    name = environment_name(rel)
+    if name is not None:
+        return environment_digest(os.environ.get(name))
     if rel.startswith(ABSENT_MARK):
         candidate = Path(rel[len(ABSENT_MARK):])
         return ABSENT if not (candidate if candidate.is_absolute() else base / candidate).exists() else "present"
