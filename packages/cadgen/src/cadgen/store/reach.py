@@ -51,6 +51,8 @@ import sys
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
+from cadgen.metadata import MODEL_DECORATORS
+
 _BUILTIN_NAMES = frozenset(dir(builtins)) | frozenset({
     "__file__", "__name__", "__doc__", "__spec__", "__package__", "__loader__",
     "__path__", "__builtins__", "__annotations__", "__cached__", "__all__",
@@ -497,8 +499,6 @@ def _is_main_guard(node: ast.stmt) -> bool:
             and not node.orelse)
 
 
-# cadgen's model decorators, as ``cadgen.metadata`` recognises them.
-_MODEL_DECORATORS = frozenset({"step", "dxf", "pcb", "harness", "stl", "glb", "threemf"})
 _PLACEHOLDER = "<literal>"
 
 
@@ -509,7 +509,7 @@ def _cadgen_decorators(tree: ast.Module) -> tuple[frozenset[str], frozenset[str]
     modules: set[str] = set()
     for node in tree.body:
         if isinstance(node, ast.ImportFrom) and node.module in {"cadgen", "cadgen.authoring"}:
-            names.update(alias.asname or alias.name for alias in node.names if alias.name in _MODEL_DECORATORS)
+            names.update(alias.asname or alias.name for alias in node.names if alias.name in MODEL_DECORATORS)
         elif isinstance(node, ast.Import):
             modules.update(alias.asname or "cadgen" for alias in node.names if alias.name == "cadgen")
     return frozenset(names), frozenset(modules)
@@ -524,7 +524,7 @@ def _placeholder_literals(decorator: ast.expr, names: frozenset[str], modules: f
     target = decorator.func
     ours = (isinstance(target, ast.Name) and target.id in names) or (
         isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)
-        and target.value.id in modules and target.attr in _MODEL_DECORATORS)
+        and target.value.id in modules and target.attr in MODEL_DECORATORS)
     if not ours:
         return decorator
 

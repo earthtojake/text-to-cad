@@ -22,16 +22,13 @@ from cadgen._internal.step_scene import LoadedStepScene
 from cadgen.catalog import build_scope
 from cadgen.cli_logging import CliLogger
 from cadgen.cli_progress import cli_progress_line
-from cadgen.coordination import DRAWING_PACKAGE
-from cadgen.coordination import HARNESS_PACKAGE
-from cadgen.coordination import PCB_PACKAGE
 from cadgen.coordination import PHASE_CHECK_BOARD
 from cadgen.coordination import PHASE_GENERATE
 from cadgen.coordination import ProgressEvent
-from cadgen.coordination import STEP_PACKAGE
 from cadgen.coordination import generator_busy
 from cadgen.coordination import reporting_as
 from cadgen.coordination import resolve as resolve_progress
+from cadgen.metadata import MODEL_FORMATS, TREE_LESS_FORMATS, format_named
 from cadgen.render import relative_to_file
 from cadgen.step_export import build_build123d_step_scene
 
@@ -611,7 +608,7 @@ def run_script_generator(
     touched — they cannot reload, must stay warm, and are not freshness inputs.
     """
     logger = logger or CliLogger("cad")
-    if model_format not in {"step", "dxf", "pcb", "harness"}:
+    if model_format not in MODEL_FORMATS:
         raise RuntimeError(f"Unsupported model format: {model_format}")
     if spec.script_path is None or spec.generator_metadata is None:
         raise ValueError(f"{spec.source_ref} is not a generated Python CAD source")
@@ -970,7 +967,7 @@ def _spec_output_dir(spec: EntrySpec, model_format: str) -> str | None:
     before any geometry is."""
     if model_format == "step" and spec.step_path is not None:
         return build_scope(spec.entry_path)
-    if model_format in ("dxf", "pcb", "harness") and spec.script_path is not None:
+    if model_format in TREE_LESS_FORMATS and spec.script_path is not None:
         return build_scope(spec.script_path)
     return None
 
@@ -999,5 +996,4 @@ def _track_spec_generation(
         return contextlib.nullcontext()
     # The kind decides which phase set the run reports over, so a drawing generator
     # counts its own phases rather than a STEP package's.
-    kind = {"dxf": DRAWING_PACKAGE, "pcb": PCB_PACKAGE, "harness": HARNESS_PACKAGE}.get(model_format, STEP_PACKAGE)
-    return generator_busy(kind, scope, sink=sink)
+    return generator_busy(format_named(model_format).package, scope, sink=sink)

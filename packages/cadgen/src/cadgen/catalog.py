@@ -8,7 +8,14 @@ from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
 
-from .metadata import GeneratorMetadata, normalize_mesh_numeric, parse_generator_metadata
+from .metadata import (
+    TREE_LESS_FORMATS,
+    GeneratorMetadata,
+    ModelFormat,
+    format_named,
+    normalize_mesh_numeric,
+    parse_generator_metadata,
+)
 
 from ._internal.doors import STEP_SUFFIXES
 from ._internal.shared_read import open_shared_for_read
@@ -217,41 +224,16 @@ def cad_ref_from_step_path(path: Path) -> str:
     raise CadSourceError(f"{_display_path(path)} is not a CAD STEP source")
 
 
-def cad_ref_from_dxf_path(path: Path) -> str:
-    # DXF refs KEEP the `.dxf` suffix so a `<name>.dxf.py` drawing and a `<name>.step.py`
-    # model in the same folder never collide on cad_ref.
+def cad_ref_from_document_path(path: Path, fmt: ModelFormat) -> str:
+    # A tree-less model's ref KEEPS its document's suffix, so a `<name>.dxf` drawing, a
+    # `<name>.kicad_pcb` board and a `<name>.step` part in one folder never collide on cad_ref.
     resolved = path.resolve()
     try:
         relative = resolved.relative_to(Path.cwd().resolve())
     except ValueError:
         relative = PurePosixPath(resolved.as_posix())
-    if relative.suffix.lower() != ".dxf":
-        raise CadSourceError(f"{_display_path(path)} is not a CAD DXF output path")
-    return relative.as_posix()
-
-
-def cad_ref_from_pcb_path(path: Path) -> str:
-    # Board refs keep the `.kicad_pcb` suffix, as drawings keep `.dxf`: a board and a
-    # part of one stem in one folder never collide on cad_ref.
-    resolved = path.resolve()
-    try:
-        relative = resolved.relative_to(Path.cwd().resolve())
-    except ValueError:
-        relative = PurePosixPath(resolved.as_posix())
-    if relative.suffix.lower() != ".kicad_pcb":
-        raise CadSourceError(f"{_display_path(path)} is not a KiCad board output path")
-    return relative.as_posix()
-
-
-def cad_ref_from_harness_path(path: Path) -> str:
-    # Harness refs keep the `.harness.yml` suffix, as drawings keep `.dxf`.
-    resolved = path.resolve()
-    try:
-        relative = resolved.relative_to(Path.cwd().resolve())
-    except ValueError:
-        relative = PurePosixPath(resolved.as_posix())
-    if not relative.name.lower().endswith(".harness.yml"):
-        raise CadSourceError(f"{_display_path(path)} is not a harness document output path")
+    if not relative.name.lower().endswith(fmt.suffix):
+        raise CadSourceError(f"{_display_path(path)} is not a {fmt.document} output path")
     return relative.as_posix()
 
 
@@ -521,64 +503,26 @@ def _model_source_ref(script_path: Path, metadata: GeneratorMetadata) -> str:
     return base
 
 
-def _dxf_generator_source(resolved_script_path: Path, metadata: GeneratorMetadata) -> CadSource:
+def _tree_less_generator_source(resolved_script_path: Path, metadata: GeneratorMetadata) -> CadSource:
+    """A drawing's, a board's (without a 3D export) or a harness's source: its one document."""
     from cadgen.metadata import resolve_model_output_path
 
-    dxf_path = resolve_model_output_path(
-        resolved_script_path, fmt="dxf", explicit_out=metadata.out_target, function=metadata.entry_function
+    fmt = format_named(metadata.format)
+    document = resolve_model_output_path(
+        resolved_script_path,
+        fmt=fmt.name,
+        explicit_out=metadata.pcb_out_target if fmt.name == "pcb" else metadata.out_target,
+        function=metadata.entry_function,
     )
     return CadSource(
         source_ref=_model_source_ref(resolved_script_path, metadata),
-        cad_ref=cad_ref_from_dxf_path(dxf_path),
+        cad_ref=cad_ref_from_document_path(document, fmt),
         source_path=resolved_script_path,
         source="generated",
         origin_path=resolved_script_path,
         script_path=resolved_script_path,
         generator_metadata=metadata,
-        step_path=None,
-        dxf_path=dxf_path,
-        mesh_tolerance=None,
-        mesh_angular_tolerance=None,
-    )
-
-
-def _pcb_generator_source(resolved_script_path: Path, metadata: GeneratorMetadata) -> CadSource:
-    from cadgen.metadata import resolve_model_output_path
-
-    pcb_path = resolve_model_output_path(
-        resolved_script_path, fmt="pcb", explicit_out=metadata.pcb_out_target, function=metadata.entry_function
-    )
-    return CadSource(
-        source_ref=_model_source_ref(resolved_script_path, metadata),
-        cad_ref=cad_ref_from_pcb_path(pcb_path),
-        source_path=resolved_script_path,
-        source="generated",
-        origin_path=resolved_script_path,
-        script_path=resolved_script_path,
-        generator_metadata=metadata,
-        step_path=None,
-        dxf_path=None,
-        pcb_path=pcb_path,
-        mesh_tolerance=None,
-        mesh_angular_tolerance=None,
-    )
-
-
-def _harness_generator_source(resolved_script_path: Path, metadata: GeneratorMetadata) -> CadSource:
-    from cadgen.metadata import resolve_model_output_path
-
-    harness_path = resolve_model_output_path(
-        resolved_script_path, fmt="harness", explicit_out=metadata.out_target, function=metadata.entry_function
-    )
-    return CadSource(
-        source_ref=_model_source_ref(resolved_script_path, metadata),
-        cad_ref=cad_ref_from_harness_path(harness_path),
-        source_path=resolved_script_path,
-        source="generated",
-        origin_path=resolved_script_path,
-        script_path=resolved_script_path,
-        generator_metadata=metadata,
-        harness_path=harness_path,
+        **{fmt.spec_path: document},
     )
 
 
@@ -589,12 +533,8 @@ def _read_python_source(
     metadata = parse_generator_metadata(resolved_script_path, function)
     if metadata is None:
         return None
-    if metadata.format == "dxf":
-        return _dxf_generator_source(resolved_script_path, metadata)
-    if metadata.format == "pcb":
-        return _pcb_generator_source(resolved_script_path, metadata)
-    if metadata.format == "harness":
-        return _harness_generator_source(resolved_script_path, metadata)
+    if metadata.format in TREE_LESS_FORMATS:
+        return _tree_less_generator_source(resolved_script_path, metadata)
     from cadgen.metadata import resolve_model_output_path
 
     step_path = resolve_model_output_path(

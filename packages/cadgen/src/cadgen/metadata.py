@@ -6,8 +6,49 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from cadgen.coordination.kinds import DRAWING_PACKAGE, HARNESS_PACKAGE, PCB_PACKAGE, STEP_PACKAGE, ArtifactKind
 from cadgen.render import relative_to_cwd as _display_path
 from cadgen.viewer.content_types import extension_of
+
+
+@dataclass(frozen=True)
+class ModelFormat:
+    """What a model's format -- the decorator that declares it -- is to the rest of cadgen.
+
+    A format with ``tree_less`` has no geometry tree: its record's tree is null, its
+    document is its output, and called inside another build it is just its body. A
+    board with a 3D export is not one: it is format "step", its tree the populated board.
+    """
+
+    name: str  # the decorator: "step", "dxf", "pcb", "harness"
+    suffix: str  # its document's: ``<name>.step``, ``.dxf``, ``.kicad_pcb``, ``.harness.yml``
+    kind: str  # its document's format, as the viewer, snapshots and telemetry name it
+    tree_less: bool
+    spec_path: str  # the CadSource/EntrySpec field that holds the document
+    package: ArtifactKind  # the phase set its build reports over
+    document: str  # what its document is, as a refusal names it ("not a CAD DXF output path")
+    wrote: str  # what its build's summary line names ("wrote DXF: ...")
+    # A tree-less build's record entryKind and its JSON result's "kind".
+    record_kind: str = ""
+
+
+MODEL_FORMATS = {
+    fmt.name: fmt
+    for fmt in (
+        ModelFormat("step", ".step", "step", False, "step_path", STEP_PACKAGE, "STEP", "STEP"),
+        ModelFormat("dxf", ".dxf", "dxf", True, "dxf_path", DRAWING_PACKAGE, "CAD DXF", "DXF", "drawing"),
+        ModelFormat("pcb", ".kicad_pcb", "kicad_pcb", True, "pcb_path", PCB_PACKAGE, "KiCad board", "KiCad project", "pcb"),
+        ModelFormat(
+            "harness", ".harness.yml", "harness", True, "harness_path", HARNESS_PACKAGE, "harness document", "harness", "harness"
+        ),
+    )
+}
+TREE_LESS_FORMATS = frozenset(name for name, fmt in MODEL_FORMATS.items() if fmt.tree_less)
+
+
+def format_named(name: str | None) -> ModelFormat:
+    """The format ``name``; a mesh-only model, or no name, is a STEP model's."""
+    return MODEL_FORMATS.get(str(name or ""), MODEL_FORMATS["step"])
 
 
 class InvalidModelScriptError(ValueError):
@@ -145,24 +186,24 @@ def resolve_model_output_path(
     if explicit_out:
         target = Path(explicit_out)
         return (target if target.is_absolute() else script.parent / target).resolve()
-    # A board's primary document is its KiCad board file.
-    suffix = _FORMAT_SUFFIX.get(fmt, fmt)
+    # A board's primary document is its KiCad board file; a mesh's, its own format.
+    suffix = MODEL_FORMATS[fmt].suffix if fmt in MODEL_FORMATS else f".{fmt}"
     # A file's sole model writes `<file>.<fmt>` (what `python bracket.py` is expected
     # to leave beside it, whatever the function is called); models SHARING a file
     # each write `<function>.<fmt>`, so two models never collide on one default.
     stem = script.stem
     if function and function != stem and len(model_function_names(script)) > 1:
         stem = function
-    return (script.parent / f"{stem}.{suffix}").resolve()
+    return (script.parent / f"{stem}{suffix}").resolve()
 
 
-_FORMAT_SUFFIX = {"pcb": "kicad_pcb", "harness": "harness.yml"}
 # A board's project is four files (the last its custom design rules, empty
 # when it has none); the board file is its primary document.
 PCB_PROJECT_SUFFIXES = (".kicad_pcb", ".kicad_sch", ".kicad_pro", ".kicad_dru")
-_MODEL_FORMATS = ("step", "dxf", "pcb", "harness")
 
 _MESH_DECORATOR_NAMES = ("stl", "glb", "threemf")
+#: Every decorator that declares a model: a format's, or a mesh export's alone.
+MODEL_DECORATORS = frozenset({*MODEL_FORMATS, *_MESH_DECORATOR_NAMES})
 _MESH_DECORATOR_FMT = {"stl": "stl", "glb": "glb", "threemf": "3mf"}
 _MESH_SUFFIX = {"stl": ".stl", "3mf": ".3mf", "glb": ".glb"}
 
@@ -187,35 +228,29 @@ def declared_output_paths(script_path: Path | str, *, function: str | None = Non
         for metadata in models:
             if metadata is None:
                 continue
-            declared = str(getattr(metadata, "format", "step") or "step")
-            fmt = declared if declared in _MODEL_FORMATS else "step"
-            if fmt == "pcb" or getattr(metadata, "board", False):
+            fmt = format_named(metadata.format).name
+            if metadata.board:
                 board_file = resolve_model_output_path(
-                    script, fmt="pcb", explicit_out=getattr(metadata, "pcb_out_target", None),
-                    function=metadata.entry_function,
+                    script, fmt="pcb", explicit_out=metadata.pcb_out_target, function=metadata.entry_function
                 )
                 outputs.extend(board_file.with_suffix(suffix) for suffix in PCB_PROJECT_SUFFIXES)
-                outputs.extend(
-                    fab_output_path(script, decl, board_file) for decl in getattr(metadata, "fab_exports", ()) or ()
-                )
+                outputs.extend(fab_output_path(script, decl, board_file) for decl in metadata.fab_exports)
             if fmt == "pcb":
                 continue
-            if fmt == "harness":
-                # One WireViz document, and the BOM its bom= writes beside it.
+            if fmt in TREE_LESS_FORMATS:
+                # One document, and the BOM a harness's bom= writes beside it.
                 document = resolve_model_output_path(
-                    script, fmt="harness", explicit_out=metadata.out_target, function=metadata.entry_function
+                    script, fmt=fmt, explicit_out=metadata.out_target, function=metadata.entry_function
                 )
                 outputs.append(document)
-                outputs.extend(
-                    fab_output_path(script, decl, document) for decl in getattr(metadata, "fab_exports", ()) or ()
-                )
+                outputs.extend(fab_output_path(script, decl, document) for decl in metadata.fab_exports)
                 continue
             primary = resolve_model_output_path(
                 script, fmt=fmt, explicit_out=metadata.out_target, function=metadata.entry_function
             )
-            if fmt == "dxf" or getattr(metadata, "step_output", True):
+            if metadata.step_output:
                 outputs.append(primary)
-            for decl in getattr(metadata, "mesh_exports", ()) or ():
+            for decl in metadata.mesh_exports:
                 if decl.out is not None:
                     outputs.append(
                         resolve_model_output_path(
@@ -234,11 +269,10 @@ def _cadgen_decorator_aliases(tree: ast.Module) -> tuple[dict[str, str], set[str
     names bound to the cadgen module itself (for ``@cadgen.step(...)``)."""
     names: dict[str, str] = {}
     module_aliases: set[str] = set()
-    tracked = {*_MODEL_FORMATS, *_MESH_DECORATOR_NAMES}
     for node in tree.body:
         if isinstance(node, ast.ImportFrom) and node.module in {"cadgen", "cadgen.authoring"}:
             for alias in node.names:
-                if alias.name in tracked:
+                if alias.name in MODEL_DECORATORS:
                     names[alias.asname or alias.name] = alias.name
         elif isinstance(node, ast.Import):
             for alias in node.names:
@@ -274,7 +308,7 @@ def _match_model_decorator(
         if isinstance(target, ast.Name):
             resolved = names.get(target.id)
         elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
-            if target.value.id in module_aliases and target.attr in {*_MODEL_FORMATS, *_MESH_DECORATOR_NAMES}:
+            if target.value.id in module_aliases and target.attr in MODEL_DECORATORS:
                 resolved = target.attr
         if resolved is not None:
             seen.append((resolved, call_kwargs))
@@ -449,9 +483,9 @@ def parse_generator_metadata(script_path: Path, function: str | None = None) -> 
         step_output=bool(defn.step_output),
         materials=defn.materials,
         animation=defn.animation,
-        board=bool(getattr(defn, "board", False)),
-        pcb_out_target=getattr(defn, "pcb_out", None),
-        fab_exports=tuple(getattr(defn, "fab_exports", ()) or ()),
+        board=defn.board,
+        pcb_out_target=defn.pcb_out,
+        fab_exports=defn.fab_exports,
     )
 
 

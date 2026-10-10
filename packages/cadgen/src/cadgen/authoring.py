@@ -64,7 +64,15 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from cadgen.kinematics import KinematicsDef, normalize_kinematics
-from cadgen.metadata import FabExportDecl, MeshExportDecl, normalize_mesh_numeric, resolve_model_output_path
+from cadgen.metadata import (
+    MODEL_FORMATS,
+    TREE_LESS_FORMATS,
+    FabExportDecl,
+    MeshExportDecl,
+    format_named,
+    normalize_mesh_numeric,
+    resolve_model_output_path,
+)
 from cadgen.store.index import model_ref
 
 __all__ = [
@@ -629,7 +637,7 @@ def _model_wrapper(func: Callable[..., Any], defn: ModelDef) -> Callable[..., An
                 # The pipeline building THIS model is asking for its body. (Another
                 # model of the same file is a child like any other.)
                 return func()
-            if _REGISTRY.get(defn.ref, defn).fmt in ("dxf", "pcb", "harness"):
+            if _REGISTRY.get(defn.ref, defn).fmt in TREE_LESS_FORMATS:
                 # A drawing, a board without a 3D export or a harness composes models,
                 # never the reverse: called inside another build it is just its body
                 # (2D geometry, the pcb.Board, the harness.Harness), nothing to pin.
@@ -640,7 +648,7 @@ def _model_wrapper(func: Callable[..., Any], defn: ModelDef) -> Callable[..., An
                 # a part to a geometry model, but its body is still its pcb.Board: that is what
                 # a harness gets. Any other geometry model has nothing a harness reads, and is
                 # refused at the call, before a child build is submitted for it.
-                if getattr(_REGISTRY.get(defn.ref, defn), "board", False):
+                if _REGISTRY.get(defn.ref, defn).board:
                     return func()
                 raise TypeError(
                     f"{building_model.name}() is a @harness, which reads boards' netlists (a @pcb model returns its "
@@ -762,7 +770,7 @@ def pcb(
     with _declaring_here():
         _reject_unknown_kwargs("pcb", unsupported)
         checked = _checked_out(out, where="@pcb")
-        if checked is not None and not checked.lower().endswith(".kicad_pcb"):
+        if checked is not None and not checked.lower().endswith(MODEL_FORMATS["pcb"].suffix):
             raise ValueError(
                 f"@pcb out= names the board file and must end with '.kicad_pcb' (got {checked!r}); "
                 "the .kicad_sch and .kicad_pro are written beside it"
@@ -861,7 +869,7 @@ def harness(
     with _declaring_here():
         _reject_unknown_kwargs("harness", unsupported)
         checked = _checked_out(out, where="@harness")
-        if checked is not None and not checked.lower().endswith(".harness.yml"):
+        if checked is not None and not checked.lower().endswith(MODEL_FORMATS["harness"].suffix):
             raise ValueError(f"@harness out= names the harness document and must end with '.harness.yml' (got {checked!r})")
         exports = _declared_exports("harness", bom=bom)
 
@@ -1154,7 +1162,7 @@ def _build(defn: ModelDef) -> int:
 
         # Counted here as the daemon counts the builds it answers: no daemon answered this one.
         return telemetry.cold_build(
-            {"dxf": "dxf", "pcb": "kicad_pcb", "harness": "harness"}.get(defn.fmt, "step"), "script",
+            format_named(defn.fmt).kind, "script",
             lambda: run_model_argv([*target, *argv], prog=f"python {defn.script_path.name}"),
             meshes=bool(defn.mesh_exports),
         )

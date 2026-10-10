@@ -234,10 +234,11 @@ class Build:
 def _run_kind(outputs: list[str]) -> str:
     """A model script's format, by the documents it declares: a board's ``.kicad_pcb``, a harness's
     ``.harness.yml``, a drawing's ``.dxf``, else a STEP model's."""
-    for suffix, kind in ((".kicad_pcb", "kicad_pcb"), (".harness.yml", "harness"), (".dxf", "dxf")):
-        if any(output.endswith(suffix) for output in outputs):
-            return kind
-    return "step"
+    from cadgen.metadata import MODEL_FORMATS
+
+    # A model declares one tree-less document at most (a board with a 3D export, its board file).
+    declared = (fmt for fmt in MODEL_FORMATS.values() if fmt.tree_less and any(out.endswith(fmt.suffix) for out in outputs))
+    return next(declared, MODEL_FORMATS["step"]).kind
 
 
 @_quiet
