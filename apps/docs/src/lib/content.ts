@@ -89,6 +89,33 @@ export const installs = [
     update: "gemini extensions update text-to-cad",
     remove: "gemini extensions uninstall text-to-cad",
   },
+  // ZCode reads the Claude plugin manifest and marketplace catalog (its loader checks a
+  // .zcode-plugin/ manifest first but falls back to .claude-plugin/), so it installs the
+  // same plugin -- skills and the CAD server.
+  {
+    id: "zcode",
+    agent: "ZCode",
+    command:
+      "zcode plugin marketplace add earthtojake/text-to-cad#latest\nzcode plugin install text-to-cad@earthtojake",
+    update: "zcode plugin marketplace update earthtojake\nzcode plugin update text-to-cad",
+    remove: "zcode plugin uninstall text-to-cad\nzcode plugin marketplace remove earthtojake",
+  },
+  // QwenPaw plugins cannot register an MCP server, so the skills install per skill from the
+  // latest branch, and the CAD server is a manual MCP entry (the README's QwenPaw section has
+  // the config and the access-policy step -- QwenPaw blocks every tool until a policy allows
+  // it). It refuses to install a skill that already exists, so an update uninstalls first.
+  {
+    id: "qwenpaw",
+    agent: "QwenPaw",
+    note: "Installs the skills only; the CAD server is a manual MCP entry — setup in",
+    noteLink: { text: "the README's QwenPaw section", href: "https://github.com/earthtojake/text-to-cad#qwenpaw" },
+    command:
+      "for skill in cad dxf urdf srdf sdf step-parts engineering-drawing dfam-check dfm gcode bambu-labs sendcutsend; do\n  qwenpaw skills install https://github.com/earthtojake/text-to-cad/tree/latest/skills/$skill --agent-id <agent>\ndone",
+    update:
+      "for skill in cad dxf urdf srdf sdf step-parts engineering-drawing dfam-check dfm gcode bambu-labs sendcutsend; do\n  qwenpaw skills uninstall $skill --agent-id <agent>\ndone\nfor skill in cad dxf urdf srdf sdf step-parts engineering-drawing dfam-check dfm gcode bambu-labs sendcutsend; do\n  qwenpaw skills install https://github.com/earthtojake/text-to-cad/tree/latest/skills/$skill --agent-id <agent>\ndone",
+    remove:
+      "for skill in cad dxf urdf srdf sdf step-parts engineering-drawing dfam-check dfm gcode bambu-labs sendcutsend; do\n  qwenpaw skills uninstall $skill --agent-id <agent>\ndone",
+  },
   {
     id: "other-agents",
     agent: "Other Agents",

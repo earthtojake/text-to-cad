@@ -230,6 +230,72 @@ To reinstall, remove it with this, then run the install command again:
 gemini extensions uninstall text-to-cad
 ```
 
+### ZCode
+
+ZCode reads this repository's Claude plugin manifest and marketplace catalog,
+so it installs the same plugin — the skills and the CAD server:
+
+```bash
+zcode plugin marketplace add earthtojake/text-to-cad#latest
+zcode plugin install text-to-cad@earthtojake
+```
+
+To update, refresh the marketplace and the plugin, then restart ZCode:
+
+```bash
+zcode plugin marketplace update earthtojake
+zcode plugin update text-to-cad
+```
+
+To reinstall, remove it with these, then run the install commands again:
+
+```bash
+zcode plugin uninstall text-to-cad
+zcode plugin marketplace remove earthtojake
+```
+
+### QwenPaw
+
+QwenPaw plugins cannot register an MCP server, so the skills and the CAD
+server install separately. Install each skill into your agent's workspace:
+
+```bash
+for skill in cad dxf urdf srdf sdf step-parts engineering-drawing dfam-check dfm gcode bambu-labs sendcutsend; do
+  qwenpaw skills install https://github.com/earthtojake/text-to-cad/tree/latest/skills/$skill --agent-id <agent>
+done
+```
+
+Then add the CAD server under **Agent → MCP**, named `cad`:
+
+```json
+{
+  "cad": {
+    "command": "uvx",
+    "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.7.19", "cadgen", "mcp"],
+    "env": {"CADGEN_INSTALL_CHANNEL": "qwenpaw-manual"}
+  }
+}
+```
+
+and set the server's access policy to allow its tools — QwenPaw blocks every
+tool until a policy allows it.
+
+QwenPaw refuses to install a skill that already exists, so to update or
+reinstall, uninstall first and install again, then raise the pinned `cadgen`
+version in the server config to the
+[latest release](https://pypi.org/project/cadgen/):
+
+```bash
+for skill in cad dxf urdf srdf sdf step-parts engineering-drawing dfam-check dfm gcode bambu-labs sendcutsend; do
+  qwenpaw skills uninstall $skill --agent-id <agent>
+done
+for skill in cad dxf urdf srdf sdf step-parts engineering-drawing dfam-check dfm gcode bambu-labs sendcutsend; do
+  qwenpaw skills install https://github.com/earthtojake/text-to-cad/tree/latest/skills/$skill --agent-id <agent>
+done
+```
+
+To remove, run just the uninstall loop and delete the MCP entry.
+
 ### Other Agents
 
 For an agent without plugin support: the skills give you everything you need for

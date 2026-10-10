@@ -809,6 +809,7 @@ hold each one:
 | `codex.mcp.json` on `main` and `latest` | `codex-github` | yes | the checked-in file |
 | `gemini-extension.json` | `gemini-github`, auto-updated | no: Gemini updates it | the checked-in file |
 | the README's Claude Desktop config | `claude-desktop` | yes | the README |
+| the README's QwenPaw config | `qwenpaw-manual` | yes | the README |
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
 | `mcp.json` on `main` and `latest`, beside `plugin.json`: the [Agent Plugins](https://agent-plugins.org) standard's, which VS Code reads before Claude's manifest | `agent-plugins` | yes | the checked-in file |
 | `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
