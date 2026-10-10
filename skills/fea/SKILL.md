@@ -1,6 +1,6 @@
 ---
 name: fea
-description: Run finite element studies on a STEP part, or a bonded assembly of parts, with cadgen. Fix faces, apply forces, pressures, gravity or a steady acceleration, choose a material, and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Strength (linear static) solves today; vibration, buckling, heat, shaking, shock, fatigue, drops, flow, permanent bending and contact are planned, and the skill maps each question to its analysis and says which are not available yet. Use when the user asks whether a part or an assembly is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part, or asks about its vibration, buckling, heat, fatigue life, drop, flow or contact.
+description: Run finite element studies on a STEP part, or a bonded assembly of parts, with cadgen. Fix faces, apply forces, pressures, gravity or a steady acceleration, choose a material, and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Strength (linear static), vibration, buckling, heat (steady, over time and the stress it causes), fatigue life from a static load and a drop estimate solve today; shaking, shock, drop impact, flow, permanent bending and contact are planned, and the skill maps each question to its analysis and says which are not available yet. Use when the user asks whether a part or an assembly is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part, or asks about its vibration, buckling, heat, fatigue life, drop, flow or contact.
 license: MIT
 ---
 
@@ -14,12 +14,16 @@ Use this skill to answer engineering questions about one part, or an assembly
 of parts bonded where they touch, by simulation. It meshes the saved STEP,
 solves, and writes a result the Viewer renders.
 
-**What runs today is strength: the `static` analysis.** It answers "will it
-hold, and by how much" under forces, pressures, the part's own weight
+**What runs today is strength (the `static` analysis), fatigue life from a
+repeated static load (`fatigue`), a drop estimate (`drop`), vibration
+(`modal`), buckling (`buckling`) and heat: steady
+temperatures (`thermal`), temperatures over time (`thermal_transient`) and the
+stress heat puts in a part (`thermal_stress`).** Static answers
+"will it hold, and by how much" under forces, pressures, the part's own weight
 (`gravity`) and a steady acceleration (`acceleration`). Every other analysis in
 [Choose the analysis](#choose-the-analysis) is planned: its study format and
 its words are settled, but this cadgen does not solve it yet, and `cadgen fea
-solve` refuses a study that names one ("'modal' is planned but not in this
+solve` refuses a study that names one ("'harmonic' is planned but not in this
 cadgen yet"). Do not write such a study; follow [When the question needs an
 analysis that is not here yet](#when-the-question-needs-an-analysis-that-is-not-here-yet).
 
@@ -38,17 +42,17 @@ study names it; left out, it is `static`.
 | --- | --- | --- | --- | --- |
 | "Will it hold", "is it strong enough", "how much does it bend" | `static` | Strength | **Runs today** | [Linear static](references/linear-static.md) |
 | The same under its own weight, or while it speeds up, brakes or turns (a steady g-load) | `static` with a `gravity` or `acceleration` load | Strength | **Runs today** | [Body loads](references/linear-static.md#body-loads-gravity-and-acceleration) |
-| "Will it rattle", "will it resonate", "what frequency does it ring at" | `modal` | Vibration | Coming, not in this cadgen yet | [modal.md](references/modal.md) |
-| "Will this column or thin wall buckle" | `buckling` | Buckling | Coming, not in this cadgen yet | [buckling.md](references/buckling.md) |
-| "How hot does it get" (settled, steady running) | `thermal` | Heat | Coming, not in this cadgen yet | [thermal.md](references/thermal.md) |
-| "How hot during a warm-up or a duty cycle" | `thermal_transient` | Heat over time | Coming, not in this cadgen yet | [thermal-transient.md](references/thermal-transient.md) |
-| "It gets hot: does that stress or warp it" | `thermal_stress` | Heat stress | Coming, not in this cadgen yet | [thermal-stress.md](references/thermal-stress.md) |
+| "Will it rattle", "will it resonate", "what frequency does it ring at" | `modal` | Vibration | **Runs today** | [modal.md](references/modal.md) |
+| "Will this column or thin wall buckle" | `buckling` | Buckling | **Runs today** | [buckling.md](references/buckling.md) |
+| "How hot does it get" (settled, steady running) | `thermal` | Heat | **Runs today** | [thermal.md](references/thermal.md) |
+| "How hot during a warm-up or a duty cycle" | `thermal_transient` | Heat over time | **Runs today** | [thermal-transient.md](references/thermal-transient.md) |
+| "It gets hot: does that stress or warp it" | `thermal_stress` | Heat stress | **Runs today** | [thermal-stress.md](references/thermal-stress.md) |
 | "On a shaker", "across a motor's speed range", a sine sweep | `harmonic` | Shaking | Coming, not in this cadgen yet | [harmonic.md](references/harmonic.md) |
 | A transport or vibration spec in g²/Hz | `random_vibration` | Random vibration | Coming, not in this cadgen yet | [random-vibration.md](references/random-vibration.md) |
 | A shock spec, a shock response spectrum (SRS) | `shock` | Shock | Coming, not in this cadgen yet | [shock.md](references/shock.md) |
 | A load that changes over time, a hammer blow | `transient` | Over time | Coming, not in this cadgen yet | [transient.md](references/transient.md) |
-| "How long will it last", "how many cycles" | `fatigue` | Fatigue life | Coming, not in this cadgen yet | [fatigue.md](references/fatigue.md) |
-| "What if I drop it" (a quick answer) | `drop` | Drop (estimate) | Coming, not in this cadgen yet | [drop.md](references/drop.md) |
+| "How long will it last", "how many cycles" | `fatigue` | Fatigue life | **Runs today** from a static load case (`"from": "static"`); from `harmonic` or `random_vibration` coming | [fatigue.md](references/fatigue.md) |
+| "What if I drop it" (a quick answer) | `drop` | Drop (estimate) | **Runs today** (an estimate; `"dynamic": true` coming) | [drop.md](references/drop.md) |
 | "What if I drop it" (a deeper check, after `drop`) | `impact` | Drop impact | Coming, not in this cadgen yet | [impact.md](references/impact.md) |
 | Flow through or around it, pressure drop, the push of air or water on it | `cfd` | Flow | Coming, not in this cadgen yet | [cfd.md](references/cfd.md) |
 | "Does it bend for good", rubber or other stretchy parts | `nonlinear` | Permanent bend / Stretch | Coming, not in this cadgen yet | [nonlinear.md](references/nonlinear.md) |
@@ -61,19 +65,20 @@ ships, its reference holds the full schema and this table says it runs today.
 
 ### When the question needs an analysis that is not here yet
 
-- Tell the user plainly, in their words: "A vibration check is not in this
+- Tell the user plainly, in their words: "A shaker test is not in this
   version yet." Do not write the study; it is refused.
 - Do not pass a static result off as the answer. A static safety factor says
   nothing about resonance, buckling, temperature, fatigue life, flow or parts
   sliding on each other.
 - Offer a static study only where it honestly answers part of the question,
   and say which part:
-  - **A drop.** The coming `drop` estimate is exactly a static study: hold the
-    faces that hit the floor fixed, and add an `acceleration` load of G g
-    pointing away from the floor (opposite those faces' outward normal), with
-    G = drop height / stopping distance (1000 mm stopping in 2 mm is 500 g).
-    You can run that today. Report it as an estimate, never as an impact
-    simulation, and say what stopping distance you assumed.
+  - **A drop impact.** The deeper `impact` check is coming; the `drop`
+    estimate runs today and is exactly a static study: the faces that hit the
+    floor held fixed, and an `acceleration` load of G g pointing away from the
+    floor (opposite those faces' outward normal), with G = drop height /
+    stopping distance (1000 mm stopping in 2 mm is 500 g). Run `drop`
+    ([drop.md](references/drop.md)). Report it as an estimate, never as an
+    impact simulation, and say what stopping distance you assumed.
   - **Its own weight, or a steady g-load** (a vehicle braking, a part on a
     spinning arm at a known g): that is `static` already.
 - When the user wants a number now and no static study fits, a hand estimate,
@@ -123,7 +128,7 @@ leave `defeature` out of `fit.allow`) or names a memory or time budget.
 
 | Task | First action | Reference |
 | --- | --- | --- |
-| **Pick the analysis** | Match the question to a row of the table above; only `static` runs today. | [Choose the analysis](#choose-the-analysis) |
+| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate) and `fatigue` (from a static load) run today. | [Choose the analysis](#choose-the-analysis) |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
 | **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`part.step#o1.f17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |
