@@ -278,8 +278,11 @@ class StaticAnalysis:
     def solve(self, ctx: SolveContext, inputs: StaticInputs) -> AnalysisResult:
         import dataclasses
 
-        from cadgen._internal.fea import solve
+        from cadgen._internal.fea import fit, solve
 
+        # The ladder's idealise rung: a thin plate as a shell, a slender bar as a beam (fit.IDEALISERS).
+        if (idealised := fit.solve_idealised(self, ctx, inputs)) is not None:
+            return idealised
         volume, study, plan = ctx.volume, ctx.study, ctx.assembly
         materials = study.material if plan is None else plan.materials
         extra: dict[str, Any] = {}

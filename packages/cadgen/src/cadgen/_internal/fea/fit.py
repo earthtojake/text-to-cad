@@ -43,7 +43,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "Budget", "Estimate", "FaceInfo", "FitPlan", "Geometry", "IDEALISERS", "Step", "TAIL", "apply_generic",
-    "default_budget", "fit_budget", "governing", "human_bytes", "human_seconds", "solid_estimate", "tets_estimate",
+    "default_budget", "fit_budget", "governing", "human_bytes", "human_seconds", "solid_estimate", "solve_idealised",
+    "tets_estimate",
 ]
 
 GIB = 2 ** 30
@@ -63,8 +64,25 @@ SMALL_FEATURE_ELEMENTS, FAR_ELEMENTS = 2.0, 3.0
 LINEAR_TABLE_NOTE = "linear tets read bending stress about 10-30% low at 3 elements through the thickness"
 
 #: Idealisers by name ("shell", "beam"): each ``(analysis, ctx, inputs) -> Step | None`` changes
-#: ``ctx.plan.idealisation`` when its detection is unambiguous. Empty until the shell and beam modules register.
+#: ``ctx.plan.idealisation`` when its detection is unambiguous, and carries ``estimate(ctx)`` and
+#: ``solve(analysis, ctx, inputs)`` for the plan it made. The shell and beam modules register on import.
 IDEALISERS: dict[str, Callable[..., "Step | None"]] = {}
+#: The rungs that only shrink the solid solve, which an idealised model replaces (and its idealiser undoes).
+SUPERSEDED_BY_IDEALISE = ("iterative", "local_refine", "linear_elements")
+
+
+def _idealisers() -> dict:
+    from cadgen._internal.fea import beam, shell  # noqa: F401  (they register in IDEALISERS)
+
+    return IDEALISERS
+
+
+def solve_idealised(analysis, ctx, inputs):
+    """The idealised model's solve when the ladder chose one (``ctx.plan.idealisation``), else ``None``."""
+    plan = getattr(ctx, "plan", None)
+    if plan is None or plan.idealisation == "solid":
+        return None
+    return _idealisers()[plan.idealisation].solve(analysis, ctx, inputs)
 
 
 @dataclass(frozen=True)
@@ -263,6 +281,10 @@ def fit_budget(analysis: "Analysis", ctx: "SolveContext", inputs: "Inputs", *, t
         step = analysis.apply(rung, ctx, inputs)
         if step is None:
             continue
+        if rung == "idealise" and plan.idealisation != "solid":
+            # The shell or beam replaces the solid solve those rungs shrank (the idealiser undid them): unsaid.
+            steps = [s for s in steps if s.rung not in SUPERSEDED_BY_IDEALISE]
+            plan.taken = [r for r in plan.taken if r not in SUPERSEDED_BY_IDEALISE]
         steps.append(step)
         plan.taken.append(rung)
         estimate = analysis.estimate(ctx, inputs)
@@ -287,7 +309,7 @@ def apply_generic(rung: str, analysis: "Analysis", ctx: "SolveContext", inputs: 
     if rung == "linear_elements":
         return _apply_linear(analysis, ctx)
     if rung == "idealise":
-        for idealiser in IDEALISERS.values():
+        for idealiser in _idealisers().values():
             step = idealiser(analysis, ctx, inputs)
             if step is not None:
                 return step
@@ -391,7 +413,7 @@ def _apply_symmetry(analysis, ctx, inputs) -> Step | None:
     from cadgen._internal.fea import symmetry
 
     plan, geometry = ctx.plan, ctx.geometry
-    if geometry is None or geometry.shape is None or plan.symmetry:
+    if geometry is None or geometry.shape is None or plan.symmetry or plan.idealisation != "solid":
         return None
     check = getattr(analysis, "symmetric_about", None)
     if check is None:
@@ -579,8 +601,10 @@ def _mesh_key(plan: FitPlan) -> tuple:
 def solid_estimate(ctx, *, components: int = 3, extra_bytes: float = 0.0, extra_seconds: float = 0.0,
                    passes: float = 1.0) -> Estimate:
     """What one linear solve on the plan's mesh costs (a vector field: ``components`` 3; a scalar one: 1).
-    A two-pass plan pays for its coarse pass and its refined one."""
+    A two-pass plan pays for its coarse pass and its refined one. An idealised plan costs its idealiser's model."""
     plan = ctx.plan
+    if plan.idealisation != "solid" and plan.idealisation in _idealisers():
+        return IDEALISERS[plan.idealisation].estimate(ctx)
     elements, nodes, two = _plan_counts(ctx)
     cost = solve_cost(elements, nodes, components=components, order=plan.order, solver=plan.solver, extra_bytes=extra_bytes)
     seconds = cost.seconds * passes + extra_seconds
