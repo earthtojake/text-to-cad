@@ -110,5 +110,5 @@ export default planned({
   defaultControls: piezoControls,
   setupGroups: PIEZO_SETUP,
   routine: piezoRoutine,
-  markers: ["fixture", "load"], displayTitle: "Electrodes and fixtures",
+  markers: ["fixture", "load", "electrode"], displayTitle: "Electrodes and fixtures",
 });

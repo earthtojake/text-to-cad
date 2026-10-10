@@ -303,12 +303,13 @@ export const CHECK_KINDS = Object.freeze({
     titles: titles("Unstable", "Barely damped", "Stable"), defaultLabel: "Stability", unit: "",
     line: stabilityLine,
   }),
-  // The highest a liquid rises inside the part over time, above the inside's floor, against the brim or a limit: "Rises to 42 mm, limit 50 mm".
+  // The highest a liquid rises inside the part over time, above the inside's floor, against the brim or a limit: "Rises to 42 mm, limit 50 mm";
+  // against the tank's own brim (`brim`), "Rises to 42 mm, limit: the brim".
   fill_level: kind({
     titles: titles("Spills over", "Close to the brim", "Stays in"), defaultLabel: "Fill level", unit: "mm",
     line: (check) => {
       const unit = unitOf(check, "mm");
-      return unbrokenHalves([`Rises to ${plainNumber(check.shown)} ${unit}`, `limit ${plainNumber(check.limit)} ${unit}`]);
+      return unbrokenHalves([`Rises to ${plainNumber(check.shown)} ${unit}`, check.brim ? "limit: the brim" : `limit ${plainNumber(check.limit)} ${unit}`]);
     },
   }),
   // The hardest the fluids press on the part's walls over time, against the most allowed: "Peak 263 Pa, limit 1000 Pa".

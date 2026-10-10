@@ -142,5 +142,5 @@ export default planned({
   defaultControls: seriesControls,
   setupGroups: ACOUSTIC_SETUP,
   routine: (result) => (result?.series?.kind === "mode" ? RING : null),
-  markers: ["fixture", "base_excitation"], displayTitle: "Fixtures",
+  markers: ["fixture", "base_excitation", "speaker"], displayTitle: "Fixtures and speakers",
 });

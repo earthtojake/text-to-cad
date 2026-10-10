@@ -834,7 +834,11 @@ exactly as it always was.
   of the side of the part's box each names, "0.5 m/s" and "0 Pa"; a **rigid plane** (a contact
   floor, or a drop impact's floor through the lowest point along the fall), one see-through grey
   quad, unlabelled; a **crack front** (fracture), an ink dot at each station along it where its K was
-  read (`extras.crack.front_mm`), unlabelled. Choosing a setup row takes its own markers to the chosen magenta. Display has
+  read (`extras.crack.front_mm`), unlabelled; a **speaker** (acoustic, a sound source's face), a small
+  ink cone on the face opening off it with two rings of sound past it, "2 mm/s"; a piezo
+  **electrode**, an ink plate on its faces with a terminal standing off it, "10 V" or "open"; a
+  rotor's **bearings**, two grey races lying on their faces, unlabelled, all one group as Study's
+  one Bearings row. Choosing a setup row takes its own markers to the chosen magenta. Display has
   one gate for them, after Surfaces, titled per analysis (**Loads and fixtures**, **Heat inputs and
   temperatures**, **Shaker and fixtures**, **Flow openings**), its line saying what it draws ("Arrows
   where the study loads the part, cones where it holds it."; "Dots where its temperature is fixed,

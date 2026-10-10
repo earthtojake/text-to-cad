@@ -82,13 +82,13 @@ describe('fracture', () => {
   });
 
   it('says every kind of crack in words', () => {
-    const crack = (kind: string, more: Record<string, unknown> = {}) => crackOf({ mesh: { userData: { study: { crack: { kind, size_mm: 1.5, face: '#o1.f4', ...more } } } } });
+    const crack = (kind: string, more: Record<string, unknown> = {}) => crackOf({ study: { crack: { kind, size_mm: 1.5, face: '#o1.f4', ...more } }, mesh: { userData: {} } });
     expect(crackWords(crack('edge'))).toBe('1.5 mm edge crack on face 4');
     expect(crackWords(crack('surface', { length_mm: 6 }))).toBe('1.5 mm deep surface crack, 6 mm long, on face 4');
     expect(crackWords(crack('surface'))).toBe('1.5 mm deep surface crack, 3 mm long, on face 4');
     expect(crackWords(crack('through', { face: '#o1.f6' }))).toBe('3 mm through crack across face 6');
     expect(crackWords(crack('embedded', { face: null }))).toBe('3 mm embedded crack');
-    expect(crackOf({ mesh: { userData: { study: { crack: { kind: 'notch', size_mm: 1 } } } } })).toBeNull();
+    expect(crackOf({ study: { crack: { kind: 'notch', size_mm: 1 } }, mesh: { userData: {} } })).toBeNull();
   });
 
   it('draws a dot at each station of the crack front, where the file puts it', () => {

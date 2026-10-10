@@ -118,6 +118,10 @@ SST with wall functions), and the pressure drop to report.
   u = 2 U (1 − r²/R²), and the wall shear is 4 μ U / R. Water at 0.01 m/s through a 4 mm bore
   16 mm long: Q = 1.26e-7 m³/s, Δp = 0.32 Pa, τ = 0.020 Pa. The solver matches the drop within
   about 1 % and the profile within 2 % with the default mesh.
+- Straight rectangular duct (Shah & London): Δp = (f·Re / 2) μ U L / D_h², with D_h = 2 W H / (W + H)
+  and f·Re = 56.91 for a square, 62.19 at 2:1, 96 for wide parallel plates. Water at 0.01 m/s
+  through a 3 × 3 mm duct 16 mm long: Δp = 0.51 Pa. The solver matches it within about 3 %; sharp
+  corners at an inlet need no rounding.
 - Any duct, laminar: Δp grows in proportion to the speed (double it, double the drop). Turbulent
   flow grows nearer the square: if the user's measured drop grows faster than the speed, the flow
   is not laminar.

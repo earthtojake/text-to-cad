@@ -66,11 +66,11 @@ const critical = (value: number, limit: number, reference: number, status: strin
 });
 
 describe('rotordynamics', () => {
-  it('is Spinning, Tier 3 and Lite: no load control, its three checks, its setup, Whirl and no markers', () => {
+  it('is Spinning, Tier 3 and Lite: no load control, its three checks, its setup, Whirl and rings on its bearings', () => {
     expect(rotordynamics).toMatchObject({ name: 'rotordynamics', tier: 3, word: 'Spinning', noun: 'this spin', family: null, scalesWithLoad: false,
       limitWord: 'Lite', checks: ['critical_speed', 'stability', 'stress'], displayTitle: 'Bearings' });
     expect(rotordynamics.checkLabels).toEqual({ stress: 'Spin stress' });
-    expect(rotordynamics.markers).toEqual([]);
+    expect(rotordynamics.markers).toEqual(['bearing']);
     expect(ROTOR_SETUP).toEqual([spinRows, bearingRows, discRows, unbalanceRows, madeOfRows]);
     const result = spinningResult();
     expect(feaAnalysis(result)).toBe(rotordynamics);

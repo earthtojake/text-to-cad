@@ -20,10 +20,10 @@ import { PLAY, historyWords } from "./transient.js";
 
 const record = (raw) => (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : null);
 
-/** What the file says of the two fluids: its study echo's `multiphase` and its analysis's `fill`, as written. */
+/** What the file says of the two fluids: the study's `multiphase` (as the viewer read it) and its analysis's `fill`. */
 function twoFluids(result) {
   const extras = result?.mesh?.userData || {};
-  return { study: record(extras.study?.multiphase), fill: record(extras.analysis?.fill) };
+  return { study: record(result?.study?.multiphase), fill: record(extras.analysis?.fill) };
 }
 
 /** How full it starts, in words: "Half full of water", "A quarter full of oil", "40 % full of water". */

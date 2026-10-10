@@ -146,9 +146,7 @@ External (a part in a stream):
   the heat transfer coefficient high. Turbulent walls use wall functions (y⁺ ≥ 30 by construction),
   so the heat transfer coefficient is the law of the wall's, good to the 10-25 % of correlations.
 - A wetted face is one temperature with the fluid at the wall (laminar): no contact resistance, no
-  coating. The flow's own limits: one part, openings on sides of the bounding box; a channel with
-  sharp internal corners can fail the laminar flow solve ("factor is exactly singular"): round
-  them, or use a round bore.
+  coating. The flow's own limits: one part, openings on sides of the bounding box.
 
 ## When the model is big
 

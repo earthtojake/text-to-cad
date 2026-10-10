@@ -171,6 +171,28 @@ class UniaxialBlock(unittest.TestCase):
         self.assertIn("the fixtures leave the part free to slide or turn (3 of its 6 rigid motions)", str(caught.exception))
 
 
+    def test_rollers_in_separate_fixtures_count_their_shared_edges_once(self):
+        """The three rollers as three fixtures meet at edges: each edge DOF's reaction is counted once, so the
+        fixtures' reactions sum to the pull and no "do not balance" warning appears."""
+        from cadgen import fea
+
+        with tempfile.TemporaryDirectory() as name:
+            step, faces, _ = _block(Path(name), 0.0)
+            study = {"material": "steel", "mesh": {"size_mm": 6.0},
+                     "fixtures": [{"faces": [faces[side]], "type": "roller"} for side in ("-x", "-y", "-z")],
+                     "loads": [{"faces": [faces["+z"]], "type": "force", "vector_N": [0, 0, FORCE]}]}
+            with redirect_stderr(io.StringIO()):
+                result = fea.solve(step, Path(name) / "three.fea.glb", study=study)
+            sidecar = json.loads(result.sidecar.read_text(encoding="utf-8"))
+        self.assertFalse([w for w in sidecar["warnings"] if "do not balance" in w], sidecar["warnings"])
+        reactions = [fixture["reaction_N"] for fixture in sidecar["fixtures"]]
+        self.assertEqual(len(reactions), 3)
+        for c in range(3):
+            self.assertAlmostEqual(sum(r[c] for r in reactions), -FORCE if c == 2 else 0.0, delta=1e-6 * FORCE)
+        # The floor (-z) carries the pull; the two side rollers carry nothing along it.
+        self.assertAlmostEqual(reactions[2][2], -FORCE, delta=1e-6 * FORCE)
+        self.assertAlmostEqual(reactions[0][2], 0.0, delta=1e-6 * FORCE)
+
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class ConfinedCylinder(unittest.TestCase):
     """A quarter cylinder (R 10, H 10) on rollers on every face but its top, pressed by 10 MPa: confined compression."""

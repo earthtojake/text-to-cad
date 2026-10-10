@@ -33,6 +33,7 @@ import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
 
+from tests.python.support import markdown
 from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
@@ -147,8 +148,7 @@ class Ceramics(unittest.TestCase):
 
     def test_the_reference_lists_every_constant_with_its_source(self):
         text = REFERENCE.read_text(encoding="utf-8")
-        section = text[text.index("## Piezoelectric ceramics"):]
-        section = section[:section.index("\n## ", 4)]
+        section = markdown.section(text, "## Piezoelectric ceramics")
         self.assertIn("TP-226", section)
         for key, material in PIEZO_MATERIALS.items():
             row = next(line for line in section.splitlines() if f"(`{key}`)" in line)

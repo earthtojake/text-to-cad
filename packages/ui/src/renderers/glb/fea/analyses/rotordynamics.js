@@ -10,7 +10,7 @@
  * you see opens on the whirl picker, the field (stress, whirl) and the deformation. Its setup says how it
  * spins ("Spins 0 to 12,000 rpm about Z"), where its bearings are ("Bearings at face 3 and face 9"), the
  * discs and unbalances the study adds, and what it is made of; it reads them from the study the file
- * records (`extras.study`: `spin`, `bearings`, `discs`, `unbalance`).
+ * records (`result.study.rotor`: `spin`, `bearings`, `discs`, `unbalance`).
  */
 import { rpmWords } from "../checkKinds.js";
 import { fieldAndDeformation } from "../controls.js";
@@ -38,9 +38,9 @@ function axisName(axis) {
   return along >= 0 ? AXES[along] : `(${unit.map((value) => plainNumber(value).replace(/^-/, "−")).join(", ")})`;
 }
 
-/** The study's spin, bearings, discs and unbalances as the file records them (`extras.study`), or null for none. */
+/** The study's spin, bearings, discs and unbalances as the viewer read them (`result.study.rotor`), or null for none. */
 export function rotorOf(result) {
-  const study = result?.mesh?.userData?.study;
+  const study = result?.study?.rotor;
   const spin = study?.spin;
   if (!spin || typeof spin !== "object") return null;
   const rpm = Array.isArray(spin.rpm) && spin.rpm.length === 2 && spin.rpm.every((v) => finite(v) !== null) ? spin.rpm.map(Number) : null;
@@ -156,7 +156,7 @@ export default Object.freeze({
   defaultControls: whirlControls,
   setupGroups: ROTOR_SETUP,
   routine: (result) => (result?.series ? WHIRL : null),
-  markers: Object.freeze([]),
+  markers: Object.freeze(["bearing"]),
   displayTitle: "Bearings",
   limitWord: "Lite",
 });

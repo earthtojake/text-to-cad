@@ -124,13 +124,12 @@ class StudyFile(unittest.TestCase):
         self.assertEqual(study.inputs.radiation[0].ambient, 25.0)
         self.assertEqual(study.inputs.reference_C, 25.0)
 
-    def test_heat_stress_does_not_take_radiation_yet(self):
+    def test_heat_stress_takes_radiation_through_its_thermal_solve(self):
         from cadgen._internal.fea.study import parse_study
 
-        with self.assertRaises(ValueError) as caught:
-            parse_study({"analysis": "thermal_stress", "material": "aluminum-6061-t6", "temperatures": [{"faces": ["#o1.f1"], "C": 25}],
-                         "fixtures": [{"faces": ["#o1.f1"]}], "radiation": []})
-        self.assertIn("unknown keys ['radiation']", str(caught.exception))
+        study = parse_study({"analysis": "thermal_stress", "material": "aluminum-6061-t6", "fixtures": [{"faces": ["#o1.f1"]}],
+                             "radiation": [{"faces": ["#o1.f2"], "emissivity": 0.9, "ambient_C": 25}]})
+        self.assertEqual([(entry.faces, entry.emissivity) for entry in study.inputs.thermal.radiation], [(("#o1.f2",), 0.9)])
 
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")

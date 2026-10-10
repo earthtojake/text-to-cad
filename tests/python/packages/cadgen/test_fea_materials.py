@@ -11,6 +11,7 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.python.support import markdown
 from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
@@ -36,7 +37,7 @@ DOC_FACTOR = {"expansion": 1e-6}
 def _reference_rows() -> dict[str, list[str]]:
     """materials.md's property table: table key -> its cells after the name."""
     text = REFERENCE.read_text(encoding="utf-8")
-    section = text[text.index("## Strength, fatigue and heat"):]
+    section = markdown.section(text, "## Strength, fatigue and heat")
     rows = {}
     for line in section.splitlines():
         match = re.match(r"\|\s*`([a-z0-9-]+)`", line)

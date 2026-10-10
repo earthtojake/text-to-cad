@@ -23,7 +23,7 @@ add_repo_path(".")
 
 from cadgen._internal.fea.materials import lookup_material  # noqa: E402
 from cadgen._internal.fea.mesh import require_fea_stack  # noqa: E402
-from tests.python.packages.cadgen.test_fea_thermal import box_step, glb_extras_and_attributes, x_faces  # noqa: E402
+from tests.python.packages.cadgen.test_fea_thermal import box_step, glb_extras_and_attributes, side_faces, x_faces  # noqa: E402
 
 try:
     require_fea_stack()
@@ -154,6 +154,40 @@ class HeatedBar(unittest.TestCase):
         self.assertIn("(thermal_stress)", lines[0])
         self.assertTrue(lines[1].startswith("max von Mises"))
         self.assertIn("temperatures 120 to 120 °C, stress-free at 20 °C", lines)
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class RadiatingBar(unittest.TestCase):
+    """The bar takes 1 W on one long side and radiates it from every face (emissivity 0.9, into 20 °C), clamped at
+    both ends: it settles at its radiative equilibrium T = (Q / (ε σ A) + T∞⁴)^¼, nearly uniform along it, and is
+    pressed by E α (T - 20 °C)."""
+
+    POWER, EMISSIVITY = 1.0, 0.9
+
+    def test_its_stress_follows_its_radiative_equilibrium_temperature(self):
+        from cadgen import fea
+
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            step = box_step(directory, "bar", (LENGTH, SIDE, SIDE))
+            near, far = x_faces(step)
+            every = [near, far, *side_faces(step)]
+            study = {"analysis": "thermal_stress", "material": "steel", "mesh": {"size_mm": 2.5},
+                     "fixtures": [{"faces": [near]}, {"faces": [far]}],
+                     "heat": [{"faces": [side_faces(step)[0]], "W": self.POWER}],
+                     "radiation": [{"faces": every, "emissivity": self.EMISSIVITY, "ambient_C": REFERENCE}]}
+            with redirect_stderr(io.StringIO()):
+                result = fea.solve(step, directory / "radiating.glb", study=study)
+            extras, attributes = glb_extras_and_attributes(result.glb, ("POSITION", "_DISPLACEMENT", "_VON_MISES", "_TEMPERATURE"))
+        area = (4 * LENGTH * SIDE + 2 * SIDE * SIDE) * 1e-6
+        ambient = REFERENCE + 273.15
+        settled = (self.POWER / (self.EMISSIVITY * 5.670374419e-8 * area) + ambient ** 4) ** 0.25 - 273.15
+        summary = result.summary
+        mean = 0.5 * (summary["max_temperature_C"] + summary["min_temperature_C"])
+        self.assertAlmostEqual(mean / settled, 1.0, delta=0.01, msg=(summary["min_temperature_C"], summary["max_temperature_C"], settled))
+        sigma = STEEL.E * STEEL.expansion * (mean - REFERENCE)
+        self.assertAlmostEqual(_middle_peak(extras, attributes) / sigma, 1.0, delta=0.05)
+        self.assertIn("radiation", extras["study"])
 
 
 if __name__ == "__main__":

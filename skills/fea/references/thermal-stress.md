@@ -25,8 +25,10 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
  "view": {"checks": [{"kind": "stress"}, {"kind": "displacement", "limit_mm": 0.1}]}}
 ```
 
-- The heat: `temperatures`, `heat` and `convection`, exactly as a steady [`thermal`](thermal.md#the-study)
-  study (at least one held temperature or convection).
+- The heat: `temperatures`, `heat`, `convection` and `radiation`, exactly as a steady
+  [`thermal`](thermal.md#the-study) study (at least one held temperature, convection or radiation;
+  radiation as in [thermal.md](thermal.md#radiation): a part that only radiates settles where it
+  radiates what it takes in, and that temperature drives the stress).
 - `fixtures` (required) and `loads` (optional): as [static](linear-static.md), gravity and
   acceleration included.
 - `reference_C`: the temperature at which the part is stress-free, as made or assembled (default
@@ -54,6 +56,10 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
 - Clamped at both ends: it cannot grow, so it is pressed by σ = -E α ΔT. Steel heated 100 °C:
   200 000 × 11e-6 × 100 = 220 MPa, near steel's yield, from heat alone. The solver matches within
   2 % in the middle, and the walls each push back with σ × area.
+- Radiating: a part taking in Q and radiating it from area A settles at
+  T = (Q / (ε σ A) + T∞⁴)^¼ (kelvin), and clamped it carries E α (T − reference). A 100 × 5 × 5 mm
+  steel bar taking 1 W, radiating from every face at ε 0.9 into 20 °C, settles near 88 °C, so
+  clamped at both ends it is pressed by about 150 MPa.
 - A plate hot on one side and cool on the other bows toward the hot side; held flat, it carries
   about E α ΔT / (2 (1 - ν)) at its faces.
 - A full `fixed` face also stops the part growing sideways, which stresses it near that face more

@@ -108,5 +108,9 @@ describe('multiphase', () => {
       status: 'fails', where: { ref: null, at: null }, at: { frame: 2, value: 0.0849, unit: 's' } }]));
     expect(spills.title).toBe('Spills over');
     expect(spills.caption.replace(/ /g, ' ')).toContain('Rises to 52 mm, limit 50 mm');
+    // Judged against the tank's own brim (no limit_mm), the file says so and the line names the brim.
+    const brim = feaVerdict(twoFluids({}, [{ kind: 'fill_level', label: '', value: 52, limit: 50, unit: 'mm', ratio: 1.04, close_at: 0.9,
+      status: 'fails', brim: true, where: { ref: null, at: null }, at: { frame: 2, value: 0.0849, unit: 's' } }]));
+    expect(brim.caption.replace(/ /g, ' ')).toContain('Rises to 52 mm, limit: the brim');
   });
 });

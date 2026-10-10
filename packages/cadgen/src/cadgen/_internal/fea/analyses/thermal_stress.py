@@ -1,7 +1,8 @@
 """Heat stress: the stress and movement a temperature field puts in a part, with any mechanical loads on top.
 
 The study (spec 5.7) takes the thermal keys (``temperatures``, ``heat``,
-``convection``, as a steady ``thermal`` study), ``fixtures`` and optional
+``convection`` and ``radiation``, as a steady ``thermal`` study: radiation
+reaches the stress through the upstream thermal solve), ``fixtures`` and optional
 ``loads`` (as ``static``, gravity and acceleration included) and
 ``reference_C``, the temperature at which the part is stress-free (default
 20 °C). The thermal analysis runs first on the same element space (its
@@ -25,7 +26,7 @@ from typing import Any, ClassVar
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, SolveContext
 from cadgen._internal.fea.analyses.static import StaticAnalysis, StaticInputs, solved_record, solved_part_record
-from cadgen._internal.fea.analyses.thermal import HEAT_KEYS, ThermalAnalysis, heat_echo
+from cadgen._internal.fea.analyses.thermal import HEAT_KEYS, RADIATION_KEY, ThermalAnalysis, heat_echo
 from cadgen._internal.fea.study import VIEW_DRIVES, parse_fixtures, parse_loads
 
 __all__ = ["ThermalStressAnalysis", "ThermalStressInputs"]
@@ -45,7 +46,7 @@ class ThermalStressInputs(StaticInputs):
 class ThermalStressAnalysis(StaticAnalysis):
     name: ClassVar[str] = "thermal_stress"
     word: ClassVar[str] = "Heat stress"
-    study_keys: ClassVar[frozenset[str]] = frozenset({"fixtures", "loads", "reference_C", *HEAT_KEYS})
+    study_keys: ClassVar[frozenset[str]] = frozenset({"fixtures", "loads", "reference_C", *HEAT_KEYS, RADIATION_KEY})
     material_needs: ClassVar[frozenset[str]] = frozenset({"conductivity", "expansion"})
     fields: ClassVar[tuple[FieldSpec, ...]] = (
         FieldSpec("von_mises", "_VON_MISES", "von Mises stress", "MPa"),
@@ -80,7 +81,7 @@ class ThermalStressAnalysis(StaticAnalysis):
         from cadgen._internal.fea import fit
         from cadgen._internal.fea.analyses.thermal import ladder_estimate
 
-        mechanical, heat = fit.solid_estimate(ctx), ladder_estimate(ctx)
+        mechanical, heat = fit.solid_estimate(ctx), ladder_estimate(ctx, steps=6 if inputs.thermal.radiation else 0)
         return fit.Estimate(dofs=mechanical.dofs, memory_bytes=max(mechanical.memory_bytes, heat.memory_bytes),
                             seconds=mechanical.seconds + heat.seconds)
 

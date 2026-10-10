@@ -325,5 +325,34 @@ class ColdPlate(unittest.TestCase):
               f"Dittus-Boelter {dittus_boelter:.2f} for developed flow")
 
 
+def box_duct_step(directory: Path, side: float, length: float, wall: float = 1.0) -> Path:
+    """A square passage through a block along x: sharp corners where the inlet meets the walls."""
+    from build123d import Align, Box, export_step
+
+    step = directory / "duct.step"
+    along = (Align.MIN, Align.CENTER, Align.CENTER)
+    export_step(Box(length, side + 2 * wall, side + 2 * wall, align=along) - Box(length, side, side, align=along), str(step))
+    return step
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class BoxDuct(unittest.TestCase):
+    """A square duct (sharp corners at its inlet) is cooled by its flow: the laminar flow under it solves."""
+
+    def test_a_square_duct_solves(self):
+        from cadgen import fea
+
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            step = box_duct_step(directory, 3.0, 12.0)
+            floor = next(face.ref for face in fea.faces(step).faces
+                         if face.surface == "plane" and abs(face.center_mm[2] + 2.5) < 1e-6)
+            result, _ = solve(step, directory / "duct.glb", {**COLD_PLATE, "mesh": {"size_mm": 1.0},
+                                                             "temperatures": [{"faces": [floor], "C": 80}]})
+        self.assertTrue(result.ok)
+        self.assertGreater(result.summary["pressure_drop_Pa"], 0)
+        self.assertGreater(result.summary["max_temperature_C"], 20)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -46,7 +46,8 @@ if TYPE_CHECKING:
 
     from cadgen._internal.fea.femspace import FemSpace
 
-__all__ = ["CONTINUATION", "FlowProblem", "FlowSolution", "developed_profile", "solve_flow", "vector_dofs"]
+__all__ = ["CONTINUATION", "FlowProblem", "FlowSolution", "developed_profile", "fill_unreached_pressures", "solve_flow",
+           "unreached_pressures", "vector_dofs"]
 
 #: Picard stops at this residual (relative to the Stokes right-hand side), Newton at this one.
 PICARD_TOL, NEWTON_TOL = 1e-3, 1e-8
@@ -156,6 +157,60 @@ def developed_profile(locations: "np.ndarray", rows: "np.ndarray", axis: int) ->
     return out
 
 
+def unreached_pressures(B, velocity_held: "np.ndarray") -> "np.ndarray":
+    """The pressure DOFs no free velocity DOF reaches: their column of the saddle point is empty.
+
+    ``B`` is the (pressure, velocity) divergence matrix and ``velocity_held`` the velocity DOFs with a
+    prescribed value. A linear pressure node where an inlet meets the walls at a sharp corner (a
+    rectangular duct's inlet edge and corners) can have every velocity DOF of every tetrahedron around
+    it prescribed: no momentum equation sees that pressure and its continuity equation holds only
+    prescribed values, so the saddle-point matrix is exactly singular there. Those pressures are taken
+    out of the solve and given their neighbours' value afterwards (:func:`fill_unreached_pressures`):
+    the flow never felt them, so this changes no velocity and no other pressure.
+    """
+    import numpy as np
+
+    B = B.tocsr()
+    free = np.ones(B.shape[1], dtype=float)
+    free[np.asarray(velocity_held, dtype=np.int64)] = 0.0
+    magnitude = abs(B)
+    reach = np.asarray(magnitude @ free).ravel()
+    scale = float(magnitude.max()) if magnitude.nnz else 0.0
+    return np.flatnonzero(reach <= 1e-12 * max(scale, 1e-300))
+
+
+def fill_unreached_pressures(p: "np.ndarray", unreached: "np.ndarray", element_dofs: "np.ndarray") -> "np.ndarray":
+    """``p`` with each unreached pressure DOF set to the mean of its solved neighbours (sharing an element).
+
+    ``element_dofs`` is the pressure basis's (nodes per element, elements) DOF table. Taken in waves, so a
+    node whose neighbours are all unreached too takes the next wave's values.
+    """
+    import numpy as np
+
+    p = np.array(p, dtype=float)
+    pending = set(int(d) for d in np.asarray(unreached).tolist())
+    if not pending:
+        return p
+    neighbours: dict[int, set[int]] = {d: set() for d in pending}
+    for column in np.asarray(element_dofs).T:
+        nodes = [int(n) for n in column]
+        for n in nodes:
+            if n in neighbours:
+                neighbours[n].update(nodes)
+    while pending:
+        wave = {}
+        for d in pending:
+            known = [n for n in neighbours[d] if n != d and n not in pending]
+            if known:
+                wave[d] = float(np.mean(p[known]))
+        if not wave:
+            break
+        for d, value in wave.items():
+            p[d] = value
+        pending -= set(wave)
+    return p
+
+
 # -- the forms ----------------------------------------------------------------------------------------
 
 
@@ -235,8 +290,11 @@ class _System:
             if pressure:
                 f -= (pressure / problem.mu) * asm(self.f_out, self.basis.boundary(facets))
         self.f = np.concatenate([f, np.zeros(self.np_)])
-        self.D = np.asarray(problem.dirichlet, dtype=np.int64)
-        self.xD = np.asarray(problem.values, dtype=float)
+        held = np.asarray(problem.dirichlet, dtype=np.int64)
+        # Pressures no free velocity reaches (an inlet's sharp corners) leave the solve; filled after it.
+        self.unreached = unreached_pressures(self.B, held)
+        self.D = np.concatenate([held, self.nu + self.unreached])
+        self.xD = np.concatenate([np.asarray(problem.values, dtype=float), np.zeros(len(self.unreached))])
         free = np.ones(self.n, dtype=bool)
         free[self.D] = False
         self.I = np.flatnonzero(free)
@@ -453,8 +511,9 @@ def solve_flow(problem: FlowProblem, *, schedule: tuple[float, ...] = (), solver
     warnings = list(system.warnings)
     if not ok:
         warnings.append(f"the flow solve stopped at a residual of {r:.1e}, short of 1e-8: its numbers are approximate")
+    pressure = fill_unreached_pressures(problem.mu * x[system.nu:], system.unreached, system.pbasis.element_dofs)
     return FlowSolution(
-        u=x[:system.nu], p=problem.mu * x[system.nu:], pressure_basis=system.pbasis, converged=ok, residual=r,
+        u=x[:system.nu], p=pressure, pressure_basis=system.pbasis, converged=ok, residual=r,
         picard=counts["picard"], newton=counts["newton"], stages=stages, continued=continued, solver=solver,
         linear_solves=system.solves, warnings=warnings, timings=timings,
     )

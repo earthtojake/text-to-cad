@@ -29,6 +29,7 @@ import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
 
+from tests.python.support import markdown
 from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
@@ -126,7 +127,7 @@ class Materials(unittest.TestCase):
 
     def _rows(self) -> dict[str, list[str]]:
         text = (REFERENCE / "materials.md").read_text(encoding="utf-8")
-        section = text[text.index("## Fracture"):text.index("## Strength, fatigue and heat")]
+        section = markdown.section(text, "## Fracture")
         rows = {}
         for line in section.splitlines():
             match = re.match(r"\|\s*`([a-z0-9-]+)`", line)

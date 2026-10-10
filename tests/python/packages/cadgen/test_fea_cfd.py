@@ -233,6 +233,62 @@ class Poiseuille(unittest.TestCase):
         self.assertIn("(cfd)", lines)
 
 
+def duct_step(directory: Path, width: float, height: float, length: float = 16.0) -> Path:
+    """A rectangular duct along x: a width x height passage through a block with 1 mm walls."""
+    from build123d import Align, Box, export_step
+
+    step = directory / f"duct_{width:g}x{height:g}.step"
+    along = (Align.MIN, Align.CENTER, Align.CENTER)
+    export_step(Box(length, width + 2, height + 2, align=along) - Box(length, width, height, align=along), str(step))
+    return step
+
+
+def rectangular_duct_Pa(flow_m3_s: float, width_mm: float, height_mm: float, length_mm: float = 16.0,
+                        mu: float = WATER_MU) -> float:
+    """Laminar developed flow through a W x H rectangle (Shah & London's series): Q = W H^3 dp / (12 mu L) times
+    1 - (192 H / pi^5 W) sum over odd n of tanh(n pi W / 2H) / n^5, with H the shorter side (f Re = 56.91 square)."""
+    w, h = max(width_mm, height_mm) / 1000, min(width_mm, height_mm) / 1000
+    series = sum(math.tanh(n * math.pi * w / (2 * h)) / n ** 5 for n in range(1, 40, 2))
+    shape = 1 - 192 * h / (math.pi ** 5 * w) * series
+    return 12 * mu * (length_mm / 1000) * flow_m3_s / (w * h ** 3 * shape)
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class SharpCorneredDucts(unittest.TestCase):
+    """Rectangular passages solve: the inlet's corners, where every velocity around a pressure node is held,
+    used to make the flow's matrix exactly singular. A square and a 2:1 duct against Shah & London."""
+
+    def check(self, width: float, height: float):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            result, _ = solve(duct_step(directory, width, height), directory / "duct.glb", PIPE)
+        summary = result.summary
+        self.assertTrue(summary["solve"]["converged"])
+        flow = summary["flow_rate_m3_s"]
+        self.assertAlmostEqual(flow, 0.01 * width * height * 1e-6, delta=1e-3 * flow)
+        expected = rectangular_duct_Pa(flow, width, height)
+        self.assertLess(abs(summary["pressure_drop_Pa"] - expected) / expected, 0.05, (summary["pressure_drop_Pa"], expected))
+
+    def test_a_square_duct_loses_shah_and_londons_pressure(self):
+        self.check(3.0, 3.0)
+
+    def test_a_two_to_one_duct_loses_shah_and_londons_pressure(self):
+        self.check(4.0, 2.0)
+
+    def test_an_unreached_pressure_takes_its_neighbours_value(self):
+        import numpy as np
+        from scipy import sparse
+
+        from cadgen._internal.fea.navier_stokes import fill_unreached_pressures, unreached_pressures
+
+        # Pressure 0 touches only velocity 0 (held); pressures 1 and 2 touch the free velocity 1.
+        B = sparse.csr_matrix(np.array([[1.0, 0.0], [0.5, 1.0], [0.0, 2.0]]))
+        unreached = unreached_pressures(B, np.array([0]))
+        self.assertEqual(unreached.tolist(), [0])
+        filled = fill_unreached_pressures(np.array([0.0, 4.0, 6.0]), unreached, np.array([[0], [1], [2]]))
+        self.assertEqual(filled.tolist(), [5.0, 4.0, 6.0])
+
+
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class PastLaminar(unittest.TestCase):
     """Re 2400 in the same tube: it solves (never refuses) and warns, in words and as data."""

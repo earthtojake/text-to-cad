@@ -20,13 +20,13 @@ const finite = (value) => (Number.isFinite(Number(value)) && value !== null && v
 const mm = (value) => `${plainNumber(value)} mm`;
 
 /**
- * The crack as the file records it: the study's echo (`study.crack`: `kind`, `face`, `size_mm`,
+ * The crack as the file records it: the study's (`result.study.crack`: `kind`, `face`, `size_mm`,
  * `length_mm`) and what was solved (`extras.crack`: `K_max_MPa_sqrt_m`, `K_point`, `front_mm`, the
  * front's stations). null for a result with none.
  */
 export function crackOf(result) {
   const extras = result?.mesh?.userData || {};
-  const echo = extras.study?.crack && typeof extras.study.crack === "object" ? extras.study.crack : null;
+  const echo = result?.study?.crack && typeof result.study.crack === "object" ? result.study.crack : null;
   const solved = extras.crack && typeof extras.crack === "object" ? extras.crack : {};
   const kind = echo?.kind ?? solved.kind;
   const size = finite(echo?.size_mm ?? solved.size_mm);

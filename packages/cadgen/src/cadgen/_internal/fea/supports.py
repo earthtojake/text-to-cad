@@ -19,7 +19,12 @@ u_local``) and the held directions are DOF of that frame: an analysis solves
 does that for a nonlinear problem the driver follows.
 
 A study with only fixed faces gives exactly the DOF it always did, in the same
-order. Numeric imports live inside the functions.
+order. A DOF on the edge two fixtures share is held once, so its reaction is
+counted once (``per_fixture`` is disjoint): it goes to the fixture that holds
+its component most, a fixed face fully and a roller by its normal's share of
+that component there (two rollers meeting at an edge each take the reaction
+along their own normal), the first such fixture on a tie. Numeric imports
+live inside the functions.
 """
 
 from __future__ import annotations
@@ -52,7 +57,7 @@ class Supports:
 
     #: Sorted DOF held at zero: in ``frame``'s axes where a node is turned, else the global ones.
     fixed: "np.ndarray"
-    #: Every DOF of each fixture's faces, in the study's order (global), for its reaction.
+    #: Each fixture's DOF (global), in the study's order, for its reaction: disjoint, a shared edge's DOF in one only.
     per_fixture: "list[np.ndarray]"
     #: (N, N) orthogonal, ``u_global = frame @ u_local``; ``None`` when every node keeps the global axes.
     frame: Any = None
@@ -133,6 +138,60 @@ def _roller_directions(space: "FemSpace", roller_ordinals: "list[set[int]]") -> 
     return directions
 
 
+def _fixture_normals(space: "FemSpace", ordinals: "set[int]") -> "tuple[np.ndarray, np.ndarray]":
+    """The roller fixture's nodes (scalar DOF) and their unit normals: the area-weighted sum of its facets' normals."""
+    import numpy as np
+
+    boundary = space.boundary_quadratic
+    rows = np.flatnonzero(np.isin(np.asarray(space.volume.boundary_ordinal), list(ordinals)))
+    if not len(rows):
+        return np.zeros(0, dtype=np.int64), np.zeros((0, 3))
+    points = space.dof_locations
+    corners = points[boundary[rows, :3]]
+    normal = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0])  # 2 × area along the normal
+    nodes = boundary[rows]
+    unique, inverse = np.unique(nodes.ravel(), return_inverse=True)
+    summed = np.zeros((len(unique), 3))
+    np.add.at(summed, inverse, np.repeat(normal, nodes.shape[1], axis=0))
+    length = np.linalg.norm(summed, axis=1)
+    return unique, summed / np.where(length > 0, length, 1.0)[:, None]
+
+
+def _disjoint(space: "FemSpace", fixtures, per_fixture: "list[np.ndarray]", ordinal_of: dict[str, int]) -> "list[np.ndarray]":
+    """``per_fixture`` with each DOF shared by several fixtures kept in one: the one holding its component most."""
+    import numpy as np
+
+    if len(per_fixture) < 2:
+        return per_fixture
+    size = space.basis.N
+    counts = np.zeros(size, dtype=np.int64)
+    for dofs in per_fixture:
+        counts[np.unique(dofs)] += 1
+    if not (counts > 1).any():
+        return per_fixture
+    node_of = np.zeros(size, dtype=np.int64)
+    for c in range(3):
+        node_of[space.basis.nodal_dofs[c]] = space.scalar.nodal_dofs[0]
+        if space.order == 2:
+            node_of[space.basis.edge_dofs[c]] = space.scalar.edge_dofs[0]
+    component = np.asarray(space.component)
+    owner = np.full(size, -1, dtype=np.int64)
+    best = np.full(size, -1.0)
+    for index, (dofs, fixture) in enumerate(zip(per_fixture, fixtures)):
+        dofs = np.unique(dofs)
+        if getattr(fixture, "type", "fixed") == "roller":
+            nodes, normals = _fixture_normals(space, {ordinal_of[ref] for ref in fixture.faces})
+            share = np.zeros((space.scalar_count, 3))
+            share[nodes] = np.abs(normals)
+            hold = share[node_of[dofs], component[dofs]]
+        else:
+            hold = np.ones(len(dofs))
+        better = hold > best[dofs] + 1e-9
+        owner[dofs[better]] = index
+        best[dofs[better]] = hold[better]
+    return [dofs[owner[dofs] == index] for index, dofs in enumerate(per_fixture)]
+
+
 def _axes_of(directions: "np.ndarray") -> "list[int] | None":
     """The global axes spanning the held directions exactly, or None when they are not axes."""
     import numpy as np
@@ -153,14 +212,15 @@ def supports_of(space: "FemSpace", fixtures: "tuple[Fixture, ...]", ordinal_of: 
     import scipy.sparse as sparse
 
     basis = space.basis
-    per_fixture = [basis.get_dofs(space.facets_of(fixture.faces, ordinal_of)).all() for fixture in fixtures]
+    on_faces = [basis.get_dofs(space.facets_of(fixture.faces, ordinal_of)).all() for fixture in fixtures]
+    per_fixture = _disjoint(space, fixtures, on_faces, ordinal_of)
     rollers = [fixture for fixture in fixtures if getattr(fixture, "type", "fixed") == "roller"]
     if not rollers:
-        held_all = [*per_fixture, *held]
+        held_all = [*on_faces, *held]
         fixed = np.unique(np.concatenate(held_all)) if held_all else np.zeros(0, dtype=np.int64)
         return Supports(fixed=fixed, per_fixture=per_fixture)
 
-    clamped = [dofs for dofs, fixture in zip(per_fixture, fixtures) if getattr(fixture, "type", "fixed") != "roller"]
+    clamped = [dofs for dofs, fixture in zip(on_faces, fixtures) if getattr(fixture, "type", "fixed") != "roller"]
     pieces = [*clamped, *held]
     fixed = np.unique(np.concatenate(pieces)) if pieces else np.zeros(0, dtype=np.int64)
     vdofs = np.zeros((space.scalar_count, 3), dtype=np.int64)

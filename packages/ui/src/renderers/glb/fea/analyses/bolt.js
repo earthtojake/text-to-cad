@@ -44,7 +44,7 @@ function outcomeWords(outcome) {
 export function boltRows(result) {
   const extras = result?.mesh?.userData || {};
   const outcomes = list(extras.bolts);
-  const rows = list(extras.study?.bolts).map((bolt, index) => {
+  const rows = list(result?.study?.bolts).map((bolt, index) => {
     const label = boltWords(bolt);
     if (!label) return null;
     const outcome = outcomes[index];

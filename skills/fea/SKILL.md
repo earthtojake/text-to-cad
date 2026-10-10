@@ -1,10 +1,10 @@
 ---
 name: fea
-description: Run finite element studies on a STEP part, or a bonded assembly of parts, with cadgen. Fix faces or let them slide on rollers, apply forces, pressures, gravity or a steady acceleration, choose a material, and report stress, safety factor and displacement as a colour-mapped result the CAD Viewer shows. Every analysis runs today: strength, vibration, buckling, heat (steady, over time and the stress it causes), shaking, random vibration, shock, loads over time, fatigue life, a drop estimate, and lite solvers for flow (laminar, turbulent, fast gas), permanent bending and stretch, creep, composite plates, contact, bolted joints, a drop impact, electric and magnetic fields, sound (air's resonances, sound levels, noise from vibration) and cracks; the skill maps each question to its analysis. Use when the user asks whether a part or assembly is strong enough, how much it deflects or where it is most stressed, wants a stress analysis, FEA or simulation, or asks about vibration, buckling, heat, fatigue, a drop, flow, contact, a bolted joint, sound and noise, or a crack.
+description: Run finite element and multiphysics studies on STEP parts and assemblies with cadgen, covering strength, vibration, buckling, heat, flow, sound, cracks, fatigue, drops, electromagnetics, piezo, rotors and more. Pick the analysis from the table; each has its own reference page. Use when the user asks whether a part is strong enough, how much it bends, where it is most stressed, or asks for FEA or a simulation of a part.
 license: MIT
 ---
 
-# FEA: stress, vibration, buckling, heat, shaking, shock, fatigue, drops, flow, permanent bending and contact
+# FEA: simulate a part or an assembly
 
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth; the
@@ -12,52 +12,22 @@ repository link is only for provenance and release review.
 
 Use this skill to answer engineering questions about one part, or an assembly
 of parts bonded where they touch, by simulation. It meshes the saved STEP,
-solves, and writes a result the Viewer renders.
+solves the analysis the study names, and writes a colour-mapped result the
+Viewer renders. This page is a router: [Choose the analysis](#choose-the-analysis)
+maps the user's question to an analysis and its reference page, which holds
+that analysis's schema, hand checks and limits. Every analysis in the table
+runs today; for a question none of them answers, follow [When the question
+needs an analysis that is not here](#when-the-question-needs-an-analysis-that-is-not-here).
 
-**What runs today is strength (the `static` analysis), fatigue life from a
-repeated static load, a shaker dwell or a random vibration spec (`fatigue`), a drop estimate (`drop`), vibration
-(`modal`), shaking across a sine sweep (`harmonic`), random vibration from a PSD
-(`random_vibration`), shock from a response spectrum
-(`shock`), loads that change over time (`transient`), buckling (`buckling`) and heat: steady
-temperatures (`thermal`), temperatures over time (`thermal_transient`), both with radiation to the
-surroundings and between faces, the
-stress heat puts in a part (`thermal_stress`) and heat carried away by a flowing fluid
-(`conjugate_heat`, lite: the flow solved first, then the fluid's and the part's temperatures together), and flow (`cfd`, lite: steady laminar
-flow through or around the part, its pressure drop and its push on the part), turbulent
-flow (`cfd_turbulent`, lite: steady RANS with the k-omega SST model and wall functions, the
-step up from `cfd` past the laminar range), fast gas flow (`cfd_compressible`, lite: a steady
-ideal gas past about Mach 0.3, choking and normal shocks in a nozzle, the mass flow and Mach number), and
-permanent bending and stretch (`nonlinear`, lite: metal past yield or rubber, the
-load in steps, a collapse found and reported), creep under a load held for a long time
-(`creep`, lite: Norton's power law, the stress relaxing as it creeps), laminated fibre plates ply by ply
-(`composite`, lite: classical laminate theory, Tsai-Wu and max-stress ply failure), parts pressing or
-sliding on each other or resting on a rigid floor (`contact`, lite: small sliding, frictionless or Coulomb
-friction, the contact pressure), bolted joints (`bolt`, lite: bolts with a preload clamping parts in frictional
-contact, the bolt's force, whether the joint opens or slips), electric and magnetic fields (`electromagnetic`, lite: a static electric
-field and its capacitance, a DC current with its resistance and Joule heat, a coil's magnetic field with
-its inductance and force, and an AC field at a frequency with its eddy currents, skin effect, loss, impedance
-and induction heating), sound (`acoustic`, lite: linear acoustics in air or water, the natural frequencies of the air
-in a cavity, duct or enclosure, the sound level a speaker face, a point source or the part's own vibration from a
-`harmonic` shake makes inside it or out in open air, with absorbing faces), cracks (`fracture`, lite: a crack the
-study describes cut into the part, its stress intensity K along the front against the toughness, and Paris
-crack growth to a life in cycles), spinning shafts and discs (`rotordynamics`, lite: the Campbell diagram,
-critical speeds, unbalance response, whirl stability and the spinning stress), and a drop impact simulated through
-time (`impact`, lite: the part dropped onto a rigid floor, its peak g, peak stress
-and any permanent strain).** Static answers
-"will it hold, and by how much" under forces, pressures, the part's own weight
-(`gravity`) and a steady acceleration (`acceleration`). Every analysis in
-[Choose the analysis](#choose-the-analysis) runs today, and nothing is
-registered as planned; for a question none of them answers, follow [When the
-question needs an analysis that is not here](#when-the-question-needs-an-analysis-that-is-not-here).
-
-The static solve uses quadratic tetrahedra and linear elasticity (isotropic, or
-orthotropic where the material gives its directions). It
-is a first-pass engineering check, not a certification: it assumes small
-displacements, a linear material below yield, perfectly rigid fixtures (a
-`fixed` face held still, a `roller` face free to slide in its plane but not
-off it) and loads that do not move. In an assembly every joint is also perfectly rigid
-(bonded) unless the study names `contact` pairs (the `contact` analysis) or
-`bolt`s (the `bolt` analysis). Say so when you report.
+The default, `static`, answers "will it hold, and by how much" under forces,
+pressures, the part's own weight (`gravity`) and a steady acceleration
+(`acceleration`), with quadratic tetrahedra and linear elasticity (isotropic,
+or orthotropic where the material gives its directions). It is a first-pass
+engineering check, not a certification: small displacements, a linear material
+below yield, perfectly rigid fixtures (a `fixed` face held still, a `roller`
+face free to slide in its plane but not off it) and loads that do not move. In
+an assembly every joint is perfectly rigid (bonded) unless the study names
+`contact` pairs or `bolt`s. Say so when you report.
 
 ## Choose the analysis
 
@@ -67,13 +37,13 @@ study names it; left out, it is `static`.
 | The user asks | `analysis` | Plain word | Status | Reference |
 | --- | --- | --- | --- | --- |
 | "Will it hold", "is it strong enough", "how much does it bend" | `static` | Strength | **Runs today** | [Linear static](references/linear-static.md) |
-| The same under its own weight, or while it speeds up, brakes or turns (a steady g-load) | `static` with a `gravity` or `acceleration` load | Strength | **Runs today** | [Body loads](references/linear-static.md#body-loads-gravity-and-acceleration) |
+| The same under its own weight, or while it speeds up, brakes or turns (a steady g-load) | `static` with a `gravity` or `acceleration` load | Strength | **Runs today** | linear-static.md, section "Body loads: gravity and acceleration" |
 | "Will it rattle", "will it resonate", "what frequency does it ring at" | `modal` | Vibration | **Runs today** | [modal.md](references/modal.md) |
 | "Will this column or thin wall buckle" | `buckling` | Buckling | **Runs today** | [buckling.md](references/buckling.md) |
 | "How hot does it get" (settled, steady running) | `thermal` | Heat | **Runs today** | [thermal.md](references/thermal.md) |
 | "How hot during a warm-up or a duty cycle" | `thermal_transient` | Heat over time | **Runs today** | [thermal-transient.md](references/thermal-transient.md) |
 | "It gets hot: does that stress or warp it" | `thermal_stress` | Heat stress | **Runs today** | [thermal-stress.md](references/thermal-stress.md) |
-| "How hot does it get" when it radiates: a hot part, a dull part in still air, in a vacuum, fins or plates that see each other | `thermal` (or `thermal_transient`) with `radiation` | Heat | **Runs today** (grey, diffuse; view factors computed between faces with `surface_to_surface`) | [thermal.md](references/thermal.md#radiation) |
+| "How hot does it get" when it radiates: a hot part, a dull part in still air, in a vacuum, fins or plates that see each other | `thermal` (or `thermal_transient`, or `thermal_stress` for the stress it causes) with `radiation` | Heat | **Runs today** (grey, diffuse; view factors computed between faces with `surface_to_surface`) | thermal.md, section "Radiation" |
 | "On a shaker", "across a motor's speed range", a sine sweep | `harmonic` | Shaking | **Runs today** | [harmonic.md](references/harmonic.md) |
 | A transport or vibration spec in g²/Hz | `random_vibration` | Random vibration | **Runs today** | [random-vibration.md](references/random-vibration.md) |
 | A shock spec, a shock response spectrum (SRS) | `shock` | Shock | **Runs today** | [shock.md](references/shock.md) |
@@ -91,12 +61,12 @@ study names it; left out, it is `static`.
 | Parts pressing or sliding on each other, "how hard do they press", a part resting on a floor | `contact` | Contact | **Runs today** (lite: small sliding, node-to-surface, static, elastic parts) | [contact.md](references/contact.md) |
 | A bolted joint: "is the bolt strong enough", "does the joint open", "does it slip", tightening torque to preload | `bolt` | Bolted joint | **Runs today** (lite: a pretensioned spring per bolt, frictional contact between the clamped parts, linear elastic, no thread) | [bolt.md](references/bolt.md) |
 | "Will it arc", capacitance, resistance, Joule heating from a current, a coil's magnetic field, inductance or magnet force | `electromagnetic` | Magnetic / electric | **Runs today** (lite: static and DC, linear materials) | [electromagnetic.md](references/electromagnetic.md) |
-| Eddy currents, skin effect, AC resistance, a coil's impedance at a frequency, induction heating, the loss in a part near an AC field | `electromagnetic` with `"mode": "ac_magnetic"` | Magnetic / electric | **Runs today** (lite: time-harmonic at one frequency, linear materials, stranded coils; no saturation, hysteresis or waves) | [electromagnetic.md](references/electromagnetic.md#ac-magnetic-fields-ac_magnetic) |
+| Eddy currents, skin effect, AC resistance, a coil's impedance at a frequency, induction heating, the loss in a part near an AC field | `electromagnetic` with `"mode": "ac_magnetic"` | Magnetic / electric | **Runs today** (lite: time-harmonic at one frequency, linear materials, stranded coils; no saturation, hysteresis or waves) | electromagnetic.md, section "AC magnetic fields (`ac_magnetic`)" |
 | Fast gas flow (past about Mach 0.3, 100 m/s in air): a nozzle, valve or orifice under a real pressure ratio, "does it choke", "what Mach number", "where is the shock" | `cfd_compressible` | Fast gas flow | **Runs today** (lite: steady ideal gas, adiabatic, an inviscid core past the laminar range, shocks captured; no supersonic outlet) | [cfd-compressible.md](references/cfd-compressible.md) |
 | "Make it lighter", "where can I take material out", "what shape should this bracket be", the stiffest part from 30 % of the material, or the least material that still holds | `topology` | Lighten it | **Runs today** (lite: SIMP density method on a fixed linear-tet design mesh, linear elastic, one part; the result is a shape to rebuild in CAD, then check with `static`) | [topology.md](references/topology.md) |
 | "What frequencies does this box, duct or room boom at", the air's own resonances | `acoustic` | Sound | **Runs today** (lite: linear acoustics, rigid walls, no flow) | [acoustic.md](references/acoustic.md) |
-| "How loud is it", a speaker or a point source in a cavity or out in open air, "how much does lining this face help", what a microphone hears across a sweep | `acoustic` with `sources` and `sweep_Hz` | Sound | **Runs today** (lite: linear acoustics, lumped absorption, a first-order absorbing boundary for open air) | [acoustic.md](references/acoustic.md) |
-| "How much noise does this vibrating part make", the sound a shaken panel sends out or into the box it closes | `acoustic` with `"from": "harmonic"` | Sound | **Runs today** (lite: one-way, the harmonic's surface velocity drives the air; no flow) | [acoustic.md](references/acoustic.md#the-study) |
+| "How loud is it", a speaker or a point source in a cavity or out in open air, "how much does lining this face help", what a microphone hears across a sweep | `acoustic` with `sources` and `sweep_Hz` | Sound | **Runs today** (lite: linear acoustics, lumped absorption, a first-order absorbing boundary for open air) | acoustic.md |
+| "How much noise does this vibrating part make", the sound a shaken panel sends out or into the box it closes | `acoustic` with `"from": "harmonic"` | Sound | **Runs today** (lite: one-way, the harmonic's surface velocity drives the air; no flow) | acoustic.md, section "The study" |
 | A piezo actuator, sensor or buzzer: "how far does it move at this voltage", "how hard can it push", "what voltage does this sensor make", its capacitance, resonance and anti-resonance, coupling, the current it draws across a band | `piezo` | Piezo | **Runs today** (lite: linear piezoelectricity, small signal; static, resonance and a driven sweep; no depolarisation or hysteresis) | [piezo.md](references/piezo.md) |
 | "Will this crack grow", "how big a crack can it take", a flaw found in inspection, "how many cycles until it breaks" with a crack | `fracture` | Cracks | **Runs today** (lite: linear-elastic fracture mechanics on a crack the study describes, K against K_IC, Paris crack growth; no ductile tearing) | [fracture.md](references/fracture.md) |
 | A spinning shaft, spindle, rotor, fan or disc: "will it run through a critical speed", a Campbell diagram, "how big is the orbit with this unbalance", "is the whirl stable", the spinning stress in a disc | `rotordynamics` | Spinning | **Runs today** (lite: a Timoshenko rotor line cut from the CAD with gyroscopic terms, linear bearings, bending whirl only; the spinning stress on the solid) | [rotordynamics.md](references/rotordynamics.md) |
@@ -106,6 +76,8 @@ Each reference holds its analysis's full schema. A test keeps this table and
 the study file's `analysis` table in step with what cadgen registers.
 
 ### When the question needs an analysis that is not here
+
+([planned-next.md](references/planned-next.md) says the same: nothing is registered as planned.)
 
 - Tell the user plainly, in their words: "That is not in this version." Do
   not write a study for it.
@@ -145,12 +117,10 @@ runs.
 - **Estimates.** A `drop` result, or a static study standing in for one, is an
   estimate of an equivalent steady load, not a simulation of the impact. Say
   "estimate" every time you quote it.
-- **Lite limits.** `cfd`, `cfd_turbulent`, `cfd_compressible`, `impact`, `nonlinear`, `creep`, `composite`, `contact`, `bolt`, `electromagnetic`, `acoustic`, `fracture`, `conjugate_heat`, `fsi` and `rotordynamics` are lite solvers
-  with stated limits (for flow: laminar, steady, incompressible, no turbulence
-  model; for turbulent flow: steady RANS (k-omega SST), wall functions,
-  incompressible; for fast gas flow: steady, ideal gas, adiabatic, frictionless walls past the
-  laminar range; for heat carried by a flow: steady, the flow not changed by the heat, constant
-  properties). Quote the limits the result carries whenever you quote its numbers.
+- **Lite limits.** An analysis whose Status in the table says "lite" is a lite
+  solver with stated limits, listed in its row and its reference page and
+  carried by its result. Quote the limits the result carries whenever you quote
+  its numbers.
 - **A lightened design.** `topology` is lite too: say it is a concept shape from a
   fixed design mesh, quote the mass saved and the verified design's stress and
   displacement as a guide, and point the user to the design STL to rebuild in CAD
@@ -182,7 +152,7 @@ leave `defeature` out of `fit.allow`) or names a memory or time budget.
 
 | Task | First action | Reference |
 | --- | --- | --- |
-| **Pick the analysis** | Match the question to a row of the table above; every analysis in that table runs today: the Tier 1 solvers, `drop` (an estimate) and the lite ones (`cfd`, `cfd_turbulent`, `cfd_compressible`, `impact`, `nonlinear`, `creep`, `composite`, `contact`, `bolt`, `electromagnetic`, `acoustic`, `fracture`, `conjugate_heat`, `fsi`, `rotordynamics`). | [Choose the analysis](#choose-the-analysis) |
+| **Pick the analysis** | Match the question to a row of the table above; every analysis in it runs today, and its row says whether it is an estimate or lite. | [Choose the analysis](#choose-the-analysis) |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
 | **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`part.step#o1.f17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |

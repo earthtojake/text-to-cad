@@ -26,6 +26,7 @@ import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
 
+from tests.python.support import markdown
 from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
@@ -153,7 +154,7 @@ class Materials(unittest.TestCase):
 
     def test_the_reference_gives_the_tables_electrical_numbers_and_sources(self):
         text = REFERENCE.read_text(encoding="utf-8")
-        section = text[text.index("## Electrical and magnetic"):text.index("## Strength, fatigue and heat")]
+        section = markdown.section(text, "## Electrical and magnetic")
         rows = {}
         for line in section.splitlines():
             if match := re.match(r"\|\s*`([a-z0-9-]+)`", line):

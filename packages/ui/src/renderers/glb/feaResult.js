@@ -198,6 +198,8 @@ function readChecks(raw, kinds) {
       ...(Number.isInteger(check.ply) && check.ply >= 1 ? { ply: check.ply, angle: finiteOrNull(check.angle_deg) ?? 0 } : {}),
       // Where along a crack's front its K is largest (fracture): "the deepest point", "the surface".
       ...(typeof check.point === "string" && check.point ? { point: check.point } : {}),
+      // A fill level judged against the tank's own brim (multiphase, no limit_mm given): its line says so.
+      ...(check.brim === true ? { brim: true } : {}),
     }));
 }
 
@@ -466,7 +468,9 @@ function readLaminae(raw) {
  * `sigma` a random vibration judges at and its `psd` (table and g rms), a shock's `srs` and how its
  * modes were `combination`ed, a sweep's `sweepHz` and the `dampingRatio`. A load over time keeps its
  * `history`, as the excitation does. An electromagnetic study's `mode`, `frequencyHz`, `voltages`,
- * `currents`, `coils`, `appliedField` and `heatOut`; a composite's `layup` and `laminae`. A fixture's
+ * `currents`, `coils`, `appliedField` and `heatOut`; a composite's `layup` and `laminae`; an acoustic
+ * study's block, a piezo's electrodes, a bolted joint's `bolts`, a contact study's `contactPairs`, a
+ * fracture's `crack`, a multiphase's block and a rotor's spin, bearings, discs and unbalances. A fixture's
  * `type` is "fixed" (none given) or "roller" (it may slide in the face's plane, not off it). Every
  * analysis reads its study from here, never the raw echo.
  */
@@ -523,6 +527,15 @@ function readStudy(raw) {
     keptSolid: faceRefs(raw.kept_solid),
     // Piezo: what it solved, its electrodes (held at a voltage, or open) and each part's poling. null for none.
     piezo: readPiezo(raw),
+    // Bolted joint and contact: the bolts and contact pairs as the study gives them (their analyses word them).
+    bolts: entries(raw.bolts),
+    contactPairs: entries(raw.contact_pairs),
+    // Fracture: the crack the study cuts in (`kind`, `face`, `size_mm`, `length_mm`). null for none.
+    crack: record(raw.crack),
+    // Two fluids: the multiphase block (the liquid, the shake, the openings). null for none.
+    multiphase: record(raw.multiphase),
+    // Spinning: the spin (`axis`, `rpm`), the bearings, discs and unbalances as the study gives them. null for no spin.
+    rotor: record(raw.spin) ? { spin: raw.spin, bearings: entries(raw.bearings), discs: entries(raw.discs), unbalance: entries(raw.unbalance) } : null,
   };
 }
 

@@ -449,6 +449,18 @@ class CliLines(unittest.TestCase):
         self.assertIn("check 'Fatigue life': 1.317 against a 1.5 limit, 0.76× it, close", lines)
         self.assertIn("check 'Strength': 77.1 MPa against a 250 MPa limit, 0.31× it, passes", lines)
 
+    def test_a_decibel_check_says_how_far_over_or_under_its_limit_it_is(self):
+        def level(value, status):
+            return {"label": "Loudness", "value": value, "limit": 80.0, "unit": "dB", "ratio": 10 ** ((value - 80) / 20),
+                    "status": status}
+
+        lines = self._result(summary={"safety_factor": 2.5, "checks": [level(84.0, "fails"), level(74.0, "passes"),
+                                                                       level(80.0, "close")]}).human_lines()
+        self.assertIn("check 'Loudness': 84 dB, 4 dB over the 80 dB limit, fails", lines)
+        self.assertIn("check 'Loudness': 74 dB, 6 dB under the 80 dB limit, passes", lines)
+        self.assertIn("check 'Loudness': 80 dB, at the 80 dB limit, close", lines)
+        self.assertFalse([line for line in lines if "dB" in line and "×" in line])
+
 
 def _cantilever(directory: Path) -> Path:
     from build123d import Align, Box, export_step
@@ -582,6 +594,26 @@ class SkillDocs(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             for stale in ("coming, not in this cadgen", "Only `static` runs", "the only one that runs today", "is planned, and"):
                 self.assertNotIn(stale, text, f"{path.name} still says {stale!r}")
+
+    def test_the_skill_is_a_router_and_links_each_reference_page_once_from_its_table(self):
+        import re
+
+        skill = Path(__file__).resolve().parents[4] / "skills" / "fea"
+        text = (skill / "SKILL.md").read_text(encoding="utf-8")
+        description = re.search(r"^description: (.*)$", text, re.M).group(1)
+        self.assertLess(len(description), 1024)
+        # A router: it names kinds of question in plain words, never every analysis by its key.
+        self.assertFalse([name for name in REGISTRY if f"`{name}`" in description or name in description.split()])
+        self.assertNotIn("—", description)
+        section = text.split("## Choose the analysis", 1)[1]
+        section = re.split(r"\n#{2,3} ", section, maxsplit=1)[0]
+        linked = re.findall(r"\]\(references/([a-z0-9-]+\.md)", section)
+        general = {"materials.md", "study-file.md", "planned-next.md"}
+        pages = sorted(path.name for path in (skill / "references").glob("*.md") if path.name not in general)
+        self.assertEqual(sorted(linked), pages, "each analysis page is linked exactly once from the table")
+        for page in general:
+            self.assertIn(f"references/{page}", text)
+
 
 
 class PrivateNames(unittest.TestCase):

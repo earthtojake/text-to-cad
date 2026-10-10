@@ -247,5 +247,28 @@ class Ladder(unittest.TestCase):
         self.assertLess(abs(friction(self.result.summary, 20000) - expected) / expected, 0.15)
 
 
+def box_duct_step(directory: Path, side: float, length: float, wall: float = 1.0) -> Path:
+    """A square passage through a block along x: sharp corners where the inlet meets the walls."""
+    from build123d import Align, Box, export_step
+
+    step = directory / "duct.step"
+    along = (Align.MIN, Align.CENTER, Align.CENTER)
+    export_step(Box(length, side + 2 * wall, side + 2 * wall, align=along) - Box(length, side, side, align=along), str(step))
+    return step
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class BoxDuct(unittest.TestCase):
+    """A square duct (sharp corners at its inlet) solves turbulent and loses pressure along it."""
+
+    def test_a_square_duct_solves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            result = solve(box_duct_step(directory, 6.0, 12.0), directory / "duct.glb",
+                           {**pipe(10000), "mesh": {"size_mm": 1.5}})
+        self.assertTrue(result.ok)
+        self.assertGreater(result.summary["pressure_drop_Pa"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

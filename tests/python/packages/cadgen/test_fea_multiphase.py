@@ -310,5 +310,28 @@ class Tank(unittest.TestCase):
         self.assertLess(abs(sidecar["summary"]["volume"]["max_change_percent"]), 1.0)
 
 
+def box_duct_step(directory: Path, side: float, length: float, wall: float = 1.0) -> Path:
+    """A square passage through a block along x: sharp corners where the inlet meets the walls."""
+    from build123d import Align, Box, export_step
+
+    step = directory / "duct.step"
+    along = (Align.MIN, Align.CENTER, Align.CENTER)
+    export_step(Box(length, side + 2 * wall, side + 2 * wall, align=along) - Box(length, side, side, align=along), str(step))
+    return step
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class BoxDuct(unittest.TestCase):
+    """Liquid fed into a square duct (sharp corners at its inlet) through one end, out of the other: it runs."""
+
+    def test_a_square_duct_solves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            step = box_duct_step(Path(tmp), 10.0, 30.0, wall=2.0)
+            result = solve(step, {"analysis": "multiphase", "fill": {"fraction": 0.5}, "end_s": 0.02, "mesh": {"size_mm": 3},
+                                  "inlets": [{"opening": "x_min", "velocity_m_s": 0.05}], "outlets": [{"opening": "x_max"}]})
+        self.assertTrue(result.ok)
+        self.assertGreater(result.summary["max_speed_m_s"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

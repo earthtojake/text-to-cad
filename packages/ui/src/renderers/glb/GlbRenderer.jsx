@@ -77,7 +77,8 @@ function controlValue(control, chosen) {
 
 // Study's setup rows by the marker kind they stand for: a row `<row kind>:<group>` chooses its entry's markers.
 const ROW_MARKERS = Object.freeze({ load: "load", fixed: "fixture", roller: "roller", body: "body_load", shaken: "base_excitation", temperature: "temperature",
-  heat: "heat", convection: "convection", drop: "drop", inlet: "inlet", outlet: "outlet", rigid: "rigid_plane" });
+  heat: "heat", convection: "convection", drop: "drop", inlet: "inlet", outlet: "outlet", rigid: "rigid_plane", source: "speaker",
+  electrode: "electrode", bearings: "bearing" });
 
 /**
  * Whether a marker is of what Study chose: a setup row's markers (a load's arrows on its faces, a

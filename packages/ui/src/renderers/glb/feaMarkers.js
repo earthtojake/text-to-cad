@@ -6,7 +6,8 @@
  * their own kinds from one table (`MARKER_KINDS`): a body load's arrow through the model's middle,
  * a shaker's double arrows on the fixtures, a fixed temperature's dot, heat's wavy arrow, the air's
  * strokes, a drop's travel arrow, a flow's inlet and outlet arrows, a rigid floor's see-through
- * plane and a crack front's dots, each in the ink (what drives the part) or the muted grey (what holds or takes from it). An
+ * plane, a crack front's dots, a speaker face's cone and the sound rings off it, a piezo electrode's
+ * plate and a rotor bearing's two races, each in the ink (what drives the part) or the muted grey (what holds or takes from it). An
  * analysis draws the kinds it lists (`markers`, ./fea/analyses), and one that draws fixtures draws
  * rollers too, so a static result with no roller is as it was.
  *
@@ -62,6 +63,12 @@ export const MARKER_KINDS = Object.freeze({
   rigid_plane: Object.freeze({ shape: "plane", tone: "fixture", bucket: "fixtures", on: "plane", most: 1, phrase: "a see-through plane for the rigid floor" }),
   // A crack's front (fracture): a dot at each station along it, where its K was read.
   crack_front: Object.freeze({ shape: "dot", tone: "load", bucket: "loads", on: "front", most: 1, phrase: "dots along the crack's front" }),
+  // A sound source's face (acoustic): a small speaker cone on it, opening off the face, and two rings of sound past it.
+  speaker: Object.freeze({ shape: "speaker", tone: "load", bucket: "loads", on: "faces", most: 3, phrase: "speakers where sound is made" }),
+  // A piezo electrode: a thin plate on its face with a terminal standing off it.
+  electrode: Object.freeze({ shape: "electrode", tone: "load", bucket: "loads", on: "faces", most: 3, phrase: "plates on its electrodes" }),
+  // A rotor's bearing on its faces: two races, one inside the other, lying on the face.
+  bearing: Object.freeze({ shape: "bearing", tone: "fixture", bucket: "fixtures", on: "faces", most: 3, phrase: "rings where bearings carry the shaft" }),
 });
 
 /** A crack's front as the file records it (`extras.crack.front_mm`, CAD mm): its stations' points. [] for none. */
@@ -163,7 +170,8 @@ function spreadTriangles({ areas, centroids }, count) {
  * loads with faces, the fixtures (a roller's faces its own kind's, each numbered by its place among
  * every fixture, as Study's rows number it), a body load (gravity, an acceleration: a load with no faces), the
  * shaker (on the fixtures), the fixed temperatures, the heat, the air, the faces a drop lands on,
- * the flow's openings and the rigid planes. Only the kinds the result's analysis draws.
+ * the flow's openings, the rigid planes, the crack front's stations, the speaker faces, the piezo
+ * electrodes and the bearings. Only the kinds the result's analysis draws.
  */
 function markerGroups(result) {
   const study = result.study;
@@ -186,6 +194,11 @@ function markerGroups(result) {
     outlet: entries(study.flow?.outlets).map(() => []),
     rigid_plane: [...entries(study.rigidPlanes), ...(study.drop?.floor === "rigid" ? [{ floor: true }] : [])].map(() => []),
     crack_front: crackFront(result).map(() => []),
+    speaker: entries(study.acoustic?.sources).filter((source) => source.faces.length).map((source) => source.faces),
+    electrode: entries(study.piezo?.electrodes).filter((entry) => entry.faces.length).map((entry) => entry.faces),
+    // Every bearing on faces is one group: Study names them in one row.
+    bearing: [entries(study.rotor?.bearings).flatMap((entry) => (Array.isArray(entry.faces) ? entry.faces.filter((ref) => typeof ref === "string") : []))]
+      .filter((refs) => refs.length),
   };
   return Object.keys(MARKER_KINDS).filter((kind) => drawn.has(kind))
     .flatMap((kind) => groups[kind].map((refs, group) => ({ kind, group, refs })));
@@ -322,7 +335,9 @@ function offFacePose(result, site, box, positions, arrow) {
  * normal there, from the triangle's winding. A roller stands as a fixture's cone does. The other kinds: a shaker's double arrow stands off
  * its fixture along the shake (`tip` one end, `tail` the other); a temperature's dot sits on its
  * face; heat's wavy arrow points into its face, its tip on it; the air's strokes rise off their
- * face; a drop's arrow stands on the face that lands, pointing the way it falls.
+ * face; a drop's arrow stands on the face that lands, pointing the way it falls. A speaker stands on
+ * its face opening off it (`direction` the outward normal); an electrode's plate and a bearing's races
+ * lie on their face as a fixture's cone does.
  */
 export function markerPoses(result, { diagonal, sites }, positions) {
   const loads = result.study ? result.study.loads.filter((load) => load.faces.length) : [];
@@ -333,7 +348,8 @@ export function markerPoses(result, { diagonal, sites }, positions) {
     const [a, b, c] = site.triangle.map((corner) => point(positions, corner));
     const at = scaled(plus(plus(a, b), c), 1 / 3);
     const normal = unit(cross(sub(b, a), sub(c, a)));
-    if (site.kind === "fixture" || site.kind === "roller" || site.kind === "temperature") return { ...site, normal, tip: at, direction: scaled(normal, -1) };
+    if (["fixture", "roller", "temperature", "electrode", "bearing"].includes(site.kind)) return { ...site, normal, tip: at, direction: scaled(normal, -1) };
+    if (site.kind === "speaker") return { ...site, normal, tip: at, direction: normal, pushes: false };
     if (site.kind === "convection") return { ...site, normal, tip: at, tail: plus(at, scaled(normal, arrow)), direction: normal };
     if (site.kind === "heat") return { ...site, normal, tip: at, tail: plus(at, scaled(normal, arrow)), direction: scaled(normal, -1), pushes: true };
     if (site.kind === "base_excitation") {
@@ -404,6 +420,14 @@ function labelText(result, kind, group, loadScale) {
   if (kind === "drop") return study.drop.heightMm !== null ? dropWords(study.drop.heightMm) : "";
   if (kind === "inlet") return study.flow.inlets[group].speed !== null ? `${plainNumber(study.flow.inlets[group].speed)} m/s` : "";
   if (kind === "outlet") return study.flow.outlets[group].pressure !== null ? `${plainNumber(study.flow.outlets[group].pressure)} Pa` : "";
+  if (kind === "speaker") {
+    const source = study.acoustic.sources.filter((entry) => entry.faces.length)[group];
+    return source.velocityMmS !== null ? `${plainNumber(source.velocityMmS)} mm/s` : "";
+  }
+  if (kind === "electrode") {
+    const electrode = study.piezo.electrodes.filter((entry) => entry.faces.length)[group];
+    return electrode.open || electrode.volts === null ? "open" : `${plainNumber(electrode.volts)} V`;
+  }
   return "";
 }
 
@@ -413,7 +437,8 @@ function labelText(result, kind, group, loadScale) {
  * its normal; heat's is its tail; a shaker's one end of its double arrow.
  */
 function labelEnds(pose, arrow) {
-  if (pose.kind === "temperature") return { free: plus(pose.tip, scaled(pose.normal, arrow * 0.35)), anchor: pose.tip };
+  if (pose.kind === "temperature" || pose.kind === "electrode") return { free: plus(pose.tip, scaled(pose.normal, arrow * 0.35)), anchor: pose.tip };
+  if (pose.kind === "speaker") return { free: plus(pose.tip, scaled(pose.normal, arrow * 0.9)), anchor: pose.tip };
   if (pose.kind === "convection") return { free: plus(pose.tip, scaled(pose.normal, arrow * 0.9)), anchor: pose.tip };
   if (pose.kind === "base_excitation") return { free: pose.tip, anchor: pose.tail };
   return { free: pose.pushes ? pose.tail : pose.tip, anchor: pose.pushes ? pose.tip : pose.tail };
@@ -525,6 +550,47 @@ export function createFeaMarkers(THREE, result) {
       cone.translate(0, -2 * ball - plate - coneHeight * 0.425, 0);
       geometries.push(...balls, disc, cone);
       return [["cones", cone], ["plates", disc], ["balls", balls[0]], ["balls-2", balls[1]]];
+    },
+    // A speaker: a small cone, its point on the face and its mouth off it, and two rings of sound past it, wider as they go.
+    speaker: () => {
+      const depth = arrowLength * 0.25;
+      const cone = new THREE.ConeGeometry(arrowLength * 0.13, depth, 16);
+      cone.rotateX(Math.PI);
+      cone.translate(0, depth / 2, 0);
+      const ring = (radius, height) => {
+        const torus = new THREE.TorusGeometry(radius, arrowLength * 0.022, 6, 32);
+        torus.rotateX(Math.PI / 2);
+        torus.translate(0, height, 0);
+        return torus;
+      };
+      const rings = [ring(arrowLength * 0.17, arrowLength * 0.42), ring(arrowLength * 0.24, arrowLength * 0.62)];
+      geometries.push(cone, ...rings);
+      return [["cones", cone], ["waves", rings[0]], ["waves-2", rings[1]]];
+    },
+    // An electrode: a thin plate on the face, a stem and a ball terminal off it (the face is along +Y, into the part).
+    electrode: () => {
+      const thick = arrowLength * 0.03;
+      const plate = new THREE.CylinderGeometry(arrowLength * 0.16, arrowLength * 0.16, thick, 20);
+      plate.translate(0, -thick / 2, 0);
+      const stem = new THREE.CylinderGeometry(arrowLength * 0.02, arrowLength * 0.02, arrowLength * 0.12, 8);
+      stem.translate(0, -thick - arrowLength * 0.06, 0);
+      const knob = new THREE.SphereGeometry(arrowLength * 0.045, 12, 8);
+      knob.translate(0, -thick - arrowLength * 0.12, 0);
+      geometries.push(plate, stem, knob);
+      return [["plates", plate], ["stems", stem], ["knobs", knob]];
+    },
+    // A bearing: an outer and an inner race lying on the face.
+    bearing: () => {
+      const race = (radius, tube) => {
+        const torus = new THREE.TorusGeometry(radius, tube, 8, 32);
+        torus.rotateX(Math.PI / 2);
+        torus.translate(0, -tube, 0);
+        return torus;
+      };
+      const outer = race(arrowLength * 0.17, arrowLength * 0.03);
+      const inner = race(arrowLength * 0.09, arrowLength * 0.025);
+      geometries.push(outer, inner);
+      return [["races", outer], ["races-2", inner]];
     },
     strokes: () => {
       const stroke = (x) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(wavePoints(THREE, arrowLength * 0.15, arrowLength * 0.75, arrowLength * 0.05, 1.5, x)), 40, arrowLength * 0.025, 6);

@@ -35,7 +35,7 @@ function outcomeWords(outcome) {
  */
 export function contactRows(result) {
   const extras = result?.mesh?.userData || {};
-  const pairs = list(extras.study?.contact_pairs);
+  const pairs = list(result?.study?.contactPairs);
   const outcomes = list(extras.contacts).filter((entry) => entry.kind === "pair");
   const rows = pairs.map((pair, index) => {
     const outcome = outcomes[index];

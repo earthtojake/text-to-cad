@@ -299,6 +299,49 @@ describe('every other kind of marker', () => {
     expect(createFeaMarkers(THREE, cube(STUDY)).kinds).not.toContain('roller');
   });
 
+  it('stands a speaker on a sound source\'s face, a plate on a piezo electrode and two races on a bearing\'s faces', () => {
+    const sounding = cube({ fixtures: [], loads: [], acoustic: { sources: [{ faces: ['#o1.f3'], velocity_mm_s: 2 }, { point_mm: [0, 0, 0], volume_velocity_m3_s: 1e-6 }] } },
+      [0, 0, 0], { analysis: { type: 'acoustic' } });
+    const speakers = createFeaMarkers(THREE, sounding);
+    expect(speakers.kinds).toEqual(['speaker']);
+    speakers.update(positionsOf(sounding));
+    speakers.style(STYLE);
+    const byName = (markers: any, name: string) => markers.object3D.getObjectByName(name) as THREE.InstancedMesh;
+    expect(colourOf(byName(speakers, 'fea-speaker-cones'))).toBe('18181b');
+    expect(byName(speakers, 'fea-speaker-waves-2-ghost')).toBeTruthy();
+    // On the +Y face, opening off it (the outward normal), labelled with its speed past the rings.
+    for (const pose of speakers.poses().filter((entry: any) => entry.kind === 'speaker')) {
+      near(pose.direction, [0, 1, 0]);
+      expect(pose.tip[1]).toBeCloseTo(0.5, 6);
+    }
+    expect(speakers.labels(1).map((label: any) => [label.kind, label.text])).toEqual([['speaker', '2 mm/s']]);
+    expect(speakers.labels(1)[0].at[1]).toBeGreaterThan(0.5);
+    speakers.style({ ...STYLE, visible: { loads: false, fixtures: true } });
+    expect(byName(speakers, 'fea-speaker-cones').visible).toBe(false);
+
+    const poled = cube({ fixtures: [{ faces: ['#o1.f4'] }], loads: [], electrodes: [{ faces: ['#o1.f3'], name: 'top', V: 10 }, { faces: ['#o1.f1'], name: 'out', open: true }] },
+      [0, 0, 0], { analysis: { type: 'piezo' } });
+    const plates = createFeaMarkers(THREE, poled);
+    expect(plates.kinds).toEqual(['fixture', 'electrode']);
+    plates.update(positionsOf(poled));
+    expect(plates.labels(1).map((label: any) => label.text)).toEqual(['10 V', 'open']);
+    for (const pose of plates.poses().filter((entry: any) => entry.kind === 'electrode' && entry.group === 0)) near(pose.direction, [0, -1, 0]);
+
+    const spinning = cube({ spin: { axis: 'Z', rpm: [0, 3000] }, bearings: [{ faces: ['#o1.f5'], rigid: true }, { faces: ['#o1.f6'], kxx: 1000 }] },
+      [0, 0, 0], { analysis: { type: 'rotordynamics' } });
+    const races = createFeaMarkers(THREE, spinning);
+    expect(races.kinds).toEqual(['bearing']);
+    races.update(positionsOf(spinning));
+    races.style(STYLE);
+    // Grey, like what holds the part; both bearings are Study's one Bearings row (group 0), and say nothing.
+    expect(colourOf(byName(races, 'fea-bearing-races'))).toBe('71717a');
+    expect(new Set(races.sites.map((site: any) => site.group))).toEqual(new Set([0]));
+    expect(new Set(races.sites.map((site: any) => site.ref))).toEqual(new Set(['#o1.f5', '#o1.f6']));
+    expect(races.labels(1)).toEqual([]);
+    expect(markerGateText(['speaker', 'electrode', 'bearing']))
+      .toBe('Speakers where sound is made, plates on its electrodes, rings where bearings carry the shaft.');
+  });
+
   it('says in Display what it draws, and words a drop and a shake plainly', () => {
     expect(markerGateText(['fixture', 'load'])).toBe('Arrows where the study loads the part, cones where it holds it.');
     expect(markerGateText(['temperature', 'heat', 'convection'])).toBe('Dots where its temperature is fixed, wavy arrows where heat goes in, strokes where air cools it.');

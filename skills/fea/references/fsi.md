@@ -146,9 +146,7 @@ tolerance), so a very soft part in a turbulent flow may stop short of the defaul
   the part's shape at rest.
 - The fluid mesh is moved, never rebuilt: deflections past a fraction of the gap next to the part
   fold it.
-- The flow's own limits: one part; openings on sides of the bounding box; a channel with sharp
-  internal corners at an inlet can fail the laminar flow solve ("factor is exactly singular"):
-  round them, or use a round bore.
+- The flow's own limits: one part; openings on sides of the bounding box.
 
 ## When the model is big
 
