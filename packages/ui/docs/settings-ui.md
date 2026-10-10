@@ -575,8 +575,9 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     elements · refined from 2.8 mm", or "not refined"); and **Result**: the controls the study's
     `view` chose (`feaControls` in `glb/feaResult.js`), in its order, with its labels, ranges and
     units, each a generic parameter row drawn by the same `parameterRow` as Position's joints
-    (`kit/inspector/parameterRow.jsx`), a sentence-long label running over its value field
-    (`wideLabel`). What each moves is the viewer's, from a closed set (`drives`): **field** (a select
+    (`kit/inspector/parameterRow.jsx`), a sentence-long label wrapping between words on its
+    value field's line and the slider the row's whole width under them (`wideLabel`), so the
+    narrow panel still gives the slider room. What each moves is the viewer's, from a closed set (`drives`): **field** (a select
     of the fields the file carries, in plain words: Stress, Displacement; the file's own name, von
     Mises stress, is the colour bar's), **deformation** (how many times the displacement is drawn,
     "×12.0"), **load_scale** (the load as a multiple of the solved one, "×1.50") and **threshold**

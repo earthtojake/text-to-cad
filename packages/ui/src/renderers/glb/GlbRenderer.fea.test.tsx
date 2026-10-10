@@ -583,6 +583,24 @@ it('Result shows the view\'s controls in its order, with its words and ranges, s
   expect(screen.queryByRole('combobox', { name: 'Preset' })).toBeNull();
 });
 
+it('each slider\'s thumb stands at its control\'s value, and the slider takes the row\'s whole width under its label and value field', () => {
+  mount(VIEWED);
+  const now = () => screen.getAllByRole('slider').map(slider => slider.getAttribute('aria-valuenow'));
+  expect(now()).toEqual(['1', '40', '12']);
+  setValue('Exaggerate slider value', '24');
+  setValue('Rider weight slider value', '2.5');
+  expect(now()).toEqual(['2.5', '40', '24']);
+  choose('Preset', 'Landing (3×)');
+  expect(now()).toEqual(['3', '40', '12']);
+  // The label and the value field share the first line; the slider is the second, both columns wide.
+  const row = screen.getByRole('slider', { name: 'Exaggerate' }).closest('[data-slider-layout="wide"]')!;
+  const [label, value, sliderBox] = Array.from(row.children);
+  expect(label.textContent).toBe('Exaggerate');
+  expect(value.contains(screen.getByRole('textbox', { name: 'Exaggerate slider value' })) || value === screen.getByRole('textbox', { name: 'Exaggerate slider value' })).toBe(true);
+  expect(sliderBox.className).toContain('col-span-2');
+  expect(sliderBox.querySelector('[data-slot="slider"]')).toBeTruthy();
+});
+
 it('at twice the load, the bar, its line and the deformation are twice the solved ones, what each part holds is half, and a part flips to yields', () => {
   const parts = [{ ref: '#o1.1', name: 'post', material: 'steel', safety_factor: 5.83 }, { ref: '#o1.2', name: 'base', material: 'steel', safety_factor: 1.5 }];
   const { container, mesh } = mount({ ...VIEWED, view: { controls: [VIEWED.view.controls[0], VIEWED.view.controls[5]] }, parts });
