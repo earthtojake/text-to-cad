@@ -17,7 +17,8 @@ class Waveform:
     Both are numpy arrays; ``values`` is complex for an AC run (use ``db``,
     ``magnitude`` and ``phase``). ``final`` is the last value, ``at(x)`` a
     linear interpolation (in log frequency for an AC run), ``crossings(level)``
-    every axis value where the waveform crosses ``level``.
+    every axis value where the waveform crosses ``level`` (``rising=``, ``start=``, ``stop=``
+    narrow them), ``window(start, stop)`` the part of it between two axis values.
     """
 
     __slots__ = ("x", "values", "name", "unit", "axis", "axis_unit")
@@ -84,28 +85,44 @@ class Waveform:
             return complex(numpy.interp(position, axis, values.real), numpy.interp(position, axis, values.imag))
         return float(numpy.interp(position, axis, values))
 
-    def crossings(self, level: float) -> list[float]:
-        """Every axis value where the waveform crosses ``level`` (rising or falling), interpolated."""
+    def crossings(self, level: float, *, rising: bool | None = None, start: float | None = None, stop: float | None = None) -> list[float]:
+        """Every axis value where the waveform crosses ``level``, interpolated: ``rising=True`` only
+        where it goes up through it, ``False`` only down, ``None`` both; ``start`` and ``stop``
+        bound the axis values kept (both included)."""
         import numpy
 
         values = numpy.asarray(self._real("crossings()"), dtype=float) - to_number(level, what="level")
         x = numpy.asarray(self.x, dtype=float)
-        found: list[float] = []
+        found: list[tuple[float, float]] = []  # (axis value, which way it crosses: + up, - down)
         logarithmic = self.axis_unit == "Hz"
         for index in range(len(values) - 1):
             a, b = values[index], values[index + 1]
             if a == 0:
-                if not found or found[-1] != x[index]:
-                    found.append(float(x[index]))
+                if not found or found[-1][0] != x[index]:
+                    found.append((float(x[index]), b))
             elif a * b < 0:
                 fraction = a / (a - b)
                 if logarithmic:
-                    found.append(float(10 ** (math.log10(x[index]) + fraction * (math.log10(x[index + 1]) - math.log10(x[index])))))
+                    at = 10 ** (math.log10(x[index]) + fraction * (math.log10(x[index + 1]) - math.log10(x[index])))
                 else:
-                    found.append(float(x[index] + fraction * (x[index + 1] - x[index])))
-        if len(values) and values[-1] == 0 and (not found or found[-1] != x[-1]):
-            found.append(float(x[-1]))
-        return found
+                    at = x[index] + fraction * (x[index + 1] - x[index])
+                found.append((float(at), b - a))
+        if len(values) and values[-1] == 0 and (not found or found[-1][0] != x[-1]):
+            found.append((float(x[-1]), -values[-2] if len(values) > 1 else 0.0))
+        low = -math.inf if start is None else to_number(start, what="start")
+        high = math.inf if stop is None else to_number(stop, what="stop")
+        return [
+            at for at, way in found
+            if low <= at <= high and (rising is None or (way > 0 if rising else way < 0))
+        ]
+
+    def window(self, start: float, stop: float) -> "Waveform":
+        """The waveform where its axis is from ``start`` to ``stop`` (both included)."""
+        import numpy
+
+        x = numpy.asarray(self.x, dtype=float)
+        kept = (x >= to_number(start, what="start")) & (x <= to_number(stop, what="stop"))
+        return Waveform(x[kept], numpy.asarray(self.values)[kept], name=self.name, unit=self.unit, axis=self.axis, axis_unit=self.axis_unit)
 
     @property
     def magnitude(self) -> "Waveform":

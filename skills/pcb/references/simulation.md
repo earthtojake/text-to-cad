@@ -113,8 +113,10 @@ waveform, set it to the waveform's value at time 0. Waveforms are SPICE's, keyed
 
 A run's `run["OUT"]` and `run.current(source | load | probed pin)` are waveforms: `x` and
 `values` (numpy arrays), `final`, `initial`, `max()`, `min()`, `at(x)` (interpolated),
-`crossings(level)` (every axis value where it crosses), and for AC `db`, `phase` (degrees,
-unwrapped) and `magnitude`. `run["A"] - run["B"]` is the voltage across a part. A current
+`crossings(level, rising=None, start=None, stop=None)` (every axis value where it crosses;
+`rising=True` only upward, `False` only downward, `start`/`stop` bound the axis),
+`window(start, stop)` (the waveform between two axis values), and for AC `db`, `phase`
+(degrees, unwrapped) and `magnitude`. `run["A"] - run["B"]` is the voltage across a part. A current
 is positive into what it measures: a source's current is what it delivers into its net,
 a load's or a pin's what the net feeds into it.
 
