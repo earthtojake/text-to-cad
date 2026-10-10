@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 // The GLB renderer's FEA surfaces under the real shell, with only what loads the file and the WebGL
 // viewport replaced: a result's study, field and deformation are Select's Study panel, its colour
 // bar is a reading with no controls, and a GLB that is not a result has neither.
-const loaded = vi.hoisted(() => ({ root: null as any, scene: null as any, revision: 'one', animation: null as any, runtime: null as any, host: null as any }));
+const loaded = vi.hoisted(() => ({ root: null as any, scene: null as any, revision: 'one', animation: null as any, runtime: null as any, host: null as any, own: null as any }));
 vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
   default: forwardRef(function StandInViewport(props: any, ref) {
     useImperativeHandle(ref, () => ({ requestRender() {} }));
@@ -16,7 +16,8 @@ vi.mock('../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
 vi.mock('../../../dist/renderers/glb/useGlbScene.js', () => ({
   useGlbScene: () => ({ scene: loaded.scene, revision: loaded.revision, busy: false, error: null, progress: null })
 }));
-vi.mock('../../../dist/renderers/glb/useGlbAnimation.js', () => ({ useGlbAnimation: () => loaded.animation }));
+// The renderer's own clips (its analysis's routine) are kept to be played by hand.
+vi.mock('../../../dist/renderers/glb/useGlbAnimation.js', () => ({ useGlbAnimation: (_document: any, _render: any, own: any) => { loaded.own = own; return loaded.animation; } }));
 import GlbRenderer from '../../../dist/renderers/glb/GlbRenderer.js';
 import { writeFileView } from '../../../dist/renderers/kit/shell/fileView.js';
 import { createAnimationClock } from '../../../dist/renderers/kit/tools/playbar/animationClock.js';
@@ -32,7 +33,8 @@ afterEach(() => { vi.restoreAllMocks(); loaded.animation = null; loaded.runtime 
 
 // Two triangles the way GLTFLoader hands a result over: lower-cased custom attributes, extras in userData.
 // `faces`: the source face of each vertex (`_FACE`), for a result that records its study.
-function resultRoot(extras: Record<string, unknown> | null, faces: number[] | null = null) {
+// `attributes`: what another analysis's result carries instead, by name: values and item size (null drops one).
+function resultRoot(extras: Record<string, unknown> | null, faces: number[] | null = null, attributes: Record<string, [number[], number] | null> = {}) {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0]), 3));
   geometry.setIndex([0, 1, 2, 1, 3, 2]);
@@ -40,6 +42,10 @@ function resultRoot(extras: Record<string, unknown> | null, faces: number[] | nu
   geometry.setAttribute('_von_mises', new BufferAttribute(new Float32Array([0, 50, 100, 25]), 1));
   geometry.setAttribute('_displacement', new BufferAttribute(new Float32Array([0, 0, 0, 0, 0, 0.001, 0, 0, 0.002, 0, 0, 0.0005]), 3));
   if (faces) geometry.setAttribute('_face', new BufferAttribute(new Float32Array(faces), 1));
+  for (const [name, values] of Object.entries(attributes)) {
+    if (values) geometry.setAttribute(name, new BufferAttribute(new Float32Array(values[0]), values[1]));
+    else geometry.deleteAttribute(name);
+  }
   const mesh = new Mesh(geometry);
   if (extras) Object.assign(mesh.userData, extras);
   const root = new Group();
@@ -60,8 +66,8 @@ function ViewerElement({ children }: { children: React.ReactNode }) {
 }
 const colourBytes = (mesh: Mesh) => Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
 
-function mount(extras: Record<string, unknown> | null, state?: unknown, { actions = () => {}, host = testHost(), faces = null, settings = { toolStack: { panels: {}, collapsed: {} } } }: { actions?: (actions: readonly any[]) => void, host?: any, faces?: number[] | null, settings?: any } = {}) {
-  const built = resultRoot(extras, faces);
+function mount(extras: Record<string, unknown> | null, state?: unknown, { actions = () => {}, host = testHost(), faces = null, settings = { toolStack: { panels: {}, collapsed: {} } }, attributes = {} }: { actions?: (actions: readonly any[]) => void, host?: any, faces?: number[] | null, settings?: any, attributes?: Record<string, [number[], number] | null> } = {}) {
+  const built = resultRoot(extras, faces, attributes);
   loaded.root = built.root;
   // One scene per file, as the hook holds it: a render is not a new result.
   loaded.scene = { document: { scene: built.root }, revision: loaded.revision };
@@ -746,4 +752,206 @@ it('shows a control `when` the checks say, live with the load, the hidden one dr
   expect(sliders()).toEqual(['Load', 'Show above']);
   expect(screen.getByRole('textbox', { name: 'Show above slider value' }).getAttribute('value')).toBe('40.0 MPa');
   expect(grey()).toEqual([true, false, false, true]);
+});
+
+// Track V1: one result per analysis family, each built here as cadgen writes it.
+const zOf = (mesh: Mesh, vertex: number) => mesh.geometry.getAttribute('position').getZ(vertex);
+const own = () => loaded.own[0];
+const play = (seconds: number) => act(() => { own().play.apply(seconds); });
+const release = () => act(() => { own().play.release(); });
+const barText = (container: HTMLElement) => container.querySelector('[aria-label$="colour bar"]')!.textContent;
+const NO_STRESS = { _von_mises: null };
+
+// A modal result: its modes a series, each mode's shape an attribute (mode 1's the displacement the file baked in).
+const MODAL = {
+  ...STUDIED, safety_factor: null, analysis: { type: 'modal', tier: 1, word: 'Vibration' },
+  study: { ...STUDY, loads: [] },
+  fields: [{ attribute: '_DISPLACEMENT', name: 'mode shape', units: 'mm', min: 0, max: 1, attribute_scale: 1000, field: 'mode_shape', per_frame: true }],
+  series: { kind: 'mode', unit: 'Hz', default: 0, frames: [{ value: 85.2, label: 'Mode 1 · 85 Hz', attributes: { mode_shape: '_DISPLACEMENT' } },
+    { value: 118.4, label: 'Mode 2 · 118 Hz', attributes: { mode_shape: '_MODE_SHAPE_F1' } }] },
+  checks: [
+    { kind: 'frequency', label: '', value: 85.2, limit: 60, unit: 'Hz', ratio: 0.704, close_at: 0.9, status: 'passes', mode: 1, at: { frame: 0, value: 85.2, unit: 'Hz' } },
+    { kind: 'frequency', label: 'Motor speed', value: 118.4, limit: 110, unit: 'Hz', ratio: 1.08, close_at: 0.9, status: 'fails', mode: 2, avoid_Hz: [110, 130],
+      at: { frame: 1, value: 118.4, unit: 'Hz' }, where: { ref: '#o1.f2' } }],
+};
+const MODE_2 = { ...NO_STRESS, _mode_shape_f1: [[0, 0, 0, 0, 0, -0.001, 0, 0, -0.004, 0, 0, 0], 3] as [number[], number] };
+
+it('a modal result picks its mode, deforms by that mode\'s shape, jumps to the mode a check is about and vibrates in preview', () => {
+  const { mesh, container } = mount(MODAL, undefined, { faces: FACES, attributes: MODE_2 });
+  // What you see with no view: the mode, then the deformation; the colours are the shape's, over every mode's range.
+  expect(screen.getByRole('combobox', { name: 'Mode' }).textContent).toBe('Mode 1 · 85 Hz');
+  expect(screen.getAllByRole('slider').map(slider => slider.getAttribute('aria-label'))).toEqual(['Deformation scale']);
+  expect(barText(container)).toBe('Mode shape01.00 mm');
+  expect(zOf(mesh, 2)).toBeCloseTo(0, 6);
+  choose('Mode', 'Mode 2 · 118 Hz');
+  // Mode 1's 10x comes off and mode 2's goes on.
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.06, 6);
+  expect(barText(container)).toBe('Mode shape01.00 mm');
+  choose('Mode', 'Mode 1 · 85 Hz');
+  expect(verdictOf()).toMatchObject({ status: 'weak', title: 'Fails 1 of 2 checks', caption: 'Mode 2 at 118 Hz, inside 110–130 Hz' });
+  // Choosing the check that is about mode 2 shows mode 2.
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select Motor speed' })); });
+  expect(screen.getByRole('combobox', { name: 'Mode' }).textContent).toBe('Mode 2 · 118 Hz');
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.06, 6);
+  // Its routine is Vibrate: one swing a second, through rest, out to the shape and back the other way.
+  expect([own().label, own().duration]).toEqual(['Vibrate', 1]);
+  play(0);
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.02, 6);
+  play(0.25);
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.06, 6);
+  play(0.75);
+  expect(zOf(mesh, 2)).toBeCloseTo(0.02, 6);
+  release();
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.06, 6);
+  // Its markers are its fixtures, and Display's gate says so.
+  openDisplay();
+  expect(screen.getByText('Cones where it holds it.')).toBeTruthy();
+});
+
+// A steady thermal result: a signed temperature and a heat flow, no displacement to deform by.
+const THERMAL = {
+  ...FOUND, deformation_scale: 1, safety_factor: null, analysis: { type: 'thermal', tier: 1, word: 'Heat', reference_C: 20 }, faces: ['#o1.f1', '#o1.f2'],
+  fields: [{ attribute: '_TEMPERATURE', name: 'temperature', units: '°C', min: 20, max: 84, signed: true },
+    { attribute: '_HEAT_FLUX', name: 'heat flux', units: 'W/m²', min: 0, max: 5000 }],
+  study: { material: STUDY.material, fixtures: [], loads: [], mesh: STUDY.mesh, temperatures: [{ faces: ['#o1.f1'], C: 25 }],
+    heat: [{ faces: ['#o1.f1'], W: 15 }], convection: [{ faces: ['#o1.f1'], h_W_m2K: 10, ambient_C: 25 }] },
+  checks: [{ kind: 'temperature', label: '', value: 84.2, limit: 100, unit: '°C', ratio: 0.79, close_at: 0.9, status: 'passes', faces: ['#o1.f2'], reference: 20 }],
+};
+const HEAT_FIELDS = { _von_mises: null, _displacement: null, _temperature: [[20, 40, 60, 84], 1] as [number[], number], _heat_flux: [[0, 1000, 2000, 5000], 1] as [number[], number] };
+
+it('a thermal result reads its setup as Kept at, Heated and Cooled by air, shows its own minimum, deforms nothing and plays nothing', async () => {
+  const copied: string[] = [];
+  // Every vertex on face 1, which the study keeps cool, heats and cools by air.
+  const { mesh, container } = mount(THERMAL, undefined, { faces: [0, 0, 0, 0], attributes: HEAT_FIELDS, host: clipboardHost(copied) });
+  const positions = Array.from(mesh.geometry.getAttribute('position').array as Float32Array);
+  expect(rowTexts(studyPanel()!).map(text => text!.replace(/‑/g, '-'))).toEqual(
+    ['Kept at', '25 °C', 'Heated', '15 W', 'Cooled by air', 'Air at 25 °C', 'Made of', '6061-T6', 'What you see', 'Details']);
+  // The field alone: there is no displacement to draw larger.
+  expect(screen.getByRole('combobox', { name: 'Result field' }).textContent).toBe('Temperature');
+  expect(screen.queryAllByRole('slider')).toEqual([]);
+  // A signed field's bar starts at its own minimum.
+  expect(barText(container)).toBe('Temperature20.084.0 °C');
+  expect(verdictOf()).toMatchObject({ status: 'strong', title: 'Cool enough', caption: 'Hottest 84 °C, 16 °C under its limit' });
+  expect(loaded.own).toEqual([]);
+  expect(Array.from(mesh.geometry.getAttribute('position').array as Float32Array)).toEqual(positions);
+  // Its markers: a dot, a wavy arrow and the air's strokes; the heat row chooses its arrows and its face.
+  const group = mesh.children.find(child => child.name === 'fea-markers')!;
+  const heads = group.getObjectByName('fea-heat-heads') as THREE.InstancedMesh;
+  const colour = new THREE.Color();
+  heads.getColorAt(0, colour);
+  expect(colour.getHexString()).toBe('18181b');
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select 15 W' })); });
+  heads.getColorAt(0, colour);
+  expect(colour.getHexString()).toBe('ff40f2');
+  expect(await copiedPrompt(copied)).toBe('move it\n\nFile: /models/part.glb\nReferences:\n15 W of heat into face 1 · /models/part.step#o1.f1');
+  // Display's gate is titled for heat and says what it draws.
+  openDisplay();
+  expect(screen.getByText('Dots where its temperature is fixed, wavy arrows where heat goes in, strokes where air cools it.')).toBeTruthy();
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Disable Heat inputs and temperatures' })); });
+  expect(group.children.every(child => !child.visible)).toBe(true);
+});
+
+// A transient result: time frames, each frame's stress and displacement its own, opening on the peak.
+const TRANSIENT = {
+  ...STUDIED, safety_factor: null, analysis: { type: 'transient', tier: 1, word: 'Over time' },
+  fields: [{ attribute: '_VON_MISES', name: 'von Mises stress', units: 'MPa', min: 0, max: 90, per_frame: true },
+    { attribute: '_DISPLACEMENT', name: 'displacement', units: 'mm', min: 0, max: 2, attribute_scale: 1000, per_frame: true }],
+  series: { kind: 'time', unit: 's', default: 2, frames: [
+    { value: 0, label: '0 ms', attributes: { von_mises: '_VON_MISES', displacement: '_DISPLACEMENT' } },
+    { value: 0.01, label: '10 ms', attributes: { von_mises: '_VON_MISES_F1', displacement: '_DISPLACEMENT_F1' } },
+    { value: 0.02, label: '20 ms', attributes: { von_mises: '_VON_MISES_F2', displacement: '_DISPLACEMENT_F2' } }] },
+  checks: [{ kind: 'stress', label: 'Start', value: 90, limit: 276, unit: 'MPa', ratio: 0.326, close_at: 0.5, margin: 2, status: 'passes', where: { ref: '#o1.f1' },
+    at: { frame: 0, value: 0, unit: 's' } }],
+};
+const vectorsUp = (z: number[]) => [[0, 0, z[0], 0, 0, z[1], 0, 0, z[2], 0, 0, z[3]], 3] as [number[], number];
+const TIME_FIELDS = {
+  _von_mises: [[0, 0, 0, 0], 1] as [number[], number], _von_mises_f1: [[10, 20, 30, 45], 1] as [number[], number], _von_mises_f2: [[20, 40, 60, 90], 1] as [number[], number],
+  _displacement: vectorsUp([0, 0, 0, 0]), _displacement_f1: vectorsUp([0, 0.0005, 0.001, 0.0005]), _displacement_f2: vectorsUp([0, 0.001, 0.002, 0.001]),
+};
+
+it('a transient result scrubs its time frames, snapping to them, jumps to a check\'s moment and plays its frames', () => {
+  const { mesh } = mount(TRANSIENT, undefined, { faces: FACES, attributes: TIME_FIELDS });
+  const vertex3 = () => colourBytes(mesh).slice(12, 15);
+  // It opens on the peak, the last frame: its stress and displacement.
+  expect(screen.getAllByRole('slider').map(slider => slider.getAttribute('aria-label'))).toEqual(['Time', 'Deformation scale']);
+  expect(screen.getByRole('textbox', { name: 'Time slider value' }).getAttribute('value')).toBe('20 ms');
+  expect(zOf(mesh, 2)).toBeCloseTo(0.02, 6);
+  expect(vertex3()).toEqual([230, 20, 13]);
+  setValue('Time slider value', '0.012');
+  expect(screen.getByRole('textbox', { name: 'Time slider value' }).getAttribute('value')).toBe('10 ms');
+  expect(zOf(mesh, 2)).toBeCloseTo(0.01, 6);
+  expect(vertex3()).toEqual([27, 217, 38]);
+  // The check is about the first moment: choosing it moves the scrubber there.
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select Start' })); });
+  expect(screen.getByRole('textbox', { name: 'Time slider value' }).getAttribute('value')).toBe('0 ms');
+  expect(zOf(mesh, 2)).toBeCloseTo(0, 6);
+  // Play runs the frames over three seconds, each blended into the next.
+  expect([own().label, own().duration]).toEqual(['Play', 3]);
+  play(0.75);
+  expect(zOf(mesh, 2)).toBeCloseTo(0.005, 6);
+  play(3);
+  expect(zOf(mesh, 2)).toBeCloseTo(0.02, 6);
+  expect(vertex3()).toEqual([230, 20, 13]);
+  release();
+  expect(zOf(mesh, 2)).toBeCloseTo(0, 6);
+});
+
+it('a random vibration\'s RMS fields show at the sigma chosen, the bar saying the level', () => {
+  const random = { ...FOUND, safety_factor: null, analysis: { type: 'random_vibration' }, study: { ...STUDY, sigma: 3 },
+    fields: [{ attribute: '_VON_MISES_RMS', name: 'von Mises RMS', units: 'MPa', min: 0, max: 30 }] };
+  const { container, mesh } = mount(random, undefined, { attributes: { _von_mises: null, _von_mises_rms: [[0, 10, 20, 30], 1] } });
+  expect(screen.getByRole('combobox', { name: 'Sigma' }).textContent).toBe('3σ');
+  expect(barText(container)).toBe('Stress (3σ)090.0 MPa');
+  const colours = colourBytes(mesh);
+  choose('Sigma', '1σ');
+  expect(barText(container)).toBe('Stress (1σ)030.0 MPa');
+  // The values and the range scale together, so the colours keep their place.
+  expect(colourBytes(mesh)).toEqual(colours);
+  expect(loaded.own).toEqual([]);
+});
+
+it('a result that took steps to fit says so: "adapted" in the verdict and a Details row per step, chosen with its faces', async () => {
+  const copied: string[] = [];
+  const words = 'Coarsened the mesh away from the hole to fit: the peak is still meshed at 0.8 mm';
+  const fit = [{ rung: 'local_refine', words, accuracy: 'peak stress moved 2.1 % between passes', accuracy_pct: 2.1, faces: ['#o1.f2'], detail: '' },
+    { rung: 'iterative', words: 'Used an iterative solver to fit in memory', accuracy: '', accuracy_pct: null, faces: [], detail: '' }];
+  const { mesh } = mount({ ...STUDIED, fit }, undefined, { faces: FACES, host: clipboardHost(copied) });
+  expect(verdictOf().caption).toBe('OK up to 5.8× this load · adapted');
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand Details' })); });
+  expect(rowTexts(studyPanel()!).slice(-5)).toEqual(['Details', 'Mesh1.9 mm elements', 'Adapted to fit', words, 'Used an iterative solver to fit in memory']);
+  const plain = colourBytes(mesh);
+  act(() => { fireEvent.click(screen.getByRole('button', { name: `Select ${words}` })); });
+  expect(colourBytes(mesh).slice(12, 15)).not.toEqual(plain.slice(12, 15));
+  expect(colourBytes(mesh).slice(0, 12)).toEqual(plain.slice(0, 12));
+  expect(await copiedPrompt(copied)).toBe(`move it\n\nFile: /models/part.glb\nReferences:\nAdapted to fit: ${words} (peak stress moved 2.1 % between passes) · /models/part.step#o1.f2`);
+  // A step with no faces carries the whole part.
+  cleanup();
+  mount({ ...STUDIED, fit }, undefined, { faces: FACES, host: clipboardHost(copied) });
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand Details' })); });
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select Used an iterative solver to fit in memory' })); });
+  expect(await copiedPrompt(copied)).toBe('move it\n\nFile: /models/part.glb\nReferences:\nAdapted to fit: Used an iterative solver to fit in memory · /models/part.step#o1');
+});
+
+it('a static result keeps its Load ramp, drawn as it always was', () => {
+  const { mesh } = mount(STUDIED, undefined, { faces: FACES });
+  expect([own().id, own().label, own().duration]).toEqual(['fea:load-ramp', 'Load ramp', 2]);
+  play(1);
+  // Half the load on: half the 10x drawn.
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.01, 6);
+  release();
+  expect(zOf(mesh, 2)).toBeCloseTo(0, 6);
+});
+
+it('a harmonic result vibrates its frame through its phase, the real part then the imaginary', () => {
+  const harmonic = { ...STUDIED, safety_factor: null, analysis: { type: 'harmonic' },
+    series: { kind: 'frequency', unit: 'Hz', default: 0, frames: [{ value: 118, label: '118 Hz', attributes: { displacement: '_DISPLACEMENT', displacement_im: '_DISPLACEMENT_IM_F0' } }] } };
+  const { mesh } = mount(harmonic, undefined, { faces: FACES, attributes: { _displacement_im_f0: vectorsUp([0, 0, 0.001, 0]) } });
+  expect([own().label, own().duration]).toEqual(['Vibrate', 1]);
+  // At phase 0 the real part, as baked; a quarter turn on, minus the imaginary part.
+  play(0);
+  expect(zOf(mesh, 2)).toBeCloseTo(0, 6);
+  play(0.25);
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.02 - 0.01, 6);
+  release();
+  expect(zOf(mesh, 2)).toBeCloseTo(0, 6);
 });

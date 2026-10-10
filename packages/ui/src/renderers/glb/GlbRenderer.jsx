@@ -19,18 +19,24 @@ import {
   applyDeformation, faceIndices, facePartDetail, faceTitle, facePromptSummary, faceRole, feaControls, feaDefaults, feaMarkerShow, feaPresets, feaSections, feaShownControls,
   feaShowsParts, feaVerdict, findingSelector, pickFace, readFeaResult, recolorByField, resultSourcePath, partRows, studySections, weakestPartIndex
 } from "./feaResult.js";
-import { createFeaMarkers } from "./feaMarkers.js";
+import { createFeaMarkers, markerGateText } from "./feaMarkers.js";
+import { feaAnalysis } from "./fea/analyses/index.js";
+import { activeFrameIndex, deformationAt, fieldAtFrame, framesBetween, sigmaScale, snapFrame } from "./fea/series.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
 import { useGlbScene } from "./useGlbScene.js";
 
 const LIVE = Object.freeze({ declined: GLB_DECLINED_LIVE_COMMANDS });
-const NO_CHOICE = Object.freeze({ field: null, scale: null, loadScale: null, threshold: null, preset: null, markers: null });
+const NO_CHOICE = Object.freeze({ field: null, scale: null, loadScale: null, threshold: null, preset: null, markers: null, mode: null, frame: null, sigma: null });
+// What a series adds to the file's view, written only once chosen, so a result with none keeps the slice it always had.
+const SERIES_KEYS = Object.freeze(["mode", "frame", "sigma"]);
 // Where each control's value is kept in the file's view: the field and the deformation scale as they always were.
-const DRIVE_KEYS = Object.freeze({ field: "field", deformation: "scale", load_scale: "loadScale", threshold: "threshold" });
-const NO_VALUES = Object.freeze({ field: null, scale: null, loadScale: null, threshold: null });
-// The Load ramp: the load going on, from none to all of it, over this long.
-const LOAD_RAMP_SECONDS = 2;
+const DRIVE_KEYS = Object.freeze({ field: "field", deformation: "scale", load_scale: "loadScale", threshold: "threshold", mode: "mode", frame: "frame", sigma: "sigma" });
+const NO_VALUES = Object.freeze({ field: null, scale: null, loadScale: null, threshold: null, mode: null, frame: null, sigma: null });
+// Each routine an analysis plays (`routine`, fea/analyses), and how long one pass of it is: the Load ramp
+// (the load going on, from none to all of it; buckling's Buckle), Vibrate (one swing a second) and
+// Play (a series' frames, start to end).
+const ROUTINE_SECONDS = Object.freeze({ load_ramp: 2, vibrate: 1, play: 3 });
 // What the markers are drawn in. The theme has no colour of its own to spare: every saturated hue is
 // the ramp's or the chosen faces' magenta, so a load is the ink and a fixture a muted grey.
 const MARKER_COLOURS = Object.freeze({
@@ -69,15 +75,22 @@ function controlValue(control, chosen) {
   return Number.isFinite(chosen) ? clamp(chosen, control.min, control.max) : control.defaultValue;
 }
 
+// Study's setup rows by the marker kind they stand for: a row `<row kind>:<group>` chooses its entry's markers.
+const ROW_MARKERS = Object.freeze({ load: "load", fixed: "fixture", body: "body_load", shaken: "base_excitation", temperature: "temperature",
+  heat: "heat", convection: "convection", drop: "drop", inlet: "inlet", outlet: "outlet", rigid: "rigid_plane" });
+
 /**
- * Whether a marker is of what Study chose: a load row's arrows (that load, on its faces), a fixed
- * row's cones, and both on a face picked on the result. A part or a joint has none.
+ * Whether a marker is of what Study chose: a setup row's markers (a load's arrows on its faces, a
+ * fixed row's cones, a heat input's wavy arrows, ...; a body load, an opening or a floor by its
+ * row alone, standing on no face), and every marker on a face picked on the result. A part or a joint has none.
  */
 function markerChosen(faces, site) {
-  if (!faces.faces.includes(site.ref)) return false;
   const [kind, group] = String(faces.id).split(":");
-  if (kind === "load") return site.kind === "load" && Number(group) === site.group;
-  if (kind === "fixed") return site.kind === "fixture" && Number(group) === site.group;
+  const own = ROW_MARKERS[kind];
+  const ofRow = own === site.kind && (group === undefined || Number(group) === site.group);
+  if (!site.ref) return ofRow;
+  if (!faces.faces.includes(site.ref)) return false;
+  if (own) return ofRow;
   return kind !== "joint";
 }
 
@@ -96,6 +109,7 @@ function GlbSurface({ view, data }) {
   // the file's view (`kit/shell/fileView.js`), written against the result's own fields, scale and
   // view: a re-solved result opens at its own defaults.
   const fea = useMemo(() => readFeaResult(scene?.document?.scene), [scene]);
+  const analysis = fea ? feaAnalysis(fea) : null;
   const controls = useMemo(() => (fea ? feaControls(fea) : EMPTY), [fea]);
   const presets = useMemo(() => (fea ? feaPresets(fea, controls) : EMPTY), [fea, controls]);
   const markerShow = useMemo(() => (fea ? feaMarkerShow(fea) : null), [fea]);
@@ -110,6 +124,13 @@ function GlbSurface({ view, data }) {
   const { shown: shownControls, effective, loadScale } = fea ? feaShownControls(fea, controls, values) : { shown: EMPTY, effective: values, loadScale: 1 };
   const activeField = fea ? fea.fields.find((entry) => entry.attribute === effective.field) || fea.fields[0] : null;
   const activeScale = fea ? finiteOr(effective.deformation, fea.deformationScale) : null;
+  // The frame of a series shown: the mode picker's or the scrubber's, else where a chosen check
+  // jumped to, else the series' own default; and the sigma level a random vibration's RMS fields show at.
+  const seriesControl = controls.find((control) => control.drives === "mode" || control.drives === "frame") || null;
+  const frameIndex = fea ? activeFrameIndex(fea, seriesControl ? effective : { mode: choice.mode }) : 0;
+  const sigma = fea && effective.sigma !== undefined && effective.sigma !== null ? Number(effective.sigma) : null;
+  // The load shown moves the colours and the deformation only where the analysis follows the load.
+  const fieldLoad = analysis?.scalesWithLoad ? loadScale : 1;
   // The load as a multiple of the solved one (a linear study scales exactly), and what is drawn grey under a threshold.
   const thresholdControl = shownControls.find((control) => control.drives === "threshold");
   const thresholdField = fea && thresholdControl ? fea.fields.find((entry) => entry.attribute === thresholdControl.field) : null;
@@ -121,7 +142,8 @@ function GlbSurface({ view, data }) {
   const choiceRef = useRef(choice);
   choiceRef.current = choice;
   const rendererState = useMemo(() => (fea
-    ? { signatures: { fea: signature }, read: () => ({ fea: Object.fromEntries(Object.keys(NO_CHOICE).map((key) => [key, choiceRef.current[key]])) }) }
+    ? { signatures: { fea: signature }, read: () => ({ fea: Object.fromEntries(Object.keys(NO_CHOICE)
+      .filter((key) => !SERIES_KEYS.includes(key) || (choiceRef.current[key] !== null && choiceRef.current[key] !== undefined)).map((key) => [key, choiceRef.current[key]])) }) }
     : null), [fea, signature]);
 
   // What the result's checks found stays in the file for the agent; the viewer raises no alert for it
@@ -140,7 +162,13 @@ function GlbSurface({ view, data }) {
   const parts = useMemo(() => (fea && feaShowsParts(fea) ? partRows(fea, loadScale) : EMPTY), [fea, loadScale]);
   // The answer at a glance, at the load shown: it follows the load control, and may change its word.
   const verdict = useMemo(() => (fea ? feaVerdict(fea, loadScale) : null), [fea, loadScale]);
-  const chooseFaces = useCallback((row) => { setChosenFaces({ result: fea, id: row.id, faces: row.faces || EMPTY, refs: row.refs || EMPTY, parts: row.parts || EMPTY, softParts: row.softParts || EMPTY, summary: row.summary }); }, [fea]);
+  // A check whose value occurs at a frame of the series shows that frame when chosen: the mode picker
+  // or the scrubber moves there, and with neither the view still jumps to it.
+  const jumpRef = useRef(null);
+  const chooseFaces = useCallback((row) => {
+    setChosenFaces({ result: fea, id: row.id, faces: row.faces || EMPTY, refs: row.refs || EMPTY, parts: row.parts || EMPTY, softParts: row.softParts || EMPTY, summary: row.summary });
+    if (Number.isInteger(row.frame)) jumpRef.current?.(row.frame);
+  }, [fea]);
   // A press on the result picks the face under it, called what Study calls it.
   const pickScene = useMemo(() => (fea ? { pick: (ray) => pickFace(fea, ray) } : null), [fea]);
   const pick = useCallback((hit) => {
@@ -160,32 +188,48 @@ function GlbSurface({ view, data }) {
   }, [fea, source, faces]);
 
   const requestRenderRef = useMemo(() => ({ current: null }), []);
-  // How much of the load a playing Load ramp has put on (0 to 1), or null while none plays; and the
-  // one pass that draws the colours, the deformation and the markers for the load shown.
-  const rampRef = useRef(null);
+  // The routine playing, `{ kind, value }`, or null while none plays: a Load ramp's share of the load
+  // put on (0 to 1), Vibrate's phase (radians), Play's share of the way through the frames (0 to 1);
+  // and the one pass that draws the colours, the deformation and the markers for what is shown.
+  const routineRef = useRef(null);
   const paintRef = useRef(null);
-  // A result's own routine: the load going on, from none to the load chosen, colours, deformation and markers together.
-  const loadRamp = useMemo(() => (fea ? [{
-    id: "fea:load-ramp", label: "Load ramp", duration: LOAD_RAMP_SECONDS,
-    play: {
-      apply(elapsedSec) { rampRef.current = clamp(elapsedSec / LOAD_RAMP_SECONDS, 0, 1); paintRef.current?.(); },
-      release() { rampRef.current = null; paintRef.current?.(); },
-    },
-  }] : EMPTY), [fea]);
-  const animation = useGlbAnimation(scene?.document || null, () => requestRenderRef.current?.(), loadRamp);
+  // A result's own routine, its analysis's (`routine`): the static family's Load ramp (the load going
+  // on, from none to the load chosen, colours, deformation and markers together; buckling's Buckle),
+  // modal's and harmonic's Vibrate (a loop of the shape swinging, a harmonic frame through its phase),
+  // a series' Play (its frames in turn, each blended into the next); none for one with nothing to play.
+  const ownClips = useMemo(() => {
+    const routine = fea ? feaAnalysis(fea).routine(fea) : null;
+    const duration = routine ? ROUTINE_SECONDS[routine.kind] : 0;
+    if (!duration) return EMPTY;
+    const valueAt = (elapsedSec) => (routine.kind === "vibrate" ? (2 * Math.PI * elapsedSec) / duration : clamp(elapsedSec / duration, 0, 1));
+    return [{
+      id: routine.id, label: routine.label, duration,
+      play: {
+        apply(elapsedSec) { routineRef.current = { kind: routine.kind, value: valueAt(elapsedSec) }; paintRef.current?.(); },
+        release() { routineRef.current = null; paintRef.current?.(); },
+      },
+    }];
+  }, [fea]);
+  const animation = useGlbAnimation(scene?.document || null, () => requestRenderRef.current?.(), ownClips);
   const shellRef = useRef(null);
   const choose = useCallback((patch) => {
     setEdited({ ...choiceRef.current, ...patch, signature });
     shellRef.current?.scheduleStateSave();
   }, [signature]);
+  jumpRef.current = (index) => {
+    if (!fea?.series || index < 0 || index >= fea.series.frames.length) return;
+    choose(seriesControl?.drives === "frame" ? { frame: seriesControl.snaps[index], preset: null } : { mode: String(index), preset: null });
+  };
+  // The markers built for the result (below), whose kinds Display's gate names.
+  const [markers, setMarkers] = useState(null);
   const chosenSomething = faces.faces.length > 0 || faces.refs.length > 0;
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: loaded.revision,
     features: EDGELESS_VIEW_FEATURES, toolModes: GLB_TOOL_MODES, previewable: true, scene,
     load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
     animation, live: LIVE, rendererState, displaySections: markerShow ? [{
-      id: "fea-markers", title: "Loads and fixtures", enabled: markersOn, onEnabledChange: (on) => choose({ markers: on }),
-      content: <FileSheetStatusText>Arrows where the study loads the part, cones where it holds it.</FileSheetStatusText>,
+      id: "fea-markers", title: analysis.displayTitle, enabled: markersOn, onEnabledChange: (on) => choose({ markers: on }),
+      content: <FileSheetStatusText>{markerGateText(markers?.kinds?.length ? markers.kinds : analysis.markers.filter((kind) => kind !== "body_load"))}</FileSheetStatusText>,
     }] : null,
     // Escape lets go of what is chosen, which a result with no source to edit has no Quick Edit to clear.
     escape: { active: chosenSomething, handle: () => { if (!chosenSomething) return false; clearChoice(); return true; } }
@@ -201,22 +245,38 @@ function GlbSurface({ view, data }) {
   // under the range of the load chosen. The markers stand on the positions drawn.
   const tinted = useMemo(() => (fea ? faceIndices(fea, faces.faces) : EMPTY), [fea, faces]);
   const markersRef = useRef(null);
+  // A series shows the frame chosen: its fields' colours from that frame's attributes and the model
+  // deformed by its displacement or mode shape; Play blends each frame into the next, and Vibrate
+  // swings the shape (a harmonic frame turning through its phase, re·cos − im·sin).
   paintRef.current = () => {
     if (!fea) return;
-    const shownLoad = rampRef.current === null ? loadScale : rampRef.current * loadScale;
-    const threshold = thresholdField ? { field: thresholdField, value: thresholdValue, scale: shownLoad } : null;
-    let changed = recolorByField(fea.mesh, activeField, fea.ramp, tinted, faces.parts, faces.softParts, { valueScale: shownLoad, rangeScale: loadScale, threshold });
-    if (applyDeformation(fea.mesh, activeScale * shownLoad, fea.deformationScale)) {
+    const routine = routineRef.current;
+    const shownLoad = routine?.kind === "load_ramp" ? routine.value * fieldLoad : fieldLoad;
+    const between = routine?.kind === "play" ? framesBetween(fea, routine.value) : null;
+    const index = between ? between.from : frameIndex;
+    const field = fieldAtFrame(fea, activeField, index);
+    const blend = between?.weight > 0 ? { field: fieldAtFrame(fea, activeField, between.to), weight: between.weight } : null;
+    const level = sigmaScale(activeField, sigma);
+    const threshold = thresholdField ? { field: fieldAtFrame(fea, thresholdField, index), value: thresholdValue, scale: shownLoad } : null;
+    let changed = recolorByField(fea.mesh, field, fea.ramp, tinted, faces.parts, faces.softParts,
+      { valueScale: shownLoad * level, rangeScale: fieldLoad * level, threshold, ...(blend ? { blend } : {}) });
+    const { attribute, imaginary } = deformationAt(fea, index);
+    let vector = attribute;
+    if (attribute && routine?.kind === "vibrate") {
+      vector = imaginary ? [[attribute, Math.cos(routine.value)], [imaginary, -Math.sin(routine.value)]] : [[attribute, Math.sin(routine.value)]];
+    } else if (attribute && blend) {
+      vector = [[attribute, 1 - blend.weight], [deformationAt(fea, between.to).attribute || attribute, blend.weight]];
+    }
+    if (vector && applyDeformation(fea.mesh, activeScale * shownLoad, fea.deformationScale, vector)) {
       markersRef.current?.update(fea.mesh.geometry.getAttribute("position").array);
       changed = true;
     }
     if (changed) requestRenderRef.current?.();
   };
-  useEffect(() => { paintRef.current?.(); }, [fea, activeField, tinted, faces.parts, faces.softParts, activeScale, loadScale, thresholdField, thresholdValue]);
+  useEffect(() => { paintRef.current?.(); }, [fea, activeField, tinted, faces.parts, faces.softParts, activeScale, fieldLoad, thresholdField, thresholdValue, frameIndex, sigma]);
 
   // Where the study loads and holds the part, on the model (`feaMarkers.js`): built once per result,
   // standing on the positions drawn, the chosen load's or fixture's in the chosen colour.
-  const [markers, setMarkers] = useState(null);
   useEffect(() => {
     if (!fea?.study) return undefined;
     const built = createFeaMarkers(THREE, fea);
@@ -239,8 +299,8 @@ function GlbSurface({ view, data }) {
       chosen: (site) => markerChosen(faces, site) });
     requestRenderRef.current?.();
   }, [markers, colours, markersOn, markerShow, faces, requestRenderRef]);
-  const loadLabels = useCallback(() => (markers && markersOn && markerShow.loads ? markers.labels(loadScale) : EMPTY),
-    [markers, markersOn, markerShow, loadScale]);
+  const loadLabels = useCallback(() => (markers && markersOn
+    ? markers.labels(fieldLoad, { loads: markerShow.loads, fixtures: markerShow.fixtures }) : EMPTY), [markers, markersOn, markerShow, fieldLoad]);
 
   // Select is an FEA result's one tool, with Study (and an assembly's Parts) its panels; a GLB that is not a result has none.
   const selectActive = Boolean(fea) && !shell.previewing && shell.toolMode === GLB_TOOL.SELECT;
@@ -257,7 +317,8 @@ function GlbSurface({ view, data }) {
   // Study's What you see: each control writes its value, and a moved control leaves the preset (Custom).
   const resultControls = {
     controls: shownControls, values, presets, preset: activePreset,
-    onChange: (id, value) => choose({ [DRIVE_KEYS[id]]: value, preset: null }),
+    // A scrubber snaps to the frame nearest where it is let go.
+    onChange: (id, value) => choose({ [DRIVE_KEYS[id]]: id === "frame" ? snapFrame(seriesControl, value) : value, preset: null }),
     onPreset: (value) => {
       const preset = presets.find((entry) => entry.value === value);
       if (preset) choose({ ...Object.fromEntries(Object.entries(preset.values).map(([id, entry]) => [DRIVE_KEYS[id], entry])), preset: value });
@@ -272,7 +333,7 @@ function GlbSurface({ view, data }) {
 
   const overlay = fea ? (viewport) => <>
     <PointerPick viewport={viewport} scene={pickScene} enabled={selectActive} onPick={pick} />
-    <FeaColourBar result={fea} field={activeField} loadScale={loadScale} raised={Boolean(animation) && shell.previewing} />
+    <FeaColourBar result={fea} field={activeField} loadScale={loadScale} sigma={sigma} raised={Boolean(animation) && shell.previewing} />
     {markers ? <FeaLoadLabels runtimeRef={viewport.runtimeRef} hostRef={viewport.hostRef} mesh={fea.mesh} labels={loadLabels}
       colours={{ ink: colours.load, halo: colours.halo }} /> : null}
   </> : null;

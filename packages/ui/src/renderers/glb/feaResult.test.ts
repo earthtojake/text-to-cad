@@ -641,3 +641,234 @@ describe('the study\'s checks', () => {
     expect(feaSections(checked(null, { view: { sections: ['chart'] } }))).toEqual(['verdict', 'setup', 'controls', 'details']);
   });
 });
+
+// Another analysis than static, as cadgen writes it: `extras.analysis`, a series and the checks it judges.
+function analysisResult(extras: Record<string, unknown>, { stress = true } = {}) {
+  const built = resultMesh();
+  if (!stress) built.mesh.geometry.deleteAttribute('_von_mises');
+  Object.assign(built.mesh.userData, { study: STUDY, faces: [], safety_factor: null, ...extras });
+  return readFeaResult(built.root)!;
+}
+const FIRST_MODE = { kind: 'frequency', label: '', value: 85.2, limit: 60, unit: 'Hz', ratio: 0.704, close_at: 0.9, status: 'passes', mode: 1, at: { frame: 0, value: 85.2, unit: 'Hz' } };
+const BAND = { kind: 'frequency', label: 'Motor speed', value: 118.4, limit: 110, unit: 'Hz', ratio: 1.08, close_at: 0.9, status: 'fails', mode: 2, avoid_Hz: [110, 130],
+  at: { frame: 1, value: 118.4, unit: 'Hz' }, where: { ref: '#o1.f2' } };
+
+describe('another analysis', () => {
+  it('reads what the file says it is, its series and the steps it took to fit; a result with none is static', () => {
+    const modal = analysisResult({
+      analysis: { type: 'modal', tier: 1, word: 'Vibration', estimate: false, limits: [], noun: 'this shake', reference_C: null, warnings: [] },
+      fields: [{ attribute: '_VON_MISES', name: 'von Mises stress', units: 'MPa', min: 0, max: 47.3, signed: false },
+        { attribute: '_DISPLACEMENT', name: 'mode shape', units: 'mm', min: 0, max: 1, attribute_scale: 1000, field: 'mode_shape', per_frame: true }],
+      series: { kind: 'mode', unit: 'Hz', default: 0, frames: [{ value: 85.2, label: 'Mode 1 · 85 Hz', attributes: { mode_shape: '_DISPLACEMENT' } },
+        { value: 118.4, label: 'Mode 2 · 118 Hz', attributes: { mode_shape: '_MODE_SHAPE_F1' } }, { label: 'no value' }] },
+      fit: [{ rung: 'iterative', words: 'Solved iteratively to fit 8 GB', accuracy: '', accuracy_pct: null, faces: [], detail: '' }, { rung: 'nothing' }],
+    });
+    expect(modal.analysis).toEqual({ type: 'modal', tier: 1, word: 'Vibration', estimate: false, noun: 'this shake', limits: [], warnings: [], referenceC: null });
+    expect(modal.series).toEqual({ kind: 'mode', unit: 'Hz', default: 0, frames: [
+      { value: 85.2, label: 'Mode 1 · 85 Hz', attributes: { mode_shape: '_displacement' } },
+      { value: 118.4, label: 'Mode 2 · 118 Hz', attributes: { mode_shape: '_mode_shape_f1' } }] });
+    expect(modal.fit).toEqual([{ rung: 'iterative', words: 'Solved iteratively to fit 8 GB', accuracy: '', accuracyPct: null, faces: [], detail: '' }]);
+    expect(modal.fields[1]).toMatchObject({ view: 'mode_shape', perFrame: true });
+    const today = studyResult().result;
+    expect(today.analysis).toMatchObject({ type: 'static', word: 'Strength', noun: 'this load', estimate: false });
+    expect([today.series, today.fit]).toEqual([null, []]);
+  });
+
+  it('judges its own check kinds with no stress field, each in its own words, and its caption the worst check\'s sentence', () => {
+    const modal = analysisResult({ analysis: { type: 'modal' }, checks: [FIRST_MODE, BAND, STRESS_CHECK] }, { stress: false });
+    // A stress check is not modal's to judge.
+    expect(feaChecks(modal).map((check: any) => [check.kind, check.at.frame])).toEqual([['frequency', 0], ['frequency', 1]]);
+    const verdict = feaVerdict(modal)!;
+    expect(verdict).toMatchObject({ status: 'weak', title: 'Fails 1 of 2 checks', caption: 'Mode 2 at 118 Hz, inside 110–130 Hz' });
+    expect(verdict.rows.map((row: any) => [row.label, plain(row.line), row.margin])).toEqual([
+      ['Motor speed', 'Mode 2 at 118 Hz, inside 110–130 Hz', null], ['Vibration', 'First mode 85 Hz, must stay above 60 Hz', null]]);
+    // Chosen, a check carries its sentence, with no load to speak of.
+    expect(verdict.rows[0].choice).toEqual({ id: 'check:1', faces: ['#o1.f2'], summary: 'Motor speed fails: mode 2 at 118 Hz, inside 110–130 Hz' });
+    expect(feaVerdict(analysisResult({ analysis: { type: 'modal' }, checks: [FIRST_MODE] }, { stress: false }))).toMatchObject({
+      status: 'strong', title: 'Clear of vibration', caption: 'First mode 85 Hz, must stay above 60 Hz' });
+    // A frequency does not move with the load.
+    expect(feaVerdict(modal, 2)!.rows[1].line).toBe(verdict.rows[1].line);
+    // With nothing judged there is no verdict, and no "No stress" outside the static family.
+    expect(feaVerdict(analysisResult({ analysis: { type: 'modal' } }, { stress: false }))).toBeNull();
+    expect(feaVerdict(analysisResult({ analysis: { type: 'thermal' }, checks: [] }))).toBeNull();
+  });
+
+  it('says a temperature against its limit, and buckling\'s load factor falls as the load grows', () => {
+    const heat = { kind: 'temperature', label: 'Chip side', value: 84.2, limit: 100, unit: '°C', ratio: 0.79, close_at: 0.9, status: 'passes', reference: 25 };
+    expect(feaVerdict(analysisResult({ analysis: { type: 'thermal' }, checks: [heat] }, { stress: false }))).toMatchObject({
+      status: 'strong', title: 'Cool enough', caption: 'Hottest 84 °C, 16 °C under its limit', rows: [{ label: 'Chip side' }] });
+    const buckles = { kind: 'buckling', label: '', value: 13.3, limit: 3, unit: '×', ratio: 1 / 13.3, close_at: 1 / 3, margin: 3, status: 'passes' };
+    const column = analysisResult({ analysis: { type: 'buckling' }, checks: [buckles] });
+    expect(feaVerdict(column)).toMatchObject({ status: 'strong', title: "Won't buckle", caption: 'OK up to 13× this load', rows: [{ label: 'Buckling', margin: 3 }] });
+    expect(plain(feaVerdict(column)!.rows[0].line)).toBe('Buckles at 13× this load, needs 3×');
+    // At five times the load it buckles at 2.6 times that, under its margin of 3: close.
+    const loaded = feaVerdict(column, 5)!;
+    expect(loaded).toMatchObject({ status: 'close', title: 'Close to buckling', caption: 'OK up to 2.6× this load' });
+    expect(plain(loaded.rows[0].line)).toBe('Buckles at 2.6× this load, needs 3×');
+    expect(feaVerdict(column, 20)).toMatchObject({ status: 'weak', title: 'Buckles' });
+  });
+
+  it('names a stress check in the analysis\'s words and its takeaway with its noun', () => {
+    const shock = analysisResult({ analysis: { type: 'shock', noun: 'this shake' }, checks: [STRESS_CHECK] });
+    expect(feaVerdict(shock)).toMatchObject({ title: 'Strong enough', caption: 'OK up to 5.8× this shake' });
+    // The file's own label wins; with none, shock's word.
+    expect(feaVerdict(shock)!.rows[0].label).toBe('Strength');
+    expect(feaVerdict(analysisResult({ analysis: { type: 'shock' }, checks: [{ ...STRESS_CHECK, label: '' }] }))!.rows[0].label).toBe('Shock');
+  });
+
+  it('composes Study\'s setup from its analysis, and What you see from its defaults', () => {
+    const thermalStress = analysisResult({ analysis: { type: 'thermal_stress' }, faces: ['#o1.f1', '#o1.f2', '#o1.f3', '#o1.f4'] });
+    expect(studyRows(thermalStress).map((row: any) => row.id)).toEqual(['fixed', 'loads', 'material', 'details']);
+    expect(feaControls(thermalStress).map((control: any) => control.id)).toEqual(['field', 'deformation']);
+  });
+});
+
+// Track V1: what a series, an analysis's tier, the steps taken to fit and another analysis's setup add.
+const MODE_SERIES = { kind: 'mode', unit: 'Hz', default: 0, frames: [{ value: 85.2, label: 'Mode 1 · 85 Hz', attributes: { mode_shape: '_DISPLACEMENT' } },
+  { value: 118.4, label: 'Mode 2 · 118 Hz', attributes: { mode_shape: '_MODE_SHAPE_F1' } }] };
+const REFINED = { rung: 'local_refine', words: 'Coarsened the mesh away from the hole to fit: the peak is still meshed at 0.8 mm',
+  accuracy: 'peak stress moved 2.1 % between passes', accuracy_pct: 2.1, faces: ['#o1.f2'], detail: '' };
+const ITERATIVE = { rung: 'iterative', words: 'Used an iterative solver to fit in memory', accuracy: '', accuracy_pct: null, faces: [], detail: '' };
+
+describe('a frame of a series, drawn', () => {
+  it('deforms by another vector than the one baked in, or by a weighted sum, from the file\'s positions', () => {
+    const { mesh } = resultMesh({ scale: 10 });
+    mesh.geometry.setAttribute('_mode_shape_f1', new BufferAttribute(new Float32Array([0, 0, 0, 0, 0, -0.001, 0, 0, -0.004, 0, 0, 0]), 3));
+    const z = () => mesh.geometry.getAttribute('position').getZ(2);
+    // 10x of the baked 0.002 m comes off and 10x of the mode's -0.004 m goes on.
+    expect(applyDeformation(mesh, 10, 10, '_mode_shape_f1')).toBe(true);
+    expect(z()).toBeCloseTo(-0.06, 6);
+    expect(applyDeformation(mesh, 10, 10, '_mode_shape_f1')).toBe(false);
+    // Halfway between the two: their average, 10x.
+    expect(applyDeformation(mesh, 10, 10, [['_displacement', 0.5], ['_mode_shape_f1', 0.5]])).toBe(true);
+    expect(z()).toBeCloseTo(-0.03, 6);
+    // Swung to nothing, the part at rest; and back to the baked shape exactly as it always was.
+    applyDeformation(mesh, 10, 10, [['_displacement', 0]]);
+    expect(z()).toBeCloseTo(-0.02, 6);
+    expect(applyDeformation(mesh, 10, 10)).toBe(true);
+    expect(z()).toBeCloseTo(0, 6);
+    expect(applyDeformation(mesh, 10, 10, '_nope')).toBe(false);
+  });
+
+  it('blends two frames\' colours while a series plays between them', () => {
+    const { mesh, root } = resultMesh();
+    mesh.geometry.setAttribute('_von_mises_f1', new BufferAttribute(new Float32Array([100, 100, 100, 100]), 1));
+    const [stress] = readFeaResult(root)!.fields;
+    const next = { ...stress, attribute: '_von_mises_f1' };
+    recolorByField(mesh, { ...stress, max: 100 }, undefined, null, null, null, { blend: { field: next, weight: 0.5 } });
+    const bytes = colours(mesh);
+    // Vertex 0: halfway from 0 to 100 MPa is 50, the middle of the ramp; vertex 2 stays at 100.
+    expect(vertexColour(bytes, 0)).toEqual([27, 217, 38]);
+    expect(vertexColour(bytes, 2)).toEqual([230, 20, 13]);
+    expect(recolorByField(mesh, { ...stress, max: 100 }, undefined, null, null, null, { blend: { field: next, weight: 0.5 } })).toBe(false);
+    expect(recolorByField(mesh, { ...stress, max: 100 }, undefined, null, null, null, { blend: { field: next, weight: 0.75 } })).toBe(true);
+  });
+});
+
+describe('a view over a series', () => {
+  it('draws mode, frame and sigma controls from the result, and no load control where the analysis does not follow the load', () => {
+    const { mesh, root } = resultMesh();
+    mesh.geometry.setAttribute('_mode_shape_f1', new BufferAttribute(new Float32Array(12), 3));
+    Object.assign(mesh.userData, { analysis: { type: 'modal' }, series: MODE_SERIES, view: { controls: [
+      { drives: 'load_scale', max: 2 }, { drives: 'mode', type: 'enum', label: 'Which mode', default: 118.4 }, { drives: 'frame' }, { drives: 'sigma' },
+      { drives: 'deformation', max: 20 }] } });
+    const result = readFeaResult(root)!;
+    const controls = feaControls(result);
+    // A modal result has no load to scale and no RMS field: the mode, a scrubber over the same frames, the deformation.
+    expect(controls.map((control: any) => [control.id, control.type, control.label])).toEqual([
+      ['mode', 'enum', 'Which mode'], ['frame', 'number', 'Mode'], ['deformation', 'number', 'Deformation']]);
+    expect(controls[0]).toMatchObject({ defaultValue: '1', wideLabel: true });
+    // A preset names a mode by its value, and a frame snaps.
+    mesh.userData.view = { ...mesh.userData.view, presets: [{ label: 'Second', mode: 118.4, frame: 90 }] };
+    const viewed = readFeaResult(root)!;
+    expect(feaPresets(viewed, feaControls(viewed))[0].values).toMatchObject({ mode: '1', frame: 85.2 });
+  });
+
+  it('shows a check\'s frame when it is chosen, where the result has the series it points into', () => {
+    const modal = analysisResult({ analysis: { type: 'modal' }, checks: [FIRST_MODE, BAND], series: MODE_SERIES }, { stress: false });
+    expect(feaVerdict(modal)!.rows.map((row: any) => row.choice.frame)).toEqual([1, 0]);
+  });
+});
+
+describe('the takeaway by tier', () => {
+  it('says an estimate is one, a Tier 3 analysis\'s limit, and that a step to fit the run cost accuracy', () => {
+    const caption = (extras: Record<string, unknown>) => feaVerdict(analysisResult({ checks: [STRESS_CHECK], ...extras }))!.caption;
+    expect(caption({})).toBe('OK up to 5.8× this load');
+    expect(caption({ analysis: { type: 'drop', tier: 2, estimate: true } })).toBe('Estimate · OK up to 5.8× this drop');
+    expect(caption({ analysis: { type: 'impact', tier: 3 } })).toBe('Rigid floor · OK up to 5.8× this drop');
+    expect(caption({ analysis: { type: 'nonlinear', tier: 3 } })).toBe('Lite · OK up to 5.8× this load');
+    expect(caption({ fit: [REFINED] })).toBe('OK up to 5.8× this load · adapted');
+    // A step with no cost to the answer (an iterative solver) is not "adapted".
+    expect(caption({ fit: [ITERATIVE] })).toBe('OK up to 5.8× this load');
+    const drop = { kind: 'pressure_drop', label: '', value: 820, limit: 1000, unit: 'Pa', ratio: 0.82, close_at: 0.9, status: 'passes' };
+    const flow = (warnings: string[], study: unknown = STUDY) => feaVerdict(analysisResult({ analysis: { type: 'cfd', tier: 3, warnings }, checks: [drop], study }))!.caption;
+    expect(flow([])).toBe('Laminar · Drop 820 Pa, limit 1000 Pa');
+    const past = 'Re 4200 is past the laminar range: real flow is likely turbulent, so this pressure drop is a lower bound and the flow pattern may be wrong.';
+    expect(flow([past])).toBe('Laminar · unreliable above Re 2000 · Drop 820 Pa, limit 1000 Pa');
+    expect(flow([past], { ...STUDY, flow: { kind: 'external', velocity_m_s: [5, 0, 0] } })).toBe('Laminar · unreliable above Re 1000 · Drop 820 Pa, limit 1000 Pa');
+  });
+});
+
+describe('Details', () => {
+  it('lists each step taken to fit the run, its accuracy its hint, chosen with its faces, else the whole part', () => {
+    const result = studyResult({ study: STUDY, faces: ['#o1.f1', '#o1.f2'], occurrence: 'o1', fit: [REFINED, ITERATIVE] }).result;
+    const details = studyRows(result).at(-1)!;
+    expect(details.children!.map((row: any) => row.id)).toEqual(['mesh', 'fit']);
+    expect(details.children![1]).toMatchObject({ label: 'Adapted to fit', children: [
+      { id: 'fit:0', label: REFINED.words, hint: 'peak stress moved 2.1 % between passes', faces: ['#o1.f2'], wrap: true,
+        summary: `Adapted to fit: ${REFINED.words} (peak stress moved 2.1 % between passes)` },
+      { id: 'fit:1', label: ITERATIVE.words, refs: ['o1'], summary: `Adapted to fit: ${ITERATIVE.words}` }] });
+    expect(details.children![1].children[1].hint).toBeUndefined();
+    // A result whose study was not recorded still says what was adapted.
+    const old = resultMesh();
+    old.mesh.userData.fit = [REFINED];
+    expect(studyRows(readFeaResult(old.root)!).map((row: any) => [row.id, row.children.map((child: any) => child.id)])).toEqual([['details', ['fit']]]);
+  });
+
+  it('gives a Tier 3 analysis its limits, one row each, and a flow past the laminar range its own row first', () => {
+    const past = 'Re 4200 is past the laminar range: real flow is likely turbulent.';
+    const result = analysisResult({ analysis: { type: 'cfd', tier: 3, word: 'Flow', limits: ['Laminar, steady, incompressible; no turbulence model.'], warnings: [past] },
+      occurrence: 'o1' });
+    const details = studyRows(result).at(-1)!;
+    expect(details.children!.map((row: any) => row.id)).toEqual(['reynolds', 'mesh', 'limits']);
+    expect(details.children![0]).toMatchObject({ label: past, refs: ['o1'], summary: past, wrap: true });
+    expect(details.children![2].children).toEqual([{ id: 'limit:0', label: 'Laminar, steady, incompressible; no turbulence model.', detail: '', wrap: true,
+      refs: ['o1'], summary: 'Limits of this flow result: Laminar, steady, incompressible; no turbulence model.' }]);
+    // A Tier 1 analysis's limits, if any, are not a row.
+    expect(studyRows(analysisResult({ analysis: { type: 'modal', limits: ['x'] } })).at(-1)!.children!.map((row: any) => row.id)).toEqual(['mesh']);
+  });
+});
+
+describe('another analysis\'s setup', () => {
+  const HEATED = { material: { name: '6061-T6' }, fixtures: [], loads: [], temperatures: [{ faces: ['#o1.f1'], C: 25 }],
+    heat: [{ faces: ['#o1.f2'], W: 15 }, { faces: ['#o1.f3'], W_per_m2: 2000 }], convection: [{ faces: ['#o1.f3', '#o1.f4'], h_W_m2K: 10, ambient_C: 25 }] };
+  const ids = (rows: any[]) => rows.map((row) => [row.label, row.children.map((child: any) => child.label)]);
+
+  it('reads a heated part as Kept at, Heated and Cooled by air, each entry chosen with its faces', () => {
+    const result = studyResult({ analysis: { type: 'thermal' }, study: HEATED, faces: ['#o1.f1', '#o1.f2', '#o1.f3', '#o1.f4'] }).result;
+    const rows = studyRows(result) as any[];
+    expect(ids(rows)).toEqual([['Kept at', ['25 °C']], ['Heated', ['15 W', '2000 W/m²']], ['Cooled by air', ['Air at 25 °C']], ['Made of', ['6061-T6']]]);
+    expect(rows.slice(0, 3).map((row) => row.glyph)).toEqual(['temperature', 'heat', 'convection']);
+    expect(rows[1].children[0]).toMatchObject({ id: 'heat:0', faces: ['#o1.f2'], summary: '15 W of heat into face 2', collapsed: true });
+    expect(rows[2].children[0]).toMatchObject({ summary: 'Cooled by air at 25 °C (10 W/m²K) on faces 3, 4', hint: 'Heat transfer coefficient 10 W/m²K' });
+    expect(faceRole(result, '#o1.f3')).toBe('2000 W/m² of heat in; cooled by air at 25 °C');
+    expect(faceRole(result, '#o1.f1')).toBe('kept at 25 °C');
+  });
+
+  it('says a body load in Pushed, a shaker, a drop, a flow\'s openings and a rigid floor', () => {
+    const study = { ...STUDY, loads: [...STUDY.loads, { type: 'gravity', vector_g: [0, 0, -1] }],
+      excitation: { type: 'base', direction: [0, 0, 1], amplitude_g: 1 }, drop: { height_mm: 1000, onto: ['#o1.f2'], stop_mm: 2 },
+      flow: { kind: 'internal', inlets: [{ opening: 'x_min', velocity_m_s: 0.5 }], outlets: [{ opening: 'x_max', pressure_Pa: 0 }] },
+      rigid_planes: [{ point_mm: [0, 0, 0], normal: [0, 0, 1] }] };
+    const result = studyResult({ analysis: { type: 'contact' }, study, faces: ['#o1.f1', '#o1.f2', '#o1.f3', '#o1.f4'], occurrence: 'o1' }).result;
+    expect(ids(studyRows(result) as any[]).slice(0, -2)).toEqual([['Held at', ['Face 1']], ['Pushed', ['2500 N down', '2 MPa pressure', '1 g down']],
+      ['Shaken', ['1 g along Z']], ['Dropped', ['1 m drop']], ['Flow in/out', ['In 0.5 m/s at the low X side', 'Out at 0 Pa, the high X side']],
+      ['Rigid floor', ['Facing up']]]);
+    const rows = studyRows(result) as any[];
+    expect(rows[1].children[2]).toMatchObject({ id: 'body:0', refs: ['o1'], summary: 'Its weight, 1 g down' });
+    expect(rows[2].children[0]).toMatchObject({ id: 'shaken:0', faces: ['#o1.f1'], summary: 'Shaken where it is held: 1 g along Z' });
+    expect(rows[3].children[0]).toMatchObject({ id: 'drop:0', faces: ['#o1.f2'], summary: '1 m drop, stopping in 2 mm, landing on face 2', hint: 'stopping in 2 mm' });
+    // Static's setup is as it was: its own three groups, a body load its one addition.
+    expect(studyRows(studyResult({ study, faces: [] }).result).map((row: any) => row.id)).toEqual(['fixed', 'loads', 'material', 'details']);
+  });
+});

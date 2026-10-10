@@ -7,11 +7,16 @@ import { KinematicsPoseRow } from "../kit/inspector/kinematicsControls.jsx";
 import { parameterRow } from "../kit/inspector/parameterRow.jsx";
 import ToolPanel, { ToolPanelClose, ToolPanelFooterButton } from "../kit/tools/ToolPanel.jsx";
 import { formatValue } from "./feaResult.js";
+import { frameText } from "./fea/series.js";
 import FeaVerdict from "./FeaVerdict.jsx";
 import { STUDY_GLYPHS } from "./feaGlyphs.jsx";
 
-/** A control's number as its value field shows it: a multiple as "×12.0", others with their unit after ("138 MPa"). */
-const controlText = (value, control) => (control.unit === "×" ? `×${formatValue(value)}` : `${formatValue(value)}${control.unit ? ` ${control.unit}` : ""}`);
+/**
+ * A control's number as its value field shows it: a multiple as "×12.0", a series' scrubber as the
+ * frame it stands on ("12 ms", "118 Hz"), others with their unit after ("138 MPa").
+ */
+const controlText = (value, control) => frameText(control, value)
+  ?? (control.unit === "×" ? `×${formatValue(value)}` : `${formatValue(value)}${control.unit ? ` ${control.unit}` : ""}`);
 
 /**
  * Study's What you see: the controls the study's view chose (`feaControls`), in its order, each a generic

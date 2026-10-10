@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import { BoxGeometry, BufferAttribute, Group, Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import { readFeaResult } from './feaResult.js';
-import { ARROW_LENGTH, GHOST_OPACITY, createFeaMarkers, loadLabel, markerPoses, markerSites } from './feaMarkers.js';
+import { ARROW_LENGTH, GHOST_OPACITY, MARKER_KINDS, createFeaMarkers, dropWords, loadLabel, markerGateText, markerPoses, markerSites, shakeWords } from './feaMarkers.js';
 
 // A unit cube in the result's glTF space, its six faces in BoxGeometry's order (+X, -X, +Y, -Y, +Z,
 // -Z) as `_FACE` 0..5, wound outward as the writer winds it.
 const FACES = ['#o1.f1', '#o1.f2', '#o1.f3', '#o1.f4', '#o1.f5', '#o1.f6'];
-function cube(study: Record<string, unknown>, displacement = [0, 0, 0]) {
+function cube(study: Record<string, unknown>, displacement = [0, 0, 0], extras: Record<string, unknown> = {}) {
   const geometry = new BoxGeometry(1, 1, 1, 4, 4, 4);
   const count = geometry.getAttribute('position').count;
   const face = new Float32Array(count);
@@ -20,7 +20,7 @@ function cube(study: Record<string, unknown>, displacement = [0, 0, 0]) {
   const mesh = new Mesh(geometry);
   Object.assign(mesh.userData, {
     generator: 'cadgen fea', deformation_scale: 1, faces: FACES, study,
-    fields: [{ attribute: '_VON_MISES', name: 'von Mises stress', units: 'MPa', min: 0, max: 1 }],
+    fields: [{ attribute: '_VON_MISES', name: 'von Mises stress', units: 'MPa', min: 0, max: 1 }], ...extras,
   });
   const root = new Group();
   root.add(mesh);
@@ -157,5 +157,123 @@ describe('loads and fixtures on the model', () => {
     expect(label.at[1]).toBeCloseTo(0.5 + ARROW_LENGTH * Math.sqrt(3), 6);
     expect(label.face[1]).toBeCloseTo(0.5, 6);
     markers.dispose();
+  });
+});
+
+// Track V1: every other kind of marker, from one table, each in the ink or the muted grey.
+const HEATED = { fixtures: [], loads: [], temperatures: [{ faces: ['#o1.f4'], C: 25 }], heat: [{ faces: ['#o1.f3'], W: 15 }],
+  convection: [{ faces: ['#o1.f1', '#o1.f2'], h_W_m2K: 10, ambient_C: 25 }] };
+const STYLE = { colours: { load: '#18181b', fixture: '#71717a' }, visible: { loads: true, fixtures: true }, chosen: () => false };
+const colourOf = (mesh: THREE.InstancedMesh) => { const colour = new THREE.Color(); mesh.getColorAt(0, colour); return colour.getHexString(); };
+
+describe('every other kind of marker', () => {
+  it('draws what the analysis lists, each kind in its tone, following the switch for its bucket', () => {
+    expect(Object.values(MARKER_KINDS).every((kind: any) => ['load', 'fixture'].includes(kind.tone) && ['loads', 'fixtures'].includes(kind.bucket))).toBe(true);
+    const result = cube(HEATED, [0, 0, 0], { analysis: { type: 'thermal' } });
+    const markers = createFeaMarkers(THREE, result);
+    expect(markers.kinds).toEqual(['temperature', 'heat', 'convection']);
+    markers.update(positionsOf(result));
+    markers.style(STYLE);
+    const byName = (name: string) => markers.object3D.getObjectByName(name) as THREE.InstancedMesh;
+    // Loads and fixtures keep their six meshes, empty here; the other kinds follow them, each with its ghost.
+    expect(markers.object3D.children.slice(0, 6).map((child: any) => child.count)).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(markers.object3D.children.slice(6).map((child) => child.name)).toEqual([
+      'fea-temperature-dots', 'fea-temperature-dots-ghost', 'fea-heat-shafts', 'fea-heat-shafts-ghost', 'fea-heat-heads', 'fea-heat-heads-ghost',
+      'fea-convection-strokes', 'fea-convection-strokes-ghost', 'fea-convection-strokes-2', 'fea-convection-strokes-2-ghost']);
+    // A temperature and the air are what the part gives heat to, grey; heat going in is the ink.
+    expect([colourOf(byName('fea-temperature-dots')), colourOf(byName('fea-heat-heads')), colourOf(byName('fea-convection-strokes'))])
+      .toEqual(['71717a', '18181b', '71717a']);
+    expect((byName('fea-heat-heads-ghost').material as THREE.MeshBasicMaterial).opacity).toBe(GHOST_OPACITY);
+    markers.style({ ...STYLE, visible: { loads: true, fixtures: false } });
+    expect([byName('fea-temperature-dots').visible, byName('fea-heat-heads').visible, byName('fea-convection-strokes-ghost').visible]).toEqual([false, true, false]);
+    markers.style({ ...STYLE, chosen: (site: any) => site.kind === 'heat' });
+    expect(colourOf(byName('fea-heat-shafts'))).toBe('ff40f2');
+    // Static draws none of them, whatever the study echoes.
+    expect(createFeaMarkers(THREE, cube(HEATED)).kinds).toEqual([]);
+    const disposed: string[] = [];
+    markers.object3D.traverse((object: any) => object.material?.addEventListener('dispose', () => disposed.push(object.name)));
+    markers.dispose();
+    expect(disposed.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('stands a dot on a fixed temperature, heat\'s arrow into its face and the air\'s strokes off theirs, each labelled', () => {
+    const result = cube(HEATED, [0, 0, 0], { analysis: { type: 'thermal' } });
+    const markers = createFeaMarkers(THREE, result);
+    markers.update(positionsOf(result));
+    const poses = markers.poses();
+    for (const dot of poses.filter((pose: any) => pose.kind === 'temperature')) expect(dot.tip[1]).toBeCloseTo(-0.5, 6);
+    for (const heat of poses.filter((pose: any) => pose.kind === 'heat')) { expect(heat.tip[1]).toBeCloseTo(0.5, 6); near(heat.direction, [0, -1, 0]); }
+    for (const air of poses.filter((pose: any) => pose.kind === 'convection')) expect(Math.abs(air.direction[0])).toBeCloseTo(1, 6);
+    expect(markers.labels().map((label: any) => [label.kind, label.text])).toEqual([['temperature', '25 °C'], ['heat', '15 W'], ['convection', 'air 25 °C']]);
+    // Only the bucket shown is labelled.
+    expect(markers.labels(1, { loads: true, fixtures: false }).map((label: any) => label.text)).toEqual(['15 W']);
+    markers.dispose();
+  });
+
+  it('puts a body load through the model\'s middle, labelled with its g and way, at the load shown', () => {
+    const result = cube({ fixtures: [], loads: [{ type: 'gravity', vector_g: [0, 0, -1] }] });
+    const markers = createFeaMarkers(THREE, result);
+    markers.update(positionsOf(result));
+    const [pose] = markers.poses();
+    expect(pose).toMatchObject({ kind: 'body_load', ref: null });
+    near(pose.direction, [0, -1, 0]);
+    near(pose.tip, [0, -ARROW_LENGTH * Math.sqrt(3) / 2, 0]);
+    expect(markers.labels(2).map((label: any) => label.text)).toEqual(['2 g down']);
+    markers.dispose();
+  });
+
+  it('shakes the fixtures with double arrows, drops along the fall, and opens a flow at its box\'s sides', () => {
+    const shaken = cube({ fixtures: [{ type: 'fixed', faces: ['#o1.f4'] }], loads: [], excitation: { type: 'base', direction: [0, 0, 1], amplitude_g: 1 } },
+      [0, 0, 0], { analysis: { type: 'harmonic' } });
+    const shaker = createFeaMarkers(THREE, shaken);
+    shaker.update(positionsOf(shaken));
+    const doubles = shaker.poses().filter((pose: any) => pose.kind === 'base_excitation');
+    expect(doubles).toHaveLength(1);
+    // CAD Z is the mesh's Y: the double arrow runs along it, off the fixed face.
+    near(doubles[0].direction, [0, 1, 0]);
+    expect(shaker.object3D.getObjectByName('fea-base-excitation-tails')).toBeTruthy();
+    expect(shaker.labels().map((label: any) => label.text)).toEqual(['shaken 1 g along Z']);
+    shaker.dispose();
+
+    const dropped = cube({ fixtures: [], loads: [], drop: { height_mm: 1000, onto: ['#o1.f4'], stop_mm: 2 } }, [0, 0, 0], { analysis: { type: 'drop' } });
+    const [fall] = markerPoses(dropped, markerSites(dropped), positionsOf(dropped));
+    // Along the landing face's outward normal, standing on it by its tail.
+    near(fall.direction, [0, -1, 0]);
+    expect(fall.tail[1]).toBeCloseTo(-0.5, 6);
+
+    const flow = cube({ fixtures: [], loads: [], flow: { kind: 'internal', inlets: [{ opening: 'x_min', velocity_m_s: 0.5 }], outlets: [{ opening: 'y_max', pressure_Pa: 0 }] } },
+      [0, 0, 0], { analysis: { type: 'cfd' } });
+    const openings = createFeaMarkers(THREE, flow);
+    openings.update(positionsOf(flow));
+    const [inlet, outlet] = openings.poses();
+    // In through the low X side, its tip on it; out through CAD's high Y, which is the mesh's low Z.
+    near(inlet.direction, [1, 0, 0]);
+    near(inlet.tip, [-0.5, 0, 0]);
+    near(outlet.direction, [0, 0, -1]);
+    near(outlet.tail, [0, 0, -0.5]);
+    expect(openings.labels().map((label: any) => label.text)).toEqual(['0.5 m/s', '0 Pa']);
+    openings.dispose();
+  });
+
+  it('lays a see-through rigid floor under a drop, through the lowest point along the fall', () => {
+    const result = cube({ fixtures: [], loads: [], drop: { height_mm: 1000, onto: [], direction: [0, 0, -1], floor: 'rigid' } }, [0, 0, 0], { analysis: { type: 'impact' } });
+    const markers = createFeaMarkers(THREE, result);
+    markers.update(positionsOf(result));
+    const plane = markers.object3D.getObjectByName('fea-rigid-plane-0') as THREE.Mesh;
+    expect(plane.position.y).toBeCloseTo(-0.5, 6);
+    const material = plane.material as THREE.MeshBasicMaterial;
+    expect([material.transparent, material.opacity < 0.5, material.depthWrite]).toEqual([true, true, false]);
+    markers.style(STYLE);
+    expect(material.color.getHexString()).toBe('71717a');
+    markers.dispose();
+  });
+
+  it('says in Display what it draws, and words a drop and a shake plainly', () => {
+    expect(markerGateText(['fixture', 'load'])).toBe('Arrows where the study loads the part, cones where it holds it.');
+    expect(markerGateText(['temperature', 'heat', 'convection'])).toBe('Dots where its temperature is fixed, wavy arrows where heat goes in, strokes where air cools it.');
+    expect(markerGateText([])).toBe('');
+    expect([dropWords(1000), dropWords(500), dropWords(1500)]).toEqual(['1 m drop', '500 mm drop', '1.5 m drop']);
+    expect([shakeWords({ kind: 'psd', direction: [0, 0, 1] }), shakeWords({ kind: 'srs', direction: [1, 0, 0] }),
+      shakeWords({ kind: 'base', direction: [0, 0, 1], amplitudeG: 2 }, 1.5)]).toEqual(['shaken at random along Z', 'a shock along X', 'shaken 3 g along Z']);
   });
 });
