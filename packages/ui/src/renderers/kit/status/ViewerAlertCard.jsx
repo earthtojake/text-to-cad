@@ -40,23 +40,21 @@ const NO_ACTIONS = Object.freeze([]);
  * the card's own icon, in its colour, named after the alert, leftmost of the navbar's right-hand
  * controls — the renderer's navbar action (`onNavigationActionsChange`), before the host's update,
  * Settings and the view's controls. Pressing it brings the card back and takes the icon away. Where
- * there is no navbar (preview, a view shown small) there is no icon either. An alert that is news
- * but no reason to stop (`startDismissed`: a board's suggestions) starts put away, its icon alone
- * saying it is there, each time it changes, until the person brings it back.
+ * there is no navbar (preview, a view shown small) there is no icon either.
  *
  * @param {object | null} alert  The alert the card shows.
- * @param {{ hasContent?: boolean, scope?: string, startDismissed?: boolean,
+ * @param {{ hasContent?: boolean, scope?: string,
  *   onNavigationActionsChange?: ((actions: readonly import("../../../file-viewer/types.js").FileNavigationAction[]) => void) | null }} [options]
  * @returns {{ dismissed: boolean, dismiss(): void }}
  */
-export function useAlertDismissal(alert, { hasContent = false, scope = "", startDismissed = false, onNavigationActionsChange = null } = {}) {
+export function useAlertDismissal(alert, { hasContent = false, scope = "", onNavigationActionsChange = null } = {}) {
   const key = alert ? alertKey(alert) : "";
   // What the person did with the alert on screen (`away`: put it away, or brought it back).
   const [put, setPut] = useState(null);
   // The dismissal of the alert on screen alone: when it is not that alert any more, it is gone.
   const stale = put !== null && (put.key !== key || put.scope !== scope);
   if (stale) setPut(null);
-  const away = !stale && put !== null ? put.away : startDismissed;
+  const away = !stale && put !== null && put.away;
   const dismissed = away && Boolean(alert) && alertDismissible(alert, hasContent);
   const dismiss = useCallback(() => { if (key) setPut({ key, scope, away: true }); }, [key, scope]);
   const reopen = useCallback(() => setPut({ key, scope, away: false }), [key, scope]);

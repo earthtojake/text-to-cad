@@ -44,35 +44,33 @@ it('says a warning beside the model over it, where it can be put away; with noth
   expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull();
 });
 
-/** A frame whose card may start put away, with its navbar beside it: the one action it publishes. */
-function NavbarFrame({ alert, startDismissed }: { alert: object | null, startDismissed: boolean }) {
+/** A frame with its navbar beside it: the one action it publishes. */
+function NavbarFrame({ alert }: { alert: object | null }) {
   const [actions, setActions] = React.useState<readonly any[]>([]);
-  const { dismissed, dismiss } = useAlertDismissal(alert, { hasContent: true, startDismissed, onNavigationActionsChange: setActions });
+  const { dismissed, dismiss } = useAlertDismissal(alert, { hasContent: true, onNavigationActionsChange: setActions });
   return <>
     {actions.map(({ id, label, icon: Icon, onInvoke }) => <button key={id} type="button" aria-label={label} onClick={onInvoke}><Icon /></button>)}
     <ViewerAlertCard alert={alert} hasContent dismissed={dismissed} onDismiss={dismiss} onReload={() => {}} body={<p>The body</p>} />
   </>;
 }
 
-it('a card that starts put away shows its icon at once, brings the card back from it, and starts put away again once the alert changes', () => {
-  const first = { severity: 'warning', blocking: false, title: '3 suggestions', message: '', key: 'a' };
-  const { rerender } = render(<NavbarFrame alert={first} startDismissed />);
-  expect(screen.queryByRole('alert')).toBeNull();
-  const icon = screen.getByRole('button', { name: '3 suggestions' });
-  expect(icon.querySelector('svg')!.getAttribute('class')).toMatch(/text-amber-500/);
-  fireEvent.click(icon);
+it('a card put away leaves its icon in the navbar, which brings it back; a changed alert opens again', () => {
+  const first = { severity: 'error', blocking: false, title: '1 to fix', message: '', key: 'a' };
+  const { rerender } = render(<NavbarFrame alert={first} />);
   expect(screen.getByRole('alert').textContent).toContain('The body');
-  expect(screen.queryByRole('button', { name: '3 suggestions' })).toBeNull();
-  // The same alert again stays where the person left it; a changed one (its key alone) starts put away.
-  rerender(<NavbarFrame alert={{ ...first }} startDismissed />);
-  expect(screen.getByRole('alert')).toBeTruthy();
-  rerender(<NavbarFrame alert={{ ...first, key: 'b' }} startDismissed />);
-  expect(screen.queryByRole('alert')).toBeNull();
-  // Without it, a new alert opens as it always has.
-  rerender(<NavbarFrame alert={{ ...first, severity: 'error', title: '1 to fix', key: 'c' }} startDismissed={false} />);
-  expect(screen.getByRole('alert').textContent).toContain('1 to fix');
   fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-  expect(screen.getByRole('button', { name: '1 to fix' }).querySelector('svg')!.getAttribute('class')).toMatch(/text-destructive/);
+  expect(screen.queryByRole('alert')).toBeNull();
+  const icon = screen.getByRole('button', { name: '1 to fix' });
+  expect(icon.querySelector('svg')!.getAttribute('class')).toMatch(/text-destructive/);
+  // The same alert again stays where the person left it; a changed one (its key alone) opens.
+  rerender(<NavbarFrame alert={{ ...first }} />);
+  expect(screen.queryByRole('alert')).toBeNull();
+  rerender(<NavbarFrame alert={{ ...first, key: 'b' }} />);
+  expect(screen.getByRole('alert')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: '1 to fix' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+  fireEvent.click(screen.getByRole('button', { name: '1 to fix' }));
+  expect(screen.getByRole('alert')).toBeTruthy();
 });
 
 it('a card saying what a design has against it offers no Report Issue', () => {

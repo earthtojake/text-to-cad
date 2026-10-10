@@ -339,52 +339,52 @@ const FINDINGS = [
 const boardWith = (findings: unknown[]) => (file: string) => (file.endsWith('.kicad_pcb') ? json({ ...BOARD, board: { ...INDEX, findings } }) : json(SCHEMATIC));
 const navbarAction = (pane: HTMLElement, name: string) => within(pane).queryByRole('button', { name });
 
-it('a board with nothing to report has no card and no icon in the navbar', async () => {
+it('a board with nothing to report has no card, no icon in the navbar and no Checks', async () => {
   readPlot = boardWith([]);
   const { pane, dispose } = await open('blinky.kicad_pcb');
   await opened(pane);
   await within(pane).findByRole('group', { name: 'Interaction tools' });
   expect(within(pane).queryByRole('alert')).toBeNull();
   expect(pane.querySelector('svg.text-amber-500, svg.text-destructive')).toBeNull();
+  expect(pane.querySelector('[data-tool-panel-id="checks"]')).toBeNull();
   dispose();
 });
 
-it('a board with suggestions alone puts its card away: an amber icon in the navbar says how many, and brings it back', async () => {
+it('a board with suggestions alone has no card and no icon: Select\'s Checks panel holds them, folded', async () => {
   readPlot = boardWith(FINDINGS.filter((finding) => finding.severity === 'warning'));
-  const { pane, dispose } = await open('blinky.kicad_pcb');
+  const view = await open('blinky.kicad_pcb');
+  const { pane, dispose } = view;
   await opened(pane);
-  const icon = await waitFor(() => { const found = navbarAction(pane, '2 suggestions'); expect(found).not.toBeNull(); return found!; });
-  expect(icon.querySelector('svg')!.getAttribute('class')).toMatch(/text-amber-500/);
-  // The icon first at the navbar's right end, then the board's Display, as an alert's icon precedes a 3D view's.
-  expect(navbarControls(pane)).toEqual(['2 suggestions', 'Display']);
-  expect(pane.querySelector('[data-view-controls]')!.contains(within(pane).getByRole('button', { name: 'Display' }))).toBe(true);
+  await within(pane).findByRole('group', { name: 'Interaction tools' });
   expect(within(pane).queryByRole('alert')).toBeNull();
-  await act(async () => { icon.click(); });
-  const card = within(within(pane).getByRole('alert'));
-  expect(card.getByRole('heading', { name: '2 suggestions' })).not.toBeNull();
-  expect(card.queryByRole('heading', { name: 'Fix before ordering' })).toBeNull();
-  expect(card.getByRole('heading', { name: 'Suggestions' })).not.toBeNull();
-  expect(card.getByRole('button', { name: 'R1 is 9.1 mm from J1 (aim for under 3 mm)' })).not.toBeNull();
+  expect(navbarControls(pane)).toEqual(['Display']);
+  const checks = pane.querySelector('[data-tool-panel-id="checks"]') as HTMLElement;
+  expect(checks.querySelector('[data-tool-panel-heading]')!.textContent).toBe('Checks');
+  const fold = within(checks).getByRole('button', { name: 'Expand checks' });
+  expect(fold.getAttribute('aria-expanded')).toBe('false');
+  await act(async () => { fold.click(); });
+  expect(fold.getAttribute('aria-expanded')).toBe('true');
+  expect(within(checks).getByRole('button', { name: 'R1 is 9.1 mm from J1 (aim for under 3 mm)' })).not.toBeNull();
   // A finding without a sentence of its own reads as KiCad wrote it.
-  expect(card.getByRole('button', { name: 'Silkscreen clearance' })).not.toBeNull();
-  expect(card.queryByRole('link', { name: 'Report Issue' })).toBeNull();
+  const silk = within(checks).getByRole('button', { name: 'Silkscreen clearance' });
+  await act(async () => { silk.click(); });
+  expect(view.controller.readState().selection[0]).toMatchObject({ target: { selectors: ['#R1'] } });
+  expect(pane.querySelector('[data-tool-panel-id="reference"] [data-tool-panel-heading] h3')!.textContent).toBe('Silkscreen clearance');
   dispose();
 });
 
-it('a board with something to fix opens its card over the board, what to fix first', async () => {
+it('a board with something to fix opens its card over the board with the errors alone; the suggestions stay in Checks', async () => {
   readPlot = boardWith(FINDINGS);
   const { pane, dispose } = await open('blinky.kicad_pcb');
   await opened(pane);
   const alert = await within(pane).findByRole('alert');
   const card = within(alert);
-  expect(card.getByRole('heading', { name: '1 to fix, 2 suggestions' })).not.toBeNull();
-  expect(card.getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['1 to fix, 2 suggestions', 'Fix before ordering', 'Suggestions']);
+  expect(card.getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['1 to fix', 'Fix before ordering']);
   expect(card.getAllByRole('button').map((button) => button.textContent).filter((text) => text !== '')).toEqual([
     'The VIN track and the GND pad of J1 are 0.15 mm apart; the rules need 0.2 mm',
-    'R1 is 9.1 mm from J1 (aim for under 3 mm)',
-    'Silkscreen clearance',
   ]);
-  expect(navbarAction(pane, '1 to fix, 2 suggestions')).toBeNull();
+  expect(navbarAction(pane, '1 to fix')).toBeNull();
+  expect(pane.querySelector('[data-tool-panel-id="checks"]')).not.toBeNull();
   dispose();
 });
 
@@ -398,7 +398,7 @@ it('a finding in the card selects what it names, puts the card away and heads th
   await act(async () => { row.click(); });
   expect(view.controller.readState().selection[0]).toMatchObject({ target: { selectors: ['#net:VIN', '#J1.2'] }, summary: sentence });
   expect(within(pane).queryByRole('alert')).toBeNull();
-  await waitFor(() => expect(navbarAction(pane, '1 to fix, 2 suggestions')?.querySelector('svg')!.getAttribute('class')).toMatch(/text-destructive/));
+  await waitFor(() => expect(navbarAction(pane, '1 to fix')?.querySelector('svg')!.getAttribute('class')).toMatch(/text-destructive/));
   expect(pane.querySelector('[data-tool-panel-id="reference"] [data-tool-panel-heading] h3')!.textContent).toBe(sentence);
   const reference = pane.querySelector('[data-board-reference]')!;
   expect(reference.textContent).toContain('Clearance violation');

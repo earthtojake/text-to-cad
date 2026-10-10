@@ -92,8 +92,7 @@ export function usePlaneFileView({ view, rendererState = null }) {
  *   shell writes it to the clipboard (`copyText`), as the renderer's own Copy buttons do.
  * @param {() => Promise<Blob>} [options.capture]  The view as a picture, when it is more than `plane.capture`.
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first.
- * @param {{ alert: object, startDismissed?: boolean } | null} [options.report]  The renderer's own alert, under a
- *   load's and a failed action's: put away from the start when `startDismissed`.
+ * @param {{ alert: object } | null} [options.report]  The renderer's own alert, under a load's and a failed action's.
  * @param {boolean} [options.displayInView]  The picture has Display settings of its own, the person's, in the view.
  */
 export function usePlaneShell({
@@ -138,8 +137,7 @@ export function usePlaneShell({
   const cardAlert = load.alert || (actionError ? { severity: "error", kind: "status", blocking: false, title: actionError.title, message: actionError.message } : null)
     || report?.alert || null;
   const showingReport = Boolean(report?.alert) && cardAlert === report.alert;
-  const dismissal = useAlertDismissal(cardAlert, { hasContent: load.shown, scope: modelKey, onNavigationActionsChange: view.onNavigationActionsChange,
-    startDismissed: showingReport && Boolean(report.startDismissed) });
+  const dismissal = useAlertDismissal(cardAlert, { hasContent: load.shown, scope: modelKey, onNavigationActionsChange: view.onNavigationActionsChange });
 
   // ---- the clipboard and the prompt -------------------------------------------
   const copyText = useCallback(async (text) => {

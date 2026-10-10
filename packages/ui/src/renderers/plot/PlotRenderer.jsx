@@ -7,7 +7,7 @@ import { usePlaneFileView, usePlaneShell } from "../kit/shell/usePlaneShell.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { BoardDisplaySection, boardDisplayAirwires, boardDrawView, readBoardDisplay } from "./board/BoardDisplay.jsx";
 import { BoardMeasurePanel, BoardReferencePanel, BoardTreePanel } from "./board/BoardPanels.jsx";
-import FindingsList, { findingsReport } from "./board/FindingsList.jsx";
+import FindingsList, { ChecksPanel, findingsReport } from "./board/FindingsList.jsx";
 import { BoardMeasureIcon, BoardSelectIcon } from "./board/boardModes.jsx";
 import { useBoardHandover } from "./board/useBoardHandover.js";
 import { readBoardIsolation, useBoardIsolation } from "./board/useBoardIsolation.js";
@@ -69,7 +69,7 @@ function PlotSurface({ view, data }) {
     active: Boolean(index && (selection.active || measure.start || toolMode === PLOT_TOOL.MEASURE)),
     handle: () => escapePlot({ toolMode, selectTool, selection, measure })
   }), [index, selection, measure, toolMode, selectTool]);
-  // What KiCad and the review found is the card a STEP's alerts are (`findingsReport`).
+  // What KiCad and the review found: the errors are the card a STEP's alerts are (`findingsReport`), the rest Select's Checks.
   const compact = Boolean(view.appearance?.compact);
   const findings = document.shown && !compact ? index?.findings ?? null : null;
   const report = useMemo(() => findingsReport(findings), [findings]);
@@ -87,7 +87,7 @@ function PlotSurface({ view, data }) {
   // A board and its schematic open in two views select together, through the host (selection only).
   useCrossProbe({ port: host.crossProbe, path: view.file.path, index, selection, toolMode, view: plotView,
     layout: document.plot?.layout ?? null, mirrored: picking.mirrored });
-  // A finding chosen in the card selects what it names, as a tree row would, and puts the card away.
+  // A finding chosen in the card or in Checks selects what it names, as a tree row would, and puts the card away.
   const { select } = selection;
   const { dismissAlert } = shell;
   const chooseFinding = useCallback((finding) => {
@@ -113,6 +113,7 @@ function PlotSurface({ view, data }) {
       onIsolate={isolation.toggle} clear={selection.clear} active={selecting} />
     <BoardReferencePanel index={index} resolved={selection.resolved} finding={selection.finding} active={selecting}
       onClear={selection.clear} onSelect={select} onCopy={() => copyReferences(selection.selection)} copyShortcut={copyShortcut} />
+    <ChecksPanel findings={findings} onChoose={chooseFinding} active={selecting} />
     <BoardMeasurePanel measure={measure} shown={toolMode === PLOT_TOOL.MEASURE || measure.measurements.length > 0}
       onClose={() => { measure.clear(); if (toolMode === PLOT_TOOL.MEASURE) selectTool(PLOT_TOOL.SELECT); }} />
   </> : null;
