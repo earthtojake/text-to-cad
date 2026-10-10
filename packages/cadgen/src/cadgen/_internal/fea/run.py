@@ -958,7 +958,7 @@ def solve_study(
         "files": {"glb": glb_path.name, "vtu": vtu_path.name if vtu_path else None},
         **({} if parsed.view is None else {"view": parsed.view}),
     }
-    sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+    sidecar_path.write_text(json.dumps(sidecar, indent=2, allow_nan=False), encoding="utf-8")
     logger.debug(f"wrote {glb_path.name}, {sidecar_path.name}" + (f", {vtu_path.name}" if vtu_path else ""))
     return FeaResult(
         ok=True,

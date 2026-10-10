@@ -33,6 +33,7 @@ names the field.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,12 @@ UNSUPPORTED_CONNECTION_TYPES = ("bolt", "contact")
 VIEW_DRIVES = ("field", "deformation", "load_scale", "threshold")
 #: The fields a result writes, as a view names them: outputs.py's `_VON_MISES` and `_DISPLACEMENT`.
 VIEW_FIELDS = ("von_mises", "displacement")
+# The controls the viewer shows when a view declares none: every field, and the exaggeration from
+# zero up (its top is the viewer's, from the result's own scale, so a preset is held only to >= 0).
+_DEFAULT_CONTROLS = {
+    "field": {"drives": "field", "type": "enum", "options": list(VIEW_FIELDS)},
+    "deformation": {"drives": "deformation", "type": "number", "min": 0.0, "max": None},
+}
 _CONTROL_KEYS = {
     "field": {"drives", "type", "label", "options", "default"},
     "deformation": {"drives", "type", "label", "min", "max", "default", "unit"},
@@ -144,10 +151,20 @@ def _faces(entry: dict, *, where: str) -> tuple[str, ...]:
     return tuple(f.strip() for f in faces)
 
 
+def _json_text(value: Any) -> str:
+    """A value as the JSON an agent wrote it: true, null, "text", not Python's True, None, 'text'."""
+    try:
+        return json.dumps(value, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return repr(value)
+
+
 def _number(value: Any, *, where: str, positive: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{where}: expected a number, got {value!r}")
+        raise ValueError(f"{where}: expected a number, got {_json_text(value)}")
     number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{where}: expected a finite number, got {number}")
     if positive and not number > 0:
         raise ValueError(f"{where}: must be > 0, got {number}")
     return number
@@ -258,18 +275,27 @@ def _control(entry: Any, *, where: str) -> dict:
         control["field"] = _view_field(entry["field"], where=f"{where}.field")
     if "max" not in entry:
         raise ValueError(f"{where}.max: a {drives} control needs the top of its range")
-    low = _number(entry.get("min", 0), where=f"{where}.min")
+    # A load_scale's bottom is a tenth of the load: at no load there is no stress and nothing to show.
+    low = _number(entry.get("min", 0.1 if drives == "load_scale" else 0), where=f"{where}.min")
     high = _number(entry["max"], where=f"{where}.max")
+    if drives == "load_scale" and not low > 0:
+        raise ValueError(
+            f"{where}.min: a load_scale control starts above no load; min ({low:g}) must be more than 0, like 0.1 for a tenth of the load"
+        )
     if low < 0:
         raise ValueError(f"{where}.min: min ({low:g}) must be zero or more")
     if not low < high:
         raise ValueError(f"{where}: min ({low:g}) must be below max ({high:g})")
-    # The load as solved, where the range holds it; elsewhere a range's bottom.
+    control = {**control, "min": low, "max": high}
+    # A deformation with no default opens at the result's own exaggeration, which the solve picks:
+    # the viewer reads the file's. Otherwise the load as solved, where the range holds it, or the range's bottom.
+    if drives == "deformation" and "default" not in entry:
+        return {**control, **_text(entry, "unit", where=where)}
     fallback = min(max(1.0, low), high) if drives == "load_scale" else low
     default = _number(entry.get("default", fallback), where=f"{where}.default")
     if not low <= default <= high:
         raise ValueError(f"{where}: default ({default:g}) must be between min ({low:g}) and max ({high:g})")
-    return {**control, "min": low, "max": high, "default": default, **_text(entry, "unit", where=where)}
+    return {**control, "default": default, **_text(entry, "unit", where=where)}
 
 
 def _preset(entry: Any, controls: dict[str, dict], *, where: str) -> dict:
@@ -283,13 +309,22 @@ def _preset(entry: Any, controls: dict[str, dict], *, where: str) -> dict:
             continue
         control = controls.get(key)
         if control is None:
-            raise ValueError(f"{where}: {key!r} is not a control of this view; a preset sets {sorted(controls)} and its label")
+            settable = ", ".join(["label", *sorted(controls)])
+            raise ValueError(
+                f"{where}: {key!r} is not a control of this view; a preset here can set only {settable}"
+                " (declare a control in view.controls for a preset to set it)"
+            )
         if control["type"] == "enum":
             if value not in control["options"]:
                 raise ValueError(f"{where}.{key}: {value!r} is not one of {control['options']}")
             preset[key] = value
             continue
         number = _number(value, where=f"{where}.{key}")
+        if control["max"] is None:
+            if number < control["min"]:
+                raise ValueError(f"{where}.{key}: {number:g} must be {control['min']:g} or more")
+            preset[key] = number
+            continue
         if not control["min"] <= number <= control["max"]:
             raise ValueError(f"{where}.{key}: {number:g} must be between {control['min']:g} and {control['max']:g}")
         preset[key] = number
@@ -319,6 +354,8 @@ def _view(raw: Any) -> dict | None:
     entries = raw.get("controls", [])
     if not isinstance(entries, list):
         raise ValueError("view.controls: expected a list of controls")
+    if "controls" in raw and not entries:
+        raise ValueError("view.controls is empty: leave it out for the default controls")
     controls: dict[str, dict] = {}
     for index, entry in enumerate(entries):
         control = _control(entry, where=f"view.controls[{index}]")
@@ -330,7 +367,9 @@ def _view(raw: Any) -> dict | None:
     if "presets" in raw:
         if not isinstance(raw["presets"], list):
             raise ValueError("view.presets: expected a list of named states")
-        view["presets"] = [_preset(entry, controls, where=f"view.presets[{index}]") for index, entry in enumerate(raw["presets"])]
+        # With no controls declared the viewer shows its own two, so a preset may set those.
+        settable = controls or _DEFAULT_CONTROLS
+        view["presets"] = [_preset(entry, settable, where=f"view.presets[{index}]") for index, entry in enumerate(raw["presets"])]
     if "show" in raw:
         show = raw["show"]
         if not isinstance(show, dict):
@@ -340,7 +379,7 @@ def _view(raw: Any) -> dict | None:
             raise ValueError(f"view.show: unknown keys {sorted(unknown)}; expected loads, fixtures")
         for key, value in show.items():
             if not isinstance(value, bool):
-                raise ValueError(f"view.show.{key}: true or false, got {value!r}")
+                raise ValueError(f"view.show.{key}: true or false, got {_json_text(value)}")
         view["show"] = dict(show)
     return view
 

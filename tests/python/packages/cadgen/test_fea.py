@@ -251,8 +251,19 @@ class StudyView(unittest.TestCase):
 
     def test_a_bare_control_takes_its_type_and_range_defaults(self):
         view = parse_study({**self.BASE, "view": {"controls": [{"drives": "deformation", "max": 40}, {"drives": "load_scale", "max": 2}]}}).view
-        self.assertEqual(view["controls"][0], {"drives": "deformation", "type": "number", "min": 0.0, "max": 40.0, "default": 0.0})
-        self.assertEqual(view["controls"][1], {"drives": "load_scale", "type": "number", "min": 0.0, "max": 2.0, "default": 1.0})
+        # A deformation with no default leaves it to the result's own exaggeration; a load_scale starts at a tenth of the load.
+        self.assertEqual(view["controls"][0], {"drives": "deformation", "type": "number", "min": 0.0, "max": 40.0})
+        self.assertEqual(view["controls"][1], {"drives": "load_scale", "type": "number", "min": 0.1, "max": 2.0, "default": 1.0})
+
+    def test_presets_with_no_controls_set_the_default_field_and_deformation(self):
+        presets = [{"label": "Exaggerated", "deformation": 40, "field": "displacement"}]
+        self.assertEqual(parse_study({**self.BASE, "view": {"presets": presets}}).view, {"presets": [{"label": "Exaggerated", "deformation": 40.0, "field": "displacement"}]})
+        with self.assertRaises(ValueError) as caught:
+            parse_study({**self.BASE, "view": {"presets": [{"label": "Heavy", "load_scale": 2}]}})
+        self.assertIn("a preset here can set only label, deformation, field", str(caught.exception))
+        with self.assertRaises(ValueError) as caught:
+            parse_study({**self.BASE, "view": {"presets": [{"label": "Inside out", "deformation": -1}]}})
+        self.assertIn("view.presets[0].deformation: -1 must be 0 or more", str(caught.exception))
 
     def test_a_malformed_view_is_a_study_error_in_a_plain_sentence(self):
         threshold_on_safety = self._control("threshold", field="safety_factor")
@@ -267,6 +278,12 @@ class StudyView(unittest.TestCase):
             (self._control("load_scale", min=3, max=1), "min (3) must be below max (1)"),
             (self._control("load_scale", default=5), "default (5) must be between min (0.5) and max (3)"),
             (self._control("deformation", min=-1), "min (-1) must be zero or more"),
+            (self._control("load_scale", min=0), "view.controls[2].min: a load_scale control starts above no load; min (0) must be more than 0"),
+            (self._control("threshold", max=float("inf")), "view.controls[3].max: expected a finite number, got inf"),
+            (self._control("deformation", default=float("nan")), "view.controls[1].default: expected a finite number, got nan"),
+            (self._control("deformation", max=True), "view.controls[1].max: expected a number, got true"),
+            (self._view(presets=[{"label": "Huge", "load_scale": float("inf")}]), "view.presets[0].load_scale: expected a finite number"),
+            (self._view(controls=[]), "view.controls is empty: leave it out for the default controls"),
             (threshold_on_safety, "'safety_factor' is not a field the result writes"),
             (self._control("threshold", field=None), "view.controls[3].field: name the field it compares"),
             (self._control("deformation", field="von_mises"), "view.controls[1]: unknown keys ['field']"),
@@ -286,11 +303,21 @@ class StudyView(unittest.TestCase):
             parse_study({**self.BASE, "view": {"controls": [VIEW["controls"][0]], "presets": [{"label": "Heavy", "load_scale": 2}]}})
         self.assertIn("'load_scale' is not a control", str(caught.exception))
 
-    def test_the_view_names_only_fields_the_glb_writes(self):
-        from cadgen._internal.fea.study import VIEW_FIELDS
 
-        written = {"_VON_MISES", "_DISPLACEMENT"}
-        self.assertEqual({f"_{name.upper()}" for name in VIEW_FIELDS}, written)
+class GlbJson(unittest.TestCase):
+    def test_a_non_finite_number_is_refused_rather_than_written_as_json_no_reader_parses(self):
+        import numpy as np
+
+        from cadgen._internal.fea.outputs import write_glb
+
+        nodes = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0.5, 0, 0], [0.5, 0.5, 0], [0, 0.5, 0]], float)
+        mesh = dict(positions=nodes, displacement=np.zeros_like(nodes), values=np.zeros(6), triangles6=np.array([[0, 1, 2, 3, 4, 5]]),
+                    face_of_triangle=np.array([0]), scale=1.0, value_range=(0.0, 1.0))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.glb"
+            with self.assertRaises(ValueError):
+                write_glb(path, extras={"faces": ["#o1.f1"], "view": {"max": math.inf}}, **mesh)
+            self.assertFalse(path.exists())
 
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
@@ -383,6 +410,12 @@ class Cantilever(unittest.TestCase):
         self.assertEqual(sidecar["summary"], self.result.summary)
         self.assertEqual(sidecar["fields"][0]["max"], self.result.summary["max_von_mises_MPa"])
         self.assertEqual(sidecar["mesh"]["order"], 2)
+
+    def test_the_view_names_only_fields_the_glb_writes(self):
+        from cadgen._internal.fea.study import VIEW_FIELDS
+
+        written = {field["attribute"] for field in _glb_extras(self.result.glb)["fields"]}
+        self.assertLessEqual({f"_{name.upper()}" for name in VIEW_FIELDS}, written)
 
     def test_the_studys_view_is_copied_into_the_glb_and_the_sidecar(self):
         self.assertEqual(_glb_extras(self.result.glb)["view"], VIEW)

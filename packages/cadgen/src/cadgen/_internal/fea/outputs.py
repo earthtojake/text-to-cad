@@ -229,7 +229,7 @@ def write_glb(
         "bufferViews": views,
         "accessors": accessors,
     }
-    header = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
+    header = json.dumps(gltf, separators=(",", ":"), allow_nan=False).encode("utf-8")
     header += b" " * (-len(header) % 4)
     binary = b"".join(blobs)
     total = 12 + 8 + len(header) + 8 + len(binary)

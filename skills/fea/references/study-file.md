@@ -159,20 +159,24 @@ decides what dragging one does:
 | `drives` | `type` | what it moves | keys |
 | --- | --- | --- | --- |
 | `field` | `enum` | which field the colours show | `options` (fields the result writes: `von_mises`, `displacement`; default both), `default` (default the first option) |
-| `deformation` | `number` | how many times the displacement is drawn | `min` (default 0), `max` (required), `default` (default `min`) |
-| `load_scale` | `number` | the load as a multiple of the solved one: stress, displacement and deformation times it, safety factors divided by it | as above; `default` defaults to 1 where the range holds it |
-| `threshold` | `number` | values of `field` under it are drawn grey, so only the regions over it carry colour | `field` (required), as above, in that field's units |
+| `deformation` | `number` | how many times the displacement is drawn | `min` (default 0), `max` (required), `default` (left out, the result opens at its own `deformation_scale`) |
+| `load_scale` | `number` | the load as a multiple of the solved one: stress, displacement and deformation times it, safety factors divided by it | `min` (default 0.1; more than 0, since at no load there is nothing to show), `max` (required), `default` (1 where the range holds it, else `min`) |
+| `threshold` | `number` | values of `field` under it are drawn grey, so only the regions over it carry colour | `field` (required), `min` (default 0), `max` (required), `default` (default `min`), in that field's units |
 
 `type` may be left out; given, it must be the one above. `min` is zero or
-more and below `max`, and `default` lies between them. The findings stay
-those of the solved load whatever `load_scale` is set to.
+more and below `max`, and `default` lies between them. Every number is
+finite. Leave `controls` out for the default field select and deformation
+slider; an empty list is refused. The findings stay those of the solved load
+whatever `load_scale` is set to.
 
 - Use `load_scale` when the user asks how much the part can take, or what
   happens at a heavier load, labelled with the load in their words.
 - Use `presets` for named load cases: `{"label": ..., <drives>: value}`,
   each key the `drives` of a declared control, each value in its range (an
-  option for `field`). A preset is a full state: controls it does not name go
-  back to their defaults.
+  option for `field`). With no `controls`, a preset may set `field` and
+  `deformation` (zero or more), the two the Viewer shows by default. A
+  preset is a full state: controls it does not name go back to their
+  defaults.
 - Use `threshold` to show only the regions over a limit: half yield, an
   allowable stress, a deflection limit on `displacement`. A threshold usually
   defaults to its minimum, so it is off until dragged; give it a non-zero
