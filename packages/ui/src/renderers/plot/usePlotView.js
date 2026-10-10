@@ -10,7 +10,7 @@
  * `data-plot-settled` on its element, written as it paints (no render): a zoom is `false` until
  * the view has rested and been drawn again.
  */
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { clearSurface } from "@text-to-cad/core/lib/drawing2d/index.js";
 import { drawPlot, fitPlotTransform, sheetImages } from "@text-to-cad/core/lib/plot2d/index.js";
 import { usePlaneView } from "../kit/plane/usePlaneView.js";
@@ -26,13 +26,10 @@ import { createPlotRasters } from "./plotRasters.js";
  * @param {"light"|"dark"} options.colorScheme
  * @param {(transform: object|null) => void} options.onViewMoved  The view to remember, or null for the fit.
  * @param {string} options.noun  What the plot is called ("board", "schematic").
- * @param {(ctx: CanvasRenderingContext2D, frame: object) => void} [options.overlay]  Drawn over the
- *   plot in the same frame, at the frame's view: what a person points at on a board or schematic.
- * @param {object} [options.picking]  The plane view's pointing (`usePlaneView`): taps, hover, double-tap.
  * @param {{ layers: string[]|null, poured: boolean, side: "top"|"bottom" }|null} [options.drawView]  A
  *   board's Display, as `drawPlot`'s `view`; a new one draws the plot afresh.
  */
-export function usePlotView({ plot, restored = null, colorScheme = "light", onViewMoved, noun, overlay = null, picking = null, drawView = null }) {
+export function usePlotView({ plot, restored = null, colorScheme = "light", onViewMoved, noun, drawView = null }) {
   const plotRef = useRef(plot);
   plotRef.current = plot;
   const rastersRef = useRef(null);
@@ -40,17 +37,23 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", onVi
   const drawViewRef = useRef(drawView);
   drawViewRef.current = drawView;
   const drawViewKey = JSON.stringify(drawView);
-  const overlayRef = useRef(overlay);
-  overlayRef.current = overlay;
+  // What a person points at, over the plot (`setLayer`): made after the view, from its handle.
+  const layerRef = useRef(null);
   const paint = useCallback((ctx, frame) => {
     const { width, height, pixelRatio, transform, element, colorScheme: scheme } = frame;
     clearSurface(ctx, { width, height, pixelRatio, background: readThemeColors(element, scheme).background });
     const rasters = rastersRef.current;
     if (!rasters || !transform) return;
     const final = rasters.paint(ctx, { transform, width, height, pixelRatio });
-    overlayRef.current?.(ctx, frame);
+    layerRef.current?.overlay?.(ctx, frame);
     if (element) element.dataset.plotSettled = final ? "true" : "false";
   }, []);
+  // The plane view's pointing, handed on to the layer of the moment (none: a press only pans).
+  const picking = useMemo(() => ({
+    onHover: (point, event) => layerRef.current?.picking?.onHover?.(point, event),
+    onTap: (point, event) => layerRef.current?.picking?.onTap?.(point, event),
+    onDoubleTap: (point, event) => Boolean(layerRef.current?.picking?.onDoubleTap?.(point, event)),
+  }), []);
   const view = usePlaneView({
     content: plot, bounds: plot?.layout.modelBounds ?? null, restored, colorScheme, onViewMoved, paint, noun, picking
   });
@@ -105,8 +108,14 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", onVi
     }, "image/png");
   }), [containerRef, schemeRef, noun]);
 
+  /**
+   * The layer over the plot, or null: `overlay(ctx, frame)` is drawn in the plot's own frame, at its
+   * view (so a capture shows it), and `picking` takes the pane's taps, hover and double-taps.
+   */
+  const setLayer = useCallback((layer) => { layerRef.current = layer; requestPaint(); }, [requestPaint]);
+
   return {
     containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, capture, thumbnail,
-    transformRef: view.transformRef, requestPaint, paintNow, settle, setView: view.setView
+    transformRef: view.transformRef, requestPaint, paintNow, settle, setView: view.setView, setLayer
   };
 }

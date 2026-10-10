@@ -19,6 +19,24 @@ export function findingsLabel(findings) {
   return suggestions ? `${errors} to fix, ${plural(suggestions, "suggestion")}` : `${errors} to fix`;
 }
 
+/**
+ * What KiCad and the review found, as the shell's report card (`usePlaneShell`'s `report`): open over
+ * the board while there is something to fix before ordering, put away (its icon in the navbar) for
+ * suggestions alone. Its key is the findings' sentences, so a rebuild that changes them is a new alert.
+ *
+ * @param {readonly object[] | null} findings
+ * @returns {{ alert: object, startDismissed: boolean } | null}
+ */
+export function findingsReport(findings) {
+  if (!findings?.length) return null;
+  const errors = findings.some(findingBlocks);
+  return {
+    alert: { severity: errors ? "error" : "warning", blocking: false, kind: "findings", report: false, title: findingsLabel(findings), message: "",
+      key: JSON.stringify(findings.map((finding) => [finding.severity, finding.summary || finding.description])) },
+    startDismissed: !errors,
+  };
+}
+
 function FindingsSection({ heading, findings, onChoose }) {
   if (!findings.length) return null;
   return <section className="min-w-0">

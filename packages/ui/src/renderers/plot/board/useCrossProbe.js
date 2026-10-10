@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { mirrorPageX, visiblePageRect } from "@text-to-cad/core/lib/plot2d/index.js";
-import { BOARD_TOOL } from "./useBoardInspector.js";
+import { PLOT_TOOL } from "../tools.js";
 
 /**
  * Cross-probing: a board and its schematic, open in two views, select together. What a person (or
@@ -25,40 +25,43 @@ const union = (boxes) => boxes.reduce((box, next) => [Math.min(box[0], next[0]),
  * @param {object} options
  * @param {import("../../../host/types.js").CrossProbePort|undefined} options.port  The host's.
  * @param {string} options.path  The file's absolute path.
- * @param {ReturnType<typeof import("./useBoardInspector.js").useBoardInspector>} options.inspector
- * @param {{ transformRef: { current: object|null }, setView: (transform: object) => void }} options.view
- * @param {{ current: HTMLCanvasElement|null }} options.canvasRef
+ * @param {object|null} options.index  The document's index: without one, nothing is probed.
+ * @param {ReturnType<typeof import("./useBoardSelection.js").useBoardSelection>} options.selection
+ * @param {string} options.toolMode
+ * @param {{ transformRef: { current: object|null }, canvasRef: { current: HTMLCanvasElement|null },
+ *   setView: (transform: object) => void }} options.view
  * @param {object|null} options.layout  The plot's layout (a bottom view mirrors about its sheet).
  * @param {boolean} options.mirrored  The board seen from the bottom.
  */
-export function useCrossProbe({ port, path, inspector, view, canvasRef, layout, mirrored }) {
-  const project = port && inspector.available ? kicadProject(path) : null;
+export function useCrossProbe({ port, path, index, selection, toolMode, view, layout, mirrored }) {
+  const project = port && index ? kicadProject(path) : null;
   const id = useMemo(() => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`, []);
   // The selection this view last told (null until its index is in: what it opens with is not news),
   // and the one a probe set, which is not told back.
   const told = useRef(null);
   const heard = useRef(null);
-  const key = JSON.stringify(inspector.selection);
+  const selectors = selection.selection;
+  const key = JSON.stringify(selectors);
   useEffect(() => {
     if (!project) { told.current = null; return; }
     if (told.current === null || told.current === key) { told.current = key; return; }
     told.current = key;
     const fromProbe = heard.current === key;
     heard.current = null;
-    if (!fromProbe) port.publish({ project, from: id, selectors: [...inspector.selection] });
-  }, [port, project, id, key, inspector.selection]);
+    if (!fromProbe) port.publish({ project, from: id, selectors: [...selectors] });
+  }, [port, project, id, key, selectors]);
 
   const current = useRef(null);
-  current.current = { inspector, view, canvasRef, layout, mirrored };
+  current.current = { index, selection, toolMode, view, layout, mirrored };
   useEffect(() => {
     if (!project) return undefined;
     /** Centre what `selectors` name when any of it is off screen; the zoom stays. */
     const reveal = (selectors) => {
-      const { inspector: shown, view: pane, canvasRef: canvas, layout: plot, mirrored: below } = current.current;
+      const { index: shown, view: pane, layout: plot, mirrored: below } = current.current;
       const transform = pane.transformRef.current;
-      const width = canvas.current?.clientWidth || 0;
-      const height = canvas.current?.clientHeight || 0;
-      const boxes = selectors.map((selector) => shown.index.extent(shown.index.resolve(selector))).filter(Boolean);
+      const width = pane.canvasRef.current?.clientWidth || 0;
+      const height = pane.canvasRef.current?.clientHeight || 0;
+      const boxes = selectors.map((selector) => shown.extent(shown.resolve(selector))).filter(Boolean);
       if (!transform || !(width > 0 && height > 0) || !boxes.length) return;
       let [x0, y0, x1, y1] = union(boxes);
       if (below && plot) [x0, x1] = [mirrorPageX(plot, 0, x1), mirrorPageX(plot, 0, x0)];
@@ -67,15 +70,15 @@ export function useCrossProbe({ port, path, inspector, view, canvasRef, layout, 
       pane.setView({ ...transform, offsetX: width / 2 - ((x0 + x1) / 2) * transform.scale, offsetY: height / 2 - ((y0 + y1) / 2) * transform.scale });
     };
     return port.subscribe((message) => {
-      const shown = current.current.inspector;
-      if (message?.project !== project || message.from === id || !shown.available || shown.tool === BOARD_TOOL.MEASURE) return;
+      const { index: shown, selection: selected, toolMode: tool } = current.current;
+      if (message?.project !== project || message.from === id || !shown || tool === PLOT_TOOL.MEASURE) return;
       const named = Array.isArray(message.selectors) ? message.selectors : [];
-      const selectors = [...new Set(named.map((selector) => shown.index.resolve(selector)?.selector).filter(Boolean))];
-      if (named.length && !selectors.length) return;
-      heard.current = JSON.stringify(selectors);
-      if (!selectors.length) { shown.clear(); return; }
-      shown.select(selectors);
-      reveal(selectors);
+      const found = [...new Set(named.map((selector) => shown.resolve(selector)?.selector).filter(Boolean))];
+      if (named.length && !found.length) return;
+      heard.current = JSON.stringify(found);
+      if (!found.length) { selected.clear(); return; }
+      selected.select(found);
+      reveal(found);
     });
   }, [port, project, id]);
 }
