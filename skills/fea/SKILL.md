@@ -1,27 +1,129 @@
 ---
 name: fea
-description: Run a linear static stress study on a STEP part, or a bonded assembly of parts, with cadgen — fix faces, apply forces or pressures, choose a material — and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Use when the user asks whether a part or an assembly is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part.
+description: Run finite element studies on a STEP part, or a bonded assembly of parts, with cadgen. Fix faces, apply forces, pressures, gravity or a steady acceleration, choose a material, and report max von Mises stress, safety factor against yield and displacement, with a colour-mapped result the CAD Viewer shows. Strength (linear static) solves today; vibration, buckling, heat, shaking, shock, fatigue, drops, flow, permanent bending and contact are planned, and the skill maps each question to its analysis and says which are not available yet. Use when the user asks whether a part or an assembly is strong enough, how much it deflects, where it is most stressed, or wants a "stress analysis", "FEA", "simulation" or "load case" on a part, or asks about its vibration, buckling, heat, fatigue life, drop, flow or contact.
 license: MIT
 ---
 
-# FEA: linear static stress on a part or a bonded assembly
+# FEA: stress, vibration, buckling, heat, shaking, shock, fatigue, drops, flow, permanent bending and contact
 
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth; the
 repository link is only for provenance and release review.
 
-Use this skill to answer "will it hold, and by how much" for one part, or an
-assembly of parts bonded where they touch, under static loads. It meshes the saved STEP with quadratic tetrahedra, solves
-isotropic linear elasticity, and writes a result the Viewer renders. It is a
-first-pass engineering check, not a certification: it assumes small
+Use this skill to answer engineering questions about one part, or an assembly
+of parts bonded where they touch, by simulation. It meshes the saved STEP,
+solves, and writes a result the Viewer renders.
+
+**What runs today is strength: the `static` analysis.** It answers "will it
+hold, and by how much" under forces, pressures, the part's own weight
+(`gravity`) and a steady acceleration (`acceleration`). Every other analysis in
+[Choose the analysis](#choose-the-analysis) is planned: its study format and
+its words are settled, but this cadgen does not solve it yet, and `cadgen fea
+solve` refuses a study that names one ("'modal' is planned but not in this
+cadgen yet"). Do not write such a study; follow [When the question needs an
+analysis that is not here yet](#when-the-question-needs-an-analysis-that-is-not-here-yet).
+
+The static solve uses quadratic tetrahedra and isotropic linear elasticity. It
+is a first-pass engineering check, not a certification: it assumes small
 displacements, a linear material below yield, perfectly rigid fixtures and
 loads that do not move. In an assembly every joint is also perfectly rigid
 (bonded): bolts, pins and contact are not modelled yet. Say so when you report.
+
+## Choose the analysis
+
+Match the user's question to an analysis first. The `analysis` key of the
+study names it; left out, it is `static`.
+
+| The user asks | `analysis` | Plain word | Status | Reference |
+| --- | --- | --- | --- | --- |
+| "Will it hold", "is it strong enough", "how much does it bend" | `static` | Strength | **Runs today** | [Linear static](references/linear-static.md) |
+| The same under its own weight, or while it speeds up, brakes or turns (a steady g-load) | `static` with a `gravity` or `acceleration` load | Strength | **Runs today** | [Body loads](references/linear-static.md#body-loads-gravity-and-acceleration) |
+| "Will it rattle", "will it resonate", "what frequency does it ring at" | `modal` | Vibration | Coming, not in this cadgen yet | [modal.md](references/modal.md) |
+| "Will this column or thin wall buckle" | `buckling` | Buckling | Coming, not in this cadgen yet | [buckling.md](references/buckling.md) |
+| "How hot does it get" (settled, steady running) | `thermal` | Heat | Coming, not in this cadgen yet | [thermal.md](references/thermal.md) |
+| "How hot during a warm-up or a duty cycle" | `thermal_transient` | Heat over time | Coming, not in this cadgen yet | [thermal-transient.md](references/thermal-transient.md) |
+| "It gets hot: does that stress or warp it" | `thermal_stress` | Heat stress | Coming, not in this cadgen yet | [thermal-stress.md](references/thermal-stress.md) |
+| "On a shaker", "across a motor's speed range", a sine sweep | `harmonic` | Shaking | Coming, not in this cadgen yet | [harmonic.md](references/harmonic.md) |
+| A transport or vibration spec in g²/Hz | `random_vibration` | Random vibration | Coming, not in this cadgen yet | [random-vibration.md](references/random-vibration.md) |
+| A shock spec, a shock response spectrum (SRS) | `shock` | Shock | Coming, not in this cadgen yet | [shock.md](references/shock.md) |
+| A load that changes over time, a hammer blow | `transient` | Over time | Coming, not in this cadgen yet | [transient.md](references/transient.md) |
+| "How long will it last", "how many cycles" | `fatigue` | Fatigue life | Coming, not in this cadgen yet | [fatigue.md](references/fatigue.md) |
+| "What if I drop it" (a quick answer) | `drop` | Drop (estimate) | Coming, not in this cadgen yet | [drop.md](references/drop.md) |
+| "What if I drop it" (a deeper check, after `drop`) | `impact` | Drop impact | Coming, not in this cadgen yet | [impact.md](references/impact.md) |
+| Flow through or around it, pressure drop, the push of air or water on it | `cfd` | Flow | Coming, not in this cadgen yet | [cfd.md](references/cfd.md) |
+| "Does it bend for good", rubber or other stretchy parts | `nonlinear` | Permanent bend / Stretch | Coming, not in this cadgen yet | [nonlinear.md](references/nonlinear.md) |
+| Parts pressing or sliding on each other | `contact` | Contact | Coming, not in this cadgen yet | [contact.md](references/contact.md) |
+| Turbulent or fast gas flow, creep, composites, bolted joints, magnetic or electric fields | not yet named in a study | Planned next | Coming after the rest | [planned-next.md](references/planned-next.md) |
+
+Each reference marked "Coming" says at its top that it is not available in
+this cadgen yet, and lists the study keys it will take. When an analysis
+ships, its reference holds the full schema and this table says it runs today.
+
+### When the question needs an analysis that is not here yet
+
+- Tell the user plainly, in their words: "A vibration check is not in this
+  version yet." Do not write the study; it is refused.
+- Do not pass a static result off as the answer. A static safety factor says
+  nothing about resonance, buckling, temperature, fatigue life, flow or parts
+  sliding on each other.
+- Offer a static study only where it honestly answers part of the question,
+  and say which part:
+  - **A drop.** The coming `drop` estimate is exactly a static study: hold the
+    faces that hit the floor fixed, and add an `acceleration` load of G g
+    pointing away from the floor (opposite those faces' outward normal), with
+    G = drop height / stopping distance (1000 mm stopping in 2 mm is 500 g).
+    You can run that today. Report it as an estimate, never as an impact
+    simulation, and say what stopping distance you assumed.
+  - **Its own weight, or a steady g-load** (a vehicle braking, a part on a
+    spinning arm at a known g): that is `static` already.
+- When the user wants a number now and no static study fits, a hand estimate,
+  labelled as one, is better than nothing. Work in the study's units (mm, N,
+  MPa, t/mm³), where these come out directly:
+  - Buckling of a column (Euler): P = π² E I / (K L)², with K = 2 for one end
+    fixed and one free, 1 for both ends pinned, 0.5 for both ends fixed.
+  - First natural frequency of a cantilever: f = 0.560 √(E I / (ρ A L⁴)) Hz.
+
+## Say what the run did
+
+These rules hold for every analysis; each one applies as soon as its analysis
+runs.
+
+- **Every adapted step.** A model too big for the machine's memory or time
+  target is adapted, not refused (below). The CLI prints one `adapted:` line
+  per step, and the sidecar's `fit` lists them, each with its accuracy note
+  ("peak stress moved 2.1 % between passes"). Report every one, with its note,
+  in the user's words. Never hide a step, and never report an adapted result as
+  if it were not.
+- **Estimates.** A `drop` result, or a static study standing in for one, is an
+  estimate of an equivalent steady load, not a simulation of the impact. Say
+  "estimate" every time you quote it.
+- **Lite limits.** `cfd`, `impact`, `nonlinear` and `contact` are lite solvers
+  with stated limits (for flow: laminar, steady, incompressible, no turbulence
+  model). Quote the limits the result carries whenever you quote its numbers.
+- **The Reynolds warning.** When a flow result warns that its Reynolds number
+  is past the laminar range, say so with its number: the real flow is likely
+  turbulent, the pressure drop is a lower bound and the flow pattern may be
+  wrong.
+
+## Big models: run first, then report what was adapted
+
+Never ask the user to shrink, simplify or defeature a model before running it.
+Run it as it is. When it does not fit the memory or time target, the run
+adapts by itself: an iterative solver, a mesh kept fine at the peak and coarse
+away from it, small fillets far from every load left out, simpler elements,
+half a symmetric part. Then report what was adapted, as above. Nothing is
+refused for being big or slow; when every step is used and it still misses the
+target, the run goes ahead and says how long and how much memory to expect.
+
+Use the study's `fit` key ([study-file.md](references/study-file.md#fit)) only
+when the user rules a simplification out ("do not leave any fillets out":
+leave `defeature` out of `fit.allow`) or names a memory or time budget.
 
 ## Start with the task
 
 | Task | First action | Reference |
 | --- | --- | --- |
+| **Pick the analysis** | Match the question to a row of the table above; only `static` runs today. | [Choose the analysis](#choose-the-analysis) |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
 | **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`part.step#o1.f17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |
@@ -57,7 +159,10 @@ uvx --no-config --managed-python --python 3.13 --from "cadgen[fea]==0.7.20" cadg
 The first run downloads the mesher and solver (large); later runs reuse them.
 
 Units are fixed: mm for geometry, N for forces, MPa for pressure, modulus and
-stress. Restate every load in those units before you write it down.
+stress, t/mm³ for density, and g (9.81 m/s²) for gravity and acceleration.
+Restate every load in those units before you write it down. The full table,
+including the heat and flow units the coming analyses take, is in
+[study-file.md](references/study-file.md#units).
 
 ## Workflow
 
@@ -88,7 +193,12 @@ stress. Restate every load in those units before you write it down.
    ```
 
    A `force` is the total force over its faces; a `pressure` is in MPa and
-   pushes into the surface. Leave `mesh` out on the first run; the default
+   pushes into the surface. Add `{"type": "gravity", "vector_g": [0, 0, -1]}`
+   when the part's own weight matters (a long arm, a heavy casting), and
+   `{"type": "acceleration", "vector_g": [5, 0, 0]}` when the part is speeding
+   up, braking or turning at a known g; neither names faces, and both need the
+   material's density ([Body loads](references/linear-static.md#body-loads-gravity-and-acceleration)).
+   Leave `analysis` out (it is `static`). Leave `mesh` out on the first run; the default
    element size is a fortieth of the part's bounding diagonal, and small
    features (thin walls, fillets, chamfers, small holes) make the elements
    finer where they are, so they, not only the bounding box, can set the
@@ -147,7 +257,9 @@ stress. Restate every load in those units before you write it down.
    written and reported, and the sidecar's `refined` block records both
    sizes and peaks. The finer size is capped to keep the solve under the
    degrees-of-freedom budget, so a part near the limit takes longer (minutes)
-   and may get a smaller refinement than half. `--vtu` adds a ParaView file. `--json` prints the result as one JSON line
+   and may get a smaller refinement than half. A model too big for the
+   machine is adapted to fit rather than refused, and each step prints an
+   `adapted:` line ([Big models](#big-models-run-first-then-report-what-was-adapted)). `--vtu` adds a ParaView file. `--json` prints the result as one JSON line
    for scripting. Progress lines (`[fea] reading the parts`, `[fea] meshing
    the glued shape at 6.01 mm`) print to stderr, never into the result on
    stdout; `--verbose` adds mesh and solve detail there. A study
@@ -162,7 +274,8 @@ stress. Restate every load in those units before you write it down.
 5. **Report.** Quote, in this order: max von Mises (MPa) and where it is,
    safety factor against yield, max displacement (mm) and where, the applied
    load and the reaction (they balance, or the run warns), the mesh size and
-   element count. Then say what the model assumes. Open the GLB in the Viewer
+   element count, and every `adapted:` step with its accuracy note. Then say
+   what the model assumes. Open the GLB in the Viewer
    for the user; the deformation is exaggerated by the `deformation_scale`
    the sidecar records, so say that too. The Viewer draws the loads as
    arrows and the fixed faces as cones on the model; a person can check
@@ -296,3 +409,8 @@ they would not change the answer.
 A `warning:` line that is not a finding (a slow solve, reactions that do not
 balance, a finer solve that failed) is about the run itself: read it, and
 mention it when it bears on the answer.
+
+An `info` finding whose kind starts `fit_` (`fit_local_refine`,
+`fit_defeature`) is one adapted step, the same as its `adapted:` line: report
+it with its accuracy note, as [Say what the run did](#say-what-the-run-did)
+asks.

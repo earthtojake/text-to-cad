@@ -14,8 +14,10 @@ and how to tell a good answer from a bad one.
 - Fixtures are perfectly rigid and perfectly bonded. A real bolt, weld or
   clamp is softer and spreads load; a fixed face is the stiffest possible
   support.
-- Loads are static and do not follow the deformation. No inertia, no
-  fatigue, no thermal strain, no preload.
+- Loads are static and do not follow the deformation. A `gravity` or
+  `acceleration` load is a steady body load (the part's weight, or a constant
+  g-load), not a moving one: no vibration, no impact, no fatigue, no thermal
+  strain, no preload.
 - An assembly's parts are bonded where they touch (within 0.1 mm): the glued
   faces carry load as if welded, with no slip, no clearance, no preload and no
   bolt stiffness. A bonded joint is stiffer than a real bolted one and
@@ -46,10 +48,48 @@ and how to tell a good answer from a bad one.
 - A pressure is normal to the face and positive pushing in. Convert bar to
   MPa (1 bar = 0.1 MPa) and psi to MPa (1 psi = 0.006895 MPa) before writing
   it down.
-- Weight of a held object: mass in kg times 9.81 gives newtons. Gravity on
-  the part itself is not modelled.
+- Weight of a held object: mass in kg times 9.81 gives newtons, as a `force`
+  on the face it rests on. The part's own weight is a `gravity` load (below).
 - A moment: two equal and opposite forces on two faces a known distance
   apart.
+
+## Body loads: gravity and acceleration
+
+Two loads act on the whole volume instead of on faces. Neither has `faces`;
+each takes `vector_g`, in g (1 g = 9.81 m/s²).
+
+```json
+"loads": [
+  {"faces": ["#o1.f2"], "type": "force", "vector_N": [0, 0, -200]},
+  {"type": "gravity", "vector_g": [0, 0, -1]},
+  {"type": "acceleration", "vector_g": [5, 0, 0]}
+]
+```
+
+- `gravity`: the part's own weight, pulling along `vector_g`. `[0, 0, -1]` is
+  Earth's gravity with +Z up. Add it when the weight matters against the other
+  loads: a long arm, a heavy casting, a large plate held at one edge. For a
+  small bracket carrying a large force it changes little; leave it out unless
+  asked.
+- `acceleration`: the part itself is accelerated by `vector_g` (a vehicle
+  braking, a robot arm swinging, a part on a spinning arm at a known g). It
+  feels an inertial load the opposite way: speeding up at 5 g in +X loads
+  every bit of the part toward -X, like a passenger pressed back into a seat.
+  This is a steady g-load, not a shake or an impact.
+- Both need a density greater than zero. Every table material has one; a
+  material object must give `density_t_per_mm3` (steel 7.85e-9, aluminium
+  2.7e-9), or the study is refused with a sentence saying so.
+- In an assembly they act on every part, each with its own density.
+- The sidecar's `applied_force_N` includes them (mass times acceleration), so
+  the reactions still balance it: a 2 kg part under `gravity` alone shows
+  about 19.6 N applied and 19.6 N of reaction.
+- A drop, as an estimate: hold the faces that hit the floor fixed and add an
+  `acceleration` of G g pointing away from the floor (opposite those faces'
+  outward normal), G = drop height / stopping distance. A 1 m drop that stops
+  in 2 mm is 500 g. Report it as an estimate of an equivalent steady load,
+  never as an impact simulation, and say the stopping distance you assumed.
+- The `load_scale` control scales the body loads with the rest, because the
+  answer is linear in every load.
 
 ## Mesh
 
@@ -77,8 +117,50 @@ and how to tell a good answer from a bad one.
   short distance away from it, say why, and suggest a fillet or a softer
   fixture if the location is real.
 - Element count grows as the cube of the refinement. Above about 400 000
-  degrees of freedom the solve is slow and the run says so; above 1.5
-  million it refuses.
+  degrees of freedom the solve is slow and the run says so. A model too big
+  for the machine is not refused: the run adapts it to fit (below).
+
+## When the model is big: the static ladder
+
+Never ask the user to shrink, simplify or defeature a model first. Run it as
+it is. Before meshing, the run estimates the memory and time the solve needs,
+and while that misses the target (half the machine's memory and 600 seconds,
+unless the study's `fit` says otherwise) it takes the next step that applies,
+in this order:
+
+1. `iterative`: an iterative solver, or one that never stores the whole
+   matrix. No accuracy cost.
+2. `local_refine`: a coarse first pass everywhere, then a second mesh kept at
+   the requested size only around the first pass's peak and on loaded, fixed
+   and checked faces, coarse elsewhere. Its note gives how far the peak moved
+   between the passes ("the peak is still meshed at 0.8 mm; peak stress moved
+   2.1 % between passes").
+3. `defeature`: small fillets, chamfers and holes far from every named face
+   and from the peak are left out of the mesh. A named face is never removed.
+   Its words name what was left out ("Left out 6 small fillets far from the
+   load to mesh it").
+4. `linear_elements`: simpler elements. Bending stress reads about 10 to 30 %
+   low with them; the note says how much, measured where it could be.
+   `idealise` (a thin-walled part as a shell, a slender part as a beam) sits
+   at this step too, where this cadgen has those models.
+5. `symmetry`: when the part and every load, fixture and check is symmetric
+   about a plane, it solves half (or a quarter) and mirrors the result. Exact.
+
+A step that does not apply is skipped. When every step is taken and the
+estimate still misses, the run goes ahead anyway and says how long and how
+much memory to expect.
+
+Each step taken is one `adapted:` line in the CLI output, one entry of the
+sidecar's `fit`, and an `info` finding `fit_<step>`. Report every one, with
+its accuracy note, in plain words: "To fit this machine, it meshed coarsely
+away from the hole; the peak there is still meshed finely, and it moved 2 %
+between the coarse and fine passes." Never report an adapted result as if no
+step was taken.
+
+The study's `fit` key ([study-file.md](study-file.md#fit)) changes the
+targets or forbids steps. Use it only when the user rules a simplification
+out ("keep every fillet": leave `defeature` out of `fit.allow`) or names a
+budget.
 
 ## Judging the answer
 
@@ -89,6 +171,11 @@ Before trusting a run, estimate the answer by hand and compare:
 - A plate with a hole in tension: about three times the nominal stress at the
   hole's edge.
 - A thin ring or cylinder under pressure p: hoop stress p r / t.
+- A body load: the reaction equals mass times acceleration, density times
+  volume times 9806.65 (g in mm/s²) times `vector_g`, in N when density is in
+  t/mm³ and volume in mm³. A cantilever of length L under its own
+  weight w per unit length: tip deflection w L⁴ / (8 E I), root bending
+  stress w L² (h/2) / (2 I).
 
 If the model is within roughly 20 % of the estimate, it is doing what you
 asked. If it is off by a factor, the load, the fixture or the units are
@@ -105,7 +192,8 @@ In this order, with units:
 3. Max displacement (mm) and where.
 4. Applied load and reaction.
 5. Mesh: element size, count, and whether a refinement was run.
-6. What the model assumes, in one or two sentences, and what would change
+6. Every adapted step, with its accuracy note, when the run took any.
+7. What the model assumes, in one or two sentences, and what would change
    the answer most (a softer fixture, a fillet at the peak, a different
    material).
 
