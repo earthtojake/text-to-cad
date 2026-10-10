@@ -302,9 +302,10 @@ Every file the build opens is recorded as it reads it, whatever opens it:
 `json.load`, `np.load`, a BREP `bd.import_brep` opens in C++, a font `bd.Text`
 loads. The input is the content, not the mtime, and a globbed folder is recorded
 too, so adding or removing a file there rebuilds the model. A model's own outputs
-do not count; another model's outputs in a globbed folder do. Not inputs: the
-Python environment, system files, and anything a subprocess the model starts
-reads.
+do not count; another model's outputs in a globbed folder do. An environment
+variable the model's own code reads is an input by its value. Not inputs:
+installed packages, system files, and anything a program the model starts reads;
+the build warns when it starts one.
 
 ## Freshness: `cadgen store why`
 
@@ -335,9 +336,7 @@ a thin wrapper model that reads the foreign STEP instead.
 ## Optional-module assemblies
 
 A model that skips part modules that do not exist yet stays renderable while
-parts are written in parallel. Its closure holds only the modules it actually
-imported, so a module that appears later does not make it stale: `--force`
-rebuilds it with the new module.
+parts are written in parallel; a module that appears rebuilds it like an edit.
 
 ## Progress and runtime diagnostics
 

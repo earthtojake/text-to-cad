@@ -90,10 +90,10 @@ python src/bracket.py
   their own files keep a big assembly's iterations fast, and each child also runs
   on its own.
 - `cadgen.read_step` reads a vendor STEP with its colours, warm from the store when
-  it can. Every file a build opens is a tracked input, whatever opens it; nothing
-  is declared. A model that reads its own output is never current, and geometry
-  that depends on time, randomness, environment variables or the working
-  directory is invisible to the cache.
+  it can. Every file a build opens is a tracked input, whatever opens it, and so
+  is every environment variable its code reads; nothing is declared. A model that
+  reads its own output is never current, and geometry that depends on time,
+  randomness or the working directory is invisible to the cache.
 - `$step-parts` finds real vendor models of purchasable parts such as fasteners,
   bearings and servos.
 - A STEP's sidecar (`<name>.step.json`: kinematics, materials, animation
