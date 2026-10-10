@@ -1,0 +1,48 @@
+# TEMPORARY probe (never merged): does a Windows build worker work in the environment uvx makes?
+name: Probe Windows uvx worker
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  wheel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: packages/core packages/ui apps/web apps/mcp
+      - run: scripts/bundle/bundle.sh --clean
+      - run: |
+          python -m pip install build
+          python -m build --wheel packages/cadgen
+      - uses: actions/upload-artifact@v7
+        with:
+          name: probe-wheel
+          path: packages/cadgen/dist/*.whl
+          if-no-files-found: error
+
+  windows-uvx:
+    needs: wheel
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: probe-wheel
+          path: ${{ runner.temp }}/wheel
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        shell: bash
+        run: python -m pip install uv==0.12.18 && uv --version
+      - name: Run the wheel as users do, through the daemon
+        shell: bash
+        run: python .github/probe/win_uv_probe.py "$RUNNER_TEMP/wheel"
