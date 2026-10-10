@@ -111,6 +111,8 @@ class VersionSyncMirrorTests(unittest.TestCase):
             "console.log(JSON.stringify([...jsonTargets.map((t) => t.path), ...pinTargets]));"
             % json.dumps(SYNC_SCRIPT.as_uri())))
         self.assertIn("gemini-extension.json", targets)
+        self.assertIn(".qoder-plugin/plugin.json", targets)
+        self.assertIn("qoder.mcp.json", targets)
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch).resolve()  # the script runs main() only when argv[1] is its real path
             for relative in {*targets, "packages/cadgen/pyproject.toml", "scripts/release/sync-version.mjs"}:
