@@ -21,7 +21,7 @@ import math
 from dataclasses import dataclass
 
 from cadgen.kicad import sexpr
-from cadgen.kicad.design import Board, Part, _natural, kicad_net_name
+from cadgen.kicad.design import Board, Part, kicad_net_name
 from cadgen.kicad.ids import Ids
 from cadgen.kicad.library import Symbol
 from cadgen.kicad.sexpr import Sym
@@ -349,7 +349,3 @@ def schematic_document(
     document.append([Sym("sheet_instances"), [Sym("path"), "/", [Sym("page"), "1"]]])
     document.append([Sym("embedded_fonts"), Sym("no")])
     return document, paths
-
-
-def sorted_parts(board: Board) -> list[Part]:
-    return sorted(board.parts, key=lambda part: _natural(part.ref))

@@ -32,7 +32,7 @@ from cadgen.kicad.ids import Ids
 from cadgen.kicad.outline import outline_bounds, outline_segments, polygon_rings
 from cadgen.kicad.sexpr import Sym
 
-__all__ = ["BOARD_FORMAT_VERSION", "Frame", "board_document", "page_for", "unconnected_net_name"]
+__all__ = ["BOARD_FORMAT_VERSION", "Frame", "board_document", "unconnected_net_name"]
 
 BOARD_FORMAT_VERSION = 20260206
 GENERATOR = "cadgen"
@@ -43,7 +43,7 @@ _PAGES = (("A4", 297.0, 210.0), ("A3", 420.0, 297.0), ("A2", 594.0, 420.0), ("A1
 _PAGE_MARGIN = 20.0
 
 
-def page_for(width: float, height: float) -> tuple[str, float, float]:
+def _page_for(width: float, height: float) -> tuple[str, float, float]:
     """The smallest landscape ISO page holding ``width`` x ``height`` plus a margin."""
     for name, page_width, page_height in _PAGES:
         if width + 2 * _PAGE_MARGIN <= page_width and height + 2 * _PAGE_MARGIN <= page_height:
@@ -69,7 +69,7 @@ class Frame:
     @classmethod
     def for_outline(cls, outline) -> "Frame":
         min_x, min_y, max_x, max_y = outline_bounds(outline)
-        page, width, height = page_for(max_x - min_x, max_y - min_y)
+        page, width, height = _page_for(max_x - min_x, max_y - min_y)
         # The board's centre at the page's centre, on a 0.1 mm grid.
         offset_x = round(width / 2 - (min_x + max_x) / 2, 1)
         offset_y = round(height / 2 + (min_y + max_y) / 2, 1)

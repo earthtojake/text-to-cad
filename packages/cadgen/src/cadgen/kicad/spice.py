@@ -268,7 +268,6 @@ class PartModel:
     tail: str
     models: tuple[str, ...] = ()
     include: Path | None = None
-    needs_codemodels: bool = False
 
 
 @dataclass(frozen=True)
@@ -681,7 +680,7 @@ def _potentiometer(part: Part, fields: dict[str, str]) -> PartModel:
     words = [f"r={r}"] + ([f"position={_param_text(params['pos'], ref=part.ref, key='pos')}"] if "pos" in params else [])
     name = _model_name(part.ref)
     pins = _model_pin_order(part, ("r0", "wiper", "r1"), fields.get("Sim.Pins"), what="a potentiometer (pins r0 wiper r1)")
-    return PartModel("A", ("r0", "wiper", "r1"), pins, name, models=(f".model {name} potentiometer({' '.join(words)})",), needs_codemodels=True)
+    return PartModel("A", ("r0", "wiper", "r1"), pins, name, models=(f".model {name} potentiometer({' '.join(words)})",))
 
 
 def _no_model(part: Part, fields: dict[str, str]) -> str:

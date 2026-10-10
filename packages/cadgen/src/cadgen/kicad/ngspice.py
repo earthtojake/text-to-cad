@@ -127,7 +127,7 @@ def library_candidates() -> list[str]:
     return list(dict.fromkeys(found))
 
 
-def _missing(tried: Sequence[str], problems: Sequence[str]) -> Exception:
+def _missing(problems: Sequence[str]) -> Exception:
     from cadgen.kicad.install import KicadMissingError, install_hint
 
     linux = (
@@ -340,17 +340,15 @@ _ENGINE: _Engine | None = None
 def _engine() -> _Engine:
     global _ENGINE
     if _ENGINE is None:
-        tried: list[str] = []
         problems: list[str] = []
         for candidate in library_candidates():
-            tried.append(candidate)
             try:
                 _ENGINE = _Engine(candidate)
                 break
             except (OSError, AttributeError) as error:  # not loadable, or not ngspice's shared API
                 problems.append(f"{candidate}: {error}")
         else:
-            raise _missing(tried, problems)
+            raise _missing(problems)
     return _ENGINE
 
 

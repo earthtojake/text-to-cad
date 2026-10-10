@@ -42,6 +42,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+import cadgen
 from cadgen.kicad.design import Board, DesignError, Net, kicad_net_name
 from cadgen.kicad.specctra import Routes, SessionError, board_dsn, read_session, with_routes
 
@@ -366,7 +367,7 @@ def route_board(board: Board, pcb_tree: list, *, project: str, name: str, tool: 
         raise DesignError("route_board needs a board that asked for routing: call board.autoroute()")
     # The written board spells nets as KiCad does (TX/RX is TX{slash}RX).
     skip = [kicad_net_name(item.name if isinstance(item, Net) else str(item).strip()) for item in request.skip]
-    dsn = board_dsn(pcb_tree, project, skip=skip, layers=request.layers, name=name, host_version=_cadgen_version())
+    dsn = board_dsn(pcb_tree, project, skip=skip, layers=request.layers, name=name, host_version=cadgen.__version__)
     if not dsn.routed:
         return Routed(tree=pcb_tree, routes=Routes(tracks=(), vias=()), freerouting="")
     tool = tool or find_freerouting()
@@ -380,12 +381,3 @@ def route_board(board: Board, pcb_tree: list, *, project: str, name: str, tool: 
         except SessionError as error:
             raise RouteError(f"Freerouting {version} answered with a session cadgen cannot use: {error}") from None
     return Routed(tree=with_routes(pcb_tree, routes, project=name), routes=routes, freerouting=version)
-
-
-def _cadgen_version() -> str:
-    try:
-        import cadgen
-
-        return str(getattr(cadgen, "__version__", "") or "")
-    except Exception:  # noqa: BLE001 - a version string is decoration, never a failure
-        return ""
