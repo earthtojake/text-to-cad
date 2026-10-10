@@ -29,7 +29,7 @@ waits for it.
 
 One more kind lives beside a build's output rather than in the temp folder:
 the folder a build saves its STEP in before publishing it
-(``.cadgen-stage-<pid>-<host>-<stem>-*/``, :func:`stage_prefix`), a full copy
+(``.cadgen-stage-p<pid>-h<host>-<stem>-*/``, :func:`stage_prefix`), a full copy
 of the document. A build runs :func:`sweep_stages` on its output's folder
 before it stages there, which removes the staging folders of this machine's
 builds that are gone. The host is in the name because an output's folder can
@@ -64,7 +64,9 @@ SWEPT_PREFIX = "cadgen-swept-"
 UNNAMED_AGE_SECONDS = 24 * 3600
 
 _OWNED = re.compile(r"^(\d+)-")
-_STAGE_OWNED = re.compile(r"^(\d+)-([0-9a-f]{8})-")
+# ``p`` and ``h`` mark the owner, so an older cadgen's unnamed folder for a stem that
+# merely starts with digits and hex is never read as another machine's.
+_STAGE_OWNED = re.compile(r"^p(\d+)-h([0-9a-f]{8})-")
 
 
 def owned_prefix(prefix: str) -> str:
@@ -80,7 +82,7 @@ def _host() -> str:
 
 def stage_prefix(stem: str) -> str:
     """What this process's STEP staging folder for an output named ``stem`` starts with."""
-    return f"{STAGE_PREFIX}{os.getpid()}-{_host()}-{stem}-"
+    return f"{STAGE_PREFIX}p{os.getpid()}-h{_host()}-{stem}-"
 
 
 def pid_alive(pid: int) -> bool:

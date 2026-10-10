@@ -91,9 +91,9 @@ class StepPublicationTests(unittest.TestCase):
         exited.wait()
         host = temp_leftovers._host()
         other = "0" * 8 if host != "0" * 8 else "1" * 8
-        dead = self.root / f".cadgen-stage-{exited.pid}-{host}-part-ab12cd34"
-        live = self.root / f".cadgen-stage-{os.getpid()}-{host}-part-ef56gh78"
-        elsewhere = self.root / f".cadgen-stage-{exited.pid}-{other}-part-ab12cd34"
+        dead = self.root / f".cadgen-stage-p{exited.pid}-h{host}-part-ab12cd34"
+        live = self.root / f".cadgen-stage-p{os.getpid()}-h{host}-part-ef56gh78"
+        elsewhere = self.root / f".cadgen-stage-p{exited.pid}-h{other}-part-ab12cd34"
         for stage in (dead, live, elsewhere):
             stage.mkdir()
             (stage / "part.step").write_text("ISO-10303-21;", encoding="utf-8")
@@ -111,7 +111,7 @@ class StepPublicationTests(unittest.TestCase):
         self.assertFalse(dead.exists())
         self.assertTrue(live.is_dir() and elsewhere.is_dir())
         [stage] = own
-        self.assertTrue(stage.startswith(f".cadgen-stage-{os.getpid()}-{host}-part-"), stage)
+        self.assertTrue(stage.startswith(f".cadgen-stage-p{os.getpid()}-h{host}-part-"), stage)
         self.assertFalse((self.root / stage).exists())
 
     def test_a_stale_build_skips_the_saved_tree_reuse_check(self) -> None:

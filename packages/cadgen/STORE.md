@@ -1486,7 +1486,7 @@ cannot judge counts as live, and nothing in the store is involved
 before it is deleted, so a sweep killed midway leaves it condemned rather than
 half there with a fresh mtime, and the next sweep finishes it once that
 sweeper is gone. A build saves its STEP in a staging folder beside the output
-(`.cadgen-stage-<pid>-<host>-<stem>-*/`) and publishes it from there; before it
+(`.cadgen-stage-p<pid>-h<host>-<stem>-*/`) and publishes it from there; before it
 stages, a build removes from that folder the staging folders of this machine's
 builds that are gone (and an older cadgen's unnamed ones once a day old). A
 live build's stays, and so does another machine's: an output's folder can be

@@ -159,11 +159,14 @@ class StageFolderSweep(unittest.TestCase):
                 (path / "part.step").write_text("ISO-10303-21;", encoding="utf-8")
                 return path
 
-            gone = [stage(f".cadgen-stage-{dead}-{host}-part-ab12cd34"), stage(".cadgen-stage-part-o1dname_")]
-            kept = [stage(f".cadgen-stage-{live}-{host}-part-ef56gh78"), stage(f".cadgen-stage-{dead}-{other}-part-ab12cd34"),
+            gone = [stage(f".cadgen-stage-p{dead}-h{host}-part-ab12cd34"), stage(".cadgen-stage-part-o1dname_"),
+                    stage(".cadgen-stage-2024-deadbeef-part-o1dname_")]
+            kept = [stage(f".cadgen-stage-p{live}-h{host}-part-ef56gh78"), stage(f".cadgen-stage-p{dead}-h{other}-part-ab12cd34"),
                     stage(".cadgen-stage-part-newname_"), stage("cadgen-stage-not-hidden"), stage("parts")]
             old = time.time() - 2 * temp_leftovers.UNNAMED_AGE_SECONDS
             os.utime(root / ".cadgen-stage-part-o1dname_", (old, old))
+            # An older cadgen's, for a stem that starts like an owner: unnamed, so it goes when old.
+            os.utime(root / ".cadgen-stage-2024-deadbeef-part-o1dname_", (old, old))
             removed = temp_leftovers.sweep_stages(root)
             self.assertEqual(sorted(removed), sorted(str(path) for path in gone))
             self.assertEqual([path for path in gone if path.exists()], [])
