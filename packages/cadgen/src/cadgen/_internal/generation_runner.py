@@ -583,10 +583,14 @@ def _run_script_generator_body(
     # A model's own outputs are never its inputs: reading one back reads the
     # previous run, so a read the trace saw is dropped here, and a folder its
     # code listed is hashed without them.
+    from cadgen._internal.build_timing import note_programs
     from cadgen.store.closure import build_closure
 
     own_outputs = _own_outputs(spec, model_format, entry_name)
     read_files, listed = trace.inputs(outputs=own_outputs)
+    # A program the model's code started reads files this trace never sees: the
+    # build's done event names it, and the root warns (cadgen.cli_tree).
+    note_programs(trace.programs)
     # The closure a record carries: the script + its static closure (stopping at
     # child models — a result edge is tracked by pin, not by file), every file
     # that executed (hashed AT execution), the data files and folders the run

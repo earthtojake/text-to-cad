@@ -254,6 +254,26 @@ def _lines_json(out: io.StringIO) -> list[dict]:
     return [json.loads(line) for line in out.getvalue().splitlines() if line.startswith("{")]
 
 
+class StartedPrograms(unittest.TestCase):
+    """A model whose code started a program is warned about once, after its time line,
+    whichever way the tree renders: what the program reads is no input."""
+
+    def test_the_warning_follows_the_time_line_once_in_every_mode(self):
+        warning = ("[cadgen] warning: arm started openscad; files it reads are not inputs, "
+                   "so editing them will not rebuild it")
+        for mode in ("tty", "plain", "json"):
+            with self.subTest(mode=mode):
+                out = _Tty() if mode == "tty" else io.StringIO()
+                tree = BuildTree(root_id="r", stream=out, json_lines=mode == "json")
+                tree.handle({"model": ARM, "state": "done", "timings": _timings(1.0), "started": ["openscad"]})
+                tree.handle({"model": ARM, "state": "done"})  # the job thread's second done
+                tree.close()
+                lines = [line for line in out.getvalue().splitlines() if line.startswith("[cadgen]")]
+                self.assertEqual(lines[1:], [warning])
+                if mode == "json":
+                    self.assertEqual(_lines_json(out)[0]["started"], ["openscad"])
+
+
 class ProcessWiring(unittest.TestCase):
     def setUp(self):
         self.addCleanup(executors.set_event_sink, None)

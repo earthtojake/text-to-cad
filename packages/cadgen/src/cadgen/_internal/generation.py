@@ -1187,7 +1187,7 @@ def _run_with_spec_generation_status(
     The build is measured (cadgen._internal.build_timing): its ``done`` event carries
     the time split the root prints, and ``on_timed`` receives the same numbers for
     the run's result. ``profile`` profiles the model body and the ``done`` event
-    carries the report.
+    carries the report, and the programs the model's code started.
 
     Delegates to :func:`cadgen.coordination.artifact_build`, the SAME primitive
     ``cadgen.step_artifact_cli`` uses, so every producer reports the same way.
@@ -1261,9 +1261,11 @@ def _run_with_spec_generation_status(
         # A profiled body is slowed by the profiler: no slowdown to compare.
         "lastModelSeconds": None if profile else clock.last_model_seconds,
     }
+    # The programs its code started ride the done event as its timings do: a child's
+    # stderr is dropped when it succeeds, and this is how its root warns about it.
     _tree_event(
         spec, "done", elapsed=time.perf_counter() - started, stale=_stale_after_build(spec),
-        timings=timings, profile=profile_report,
+        timings=timings, profile=profile_report, started=list(clock.programs) or None,
     )
     return result
 

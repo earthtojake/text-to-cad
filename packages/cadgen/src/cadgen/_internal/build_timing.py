@@ -23,6 +23,11 @@ How the split is measured, on the thread that runs the build:
 ``--profile`` runs cProfile over exactly the model-code windows and reports the
 functions the time went to. Stdlib only: the root process imports this to print,
 and the root must stay light.
+
+The clock also carries the one other thing a build's ``done`` event tells its root
+about the model's own code: the programs it started (``note_programs``), whose
+reads no trace sees, so the root warns that editing what they read will not
+rebuild the model (``started_warning``).
 """
 
 from __future__ import annotations
@@ -113,6 +118,18 @@ def slowdown_warning(name: str, model_seconds: float, last_seconds: float | None
     )
 
 
+def started_warning(name: str, programs: list[str]) -> str | None:
+    """The warning for a model whose code started programs, or None: the files a
+    program reads are not the model's inputs (``cadgen._internal.filetrace``)."""
+    if not programs:
+        return None
+    reads = "it reads" if len(programs) == 1 else "they read"
+    return (
+        f"warning: {name} started {', '.join(programs)}; files {reads} are not inputs, "
+        "so editing them will not rebuild it"
+    )
+
+
 # --- measuring ---------------------------------------------------------------------------
 
 
@@ -130,6 +147,7 @@ class BuildClock:
         self.children = 0.0
         self.queued = 0.0
         self.profile_report: str | None = None
+        self.programs: list[str] = []  # what the model's code started (note_programs)
         self._in_body = 0
         self._paused = 0
 
@@ -149,6 +167,17 @@ class BuildClock:
 def current() -> BuildClock | None:
     stack = getattr(_LOCAL, "clocks", None)
     return stack[-1] if stack else None
+
+
+def note_programs(programs: list[str]) -> None:
+    """The programs the model's code started in the build measured on this thread,
+    for its ``done`` event (``started_warning``). Nothing outside a build."""
+    clock = current()
+    if clock is None:
+        return
+    for program in programs:
+        if program not in clock.programs:
+            clock.programs.append(program)
 
 
 def record_fields() -> dict[str, float]:

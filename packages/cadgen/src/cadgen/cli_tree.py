@@ -18,7 +18,8 @@ Three renderings, chosen once per process:
 Every model that was BUILT also gets a durable human line on stderr saying where its
 time went -- ``[cadgen] built robot.step in 9m42s: model code 8m20s, cadgen 1m22s`` --
 read off its ``done`` event's ``timings`` (cadgen._internal.build_timing), followed by
-a warning when its model code got much slower than its last build, and by the
+a warning when its model code got much slower than its last build, a warning when it
+started a program (its ``started``: what that program reads is no input), and the
 ``--profile`` report when the build carried one. Off a TTY they print as the model
 finishes; on a TTY, below the frozen block when the build ends. A plain non-TTY also
 gets the one notice the transitions carried that a reader acts on: a model already
@@ -62,7 +63,7 @@ class _Model:
     __slots__ = (
         "model", "name", "state", "phase", "done", "total", "started", "finished",
         "elapsed", "exit", "parent", "children", "stale", "seen", "timings", "profile",
-        "timed", "stale_told",
+        "programs", "timed", "stale_told",
     )
 
     def __init__(self, model: str, parent: str | None) -> None:
@@ -85,6 +86,7 @@ class _Model:
         self.seen = False  # ever reported by its own process (not just submitted)
         self.timings: dict | None = None  # where a built model's time went
         self.profile: str | None = None  # its --profile report
+        self.programs: list[str] | None = None  # the programs its code started
         self.timed = False  # its time lines were printed (or held for the block)
         self.stale_told = False  # its already-stale notice was printed (plain non-TTY)
 
@@ -158,7 +160,7 @@ class BuildTree:
                     self._write_line(node)
                 elif self._tty:
                     self._draw(force=True)
-            if node.timings is not None and not node.timed:
+            if (node.timings is not None or node.programs) and not node.timed:
                 self._time_lines(node)
             if node.stale and node.terminal and not node.stale_told and not (self._json or self._tty):
                 node.stale_told = True
@@ -222,6 +224,9 @@ class BuildTree:
                 node.timings = timings
                 profile = event.get("profile")
                 node.profile = profile if isinstance(profile, str) and profile else None
+            programs = event.get("started")
+            if state == STATE_DONE and isinstance(programs, list) and node.programs is None:
+                node.programs = [str(program) for program in programs if isinstance(program, str) and program]
             if state == STATE_FAILED:
                 node.state = STATE_FAILED
         stale = event.get("stale")
@@ -233,21 +238,27 @@ class BuildTree:
 
     def _time_lines(self, node: _Model) -> None:
         """The durable lines for a model that was built: where its time went, the
-        slowdown warning, the ``--profile`` report. Once per model."""
+        slowdown warning, the warning that it started a program, the ``--profile``
+        report. Once per model."""
         node.timed = True
-        timings = node.timings or {}
-        from cadgen._internal.build_timing import slowdown_warning, time_line
+        from cadgen._internal.build_timing import slowdown_warning, started_warning, time_line
         from cadgen._internal.doors import display_path
 
-        document = timings.get("document")
-        lines = [f"[cadgen] {time_line(display_path(document) if document else node.name, timings)}"]
-        last = timings.get("lastModelSeconds")
-        warning = slowdown_warning(
-            node.name, float(timings.get("modelSeconds") or 0.0),
-            float(last) if isinstance(last, (int, float)) else None,
-        )
-        if warning:
-            lines.append(f"[cadgen] {warning}")
+        lines = []
+        if node.timings is not None:
+            timings = node.timings
+            document = timings.get("document")
+            lines.append(f"[cadgen] {time_line(display_path(document) if document else node.name, timings)}")
+            last = timings.get("lastModelSeconds")
+            warning = slowdown_warning(
+                node.name, float(timings.get("modelSeconds") or 0.0),
+                float(last) if isinstance(last, (int, float)) else None,
+            )
+            if warning:
+                lines.append(f"[cadgen] {warning}")
+        started = started_warning(node.name, node.programs or [])
+        if started:
+            lines.append(f"[cadgen] {started}")
         if node.profile:
             lines += [f"[cadgen] {line}" for line in node.profile.splitlines()]
         if self._tty:
@@ -277,6 +288,8 @@ class BuildTree:
             payload["exit"] = node.exit
         if node.state == STATE_DONE and node.timings is not None:
             payload["timings"] = {k: v for k, v in node.timings.items() if k != "document"}
+        if node.state == STATE_DONE and node.programs:
+            payload["started"] = list(node.programs)
         with contextlib.suppress(OSError, ValueError):
             self._stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
             self._stream.flush()

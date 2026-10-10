@@ -998,7 +998,12 @@ Each with the failure it prevents.
   did not find (one that appears later is no change -- a MODULE that appears
   later is, §3); a `.py` file read as text and `exec`'d rather than imported
   (source counts by reach, and reach follows imports); what a separate
-  program the model runs reads; a copy of
+  program the model runs reads -- so a model whose code starts one
+  (`subprocess`, `os.system`, the `spawn` and `exec` families, by their audit
+  events and by frame) is warned about each time it builds, root or child:
+  `[cadgen] warning: <model> started <program>; files it reads are not
+  inputs, so editing them will not rebuild it`, carried on its `done` event
+  (§9a) because a child's own output is dropped when it succeeds; a copy of
   the whole environment, or a variable a library reads for the model; calls
   made inside the operating system's own libraries (the macOS shared cache);
   a file a third-party library caches for the life of a warm worker, after
@@ -1864,7 +1869,10 @@ stderr (`cadgen.cli_tree`): a TTY gets one refreshed block — `submitted`,
 `building · <phase> n/total`, `current`, `✓ <time>`, finished subtrees folded
 to one line, current children counted on the parent's line; `--json` gets one
 JSON line per model transition; any other non-TTY gets no transitions, only each
-built model's time line and an already-stale notice. Child events reach the root
+built model's time line and an already-stale notice. Every mode prints, once per
+built model, the warning that its code started a program (§5, every read is
+seen), from the `started` list its `done` event carries as it carries its
+`timings`. Child events reach the root
 through the pool, tagged with the root request's id, identically for both
 executors. After publishing, the root runs its gate once more and says
 `already stale: …; rerun` if a child changed during the build.

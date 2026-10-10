@@ -262,7 +262,8 @@ variable its own code reads by its VALUE (a daemon job runs in its caller's
 environment), and on every file whose appearance would change what an import
 finds, a module an import looked for and did not find included
 ([`STORE.md`](STORE.md) §3) — and a model must never `read_step` its own
-output (14). The bundled runtime
+output (14). What a program the model starts reads is no input; the build
+says so when it starts one. The bundled runtime
 under `_runtime/` is the JS half of these; the laws' JS statements live in that
 runtime. It is built
 when the wheel is packaged and travels only inside it: the source tree never

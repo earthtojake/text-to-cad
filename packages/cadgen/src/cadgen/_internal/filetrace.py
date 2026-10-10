@@ -28,6 +28,10 @@ not -- a library caches its configuration, so whether it reads during a build
 depends on the process, not the model. A copy of the whole environment
 (``dict(os.environ)``, ``os.environ.copy()``, its items) reads no one variable,
 and a variable the build set before it read it is its own.
+
+A program the model's code starts (``subprocess``, ``os.system``, the ``spawn``
+and ``exec`` families, by their audit events and by frame, as folder listings
+are) is noted: the files it reads are invisible here, so the build warns.
 """
 
 from __future__ import annotations
@@ -96,7 +100,7 @@ def _tracer() -> ctypes.CDLL:
 
 @dataclass
 class Trace:
-    """What one capture saw opened, listed and read from the environment."""
+    """What one capture saw opened, listed, read from the environment and started."""
 
     read: dict[str, set[tuple[int, int]]] = field(default_factory=dict)  # path -> {(size, mtime_ns)} at open
     updated: set[str] = field(default_factory=set)  # read paths opened to read and write
@@ -108,6 +112,8 @@ class Trace:
     environment: dict[str, str | None] = field(default_factory=dict)
     # Variables the build set or removed: read after that, they are its own.
     environment_set: set[str] = field(default_factory=set)
+    # The programs the model's code started, in order, each once.
+    programs: list[str] = field(default_factory=list)
 
     def _parse(self, log: bytes, *, own: str) -> None:
         for record in log.split(b"\0"):
@@ -208,8 +214,8 @@ def _machine_roots() -> tuple[Path, ...]:
 
 @contextlib.contextmanager
 def capture() -> Iterator[Trace]:
-    """Record what the code run inside opens, lists and reads from the
-    environment. Nests: an inner capture sees its own stretch of the log, the
+    """Record what the code run inside opens, lists, reads from the environment
+    and starts. Nests: an inner capture sees its own stretch of the log, the
     outer one all of it."""
     global _LOG
     tracer = _tracer()
@@ -268,7 +274,7 @@ def paused() -> Iterator[None]:
 
 def _install_hooks() -> None:
     """Install, once and for good, what hears the Python-level half of a build:
-    the audit hook (folder listings) and the environment's
+    the audit hook (folder listings, programs started) and the environment's
     read and write hooks. Outside a capture each costs one check."""
     global _HOOKED
     with _LOCK:
@@ -279,13 +285,20 @@ def _install_hooks() -> None:
 
 
 _LISTINGS = frozenset({"os.listdir", "os.scandir"})
+_PROGRAMS = frozenset({"subprocess.Popen", "os.system", "os.posix_spawn", "os.spawn", "os.exec"})
 
 
 def _audit(event: str, args: tuple) -> None:
-    if not _OPEN or event not in _LISTINGS:
+    if not _OPEN or (event not in _LISTINGS and event not in _PROGRAMS):
         return
     try:
         if getattr(_LOCAL, "paused", 0) or not _listed_by_model(sys._getframe(1)):
+            return
+        if event in _PROGRAMS:
+            program = _program(event, args)
+            for trace in tuple(_OPEN):
+                if program and program not in trace.programs:
+                    trace.programs.append(program)
             return
         target = args[0] if args else None
         folder = _descriptor_path(target) if isinstance(target, int) else os.path.abspath(
@@ -296,6 +309,51 @@ def _audit(event: str, args: tuple) -> None:
             trace.listed.add(folder)
     except Exception:  # noqa: BLE001 - an audit hook must never fail the call it observes
         pass
+
+
+# Programs that run the command they are handed (``shell=True``, ``os.system``):
+# the program named is that command's.
+_SHELLS = frozenset({"sh", "bash", "dash", "zsh", "cmd", "cmd.exe"})
+
+
+def _program(event: str, args: tuple) -> str | None:
+    """The program an audit event starts, by name: ``openscad``, not its path."""
+    if event == "os.system":
+        return _first_word(args[0])
+    if event == "subprocess.Popen":
+        executable, argv = args[0], args[1]
+        words = [os.fsdecode(word) for word in argv] if isinstance(argv, (list, tuple)) else None
+        if words is None:
+            # Windows hands the audit one command line.
+            line = os.fsdecode(argv)
+            name = _base(executable) if executable is not None else _first_word(line)
+            if name and name.lower() in _SHELLS:
+                _shell, _flag, command = line.partition(" /c ")
+                return _first_word(command.strip().strip('"')) or name
+            return name
+        if len(words) >= 3 and _base(words[0]).lower() in _SHELLS and words[1] in ("-c", "/c", "/C"):
+            return _first_word(words[2])
+        return _base(executable if executable is not None else (words[0] if words else ""))
+    # os.posix_spawn (path, argv, env), os.exec (path, args, env), os.spawn (mode, path, args, env)
+    return _base(args[1] if event == "os.spawn" else args[0])
+
+
+def _first_word(command: object) -> str | None:
+    import shlex
+
+    text = os.fsdecode(command) if isinstance(command, (str, bytes)) else ""
+    try:
+        words = shlex.split(text, posix=os.name != "nt")
+    except ValueError:
+        words = text.split()
+    return _base(words[0].strip('"')) if words else None
+
+
+def _base(path: object) -> str:
+    try:
+        return os.path.basename(os.fsdecode(path)) if path is not None else ""
+    except TypeError:
+        return ""
 
 
 def _hook_environment() -> None:
