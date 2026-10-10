@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-__all__ = ["candidates", "executable", "output", "stamp", "version", "version_tuple"]
+__all__ = ["candidates", "executable", "output", "version", "version_tuple"]
 
 
 def executable(name: str) -> str:
@@ -43,7 +43,7 @@ def candidates(variable: str | None, places: Iterable[Path | str | None]) -> lis
     return found
 
 
-def stamp(path: Path) -> tuple[int, int] | None:
+def _stamp(path: Path) -> tuple[int, int] | None:
     """``path``'s (mtime, size), or ``None`` when there is nothing there."""
     try:
         stat = path.stat()
@@ -64,7 +64,7 @@ def _run(command: str, flag: str, stamp: tuple[int, int]) -> tuple[str, str] | N
 
 def output(path: Path, flag: str) -> tuple[str, str] | None:
     """What ``path flag`` prints, as (stdout, stderr), when it runs and succeeds; else ``None``."""
-    found = stamp(path)
+    found = _stamp(path)
     return None if found is None else _run(str(path), flag, found)
 
 

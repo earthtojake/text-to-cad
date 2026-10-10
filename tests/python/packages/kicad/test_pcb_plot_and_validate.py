@@ -86,7 +86,8 @@ class PcbPlotAndValidateTest(unittest.TestCase):
         return cls._payloads
 
     def test_a_board_plots_as_one_sheet_of_layers_and_a_draft_carries_its_ratsnest(self) -> None:
-        from cadgen.kicad.plot import BOARD_BACKGROUND, PLOT_SCHEMA_VERSION
+        from cadgen.kicad.plot import BOARD_BACKGROUND
+        from cadgen.plot import PLOT_SCHEMA_VERSION
 
         finished, draft = self.payloads()
         self.assertEqual((finished["schemaVersion"], PLOT_SCHEMA_VERSION), (2, 2))

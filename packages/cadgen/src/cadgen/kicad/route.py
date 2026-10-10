@@ -108,10 +108,6 @@ def _java_major(version: str) -> int:
     return int(parts[1]) if major == 1 and len(parts) > 1 else major
 
 
-def _java_version(java: Path) -> str | None:
-    return tool_probe.version(java, "-version", r'version "([^"]+)"')
-
-
 def _java_places() -> Iterator[Path | str | None]:
     home = os.environ.get("JAVA_HOME", "").strip()
     yield Path(home).expanduser() / "bin" / tool_probe.executable("java") if home else None
@@ -137,7 +133,7 @@ def _java_places() -> Iterator[Path | str | None]:
 def _find_java() -> tuple[Path, str]:
     too_old: list[str] = []
     for candidate in tool_probe.candidates("CADGEN_JAVA", _java_places()):
-        version = _java_version(candidate)
+        version = tool_probe.version(candidate, "-version", r'version "([^"]+)"')
         if version is None:
             continue
         if _java_major(version) < JAVA_MAJOR:

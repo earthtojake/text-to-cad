@@ -17,7 +17,7 @@ const VIEW_SAVE_DELAY_MS = 180;
  * @param {{ onStateChange?: (record: object) => void, record: () => object, written?: object | null }} options
  *   `record` is read when the view is written, never at render. `written`: the record the host
  *   already holds, which is not written back to it unchanged.
- * @returns {{ schedule: () => void, flush: () => void }}
+ * @returns {{ schedule: () => void }}
  */
 export function useFileViewWriter({ onStateChange, record, written = null }) {
   const onStateChangeRef = useRef(onStateChange);
@@ -45,7 +45,7 @@ export function useFileViewWriter({ onStateChange, record, written = null }) {
     closed.current = false;
     return () => { flush(); closed.current = true; };
   }, [flush]);
-  return useMemo(() => ({ schedule, flush }), [schedule, flush]);
+  return useMemo(() => ({ schedule }), [schedule]);
 }
 
 /**

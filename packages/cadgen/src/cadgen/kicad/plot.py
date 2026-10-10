@@ -63,8 +63,6 @@ from cadgen.plot import PLOT_SCHEMA_VERSION, PlotError
 
 __all__ = [
     "BOARD_BACKGROUND",
-    "PLOT_SCHEMA_VERSION",
-    "PlotError",
     "SCHEMATIC_BACKGROUND",
     "build_plot",
     "plot_payload_bytes",

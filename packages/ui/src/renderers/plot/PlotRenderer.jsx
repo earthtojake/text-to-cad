@@ -84,7 +84,7 @@ function PlotSurface({ view, data }) {
   const { copyText: referenceText } = handover;
   const copyReferences = useCallback((selectors) => copyText(referenceText(selectors)), [copyText, referenceText]);
   const picking = useBoardPicking({ view: plotView, index, sheet: document.sheet, toolMode, selection, measure, isolated: isolation.resolved,
-    side: shownDisplay?.side || "top", placement: boardDisplayAirwires(shownDisplay), onCopy: copyReferences });
+    side: shownDisplay?.side, placement: boardDisplayAirwires(shownDisplay), onCopy: copyReferences });
   // A board and its schematic open in two views select together, through the host (selection only).
   useCrossProbe({ port: host.crossProbe, path: view.file.path, index, selection, toolMode, view: plotView,
     layout: document.plot?.layout ?? null, mirrored: picking.mirrored });
@@ -109,7 +109,7 @@ function PlotSurface({ view, data }) {
   const selecting = toolMode === PLOT_TOOL.SELECT;
   const copyShortcut = mobile ? "" : shell.frame.copyShortcut;
   const toolPanels = index ? <>
-    <BoardTreePanel index={index} documentKind={index.document} selection={selection.selection} isolated={isolation.isolated}
+    <BoardTreePanel index={index} selection={selection.selection} isolated={isolation.isolated}
       selectMode={selection.selectMode} onSelectMode={selection.setSelectMode} select={select} hover={selection.hover}
       onIsolate={isolation.toggle} clear={selection.clear} active={selecting} />
     <BoardReferencePanel index={index} resolved={selection.resolved} finding={selection.finding} active={selecting}

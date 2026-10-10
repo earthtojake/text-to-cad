@@ -184,7 +184,7 @@ class HarnessModelTest(unittest.TestCase):
         self.assertIsNone(catalog_entry(self.folder / "config.yml"))
 
     def test_the_plot_route_takes_a_harness_and_names_what_is_missing(self) -> None:
-        from cadgen.kicad.plot import PlotError
+        from cadgen.plot import PlotError
         from cadgen.viewer.plots import plot_payload_response
 
         (self.folder / "main.harness.yml").write_text(EXPECTED, encoding="utf-8")

@@ -14,7 +14,6 @@ import { useViewerShortcuts } from "./useViewerShortcuts.js";
 import { useWhenSettled } from "./useWhenSettled.js";
 
 const EMPTY = Object.freeze({});
-const NO_COMMANDS = Object.freeze({});
 
 /**
  * The file's view of a flat picture (`fileView.js`): the picture's transform as its camera (only once
@@ -26,7 +25,7 @@ const NO_COMMANDS = Object.freeze({});
  *   rendererState?: { signatures?: Record<string, string>, read: () => Record<string, unknown> } | null }} options
  *   `rendererState`: the renderer's slices, read when the view is written; a new one is written soon.
  *   The renderer restores them itself (`readFileView(view.state, signatures)`). Null keeps what is stored.
- * @returns {{ restored: object | null, rememberView: (transform: object | null) => void, schedule: () => void }}
+ * @returns {{ restored: object | null, rememberView: (transform: object | null) => void }}
  */
 export function usePlaneFileView({ view, rendererState = null }) {
   const [stored] = useState(() => ({ camera: readFileView(view.state).camera, slices: readFileViewSlices(view.state) }));
@@ -53,7 +52,7 @@ export function usePlaneFileView({ view, rendererState = null }) {
     cameraRef.current = planeTransformCamera(transform, Boolean(transform));
     schedule();
   }, [schedule]);
-  return { restored, rememberView, schedule };
+  return { restored, rememberView };
 }
 
 /**
@@ -83,8 +82,8 @@ export function usePlaneFileView({ view, rendererState = null }) {
  * @param {{ noun: string, captureFailed: string, copyFailed: string, noCamera: string, noDisplay: string, displayInView?: string }} options.words
  *   What the picture is called, and the sentences of a failed capture or copy and of the commands it cannot take.
  * @param {ReturnType<typeof import("../tools/toolModes.js").createToolModes> | null} [options.toolModes]
- * @param {{ mode: string, set: (update: (current: string) => string) => void }} [options.tool]  The tool in hand, when
- *   the renderer holds it itself (its pointer is decided before this hook runs). Omitted: the shell holds it.
+ * @param {{ mode: string, set: (update: (current: string) => string) => void }} [options.tool]  The tool in hand, which
+ *   the renderer holds (its pointer is decided before this hook runs). Omitted: a picture with no tools.
  * @param {{ commands?: Record<string, (...args: any[]) => void>, declined?: Record<string, string>, state?: () => object }} [options.live]
  * @param {readonly import("@text-to-cad/core/prompt").PromptReference[] | null} [options.references]  What is selected,
  *   in the prompt grammar: live state's selection, and with it the view has Quick Edit. Null: neither.
@@ -111,11 +110,9 @@ export function usePlaneShell({
   const idle = load.busy || !load.shown;
 
   // ---- tools ----------------------------------------------------------------
-  const [ownToolMode, setOwnToolMode] = useState(() => (toolModes ? toolModes.defaultMode : ""));
-  const toolMode = tool ? tool.mode : ownToolMode;
-  const setToolMode = tool ? tool.set : setOwnToolMode;
-  const selectTool = useCallback((mode) => setToolMode((current) => (toolModes ? toolModes.next(current, mode) : mode)), [toolModes, setToolMode]);
-  const selectDefaultTool = useCallback(() => setToolMode(toolModes ? toolModes.defaultMode : ""), [toolModes, setToolMode]);
+  const toolMode = tool?.mode ?? "";
+  const setToolMode = tool?.set;
+  const selectTool = useCallback((mode) => setToolMode?.((current) => (toolModes ? toolModes.next(current, mode) : mode)), [toolModes, setToolMode]);
   const drawToolActive = toolMode === SHELL_TOOL.DRAW;
   const draw = usePlaneDrawing({ active: drawToolActive, plane, noun: words.noun });
   const { toolStack, changeToolStack } = useToolStackLayout(services);
@@ -207,11 +204,11 @@ export function usePlaneShell({
     setRenderMode() { throw new Error(words.noDisplay); },
     capture,
     thumbnail: plane.thumbnail,
-    ...(live.commands || NO_COMMANDS)
+    ...(live.commands || EMPTY)
   };
   // A picture has settled once it is read and drawn: a library card's picture waits for that.
   const whenSettled = useWhenSettled(() => ready);
-  useLiveSurface({ binding: services.live, runtime: runtimeRef, commands: Object.keys(live.commands || NO_COMMANDS), declined: live.declined, ready: whenSettled });
+  useLiveSurface({ binding: services.live, runtime: runtimeRef, commands: Object.keys(live.commands || EMPTY), declined: live.declined, ready: whenSettled });
 
   // While the picture loads, or once it has failed to, there is no chrome: no tools, no Quick Edit.
   const chromeHidden = !load.shown || load.busy;
@@ -219,7 +216,7 @@ export function usePlaneShell({
   const sketch = useMemo(() => (drawToolActive ? { ink: draw.drawing.hasContent, capture: draw.capture } : null),
     [drawToolActive, draw.drawing.hasContent, draw.capture]);
   return {
-    toolMode, selectTool, selectDefaultTool, tools, idle, ready, copyText, dismissAlert: dismissal.dismiss,
+    tools, ready, copyText, dismissAlert: dismissal.dismiss,
     frame: {
       view, plane, modelKey, resource, load, rootRef, rootElement, chromeHidden, compact, toolStack, changeToolStack,
       references, copyAction, copyDrawing, copyShortcut: host.environment?.platform === "darwin" ? "⌘C" : "Ctrl+C",

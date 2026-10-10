@@ -347,7 +347,7 @@ class HarnessRequestsAreRefusedByName(_Workspace):
         self.assertEqual(payload, served.read_bytes())
 
     def test_a_machine_without_wireviz_is_told_how_to_get_it_and_a_bad_document_why(self) -> None:
-        from cadgen.kicad.plot import PlotError
+        from cadgen.plot import PlotError
         from cadgen.wireviz.install import WirevizMissingError
 
         for raised, pattern in (

@@ -5,7 +5,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 
 /** The room the eye takes at a row's right end: the row's `--row-actions`. */
-export const TREE_ROW_EYE_WIDTH = "1.5rem";
+const TREE_ROW_EYE_WIDTH = "1.5rem";
 
 /**
  * What the eye does, and what it says while it is off and on:

@@ -23,7 +23,7 @@ Freerouting's reader splits a pin reference at its first ``-``, strips any
 ``.<digits>`` from a padstack name and reads a tab as part of a name, so no
 spelling of the board's own goes into the file: nets, parts, pins, padstacks,
 images and classes get aliases of letters, digits, ``_`` and ``@``
-(``N3_GND``, ``R1``, ``@4``), and the :class:`Dsn` keeps the way back.
+(``N3_GND``, ``R1``, ``@4``), and the :class:`~cadgen.kicad.specctra.dsn.Dsn` keeps the way back.
 
 What goes in
 ------------
@@ -48,28 +48,15 @@ What goes in
 A shape Freerouting has no word for is written larger than it is, never
 smaller: a rounded or oval pad as a polygon outside its curve, an arc of the
 outline on the side away from the copper, an arc track as a wider polyline.
-Every clearance is written :data:`MARGIN` above the board's. KiCad's DRC runs
+Every clearance is written :data:`~cadgen.kicad.specctra.dsn.MARGIN` above the board's. KiCad's DRC runs
 on the routed board and judges the result; an approximation only ever costs
 the router room.
 """
 
 from __future__ import annotations
 
-from cadgen.kicad.specctra.dsn import MARGIN, RESOLUTION, Dsn, ViaKind, board_dsn
-from cadgen.kicad.specctra.session import RoutedTrack, RoutedVia, Routes, SessionError, read_session, with_routes
+from cadgen.kicad.specctra.dsn import board_dsn
+from cadgen.kicad.specctra.session import Routes, SessionError, read_session, with_routes
 from cadgen.kicad.specctra.shapes import DsnFrame
 
-__all__ = [
-    "MARGIN",
-    "RESOLUTION",
-    "Dsn",
-    "DsnFrame",
-    "RoutedTrack",
-    "RoutedVia",
-    "Routes",
-    "SessionError",
-    "ViaKind",
-    "board_dsn",
-    "read_session",
-    "with_routes",
-]
+__all__ = ["DsnFrame", "Routes", "SessionError", "board_dsn", "read_session", "with_routes"]

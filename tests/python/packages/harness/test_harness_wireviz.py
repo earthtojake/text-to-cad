@@ -178,7 +178,7 @@ class HarnessWirevizTest(unittest.TestCase):
         self.assertIn("Heat shrink", described)
 
     def test_wireviz_draws_a_hand_written_document_and_names_what_it_refuses(self) -> None:
-        from cadgen.kicad.plot import PlotError
+        from cadgen.plot import PlotError
         from cadgen.wireviz.bom import harness_bom
         from cadgen.wireviz.plot import build_plot
 

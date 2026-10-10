@@ -18,7 +18,6 @@ import { formatBoardRefSelector, parseBoardRefSelector } from "../boardRefs.js";
 import { bounds, nearestOnPolyline, point, pointInPolygon, polygonArea, polygonReach } from "./geometry.js";
 import { boxOf, createSpatialGrid, nearBox } from "./spatialGrid.js";
 
-export { nearestOnSegment, pointInPolygon, polygonArea } from "./geometry.js";
 
 /** How a pick is filtered: the Select tool's modes. */
 export const BOARD_PICK_MODES = Object.freeze(["all", "parts", "pads", "nets"]);

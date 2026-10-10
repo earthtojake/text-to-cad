@@ -461,12 +461,12 @@ class PcbRouteTest(unittest.TestCase):
             jar.write_text("", encoding="utf-8")
             java.write_text("", encoding="utf-8")
             with mock.patch.dict(os.environ, {"CADGEN_FREEROUTING": str(jar), "CADGEN_JAVA": str(java)}):
-                with mock.patch.object(route, "_java_version", return_value="25.0.4.1"):
+                with mock.patch.object(route.tool_probe, "version", return_value="25.0.4.1"):
                     self.assertEqual(route.find_freerouting().command, (str(java), "-Djava.awt.headless=true", "-jar", str(jar)))
-                with mock.patch.object(route, "_java_version", return_value="15.0.1"):
+                with mock.patch.object(route.tool_probe, "version", return_value="15.0.1"):
                     with self.assertRaisesRegex(route.FreeroutingMissingError, r"needs Java 25 or newer.*is Java 15\.0\.1"):
                         route.find_freerouting()
-                with mock.patch.object(route, "_java_version", return_value="1.8.0_282"):
+                with mock.patch.object(route.tool_probe, "version", return_value="1.8.0_282"):
                     with self.assertRaisesRegex(route.FreeroutingMissingError, r"is Java 1\.8\.0_282"):
                         route.find_freerouting()
 

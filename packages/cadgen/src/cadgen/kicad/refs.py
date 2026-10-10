@@ -43,7 +43,6 @@ from cadgen.cad_ref_syntax import QUOTED_PREFIX_RE, ref_prefix_names, split_cad_
 from cadgen.kicad.naming import natural
 
 __all__ = [
-    "BOARD_REF_SUFFIXES",
     "BoardSelector",
     "BoardToken",
     "ReferenceView",
@@ -56,8 +55,6 @@ __all__ = [
     "selector_or_none",
 ]
 
-#: The documents whose references are board references.
-BOARD_REF_SUFFIXES = (".kicad_pcb", ".kicad_sch")
 SELECTOR_KINDS = ("part", "pad", "net", "copper", "point")
 
 # JavaScript's whitespace (`\s`), spelled out: Python's `\s` and `str.strip()` know a few

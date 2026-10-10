@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createBoardIndex, nearestOnSegment, pointInPolygon } from "./boardIndex.js";
+import { createBoardIndex } from "./boardIndex.js";
+import { nearestOnSegment, pointInPolygon } from "./geometry.js";
 import { drawBoardOverlay } from "./boardOverlay.js";
 
 // A 40 x 30 mm sheet whose script origin sits at sheet (5, 25): script (10, 5) is sheet (15, 20).

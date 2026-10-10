@@ -39,7 +39,7 @@ function rowActions(node, { select, hover }) {
 // A part's or a net's eye isolates it: everything else on the canvas steps back
 // (`kit/inspector/TreeRowEye.jsx`). It takes no width from the row; the name fades out under it.
 function rowEye(node, isolatedIds, isolate) {
-  if (!isolable(node) || !isolate) return { layout: { style: null, name: "" }, eye: null };
+  if (!isolable(node)) return { layout: { style: null, name: "" }, eye: null };
   const on = isolatedIds.has(node.id);
   return { layout: treeRowEyeLayout(on), eye: <TreeRowEye kind="isolate" on={on} label={node.label} onToggle={() => isolate(node.selector)} /> };
 }
@@ -100,9 +100,9 @@ function BoardSearchRow({ match, highlighted, isolatedIds, cursor, actions }) {
  * isolates it (`isolated`, `onIsolate`). It renders again only for what it shows — the document, the
  * selection, what is isolated, the mode — not for every render of the view under it.
  */
-export const BoardTreePanel = memo(function BoardTreePanel({ index, documentKind, selection, isolated = EMPTY, selectMode, onSelectMode, select, hover, onIsolate = null, clear, active }) {
-  const noun = nounOf(documentKind);
-  const tree = useMemo(() => (index ? buildBoardTree(index) : { roots: EMPTY, nodesById: new Map(), parents: new Map() }), [index]);
+export const BoardTreePanel = memo(function BoardTreePanel({ index, selection, isolated = EMPTY, selectMode, onSelectMode, select, hover, onIsolate, clear, active }) {
+  const noun = nounOf(index.document);
+  const tree = useMemo(() => buildBoardTree(index), [index]);
   const [expanded, setExpanded] = useState(() => new Set(["group:parts"]));
   const toggle = useCallback((node) => setExpanded((current) => {
     const next = new Set(current);
@@ -143,7 +143,7 @@ export const BoardTreePanel = memo(function BoardTreePanel({ index, documentKind
 
   return <ToolPanel id="tree" label={noun} fit="tree" resizable closable collapsible={false} hidden={!active}
     header={<TreeFilterInput dense label={`Filter ${noun.toLowerCase()}`} placeholder="Filter…" yieldWhileTyping value={query} onChange={changeQuery} onKeyDown={onKeyDown}
-      trailing={<><BoardSelectModeMenu mode={selectMode} onModeChange={onSelectMode} document={documentKind || "board"} /><ToolPanelClose /></>} />}>
+      trailing={<><BoardSelectModeMenu mode={selectMode} onModeChange={onSelectMode} document={index.document} /><ToolPanelClose /></>} />}>
     <div className="flex flex-col text-tiny" aria-label={`${noun} parts and nets`}>
       <div ref={listRef} className="px-1 py-1" onClick={(event) => { if (!event.target.closest("li,button,input")) clear(); }}>
         {searching ? <p role="status" className="px-2 py-1 text-micro text-muted-foreground">

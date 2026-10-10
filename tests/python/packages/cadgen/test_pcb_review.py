@@ -111,7 +111,7 @@ class ReviewTest(unittest.TestCase):
 
     def test_the_review_never_blocks_a_build(self):
         from cadgen.kicad.check import is_blocking
-        from cadgen.kicad.cli import Finding
+        from cadgen.kicad.phrasing import Finding
 
         for severity in ("warning", "error"):
             self.assertFalse(is_blocking(Finding(check="review", severity=severity, type="decoupling_far", description="", items=())))
@@ -122,7 +122,7 @@ class ReviewTest(unittest.TestCase):
 
         from cadgen import pcb
         from cadgen.kicad.check import ProjectCheck
-        from cadgen.kicad.cli import Finding
+        from cadgen.kicad.phrasing import Finding
 
         for severity in ("warning", "error"):
             found = Finding(check="review", severity=severity, type="decoupling_far", description="far", items=(), summary="C1 is far")

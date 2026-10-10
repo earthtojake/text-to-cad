@@ -341,5 +341,5 @@ export function usePlaneView({ content, bounds, restored = null, colorScheme = "
     }, "image/png");
   }), []);
 
-  return { containerRef, canvasRef, dragging, fit, zoomBy, setView: moveTo, capture, requestPaint, paintNow, transformRef, schemeRef };
+  return { containerRef, canvasRef, dragging, fit, setView: moveTo, capture, requestPaint, paintNow, transformRef, schemeRef };
 }

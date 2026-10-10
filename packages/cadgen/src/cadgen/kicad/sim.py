@@ -43,7 +43,7 @@ from cadgen.kicad.sim_plot import plot_run
 from cadgen.kicad.spice import PartModel, parse_value, part_model, spice_number, to_number
 from cadgen.kicad.waveform import Waveform
 
-__all__ = ["Load", "OperatingPoint", "Run", "SimulationError", "Source", "Testbench", "Waveform"]
+__all__ = ["Load", "OperatingPoint", "Run", "SimulationError", "Source", "Testbench"]
 
 
 class SimulationError(RuntimeError):

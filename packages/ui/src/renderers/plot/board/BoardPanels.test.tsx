@@ -21,7 +21,7 @@ const index = createBoardIndex({
 
 function tree(props: Record<string, unknown> = {}) {
   const spies = { select: vi.fn(), hover: vi.fn(), onIsolate: vi.fn(), clear: vi.fn() };
-  const element = (extra: Record<string, unknown>) => <BoardTreePanel index={index} documentKind="board" selection={[]} selectMode="all" onSelectMode={() => {}} active {...spies} {...props} {...extra} />;
+  const element = (extra: Record<string, unknown>) => <BoardTreePanel index={index} selection={[]} selectMode="all" onSelectMode={() => {}} active {...spies} {...props} {...extra} />;
   const view = render(element({}));
   return { spies, rerender: (extra: Record<string, unknown>) => view.rerender(element(extra)) };
 }

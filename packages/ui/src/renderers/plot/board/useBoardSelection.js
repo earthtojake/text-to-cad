@@ -94,7 +94,7 @@ export function useBoardSelection({ index, requestPaint, toolMode, selectTool })
   const dropHover = useCallback(() => { hoverRef.current = null; }, []);
 
   return {
-    selection, resolved, finding, focusedFinding, markers, dim, active: Boolean(selection.length || finding),
+    selection, resolved, finding, markers, dim, active: Boolean(selection.length || finding),
     select, clear, hover, hoverHit, hoverRef, dropHover, selectMode, setSelectMode,
   };
 }

@@ -35,10 +35,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from cadgen.kicad import sexpr
-from cadgen.kicad.cli import Finding, drc_findings, erc_findings, run_kicad_cli
+from cadgen.kicad.cli import drc_findings, erc_findings, run_kicad_cli
 from cadgen.kicad.design import Board, DesignError
 from cadgen.kicad.geometry import board_origin, script_frame
 from cadgen.kicad.install import KicadInstall, find_kicad
+from cadgen.kicad.phrasing import Finding
 from cadgen.kicad.project import project_texts
 
 __all__ = ["BoardBuild", "ProjectCheck", "build_board", "check_project", "fixes", "is_blocking"]

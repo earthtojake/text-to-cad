@@ -104,7 +104,6 @@ it('a check in focus stays on that check in a new revision, wherever it is liste
   // KiCad now lists a new check first: the one in focus is the same check, one place down.
   const added = { check: 'drc', severity: 'error', type: 'clearance', description: 'Clearance', items: [] };
   view.rerender({ index: indexOf(board([added, ...FINDINGS])) });
-  expect(view.result.current.selection.focusedFinding).toBe(2);
   expect(view.result.current.selection.finding.type).toBe('unconnected_items');
   // Fixed: no check in focus, and none of the others in its place.
   view.rerender({ index: indexOf(board([added, FINDINGS[0]])) });

@@ -8,7 +8,7 @@ import time
 
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from cadgen.catalog import (
     StepImportOptions,
@@ -49,6 +49,10 @@ from cadgen._internal.generation_spec import (
     _entry_spec_from_source,
     _selector_options_for_part,
 )
+
+if TYPE_CHECKING:
+    from cadgen.kicad.build import BoardWritten
+
 
 def _pinned_child_records(scene: object) -> Iterator[tuple[str, dict]]:
     """Each child tree the body pinned, with that child's record, only while the
@@ -1139,10 +1143,7 @@ def _validate_tree_less_target(spec: EntrySpec, fmt: ModelFormat) -> None:
 
 
 def _generated_document_summary(spec: EntrySpec, fmt: ModelFormat) -> str:
-    output = getattr(spec, fmt.spec_path)
-    if output is not None:
-        return f"wrote {fmt.wrote}: {_display_path(output)}"
-    return f"processed: {spec.source_ref}"
+    return f"wrote {fmt.wrote}: {_display_path(getattr(spec, fmt.spec_path))}"
 
 
 def _generated_output_summary(spec: EntrySpec) -> str:
@@ -1626,10 +1627,10 @@ def generate_harness_targets(
     )
 
 
-def _board_facts(spec: EntrySpec, built: object | None) -> dict[str, object]:
+def _board_facts(spec: EntrySpec, built: BoardWritten | None) -> dict[str, object]:
     """A board's result says how much is left to route: what this build left, or else
     what its record says the last one left."""
-    return {"unrouted": getattr(built, "unrouted", None) if built is not None else _board_unrouted(spec)}
+    return {"unrouted": built.unrouted if built is not None else _board_unrouted(spec)}
 
 
 def _board_unrouted(spec: EntrySpec) -> int | None:
@@ -1663,7 +1664,8 @@ def _generate_tree_less_targets(
 
     reported: list[dict[str, object]] = []
 
-    def document_of(spec: EntrySpec) -> Path | None:
+    # Every target is validated first (`_validate_tree_less_target`): each has its document.
+    def document_of(spec: EntrySpec) -> Path:
         return getattr(spec, fmt.spec_path)
 
     def _emit(spec: EntrySpec, outcome: str, built: object | None = None) -> None:
@@ -1678,7 +1680,7 @@ def _generate_tree_less_targets(
                 "outcome": outcome,
                 # Absolute in the JSON result, like every door's; the human line
                 # shows it relative to the cwd.
-                "document": str(document.expanduser().resolve()) if document is not None else None,
+                "document": str(document.expanduser().resolve()),
                 "tree": None,
                 **(facts(spec, built) if facts is not None else {}),
             }
@@ -1690,7 +1692,7 @@ def _generate_tree_less_targets(
                 print(json.dumps(entry, separators=(",", ":")))
                 continue
             document = entry["document"]
-            line = f"{entry['outcome']} {_display_path(Path(document)) if document else None}"
+            line = f"{entry['outcome']} {_display_path(Path(document))}"
             unrouted = entry.get("unrouted")
             if unrouted:
                 line += f" (draft: {unrouted} unrouted connection{'s' if unrouted != 1 else ''})"
@@ -1703,7 +1705,7 @@ def _generate_tree_less_targets(
         # models, and cadgen.store.index.resolve_model_ref refuses a bare path there
         # rather than guessing.
         model = _model_for_spec(spec)
-        if spec.script_path is None or document_of(spec) is None or model is None:
+        if model is None:
             return False
         return not stale(model).stale
 
@@ -1716,8 +1718,7 @@ def _generate_tree_less_targets(
     if not force:
         current_specs = [spec for spec in selected_specs if is_current(spec)]
         for spec in current_specs:
-            document = document_of(spec)
-            logger.info(f"{_display_path(document) if document is not None else spec.cad_ref} is current; not rebuilt")
+            logger.info(f"{_display_path(document_of(spec))} is current; not rebuilt")
             _emit(spec, "current")
         current_refs = {spec.source_ref for spec in current_specs}
         selected_specs = [spec for spec in selected_specs if spec.source_ref not in current_refs]

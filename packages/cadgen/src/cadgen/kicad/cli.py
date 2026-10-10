@@ -29,7 +29,7 @@ from typing import Callable, Sequence
 from cadgen.kicad.install import KicadInstall
 from cadgen.kicad.phrasing import Finding, FindingItem, summarize
 
-__all__ = ["Finding", "KicadRunError", "erc_findings", "drc_findings", "run_kicad_cli", "stage_files"]
+__all__ = ["KicadRunError", "erc_findings", "drc_findings", "run_kicad_cli", "stage_files"]
 
 _TIMEOUT_SECONDS = 600
 _NOISE = ("Fontconfig error",)
@@ -50,10 +50,6 @@ def _private_config() -> Path:
             _config_home = Path(tempfile.mkdtemp(prefix="cadgen-kicad-config-"))
             atexit.register(shutil.rmtree, _config_home, True)
         return _config_home
-
-
-def config_home() -> Path:
-    return _private_config()
 
 
 def stage_files(files: Sequence[tuple[Path, bytes]], folder: Path) -> Path:

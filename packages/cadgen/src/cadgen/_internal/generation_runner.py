@@ -367,13 +367,13 @@ def _write_treeless_record(
         "closure": {
             "hash": closure_hash,
             "files": closure_files,
-            "shas": dict(getattr(source_closure, "file_hashes", None) or {}),
-            "names": {rel: list(names) for rel, names in (getattr(source_closure, "names", None) or {}).items()},
-            "wholes": dict(getattr(source_closure, "wholes", None) or {}),
-            "own": {rel: list(names) for rel, names in (getattr(source_closure, "own", None) or {}).items()},
+            "shas": dict(source_closure.file_hashes),
+            "names": {rel: list(names) for rel, names in source_closure.names.items()},
+            "wholes": dict(source_closure.wholes),
+            "own": {rel: list(names) for rel, names in source_closure.own.items()},
             "static": False,
         },
-        "constants": dict(getattr(source_closure, "constants", None) or {}),
+        "constants": dict(source_closure.constants),
         "children": [{"model": str(child), "tree": tree} for child, tree in child_trees],
         "outputs": _output_entries(written),
         "stepHash": "",
@@ -708,10 +708,10 @@ def _run_script_generator_body(
     generated_scene.extra_outputs = board_outputs
     generated_scene.source_closure_hash = source_closure.closure_hash
     generated_scene.source_closure_files = source_closure.files
-    generated_scene.source_closure_file_hashes = dict(getattr(source_closure, "file_hashes", None) or {})
-    generated_scene.source_closure_names = dict(getattr(source_closure, "names", None) or {})
-    generated_scene.source_closure_wholes = dict(getattr(source_closure, "wholes", None) or {})
-    generated_scene.source_closure_own = dict(getattr(source_closure, "own", None) or {})
+    generated_scene.source_closure_file_hashes = dict(source_closure.file_hashes)
+    generated_scene.source_closure_names = dict(source_closure.names)
+    generated_scene.source_closure_wholes = dict(source_closure.wholes)
+    generated_scene.source_closure_own = dict(source_closure.own)
     generated_scene.source_closure_constants = dict(source_closure.constants)
     return generated_scene
 
