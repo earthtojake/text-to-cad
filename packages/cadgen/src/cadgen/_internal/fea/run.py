@@ -530,6 +530,8 @@ def _analysis_extras(analysis, result) -> dict:
         "noun": getattr(analysis, "noun", "this load"),
         "reference_C": result.scalars.get("reference_C"),
         "warnings": list(result.scalars.get("analysis_warnings", ())),
+        # Structured facts an analysis adds for the viewer (cfd's Reynolds number and its limit).
+        **result.scalars.get("analysis_extras", {}),
     }
 
 
@@ -904,7 +906,9 @@ def solve_study(
     if primary.components == 3:
         colour = np.linalg.norm(colour, axis=1)
     stress_coloured = primary.attribute == "_VON_MISES"
-    written = {"_VON_MISES", "_DISPLACEMENT"}
+    # The colour values go under _VON_MISES only when they are von Mises; a von Mises field that is
+    # not the colouring one (cfd's mapped structure) is written like any other listed field.
+    written = {"_DISPLACEMENT"} | ({"_VON_MISES"} if stress_coloured else set())
     extra_attributes = {}
     if not static:
         for spec in analysis.fields:

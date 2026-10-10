@@ -211,7 +211,15 @@ function readAnalysis(raw) {
     type: known.name, tier: [1, 2, 3].includes(own.tier) ? own.tier : known.tier, word: text(own.word) || known.word,
     estimate: typeof own.estimate === "boolean" ? own.estimate : known.estimate, noun: text(own.noun) || known.noun,
     limits: sentences(own.limits), warnings: sentences(own.warnings), referenceC: finiteOrNull(own.reference_C),
+    ...(readReynolds(own.reynolds) ? { reynolds: readReynolds(own.reynolds) } : {}),
   };
+}
+
+/** A flow's Reynolds number as the file states it (`analysis.reynolds`: value, limit, kind); null for none. */
+function readReynolds(raw) {
+  if (!raw || typeof raw !== "object" || !Number.isFinite(raw.value)) return null;
+  const kind = raw.kind === "external" ? "external" : "internal";
+  return { value: Number(raw.value), limit: Number.isFinite(raw.limit) ? Number(raw.limit) : kind === "external" ? 1000 : 2000, kind };
 }
 
 /**
@@ -934,13 +942,21 @@ export const feaAdapted = (result) => result.fit.some((step) => Boolean(step.acc
 
 const REYNOLDS = /\bRe\s*(\d[\d,.]*)/;
 /**
- * A flow's warning that it ran past the laminar range, where the file gives one (`analysis.warnings`:
- * "Re 4200 is past the laminar range: ..."): `{ sentence, limit }`, the Reynolds number the laminar
- * solve is good to (said in the sentence, else 1000 for an external flow, 2000 for an internal one).
+ * A flow's warning that it ran past the laminar range: from the file's structured `analysis.reynolds`
+ * (value, limit, kind) when it has one, else from its sentence (`analysis.warnings`: "Re 4200 is past
+ * the laminar range: ..."): `{ sentence, limit }`, the Reynolds number the laminar solve is good to
+ * (said in the sentence, else 1000 for an external flow, 2000 for an internal one).
  * null for none, or for another analysis.
  */
 export function reynoldsWarning(result) {
   if (result.analysis?.type !== "cfd") return null;
+  // The structured number first (`analysis.reynolds`), with the file's sentence where it gives one.
+  const stated = result.analysis.reynolds;
+  if (stated) {
+    if (stated.value <= stated.limit) return null;
+    const line = result.analysis.warnings.find((text) => REYNOLDS.test(text) && /laminar|turbulen/i.test(text));
+    return { sentence: line || `Re ${Math.round(stated.value)} is past the laminar range: real flow is likely turbulent, so this pressure drop is a lower bound and the flow pattern may be wrong`, limit: stated.limit };
+  }
   const sentence = result.analysis.warnings.find((line) => REYNOLDS.test(line) && /laminar|turbulen/i.test(line));
   if (!sentence) return null;
   const said = /above Re\s*(\d[\d,]*)/i.exec(sentence);

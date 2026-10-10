@@ -44,8 +44,8 @@ the skill's "Choose the analysis" table says what to do instead.
 | `thermal_transient` | Heat over time | runs today | [thermal-transient.md](thermal-transient.md) |
 | `thermal_stress` | Heat stress | runs today | [thermal-stress.md](thermal-stress.md) |
 | `harmonic` | Shaking | runs today | [harmonic.md](harmonic.md) |
-| `random_vibration` | Random vibration | coming, not in this cadgen yet | [random-vibration.md](random-vibration.md) |
-| `shock` | Shock | coming, not in this cadgen yet | [shock.md](shock.md) |
+| `random_vibration` | Random vibration | runs today | [random-vibration.md](random-vibration.md) |
+| `shock` | Shock | runs today | [shock.md](shock.md) |
 | `transient` | Over time | coming, not in this cadgen yet | [transient.md](transient.md) |
 | `fatigue` | Fatigue life | runs today, from a static load case | [fatigue.md](fatigue.md) |
 | `drop` | Drop (estimate) | runs today, as an estimate | [drop.md](drop.md) |
