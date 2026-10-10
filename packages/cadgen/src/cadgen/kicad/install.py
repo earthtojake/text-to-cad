@@ -34,6 +34,7 @@ __all__ = [
     "KicadInstall",
     "KicadMissingError",
     "find_kicad",
+    "find_ngspice",
     "install_hint",
 ]
 
@@ -138,21 +139,26 @@ def _library_dir(cli: Path, kind: str, major: int) -> Path | None:
     return None
 
 
-def _ngspice(cli: Path) -> Path | None:
+def find_ngspice(cli: Path | None = None) -> Path | None:
+    """ngspice's shared library: ``CADGEN_NGSPICE``, else the one KiCad ships beside ``cli``,
+    else the system's (a bare name such as ``libngspice.so.0`` is what its loader resolves)."""
     explicit = os.environ.get("CADGEN_NGSPICE", "").strip()
     if explicit:
         return Path(explicit).expanduser()
-    resolved = cli.resolve()
-    for candidate in (
-        resolved.parent.parent / "Frameworks" / "libngspice.0.dylib",  # macOS app bundle
-        resolved.parent.parent / "PlugIns" / "sim" / "libngspice.0.dylib",
-        resolved.parent / "libngspice-0.dll",  # Windows
-    ):
-        if candidate.is_file():
-            return candidate
-    # A bare name (``libngspice.so.0``) is what the system loader resolves.
+    if cli is not None:
+        resolved = cli.resolve()
+        for candidate in (
+            resolved.parent.parent / "Frameworks" / "libngspice.0.dylib",  # macOS app bundle
+            resolved.parent.parent / "PlugIns" / "sim" / "libngspice.0.dylib",
+            resolved.parent / "libngspice-0.dll",  # Windows
+        ):
+            if candidate.is_file():
+                return candidate
     found = ctypes.util.find_library("ngspice")
-    return Path(found) if found else None
+    if found:
+        return Path(found)
+    # A distribution's libngspice0, which KiCad's Linux packages depend on.
+    return Path("libngspice.so.0") if sys.platform.startswith("linux") else None
 
 
 @functools.lru_cache(maxsize=8)
@@ -189,7 +195,7 @@ def find_kicad() -> KicadInstall:
             symbol_dir=_library_dir(candidate, "symbols", major),
             footprint_dir=_library_dir(candidate, "footprints", major),
             model_dir=_library_dir(candidate, "3dmodels", major),
-            ngspice=_ngspice(candidate),
+            ngspice=find_ngspice(candidate),
         )
         # The libraries a board reads are its inputs wherever KiCad is installed: a
         # KiCad update that changes a footprint makes the boards using it stale.

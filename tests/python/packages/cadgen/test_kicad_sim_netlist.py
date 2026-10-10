@@ -259,7 +259,7 @@ class TestbenchNetlistTest(unittest.TestCase):
 
     def test_a_missing_ngspice_is_reported_only_when_a_simulation_runs(self) -> None:
         tb = self.divider()
-        with mock.patch.object(ngspice, "_ENGINE", None), mock.patch.object(ngspice, "library_candidates", return_value=[]):
+        with mock.patch.object(ngspice, "_ENGINE", None), mock.patch.object(ngspice, "_library", return_value=None):
             self.assertIn("R1 VIN OUT 10k", tb.netlist())
             with self.assertRaisesRegex(KicadMissingError, "ngspice, the simulator KiCad ships, was not found.*CADGEN_NGSPICE"):
                 tb.operating_point()

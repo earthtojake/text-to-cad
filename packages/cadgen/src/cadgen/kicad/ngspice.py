@@ -18,18 +18,18 @@ ends the Python process: ngspice reports it through its ``ControlledExit``
 callback instead of exiting, and the library is initialised again before its
 next use (using it without that would crash the process).
 
-The library is ``CADGEN_NGSPICE`` (a full path) when set, else the one beside
-the KiCad :func:`cadgen.kicad.install.find_kicad` finds (KiCad ships ngspice on
-macOS and Windows), else the system's (``libngspice.so.0``, a distribution's
-``libngspice0``, which KiCad's Linux packages depend on). Nothing is loaded
-until a simulation runs; when there is none, the error says how to get one.
+The library is the one :func:`cadgen.kicad.install.find_ngspice` finds:
+``CADGEN_NGSPICE`` (a full path) when set, else the one beside the KiCad in use
+(KiCad ships ngspice on macOS and Windows), else the system's
+(``libngspice.so.0``, a distribution's ``libngspice0``, which KiCad's Linux
+packages depend on). Nothing is loaded until a simulation runs; when there is
+none, the error says how to get one.
 """
 
 from __future__ import annotations
 
 import contextlib
 import ctypes
-import ctypes.util
 import locale
 import os
 import re
@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
-__all__ = ["NgspiceFailure", "Plot", "error_hints", "library_candidates", "simulate"]
+__all__ = ["NgspiceFailure", "Plot", "error_hints", "simulate"]
 
 
 class NgspiceFailure(RuntimeError):
@@ -148,29 +148,19 @@ def error_hints(errors: Sequence[str], described: Mapping[str, str]) -> tuple[li
     return seen, hints
 
 
-def library_candidates() -> list[str]:
-    """Where ngspice's shared library may be, best first (paths or names the loader resolves)."""
-    explicit = os.environ.get("CADGEN_NGSPICE", "").strip()
-    if explicit:
-        return [str(Path(explicit).expanduser())]
-    found: list[str] = []
-    from cadgen.kicad.install import KicadMissingError, find_kicad
+def _library() -> str | None:
+    """ngspice's shared library as :mod:`cadgen.kicad.install` finds it: beside the KiCad in use,
+    or without one, the system's."""
+    from cadgen.kicad.install import KicadMissingError, find_kicad, find_ngspice
 
     try:
-        install = find_kicad()
+        found = find_kicad().ngspice
     except KicadMissingError:
-        install = None
-    if install is not None and install.ngspice is not None:
-        found.append(str(install.ngspice))
-    system = ctypes.util.find_library("ngspice")
-    if system:
-        found.append(system)
-    if sys.platform.startswith("linux"):
-        found.append("libngspice.so.0")
-    return list(dict.fromkeys(found))
+        found = find_ngspice()
+    return None if found is None else str(found)
 
 
-def _missing(problems: Sequence[str]) -> Exception:
+def _missing(problem: str | None) -> Exception:
     from cadgen.kicad.install import KicadMissingError, install_hint
 
     linux = (
@@ -178,7 +168,7 @@ def _missing(problems: Sequence[str]) -> Exception:
         if sys.platform.startswith("linux")
         else ""
     )
-    detail = f" (tried {'; '.join(problems)})" if problems else ""
+    detail = f" (tried {problem})" if problem else ""
     return KicadMissingError(
         f"ngspice, the simulator KiCad ships, was not found{detail}: {install_hint()}{linux}, "
         "or set CADGEN_NGSPICE to the ngspice shared library's path"
@@ -383,15 +373,13 @@ _ENGINE: _Engine | None = None
 def _engine() -> _Engine:
     global _ENGINE
     if _ENGINE is None:
-        problems: list[str] = []
-        for candidate in library_candidates():
-            try:
-                _ENGINE = _Engine(candidate)
-                break
-            except (OSError, AttributeError) as error:  # not loadable, or not ngspice's shared API
-                problems.append(f"{candidate}: {error}")
-        else:
-            raise _missing(problems)
+        library = _library()
+        if library is None:
+            raise _missing(None)
+        try:
+            _ENGINE = _Engine(library)
+        except (OSError, AttributeError) as error:  # not loadable, or not ngspice's shared API
+            raise _missing(f"{library}: {error}") from None
     return _ENGINE
 
 
