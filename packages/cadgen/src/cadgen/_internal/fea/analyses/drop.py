@@ -10,6 +10,17 @@ inertia, G g toward those faces. That is exactly a static study with an
 is that study's (:class:`StaticAnalysis`), so every number a static result
 carries a drop result carries too.
 
+With ``"dynamic": true`` it also runs a ``transient`` study (modal) on the same
+mesh: the landing faces held and shaken by a half-sine pulse of the same peak
+G g and the same speed change (τ = π v / (2 G g), the ``impact_ms`` itself
+when given), followed until mode 1 has rung once after the pulse. A part that
+rings slower than the pulse answers less than the steady load, one that rings
+near it more. The larger response is reported: when the transient's peak
+stress passes the same peak load held steady (recovered the same way), the
+static solve is repeated at that many times
+G (the equivalent steady load that reaches the transient's peak), and the
+summary's ``dynamic`` block says both numbers and which governs.
+
 It is an estimate, never an impact simulation: no stress wave, no rebound, no
 floor beyond the faces held. Every output says so: the summary, the CLI lines,
 ``extras.analysis.estimate`` and a finding. The impact analysis simulates the
@@ -35,6 +46,8 @@ DROP_KEYS = frozenset({"height_mm", "onto", "stop_mm", "impact_ms", "direction",
 #: A direction component this close to zero is zero, so a face along an axis drops exactly along it.
 _SNAP = 1e-9
 NOT_IMPACT = "not an impact simulation (analysis impact simulates the impact)"
+#: The dynamic check's modal damping ratio (the transient analysis's default).
+DYNAMIC_DAMPING = 0.02
 
 
 @dataclass(frozen=True)
@@ -47,6 +60,8 @@ class DropInputs(StaticInputs):
     direction: tuple[float, float, float] | None = None
     #: The equivalent deceleration, in g.
     G: float = 0.0
+    #: Also run the transient check with a half-sine pulse and report the larger response.
+    dynamic: bool = False
     #: What the solve resolved (the travel direction), for the echo and the summary: written once, by ``solve``.
     resolved: dict = field(default_factory=dict, compare=False, hash=False)
 
@@ -57,6 +72,11 @@ def drop_g(height_mm: float, *, stop_mm: float | None = None, impact_ms: float |
         return height_mm / stop_mm
     speed = math.sqrt(2.0 * G0_MM_S2 * height_mm)  # mm/s
     return math.pi * speed / (2.0 * impact_ms / 1000.0) / G0_MM_S2
+
+
+def pulse_s(height_mm: float, G: float) -> float:
+    """The half-sine pulse's length with peak G g and the impact's speed change v = √(2 g h): τ = π v / (2 G g)."""
+    return math.pi * math.sqrt(2.0 * G0_MM_S2 * height_mm) / (2.0 * G * G0_MM_S2)
 
 
 def _figure(value: float) -> str:
@@ -93,12 +113,8 @@ def _drop(document: dict) -> dict:
     unknown = set(raw) - DROP_KEYS
     if unknown:
         raise ValueError(f"{where}: unknown keys {sorted(unknown)}; a drop takes {sorted(DROP_KEYS)}")
-    if raw.get("dynamic", False) is not False:
-        if raw["dynamic"] is True:
-            raise ValueError(
-                f"{where}.dynamic: the dynamic check (a transient run with the half-sine pulse) is coming, not in this cadgen "
-                "yet; leave dynamic out for the estimate"
-            )
+    dynamic = raw.get("dynamic", False)
+    if dynamic is not True and dynamic is not False:
         raise ValueError(f"{where}.dynamic: true or false, got {kinds.json_text(raw['dynamic'])}")
     if "height_mm" not in raw:
         raise ValueError(f"{where}.height_mm: how far it falls, in mm (1000 for 1 m)")
@@ -124,7 +140,7 @@ def _drop(document: dict) -> dict:
         if not size > 0:
             raise ValueError(f"{where}.direction: the direction is zero")
         direction = tuple(c / size for c in components)
-    return {"height_mm": height, "onto": onto, "stop_mm": stop, "impact_ms": impact, "direction": direction}
+    return {"height_mm": height, "onto": onto, "stop_mm": stop, "impact_ms": impact, "direction": direction, "dynamic": dynamic}
 
 
 def _outward_normal(volume, ordinals: list[int]) -> tuple[float, float, float]:
@@ -216,6 +232,53 @@ class DropAnalysis(StaticAnalysis):
         solved = dataclasses.replace(inputs, loads=(Load((), "acceleration", vector_g=vector_g),))
         result = super().solve(ctx, solved)
         result.scalars["drop"] = {"direction": travel, "vector_g": vector_g}
+        if inputs.dynamic:
+            result = self._dynamic(ctx, inputs, travel, result)
+        return result
+
+    def _dynamic(self, ctx: SolveContext, inputs: DropInputs, travel, result: AnalysisResult) -> AnalysisResult:
+        """The transient check (``"dynamic": true``): the landing faces shaken by the half-sine pulse, on the same mesh.
+        When its peak stress passes its own steady answer to the pulse's peak (the estimate's load, recovered the
+        same way), the static solve is repeated at that many times G, the equivalent steady load that reaches the
+        transient's peak, so every number, field and check reports the larger response."""
+        from cadgen._internal.fea.analyses.transient import Excitation, History, TransientAnalysis, TransientInputs
+
+        tau = pulse_s(inputs.height_mm, inputs.G)
+        shaken = TransientInputs(
+            inputs.onto, inputs.onto, True, fixtures=inputs.fixtures,
+            # The floor pushes the landing faces back, against the travel: the part's inertia loads it toward them.
+            excitation=Excitation(tuple(-c + 0.0 for c in travel), inputs.G, History("half_sine", tau)),
+            end_s=2.0 * tau, damping_ratio=DYNAMIC_DAMPING, method="modal", settle_periods=1.0,
+        )
+        transient = TransientAnalysis().solve(ctx, shaken)
+        dynamic_peak = float(transient.fields["von_mises_peak"].max())
+        static_peak = self.weakest(result).peak_MPa
+        # The transient's own steady answer to the pulse's peak, recovered as its frames are: like with like.
+        steady_peak = float(transient.scalars["static_von_mises_MPa"])
+        ratio = dynamic_peak / steady_peak if steady_peak > 0 else 0.0
+        node = int(transient.fields["displacement_peak"].argmax())
+        record = {
+            "pulse_ms": round(tau * 1000.0, 6),
+            "max_von_mises_MPa": round(dynamic_peak, 4),
+            "max_von_mises_at_ms": round(float(transient.scalars["vm_peak_t"][int(transient.fields["von_mises_peak"].argmax())]) * 1000, 6),
+            "max_displacement_mm": round(float(transient.fields["displacement_peak"][node]), 6),
+            "estimate_von_mises_MPa": round(static_peak, 4),
+            "factor": round(ratio, 4) if steady_peak > 0 else None,
+            "first_mode_Hz": round(transient.scalars["frequencies_Hz"][0], 4),
+            "modes_used": len(transient.scalars["used_modes"]),
+            "damping_ratio": DYNAMIC_DAMPING,
+            "end_ms": round(transient.scalars["end_s"] * 1000.0, 6),
+            "governs": False,
+            "G_reported": round(inputs.G, 4),
+        }
+        if ratio > 1.0:
+            factor = ratio
+            vector_g = tuple(-inputs.G * factor * c + 0.0 for c in travel)
+            inputs.resolved["vector_g"] = vector_g
+            result = super().solve(ctx, dataclasses.replace(inputs, loads=(Load((), "acceleration", vector_g=vector_g),)))
+            result.scalars["drop"] = {"direction": travel, "vector_g": vector_g}
+            record.update(governs=True, G_reported=round(inputs.G * factor, 4))
+        result.scalars["dynamic"] = record
         return result
 
     # -- judging and findings ------------------------------------------------------------------------
@@ -239,6 +302,12 @@ class DropAnalysis(StaticAnalysis):
             "description": estimate_line(inputs.height_mm, inputs.G, stop_mm=inputs.stop_mm, impact_ms=inputs.impact_ms),
             "items": [],
         })
+        if "dynamic" in result.scalars:
+            found.append({"check": "fea", "severity": "info", "type": "drop_dynamic",
+                          "summary": dynamic_line(result.scalars["dynamic"]),
+                          "description": "the transient check: the landing faces held and shaken by a half-sine pulse of the "
+                                         "same peak and speed change; the larger of it and the steady estimate is reported",
+                          "items": []})
         return sorted(found, key=lambda finding: finding["severity"] != "error")
 
     # -- what is written -----------------------------------------------------------------------------
@@ -257,6 +326,8 @@ class DropAnalysis(StaticAnalysis):
             "direction": [round(c, 6) for c in resolved["direction"]],
             "acceleration_g": [round(c, 4) for c in resolved["vector_g"]],
         }
+        if "dynamic" in result.scalars:
+            summary["dynamic"] = dict(result.scalars["dynamic"])
         summary["checks"] = checks
         return summary
 
@@ -276,18 +347,36 @@ class DropAnalysis(StaticAnalysis):
             **({"stop_mm": inputs.stop_mm} if inputs.stop_mm is not None else {"impact_ms": inputs.impact_ms}),
             **({} if direction is None else {"direction": [float(c) for c in direction]}),
             "G": round(inputs.G, 4),
+            **({"dynamic": True} if inputs.dynamic else {}),
         }
         return echo
 
     def human_lines(self, summary: dict) -> list[str]:
         drop = summary["drop"]
+        governs = summary.get("dynamic", {}).get("governs", False)
+        load = (f"equivalent load {summary['dynamic']['G_reported']} g (the transient's; {drop['G']} g steady)" if governs
+                else f"equivalent load {drop['G']} g")
         lines = [
             summary["estimate_line"],
-            f"impact speed {drop['impact_speed_m_s']} m/s, equivalent load {drop['G']} g along {drop['acceleration_g']} "
+            f"impact speed {drop['impact_speed_m_s']} m/s, {load} along {drop['acceleration_g']} "
             f"(falling along {drop['direction']})",
             f"max von Mises {summary.get('max_von_mises_MPa')} MPa (Gauss {summary.get('max_von_mises_gauss_MPa')} MPa), "
             f"yield {summary.get('yield_MPa')} MPa, safety factor {_factor(summary.get('safety_factor'))} (estimate)",
             f"max displacement {summary.get('max_displacement_mm')} mm at {summary.get('max_displacement_at_mm')}",
             f"applied {summary.get('applied_force_N')} N, reactions {summary.get('reaction_force_N')} N",
         ]
+        if "dynamic" in summary:
+            lines.insert(1, dynamic_line(summary["dynamic"]))
         return lines
+
+
+def dynamic_line(record: dict) -> str:
+    """The dynamic check in one sentence: the pulse, its peak against the estimate's, and which is reported."""
+    from cadgen._internal.fea.analyses.modal import hz_text
+
+    factor = record["factor"]
+    against = "" if factor is None else f", {factor:.2f}× the same peak load held steady"
+    reported = (f"the transient governs, reported as an equivalent {_figure(record['G_reported'])} g steady load"
+                if record["governs"] else "the steady estimate governs and is reported")
+    return (f"Dynamic check: a {_figure(record['pulse_ms'])} ms half-sine pulse (first mode {hz_text(record['first_mode_Hz'])}) "
+            f"peaks at {record['max_von_mises_MPa']:.4g} MPa{against}; {reported}")

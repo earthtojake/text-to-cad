@@ -18,7 +18,7 @@ solves, and writes a result the Viewer renders.
 repeated static load (`fatigue`), a drop estimate (`drop`), vibration
 (`modal`), shaking across a sine sweep (`harmonic`), random vibration from a PSD
 (`random_vibration`), shock from a response spectrum
-(`shock`), buckling (`buckling`) and heat: steady
+(`shock`), loads that change over time (`transient`), buckling (`buckling`) and heat: steady
 temperatures (`thermal`), temperatures over time (`thermal_transient`) and the
 stress heat puts in a part (`thermal_stress`), and flow (`cfd`, lite: steady laminar
 flow through or around the part, its pressure drop and its push on the part).** Static answers
@@ -53,9 +53,9 @@ study names it; left out, it is `static`.
 | "On a shaker", "across a motor's speed range", a sine sweep | `harmonic` | Shaking | **Runs today** | [harmonic.md](references/harmonic.md) |
 | A transport or vibration spec in g²/Hz | `random_vibration` | Random vibration | **Runs today** | [random-vibration.md](references/random-vibration.md) |
 | A shock spec, a shock response spectrum (SRS) | `shock` | Shock | **Runs today** | [shock.md](references/shock.md) |
-| A load that changes over time, a hammer blow | `transient` | Over time | Coming, not in this cadgen yet | [transient.md](references/transient.md) |
+| A load that changes over time, a hammer blow | `transient` | Over time | **Runs today** | [transient.md](references/transient.md) |
 | "How long will it last", "how many cycles" | `fatigue` | Fatigue life | **Runs today** from a static load case (`"from": "static"`); from `harmonic` or `random_vibration` coming | [fatigue.md](references/fatigue.md) |
-| "What if I drop it" (a quick answer) | `drop` | Drop (estimate) | **Runs today** (an estimate; `"dynamic": true` coming) | [drop.md](references/drop.md) |
+| "What if I drop it" (a quick answer) | `drop` | Drop (estimate) | **Runs today** (an estimate; `"dynamic": true` adds a transient check) | [drop.md](references/drop.md) |
 | "What if I drop it" (a deeper check, after `drop`) | `impact` | Drop impact | Coming, not in this cadgen yet | [impact.md](references/impact.md) |
 | Flow through or around it, pressure drop, the push of air or water on it | `cfd` | Flow | **Runs today** (lite: laminar, steady, incompressible) | [cfd.md](references/cfd.md) |
 | "Does it bend for good", rubber or other stretchy parts | `nonlinear` | Permanent bend / Stretch | Coming, not in this cadgen yet | [nonlinear.md](references/nonlinear.md) |
@@ -131,7 +131,7 @@ leave `defeature` out of `fit.allow`) or names a memory or time budget.
 
 | Task | First action | Reference |
 | --- | --- | --- |
-| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `harmonic`, `random_vibration`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate) and `fatigue` (from a static load) run today. | [Choose the analysis](#choose-the-analysis) |
+| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `harmonic`, `random_vibration`, `transient`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate) and `fatigue` (from a static load) run today. | [Choose the analysis](#choose-the-analysis) |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
 | **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`part.step#o1.f17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |

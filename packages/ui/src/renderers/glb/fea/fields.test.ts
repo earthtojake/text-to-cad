@@ -5,7 +5,7 @@ describe('the fields', () => {
   it('name each in plain words, today\'s two as ever', () => {
     expect(FIELD_WORDS._von_mises).toBe('Stress');
     expect(FIELD_WORDS._displacement).toBe('Displacement');
-    expect(Object.values(FIELDS).map((entry) => entry.word)).toEqual(['Stress', 'Displacement', 'Temperature', 'Heat flow', 'Mode shape', 'Life',
+    expect(Object.values(FIELDS).map((entry) => entry.word)).toEqual(['Stress', 'Displacement', 'Peak stress', 'Peak displacement', 'Temperature', 'Heat flow', 'Mode shape', 'Life',
       'Fatigue margin', 'Pressure', 'Wall shear', 'Plastic strain', 'Contact pressure', 'Stress (1σ)', 'Displacement (1σ)']);
     // FIELD_WORDS is FIELDS' words, by attribute.
     expect(Object.keys(FIELD_WORDS)).toEqual(Object.keys(FIELDS));

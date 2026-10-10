@@ -87,7 +87,7 @@ class Parse(unittest.TestCase):
             (_study(stop_mm=0), "drop.stop_mm: must be > 0"),
             (_study(stop_mm=2, direction=[0, 0, 0]), "the direction is zero"),
             (_study(stop_mm=2, floor="rigid"), "unknown keys ['floor']"),
-            (_study(stop_mm=2, dynamic=True), "is coming, not in this cadgen yet"),
+            (_study(stop_mm=2, dynamic="yes"), "drop.dynamic: true or false"),
             ({"analysis": "drop", "material": "abs", "drop": {"height_mm": 10, "onto": ["#o1.f5"], "stop_mm": 2},
               "fixtures": []}, "drop studies take"),
             ({"analysis": "drop", "material": {"E_MPa": 2000, "nu": 0.3, "yield_MPa": 40}, "drop": {"height_mm": 10,
@@ -95,8 +95,19 @@ class Parse(unittest.TestCase):
         ):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, self.error(document))
-        # dynamic false is the estimate itself.
+        # dynamic false is the estimate itself; true adds the transient check.
         self.assertEqual(self.parse(_study(stop_mm=2, dynamic=False)).inputs.G, 500.0)
+        self.assertTrue(self.parse(_study(stop_mm=2, dynamic=True)).inputs.dynamic)
+
+    def test_the_dynamic_pulse_has_the_estimate_s_peak_and_the_impact_s_speed_change(self):
+        from cadgen._internal.fea.analyses.drop import pulse_s
+
+        # A half-sine of peak G g changes the speed by (2/π) G g τ: the impact speed √(2 g h) sets τ.
+        for study in (_study(impact_ms=1.5), _study(stop_mm=2)):
+            G = self.parse(study).inputs.G
+            tau = pulse_s(1000.0, G)
+            self.assertAlmostEqual(2 / math.pi * G * G0 * tau, math.sqrt(2 * G0 * 1000.0), places=6)
+        self.assertAlmostEqual(pulse_s(1000.0, self.parse(_study(impact_ms=1.5)).inputs.G), 1.5e-3, places=12)
 
 
 def _extras(glb: Path) -> tuple[dict, bytes]:
@@ -192,6 +203,73 @@ class Solve(unittest.TestCase):
                                                    "direction": [0.0, 0.0, -1.0], "G": 500.0})
         self.assertEqual(extras["study"]["fixtures"], [{"type": "fixed", "faces": [self.bottom]}])
         self.assertEqual(extras["study"]["loads"], [{"type": "acceleration", "vector_g": [0.0, 0.0, 500.0]}])
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class Dynamic(unittest.TestCase):
+    """``"dynamic": true``: the transient check with a half-sine pulse, and the larger response reported.
+
+    A squat block rings far faster than a 1.5 ms pulse, so it answers the pulse as the steady load: the estimate
+    governs. A 100 mm steel arm held at its root and landing sideways rings at 490 Hz, close to a 1.6 ms pulse
+    (f τ = 0.78), where a half-sine overshoots: about 1.77× for a single undamped mode, a little less with 2 %
+    damping and the higher modes answering steadily. The transient governs, reported as the equivalent steady load.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from build123d import Align, Box, export_step
+
+        from cadgen import fea
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        directory = Path(cls._tmp.name)
+        block = directory / "block.step"
+        export_step(Box(30, 20, 10), str(block))
+        planes = {face.center_mm[2]: face.ref for face in fea.faces(block).faces if face.surface == "plane"}
+        arm = directory / "arm.step"
+        export_step(Box(100, 6, 6, align=(Align.MIN, Align.CENTER, Align.CENTER)), str(arm))
+        ends = {face.center_mm[0]: face.ref for face in fea.faces(arm).faces
+                if face.surface == "plane" and face.normal is not None and abs(abs(face.normal[0]) - 1) < 1e-6}
+        cls.root = ends[min(ends)]
+        drop = {"height_mm": 20, "onto": [cls.root], "impact_ms": 1.6, "direction": [0, 0, -1]}
+        with redirect_stderr(io.StringIO()):
+            cls.block = fea.solve(block, directory / "block.glb", study={
+                "analysis": "drop", "material": "abs", "mesh": {"size_mm": 5},
+                "drop": {"height_mm": 1000, "onto": [planes[min(planes)]], "impact_ms": 1.5, "dynamic": True},
+            })
+            cls.estimate = fea.solve(arm, directory / "estimate.glb", study={
+                "analysis": "drop", "material": "steel", "mesh": {"size_mm": 3}, "drop": drop})
+            cls.arm = fea.solve(arm, directory / "arm.glb", study={
+                "analysis": "drop", "material": "steel", "mesh": {"size_mm": 3}, "drop": {**drop, "dynamic": True}})
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_a_part_stiffer_than_the_pulse_answers_it_as_the_steady_load(self):
+        dynamic = self.block.summary["dynamic"]
+        self.assertEqual((dynamic["pulse_ms"], dynamic["governs"]), (1.5, False))
+        self.assertGreater(dynamic["first_mode_Hz"], 10 * 1000 / dynamic["pulse_ms"])
+        self.assertAlmostEqual(dynamic["factor"], 1.0, delta=0.05)
+        self.assertEqual(dynamic["G_reported"], self.block.summary["drop"]["G"])
+        self.assertIn("drop_dynamic", [finding["type"] for finding in self.block.findings])
+        self.assertTrue(self.block.human_lines()[2].startswith("Dynamic check: a 1.5 ms half-sine pulse"))
+
+    def test_a_part_ringing_near_the_pulse_reports_the_larger_transient_peak(self):
+        dynamic = self.arm.summary["dynamic"]
+        self.assertTrue(dynamic["governs"])
+        self.assertAlmostEqual(dynamic["first_mode_Hz"], 490, delta=15)
+        self.assertTrue(1.4 < dynamic["factor"] < 1.8, dynamic["factor"])
+        # Reported as the static solve at the equivalent load: the estimate's numbers times the factor.
+        G = self.arm.summary["drop"]["G"]
+        self.assertAlmostEqual(dynamic["G_reported"], G * dynamic["factor"], delta=1e-3 * G)
+        self.assertEqual(self.arm.summary["drop"]["acceleration_g"], [0.0, 0.0, round(dynamic["G_reported"], 4)])
+        ratio = self.arm.summary["max_von_mises_MPa"] / self.estimate.summary["max_von_mises_MPa"]
+        self.assertAlmostEqual(ratio, dynamic["factor"], delta=1e-3)
+        self.assertAlmostEqual(self.arm.summary["max_von_mises_MPa"] / dynamic["max_von_mises_MPa"], 1.0, delta=0.05)
+        extras, _ = _extras(self.arm.glb)
+        self.assertTrue(extras["study"]["drop"]["dynamic"])
+        self.assertIn("the transient governs, reported as an equivalent", self.arm.human_lines()[2])
 
 
 if __name__ == "__main__":

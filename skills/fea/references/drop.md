@@ -34,9 +34,17 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
 - `drop.direction` (optional): the way it falls, `[x, y, z]`, like `[0, 0, -1]` for straight down.
   Left out, it falls along the landing faces' mean outward normal (the bottom face's -Z for a part
   dropped flat). Give it when the landing faces face different ways (an edge or a corner landing).
-- `drop.dynamic`: `true` will also run a transient with the half-sine pulse and report the larger
-  answer; that is coming, and a study with `"dynamic": true` is refused with that sentence. Leave it
-  out (or `false`).
+- `drop.dynamic`: `true` also runs a `transient` check ([transient.md](transient.md)) on the same
+  mesh: the landing faces held and shaken by a half-sine pulse with the estimate's peak G g and the
+  impact's speed change (τ = π v / (2 G g), which is `impact_ms` when given), followed until the first
+  mode has rung once after the pulse, 2 % damping. The larger response is reported: when the pulse's
+  peak stress passes the same peak load held steady, the static solve is repeated at that many times G
+  (an equivalent steady load), so every number, field and check carries the larger answer. The
+  summary's `dynamic` block gives `pulse_ms`, the transient's `max_von_mises_MPa`, `factor` (its peak
+  over the steady one), `first_mode_Hz`, `governs` and `G_reported`; a CLI line and an info finding
+  `drop_dynamic` say it in words. A part that rings much faster than the pulse answers it as the
+  steady load (factor about 1, the estimate governs); one whose first mode is near 1 / (1.3 τ) can
+  reach about 1.7×. Leave it out (or `false`) for the estimate alone.
 - The material needs a density (every table material has one).
 - Checks: `stress` (labelled "Drop" unless you give a label) and `displacement`, as for static.
 

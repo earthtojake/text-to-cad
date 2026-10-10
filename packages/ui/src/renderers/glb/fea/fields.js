@@ -10,6 +10,8 @@ const field = (word, { signed = false, log = false } = {}) => Object.freeze({ wo
 export const FIELDS = Object.freeze({
   _von_mises: field("Stress"),
   _displacement: field("Displacement"),
+  _von_mises_peak: field("Peak stress"),
+  _displacement_peak: field("Peak displacement"),
   _temperature: field("Temperature", { signed: true }),
   _heat_flux: field("Heat flow"),
   _mode_shape: field("Mode shape"),

@@ -46,7 +46,7 @@ the skill's "Choose the analysis" table says what to do instead.
 | `harmonic` | Shaking | runs today | [harmonic.md](harmonic.md) |
 | `random_vibration` | Random vibration | runs today | [random-vibration.md](random-vibration.md) |
 | `shock` | Shock | runs today | [shock.md](shock.md) |
-| `transient` | Over time | coming, not in this cadgen yet | [transient.md](transient.md) |
+| `transient` | Over time | runs today | [transient.md](transient.md) |
 | `fatigue` | Fatigue life | runs today, from a static load case | [fatigue.md](fatigue.md) |
 | `drop` | Drop (estimate) | runs today, as an estimate | [drop.md](drop.md) |
 | `cfd` | Flow | coming, not in this cadgen yet | [cfd.md](cfd.md) |
