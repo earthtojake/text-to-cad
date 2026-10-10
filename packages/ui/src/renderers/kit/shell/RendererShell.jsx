@@ -67,8 +67,8 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   a file whose viewport only orbits, pans and zooms hands over. A tool the
  *   file cannot offer is left out, never handed over disabled. A tool that names a `closable`
  *   panel of its own (`panel: { id, label, startsClosed }`: Select's tree, which a single part
- *   opens with closed) is marked while that panel is closed, and a press on it while it is up
- *   opens the panel again.
+ *   opens with closed; or a list of them, an FEA assembly's Parts and Study) is marked while that
+ *   panel (any of them) is closed, and a press on it while it is up opens the closed ones again.
  *   `toolPanels`: the tool stack's panels, top to bottom — each a `ToolPanel`
  *   (`kit/tools/ToolPanel.jsx`), shown or `hidden` by the renderer as its tools say: what
  *   the tool in hand shows (Select's tree and Reference, Position's joints), then the
@@ -173,12 +173,16 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // Until the person has closed or opened it, the tree starts as the tool says this file starts it
   // (`panel.startsClosed`: a single part's) and closed on a phone.
   // One object while those starts stay the same: the stack's panels read it.
-  const panelStarts = JSON.stringify(tools.filter(tool => tool.panel).map(tool => [tool.panel.id, Boolean(tool.panel.startsClosed)]));
+  // A tool may own more than one such panel (an FEA assembly's Parts above its Study): it is marked
+  // while any is closed, and the press brings back every closed one.
+  const panelsOf = tool => (tool.panel ? [].concat(tool.panel) : []);
+  const panelStarts = JSON.stringify(tools.flatMap(tool => panelsOf(tool).map(panel => [panel.id, Boolean(panel.startsClosed)])));
   const startsClosed = useMemo(() => Object.fromEntries(JSON.parse(panelStarts)), [panelStarts]);
   const stripTools = tools.map(tool => {
-    if (!tool.panel || !toolPanelClosed(frame.toolStack, tool.panel.id, { mobile, startsClosed: startsClosed[tool.panel.id] })) return tool;
-    const reopen = () => frame.changeToolStack(current => ({ closed: { ...current.closed, [tool.panel.id]: false } }));
-    return { ...tool, panelClosed: true, description: tool.description || `${tool.panel.label} closed`,
+    const closed = panelsOf(tool).filter(panel => toolPanelClosed(frame.toolStack, panel.id, { mobile, startsClosed: startsClosed[panel.id] }));
+    if (!closed.length) return tool;
+    const reopen = () => frame.changeToolStack(current => ({ closed: { ...current.closed, ...Object.fromEntries(closed.map(panel => [panel.id, false])) } }));
+    return { ...tool, panelClosed: true, description: tool.description || `${closed.map(panel => panel.label).join(" and ")} closed`,
       onSelect: () => { if (tool.active) reopen(); tool.onSelect(); } };
   });
   // The shell's own tool's panel leads the stack while its tool is up: Draw's tools, color and

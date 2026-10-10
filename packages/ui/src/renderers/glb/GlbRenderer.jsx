@@ -11,11 +11,11 @@ import { useViewerHost } from "../../host/context.js";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
 import FindingsList, { findingsAlert } from "../kit/status/findings.jsx";
 import FindingRings from "./FindingRings.jsx";
-import FeaStudyPanel from "./FeaStudyPanel.jsx";
+import FeaStudyPanel, { FEA_PARTS_PANEL_ID, FEA_STUDY_PANEL_ID } from "./FeaStudyPanel.jsx";
 import FeaColourBar from "./FeaColourBar.jsx";
 import {
   applyDeformation, deformationRange, faceIndices, faceTitle, facePromptSummary, faceRole, findingSelector, pickFace, readFeaResult, recolorByField, resultSourcePath,
-  ringTargets, studyRows
+  partRows, ringTargets, studyRows, weakestPartIndex
 } from "./feaResult.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
@@ -29,8 +29,10 @@ const NO_FINDING = Object.freeze({ findings: null, index: -1 });
 // `refs`: what Quick Edit gets when it is not the faces' own (a part's or a joint's parts); `parts`: parts to tint.
 const NO_FACES = Object.freeze({ result: null, id: "", faces: EMPTY, refs: EMPTY, parts: EMPTY, softParts: EMPTY, summary: "" });
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
-// Select's own panel, Study, which a person can close; a result opens with it up, except on a phone.
-const STUDY_PANEL = Object.freeze({ id: "tree", label: "Study", startsClosed: false });
+// Select's own panels, which a person can close: Study, and above it an assembly's Parts. A result
+// opens with them up, except on a phone.
+const STUDY_PANEL = Object.freeze({ id: FEA_STUDY_PANEL_ID, label: "Study", startsClosed: false });
+const ASSEMBLY_PANELS = Object.freeze([Object.freeze({ id: FEA_PARTS_PANEL_ID, label: "Parts", startsClosed: false }), STUDY_PANEL]);
 
 /** Study's row for a face, where it has one (a fixed face, a loaded face), so a pick of it marks that row. */
 function faceRow(rows, ref) {
@@ -91,6 +93,8 @@ function GlbSurface({ view, data }) {
   const finding = findings && chosen.findings === findings ? findings.find((entry) => entry.index === chosen.index) || null : null;
   const faces = fea && chosenFaces.result === fea ? chosenFaces : NO_FACES;
   const rows = useMemo(() => (fea ? studyRows(fea) : EMPTY), [fea]);
+  // An assembly's parts, each with its joints, are a panel of their own above Study.
+  const parts = useMemo(() => (fea ? partRows(fea) : EMPTY), [fea]);
   const chooseFaces = useCallback((row) => { setChosen(NO_FINDING); setChosenFaces({ result: fea, id: row.id, faces: row.faces || EMPTY, refs: row.refs || EMPTY, parts: row.parts || EMPTY, softParts: row.softParts || EMPTY, summary: row.summary }); }, [fea]);
   // A press on the result picks the face under it, called what Study calls it.
   const pickScene = useMemo(() => (fea ? { pick: (ray) => pickFace(fea, ray) } : null), [fea]);
@@ -151,9 +155,9 @@ function GlbSurface({ view, data }) {
     }
   }, [fea, activeScale, requestRenderRef]);
 
-  // Select is an FEA result's one tool, and Study its panel; a GLB that is not a result has none.
+  // Select is an FEA result's one tool, with Study (and an assembly's Parts) its panels; a GLB that is not a result has none.
   const selectActive = Boolean(fea) && !shell.previewing && shell.toolMode === GLB_TOOL.SELECT;
-  const tools = fea ? [shell.tools.own({ id: GLB_TOOL.SELECT, label: "Select", icon: SELECT_ICON, panel: STUDY_PANEL })] : [];
+  const tools = fea ? [shell.tools.own({ id: GLB_TOOL.SELECT, label: "Select", icon: SELECT_ICON, panel: parts.length ? ASSEMBLY_PANELS : STUDY_PANEL })] : [];
   // One face chosen is the Reference's: its ref, what the study does to it, and Copy (the copy key too).
   const single = faces.faces.length === 1 && !faces.refs.length ? faces.faces[0] : "";
   const copyFace = useCallback(async () => {
@@ -163,7 +167,7 @@ function GlbSurface({ view, data }) {
     catch (error) { shellRef.current?.reportActionError(error instanceof Error ? error.message : "Could not copy reference"); return false; }
   }, [single, source, host.clipboard]);
   const copySelection = selectActive && single ? copyFace : null;
-  const toolPanels = fea ? <FeaStudyPanel active={selectActive} result={fea} rows={rows} chosen={faces.id} onChoose={chooseFaces}
+  const toolPanels = fea ? <FeaStudyPanel active={selectActive} result={fea} parts={parts} openPart={weakestPartIndex(fea)} rows={rows} chosen={faces.id} onChoose={chooseFaces}
     field={activeField} scale={activeScale} onFieldChange={(attribute) => choose({ field: attribute })} onScaleChange={(scale) => choose({ scale })}
     reference={single ? { title: faceTitle(fea, single), ref: single, role: faceRole(fea, single) } : null} onClearSelection={clearChoice}
     copy={single ? { label: "Copy", shortcut: shell.frame.copyShortcut, onCopy: copyFace } : null} /> : null;

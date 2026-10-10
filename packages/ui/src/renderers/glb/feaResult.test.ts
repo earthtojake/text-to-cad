@@ -2,7 +2,7 @@ import { BufferAttribute, BufferGeometry, Group, Mesh, Ray, Vector3 } from 'thre
 import { describe, expect, it } from 'vitest';
 import {
   applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaRamp, feaSummaryLine, fieldValues, forceDirection, formatValue, pickFace, readFeaResult,
-  recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows
+  partRows, recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows, weakestPartIndex
 } from './feaResult.js';
 
 /** A two-triangle "result" the way GLTFLoader hands one over: lower-cased custom attributes, extras in userData. */
@@ -312,38 +312,47 @@ const colours = (mesh: Mesh) => Array.from(mesh.geometry.getAttribute('color').a
 const vertexColour = (bytes: number[], vertex: number) => bytes.slice(vertex * 4, vertex * 4 + 3);
 
 describe('an assembly result', () => {
-  it('lists its parts and joints ahead of the study, each carrying what Quick Edit gets and what it tints', () => {
-    const rows = studyRows(assemblyResult().result);
-    expect(rows.slice(0, 2).map(({ id, label, detail, children }: any) => ({ id, label, detail, children: children.map((c: any) => [c.id, c.label, c.detail]) }))).toEqual([
-      { id: 'parts', label: 'Parts', detail: '', children: [
-        ['part:0', 'post', '6061-T6 · holds 1.4×'],
-        ['part:1', 'base', 'Steel · holds 2.5×'],
-      ] },
-      { id: 'connections', label: 'Connections', detail: '', children: [
-        ['joint:0', 'post ↔ base', 'bonded · 100 mm²'],
-        ['joint:1', 'post ↔ lid', 'not connected · 0.5 mm apart'],
-      ] },
+  it('lists its parts for the Parts panel, each joint under both its parts naming the other, and leaves them out of Study', () => {
+    const { result } = assemblyResult();
+    const rows = partRows(result) as any[];
+    const shape = (row: any): any => [row.id, row.label, row.detail, ...(row.children ? [row.children.map(shape)] : [])];
+    expect(rows.map(shape)).toEqual([
+      ['part:0', 'post', '6061-T6 · holds 1.4×', [['joint:0', '↔ base', 'bonded · 100 mm²'], ['joint:1', '↔ lid', 'not connected · 0.5 mm apart']]],
+      ['part:1', 'base', 'Steel · holds 2.5×', [['joint:0', '↔ post', 'bonded · 100 mm²']]],
     ]);
-    const [parts, joints] = rows as any[];
-    expect(parts.children[0]).toMatchObject({ refs: ['#o1.1'], parts: [0], summary: "Part 'post'" });
-    expect(joints.children[0]).toMatchObject({ faces: ['#o1.1.f1', '#o1.2.f1'], summary: "Bonded joint between 'post' and 'base'" });
-    expect(joints.children[0].refs).toBeUndefined();
+    expect(rows[0]).toMatchObject({ refs: ['#o1.1'], parts: [0], summary: "Part 'post'" });
+    // Either copy of a joint is the same choice: the same id, faces, tint and summary.
+    const [underPost, underBase] = [rows[0].children[0], rows[1].children[0]];
+    const { label: _a, ...post } = underPost;
+    const { label: _b, ...base } = underBase;
+    expect(post).toEqual(base);
+    expect(underPost).toMatchObject({ faces: ['#o1.1.f1', '#o1.2.f1'], softParts: [0, 1], name: 'post ↔ base', summary: "Bonded joint between 'post' and 'base'" });
+    expect(underPost.refs).toBeUndefined();
     // A free pair has no faces: both parts' refs go instead.
-    expect(joints.children[1]).toMatchObject({ refs: ['#o1.1', '#o1.3'], summary: "'post' and 'lid' aren't connected" });
-    expect(joints.children[1].faces).toBeUndefined();
-    expect(rows[2]).toMatchObject({ id: 'material' });
+    expect(rows[0].children[1]).toMatchObject({ refs: ['#o1.1', '#o1.3'], summary: "'post' and 'lid' aren't connected" });
+    expect(rows[0].children[1].faces).toBeUndefined();
+    expect(studyRows(result).map((row) => row.id)).toEqual(['material', 'fixed', 'loads', 'mesh']);
+    expect(weakestPartIndex(result)).toBe(0);
   });
 
   it('says a part that yields, and names a picked face\'s part', () => {
     const { result } = studyResult({ ...ASSEMBLY, parts: [{ ...ASSEMBLY.parts[0], safety_factor: 0.8 }, ASSEMBLY.parts[1]] });
-    expect((studyRows(result)[0] as any).children[0].detail).toBe('6061-T6 · yields');
+    expect((partRows(result)[0] as any).detail).toBe('6061-T6 · yields');
     expect(faceTitle(result, '#o1.1.f1')).toBe('post · face 1');
     expect(faceTitle(studyResult().result, '#o1.f1')).toBe('Face 1');
   });
 
   it('notes a gap that was closed to bond a pair', () => {
     const { result } = studyResult({ ...ASSEMBLY, connections: [{ ...ASSEMBLY.connections[0], gap_mm: 0.1 }] });
-    expect((studyRows(result)[1] as any).children[0].detail).toBe('bonded · 100 mm² · 0.1 mm gap closed');
+    expect((partRows(result)[1] as any).children[0].detail).toBe('bonded · 100 mm² · 0.1 mm gap closed');
+  });
+
+  it('finds the weakest part by the name the file gives, else by the lowest factor', () => {
+    const { result } = studyResult({ ...ASSEMBLY, weakest_part: 'base' });
+    expect(weakestPartIndex(result)).toBe(1);
+    const unnamed = studyResult({ ...ASSEMBLY, weakest_part: undefined, parts: [ASSEMBLY.parts[1], ASSEMBLY.parts[0]] }).result;
+    expect(weakestPartIndex(unnamed)).toBe(1);
+    expect(weakestPartIndex(studyResult().result)).toBe(-1);
   });
 
   it('tints a part\'s triangles by _part, and a joint\'s interface faces by _face, and only those', () => {
@@ -373,9 +382,9 @@ describe('an assembly result', () => {
     const named = [{ ...ASSEMBLY.parts[0], name: 'bulkhead_right_support_block' }, ASSEMBLY.parts[1]];
     const { result } = studyResult({ ...ASSEMBLY, parts: named, weakest_part: 'bulkhead_right_support_block',
       connections: [{ ...ASSEMBLY.connections[0], names: ['bulkhead_right_support_block', 'base'] }] });
-    const [parts, joints] = studyRows(result) as any[];
-    expect(parts.children[0]).toMatchObject({ label: 'bulkhead right support block', summary: "Part 'bulkhead_right_support_block'" });
-    expect(joints.children[0]).toMatchObject({ label: 'bulkhead right support block ↔ base',
+    const [post, base] = partRows(result) as any[];
+    expect(post).toMatchObject({ label: 'bulkhead right support block', summary: "Part 'bulkhead_right_support_block'" });
+    expect(base.children[0]).toMatchObject({ label: '↔ bulkhead right support block', name: 'bulkhead right support block ↔ base',
       summary: "Bonded joint between 'bulkhead_right_support_block' and 'base'" });
     expect(faceTitle(result, '#o1.1.f1')).toBe('bulkhead right support block · face 1');
     expect(feaSummaryLine(result, result.fields[0])).toMatch(/^Weakest: bulkhead right support block · /);
@@ -398,8 +407,8 @@ describe('an assembly result', () => {
     const stress = result.fields[0];
     recolorByField(mesh, stress, result.ramp);
     const plain = colours(mesh);
-    const [, joints] = studyRows(result) as any[];
-    expect(joints.children[0].softParts).toEqual([0, 1]);
+    const [post] = partRows(result) as any[];
+    expect(post.children[0].softParts).toEqual([0, 1]);
     // Interface face index 1 (vertex 3, the base) is full; the post (vertices 0-2) only soft.
     expect(recolorByField(mesh, stress, result.ramp, [1], null, [0, 1])).toBe(true);
     const both = colours(mesh);
@@ -411,12 +420,13 @@ describe('an assembly result', () => {
       expect(vertexColour(both, v)).not.toEqual(vertexColour(full, 3));
     }
     // A free pair names parts only by ref; one that is not in the result adds none.
-    expect(joints.children[1].softParts).toEqual([0]);
+    expect(post.children[1].softParts).toEqual([0]);
   });
 
   it('leaves a single part exactly as it was: no groups, the plain line', () => {
     const { result } = studyResult();
     expect(result.parts).toEqual([]);
+    expect(partRows(result)).toEqual([]);
     expect(studyRows(result).map((row) => row.id)).toEqual(['material', 'fixed', 'loads', 'mesh']);
     expect(feaSummaryLine(result, result.fields[0])).toBe('Peak stress 47 MPa · holds 5.8× this load · moves up to 0.029 mm');
   });

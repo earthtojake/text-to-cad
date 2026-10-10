@@ -526,61 +526,106 @@ function jointSummary(joint) {
 }
 
 /**
- * An assembly's Parts and Connections groups. A row for a part or a joint is chosen like a face's
- * and carries into Quick Edit and tints: a part its ref (`refs`) and its triangles (`parts`, indices
- * into the result's `parts`); a joint its interface `faces`, or for a free pair (no faces) both
- * parts' refs. Their details wrap (`wrap`) rather than truncate.
+ * A joint as it is chosen: its interface `faces`, or for a free pair (no faces) both parts' refs
+ * (`refs`), with both parts tinted lightly (`softParts`, indices into the result's `parts`) and
+ * what a prompt calls it; `name` says both parts, for its button's name. One id per joint, so its
+ * row under either part is the same choice.
  */
-function assemblyRows(result) {
-  const rows = [];
-  const parts = result.parts.map((part, index) => ({
-    id: `part:${index}`, label: spaced(part.name || part.ref), detail: partDetail(part), wrap: true, refs: part.ref ? [part.ref] : [], parts: [index],
-    summary: `Part '${part.name || part.ref}'`,
-  }));
-  if (parts.length) rows.push({ id: "parts", label: "Parts", detail: "", children: parts });
-  const joints = result.connections.map((joint, index) => ({
-    id: `joint:${index}`, label: `${spaced(joint.names[0])} ↔ ${spaced(joint.names[1])}`, detail: jointDetail(joint), wrap: true,
+function jointChoice(result, joint, index) {
+  return {
+    id: `joint:${index}`, name: `${spaced(joint.names[0])} ↔ ${spaced(joint.names[1])}`, detail: jointDetail(joint), wrap: true,
     softParts: joint.between.map((ref) => result.parts.findIndex((part) => part.ref === ref)).filter((at) => at >= 0),
     ...(joint.faces.length ? { faces: joint.faces } : { refs: joint.between.filter(Boolean) }), summary: jointSummary(joint),
-  }));
-  if (joints.length) rows.push({ id: "connections", label: "Connections", detail: "", children: joints });
-  return rows;
+  };
 }
 
 /**
- * Study's rows for a result's study, in order: for an assembly its parts and connections, the material, the fixed faces, the loads (each
- * with its faces under it) and the mesh. A row that stands for faces carries them (`faces`, the
- * file's refs) and what a prompt calls them (`summary`); a group row (`children`) carries none.
- * [] for a result written before the study was recorded.
+ * The Parts panel's rows, for an assembly (`parts` in the file); [] for a single part. One row per
+ * part, chosen like a face's: its ref into Quick Edit (`refs`) and its triangles tinted (`parts`).
+ * Under it, each joint it is in, named by the OTHER part ("↔ base") with how it is joined, so a
+ * joint is under both its parts and either row is the same choice (`jointChoice`). Details wrap
+ * (`wrap`) rather than truncate.
  */
-export function studyRows(result) {
-  const study = result.study;
-  if (!study) return [];
-  const rows = assemblyRows(result);
+export function partRows(result) {
+  const joints = result.connections.map((joint, index) => jointChoice(result, joint, index));
+  return result.parts.map((part, index) => {
+    const children = part.ref ? result.connections.flatMap((joint, at) => {
+      const side = joint.between.indexOf(part.ref);
+      return side < 0 ? [] : [{ ...joints[at], label: `↔ ${spaced(joint.names[1 - side])}` }];
+    }) : [];
+    return {
+      id: `part:${index}`, label: spaced(part.name || part.ref), detail: partDetail(part), wrap: true, refs: part.ref ? [part.ref] : [], parts: [index],
+      summary: `Part '${part.name || part.ref}'`, ...(children.length ? { children } : {}),
+    };
+  });
+}
+
+/** The index of an assembly's weakest part: the one the file names, else the lowest safety factor; -1 for none. */
+export function weakestPartIndex(result) {
+  const named = result.weakestPart ? result.parts.findIndex((part) => part.name === result.weakestPart) : -1;
+  if (named >= 0) return named;
+  let weakest = -1;
+  result.parts.forEach((part, index) => {
+    if (part.safetyFactor !== null && (weakest < 0 || part.safetyFactor < result.parts[weakest].safetyFactor)) weakest = index;
+  });
+  return weakest;
+}
+
+/** Study's Material row: "6061-T6 · yield 276 MPa". */
+function materialRows({ study }) {
   const material = study.material;
-  if (material?.name) {
-    const yieldText = material.yieldMPa === null ? "" : `yield ${plainNumber(material.yieldMPa)} MPa`;
-    rows.push({ id: "material", label: "Material", detail: [material.name, yieldText].filter(Boolean).join(" · ") });
-  }
+  if (!material?.name) return [];
+  const yieldText = material.yieldMPa === null ? "" : `yield ${plainNumber(material.yieldMPa)} MPa`;
+  return [{ id: "material", label: "Material", detail: [material.name, yieldText].filter(Boolean).join(" · ") }];
+}
+
+/** In an assembly a face's row leads with its part's name, which wraps (`wrap`) rather than being cut off. */
+const partNamed = (result) => (result.parts.length ? { wrap: true } : {});
+
+/** Study's Fixed group: one row per fixed face. */
+function fixedRows(result) {
+  const study = result.study;
   const fixed = study.fixtures.flatMap((fixture, index) => fixture.faces.map((ref) => ({
-    id: `fixed:${index}:${ref}`, label: faceTitle(result, ref), detail: fixture.type, faces: [ref], summary: faceSummary(study, ref),
+    id: `fixed:${index}:${ref}`, label: faceTitle(result, ref), detail: fixture.type, faces: [ref], summary: faceSummary(study, ref), ...partNamed(result),
   })));
-  if (fixed.length) rows.push({ id: "fixed", label: "Fixed", detail: "", children: fixed });
+  return fixed.length ? [{ id: "fixed", label: "Fixed", detail: "", children: fixed }] : [];
+}
+
+/** Study's Loads group: one row per load, its faces under it. */
+function loadRows(result) {
+  const study = result.study;
   const loads = study.loads.filter((load) => load.faces.length).map((load, index) => {
     const words = loadWords(load);
     return {
       id: `load:${index}`, label: words.amount, detail: words.direction, faces: load.faces, summary: loadSummary(words, load.faces),
-      children: load.faces.map((ref) => ({ id: `load:${index}:${ref}`, label: faceTitle(result, ref), detail: "loaded", faces: [ref],
+      children: load.faces.map((ref) => ({ id: `load:${index}:${ref}`, label: faceTitle(result, ref), detail: "loaded", faces: [ref], ...partNamed(result),
         summary: study.fixtures.some((fixture) => fixture.faces.includes(ref)) ? faceSummary(study, ref) : loadSummary(words, [ref]) })),
     };
   });
-  if (loads.length) rows.push({ id: "loads", label: "Loads", detail: "", children: loads });
+  return loads.length ? [{ id: "loads", label: "Loads", detail: "", children: loads }] : [];
+}
+
+/** Study's Mesh row: "1.9 mm elements · refined from 2.8 mm". */
+function meshRows({ study }) {
   const mesh = study.mesh;
-  if (mesh?.sizeMm !== null && mesh?.sizeMm !== undefined) {
-    const refined = mesh.refinedFromMm === null ? "not refined" : `refined from ${plainNumber(mesh.refinedFromMm)} mm`;
-    rows.push({ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements · ${refined}` });
-  }
-  return rows;
+  if (mesh?.sizeMm === null || mesh?.sizeMm === undefined) return [];
+  const refined = mesh.refinedFromMm === null ? "not refined" : `refined from ${plainNumber(mesh.refinedFromMm)} mm`;
+  return [{ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements · ${refined}` }];
+}
+
+// Study's groups, in order, each from what the file records and none when it records nothing for
+// it: a result kind with more to say (a modal's modes, a thermal load) adds a group here.
+const STUDY_GROUPS = Object.freeze([materialRows, fixedRows, loadRows, meshRows]);
+
+/**
+ * Study's rows for a result's study, in order: the material, the fixed faces, the loads (each with
+ * its faces under it) and the mesh (`STUDY_GROUPS`). An assembly's parts and joints are the Parts
+ * panel's (`partRows`). A row that stands for faces carries them (`faces`, the file's refs) and
+ * what a prompt calls them (`summary`); a group row (`children`) carries none. [] for a result
+ * written before the study was recorded.
+ */
+export function studyRows(result) {
+  return result.study ? STUDY_GROUPS.flatMap((group) => group(result)) : [];
 }
 
 /** A face's heading: "Face 17", and in an assembly "post · face 17", the part it is on (a long name's underscores spaced). */

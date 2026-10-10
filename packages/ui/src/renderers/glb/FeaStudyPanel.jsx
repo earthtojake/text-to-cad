@@ -64,8 +64,9 @@ function RowText({ row }) {
   </>;
 }
 
-/** Text that wraps between words alone: a hyphenated name ("6061-T6") and a number and its unit ("276 MPa") never part. */
-const unbroken = (text) => String(text).replace(/(\S)-(?=\S)/g, "$1\u2011").replace(/(\d) (?=[A-Za-zµ°%])/g, "$1\u00a0");
+/** Text that wraps between words alone: a hyphenated name ("6061-T6"), a number and its unit ("276 MPa") and "holds 1.4×" never part. */
+const unbroken = (text) => String(text).replace(/(\S)-(?=\S)/g, "$1\u2011").replace(/(\d) (?=[A-Za-zµ°%])/g, "$1\u00a0")
+  .replace(/\bholds (?=\d)/g, "holds\u00a0");
 
 /** A row's name and detail that wrap between words (a long part name, a detail that will not fit the line) instead of being cut off. */
 function WrappedRowText({ row }) {
@@ -89,13 +90,13 @@ function StudyFactRow({ row }) {
 }
 
 /**
- * One of Study's rows, the Links tree's: a 16px disclosure column, then its name and detail. A row
- * that stands for faces (a fixed face, a load, a load's face) or for parts (an assembly's part or
- * joint) is a button that chooses them; a group (Parts, Connections, Fixed, Loads, Result) only
- * opens and closes. `content`: what an open row shows in place
- * of child rows (Result's controls).
+ * One of a tree's rows (Parts', Study's), the Links tree's: a 16px disclosure column, then its name
+ * and detail. A row that stands for faces (a fixed face, a load, a load's face) or for parts (an
+ * assembly's part or joint) is a button that chooses them; a group (Fixed, Loads, Result) only opens
+ * and closes. `contents`: what an open row shows in place of child rows, by id (Result's controls).
  */
-function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, content = null }) {
+function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, contents }) {
+  const content = contents[row.id] || null;
   const choosable = Boolean(row.faces || row.refs);
   if (!choosable && !row.children && !content) return <StudyFactRow row={row} />;
   const branch = Boolean(row.children?.length || content);
@@ -106,52 +107,74 @@ function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, content = n
       style={{ paddingLeft: depth * TREE_INDENT_PX, ...(row.wrap ? { height: "auto" } : {}) }} data-study-row={row.id}>
       <TreeRowGuides depth={depth} column={16} />
       {branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${row.label}`} aria-expanded={open}
-        className="grid h-6 w-4 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring"
+        className="grid h-6 w-4 shrink-0 place-items-center self-start rounded focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => toggle(row.id)}><TreeRowChevron expanded={open} /></button> : <span className="w-4 shrink-0" />}
-      {choosable ? <button type="button" aria-label={`Select ${row.label}`} aria-pressed={active} onClick={() => onChoose(row)}
+      {choosable ? <button type="button" aria-label={`Select ${row.name || row.label}`} aria-pressed={active} onClick={() => onChoose(row)}
         className={cn("flex min-w-0 flex-1 gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           row.wrap ? "flex-wrap items-baseline py-1" : "h-full items-center")}>
         {row.wrap ? <WrappedRowText row={row} /> : <RowText row={row} />}
       </button> : <span className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"><RowText row={row} /></span>}
     </TreeRowSurface>
     {open && row.children ? <ul>{row.children.map((child) => <StudyRow key={child.id} row={child} depth={depth + 1}
-      {...{ chosen, collapsed, toggle, onChoose }} />)}</ul> : null}
+      {...{ chosen, collapsed, toggle, onChoose, contents }} />)}</ul> : null}
     {open && content ? <div className="pb-1 pl-4" data-study-result="">{content}</div> : null}
   </li>;
 }
 
+/**
+ * One closable panel of rows, headed by its title and its X: Parts or Study. `fit`: how it gives way
+ * when the stack is short (`ToolPanel`). `startsCollapsed`: the
+ * rows it opens with shut (every part but the weakest). Which rows are open is the panel's own, kept
+ * while it is mounted (closed or not).
+ */
+function StudyTreePanel({ id, title, rows, startsCollapsed, fit, hidden, chosen, onChoose, contents }) {
+  const [collapsed, setCollapsed] = useState(() => new Set(startsCollapsed));
+  const toggle = (rowId) => setCollapsed((current) => {
+    const next = new Set(current);
+    if (!next.delete(rowId)) next.add(rowId);
+    return next;
+  });
+  return <ToolPanel id={id} title={title} label={title} actions={<ToolPanelClose />} fit={fit} resizable fitContent closable collapsible={false} hidden={hidden}>
+    <ul className="flex flex-col px-1 pb-1 text-tiny" aria-label={title}>
+      {rows.map((row) => <StudyRow key={row.id} row={row} depth={0} {...{ chosen, collapsed, toggle, onChoose, contents }} />)}
+    </ul>
+  </ToolPanel>;
+}
+
 const RESULT_ROW = Object.freeze({ id: "result", label: "Result", detail: "" });
+const NONE = Object.freeze([]);
+
+// The panel ids: Study keeps the tree's, so a single part's is as it always was; Parts is its own.
+export const FEA_PARTS_PANEL_ID = "parts";
+export const FEA_STUDY_PANEL_ID = "tree";
 
 /**
- * An FEA result's Select panel, **Study**, closable like the Features tree (`tree`), and the
- * **Reference** for a face picked on the result. Study reads the result's study as the tree's rows
- * (`studyRows`: an assembly's parts and connections, material, fixed faces, loads with their faces, mesh), then Result: the field and
- * deformation. A result written before its study was recorded has Result alone. Choosing a row
- * that stands for faces is `onChoose(row)`; `chosen` is the row (or picked face) chosen.
+ * An FEA result's Select panels, each closable as the Features tree is, and the **Reference** for a
+ * face picked on the result. They are composed from what the file holds: **Parts** only for an
+ * assembly (`parts`: `partRows`, each part with its joints under it, the weakest part open), then
+ * **Study** (`rows`: `studyRows`, the material, fixed faces, loads with their faces and mesh, each
+ * only where the file records it), ending in Result: the field and deformation. A result written
+ * before its study was recorded has Result alone. Choosing a row that stands for faces or parts is
+ * `onChoose(row)`; `chosen` is the row (or picked face) chosen.
  *
- * @param {{ active: boolean, result: object, rows: object[], chosen: string, onChoose(row: object): void,
+ * @param {{ active: boolean, result: object, parts?: object[], openPart?: number, rows: object[], chosen: string, onChoose(row: object): void,
  *   field: object, scale: number, onFieldChange(attribute: string): void, onScaleChange(scale: number): void,
  *   reference: { title: string, ref: string, role: string } | null, onClearSelection(): void,
  *   copy: { label: string, shortcut: string, onCopy(): unknown } | null }} props
  */
-export default function FeaStudyPanel({ active, result, rows, chosen, onChoose, field, scale, onFieldChange, onScaleChange,
+export default function FeaStudyPanel({ active, result, parts = NONE, openPart = -1, rows, chosen, onChoose, field, scale, onFieldChange, onScaleChange,
   reference, onClearSelection, copy }) {
-  const [collapsed, setCollapsed] = useState(() => new Set());
-  const toggle = (id) => setCollapsed((current) => {
-    const next = new Set(current);
-    if (!next.delete(id)) next.add(id);
-    return next;
-  });
-  const shared = { depth: 0, chosen, collapsed, toggle, onChoose };
+  const contents = {
+    [RESULT_ROW.id]: <FeaResultControls result={result} field={field} scale={scale} onFieldChange={onFieldChange} onScaleChange={onScaleChange} />,
+  };
+  const panels = [
+    parts.length ? { id: FEA_PARTS_PANEL_ID, title: "Parts", rows: parts, startsCollapsed: parts.filter((_, index) => index !== openPart).map((row) => row.id), fit: "tree" } : null,
+    // Under Parts, Study gives way only after Parts has, as a details panel does, so Result stays in view.
+    { id: FEA_STUDY_PANEL_ID, title: "Study", rows: [...rows, RESULT_ROW], startsCollapsed: NONE, fit: parts.length ? "details" : "tree" },
+  ].filter(Boolean);
   return <>
-    {/* Headed "Study"; its X closes it, and Select, pressed while it is the tool, opens it again. */}
-    <ToolPanel id="tree" title="Study" label="Study" actions={<ToolPanelClose />} fit="tree" resizable fitContent closable collapsible={false} hidden={!active}>
-      <ul className="flex flex-col px-1 pb-1 text-tiny" aria-label="Study">
-        {rows.map((row) => <StudyRow key={row.id} row={row} {...shared} />)}
-        <StudyRow row={RESULT_ROW} {...shared} content={<FeaResultControls result={result} field={field} scale={scale}
-          onFieldChange={onFieldChange} onScaleChange={onScaleChange} />} />
-      </ul>
-    </ToolPanel>
+    {/* Each headed with its X; Select, pressed while it is the tool, opens the closed ones again. */}
+    {panels.map((panel) => <StudyTreePanel key={panel.id} {...panel} hidden={!active} chosen={chosen} onChoose={onChoose} contents={contents} />)}
     {/* The face picked, sized on its own under Study: its ref, what the study does to it, and Copy. */}
     {reference ? <ToolPanel id="reference" title={reference.title} label="Reference details" closeLabel="Clear selection" fit="details" resizable
       collapsible={false} hidden={!active} onClose={onClearSelection}

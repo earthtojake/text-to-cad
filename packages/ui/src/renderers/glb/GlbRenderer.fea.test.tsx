@@ -68,7 +68,11 @@ function mount(extras: Record<string, unknown> | null, state?: unknown, { action
   slot.setAttribute('data-test-navbar', '');
   document.body.append(slot);
   const save = vi.fn();
-  const preferences = { getSnapshot: () => settings, subscribe: () => () => {}, update() {} };
+  // The tab's settings, as a store: a closed or resized panel is written back and read again.
+  let snapshot = settings;
+  const listeners = new Set<() => void>();
+  const preferences = { getSnapshot: () => snapshot, subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
+    update(patch: any) { snapshot = { ...snapshot, ...patch }; listeners.forEach(listener => listener()); } };
   const catalog = { entries: [], error: null };
   const client = { resources: {}, subscribe: () => () => {}, getSnapshot: () => catalog };
   const props = { source: { id: 'one' }, file: { path: '/models/part.glb', name: 'part.glb', kind: 'file' }, document: null, navbarSlot: slot,
@@ -448,15 +452,44 @@ function mountAssembly(copied: string[]) {
   return built;
 }
 
-it('an assembly\'s Study lists Parts and Connections rows and the colour bar names the weakest part', () => {
+const partsPanel = () => screen.queryByRole('region', { name: 'Parts' });
+
+it('an assembly has a Parts panel above Study, each part with its joints, the weakest open, and Study holds only the study', () => {
   mountAssembly([]);
-  expect(document.querySelector('[data-study-row="part:0"]')!.textContent).toContain('post');
-  expect(document.querySelector('[data-study-row="part:0"]')!.textContent!.replace(/\u2011/g, '-')).toContain('6061-T6 · holds 1.4×');
-  // The detail wraps between words rather than being cut off.
-  expect(document.querySelector('[data-study-row="part:0"] [data-study-detail]')!.className).not.toMatch(/truncate|ellipsis|overflow-hidden|whitespace-nowrap/);
-  expect(document.querySelector('[data-study-row="joint:0"]')!.textContent).toContain('post ↔ base');
-  expect(document.querySelector('[data-study-row="joint:0"]')!.textContent!.replace(/\u00a0/g, ' ')).toContain('bonded · 100 mm²');
+  const parts = partsPanel()!;
+  const study = studyPanel()!;
+  expect(parts.querySelector('h3')!.textContent).toBe('Parts');
+  expect(parts.querySelector('button[aria-label="Close parts"]')).toBeTruthy();
+  expect(parts.compareDocumentPosition(study) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // The weakest part (post) opens with its joint under it, naming only the other part; base starts shut.
+  const plain = (panel: HTMLElement) => rowTexts(panel).map(text => text!.replace(/\u2011/g, '-').replace(/\u00a0/g, ' '));
+  expect(plain(parts)).toEqual(['post6061-T6 · holds 1.4×', '↔ basebonded · 100 mm²', 'baseSteel · holds 2.5×']);
+  expect(parts.querySelector('[data-study-row="part:0"] [data-study-detail]')!.className).not.toMatch(/truncate|ellipsis|overflow-hidden|whitespace-nowrap/);
+  // Opened, base lists the same joint, naming post.
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand base' })); });
+  expect(plain(parts).slice(2)).toEqual(['baseSteel · holds 2.5×', '↔ postbonded · 100 mm²']);
+  // Study no longer lists parts or joints.
+  expect(rowTexts(study)[0]).toMatch(/^Material/);
+  expect(study.querySelector('[data-study-row^="part:"], [data-study-row^="joint:"], [data-study-row="parts"], [data-study-row="connections"]')).toBeNull();
   expect(document.querySelector('[data-fea-summary]')!.textContent).toBe('Weakest: post · peak stress 180 MPa · holds 1.4× this load · the assembly moves up to 0.029 mm');
+});
+
+it('Select carries the mark while Parts or Study is closed, and a press brings back the closed ones', () => {
+  mountAssembly([]);
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Close parts' })); });
+  expect(partsPanel()).toBeNull();
+  expect(studyPanel()).toBeTruthy();
+  const select = screen.getByRole('button', { name: 'Select' });
+  expect(select.getAttribute('aria-description')).toBe('Parts closed');
+  act(() => { fireEvent.click(select); });
+  expect(partsPanel()).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-description')).toBeNull();
+});
+
+it('a single part has no Parts panel', () => {
+  mount(STUDIED, undefined, { faces: FACES });
+  expect(partsPanel()).toBeNull();
+  expect(studyPanel()).toBeTruthy();
 });
 
 it('choosing a part tints its triangles and carries it into Quick Edit', async () => {
@@ -482,5 +515,16 @@ it('choosing a joint tints both sides\' interface faces and carries both parts i
   expect(joint.slice(8, 11)).not.toEqual(plain.slice(8, 11));
   for (const vertex of [0, 1, 3]) expect(joint.slice(vertex * 4, vertex * 4 + 3)).not.toEqual(plain.slice(vertex * 4, vertex * 4 + 3));
   expect(Math.abs(channel(2))).toBeLessThan(Math.abs(channel(0)));
+  expect(await copiedPrompt(copied)).toBe("move it\n\nFile: /models/part.glb\nReferences:\nBonded joint between 'post' and 'base' · /models/part.step#o1.1.f1,o1.2.f1");
+});
+
+it('a joint chosen under either of its parts is the same choice: both copies pressed, the same refs', async () => {
+  const copied: string[] = [];
+  mountAssembly(copied);
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand base' })); });
+  const copies = screen.getAllByRole('button', { name: 'Select post ↔ base' });
+  expect(copies).toHaveLength(2);
+  act(() => { fireEvent.click(copies[1]); });
+  for (const copy of screen.getAllByRole('button', { name: 'Select post ↔ base' })) expect(copy.getAttribute('aria-pressed')).toBe('true');
   expect(await copiedPrompt(copied)).toBe("move it\n\nFile: /models/part.glb\nReferences:\nBonded joint between 'post' and 'base' · /models/part.step#o1.1.f1,o1.2.f1");
 });

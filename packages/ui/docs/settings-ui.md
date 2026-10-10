@@ -286,7 +286,7 @@ on the strip.
 
 Under the toolbar, in one column: the shell's tool's panel (**Drawing**) while
 Draw is up; Select's **Features** (STEP; a
-robot's **Links**; an FEA result's **Study**) and, whenever something is selected, its **Reference** (then
+robot's **Links**; an FEA result's **Study**, under an assembly's **Parts**) and, whenever something is selected, its **Reference** (then
 a `.sdf`'s **SDF**); Position's **Position**; then the panels
 of the effects a person keeps (**Measurements**, **Explode**, **Clip**). A panel
 whose tool is not up is `hidden`, not unmounted: a tree keeps its expansion,
@@ -318,7 +318,9 @@ stack.
   measurements, an arc's four the most; a longer one, a robot link's facts,
   scrolls, or a drag of its corner shows it). An FEA result's Study is short and ends in
   controls, so it opens at its content's height, uncapped (`fitContent`), giving way as the
-  tree does only when the stack is short; a cap the person drags holds as for any panel.
+  tree does only when the stack is short; an assembly's Parts above it opens the same way and is
+  the one that gives way first, Study after it as a details panel does, so Result stays in view. A
+  cap the person drags holds as for any panel.
   A cap is never a floor. Setting one panel's cap changes no other's.
 - **One grip, on a resizable panel only.** A resizable panel is sized from its
   bottom-right corner alone, by the grip Quick Edit's box has
@@ -342,14 +344,15 @@ stack.
   keeps its height. If what cannot give way still does not fit, the column
   itself scrolls — a panel is never cut. On mobile the tree starts closed and,
   opened, may take the whole column, giving way as other panels join it.
-- **Closing the tree.** Select's tree (Features, Links, Study) does not fold: the X at
+- **Closing the tree.** Select's tree (Features, Links, Study, and an FEA assembly's Parts) does not fold: the X at
   its filter row's end ("Close features") closes it, `hidden` and kept mounted
   with its expansion, filter, selection and scroll, and Select stays the tool —
   a selection still shows its Reference, a panel of its own. While the tree is
   closed, Select's button carries the flyout corner: a small filled triangle in
   its bottom-right corner (the mode badge has the top-right), out of the
   accessibility tree, with the button described as its tree's name and "closed"
-  ("Features closed", "Links closed", "Study closed"). A press
+  ("Features closed", "Links closed", "Study closed"; for an FEA assembly, whichever of
+  Parts and Study is closed, "Parts and Study closed" for both). A press
   on Select while it is the tool opens the tree again as it was, and the mark
   goes; from another tool a press only takes Select up, the tree still closed.
   Until a person closes or opens it, the tree starts as the file does: closed
@@ -359,7 +362,9 @@ stack.
   the tab, over how each starts. A renderer opts in with `closable` on the
   tree's panel (`ToolPanelClose` is its X) and `panel: { id, label, startsClosed }`
   on the tool it belongs to (STEP: `startsClosed` for a single part); the frame
-  draws the mark, routes the press and starts the panel (`RendererShell.jsx`).
+  draws the mark, routes the press and starts the panel (`RendererShell.jsx`). A tool with two such
+  panels (an FEA assembly's Parts and Study) names both, a list for `panel`: the mark shows while
+  either is closed, and the press opens every closed one.
 - **Folding.** Only Select's SDF panel and a robot's Reference fold: every tool
   panel and a STEP's Reference has an X alone. A folding panel folds to its first row and unfolds again,
   by a chevron at that row's trailing end: up while open (fold), down while
@@ -544,24 +549,37 @@ displacement, a plain-language summary, the study it was solved for and the sour
 every triangle (`glb/feaResult.js`). Its choices are Study's, and what the colours mean is on
 the view; Display is the view's alone, as a STEP's is. It has no mode of its own.
 
-- **Select, and its Study.** A result's strip is Select alone, and Select's panel is **Study**
-  (`glb/FeaStudyPanel.jsx`): the tree of the stack (`tree`, closable like Features, starting
-  open, closed on a phone), headed "Study" with its X, in the Links tree's rows. In order:
-  for a bonded assembly first **Parts** (one row per part: its name, then its material and "holds
-  1.5×", or "yields" under 1, as the colour bar words it) and **Connections** (one row per joint:
-  "post ↔ base", then "bonded · 100 mm²", with "· 0.1 mm gap closed" when a gap was closed to bond
-  it, or "not connected" and how far apart for a free pair); their details and a long part name wrap
-  between words like Material's, never cut off; then **Material** ("6061-T6 · yield 276 MPa"); **Fixed**, one row per fixed face ("Face 17",
-  "fixed"); **Loads**, one row per load ("2500 N", its direction in words: "down" and "up" are
-  CAD Z, else "along +X" or the unit vector; or "2 MPa pressure"), its faces under it ("Face 22",
-  "loaded"); **Mesh** ("1.9 mm elements · refined from 2.8 mm", or "not refined"); and
-  **Result**: a Field select in plain words (Stress, Displacement; the file's own name, von
-  Mises stress, is the colour bar's) and a Deformation slider with its
-  committed number, from 0 to four times the file's own exaggeration. A result written before
-  its study was recorded has Result alone. Nothing in Study is cut off at the one width: Material's
-  and Mesh's details wrap under their label's row onto a second line, as a Reference's values
-  wrap, between words only (a hyphenated name, "6061‑T6", and a number with its unit, "276 MPa",
-  never part). It opens at its content's height (see Heights), so Result's slider is in view. A GLB that is not a result has no strip at all.
+- **Select, its Parts and its Study.** A result's strip is Select alone, and Select's panels are
+  composed from what the file holds (`glb/FeaStudyPanel.jsx`), each a tree of the stack, closable
+  like Features, starting open (closed on a phone), headed with its name and its X, in the Links
+  tree's rows. FEA tools keep the model apart from the study, as a STEP and a board keep their
+  parts tree on the left: a STEP's and a board's tree is Select's panel, with no button of its own
+  on the strip, so an assembly's Parts is one too, stacked above Study and sharing the column.
+  - **Parts**, only for an assembly (`parts` in the file; a single part's result has none, and
+    looks as ever): one row per part, its name, then its material and "holds 1.5×", or "yields"
+    under 1, as the colour bar words it. Under each part, the joints it is in, each naming only the
+    OTHER part ("↔ chassis bulkhead"), then "bonded · 88 mm²", with "· 0.1 mm gap closed" when a gap
+    was closed to bond it, or "not connected" and how far apart for a free pair. A joint is so under
+    both its parts, and either row is the same choice (both rows show it chosen). The weakest part
+    (the one the file names, else the lowest factor) opens with its joints and the rest start shut,
+    so four parts and their joints do not fill the column; each opens by its chevron. Names and
+    details wrap between words, never cut off.
+  - **Study**: in order **Material** ("6061-T6 · yield 276 MPa"); **Fixed**, one row per fixed
+    face ("Face 17", "fixed"; in an assembly "post · face 17", wrapping); **Loads**, one row per
+    load ("2500 N", its direction in words: "down" and "up" are CAD Z, else "along +X" or the unit
+    vector; or "2 MPa pressure"), its faces under it ("Face 22", "loaded"); **Mesh** ("1.9 mm
+    elements · refined from 2.8 mm", or "not refined"); and **Result**: a Field select in plain
+    words (Stress, Displacement; the file's own name, von Mises stress, is the colour bar's),
+    listing only the fields the file carries, and a Deformation slider with its committed number,
+    from 0 to four times the file's own exaggeration. Each group shows only where the file records
+    something for it (`STUDY_GROUPS` in `glb/feaResult.js`: a result kind with more to say adds a
+    group there, touching no other), so a result written before its study was recorded has Result
+    alone. Nothing in Study is cut off at the one width: Material's and Mesh's details wrap under
+    their label's row onto a second line, as a Reference's values wrap, between words only (a
+    hyphenated name, "6061‑T6", a number with its unit, "276 MPa", and "holds 1.4×" never part).
+    It opens at its content's height (see Heights), so Result's slider is in view.
+
+  A GLB that is not a result has no strip at all.
 - **Choosing faces.** A fixed face, a load or a load's face chosen in Study tints its triangles
   (two thirds of the way to magenta, which no colour of the ramp is, so it reads at either end
   of the ramp while the stress still shows through) and carries
@@ -572,10 +590,10 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   what the study does to it ("fixed", "2500 N load, down", "free"), with **Copy** (the STEP's
   path and the ref, as a STEP's Copy writes it). Escape, the Reference's X, Quick Edit's clear
   and a press on nothing let go; one choice at a time, a finding or faces.
-- **Choosing a part or a joint** is choosing faces, for an assembly (`_PART`, `parts` and `connections`
-  in the file; a single part's result has none, and looks as ever). A part tints all its triangles and
+- **Choosing a part or a joint** in Parts is choosing faces, for an assembly (`_PART`, `parts` and `connections`
+  in the file). A part tints all its triangles and
   carries its ref into Quick Edit ("Part 'post'"); a joint tints the interface faces of both sides and
-  carries them ("Bonded joint between 'post' and 'base'"); a free pair has no faces, so it carries
+  carries them ("Bonded joint between 'post' and 'base'"), its two parts tinted lightly around them; a free pair has no faces, so it carries
   both parts' refs ("'post' and 'lid' aren't connected"). A part or a joint has no Reference panel, and
   in an assembly a picked face's Reference is headed with its part ("post · face 1").
 - **A colour bar** floats at bottom-centre on the playbar's line

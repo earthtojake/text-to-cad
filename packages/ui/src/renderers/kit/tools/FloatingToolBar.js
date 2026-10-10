@@ -15,10 +15,11 @@ import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
  * @property {boolean} [disabled]
  * @property {() => void} onSelect  Every press of the button.
  * @property {string} [description]  `aria-description`.
- * @property {{ id: string, label: string, startsClosed?: boolean }} [panel]  The panel of the tool's
- *   own that a person can close (Select's tree, by its `id` and its name; `startsClosed` where this
- *   file opens with it closed, as a single part does): while it is closed the frame marks the tool
- *   (`panelClosed`), and a press on the tool while it is up opens the panel again (`RendererShell.jsx`).
+ * @property {{ id: string, label: string, startsClosed?: boolean } | { id: string, label: string, startsClosed?: boolean }[]} [panel]
+ *   The panel of the tool's own that a person can close (Select's tree, by its `id` and its name;
+ *   `startsClosed` where this file opens with it closed, as a single part does), or several (an FEA
+ *   assembly's Parts and Study): while one is closed the frame marks the tool (`panelClosed`), and a
+ *   press on the tool while it is up opens the closed ones again (`RendererShell.jsx`).
  * @property {boolean} [panelClosed]  The tool's panel is closed: a small mark in the button's
  *   bottom-right corner, the flyout corner that says the tool has more to show.
  */
