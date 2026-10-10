@@ -375,10 +375,7 @@ def _findings(report: list[tuple], index) -> tuple:
     )
 
 
-def _board_payload(inputs: _Inputs, install) -> dict:
-    from cadgen.kicad.board_index import read_index
-    from cadgen.kicad.cli import run_kicad_cli, stage_files
-
+def _board_tree(inputs: _Inputs) -> list:
     path = inputs.document
     try:
         tree = sexpr.parse(_decoded(path, inputs.files[0][1]))
@@ -386,68 +383,91 @@ def _board_payload(inputs: _Inputs, install) -> dict:
         raise PlotError(f"{path.name} is not a readable KiCad board ({error})") from None
     if sexpr.head(tree) != "kicad_pcb":
         raise PlotError(f"{path.name} is not a KiCad board")
+    return tree
+
+
+def _marked(tree: list, unconnected: list[tuple], mark: tuple[float, float]) -> list:
+    """``tree`` with the ratsnest drawn on its scratch layer (cleared first) and the calibration
+    circle at ``mark``: a new list, its children shared with ``tree`` and never changed."""
+    marked = _clear_layer(tree, _RATSNEST_LAYER) if unconnected else list(tree)
+    for number, finding in enumerate(unconnected):
+        points = [at for _text, _uuid, at in finding[4] if at is not None]
+        if len(points) < 2:
+            continue
+        (x1, y1), (x2, y2) = points[0], points[1]
+        marked.insert(len(marked) - 1, [
+            Sym("gr_line"), [Sym("start"), x1, y1], [Sym("end"), x2, y2],
+            [Sym("stroke"), [Sym("width"), _RATSNEST_WIDTH], [Sym("type"), Sym("solid")]],
+            [Sym("layer"), _RATSNEST_LAYER], [Sym("uuid"), f"00000000-0000-4000-8000-{number:012d}"],
+        ])
+    marked.insert(len(marked) - 1, [
+        Sym("gr_circle"), [Sym("center"), *mark], [Sym("end"), round(mark[0] + _CALIBRATION_RADIUS, 4), mark[1]],
+        [Sym("stroke"), [Sym("width"), 0.01], [Sym("type"), Sym("solid")]], [Sym("fill"), Sym("no")],
+        [Sym("layer"), _CALIBRATION_LAYER[1]], [Sym("uuid"), "00000000-0000-4000-8000-ca1b0a7e0000"],
+    ])
+    return marked
+
+
+def _plot_layers(install, staged: Path, marked: list, stack: list[tuple[str, str, str]], mark: tuple[float, float]):
+    """KiCad's plot of each layer of ``stack`` (the ``marked`` board, staged at ``staged``), its
+    copper's drill holes as one last layer: ``(layers, a plotted page, the calibration offset)``."""
+    stage = staged.parent
+    plotted = [layer for layer, _kind, _side in stack] + [_CALIBRATION_LAYER[1]]
+    tokens = {layer: f"cadgenplot{number:02d}" for number, layer in enumerate(plotted)}
+    _name_layers(marked, tokens)
+
+    def svg(folder: str, layer: str) -> str:
+        return _plotted(stage, folder, tokens[layer], layer)
+
+    staged.write_text(sexpr.dumps(marked), encoding="utf-8")
+    _export(install, stage, staged.name, plotted, "poured")
+    offset = _calibration(svg("poured", _CALIBRATION_LAYER[1]), mark)
+    copper = [layer for layer, kind, _side in stack if kind == "copper"]
+    bare, filled = _unpoured(marked)
+    unpoured: dict[str, str] = {}
+    if filled:
+        staged.write_text(sexpr.dumps(bare), encoding="utf-8")
+        _export(install, stage, staged.name, copper + [_CALIBRATION_LAYER[1]], "unpoured")
+        if _calibration(svg("unpoured", _CALIBRATION_LAYER[1]), mark) != offset:
+            raise PlotError(f"KiCad placed {staged.name} differently on its two plots")
+        unpoured = {layer: _drill_groups(svg("unpoured", layer))[0] for layer in copper}
+    layers = []
+    drills: dict[str, None] = {}
+    page = ""
+    for layer, kind, side in stack:
+        drawn, holes = _drill_groups(svg("poured", layer))
+        page = page or drawn
+        if kind == "copper":
+            drills.update(dict.fromkeys(holes))
+        entry = {"id": "ratsnest" if kind == "ratsnest" else layer, "kind": kind, "side": side, "svg": drawn}
+        if layer in unpoured and unpoured[layer] != drawn:
+            entry["unpoured"] = unpoured[layer]
+        layers.append(entry)
+    if drills:
+        layers.append({"id": "drills", "kind": "drill", "side": "both", "svg": _drill_layer(page, list(drills))})
+    return layers, page, offset
+
+
+def _board_payload(inputs: _Inputs, install) -> dict:
+    from cadgen.kicad.board_index import read_index
+    from cadgen.kicad.cli import run_kicad_cli, stage_files
+    from cadgen.kicad.review import net_currents, review
+
+    path = inputs.document
+    tree = _board_tree(inputs)
     stack = _board_layers(tree)
     with tempfile.TemporaryDirectory(prefix="cadgen-kicad-plot-") as folder:
         staged = stage_files(inputs.files, Path(folder))
-        stage = staged.parent
         index = read_index(tree, project=staged.with_suffix(".kicad_pro"))
-        from cadgen.kicad.review import net_currents, review
-
         reviewed = review(index, net_currents(staged.with_suffix(".kicad_pro")))
         # One DRC: what is still unconnected (the ratsnest), and every finding the viewer lists.
-        run_kicad_cli(install, ["pcb", "drc", "--format", "json", "-o", "drc.json", staged.name], cwd=stage)
-        report = _drc_report(stage / "drc.json")
+        run_kicad_cli(install, ["pcb", "drc", "--format", "json", "-o", "drc.json", staged.name], cwd=staged.parent)
+        report = _drc_report(staged.parent / "drc.json")
         unconnected = [finding for finding in report if finding[0] == "unconnected"]
-        marked = _clear_layer(tree, _RATSNEST_LAYER) if unconnected else list(tree)  # a new list; children shared, never changed
-        for number, finding in enumerate(unconnected):
-            points = [at for _text, _uuid, at in finding[4] if at is not None]
-            if len(points) < 2:
-                continue
-            (x1, y1), (x2, y2) = points[0], points[1]
-            marked.insert(len(marked) - 1, [
-                Sym("gr_line"), [Sym("start"), x1, y1], [Sym("end"), x2, y2],
-                [Sym("stroke"), [Sym("width"), _RATSNEST_WIDTH], [Sym("type"), Sym("solid")]],
-                [Sym("layer"), _RATSNEST_LAYER], [Sym("uuid"), f"00000000-0000-4000-8000-{number:012d}"],
-            ])
+        if unconnected:
+            stack.append((_RATSNEST_LAYER, "ratsnest", "both"))
         mark = _marker_point(index)
-        marked.insert(len(marked) - 1, [
-            Sym("gr_circle"), [Sym("center"), *mark], [Sym("end"), round(mark[0] + _CALIBRATION_RADIUS, 4), mark[1]],
-            [Sym("stroke"), [Sym("width"), 0.01], [Sym("type"), Sym("solid")]], [Sym("fill"), Sym("no")],
-            [Sym("layer"), _CALIBRATION_LAYER[1]], [Sym("uuid"), "00000000-0000-4000-8000-ca1b0a7e0000"],
-        ])
-        plotted = [layer for layer, _kind, _side in stack] + ([_RATSNEST_LAYER] if unconnected else []) + [_CALIBRATION_LAYER[1]]
-        tokens = {layer: f"cadgenplot{number:02d}" for number, layer in enumerate(plotted)}
-        _name_layers(marked, tokens)
-
-        def svg(folder: str, layer: str) -> str:
-            return _plotted(stage, folder, tokens[layer], layer)
-
-        staged.write_text(sexpr.dumps(marked), encoding="utf-8")
-        _export(install, stage, staged.name, plotted, "poured")
-        offset = _calibration(svg("poured", _CALIBRATION_LAYER[1]), mark)
-        copper = [layer for layer, kind, _side in stack if kind == "copper"]
-        bare, filled = _unpoured(marked)
-        unpoured: dict[str, str] = {}
-        if filled:
-            staged.write_text(sexpr.dumps(bare), encoding="utf-8")
-            _export(install, stage, staged.name, copper + [_CALIBRATION_LAYER[1]], "unpoured")
-            if _calibration(svg("unpoured", _CALIBRATION_LAYER[1]), mark) != offset:
-                raise PlotError(f"KiCad placed {path.name} differently on its two plots")
-            unpoured = {layer: _drill_groups(svg("unpoured", layer))[0] for layer in copper}
-        layers = []
-        drills: dict[str, None] = {}
-        page = ""
-        for layer, kind, side in stack + ([(_RATSNEST_LAYER, "ratsnest", "both")] if unconnected else []):
-            drawn, holes = _drill_groups(svg("poured", layer))
-            page = page or drawn
-            if kind == "copper":
-                drills.update(dict.fromkeys(holes))
-            entry = {"id": "ratsnest" if kind == "ratsnest" else layer, "kind": kind, "side": side, "svg": drawn}
-            if layer in unpoured and unpoured[layer] != drawn:
-                entry["unpoured"] = unpoured[layer]
-            layers.append(entry)
-        if drills:
-            layers.append({"id": "drills", "kind": "drill", "side": "both", "svg": _drill_layer(page, list(drills))})
+        layers, page, offset = _plot_layers(install, staged, _marked(tree, unconnected, mark), stack, mark)
     width, height = _svg_size(page)
     sheet = replace(index, findings=_findings(report, index) + reviewed).mapped(lambda x, y: (x - offset[0], y - offset[1]))
     return {
