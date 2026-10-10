@@ -237,8 +237,10 @@ jobs:
           playwright: "false"
           npm: packages/core
 
+      # netgen is pinned to the version the accuracy tests' margins were measured with (the
+      # round rod's top-fibre stress is +8.6% against 10%); pyproject only sets the users' floor.
       - name: Install the fea extra
-        run: python -m pip install --editable "./packages/cadgen[fea]"
+        run: python -m pip install --editable "./packages/cadgen[fea]" "netgen-mesher==6.2.2608"
 
       - name: Run the fea tests
         run: scripts/test/test-python.sh --select cadgen --print-weights tests/python/packages/cadgen/test_fea.py tests/python/packages/cadgen/test_fea_assembly.py

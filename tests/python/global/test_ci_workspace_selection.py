@@ -254,6 +254,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_the_solver_runs_its_own_job_with_the_extra_installed(self):
         self.assertIn("cadgen[fea]", JOBS["fea"])
+        # The accuracy tests' margins were measured with this mesher; pyproject only sets a floor.
+        self.assertIn('"netgen-mesher==6.2.2608"', JOBS["fea"])
         self.assertIn(f"{CADGEN}/test_fea.py", JOBS["fea"])
         self.assertIn(f"{CADGEN}/test_fea_assembly.py", JOBS["fea"])
         fea = {"fea", "skills"}

@@ -812,6 +812,8 @@ class DefaultSizeAccuracy(unittest.TestCase):
         # with every refinement. A quarter along (four diameters from the
         # clamp, past its reach) the top fibre carries the beam's own M y / I,
         # compared node by node with the moment and height at each node.
+        # Measured +8.6% (nodes +3.6% to +11.6%) with netgen 6.2.2608; the mean
+        # is over mesh-dependent nodes, so the CI fea job pins that netgen.
         import numpy as np
 
         xyz, von_mises = _vtu_von_mises(self.rod.vtu)
