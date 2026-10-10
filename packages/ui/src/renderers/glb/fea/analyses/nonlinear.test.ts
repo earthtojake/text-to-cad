@@ -5,7 +5,7 @@ import { feaControls, feaVerdict, readFeaResult, studyRows } from '../../feaResu
 import { activeFrame, activeFrameIndex } from '../series.js';
 import { heldRows, madeOfRows, pushedRows } from '../setup.js';
 import { feaAnalysis } from './index.js';
-import nonlinear, { NONLINEAR_SETUP, PLAY } from './nonlinear.js';
+import nonlinear, { NONLINEAR_SETUP, PLAY, collapseCaption } from './nonlinear.js';
 
 const LIMIT = 'No rate or temperature effects: the material answers the same however fast it is loaded';
 
@@ -92,6 +92,20 @@ describe('nonlinear', () => {
     const limits = details.children.find((row: { id: string }) => row.id === 'limits');
     expect(limits.children.map((row: { label: string }) => row.label)).toEqual([LIMIT]);
     expect(studyRows(bentResult()).slice(0, 3).map((row: { label: string }) => row.label)).toEqual(['Held at', 'Pushed', 'Made of']);
+  });
+
+  it('leads a collapse\'s takeaway with the collapse, not the worst check\'s words', () => {
+    const result = bentResult();
+    expect(result).toMatchObject({ collapsed: true, loadPercent: 69.7 });
+    expect(feaVerdict(result).caption).toBe('Lite · Collapses at about 70 % of the load');
+    // Without the file's sentence, from the last load it carried.
+    const unsaid = bentResult({ analysis: { type: 'nonlinear', tier: 3, word: 'Permanent bend / Stretch', limits: [LIMIT], warnings: [] } });
+    expect(collapseCaption(unsaid)).toBe('Collapses at about 70 % of the load');
+    // A run that carried the full load says its worst check, as before.
+    const carried = bentResult({ collapsed: false, load_percent: 100, analysis: { type: 'nonlinear', tier: 3, warnings: [] } });
+    expect(collapseCaption(carried)).toBe('');
+    expect(feaVerdict(carried).caption.startsWith('Lite · ')).toBe(true);
+    expect(feaVerdict(carried).caption).not.toContain('Collapses');
   });
 
   it('words its check as cadgen writes it', () => {

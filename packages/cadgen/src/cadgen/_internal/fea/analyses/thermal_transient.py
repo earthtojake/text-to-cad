@@ -9,7 +9,13 @@ well posed over time, so no anchor is required; something must change its
 temperature, though.
 
 Backward Euler (θ = 1), :func:`cadgen._internal.fea.thermal_ops.march`; the
-ladder's ``adaptive_steps`` rung controls the step by step doubling. The
+ladder's ``adaptive_steps`` rung controls the step by step doubling. It keeps
+its own march rather than :func:`cadgen._internal.fea.timestep.theta`: a held
+temperature here follows its ``history``, so each step sets the held DOF at
+the step's end on the full (C + Δt K) system, a Δt-dependent coupling theta's
+``load(t)`` on the free DOF cannot carry; and its step error is judged against
+the temperature spread the study sets (at least 1 °C), where theta's is judged
+against the state's largest absolute value. The
 ``temperature`` and ``heat_flux`` fields are written per frame, up to
 ``Budget.max_frames`` of them (24): evenly spaced from t = 0 plus the hottest
 step, which the viewer opens on. The ``max_temperature_C`` curve runs over

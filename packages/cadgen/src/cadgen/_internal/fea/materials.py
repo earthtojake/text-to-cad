@@ -90,7 +90,7 @@ _BASE = ("E", "nu", "yield_strength", "density")
 TABLE_PROPERTIES = ("uts", "endurance", "endurance_cycles", "conductivity", "expansion", "specific_heat")
 #: What an example of each property looks like, for the error that asks for one.
 _EXAMPLE = {
-    "density": "7.85e-9", "uts_MPa": "400", "endurance_MPa": "200", "endurance_cycles": "1e6",
+    "density": "7.85e-9", "yield_MPa": "10", "uts_MPa": "400", "endurance_MPa": "200", "endurance_cycles": "1e6",
     "conductivity_W_mK": "50", "expansion_per_K": "11.7e-6", "specific_heat_J_kgK": "486", "tangent_MPa": "2000",
 }
 _POLYMER_FATIGUE = (

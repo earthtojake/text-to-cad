@@ -256,8 +256,7 @@ class HarmonicAnalysis:
             along = f" along {axis_words(inputs.direction)}" if inputs.direction is not None else ""
             step = fit.Step("reduce_modes", f"Kept only the fewest modes holding {_percent(KEEP_SHARE)} of the mass moving"
                             f"{along}, to fit", None, None, detail={"keep_share": KEEP_SHARE})
-            # The solve finds the modes, then says how many it kept and the share they hold (_settle_reduce_step).
-            plan._harmonic_reduce_step = step
+            # The solve finds the modes, then says how many it kept and the share they hold (settle_steps).
             return step
         return apply_eigen_rung(self, rung, ctx, inputs, words="Found the modes with an iterative solver (LOBPCG with "
                                 "multigrid) instead of factorising the stiffness")
@@ -339,12 +338,13 @@ class HarmonicAnalysis:
             along_share = float(masses.sum() / total_along) if total_along > 0 else None
         kept = np.arange(len(found))
         kept_share = None
+        reduce_step = None
         if reduce:
             if base or r is None:
                 kept, kept_share = sp.fewest_modes(weights, total, KEEP_SHARE)
             else:
                 kept, kept_share = sp.fewest_modes(sp.participation(found, M, r) ** 2, total_along, KEEP_SHARE)
-            self._settle_reduce_step(plan, inputs, found, kept, kept_share, base or r is not None)
+            reduce_step = self._reduce_step(inputs, found, kept, kept_share, base or r is not None)
         used = found.take(kept)
 
         started = time.perf_counter()
@@ -413,6 +413,7 @@ class HarmonicAnalysis:
                 "used_modes": [int(i) for i in kept],
                 "modes_in_sweep": in_sweep,
                 "kept_share": kept_share,
+                "reduce_step": reduce_step,
                 "along_share": along_share,
                 "direction": None if direction is None else [float(c) for c in direction],
                 "searched_Hz": found.searched_Hz,
@@ -442,23 +443,22 @@ class HarmonicAnalysis:
         )
 
     @staticmethod
-    def _settle_reduce_step(plan, inputs: HarmonicInputs, found, kept, share: float | None, by_mass: bool) -> None:
-        """reduce_modes' step says the share it kept once the modes are found: its words are written now.
-
-        The step is the one the ladder recorded (``FitPlan``'s steps are frozen dataclasses run.py writes as
-        they are), so its words are set in place."""
-        from cadgen._internal.fea import fit
-
-        step = getattr(plan, "_harmonic_reduce_step", None)
-        if step is None or not isinstance(step, fit.Step):
-            return
+    def _reduce_step(inputs: HarmonicInputs, found, kept, share: float | None, by_mass: bool) -> dict:
+        """reduce_modes' words once the modes are found, for :meth:`settle_steps`."""
         along = f" moving along {axis_words(inputs.direction)}" if inputs.direction is not None else " moving with the shake"
         what = f"of the mass{along}" if by_mass else "of the response to the forces"
         count = len(kept)
         words = (f"Kept {count} of the {len(found)} modes up to {hz_text(found.searched_Hz)}, the ones holding "
                  f"{_percent(share or 0.0)} {what}, to fit")
-        object.__setattr__(step, "words", words)
-        step.detail.update({"kept_modes": count, "found_modes": len(found), "kept_share": round(share or 0.0, 4)})
+        return {"words": words,
+                "detail": {"kept_modes": count, "found_modes": len(found), "kept_share": round(share or 0.0, 4)}}
+
+    def settle_steps(self, result: AnalysisResult, steps: list) -> list:
+        """reduce_modes' step said again once the modes are found: how many it kept and the share they hold
+        (run.py calls this after the solve, before writing; the solve leaves the words in ``reduce_step``)."""
+        from cadgen._internal.fea import fit
+
+        return fit.settle_step(steps, "reduce_modes", result.scalars.get("reduce_step"), marker="keep_share")
 
     # -- checks, findings ----------------------------------------------------------------------------
 

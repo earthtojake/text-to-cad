@@ -45,9 +45,6 @@ export function historyWords(history) {
   return "";
 }
 
-/** The study echo as the file wrote it: the histories ride on its loads and excitation, which `readStudy` keeps no copy of. */
-const rawStudy = (result) => result?.mesh?.userData?.study || {};
-
 /** The Time scrubber over the run's frames, the field and the deformation; the field and the deformation with no frames. */
 export function timeFieldAndDeformation(result) {
   const [field, deformation] = fieldAndDeformation(result);
@@ -60,12 +57,11 @@ export function timeFieldAndDeformation(result) {
  * 2 ms"), which way it points its hint, and a prompt carries the history too.
  */
 export function pushedOverTimeRows(result) {
-  const raw = (rawStudy(result).loads || []).filter((load) => load && Array.isArray(load.faces) && load.faces.length);
   const loads = result.study.loads.filter((load) => load.faces.length);
   return pushedRows(result).map((group) => ({
     ...group,
     children: group.children.map((row, index) => {
-      const history = historyWords(raw[index]?.history);
+      const history = historyWords(loads[index]?.history);
       if (!history || !loads[index]) return row;
       const words = loadWords(loads[index]);
       return {
@@ -80,7 +76,7 @@ export function pushedOverTimeRows(result) {
 
 /** Study's "Shaken" over time: the shake's size and line, how it changes over time its hint ("half-sine, 2 ms"). */
 export function shakenOverTimeRows(result) {
-  const history = historyWords(rawStudy(result).excitation?.history);
+  const history = historyWords(result.study?.excitation?.history);
   return shakenRows(result).map((group) => ({
     ...group,
     children: group.children.map((row) => ({

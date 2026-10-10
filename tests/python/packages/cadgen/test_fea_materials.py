@@ -156,6 +156,24 @@ class Requires(unittest.TestCase):
         self.assertIn("density_t_per_mm3", str(caught.exception))
         requires(lookup_material("steel"), ("density", "conductivity", "expansion", "specific_heat"), "thermal_stress")
 
+    def test_a_stress_check_on_a_rubber_asks_for_its_yield_strength(self):
+        from cadgen._internal.fea.study import parse_study
+
+        rubber = {"name": "rubber", "hyperelastic": {"model": "neo_hookean", "mu_MPa": 0.6, "bulk_MPa": 300}}
+        study = {"analysis": "static", "material": rubber, "fixtures": [{"faces": ["#o1.f1"]}],
+                 "loads": [{"faces": ["#o1.f2"], "type": "force", "vector_N": [0, 0, -10]}]}
+        # A static study judges stress by default: a plain error naming what to add, not a TypeError later.
+        for document in (study, {**study, "view": {"checks": [{"kind": "stress"}]}}):
+            with self.assertRaises(ValueError) as caught:
+                parse_study(document)
+            message = str(caught.exception)
+            self.assertIn("static studies need the yield strength, and rubber has none", message)
+            self.assertIn('add yield_MPa to the material object, like {"name": "rubber", "yield_MPa": 10}', message)
+        # Judged by displacement alone it needs no yield strength; given one, the stress check is judged.
+        moved = parse_study({**study, "view": {"checks": [{"kind": "displacement", "limit_mm": 1}]}})
+        self.assertIsNone(moved.material.yield_strength)
+        self.assertEqual(parse_study({**study, "material": {**rubber, "yield_MPa": 8}}).material.yield_strength, 8.0)
+
     def test_every_need_is_a_known_property(self):
         with self.assertRaises(KeyError):
             requires(lookup_material("steel"), ("colour",), "static")

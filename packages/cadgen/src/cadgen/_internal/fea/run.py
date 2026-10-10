@@ -191,6 +191,8 @@ class _Plan:
     freed_overlaps: set
     #: Per part, the group of parts bonded to it (directly or through others).
     group_of: list[int]
+    #: The pairs (part indices) a contact study's ``contact`` connections name: meshed apart, like free ones.
+    contact: set = dataclasses.field(default_factory=set)
 
 
 def _find_part(parts: list, names: list[str], key: str, where: str) -> int:
@@ -237,6 +239,7 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
     pair_of = {frozenset((index_of[c.a], index_of[c.b])) for c in contacts}
     freed: set[frozenset[int]] = set()
     freed_overlaps: set[frozenset[int]] = set()
+    contact: set[frozenset[int]] = set()
     seen: set[frozenset[int]] = set()
     for n, connection in enumerate(parsed.connections):
         where = f"connections[{n}]"
@@ -257,8 +260,10 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
                 f"{where}: {quoted(names[i])} and {quoted(names[j])} don't touch within {parsed.contact_tolerance_mm:g} mm, "
                 "so they can't be bonded; raise contact_tolerance_mm or move them together"
             )
-        if connection.type == "free" and pair in pair_of:
+        if connection.type in ("free", "contact") and pair in pair_of:
             freed.add(pair)
+        if connection.type == "contact":
+            contact.add(pair)
         if connection.type == "free" and pair in overlap_of:
             freed_overlaps.add(pair)
 
@@ -282,7 +287,8 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
                 f"connections: {quoted(names[i])} and {quoted(names[j])} are also joined through other bonded parts, so one joint "
                 "between them can't be freed on its own (not yet supported); free the parts' other connections too"
             )
-    return _Plan(parts, names, materials, sorted(set(range(len(parts))) - given), contacts, bonded, overlaps, freed_overlaps, group_of)
+    return _Plan(parts, names, materials, sorted(set(range(len(parts))) - given), contacts, bonded, overlaps, freed_overlaps, group_of,
+                 contact)
 
 
 def _joined_through(pairs: list[tuple[int, int]], start: int, end: int) -> list[int]:
@@ -404,7 +410,7 @@ def _connections(plan: _Plan, volume) -> list[dict]:
         {
             "between": [name_of[c.a], name_of[c.b]],
             "refs": [c.a, c.b],
-            "type": "bonded" if (c.a, c.b) in bonded else "free",
+            "type": "bonded" if (c.a, c.b) in bonded else "contact" if frozenset((index_of[c.a], index_of[c.b])) in plan.contact else "free",
             "area_mm2": round(c.area_mm2, 4),
             "gap_mm": round(c.gap_mm, 6),
             "interference_mm": round(c.interference_mm, 6),
@@ -683,8 +689,9 @@ def solve_study(
         space = FemSpace.build(volume, fit_plan.order)
         built = time.perf_counter() - started
         ctx = context(volume, space=space, automatic=automatic, meshed=fit._mesh_key(fit_plan))
-        # Each upstream analysis on the same element space first, from the same study document.
-        for name in analysis.upstream:
+        # Each upstream analysis on the same element space first, from the same study document
+        # (an analysis whose source the study names, fatigue's `from`, says which: `upstream_for(inputs)`).
+        for name in (analysis.upstream_for(inputs) if hasattr(analysis, "upstream_for") else analysis.upstream):
             upstream = get_analysis(name)
             ctx.upstream[name] = upstream.solve(ctx, upstream.parse(parsed.source))
         result = analysis.solve(ctx, inputs)
@@ -780,6 +787,10 @@ def solve_study(
     if fit_plan.order == 1 and any(s.rung == "linear_elements" for s in steps):
         steps = [fit.measure_linear(analysis, s, budget, geometry, fit_plan, mesh, solve_on, context, inputs)
                  if s.rung == "linear_elements" else s for s in steps]
+    # An analysis may say a step again once its solve knows what it did (reduce_modes: the modes it kept).
+    # Optional: `settle_steps(result, steps) -> steps`, returning new steps, never changing one in place.
+    if hasattr(analysis, "settle_steps"):
+        steps = list(analysis.settle_steps(result, steps))
     result.steps = list(steps)
 
     # Each check of the study (`Study.checks`) judged on the written solve, in the study's order,

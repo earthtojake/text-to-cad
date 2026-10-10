@@ -32,14 +32,11 @@ export function psdGrms(table) {
   return Math.sqrt(area);
 }
 
-/** The study's PSD as the file echoes it: its rows, its g rms and its direction; null for none. */
+/** The study's PSD as the file echoes it (the read study's `psd`): its rows, its g rms and its direction; null for none. */
 export function psdOf(result) {
-  const psd = result.mesh?.userData?.study?.psd;
-  const table = Array.isArray(psd?.table)
-    ? psd.table.filter((row) => Array.isArray(row) && row.length === 2 && row.every((value) => Number.isFinite(value) && value > 0)) : [];
-  if (table.length < 2) return null;
-  const grms = Number.isFinite(psd.grms) && psd.grms > 0 ? psd.grms : psdGrms(table);
-  return { table, grms, direction: result.study?.excitation?.direction || null };
+  const psd = result.study?.psd;
+  if (!psd || psd.table.length < 2) return null;
+  return { table: psd.table, grms: psd.grms ?? psdGrms(psd.table), direction: psd.direction || result.study?.excitation?.direction || null };
 }
 
 /** The PSD in words: "6.1 g rms along Z, 20 to 2000 Hz". "" for none. */

@@ -155,7 +155,7 @@ class Psd(unittest.TestCase):
 class Ladder(unittest.TestCase):
     def test_it_declares_its_ladder(self):
         self.assertEqual(get_analysis("random_vibration").ladder,
-                         ("reduce_modes", "adaptive_steps", "iterative", "local_refine", "defeature", "linear_elements", "symmetry"))
+                         ("reduce_modes", "frequency_grid", "iterative", "local_refine", "defeature", "linear_elements", "symmetry"))
 
     def test_each_own_rung_is_taken_once(self):
         from cadgen._internal.fea.fit import FitPlan
@@ -167,12 +167,17 @@ class Ladder(unittest.TestCase):
         self.assertEqual((step.rung, ctx.plan.modes), ("reduce_modes", 6))
         self.assertIn("90% of the mass moving along Z", step.words)
         self.assertIsNone(analysis.apply("reduce_modes", ctx, inputs))
-        grid = analysis.apply("adaptive_steps", ctx, inputs)
-        self.assertTrue(ctx.plan.adaptive_steps)
+        grid = analysis.apply("frequency_grid", ctx, inputs)
+        self.assertEqual(grid.rung, "frequency_grid")
+        self.assertTrue(ctx.plan.frequency_grid)
+        self.assertFalse(ctx.plan.adaptive_steps)
         self.assertIn("coarser frequency grid, 10 points across each resonance instead of 40", grid.words)
         self.assertIn("on the coarser grid", grid.accuracy)
         self.assertLess(grid.accuracy_pct, 1.0)
-        self.assertIsNone(analysis.apply("adaptive_steps", ctx, inputs))
+        self.assertIsNone(analysis.apply("frequency_grid", ctx, inputs))
+        # A study may name the rung in fit.allow: it is one of the ladder's own names now.
+        allowed = parse_study(_study(fit={"allow": ["reduce_modes", "frequency_grid"]}))
+        self.assertEqual(allowed.fit["allow"], ["reduce_modes", "frequency_grid"])
         for rung in ("idealise", "symmetry"):
             self.assertIsNone(analysis.apply(rung, ctx, inputs))
 
@@ -269,11 +274,11 @@ class ShakenAtRandom(unittest.TestCase):
     def test_an_oversized_model_completes_with_fewer_modes_and_a_coarser_grid(self):
         from cadgen import fea
 
-        study = {**self.study, "fit": {"memory_GB": 0.01, "allow": ["reduce_modes", "adaptive_steps"]}}
+        study = {**self.study, "fit": {"memory_GB": 0.01, "allow": ["reduce_modes", "frequency_grid"]}}
         with redirect_stderr(io.StringIO()):
             result = fea.solve(self.step, self.directory / "tight.fea.glb", study=study)
         self.assertTrue(result.ok)
-        self.assertEqual([step["rung"] for step in result.fit][:2], ["reduce_modes", "adaptive_steps"])
+        self.assertEqual([step["rung"] for step in result.fit][:2], ["reduce_modes", "frequency_grid"])
         words = "Kept 1 of the 2 modes up to 1500 Hz, the ones holding 61% of the mass moving along Z, to fit"
         self.assertEqual(result.fit[0]["words"], words)
         self.assertIsNotNone(result.fit[1]["accuracy"])
@@ -282,7 +287,7 @@ class ShakenAtRandom(unittest.TestCase):
         self.assertIn(words, [step["words"] for step in gltf["meshes"][0]["extras"]["fit"]])
         self.assertIn(words, [step["words"] for step in json.loads(result.sidecar.read_text(encoding="utf-8"))["fit"]])
         self.assertIn(f"adapted: {words}", result.human_lines())
-        self.assertTrue({"fit_reduce_modes", "fit_adaptive_steps"} <= {finding["type"] for finding in result.findings})
+        self.assertTrue({"fit_reduce_modes", "fit_frequency_grid"} <= {finding["type"] for finding in result.findings})
         # The mode that carries the shake is kept, on a grid that still resolves it: Miles still holds.
         self.assertAlmostEqual(result.summary["max_displacement_rms_mm"] / self._miles(), 1.0, delta=0.15)
 

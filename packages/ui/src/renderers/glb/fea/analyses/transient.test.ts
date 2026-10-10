@@ -92,6 +92,16 @@ describe('transient', () => {
     expect(rows[1].children[0]).toMatchObject({ label: '10 g along Z', hint: 'Over time: ramp over 1 ms' });
   });
 
+  it('reads each history from the study it keeps, not the raw echo', () => {
+    const result = overTime({ excitation: { type: 'base', direction: [0, 0, 1], amplitude_g: 10, history: [[0, 0], [0.001, 1]] } });
+    expect(result.study.loads[0].history).toEqual({ shape: 'half_sine', duration_s: 0.002 });
+    expect(result.study.excitation.history).toEqual([[0, 0], [0.001, 1]]);
+    result.mesh.userData.study = {};
+    const rows = studyRows(result);
+    expect(rows[1].children[0]).toMatchObject({ label: '50 N half-sine, 2 ms' });
+    expect(rows.find((row: { id: string }) => row.id === 'shaken').children[0].hint).toBe('Over time: table of 2 points to 1 ms');
+  });
+
   it('keeps the check\'s moment, so choosing it can jump there', () => {
     expect(overTime().checks[0].at).toMatchObject({ frame: 1, value: 0.00102 });
   });

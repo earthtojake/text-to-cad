@@ -307,7 +307,7 @@ def ladder_estimate(ctx: SolveContext, *, steps: int = 0, frames: int = 0):
     if saved == "matrix_free":
         plan.solver = "iterative"
     try:
-        nodes = fit._plan_counts(ctx)[1]
+        nodes = fit.plan_counts(ctx)[1]
         frame_bytes = 2 * 8.0 * nodes * frames
         base = fit.solid_estimate(ctx, components=1, extra_bytes=frame_bytes)
         n = base.dofs

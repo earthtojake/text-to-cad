@@ -31,7 +31,7 @@ them (default 3σ, a level a Gaussian response passes about 0.3 % of the time):
 ``stress`` (labelled "Random vibration") and ``displacement``.
 
 The ladder's own rungs are ``reduce_modes`` (the fewest modes holding 90 % of
-the mass moving along the shake) and ``adaptive_steps``, a coarser frequency
+the mass moving along the shake) and ``frequency_grid``, a coarser frequency
 grid (10 points per half-power bandwidth instead of 40), whose accuracy cost is
 measured on a single resonance. The mesh rungs are the shared ones. Stdlib only
 at import.
@@ -280,7 +280,7 @@ class RandomVibrationAnalysis:
     }
     upstream: ClassVar[tuple[str, ...]] = ()
     ladder: ClassVar[tuple[str, ...]] = (
-        "reduce_modes", "adaptive_steps", "iterative", "local_refine", "defeature", "linear_elements", "symmetry",
+        "reduce_modes", "frequency_grid", "iterative", "local_refine", "defeature", "linear_elements", "symmetry",
     )
     noun: ClassVar[str] = "this shake"
     governing_word: ClassVar[str] = "RMS stress"
@@ -332,7 +332,7 @@ class RandomVibrationAnalysis:
 
     def _grid_points(self, ctx, inputs: RandomVibrationInputs) -> int:
         plan = getattr(ctx, "plan", None)
-        per = COARSE_POINTS if getattr(plan, "adaptive_steps", False) else POINTS_PER_BANDWIDTH
+        per = COARSE_POINTS if getattr(plan, "frequency_grid", False) else POINTS_PER_BANDWIDTH
         low, high = inputs.band_Hz
         span = math.log(high / low)
         return int(span / min(2.0 * inputs.damping_ratio / per, span / MIN_POINTS)) + 1
@@ -354,7 +354,7 @@ class RandomVibrationAnalysis:
 
     def apply(self, rung, ctx: SolveContext, inputs: RandomVibrationInputs):
         """``reduce_modes``: keep only the fewest modes holding 90 % of the mass moving along the shake.
-        ``adaptive_steps``: a coarser frequency grid, its accuracy measured on one resonance. ``iterative``:
+        ``frequency_grid``: a coarser frequency grid, its accuracy measured on one resonance. ``iterative``:
         LOBPCG instead of factorising. The mesh rungs the shared way; ``symmetry`` and ``idealise`` are not
         taken for a modal response yet."""
         from cadgen._internal.fea import fit
@@ -366,16 +366,15 @@ class RandomVibrationAnalysis:
             plan.modes = REDUCED_GUESS
             step = fit.Step("reduce_modes", f"Kept only the fewest modes holding {KEEP_SHARE * 100:.0f}% of the mass moving "
                             f"along {axis_words(inputs.direction)}, to fit", None, None, detail={"keep_share": KEEP_SHARE})
-            plan._random_reduce_step = step
             return step
-        if rung == "adaptive_steps":
-            if plan.adaptive_steps:
+        if rung == "frequency_grid":
+            if plan.frequency_grid:
                 return None
-            plan.adaptive_steps = True
+            plan.frequency_grid = True
             error = grid_error(inputs.damping_ratio, COARSE_POINTS) * 100.0
             moved = "under 0.1%" if error < 0.1 else f"about {error:.2g}%"
             return fit.Step(
-                "adaptive_steps",
+                "frequency_grid",
                 f"Integrated the response on a coarser frequency grid, {COARSE_POINTS} points across each resonance "
                 f"instead of {POINTS_PER_BANDWIDTH}, to fit",
                 f"a single resonance's RMS moves {moved} on the coarser grid", error,
@@ -437,9 +436,10 @@ class RandomVibrationAnalysis:
         along_share = float(masses.sum() / total_along) if total_along > 0 else None
         kept = np.arange(len(found))
         kept_share = None
+        reduce_step = None
         if reduce:
             kept, kept_share = sp.fewest_modes(masses, total_along, KEEP_SHARE)
-            self._settle_reduce_step(plan, inputs, found, kept, kept_share)
+            reduce_step = self._reduce_step(inputs, found, kept, kept_share)
         used = found.take(kept)
         gamma = gamma_all[kept]
 
@@ -449,7 +449,7 @@ class RandomVibrationAnalysis:
         timings["stress_s"] = time.perf_counter() - started
 
         started = time.perf_counter()
-        per = COARSE_POINTS if getattr(plan, "adaptive_steps", False) else POINTS_PER_BANDWIDTH
+        per = COARSE_POINTS if getattr(plan, "frequency_grid", False) else POINTS_PER_BANDWIDTH
         grid = response_grid(inputs.table, zeta, per)
         S_a = psd_at(inputs.table, grid) * G0_MM_S2 ** 2
         C0, C2 = modal_covariance(used.omega, gamma, grid, S_a, zeta)
@@ -487,6 +487,7 @@ class RandomVibrationAnalysis:
                 "used_modes": [int(i) for i in kept],
                 "modes_in_band": in_band,
                 "kept_share": kept_share,
+                "reduce_step": reduce_step,
                 "along_share": along_share,
                 "direction": [float(c) for c in direction],
                 "searched_Hz": found.searched_Hz,
@@ -540,17 +541,19 @@ class RandomVibrationAnalysis:
         }
 
     @staticmethod
-    def _settle_reduce_step(plan, inputs: RandomVibrationInputs, found, kept, share: float | None) -> None:
-        """reduce_modes' step says the share it kept once the modes are found: its words are written now."""
-        from cadgen._internal.fea import fit
-
-        step = getattr(plan, "_random_reduce_step", None)
-        if step is None or not isinstance(step, fit.Step):
-            return
+    def _reduce_step(inputs: RandomVibrationInputs, found, kept, share: float | None) -> dict:
+        """reduce_modes' words once the modes are found, for :meth:`settle_steps`."""
         words = (f"Kept {len(kept)} of the {len(found)} modes up to {hz_text(found.searched_Hz)}, the ones holding "
                  f"{(share or 0.0) * 100:.0f}% of the mass moving along {axis_words(inputs.direction)}, to fit")
-        object.__setattr__(step, "words", words)
-        step.detail.update({"kept_modes": len(kept), "found_modes": len(found), "kept_share": round(share or 0.0, 4)})
+        return {"words": words,
+                "detail": {"kept_modes": len(kept), "found_modes": len(found), "kept_share": round(share or 0.0, 4)}}
+
+    def settle_steps(self, result: AnalysisResult, steps: list) -> list:
+        """reduce_modes' step said again once the modes are found: how many it kept and the share they hold
+        (run.py calls this after the solve, before writing; the solve leaves the words in ``reduce_step``)."""
+        from cadgen._internal.fea import fit
+
+        return fit.settle_step(steps, "reduce_modes", result.scalars.get("reduce_step"), marker="keep_share")
 
     # -- checks, findings ----------------------------------------------------------------------------
 

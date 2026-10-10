@@ -42,27 +42,25 @@ export function spectrumLevel(table) {
   return `${g} from ${from} to ${to} Hz`;
 }
 
-/** The whole spectrum in a line: "50 g above 100 Hz along Z, 5% damping". "" for no table. */
+/** The whole spectrum in a line: "50 g above 100 Hz along Z, 5% damping" (the read study's `srs`, or the file's own). "" for no table. */
 export function spectrumWords(srs) {
   const level = spectrumLevel(srs?.table);
   if (!level) return "";
   const along = Array.isArray(srs.direction) && srs.direction.length === 3 && srs.direction.every(finite) ? axisWords(srs.direction) : "";
-  const damping = finite(srs.damping_ratio) ? `, ${plainNumber(srs.damping_ratio * 100)}% damping` : "";
+  const ratio = finite(srs.dampingRatio) ? srs.dampingRatio : srs.damping_ratio;
+  const damping = finite(ratio) ? `, ${plainNumber(ratio * 100)}% damping` : "";
   return `${level}${along ? ` along ${along}` : ""}${damping}`;
 }
-
-/** The study echo the file wrote (`extras.study`), as the GLB carries it. */
-const rawStudy = (result) => result?.mesh?.userData?.study || {};
 
 /**
  * Study's "Shocked", under a wave: the spectrum in a line, how the modes were combined its hint,
  * chosen with every fixed face (where the shock comes in). [] for a file with no spectrum.
  */
 export function shockedRows(result) {
-  const raw = rawStudy(result);
-  const label = spectrumWords(raw.srs);
+  const study = result.study || {};
+  const label = spectrumWords(study.srs);
   if (!label) return [];
-  const combination = raw.combination === "cqc" ? "CQC" : raw.combination === "srss" ? "SRSS" : "";
+  const combination = study.combination === "cqc" ? "CQC" : study.combination === "srss" ? "SRSS" : "";
   const faces = (result.study?.fixtures || []).flatMap((fixture) => fixture.faces);
   const refs = faces.length ? { faces } : wholeRefs(result).length ? { refs: wholeRefs(result) } : null;
   return [{ id: "shocked", label: "Shocked", detail: "", glyph: "wave", children: [{ id: "shocked:0", label, detail: "", wrap: true,

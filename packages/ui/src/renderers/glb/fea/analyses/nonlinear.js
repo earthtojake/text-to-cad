@@ -4,7 +4,8 @@
  * ("60 % load"), opening on the last load the part carried. Its verdict judges the permanent strain,
  * the stress and the displacement there; none moves with a load control (the response is not
  * proportional to the load), and a part that collapses fails every check. Its takeaway leads with
- * "Lite · ", and Details lists its limits. What you see opens on the load-step scrubber, the field
+ * "Lite · " and, for a collapse, says it ("Lite · Collapses at about 70 % of the load"); Details
+ * lists its limits. What you see opens on the load-step scrubber, the field
  * (stress, displacement, plastic strain) and the deformation; Play runs the steps over three seconds.
  * Its setup is static's: held at, pushed, made of.
  */
@@ -14,6 +15,19 @@ import { routineOf } from "./stub.js";
 
 /** Play: the load steps one after another, interpolated (GlbRenderer plays it). */
 export const PLAY = routineOf("Play", "play");
+
+/**
+ * The takeaway of a run that collapsed: the file's own sentence ("Collapses at about 70 % of the
+ * load", in `analysis.warnings`), else one from the last load it carried; "" for a run that did not.
+ */
+export function collapseCaption(result) {
+  if (!result?.collapsed) return "";
+  const said = (result.analysis?.warnings || []).find((line) => /^Collapses\b/.test(line));
+  if (said) return said;
+  const percent = result.loadPercent;
+  if (!Number.isFinite(percent)) return "Collapses before the full load";
+  return percent < 1 ? "Collapses before 1 % of the load" : `Collapses at about ${Math.round(percent)} % of the load`;
+}
 
 /** Its setup: where it is held, what pushes it, what it is made of. */
 export const NONLINEAR_SETUP = Object.freeze([heldRows, pushedRows, madeOfRows]);
@@ -36,4 +50,6 @@ export default Object.freeze({
   displayTitle: "Loads and fixtures",
   // A Tier 3 analysis's short limit word, which leads its verdict's takeaway.
   limitWord: "Lite",
+  // A collapse leads the takeaway, not the worst check's words.
+  caption: collapseCaption,
 });

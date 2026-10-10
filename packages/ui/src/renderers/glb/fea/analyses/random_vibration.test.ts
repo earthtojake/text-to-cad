@@ -80,4 +80,12 @@ describe('random_vibration', () => {
     expect(shakenAtRandomRows(echoed)[0].children[0].label).toBe('6.3 g rms along X, 20 to 1000 Hz');
     expect(shakenAtRandomRows(shaken({ psd: null }))).toEqual([]);
   });
+
+  it('reads the PSD and its g rms from the study it keeps, not the raw echo', () => {
+    const result = shaken({ psd: { direction: [1, 0, 0], table: [[20, 0.04], [1000, 0.04]], grms: 6.26 } });
+    expect(result.study.psd).toEqual({ table: [[20, 0.04], [1000, 0.04]], grms: 6.26, direction: [1, 0, 0] });
+    expect(shaken().study.psd.grms).toBeNull();
+    result.mesh.userData.study = {};
+    expect(shakenAtRandomRows(result)[0].children[0].label).toBe('6.3 g rms along X, 20 to 1000 Hz');
+  });
 });

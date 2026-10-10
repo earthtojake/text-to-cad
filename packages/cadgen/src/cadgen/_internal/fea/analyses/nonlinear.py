@@ -322,7 +322,7 @@ class NonlinearAnalysis:
         plastic strain). fit.py's per-method constants; a two-pass plan pays for both passes."""
         from cadgen._internal.fea import fit
 
-        elements, nodes, two = fit._plan_counts(ctx)
+        elements, nodes, two = fit.plan_counts(ctx)
         order = ctx.plan.order
         n = max(int(3 * nodes), 1)
         matrix = 12.0 * fit.NNZ_PER_ROW[order] * n

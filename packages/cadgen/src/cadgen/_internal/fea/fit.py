@@ -156,6 +156,8 @@ class FitPlan:
     tried: list[str] = field(default_factory=list)
     #: The rungs taken, over every fit_budget pass.
     taken: list[str] = field(default_factory=list)
+    #: frequency_grid: a coarser frequency grid for a response integrated over frequency (random_vibration).
+    frequency_grid: bool = False
     #: local_refine: the size the governing region keeps (the requested size); set means two passes.
     refine_to_mm: float | None = None
     #: The element size the study asked for (or the default), before any rung.
@@ -485,6 +487,23 @@ def pass_step(step: Step, first: float, second: float, word: str) -> Step:
                    detail={**step.detail, "coarse_value": round(first, 6), "refined_value": round(second, 6)})
 
 
+def settle_step(steps: list[Step], rung: str, settled: dict | None, *, marker: str | None = None) -> list[Step]:
+    """The steps with ``rung``'s step said again, once the solve knows what it did (an analysis's ``settle_steps``).
+
+    ``settled`` carries the new ``words`` and, optionally, ``accuracy``, ``accuracy_pct`` and ``detail`` (merged
+    into the step's own). A step is never changed in place: the settled one is a new :class:`Step`. With
+    ``marker``, only a step whose ``detail`` holds that key is settled (transient's reduce_modes has two forms).
+    ``None`` leaves the steps as they are."""
+    if not settled:
+        return list(steps)
+    changes = {key: settled[key] for key in ("words", "accuracy", "accuracy_pct") if key in settled}
+    return [
+        replace(step, **changes, detail={**step.detail, **settled.get("detail", {})})
+        if step.rung == rung and (marker is None or marker in step.detail) else step
+        for step in steps
+    ]
+
+
 # -- cost models -------------------------------------------------------------------------------------
 
 #: Tetrahedra per mm^3 at size h: VOLUME_TETS / h^3, plus SURFACE_TETS / h^2 per mm^2 of surface.
@@ -573,9 +592,9 @@ def solve_cost(elements: float, nodes: float, *, components: int = 3, order: int
     return Estimate(dofs=n, memory_bytes=int(BASE_BYTES + memory + extra_bytes), seconds=float(seconds))
 
 
-def _plan_counts(ctx) -> tuple[float, float, bool]:
+def plan_counts(ctx) -> tuple[float, float, bool]:
     """(elements, scalar nodes, two passes) of the mesh the plan will make: counted on ``ctx.volume`` when the
-    plan meshes as it was meshed, else from the geometry."""
+    plan meshes as it was meshed, else from the geometry. An analysis's own ``estimate`` builds on it."""
     plan = ctx.plan
     volume = ctx.volume
     if volume is not None and getattr(ctx, "meshed_plan", None) == _mesh_key(plan):
@@ -594,6 +613,10 @@ def _plan_counts(ctx) -> tuple[float, float, bool]:
     return elements, elements * NODES_PER_TET[plan.order], plan.two_pass
 
 
+#: The name it had before analyses outside this module read it; kept for callers that still use it.
+_plan_counts = plan_counts
+
+
 def _mesh_key(plan: FitPlan) -> tuple:
     return (plan.size_mm, plan.order, plan.defeatured, plan.symmetry, plan.idealisation)
 
@@ -605,7 +628,7 @@ def solid_estimate(ctx, *, components: int = 3, extra_bytes: float = 0.0, extra_
     plan = ctx.plan
     if plan.idealisation != "solid" and plan.idealisation in _idealisers():
         return IDEALISERS[plan.idealisation].estimate(ctx)
-    elements, nodes, two = _plan_counts(ctx)
+    elements, nodes, two = plan_counts(ctx)
     cost = solve_cost(elements, nodes, components=components, order=plan.order, solver=plan.solver, extra_bytes=extra_bytes)
     seconds = cost.seconds * passes + extra_seconds
     if two and ctx.geometry is not None:

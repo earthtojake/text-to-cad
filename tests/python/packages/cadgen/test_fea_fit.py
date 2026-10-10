@@ -143,6 +143,72 @@ class Ladder(unittest.TestCase):
         finding = step.finding()
         self.assertEqual((finding["severity"], finding["type"]), ("info", "fit_defeature"))
 
+    def test_plan_counts_is_public_and_keeps_its_old_name(self):
+        from types import SimpleNamespace
+
+        self.assertIs(fit._plan_counts, fit.plan_counts)
+        geometry = fit.Geometry(volume_mm3=1e5, area_mm2=1.4e4, bbox_diagonal_mm=80.0)
+        ctx = SimpleNamespace(plan=fit.FitPlan(size_mm=2.0), volume=None, geometry=geometry)
+        elements, nodes, two = fit.plan_counts(ctx)
+        self.assertAlmostEqual(elements, fit.tets_estimate(geometry, 2.0))
+        self.assertAlmostEqual(nodes, elements * fit.NODES_PER_TET[2])
+        self.assertFalse(two)
+        # nonlinear's estimate reads it by its public name.
+        source = (Path(fit.__file__).parent / "analyses" / "nonlinear.py").read_text(encoding="utf-8")
+        self.assertIn("fit.plan_counts(ctx)", source)
+        self.assertNotIn("fit._plan_counts", source)
+
+    def test_a_step_is_settled_into_a_new_step_never_changed_in_place(self):
+        taken = fit.Step("reduce_modes", "Kept only the fewest modes", None, None, detail={"keep_share": 0.9})
+        other = fit.Step("reduce_modes", "Solved by modal superposition", None, None, detail={"to_method": "modal"})
+        steps = [fit.Step("iterative", "took iterative", None, None), other, taken]
+        settled = fit.settle_step(steps, "reduce_modes", {"words": "Kept 2 of the 5 modes", "accuracy": "a little low",
+                                                         "accuracy_pct": 3.0, "detail": {"kept_modes": 2}},
+                                  marker="keep_share")
+        self.assertEqual([s.words for s in settled], ["took iterative", "Solved by modal superposition", "Kept 2 of the 5 modes"])
+        self.assertEqual((settled[2].accuracy, settled[2].accuracy_pct), ("a little low", 3.0))
+        self.assertEqual(settled[2].detail, {"keep_share": 0.9, "kept_modes": 2})
+        # The ladder's own step is untouched, its detail too.
+        self.assertEqual((taken.words, taken.detail), ("Kept only the fewest modes", {"keep_share": 0.9}))
+        self.assertIs(settled[1], other)
+        self.assertEqual(fit.settle_step(steps, "reduce_modes", None), steps)
+
+    def test_the_dynamic_analyses_settle_their_steps_through_run_and_mutate_no_frozen_step(self):
+        from types import SimpleNamespace
+
+        from cadgen._internal.fea.analyses import get_analysis
+
+        run_source = (Path(fit.__file__).parent / "run.py").read_text(encoding="utf-8")
+        self.assertIn("analysis.settle_steps(result, steps)", run_source)
+        step = fit.Step("reduce_modes", "Kept only the fewest modes", None, None, detail={"keep_share": 0.9})
+        for name in ("harmonic", "shock", "random_vibration", "transient"):
+            with self.subTest(analysis=name):
+                analysis = get_analysis(name)
+                source = (Path(fit.__file__).parent / "analyses" / f"{name}.py").read_text(encoding="utf-8")
+                self.assertNotIn("__setattr__", source)
+                result = SimpleNamespace(scalars={"reduce_step": {"words": f"{name} kept 3", "detail": {"kept_modes": 3}}})
+                (settled,) = analysis.settle_steps(result, [step])
+                self.assertEqual((settled.words, settled.detail["kept_modes"]), (f"{name} kept 3", 3))
+                self.assertEqual(analysis.settle_steps(SimpleNamespace(scalars={}), [step]), [step])
+        self.assertEqual(step.words, "Kept only the fewest modes")
+
+    def test_idealise_is_not_taken_for_vibration_or_buckling_and_the_skill_says_so(self):
+        from types import SimpleNamespace
+
+        from cadgen._internal.fea.analyses import get_analysis
+
+        skill = Path(__file__).resolve().parents[4] / "skills" / "fea" / "references"
+        for name, page, words in (("modal", "modal.md", "not taken for a vibration study"),
+                                  ("buckling", "buckling.md", "not taken for buckling yet")):
+            with self.subTest(analysis=name):
+                analysis = get_analysis(name)
+                self.assertIn("idealise", analysis.ladder)
+                ctx = SimpleNamespace(plan=fit.FitPlan(), budget=fit.Budget(1, 1.0))
+                self.assertIsNone(analysis.apply("idealise", ctx, None))
+                self.assertEqual(ctx.plan.idealisation, "solid")
+                text = " ".join((skill / page).read_text(encoding="utf-8").split())
+                self.assertIn(f"`idealise` and `symmetry` are declared but {words}", text)
+
     def test_the_cost_model_grows_with_the_mesh_and_shrinks_with_each_rung(self):
         geometry = fit.Geometry(volume_mm3=1e5, area_mm2=1.4e4, bbox_diagonal_mm=80.0)
         fine, coarse = fit.tets_estimate(geometry, 1.0), fit.tets_estimate(geometry, 2.0)

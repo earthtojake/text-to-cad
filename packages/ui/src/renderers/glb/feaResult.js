@@ -256,13 +256,50 @@ const entries = (raw) => (Array.isArray(raw) ? raw.filter((entry) => entry && ty
 const record = (raw) => (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : null);
 
 /**
+ * A load's or a shake's `history` over time as the file echoes it, kept in its own form (a table of
+ * [t_s, factor] rows, or `{shape, duration_s}`), for the words that say it; null for none.
+ */
+function readHistory(raw) {
+  if (Array.isArray(raw)) {
+    const rows = raw.filter((row) => Array.isArray(row) && row.length === 2 && row.every(Number.isFinite)).map((row) => row.map(Number));
+    return rows.length ? rows : null;
+  }
+  const own = record(raw);
+  if (!own || typeof own.shape !== "string") return null;
+  return { shape: own.shape, ...(Number.isFinite(own.duration_s) ? { duration_s: Number(own.duration_s) } : {}) };
+}
+
+/** A spectrum table's rows, [Hz, value] with both positive: a PSD's g²/Hz or a shock's g. [] for none. */
+const spectrumTable = (raw) => (Array.isArray(raw)
+  ? raw.filter((row) => Array.isArray(row) && row.length === 2 && row.every((value) => Number.isFinite(value) && value > 0)).map((row) => row.map(Number))
+  : []);
+
+/** A random vibration's PSD, from the study's echo: its `table` (Hz, g²/Hz), its `grms` as the file states it (null where it does not) and its `direction`. null for none. */
+function readPsd(raw) {
+  const psd = record(raw);
+  if (!psd) return null;
+  return { table: spectrumTable(psd.table), grms: Number.isFinite(psd.grms) && psd.grms > 0 ? Number(psd.grms) : null, direction: vector(psd.direction) };
+}
+
+/** A shock's spectrum, from the study's echo: its `table` (Hz, g), its `direction` and the `dampingRatio` it is quoted at. null for none. */
+function readSrs(raw) {
+  const srs = record(raw);
+  if (!srs) return null;
+  return { table: spectrumTable(srs.table), direction: vector(srs.direction), dampingRatio: finiteOrNull(srs.damping_ratio) };
+}
+
+/**
  * What shakes the part, from the study's echo: a base `excitation` (`kind` "base", or "force" for
  * one through its loads), else a random-vibration `psd` or a shock `srs`, each along its
- * `direction`, with an `amplitudeG` where it has one. null for none.
+ * `direction`, with an `amplitudeG` where it has one and the `history` a shake over time follows
+ * (null for none). null for none.
  */
 function readExcitation(raw) {
   const own = record(raw.excitation);
-  if (own) return { kind: own.type === "force" ? "force" : "base", direction: vector(own.direction), amplitudeG: finiteOrNull(own.amplitude_g) };
+  if (own) {
+    return { kind: own.type === "force" ? "force" : "base", direction: vector(own.direction), amplitudeG: finiteOrNull(own.amplitude_g),
+      history: readHistory(own.history) };
+  }
   for (const kind of ["psd", "srs"]) {
     const spectrum = record(raw[kind]);
     if (spectrum) return { kind, direction: vector(spectrum.direction), amplitudeG: null };
@@ -295,8 +332,10 @@ function readDrop(raw) {
  * The study the result was solved for, as the file records it; null for a result written before it
  * did. Beside the material, fixtures, loads (a body load, gravity or an acceleration, has no faces
  * and its `g` vector), mesh and margin, what another analysis echoes: fixed `temperatures`, `heat`
- * inputs, `convection`, the `excitation`, the `drop`, the `flow`, the `rigidPlanes` and the
- * `sigma` a random vibration judges at.
+ * inputs, `convection`, the `excitation`, the `drop`, the `flow`, the `rigidPlanes`, the
+ * `sigma` a random vibration judges at and its `psd` (table and g rms), a shock's `srs` and how its
+ * modes were `combination`ed, a sweep's `sweepHz` and the `dampingRatio`. A load over time keeps its
+ * `history`, as the excitation does.
  */
 function readStudy(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -311,6 +350,7 @@ function readStudy(raw) {
     loads: (Array.isArray(raw.loads) ? raw.loads : []).filter(Boolean).map((load) => ({
       type: text(load.type), faces: faceRefs(load.faces), vector: vector(load.vector_N), pressure: finiteOrNull(load.pressure_MPa),
       ...(vector(load.vector_g) ? { g: vector(load.vector_g) } : {}),
+      ...(readHistory(load.history) ? { history: readHistory(load.history) } : {}),
     })),
     mesh,
     margin: Number.isFinite(raw.margin) && raw.margin >= 1 ? Number(raw.margin) : null,
@@ -323,6 +363,11 @@ function readStudy(raw) {
     rigidPlanes: entries(raw.rigid_planes).map((plane) => ({ point: vector(plane.point_mm) || [0, 0, 0], normal: vector(plane.normal) }))
       .filter((plane) => plane.normal && Math.hypot(...plane.normal) > 0),
     sigma: raw.sigma === 1 || raw.sigma === 3 ? raw.sigma : null,
+    psd: readPsd(raw.psd),
+    srs: readSrs(raw.srs),
+    combination: raw.combination === "cqc" || raw.combination === "srss" ? raw.combination : "",
+    sweepHz: band(raw.sweep_Hz),
+    dampingRatio: finiteOrNull(raw.damping_ratio),
   };
 }
 
@@ -401,6 +446,9 @@ export function readFeaResult(root) {
       checks: readChecks(extras.checks, feaAnalysis({ analysis }).checks),
       series: readSeries(extras.series),
       fit: readFit(extras.fit),
+      // A nonlinear run that collapsed: the last load it carried, in % of the load (`load_percent`).
+      collapsed: extras.collapsed === true,
+      loadPercent: finiteOrNull(extras.load_percent),
     };
   });
   return found;
@@ -1003,7 +1051,8 @@ const failedTitle = (failing, total) => (failing === total ? (total === 2 ? "Fai
  * checks"), else "Close to the limit" or "Passes all checks". `caption`: how much of this load (the
  * analysis's noun) the weakest check takes ("OK only to 0.4× this load"; with no stress, what to do),
  * or where the worst check's kind does not scale with the load, its own sentence ("Hottest 84 °C,
- * 16 °C under its limit"). `rows`: each check, worst first (failing before close before passing, then
+ * 16 °C under its limit"), or the analysis's own where it has one (a collapse: "Lite · Collapses at
+ * about 70 % of the load"). `rows`: each check, worst first (failing before close before passing, then
  * the most of its limit used), with its `label` in the person's words, the `part` a stress check's
  * numbers are for in an assembly, its `line` (the value against the limit, the label saying what it
  * is: "405 MPa, limit 276 MPa"), `use` (the share of the limit, 1 at it), the `margin` a stress,
@@ -1037,9 +1086,11 @@ export function feaVerdict(result, loadScale = 1) {
   // The load the weakest check takes, over the checks that scale with the load.
   const times = judged.filter((check) => check.times !== null).map((check) => check.times);
   const { lead, tail } = captionFrame(result, analysis);
+  // An analysis may say the takeaway itself (a collapse: "Collapses at about 70 % of the load"), else the worst check's.
+  const own = typeof analysis.caption === "function" ? analysis.caption(result) : "";
   return {
     status: TONE_OF[worst.status], title,
-    caption: `${lead}${checkCaption(worst, { times: worst.times !== null ? Math.min(...times) : null, noun })}${tail}`,
+    caption: `${lead}${own || checkCaption(worst, { times: worst.times !== null ? Math.min(...times) : null, noun })}${tail}`,
     rows: judged.map((check) => {
       const part = check.kind === "stress" ? (check.part ? spaced(check.part) : weakestName) : "";
       const label = kindLabel(check, analysis.checkLabels);

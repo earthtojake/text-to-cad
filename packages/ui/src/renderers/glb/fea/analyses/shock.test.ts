@@ -64,6 +64,14 @@ describe('shock', () => {
     expect(shockedRows(shocked({ srs: null }))).toEqual([]);
   });
 
+  it('reads the spectrum and the combination from the study it keeps, not the raw echo', () => {
+    const result = shocked();
+    expect(result.study).toMatchObject({ srs: { direction: [0, 0, 1], table: [[10, 5], [100, 50], [2000, 50]], dampingRatio: 0.05 },
+      combination: 'srss' });
+    result.mesh.userData.study = {};
+    expect(shockedRows(result)[0].children[0]).toMatchObject({ label: '50 g above 100 Hz along Z, 5% damping', hint: 'Modes combined by SRSS' });
+  });
+
   it('words a spectrum by its highest plateau', () => {
     expect(spectrumLevel([[10, 5], [100, 50], [2000, 50]])).toBe('50 g above 100 Hz');
     expect(spectrumLevel([[10, 50], [2000, 50]])).toBe('50 g from 10 to 2000 Hz');

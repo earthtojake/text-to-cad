@@ -676,6 +676,11 @@ def parse_study(study: str | dict | Path | None) -> Study:
 
     # What the analysis needs of every material it will solve with, asked for by name.
     needs = (*sorted(analysis.material_needs), *sorted(getattr(inputs, "material_needs", ())))
+    # A stress check is judged against the yield strength: a material with none (a rubber given by its
+    # hyperelastic block alone) is asked for it here, not met by a TypeError in the safety factor.
+    judged = (view or {}).get("checks") or (DEFAULT_CHECKS if name == "static" else analysis.default_checks)
+    if any(check.get("kind") == "stress" for check in judged) and "yield_strength" not in needs:
+        needs = (*needs, "yield_strength")
     for each in ([material] if material is not None else []) + list(parts.values()):
         requires(each, needs, name)
 

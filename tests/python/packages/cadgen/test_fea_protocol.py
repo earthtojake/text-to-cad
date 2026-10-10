@@ -95,7 +95,7 @@ class Registry(unittest.TestCase):
         self.assertIn("modal", str(caught.exception))
 
     def test_an_unbuilt_name_says_it_is_planned_never_an_import_error(self):
-        for name in ("creep", "contact"):
+        for name in ("creep", "bolt"):
             with self.subTest(name=name), self.assertRaises(ValueError) as caught:
                 get_analysis(name)
             self.assertIn(f"'{name}' is planned but not in this cadgen yet; available: static", str(caught.exception))

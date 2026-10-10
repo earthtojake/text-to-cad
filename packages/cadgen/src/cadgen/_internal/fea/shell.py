@@ -314,7 +314,7 @@ def idealised_cost(ctx, dofs: float, per_row: float) -> "Estimate":
     sparse direct solve of ``dofs`` with about ``per_row`` entries a row."""
     from cadgen._internal.fea import fit
 
-    elements, _, _ = fit._plan_counts(ctx)
+    elements, _, _ = fit.plan_counts(ctx)
     order = ctx.plan.order
     carrier_bytes = 0.25 * fit.BYTES_PER_ELEMENT[order] * elements
     carrier_seconds = fit.SECONDS_PER_ELEMENT[order] * elements

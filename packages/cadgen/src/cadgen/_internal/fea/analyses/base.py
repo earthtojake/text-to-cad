@@ -29,7 +29,7 @@ SeriesKind = Literal["mode", "time", "frequency"]
 Scaling = Literal["linear", "inverse", "none"]
 Rung = Literal["iterative", "local_refine", "defeature", "linear_elements", "idealise",
                "reduce_modes", "symmetry", "mass_scaling", "subcycling", "window",
-               "adaptive_steps", "fluid_coarsen", "continuation"]
+               "adaptive_steps", "frequency_grid", "fluid_coarsen", "continuation"]
 
 
 @dataclass(frozen=True)

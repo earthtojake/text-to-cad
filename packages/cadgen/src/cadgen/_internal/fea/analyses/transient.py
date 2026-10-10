@@ -442,7 +442,7 @@ class TransientAnalysis:
             plan.modes = REDUCED_GUESS
             step = fit.Step("reduce_modes", f"Kept only the fewest modes holding {KEEP_SHARE * 100:.0f}% of the response, "
                             "the rest by their steady share, to fit", None, None, detail={"keep_share": KEEP_SHARE})
-            plan._transient_reduce_step = step
+            plan._transient_fewest_modes = True
             return step
         if rung == "iterative":
             if plan.solver != "direct":
@@ -623,7 +623,7 @@ class TransientAnalysis:
         from cadgen._internal.fea import timestep
 
         space, plan = ctx.space, ctx.plan
-        reduce = getattr(plan, "_transient_reduce_step", None) is not None
+        reduce = bool(getattr(plan, "_transient_fewest_modes", False))
         base = inputs.excitation is not None and not inputs.loads
         r = None if inputs.excitation is None else sp.rigid_translation(space.component, inputs.excitation.direction)
         Mr = None if r is None else M @ r
@@ -643,6 +643,7 @@ class TransientAnalysis:
         Pm = found.vectors.T @ F                                                  # (m, J) modal loads per unit history
         kept = np.arange(len(found))
         kept_share = None
+        reduce_step = None
         if reduce:
             # Each mode's share of the steady response's work under the loads at their peak.
             p = Pm @ np.array([h.peak for h in histories])
@@ -651,7 +652,7 @@ class TransientAnalysis:
                 kept, kept_share = sp.fewest_modes(sp.participation(found, M, r) ** 2, total_along, KEEP_SHARE)
             else:
                 kept, kept_share = sp.fewest_modes(weights, float(weights.sum()), KEEP_SHARE)
-            self._settle_reduce_step(plan, found, kept, kept_share, base)
+            reduce_step = self._reduce_step(found, kept, kept_share, base)
         used = found.take(kept)
         Pu = Pm[kept]
         # The static correction: each load's steady answer less what the kept modes carry of it.
@@ -731,6 +732,7 @@ class TransientAnalysis:
                 "frequencies_Hz": [float(f) for f in found.frequencies_Hz],
                 "used_modes": [int(i) for i in kept],
                 "kept_share": kept_share,
+                "reduce_step": reduce_step,
                 "searched_Hz": found.searched_Hz,
                 "top_Hz": inputs.top_Hz,
                 "content_Hz": inputs.content_Hz(),
@@ -836,19 +838,20 @@ class TransientAnalysis:
         }
 
     @staticmethod
-    def _settle_reduce_step(plan, found, kept, share: float | None, by_mass: bool) -> None:
-        """reduce_modes' step says what it kept once the modes are found: its words are written now (in place,
-        like harmonic's: the ladder recorded the step before the solve)."""
-        from cadgen._internal.fea import fit
-
-        step = getattr(plan, "_transient_reduce_step", None)
-        if step is None or not isinstance(step, fit.Step):
-            return
+    def _reduce_step(found, kept, share: float | None, by_mass: bool) -> dict:
+        """reduce_modes' words once the modes are found, for :meth:`settle_steps` (like harmonic's)."""
         what = "of the mass moving with the shake" if by_mass else "of the response to the loads"
         words = (f"Kept {len(kept)} of the {len(found)} modes up to {hz_text(found.searched_Hz)}, the ones holding "
                  f"{(share or 0.0) * 100:.0f}% {what}, the rest by their steady share, to fit")
-        object.__setattr__(step, "words", words)
-        step.detail.update({"kept_modes": len(kept), "found_modes": len(found), "kept_share": round(share or 0.0, 4)})
+        return {"words": words,
+                "detail": {"kept_modes": len(kept), "found_modes": len(found), "kept_share": round(share or 0.0, 4)}}
+
+    def settle_steps(self, result: AnalysisResult, steps: list) -> list:
+        """reduce_modes' step said again once the modes are found: how many it kept and the share they hold
+        (run.py calls this after the solve, before writing; the solve leaves the words in ``reduce_step``)."""
+        from cadgen._internal.fea import fit
+
+        return fit.settle_step(steps, "reduce_modes", result.scalars.get("reduce_step"), marker="keep_share")
 
     # -- checks, findings ----------------------------------------------------------------------------
 

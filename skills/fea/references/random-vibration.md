@@ -150,7 +150,7 @@ A model too big for the machine still runs; each step is reported
   the mass moving along the shake, and says how many and the share: "Kept 1
   of the 2 modes up to 1500 Hz, the ones holding 61% of the mass moving along
   Z, to fit". The search for modes also stops once that share is reached.
-- `adaptive_steps`: integrates on a coarser frequency grid, 10 points across
+- `frequency_grid`: integrates on a coarser frequency grid, 10 points across
   each resonance instead of 40. Its accuracy note is measured on a single
   resonance at the study's damping ("a single resonance's RMS moves under
   0.1% on the coarser grid").

@@ -266,7 +266,6 @@ class ShockAnalysis:
             step = fit.Step("reduce_modes", f"Kept only the fewest modes holding {_percent(KEEP_SHARE)} of the mass moving "
                             f"along {axis_words(inputs.direction)}, to fit", None, None, detail={"keep_share": KEEP_SHARE})
             # The solve finds the modes, then says how many it kept, the share they hold and the mass left out.
-            plan._shock_reduce_step = step
             return step
         return apply_eigen_rung(self, rung, ctx, inputs, words="Found the modes with an iterative solver (LOBPCG with "
                                 "multigrid) instead of factorising the stiffness")
@@ -322,9 +321,10 @@ class ShockAnalysis:
         along_share = float(masses.sum() / total_along) if total_along > 0 else 0.0
         kept = np.arange(len(found))
         kept_share = None
+        reduce_step = None
         if reduce:
             kept, kept_share = sp.fewest_modes(masses, total_along, KEEP_SHARE)
-            self._settle_reduce_step(plan, inputs, found, kept, kept_share)
+            reduce_step = self._reduce_step(inputs, found, kept, kept_share)
         used = found.take(kept)
         used_gamma = gamma[kept]
         used_share = float(masses[kept].sum() / total_along) if total_along > 0 else 0.0
@@ -371,6 +371,7 @@ class ShockAnalysis:
                 "srs_g": {int(i): float(g) for i, g in zip(kept, srs_g)},
                 "modal_peak_mm": {int(i): float(v) for i, v in zip(kept, mode_peak_mm)},
                 "kept_share": kept_share,
+                "reduce_step": reduce_step,
                 "along_share": along_share,
                 "used_share": used_share,
                 "modes_below_spectrum": below,
@@ -409,24 +410,25 @@ class ShockAnalysis:
         return pairs
 
     @staticmethod
-    def _settle_reduce_step(plan, inputs: ShockInputs, found, kept, share: float) -> None:
-        """reduce_modes' step says what it kept once the modes are found, and the mass left out (the missing mass)."""
-        from cadgen._internal.fea import fit
-
-        step = getattr(plan, "_shock_reduce_step", None)
-        if step is None or not isinstance(step, fit.Step):
-            return
+    def _reduce_step(inputs: ShockInputs, found, kept, share: float) -> dict:
+        """reduce_modes' words once the modes are found, and the mass left out (the missing mass), for
+        :meth:`settle_steps`."""
         along = axis_words(inputs.direction)
         missing = max(0.0, 1.0 - share)
         words = (f"Kept {len(kept)} of the {len(found)} modes up to {hz_text(found.searched_Hz)}, the ones holding "
                  f"{_percent(share)} of the mass moving along {along}, to fit")
         accuracy = (f"the other {_percent(missing)} of the mass along {along}, the missing mass, is left out, "
                     "so the peak may read a little low") if missing >= 0.005 else None
-        object.__setattr__(step, "words", words)
-        object.__setattr__(step, "accuracy", accuracy)
-        object.__setattr__(step, "accuracy_pct", round(missing * 100, 2) if accuracy else None)
-        step.detail.update({"kept_modes": len(kept), "found_modes": len(found), "kept_share": round(share, 4),
-                            "missing_mass_share": round(missing, 4)})
+        return {"words": words, "accuracy": accuracy, "accuracy_pct": round(missing * 100, 2) if accuracy else None,
+                "detail": {"kept_modes": len(kept), "found_modes": len(found), "kept_share": round(share, 4),
+                           "missing_mass_share": round(missing, 4)}}
+
+    def settle_steps(self, result: AnalysisResult, steps: list) -> list:
+        """reduce_modes' step said again once the modes are found: how many it kept and the share they hold
+        (run.py calls this after the solve, before writing; the solve leaves the words in ``reduce_step``)."""
+        from cadgen._internal.fea import fit
+
+        return fit.settle_step(steps, "reduce_modes", result.scalars.get("reduce_step"), marker="keep_share")
 
     # -- checks, findings ----------------------------------------------------------------------------
 

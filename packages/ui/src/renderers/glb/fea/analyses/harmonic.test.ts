@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { checkLine, checkTitle } from '../checkKinds.js';
 import { feaControls, readFeaResult, studyRows } from '../../feaResult.js';
 import { activeFrameIndex, deformationAt } from '../series.js';
-import harmonic, { VIBRATE, frequencyAndDeformation, swingingRows } from './harmonic.js';
+import harmonic, { VIBRATE, frequencyAndDeformation, sweepWords, swingingRows } from './harmonic.js';
 import { feaAnalysis } from './index.js';
 
 // A shaken cantilever as cadgen writes one: frame 0 (the sweep's bottom) in the fields' own attributes, the
@@ -86,6 +86,15 @@ describe('harmonic', () => {
     const rows = studyRows(shaken());
     expect(rows.slice(0, 3).map((row: { label: string }) => row.label)).toEqual(['Held at', 'Shaken', 'Made of']);
     expect(rows[1].children[0]).toMatchObject({ label: '1 g along Z', faces: ['#o1.f1'], summary: 'Shaken where it is held: 1 g along Z' });
+  });
+
+  it('hints the sweep and its damping on the Shaken row, read from the study it keeps', () => {
+    const result = shaken();
+    expect(result.study).toMatchObject({ sweepHz: [10, 600], dampingRatio: 0.02 });
+    expect(studyRows(result)[1].children[0].hint).toBe('10 to 600 Hz sweep, 2% damping');
+    expect(sweepWords({ sweepHz: [5, 2000], dampingRatio: null })).toBe('5 to 2000 Hz sweep');
+    expect(sweepWords({ sweepHz: null, dampingRatio: 0.05 })).toBe('5% damping');
+    expect(sweepWords(null)).toBe('');
   });
 
   it('says which loads swing in a force shake, and shows no shaker', () => {
