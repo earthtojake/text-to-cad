@@ -50,6 +50,7 @@ __all__ = [
     "PartModel",
     "SIM_FIELDS",
     "library_entries",
+    "param_number",
     "parse_value",
     "part_model",
     "sim_fields",
@@ -169,7 +170,7 @@ def _decimal(mantissa: str, exponent: str | None, prefix: str | None) -> float:
 _PARAM_NUMBER = re.compile(r"(?P<sign>[+-])?(?P<mantissa>\d+\.?\d*|\.\d+)(?:[eE](?P<exponent>[+-]?\d+))?(?P<prefix>[Mm][Ee][Gg]|[fpnumkKMgGtT])?")
 
 
-def _param_number(text: str) -> float | None:
+def param_number(text: str) -> float | None:
     """A number in a ``Sim.*`` field (KiCad's notation: ``M`` mega, ``m`` milli), or None."""
     match = _PARAM_NUMBER.fullmatch(text)
     if match is None:
@@ -181,7 +182,7 @@ def _param_number(text: str) -> float | None:
 def _param_text(value: str, *, ref: str, key: str) -> str:
     """One ``Sim.Params`` value as SPICE text: numbers converted, expressions passed through."""
     text = value.strip()
-    number = _param_number(text)
+    number = param_number(text)
     if number is not None:
         return spice_number(number)
     if text[:1].isdigit() or text[:1] in ".+-":

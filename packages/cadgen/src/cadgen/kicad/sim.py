@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator, Sequence
 
 from cadgen.kicad.design import Circuit, DesignError, Net, Part, Pin
-from cadgen.kicad.spice import PartModel, _param_number, parse_value, part_model, spice_number
+from cadgen.kicad.spice import PartModel, param_number, parse_value, part_model, spice_number
 
 __all__ = ["Load", "OperatingPoint", "Run", "SimulationError", "Source", "Testbench", "Waveform"]
 
@@ -80,7 +80,7 @@ def _number(value: Any, *, what: str) -> float:
     if isinstance(value, (int, float)):
         number = float(value)
     elif isinstance(value, str):
-        parsed = _param_number(value.strip())
+        parsed = param_number(value.strip())
         if parsed is None:
             raise DesignError(f"{what} is a number such as 5, 1e-3 or '1m', got {value!r}")
         number = parsed
