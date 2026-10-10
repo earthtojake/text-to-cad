@@ -15,13 +15,10 @@ from cadgen.catalog import (
     source_from_path,
 )
 from cadgen.cli_logging import CliLogger
+from cadgen.metadata import MODEL_FORMATS, ModelFormat, format_named
 from cadgen._internal.glb_topology import build_step_topology_index_manifest
 from cadgen.coordination import (
-    DRAWING_PACKAGE,
-    HARNESS_PACKAGE,
-    PCB_PACKAGE,
     PHASE_GENERATE,
-    STEP_PACKAGE,
     ProgressEvent,
     artifact_build,
     resolve as resolve_progress,
@@ -1132,47 +1129,20 @@ def _validate_step_target(spec: EntrySpec, *, tool_name: str) -> None:
     )
 
 
-def _validate_dxf_target(spec: EntrySpec) -> None:
+def _validate_tree_less_target(spec: EntrySpec, fmt: ModelFormat) -> None:
     metadata = spec.generator_metadata
     if spec.source != "generated" or spec.script_path is None or metadata is None:
-        raise ValueError(f"dxf expected a generated Python source target: {spec.source_ref}")
-    if metadata.format != "dxf":
-        raise ValueError(f"dxf target is not a @dxf model: {spec.source_ref}")
-    if spec.dxf_path is None:
-        raise ValueError(f"dxf target has no configured DXF output: {spec.source_ref}")
+        raise ValueError(f"{fmt.name} expected a generated Python source target: {spec.source_ref}")
+    if metadata.format != fmt.name:
+        raise ValueError(f"{fmt.name} target is not a @{fmt.name} model: {spec.source_ref}")
+    if getattr(spec, fmt.spec_path) is None:
+        raise ValueError(f"{fmt.name} target has no configured {fmt.document} output: {spec.source_ref}")
 
 
-def _validate_pcb_target(spec: EntrySpec) -> None:
-    metadata = spec.generator_metadata
-    if spec.source != "generated" or spec.script_path is None or metadata is None:
-        raise ValueError(f"pcb expected a generated Python source target: {spec.source_ref}")
-    if metadata.format != "pcb":
-        raise ValueError(f"pcb target is not a @pcb model: {spec.source_ref}")
-    if spec.pcb_path is None:
-        raise ValueError(f"pcb target has no configured board output: {spec.source_ref}")
-
-
-def _validate_harness_target(spec: EntrySpec) -> None:
-    metadata = spec.generator_metadata
-    if spec.source != "generated" or spec.script_path is None or metadata is None:
-        raise ValueError(f"harness expected a generated Python source target: {spec.source_ref}")
-    if metadata.format != "harness":
-        raise ValueError(f"harness target is not a @harness model: {spec.source_ref}")
-    if spec.harness_path is None:
-        raise ValueError(f"harness target has no configured document output: {spec.source_ref}")
-
-
-def _generated_harness_summary(spec: EntrySpec) -> str:
-    output = spec.harness_path
+def _generated_document_summary(spec: EntrySpec, fmt: ModelFormat) -> str:
+    output = getattr(spec, fmt.spec_path)
     if output is not None:
-        return f"wrote harness: {_display_path(output)}"
-    return f"processed: {spec.source_ref}"
-
-
-def _generated_pcb_summary(spec: EntrySpec) -> str:
-    output = spec.pcb_path
-    if output is not None:
-        return f"wrote KiCad project: {_display_path(output)}"
+        return f"wrote {fmt.wrote}: {_display_path(output)}"
     return f"processed: {spec.source_ref}"
 
 
@@ -1194,13 +1164,6 @@ def _generated_python_glb_summary(spec: EntrySpec) -> str:
     return f"processed: {spec.source_ref}"
 
 
-def _generated_dxf_summary(spec: EntrySpec) -> str:
-    output = spec.dxf_path
-    if output is not None:
-        return f"wrote DXF: {_display_path(output)}"
-    return f"processed: {spec.source_ref}"
-
-
 def _tree_event(spec: EntrySpec, state: str, **extra: object) -> None:
     """One model transition for the build tree (cadgen.cli_tree). Generated models only:
     an imported document has no body and no children to show."""
@@ -1218,10 +1181,8 @@ def _current_source_result(spec: EntrySpec, tree: str | None) -> None:
     Tree-less models (a drawing, a board without a 3D export, a harness) have none;
     a board WITH a 3D export is a geometry model, whose tree its caller waits for.
     """
-    tree_less = spec.dxf_path is not None or spec.harness_path is not None or (
-        spec.pcb_path is not None and spec.step_path is None
-    )
-    if spec.source != "generated" or tree_less:
+    metadata = spec.generator_metadata
+    if spec.source != "generated" or metadata is None or format_named(metadata.format).tree_less:
         return
     from cadgen.daemon.executors import emit_source_result
     model = _model_for_spec(spec)
@@ -1279,7 +1240,7 @@ def _run_with_spec_generation_status(
     ``action`` is called as ``action(spec, run)``; ``run`` is the progress reporter.
     """
     del logger
-    kind = {"dxf": DRAWING_PACKAGE, "pcb": PCB_PACKAGE, "harness": HARNESS_PACKAGE}.get(model_format, STEP_PACKAGE)
+    kind = format_named(model_format).package
     started = time.perf_counter()
     checked_tree = None
 
@@ -1631,114 +1592,45 @@ def generate_dxf_targets(
     verbose: bool = False,
     json_output: bool = False,
 ) -> int:
-    """Build drawings. A drawing is a model (STORE.md §3), so its run answers on
-    stdout exactly as a STEP model's does: one `outcome document` line per
-    target, upgraded to JSON by ``json_output`` (``tree`` is null — a drawing
-    has no geometry tree)."""
-    from cadgen.store.gate import stale
+    """Build drawings (``tree`` is null -- a drawing has no geometry tree)."""
+    return _generate_tree_less_targets(
+        MODEL_FORMATS["dxf"], targets, force=force, verbose=verbose, json_output=json_output
+    )
 
-    reported: list[dict[str, object]] = []
 
-    def _emit(spec: EntrySpec, outcome: str) -> None:
-        from cadgen.daemon.telemetry import job_reused
+def generate_pcb_targets(
+    targets: Sequence[str],
+    *,
+    force: bool = False,
+    verbose: bool = False,
+    json_output: bool = False,
+) -> int:
+    """Build boards. The document is the board's ``.kicad_pcb`` (the rest of its
+    project is written beside it). A board with unrouted connections is a DRAFT: it
+    is written and says so."""
+    return _generate_tree_less_targets(
+        MODEL_FORMATS["pcb"], targets, force=force, verbose=verbose, json_output=json_output, facts=_board_facts
+    )
 
-        job_reused(outcome in ("current", "skipped-peer"))  # in a build worker: telemetry's cache hit, or not
-        reported.append(
-            {
-                "ok": True,
-                "kind": "drawing",
-                "outcome": outcome,
-                # Absolute in the JSON result, like every door's; the human line
-                # shows it relative to the cwd.
-                "document": str(spec.dxf_path.expanduser().resolve()) if spec.dxf_path is not None else None,
-                "tree": None,
-            }
-        )
 
-    def _flush() -> None:
-        for entry in reported:
-            if json_output:
-                print(json.dumps(entry, separators=(",", ":")))
-            else:
-                document = entry["document"]
-                print(f"{entry['outcome']} {_display_path(Path(document)) if document else None}")
+def generate_harness_targets(
+    targets: Sequence[str],
+    *,
+    force: bool = False,
+    verbose: bool = False,
+    json_output: bool = False,
+) -> int:
+    """Build harnesses. The document is the harness's ``.harness.yml`` (``tree`` is
+    null -- a harness has no geometry)."""
+    return _generate_tree_less_targets(
+        MODEL_FORMATS["harness"], targets, force=force, verbose=verbose, json_output=json_output
+    )
 
-    def dxf_output_current(spec: EntrySpec, output_path: Path | None) -> bool:
-        # The ONE gate every model answers to (STORE.md §4): the drawing's record,
-        # its closure, its pinned children and its .dxf output.
-        #
-        # Ask it by the model's IDENTITY (``script::fn``), never by the bare script
-        # path: a file may hold several models, and a bare path is ambiguous there --
-        # cadgen.store.index.resolve_model_ref refuses it rather than guessing, which
-        # would fail the drawing before it ever reached its own gate.
-        if output_path is None:
-            return False
-        model = _model_for_spec(spec)
-        if model is None:
-            return False
-        verdict = stale(model)
-        return not verdict.stale
 
-    logger = CliLogger("cadgen", verbose=verbose)
-    all_specs, selected_specs = _selected_specs_for_targets(targets)
-    for spec in selected_specs:
-        _validate_dxf_target(spec)
-
-    # The .dxf IS the product: every drawing writes the `.dxf` its decorator
-    # declares (`out=`, else the sibling `<name>.dxf`). The viewer parses that
-    # file directly; there is no drawing package.
-    def _effective_output(spec: EntrySpec) -> Path | None:
-        return spec.dxf_path
-
-    # No-op fast path: skip regenerating a drawing whose source closure is
-    # unchanged and whose recorded output still verifies byte-for-byte.
-    if not force:
-        current_specs = [
-            spec
-            for spec in selected_specs
-            if spec.script_path is not None
-            and dxf_output_current(spec, _effective_output(spec))
-        ]
-        for spec in current_specs:
-            logger.info(
-                f"{_display_path(spec.dxf_path) if spec.dxf_path is not None else spec.cad_ref} "
-                "is current; not rebuilt"
-            )
-            _emit(spec, "current")
-        current_refs = {spec.source_ref for spec in current_specs}
-        selected_specs = [spec for spec in selected_specs if spec.source_ref not in current_refs]
-    if selected_specs:
-        # Re-checked when the run opens, like the STEP path: a run that started behind
-        # a concurrent build of this drawing must not regenerate it.
-        def _built_by_a_peer(spec: EntrySpec) -> bool:
-            if force or spec.script_path is None:
-                return False
-            return dxf_output_current(spec, _effective_output(spec))
-
-        results = _run_selected_specs(
-            selected_specs,
-            action=lambda spec, progress_sink=None: _run_with_spec_generation_status(
-                spec,
-                "dxf",
-                lambda tracked_spec, reporter: run_script_generator(
-                    tracked_spec,
-                    "dxf",
-                    logger=logger,
-                    progress=reporter,
-                    model_prints_to_stdout=True,
-                ),
-                skip_if_current=_built_by_a_peer,
-                progress_sink=progress_sink,
-                logger=logger,
-            ),
-            logger=logger,
-            success_message=_generated_dxf_summary,
-        )
-        for spec, result in zip(selected_specs, results):
-            _emit(spec, "skipped-peer" if isinstance(result, _SkippedGeneration) else "built")
-    logger.total()
-    _flush()
-    return 0
+def _board_facts(spec: EntrySpec, built: object | None) -> dict[str, object]:
+    """A board's result says how much is left to route: what this build left, or else
+    what its record says the last one left."""
+    return {"unrouted": getattr(built, "unrouted", None) if built is not None else _board_unrouted(spec)}
 
 
 def _board_unrouted(spec: EntrySpec) -> int | None:
@@ -1754,33 +1646,42 @@ def _board_unrouted(spec: EntrySpec) -> int | None:
     return int(unrouted) if isinstance(unrouted, int) else None
 
 
-def generate_pcb_targets(
+def _generate_tree_less_targets(
+    fmt: ModelFormat,
     targets: Sequence[str],
     *,
-    force: bool = False,
-    verbose: bool = False,
-    json_output: bool = False,
+    force: bool,
+    verbose: bool,
+    json_output: bool,
+    facts: Callable[[EntrySpec, object | None], dict[str, object]] | None = None,
 ) -> int:
-    """Build boards. A board is a model like a drawing (STORE.md §3): it answers on
-    stdout with one `outcome document` line per target, the document being its
-    ``.kicad_pcb`` (its ``.kicad_sch`` and ``.kicad_pro`` are written beside it).
-    A board with unrouted connections is a DRAFT: it is written and says so."""
+    """Build drawings, boards or harnesses. Each is a model (STORE.md §3), so its run
+    answers on stdout exactly as a STEP model's does: one `outcome document` line per
+    target, upgraded to JSON by ``json_output``, ``tree`` null. ``facts`` adds what a
+    format's result says beside (a board's unrouted count), given the build's result,
+    or None when it did not build."""
     from cadgen.store.gate import stale
 
     reported: list[dict[str, object]] = []
 
-    def _emit(spec: EntrySpec, outcome: str, unrouted: int | None) -> None:
+    def document_of(spec: EntrySpec) -> Path | None:
+        return getattr(spec, fmt.spec_path)
+
+    def _emit(spec: EntrySpec, outcome: str, built: object | None = None) -> None:
         from cadgen.daemon.telemetry import job_reused
 
         job_reused(outcome in ("current", "skipped-peer"))  # in a build worker: telemetry's cache hit, or not
+        document = document_of(spec)
         reported.append(
             {
                 "ok": True,
-                "kind": "pcb",
+                "kind": fmt.record_kind,
                 "outcome": outcome,
-                "document": str(spec.pcb_path.expanduser().resolve()) if spec.pcb_path is not None else None,
+                # Absolute in the JSON result, like every door's; the human line
+                # shows it relative to the cwd.
+                "document": str(document.expanduser().resolve()) if document is not None else None,
                 "tree": None,
-                "unrouted": unrouted,
+                **(facts(spec, built) if facts is not None else {}),
             }
         )
 
@@ -1796,128 +1697,45 @@ def generate_pcb_targets(
                 line += f" (draft: {unrouted} unrouted connection{'s' if unrouted != 1 else ''})"
             print(line)
 
-    def board_current(spec: EntrySpec) -> bool:
+    def is_current(spec: EntrySpec) -> bool:
+        # The ONE gate every model answers to (STORE.md §4): its record, its closure,
+        # its pinned children and its outputs' bytes. Asked by the model's IDENTITY
+        # (``script::fn``), never by the bare script path: a file may hold several
+        # models, and cadgen.store.index.resolve_model_ref refuses a bare path there
+        # rather than guessing.
         model = _model_for_spec(spec)
-        if model is None or spec.pcb_path is None:
+        if spec.script_path is None or document_of(spec) is None or model is None:
             return False
         return not stale(model).stale
 
     logger = CliLogger("cadgen", verbose=verbose)
-    all_specs, selected_specs = _selected_specs_for_targets(targets)
+    _all_specs, selected_specs = _selected_specs_for_targets(targets)
     for spec in selected_specs:
-        _validate_pcb_target(spec)
+        _validate_tree_less_target(spec, fmt)
+    # No-op fast path: a model whose closure is unchanged and whose recorded outputs
+    # still verify byte-for-byte is not run.
     if not force:
-        current_specs = [spec for spec in selected_specs if spec.script_path is not None and board_current(spec)]
+        current_specs = [spec for spec in selected_specs if is_current(spec)]
         for spec in current_specs:
-            logger.info(f"{_display_path(spec.pcb_path) if spec.pcb_path is not None else spec.cad_ref} is current; not rebuilt")
-            _emit(spec, "current", _board_unrouted(spec))
-        current_refs = {spec.source_ref for spec in current_specs}
-        selected_specs = [spec for spec in selected_specs if spec.source_ref not in current_refs]
-    if selected_specs:
-        def _built_by_a_peer(spec: EntrySpec) -> bool:
-            if force or spec.script_path is None:
-                return False
-            return board_current(spec)
-
-        results = _run_selected_specs(
-            selected_specs,
-            action=lambda spec, progress_sink=None: _run_with_spec_generation_status(
-                spec,
-                "pcb",
-                lambda tracked_spec, reporter: run_script_generator(
-                    tracked_spec,
-                    "pcb",
-                    logger=logger,
-                    progress=reporter,
-                    model_prints_to_stdout=True,
-                ),
-                skip_if_current=_built_by_a_peer,
-                progress_sink=progress_sink,
-                logger=logger,
-            ),
-            logger=logger,
-            success_message=_generated_pcb_summary,
-        )
-        for spec, result in zip(selected_specs, results):
-            if isinstance(result, _SkippedGeneration):
-                _emit(spec, "skipped-peer", _board_unrouted(spec))
-            else:
-                _emit(spec, "built", getattr(result, "unrouted", None))
-    logger.total()
-    _flush()
-    return 0
-
-
-def generate_harness_targets(
-    targets: Sequence[str],
-    *,
-    force: bool = False,
-    verbose: bool = False,
-    json_output: bool = False,
-) -> int:
-    """Build harnesses. A harness is a model like a drawing (STORE.md §3): it answers
-    on stdout with one `outcome document` line per target, the document being its
-    ``.harness.yml`` (``tree`` is null -- a harness has no geometry)."""
-    from cadgen.store.gate import stale
-
-    reported: list[dict[str, object]] = []
-
-    def _emit(spec: EntrySpec, outcome: str) -> None:
-        from cadgen.daemon.telemetry import job_reused
-
-        job_reused(outcome in ("current", "skipped-peer"))  # in a build worker: telemetry's cache hit, or not
-        reported.append(
-            {
-                "ok": True,
-                "kind": "harness",
-                "outcome": outcome,
-                "document": str(spec.harness_path.expanduser().resolve()) if spec.harness_path is not None else None,
-                "tree": None,
-            }
-        )
-
-    def _flush() -> None:
-        for entry in reported:
-            if json_output:
-                print(json.dumps(entry, separators=(",", ":")))
-                continue
-            document = entry["document"]
-            print(f"{entry['outcome']} {_display_path(Path(document)) if document else None}")
-
-    def harness_current(spec: EntrySpec) -> bool:
-        # The ONE gate every model answers to (STORE.md §4), asked by the model's
-        # identity: its record, its closure (the boards it read are source) and its
-        # outputs' bytes.
-        model = _model_for_spec(spec)
-        if model is None or spec.harness_path is None:
-            return False
-        return not stale(model).stale
-
-    logger = CliLogger("cadgen", verbose=verbose)
-    all_specs, selected_specs = _selected_specs_for_targets(targets)
-    for spec in selected_specs:
-        _validate_harness_target(spec)
-    if not force:
-        current_specs = [spec for spec in selected_specs if spec.script_path is not None and harness_current(spec)]
-        for spec in current_specs:
-            logger.info(f"{_display_path(spec.harness_path) if spec.harness_path is not None else spec.cad_ref} is current; not rebuilt")
+            document = document_of(spec)
+            logger.info(f"{_display_path(document) if document is not None else spec.cad_ref} is current; not rebuilt")
             _emit(spec, "current")
         current_refs = {spec.source_ref for spec in current_specs}
         selected_specs = [spec for spec in selected_specs if spec.source_ref not in current_refs]
     if selected_specs:
+        # Re-checked when the run opens, like the STEP path: a run that started behind
+        # a concurrent build of this model must not build it again.
         def _built_by_a_peer(spec: EntrySpec) -> bool:
-            if force or spec.script_path is None:
-                return False
-            return harness_current(spec)
+            return not force and is_current(spec)
 
         results = _run_selected_specs(
             selected_specs,
             action=lambda spec, progress_sink=None: _run_with_spec_generation_status(
                 spec,
-                "harness",
+                fmt.name,
                 lambda tracked_spec, reporter: run_script_generator(
                     tracked_spec,
-                    "harness",
+                    fmt.name,
                     logger=logger,
                     progress=reporter,
                     model_prints_to_stdout=True,
@@ -1927,10 +1745,13 @@ def generate_harness_targets(
                 logger=logger,
             ),
             logger=logger,
-            success_message=_generated_harness_summary,
+            success_message=lambda spec: _generated_document_summary(spec, fmt),
         )
         for spec, result in zip(selected_specs, results):
-            _emit(spec, "skipped-peer" if isinstance(result, _SkippedGeneration) else "built")
+            if isinstance(result, _SkippedGeneration):
+                _emit(spec, "skipped-peer")
+            else:
+                _emit(spec, "built", result)
     logger.total()
     _flush()
     return 0
