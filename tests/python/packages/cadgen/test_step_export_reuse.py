@@ -86,10 +86,10 @@ class StepExportReuseTest(unittest.TestCase):
         self.assertIn("is current", repeat.stderr)
         self.assertEqual(hashlib.sha256(step.read_bytes()).hexdigest(), original)
 
-        # A label-only edit rebuilds the model, but its writer input is unchanged:
-        # the saved STEP is kept, not written again.
+        # An edit that draws the same document rebuilds the model, but its writer
+        # input is unchanged: the saved STEP is kept, not written again.
         before = step.stat()
-        self.entry.write_text(self.entry.read_text().replace('block.label = "block"', 'block.label = "cube"'))
+        self.entry.write_text(self.entry.read_text().replace("make_box(SIZE, SIZE, SIZE)", "make_box(SIZE, SIZE, 1.0 * SIZE)"))
         relabeled = _run(self.entry, ["--json"], self.store)
         self.assertEqual(relabeled.returncode, 0, relabeled.stderr[-1500:])
         self.assertIn('"outcome":"built"', relabeled.stdout)

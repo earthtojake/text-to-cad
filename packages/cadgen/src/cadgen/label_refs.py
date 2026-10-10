@@ -155,6 +155,39 @@ def label_ref_for_occurrence(alias_map: Mapping[str, Any], occurrence_id: str) -
     return ""
 
 
+class TreeNames:
+    """The ``#name`` namespace of an instance tree, groups and parts alike, under the
+    rule ``read_scene`` keeps: a name means the one node it names, and a name several
+    nodes share is refused, listing the numbered aliases (``#arm_1``, ``#arm_2``) that
+    each name one. Clips, material assignments and mates resolve here, so a name means
+    the same node, and a shared one fails the same way, wherever it is written."""
+
+    def __init__(self, by_name: Mapping[str, Sequence[str]]):
+        self._by_name = {name: tuple(node_ids) for name, node_ids in by_name.items()}
+        self._aliases = build_label_aliases(
+            {"id": node_id, "name": name} for name, node_ids in self._by_name.items() for node_id in node_ids
+        )
+
+    def resolve(self, name: str) -> str | None:
+        """The node ``name`` (or a numbered alias) names, None when none does. A name
+        several nodes share raises :class:`LabelResolutionError`."""
+        node_ids = self._by_name.get(name, ())
+        if len(node_ids) == 1:
+            return node_ids[0]
+        if not node_ids:
+            return self._aliases["aliases"].get(name)
+        if name in self._aliases["ambiguous"]:
+            _resolve_label(self._aliases, name)  # raises, listing the numbered aliases
+        # A name outside the label grammar takes no aliases: its nodes go by id.
+        shown = ", ".join(f"#{node_id}" for node_id in node_ids)
+        raise LabelResolutionError(f"label '{name}' matches {len(node_ids)} occurrences; use one of: {shown}")
+
+    def names(self) -> list[str]:
+        """Every name that resolves: each name one node has, and each numbered alias."""
+        unique = {name for name, node_ids in self._by_name.items() if len(node_ids) == 1}
+        return sorted(unique | set(self._aliases["aliases"]))
+
+
 def _resolve_label(alias_map: Mapping[str, Any], label: str) -> str:
     aliases = alias_map.get("aliases") if isinstance(alias_map, Mapping) else None
     ambiguous = alias_map.get("ambiguous") if isinstance(alias_map, Mapping) else None

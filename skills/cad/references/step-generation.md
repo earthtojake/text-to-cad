@@ -328,10 +328,9 @@ hierarchy.
 through cadgen's canonical writer, so OUT's bytes are deterministic; rerunning is
 a no-op. The same command annotates a document that has no model script with
 `--kinematics` and `--materials` ([kinematics](kinematics.md#annotating-a-step-you-did-not-generate));
-clips need a model script. Vendor metadata (PMI, GD&T) does not survive. OUT's
-root takes OUT's file stem; names below the root are kept, so `#label`
-references to the parts keep resolving. A shape that will keep changing suits a
-thin wrapper model that reads the foreign STEP instead.
+clips need a model script. Vendor metadata (PMI, GD&T) does not survive; names
+do, so `#label` references keep resolving. A shape that will keep changing suits
+a thin wrapper model that reads the foreign STEP instead.
 
 ## Optional-module assemblies
 

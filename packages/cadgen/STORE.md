@@ -546,9 +546,10 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   (`cadgen.store.build.writer_input_digest`): the flattened descriptor the
   writer is given — geometry by BREP object hash with intrinsic face colours,
   placements, names, colours and grouping — the file name,
-  `STEP_WRITER_SCHEME`, the cadgen release and the loaded kernel. It leaves
-  out only the root's authored name (the root product is named after the file)
-  and finishes (README law 16). When a rebuild's writer input equals its
+  `STEP_WRITER_SCHEME`, the cadgen release and the loaded kernel, with the
+  root under the name the document gives it (its label; unlabelled, an
+  assembly's root is `o1` and a single part takes the file's name). It leaves
+  out only finishes (README law 16). When a rebuild's writer input equals its
   record's, the STEP on disk when the build started still has the recorded
   `stepHash`, and that document's tree is complete, the build publishes its
   result and writes only the record, and the sidecar if its bytes changed: no

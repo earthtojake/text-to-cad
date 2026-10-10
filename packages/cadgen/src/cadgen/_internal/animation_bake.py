@@ -308,15 +308,19 @@ def _natural(occurrence_id: str) -> tuple:
 
 
 class AnimationTargets:
-    """The names and ids a clip's ``m.get`` resolves, each to document leaves."""
+    """The names and ids a clip's ``m.get`` resolves, each to document leaves.
+    A name means one part or group, as everywhere a ``#name`` is read
+    (:class:`cadgen.label_refs.TreeNames`)."""
 
     def __init__(self, by_id: Mapping[str, Sequence[str]], by_name: Mapping[str, Sequence[str]]):
+        from cadgen.label_refs import TreeNames
+
         self._by_id = {key: tuple(value) for key, value in by_id.items()}
-        self._by_name = {key: tuple(value) for key, value in by_name.items()}
+        self._names = TreeNames(by_name)
         self._resolved: dict[str, tuple[str, ...]] = {}
 
     def labels(self) -> list[str]:
-        return sorted(self._by_name)
+        return self._names.names()
 
     def resolve(self, target: object) -> tuple[str, ...]:
         key = target if isinstance(target, str) else None
@@ -329,12 +333,17 @@ class AnimationTargets:
         if selector in self._by_id:
             leaves = self._by_id[selector]
         else:
-            leaves = tuple(dict.fromkeys(
-                leaf for node in self._by_name.get(selector, ()) for leaf in self._by_id.get(node, ())
-            ))
+            from cadgen.label_refs import LabelResolutionError
+
+            try:
+                node = self._names.resolve(selector)
+            except LabelResolutionError as error:
+                raise AnimationError(f"animation target {target!r}: {error}") from None
+            leaves = self._by_id.get(node, ()) if node is not None else ()
         if not leaves:
-            known = ", ".join(f"#{name}" for name in self.labels()[:20]) or "(none)"
-            more = " ..." if len(self._by_name) > 20 else ""
+            names = self.labels()
+            known = ", ".join(f"#{name}" for name in names[:20]) or "(none)"
+            more = " ..." if len(names) > 20 else ""
             raise AnimationError(f"animation target {target!r} names no part or group; names: {known}{more}")
         self._resolved[target] = leaves
         return leaves

@@ -62,7 +62,7 @@ DESCRIPTOR = {
 TARGETS = animation_targets(DESCRIPTOR)
 BOUNDS = ((0.0, 0.0, 0.0), (20.0, 10.0, 5.0))
 CORNERS = [(x, y, z) for x in (0.0, 20.0) for y in (0.0, 10.0) for z in (0.0, 5.0)]
-NAMES = "#arm, #base, #bolt, #link, #rig"
+NAMES = "#arm, #base, #bolt_1, #bolt_2, #link, #rig"
 
 
 def _bake(clip_id: str, update, leaf_boxes=None, **options) -> dict:
@@ -538,13 +538,13 @@ class BakingStyles(unittest.TestCase):
 class ResolvingTargets(unittest.TestCase):
     def test_a_name_an_id_and_a_group_each_resolve_to_leaves(self) -> None:
         self.assertEqual(("o1.2.1", "o1.2.2"), TARGETS.resolve("#arm"))  # a group: its leaves
-        self.assertEqual(("o1.2.2", "o1.3"), TARGETS.resolve("#bolt"))  # every part of that name
+        self.assertEqual(("o1.2.2",), TARGETS.resolve("#bolt_1"))  # a shared name's numbered alias
         self.assertEqual(("o1.2.1", "o1.2.2"), TARGETS.resolve("#o1.2"))  # an id and what is beneath it
         self.assertEqual(("o1.3",), TARGETS.resolve("#o1.3"))
-        self.assertEqual(["arm", "base", "bolt", "link", "rig"], TARGETS.labels())
+        self.assertEqual(["arm", "base", "bolt_1", "bolt_2", "link", "rig"], TARGETS.labels())
 
         def wave(t, m):
-            m.get("#arm", "#bolt", "#o1.2.1").translate((0, t, 0))
+            m.get("#arm", "#bolt_2", "#o1.2.1").translate((0, t, 0))
 
         (track,) = _bake("wave", wave, duration=1, fps=10)["tracks"]
         self.assertEqual(["o1.2.1", "o1.2.2", "o1.3"], track["targets"])
@@ -552,6 +552,9 @@ class ResolvingTargets(unittest.TestCase):
     def test_a_target_that_names_nothing_fails_with_the_names_there_are(self) -> None:
         cases = {
             lambda t, m: m.get("#wheel"): f"animation target '#wheel' names no part or group; names: {NAMES}",
+            # A name two parts share is refused as read_scene refuses it, never both moved.
+            lambda t, m: m.get("#bolt"): "animation target '#bolt': label 'bolt' matches 2 occurrences; "
+                                         "use one of: #bolt_1 (o1.2.2), #bolt_2 (o1.3)",
             lambda t, m: m.get("link"): "animation target 'link' must be a #name or an #o1.2 occurrence id",
             lambda t, m: m.get(): "m.get needs at least one #name or #occurrence id",
             lambda t, m: 1 / 0: "ZeroDivisionError: division by zero",

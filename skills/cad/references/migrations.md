@@ -69,10 +69,9 @@ ANIMATION = {"demo": cadgen.clip(demo, duration=8, loop=False, label="Demo")}
   becomes `deform_tube(rest=..., path=..., twist_deg=...,
   max_segment_length=..., braid=...)`; the paths keep their shape.
 - Every target starts with `#`: a bare label becomes `"#label"`, an occurrence
-  id is `"#o1.3"`, and a comma list becomes one argument per target. An
-  assembly's root is named after its STEP file, so a label equal to the file's
-  stem (`arm` in `arm.step`) now also names the whole model; the part's
-  occurrence id names it alone.
+  id is `"#o1.3"`, and a comma list becomes one argument per target. A label
+  several parts share moved them all; now it fails, listing numbered aliases
+  (`#wheel_1`, `#wheel_2`) to pass instead.
 - A group's name moves every part beneath it, and the module's helpers and
   constants become ordinary Python.
 - A document annotated with `cadgen step build --animation` has no script to

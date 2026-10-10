@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from cadgen.cad_ref_syntax import OCCURRENCE_SELECTOR_RE
 from cadgen.coordination import PHASE_COMPONENTS, PHASE_FINALIZE, PHASE_PACKAGE
 from cadgen.coordination import resolve as resolve_progress
 from cadgen.store.index import write_entry
@@ -307,6 +308,15 @@ def build_document_tree(
     return digest, tree, stats
 
 
+def _own_name(label: object, default: str) -> str:
+    """A node's name in the tree being walked: its label, unless that is an
+    occurrence id. A document names an unlabelled group by its id, so a group
+    read back from one (``read_step``, a materialized tree) carries an id from
+    that document, which names nothing at its place here."""
+    text = str(label or "")
+    return default if not text or OCCURRENCE_SELECTOR_RE.match(text) else text
+
+
 def _walk_compound(compound: Any, *, root_name: str, progress: Any) -> _Walk:
     from build123d import Location
 
@@ -388,8 +398,7 @@ def _walk_compound(compound: Any, *, root_name: str, progress: Any) -> _Walk:
             except Exception:  # noqa: BLE001
                 pass
         components.setdefault(cid, entry_meta)
-        if name is None:
-            name = str(getattr(node, "label", "") or f"part_{occ_id}")
+        name = _own_name(getattr(node, "label", "") if name is None else name, f"part_{occ_id}")
         occurrence: dict[str, Any] = {
             "id": occ_id,
             "name": name,
@@ -410,7 +419,7 @@ def _walk_compound(compound: Any, *, root_name: str, progress: Any) -> _Walk:
         return {"id": occ_id, "name": name, "nodeType": "part", "leafPartIds": [occ_id], "children": []}
 
     def _add_link(node: Any, world_loc: Any, occ_id: str, tree_hash: str) -> dict[str, Any]:
-        name = str(getattr(node, "label", "") or occ_id)
+        name = _own_name(getattr(node, "label", ""), occ_id)
         # The link places the child's TREE FRAME. The node's location is
         # ``placement * root`` when the child's own root occurrence is placed
         # (a part returned as ``Pos(...) * body``), and the tree re-applies that
@@ -440,7 +449,7 @@ def _walk_compound(compound: Any, *, root_name: str, progress: Any) -> _Walk:
         ]
         return {
             "id": path,
-            "name": node["name"],
+            "name": _own_name(node["name"], path),
             "nodeType": "subassembly",
             "leafPartIds": [leaf for cn in child_nodes for leaf in cn.get("leafPartIds", [cn["id"]])],
             "children": child_nodes,
@@ -465,7 +474,7 @@ def _walk_compound(compound: Any, *, root_name: str, progress: Any) -> _Walk:
         nested_tree = getattr(node, "_occurrence_tree", None)
         if nested_tree is not None:
             spliced = _consume_spliced(dict(nested_tree, leaf=False), world_loc, path)
-            spliced["name"] = str(getattr(node, "label", "") or nested_tree.get("name") or path)
+            spliced["name"] = _own_name(getattr(node, "label", ""), "") or _own_name(nested_tree.get("name"), path)
             return spliced
         child_shapes = materialized_children(node, baseline)
         if not child_shapes:
@@ -483,7 +492,7 @@ def _walk_compound(compound: Any, *, root_name: str, progress: Any) -> _Walk:
         ]
         return {
             "id": path,
-            "name": str(getattr(node, "label", "") or path),
+            "name": _own_name(getattr(node, "label", ""), path),
             "nodeType": "subassembly",
             "leafPartIds": [leaf for cn in child_nodes for leaf in cn.get("leafPartIds", [cn["id"]])],
             "children": child_nodes,
@@ -1362,12 +1371,12 @@ def writer_input_digest(descriptor: dict[str, Any], *, root_name: str, step_name
     That is the flattened descriptor the writer is given — geometry by BREP
     object hash with its intrinsic face colours, placements, names, colours
     and grouping — plus the file it writes, :data:`STEP_WRITER_SCHEME`, the
-    cadgen release and the loaded kernel. Two fields a document never carries
-    are left out: the root's authored name (the root product and the header
-    are named after the file) and finishes (they ride the sidecar, law 16).
-    Everything else counts, so an input the writer may read can only cost a
-    write, never keep stale bytes. None when the kernel cannot be named or the
-    descriptor holds a value that is not canonical JSON.
+    cadgen release and the loaded kernel. The root counts under the name the
+    document gives it, ``root_name``, which its root product and header carry;
+    finishes are left out, since they ride the sidecar (law 16). Everything
+    else counts, so an input the writer may read can only cost a write, never
+    keep stale bytes. None when the kernel cannot be named or the descriptor
+    holds a value that is not canonical JSON.
     """
     from cadgen._internal.component_package import canonical_json_bytes
     from cadgen.store.surfaces import kernel_versions

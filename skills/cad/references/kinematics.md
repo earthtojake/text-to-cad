@@ -152,12 +152,11 @@ and nothing runs a clip after the build.
 - `update(t, m)` must be a pure function of `t`: every sample starts from rest,
   so no state between calls, no clock, no randomness.
 - `m.get(*targets)` returns one handle on every occurrence its targets name. A
-  target is `"#name"` (every part or group with that name; a group moves
+  target is `"#name"` (the part or group with that name; a group moves
   everything beneath it) or an occurrence id such as `"#o1.2"` (that occurrence's
-  subtree). Targets resolve against the written document's tree, the names and
-  ids the viewer shows and `read_scene` reports; `m.labels()` lists the names. An
-  assembly's root is named after the file it is written to, so in `arm.step` the
-  target `#arm` also names the root and moves the whole model.
+  subtree). Targets resolve as `read_scene` resolves them, against the written
+  document's tree: a name several occurrences share fails, listing numbered
+  aliases (`#bolt_1`, `#bolt_2`), and `m.labels()` lists the names.
 - A handle's methods chain: `.rotate(axis, degrees, origin=(0, 0, 0))`,
   `.translate(vector)`, `.transform(matrix)` (a rigid 4x4, row-major,
   translation in the last column), `.opacity(value)` (0..1), `.visible(flag)`,

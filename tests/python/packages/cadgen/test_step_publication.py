@@ -172,9 +172,9 @@ class StepPublicationTests(unittest.TestCase):
             self.assertEqual(self.build(12), 0, self.output)
             self.assertLessEqual(step_reads(), 1, reads)
             reads.clear()
-            # A label edit keeps the document, and nothing reads it.
+            # An edit that draws the same document keeps it, and nothing reads it.
             self.model.write_text(self.model.read_text(encoding="utf-8").replace(
-                "    return bd.Box(SIZE, 8, 6)\n", "    box = bd.Box(SIZE, 8, 6)\n    box.label = 'renamed'\n    return box\n"),
+                "    return bd.Box(SIZE, 8, 6)\n", "    box = bd.Box(SIZE, 8, 6)\n    return box\n"),
                 encoding="utf-8")
             output = io.StringIO()
             with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):

@@ -285,27 +285,26 @@ def resolve_materials(
             materials[resolved_id] = deepcopy(definition)
         local_ids[material_id] = resolved_id
 
+    from cadgen.label_refs import LabelResolutionError, TreeNames
+
     by_id, by_name = _descriptor_nodes(descriptor)
+    names = TreeNames(by_name)
     for index, assignment in enumerate(declaration["assignments"]):
         for target in assignment["targets"]:
             selector = target[1:]
+            where = f"materials.assignments[{index}] target {target!r}"
             if selector in by_id:
-                node_ids = [selector]
+                node_id = selector
             else:
-                node_ids = by_name.get(selector) or []
-            if len(node_ids) != 1:
-                if node_ids:
-                    raise SidecarAppearanceError(
-                        f"materials.assignments[{index}] target {target!r} is ambiguous: {', '.join(node_ids)}"
-                    )
-                raise SidecarAppearanceError(
-                    f"materials.assignments[{index}] target {target!r} does not name a part or group"
-                )
-            members = by_id.get(node_ids[0]) or []
+                try:
+                    node_id = names.resolve(selector)
+                except LabelResolutionError as error:
+                    raise SidecarAppearanceError(f"{where}: {error}") from None
+                if node_id is None:
+                    raise SidecarAppearanceError(f"{where} does not name a part or group")
+            members = by_id.get(node_id) or []
             if not members:
-                raise SidecarAppearanceError(
-                    f"materials.assignments[{index}] target {target!r} contains no leaf occurrences"
-                )
+                raise SidecarAppearanceError(f"{where} contains no leaf occurrences")
             for occurrence_id in members:
                 assignments[occurrence_id] = local_ids[assignment["material"]]
     return normalize_appearance({"materials": materials, "assignments": assignments})

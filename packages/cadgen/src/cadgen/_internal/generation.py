@@ -527,7 +527,7 @@ def _generate_part_outputs(
                 tree_hash, tree, stats, exported_hash = build_tree_through_step(
                     shape,
                     staged_step,
-                    root_name=spec.step_path.stem,
+                    root_name=_document_root_name(shape, spec.step_path),
                     force=force,
                     progress=progress,
                     extra=tree_extra,
@@ -547,7 +547,7 @@ def _generate_part_outputs(
                     tree_hash, tree, stats = build_document_tree(scene, force=force, progress=progress)
                 else:
                     tree_hash, tree, stats = build_tree_from_compound(
-                        shape, root_name=spec.step_path.stem, force=force,
+                        shape, root_name=_document_root_name(shape, spec.step_path), force=force,
                         progress=progress, extra=tree_extra,
                         materials=getattr(scene, "materials", None),
                     )
@@ -1287,6 +1287,25 @@ def _timed_document(spec: EntrySpec, model_format: str) -> str | None:
     if model_format == "dxf":
         return str(spec.dxf_path.expanduser().resolve()) if spec.dxf_path is not None else None
     return _reported_document(spec)
+
+
+def _document_root_name(shape: object, step_path: Path) -> str:
+    """What a saved document's root is called: the label its author gave it (a
+    re-emit's source document named its own root, so OUT keeps IN's name).
+
+    Names are what an author wrote. Unlabelled, an assembly's root is its
+    occurrence id, as every unlabelled group is: a name taken from the file
+    would sit among its parts' labels and answer for one of them. An
+    unlabelled single part takes its file's name, which nothing else in its
+    document can share. A label the STEP round trip does not keep (a blank, a
+    shape kind) is no label."""
+    from cadgen._internal.step_scene_loader import _normalize_label_name
+    from cadgen.store.build import compound_has_children
+
+    authored = _normalize_label_name(getattr(shape, "label", None))
+    if authored:
+        return authored
+    return "o1" if compound_has_children(shape) else step_path.stem
 
 
 def _stale_after_build(spec: EntrySpec) -> str | None:
