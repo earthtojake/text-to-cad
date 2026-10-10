@@ -11,6 +11,7 @@ import { useChromeBackdropColor } from "../look/useChromeBackdropColor.js";
 import { prefetchRenderStudio } from "../look/renderStudioChunk.js";
 import { CAD_DRAWING_DEFAULTS } from "../tools/draw/DrawingOverlay.jsx";
 import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
+import { SHELL_TOOL } from "../tools/toolModes.js";
 import { DisplaySettingsSection } from "../view-settings/DisplaySettingsSection.js";
 import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.js";
 import { useViewSettings } from "../view-settings/useViewSettings.js";
@@ -53,8 +54,7 @@ export function presentationIsPending(state, { modelKey, key, renderMode }) {
   return state?.file !== modelKey || state?.key !== key || state?.renderMode !== renderMode || state?.preparing === true;
 }
 
-/** The tool ids the shell itself understands. A renderer's own tools use any other id. */
-export const SHELL_TOOL = Object.freeze({ DRAW: "draw" });
+export { SHELL_TOOL };
 
 const EMPTY = Object.freeze({});
 // What asking for Preview does in a view that does not offer it: nothing.
