@@ -16,7 +16,7 @@
  * (`spatialGrid.js`), as the board's.
  */
 import { formatBoardRefSelector, parseBoardRefSelector } from "../boardRefs.js";
-import { nearestOnSegment, pointInPolygon, polygonArea } from "./boardIndex.js";
+import { bounds, nearestOnSegment, point, pointInPolygon, polygonArea, polygonReach } from "./geometry.js";
 import { boxOf, createSpatialGrid, nearBox } from "./spatialGrid.js";
 
 const EMPTY = Object.freeze([]);
@@ -26,26 +26,10 @@ const PIN_REACH = 0.5;
 const WIRE_REACH = 0.35;
 const JUNCTION_REACH = 0.6;
 
-const point = (value) => (Array.isArray(value) && value.length >= 2 && Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]))
-  ? [Number(value[0]), Number(value[1])] : null);
-
-function bounds(points) {
-  let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
-  for (const [x, y] of points) {
-    if (x < minX) minX = x; if (x > maxX) maxX = x;
-    if (y < minY) minY = y; if (y > maxY) maxY = y;
-  }
-  return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
-}
-
-function polygonDistance(at, polygon) {
-  if (polygon.length < 3) return Infinity;
-  if (pointInPolygon(at, polygon)) return 0;
-  let distance = Infinity;
-  for (let index = 0; index < polygon.length; index += 1) {
-    distance = Math.min(distance, nearestOnSegment(at, polygon[index], polygon[(index + 1) % polygon.length]).distance);
-  }
-  return distance;
+// What a reference frames, or null when it holds no points.
+function extentOf(points) {
+  const box = bounds(points);
+  return Number.isFinite(box[0]) ? box : null;
 }
 
 /**
@@ -199,7 +183,7 @@ export function createSchematicIndex(schematic, layoutSheets = EMPTY) {
       near(labelGrid, reach, (order) => {
         const label = labels[order];
         if (!nearBox(label.box, at, reach)) return;
-        const distance = label.outline.length > 2 ? polygonDistance(at, label.outline) : Math.hypot(x - label.at[0], y - label.at[1]);
+        const distance = label.outline.length > 2 ? polygonReach(at, label.outline) : Math.hypot(x - label.at[0], y - label.at[1]);
         if (distance <= reach) consider(1, distance, label.area, LABELS_FROM + order, { kind: "label", item: label });
       });
       near(wireGrid, WIRE_REACH + reach, (order) => {
@@ -271,11 +255,11 @@ export function createSchematicIndex(schematic, layoutSheets = EMPTY) {
   /** Where a resolved reference is on the page, as a box to frame: `[minX, minY, maxX, maxY]`. */
   function extent(resolved) {
     if (!resolved) return null;
-    if (resolved.kind === "part") return bounds([...resolved.part.units.flatMap((unit) => unit.outline), ...resolved.part.pads.flatMap(pinPoints)]);
-    if (resolved.kind === "pad") return bounds(shapesOf(resolved.pad).flatMap(pinPoints));
+    if (resolved.kind === "part") return extentOf([...resolved.part.units.flatMap((unit) => unit.outline), ...resolved.part.pads.flatMap(pinPoints)]);
+    if (resolved.kind === "pad") return extentOf(shapesOf(resolved.pad).flatMap(pinPoints));
     if (resolved.kind === "net") {
       const net = resolved.net;
-      return bounds([
+      return extentOf([
         ...net.pads.flatMap((pad) => shapesOf(pad).flatMap(pinPoints)), ...net.wires.flatMap((wire) => wire.points),
         ...net.labels.flatMap((label) => (label.outline.length ? label.outline : [label.at])), ...net.junctions.map((junction) => junction.at)
       ]);
