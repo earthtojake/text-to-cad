@@ -35,7 +35,7 @@ import threading
 
 from cadgen._internal.shared_read import open_shared_for_read
 
-from .content_types import extension_of
+from .content_types import COMPOUND_EXTENSIONS, extension_of, format_of
 from .encoding import encode_uri_component, file_version, local_asset_url_for_path
 from .store_paths import (
     SOURCE_SIDECAR_NAMES,
@@ -68,7 +68,7 @@ CAD_CATALOG_SCHEMA_VERSION = 4
 
 SOURCE_EXTENSIONS = frozenset(
     {".step", ".stp", ".stl", ".3mf", ".glb", ".dxf", ".urdf", ".srdf", ".sdf", ".kicad_pcb", ".kicad_sch",
-     ".harness.yml"}
+     *COMPOUND_EXTENSIONS}
 )
 
 # The folders the explorer's search never walks (``folders.py``), beside every hidden one. Matched
@@ -252,16 +252,8 @@ def asset_for_path(file_path) -> dict | None:
 # --- classification -------------------------------------------------------
 
 
-def source_format_for_path(source_path, extension=None) -> str:
-    r"""``extension.toLowerCase().replace(/^\./, "")`` — ONE leading dot; a compound
-    extension names its format (``.harness.yml`` is a ``harness``)."""
-    ext = (extension_of(source_path) if extension is None else extension).lower()
-    if ext in _COMPOUND_FORMATS:
-        return _COMPOUND_FORMATS[ext]
-    return ext[1:] if ext.startswith(".") else ext
-
-
-_COMPOUND_FORMATS = {".harness.yml": "harness"}
+#: A file's format, as the catalog names it (``content_types.format_of``).
+source_format_for_path = format_of
 
 
 # --- URDF/SRDF pairing ----------------------------------------------------

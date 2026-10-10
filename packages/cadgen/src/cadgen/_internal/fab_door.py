@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from cadgen.results import FabExportFile, FabExportResult
+from cadgen.viewer.content_types import format_of
 
 
 def _absolute(path: Path) -> Path:
@@ -25,12 +26,10 @@ def _absolute(path: Path) -> Path:
     return (path if path.is_absolute() else Path.cwd() / path).resolve()
 
 
-def _destination(document: Path, suffix: str, fmt: str, out: Path | None) -> Path:
-    from cadgen.metadata import FAB_SUFFIX
+def _destination(document: Path, fmt: str, out: Path | None) -> Path:
+    from cadgen.metadata import fab_sibling
 
-    if out is not None:
-        return _absolute(out)
-    return document.with_name(document.name[: -len(suffix)] + FAB_SUFFIX[fmt])
+    return _absolute(out) if out is not None else fab_sibling(document, fmt)
 
 
 def _write(destination: Path, data: bytes, fmt: str) -> FabExportResult:
@@ -46,12 +45,12 @@ def board_export(fmt: str, target: Path, out: Path | None, *, verbose: bool = Fa
     from cadgen.kicad.fab import MANUFACTURING, export, require_finished
 
     board = _absolute(target)
-    if board.suffix.lower() != ".kicad_pcb":
-        hint = " (a harness's BOM is cadgen harness bom)" if board.name.lower().endswith(".harness.yml") else ""
+    if format_of(board) != "kicad_pcb":
+        hint = " (a harness's BOM is cadgen harness bom)" if format_of(board) == "harness" else ""
         raise ValueError(f"{board.name} is not a KiCad board: cadgen pcb {fmt} takes a .kicad_pcb{hint}")
     if not board.is_file():
         raise FileNotFoundError(f"no board at {board}")
-    destination = _destination(board, ".kicad_pcb", fmt, out)
+    destination = _destination(board, fmt, out)
     if verbose:
         print(f"[pcb {fmt}] {board} -> {destination}", file=sys.stderr)
     if fmt in MANUFACTURING:
@@ -64,11 +63,11 @@ def harness_bom(target: Path, out: Path | None, *, verbose: bool = False) -> Fab
     from cadgen.wireviz.bom import harness_bom as wireviz_bom
 
     document = _absolute(target)
-    if not document.name.lower().endswith(".harness.yml"):
+    if format_of(document) != "harness":
         raise ValueError(f"{document.name} is not a wiring harness: cadgen harness bom takes a .harness.yml")
     if not document.is_file():
         raise FileNotFoundError(f"no harness at {document}")
-    destination = _destination(document, ".harness.yml", "bom", out)
+    destination = _destination(document, "bom", out)
     if verbose:
         print(f"[harness bom] {document} -> {destination}", file=sys.stderr)
     return _write(destination, wireviz_bom(document.read_bytes(), label=document.name), "bom")

@@ -10,7 +10,13 @@ from __future__ import annotations
 
 import posixpath
 
-__all__ = ["COMPOUND_EXTENSIONS", "content_type_for_static_asset", "content_type_for_path", "extension_of"]
+__all__ = [
+    "COMPOUND_EXTENSIONS",
+    "content_type_for_static_asset",
+    "content_type_for_path",
+    "extension_of",
+    "format_of",
+]
 
 # Static dist/SPA assets. Unknown extension -> "" and the caller sets NO
 # content-type header at all (not octet-stream).
@@ -51,9 +57,10 @@ _ASSET_CONTENT_TYPES = {
 }
 
 
-# A document whose type is two suffixes: `cable.harness.yml` is a wiring harness, while a
-# plain `.yml` is no CAD file at all. Each is ONE extension to everything below.
-COMPOUND_EXTENSIONS = (".harness.yml",)
+# A document whose type is two suffixes, and the format it names: `cable.harness.yml` is a
+# wiring harness, while a plain `.yml` is no CAD file at all. Each is ONE extension to
+# everything below, and to every reader of a file's type in cadgen.
+COMPOUND_EXTENSIONS = {".harness.yml": "harness"}
 
 
 def extension_of(file_path) -> str:
@@ -72,6 +79,16 @@ def extension_of(file_path) -> str:
     if dot <= 0:
         return ""
     return name[dot:].lower()
+
+
+def format_of(file_path, extension=None) -> str:
+    r"""A file's format: ``extension.toLowerCase().replace(/^\./, "")``, ONE leading dot,
+    except that a compound extension names its own (``.harness.yml`` is a ``harness``).
+    ``extension`` is the file's extension when the caller already has it."""
+    ext = (extension_of(file_path) if extension is None else extension).lower()
+    if ext in COMPOUND_EXTENSIONS:
+        return COMPOUND_EXTENSIONS[ext]
+    return ext[1:] if ext.startswith(".") else ext
 
 
 def content_type_for_static_asset(file_path) -> str:

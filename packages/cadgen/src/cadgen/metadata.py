@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cadgen.render import relative_to_cwd as _display_path
+from cadgen.viewer.content_types import extension_of
 
 
 class InvalidModelScriptError(ValueError):
@@ -68,13 +69,13 @@ def fab_output_path(script_path: Path | str, decl: "FabExportDecl", board_file: 
     if decl.out:
         target = Path(decl.out)
         return (target if target.is_absolute() else Path(script_path).resolve().parent / target).resolve()
-    # Beside the document, named by its stem: `board.kicad_pcb` -> `board.bom.csv`, and a
-    # harness's `cable.harness.yml` -> `cable.bom.csv`.
-    stem = next(
-        (board_file.name[: -len(suffix)] for suffix in (".kicad_pcb", ".harness.yml") if board_file.name.endswith(suffix)),
-        board_file.stem,
-    )
-    return board_file.with_name(stem + FAB_SUFFIX[decl.fmt]).resolve()
+    return fab_sibling(board_file, decl.fmt).resolve()
+
+
+def fab_sibling(document: Path, fmt: str) -> Path:
+    """The ``fmt`` export's default file: beside the document, named by its stem
+    (``board.kicad_pcb`` -> ``board.bom.csv``, ``cable.harness.yml`` -> ``cable.bom.csv``)."""
+    return document.with_name(document.name[: -len(extension_of(document)) or None] + FAB_SUFFIX[fmt])
 
 
 @dataclass(frozen=True)

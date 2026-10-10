@@ -57,6 +57,7 @@ from cadgen._internal.snapshot_door import (
     drawing_scene_refusal,
 )
 from cadgen.store.view import view_dir_for
+from cadgen.viewer.content_types import format_of
 from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact, StepTopologyArtifactError
 
 from cadgen.cli_logging import CliLogger
@@ -433,39 +434,15 @@ def load_job_from_options(options: SnapshotOptions, *, cwd: Path | None = None) 
     return job
 
 
-# A document whose type is TWO suffixes, as the viewer's catalog reads it
-# (`cadgen.viewer.content_types.COMPOUND_EXTENSIONS`): `cable.harness.yml` is a wiring
-# harness, while a plain `.yml` is no input at all.
-_COMPOUND_KINDS = {".harness.yml": "harness"}
-
-
 def input_kind(file_path: Path) -> str:
-    name = file_path.name.lower()
-    for compound, kind in _COMPOUND_KINDS.items():
-        if name.endswith(compound) and len(name) > len(compound):
-            return kind
-    suffix = file_path.suffix.lower()
-    if suffix == ".step":
-        return "step"
-    if suffix == ".stp":
-        return "stp"
-    if suffix == ".dxf":
-        return "dxf"
-    if suffix in {".kicad_pcb", ".kicad_sch"}:
-        return suffix[1:]
-    if suffix == ".py":
+    """The kind of snapshot input ``file_path`` is, by its format as the viewer's catalog
+    reads it (``cable.harness.yml`` is a ``harness``); ``""`` for none."""
+    kind = format_of(file_path)
+    if kind == "py":
         # DOCUMENTS-ONLY: a model script is a program. The kind survives only so
         # the resolver can refuse it by naming the run.
         return "python"
-    if suffix == ".glb":
-        return "glb"
-    if suffix == ".stl":
-        return "stl"
-    if suffix == ".3mf":
-        return "3mf"
-    if suffix in {".urdf", ".srdf", ".sdf"}:
-        return suffix[1:]
-    return ""
+    return kind if kind in KIND_LABELS else ""
 
 
 def resolve_input_path(raw_input: object, *, cwd: Path) -> Path:
