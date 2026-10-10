@@ -1258,7 +1258,8 @@ def _run_with_spec_generation_status(
     timings = {
         **measured,
         "document": _timed_document(spec, model_format),
-        "lastModelSeconds": clock.last_model_seconds,
+        # A profiled body is slowed by the profiler: no slowdown to compare.
+        "lastModelSeconds": None if profile else clock.last_model_seconds,
     }
     _tree_event(
         spec, "done", elapsed=time.perf_counter() - started, stale=_stale_after_build(spec),

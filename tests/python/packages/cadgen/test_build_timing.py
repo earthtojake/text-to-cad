@@ -105,6 +105,16 @@ class Measuring(unittest.TestCase):
             "childrenSeconds": 4.5, "queuedSeconds": 0.25,
         })
 
+    def test_a_profiled_build_keeps_the_last_unprofiled_time(self):
+        with measuring(model_ref=None, last_model_seconds=42.0, profile=True):
+            with model_body(None):
+                pass
+            self.assertEqual(record_fields(), {"modelSeconds": 42.0})
+        with measuring(model_ref=None, last_model_seconds=None, profile=True):
+            with model_body(None):
+                pass
+            self.assertEqual(record_fields(), {})
+
     def test_nothing_is_measured_outside_a_build(self):
         with model_body(None), waiting_for_children(), cadgen_work():
             pass

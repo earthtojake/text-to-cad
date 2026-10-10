@@ -640,7 +640,9 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   (`cadgen._internal.build_timing`). It is no input and no gate reads it; the
   next build compares its own model code against it and warns when that took
   more than twice as long and at least 30 s more. A record without it (a model
-  last built with no body measured) is never a slowdown.
+  last built with no body measured) is never a slowdown. A `--profile` build
+  keeps the previous value and is compared with nothing: the profiler's
+  overhead is not the model's.
 - `closure.files` is the model's static reach (AST, transitive,
   first-party, absolute and relative imports alike — a `lib/` package's
   `from .chain import X` counts, and importing `lib.x` executes

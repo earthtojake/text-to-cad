@@ -248,9 +248,14 @@ class BuildTimeTest(_ModelRunCase):
         self.assertIsNone(json.loads(again.stdout.strip())["timings"])
         self.assertNotIn("[cadgen] built ", again.stderr)
 
+        # The record kept the first build's model-code time, and the next build
+        # compares itself against it (the warning's rule is BuildTree's tests').
+        forced = self._run("cart.py", "--force")
+        self.assertEqual(self._done(forced)["timings"]["lastModelSeconds"], timings["modelSeconds"])
+
         # --profile rebuilds the model (it is current) with its own code profiled; its
-        # child is reused, so only the parent has a line. The record kept the first
-        # build's model-code time, and this build compares itself against it.
+        # child is reused, so only the parent has a line. A profiled body is slowed by
+        # the profiler, so it is compared with nothing.
         profiled = self._run("cart.py", "--profile")
         self.assertEqual(self._lines(profiled), ["built cart.step"])
         lines = profiled.stderr.splitlines()
@@ -258,11 +263,15 @@ class BuildTimeTest(_ModelRunCase):
         start = lines.index("[cadgen]   in this project, by cumulative time:")
         project_rows = lines[start + 1:lines.index("[cadgen]   everywhere, by own time:")]
         self.assertTrue(any(row.endswith("cart.py:6 spin_the_planner") for row in project_rows), profiled.stderr)
-        done = [
-            json.loads(line) for line in lines
+        self.assertIsNone(self._done(profiled)["timings"]["lastModelSeconds"])
+
+    @staticmethod
+    def _done(proc: subprocess.CompletedProcess) -> dict:
+        """The root model's `done` transition from the build tree's JSON lines."""
+        return [
+            json.loads(line) for line in proc.stderr.splitlines()
             if line.startswith('{"model":') and '"state":"done"' in line
-        ]
-        self.assertEqual(done[-1]["timings"]["lastModelSeconds"], timings["modelSeconds"])
+        ][-1]
 
 
 if __name__ == "__main__":

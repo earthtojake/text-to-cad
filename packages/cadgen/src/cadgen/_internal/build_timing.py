@@ -154,10 +154,14 @@ def current() -> BuildClock | None:
 def record_fields() -> dict[str, float]:
     """What a model's record remembers of this build: its model-code time, which the
     next build compares itself against (``slowdown_warning``). Empty when the body
-    was not measured on this thread."""
+    was not measured on this thread. A profiled build keeps the last unprofiled
+    time: cProfile's overhead is not the model's."""
     clock = current()
     if clock is None or not clock.body_measured:
         return {}
+    if clock.profile:
+        # A profiled body ran slower than the model does: keep the last real time.
+        return {"modelSeconds": clock.last_model_seconds} if clock.last_model_seconds else {}
     return {"modelSeconds": round(clock.model_seconds, 3)}
 
 
