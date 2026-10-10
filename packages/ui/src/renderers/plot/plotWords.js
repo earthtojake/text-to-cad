@@ -1,7 +1,9 @@
 /**
- * What the plot pane calls the document on screen. A plot's `kind` (`"board"`, `"schematic"`,
- * `"harness"`) changes WORDS and nothing else: every kind is laid out, drawn and navigated the
- * same way. Until the payload says what it is, the file's name does.
+ * What the plot pane calls the document on screen. Every kind (`"board"`, `"schematic"`,
+ * `"harness"`) is laid out, drawn and navigated the same way, and each is named in its own words
+ * here. What a kind OFFERS is not words: a board or a schematic with its index has the tools a
+ * person points with, a board its Display and Draw and Measure too, and a harness is the picture
+ * alone (`PlotRenderer.jsx`). Until the payload says what it is, the file's name does.
  */
 
 /** Each kind's noun, and the tool whose picture of it the pane shows. */

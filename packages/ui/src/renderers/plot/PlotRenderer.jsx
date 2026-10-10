@@ -35,6 +35,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { plotLoadAlert, usePlotPayload } from "./usePlotPayload.js";
 import { usePlotView } from "./usePlotView.js";
 import { plotKindForPath, plotWords } from "./plotWords.js";
+import { chromeStyle } from "./paperContrast.js";
 
 /**
  * A KiCad board or schematic, or a wiring harness, as the picture its own tool draws of it, on a
@@ -55,16 +56,6 @@ import { plotKindForPath, plotWords } from "./plotWords.js";
  */
 
 const SAVE_DELAY_MS = 180;
-// A plot keeps its tool's colours whatever the theme: where its paper is the other way round from the
-// theme (a schematic's light sheet in the dark, a board's dark one in the light), the tool panels
-// over it stand nearly opaque (`lib/floatingSurface.js`).
-const CONTRASTING_CHROME_ALPHA = "90%";
-const lightColour = (hex) => {
-  const match = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
-  if (!match) return null;
-  const [r, g, b] = match.slice(1).map((part) => parseInt(part, 16) / 255);
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5;
-};
 // A board's Display, as a slice of its file's view; a new shape gets a new signature.
 const BOARD_SLICE = Object.freeze({ board: "1" });
 
@@ -373,11 +364,7 @@ function PlotSurface({ view, data }) {
   const chromeHidden = !shown || payload.loading || Boolean(alert && !shown);
   const boardChrome = inspector.available && !chromeHidden && !compact;
   const copyShortcut = host.environment?.platform === "darwin" ? "⌘C" : "Ctrl+C";
-  const darkTheme = view.appearance?.colorScheme === "dark";
-  const paperAgainstTheme = (payload.plot?.layout.sheets || []).some((sheet) => {
-    const light = lightColour(sheet.background);
-    return light !== null && light === darkTheme;
-  });
+  const chrome = chromeStyle(payload.plot?.layout.sheets, view.appearance?.colorScheme === "dark");
   // Quick Edit's sketch: while Draw is up, the view with its ink once there is some.
   const sketch = useMemo(() => (drawing ? { ink: boardDrawing.drawing.hasContent, capture: boardDrawing.capture } : null),
     [drawing, boardDrawing.drawing.hasContent, boardDrawing.capture]);
@@ -385,7 +372,7 @@ function PlotSurface({ view, data }) {
     <div ref={rootRef} className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
       data-slot="cad-file-view" data-plot-surface tabIndex={-1}>
       <div ref={containerRef} className="@container/cad-viewport relative min-h-0 flex-1" aria-busy={payload.loading || payload.updating ? "true" : "false"} data-cad-scene-backdrop=""
-        style={paperAgainstTheme ? { "--cad-chrome-alpha": CONTRASTING_CHROME_ALPHA } : undefined}>
+        style={chrome}>
         <canvas ref={canvasRef} aria-label={`${words.label}: ${view.file.name}`} role="img"
           className={cn("absolute inset-0 block touch-none select-none", dragging ? "cursor-grabbing" : inspector.available ? "cursor-default" : "cursor-grab")} />
         {boardChrome && drawing ? <DrawingOverlay {...boardDrawing.overlay} /> : null}
