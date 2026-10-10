@@ -59,7 +59,7 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
   }), [containerRef, schemeRef]);
 
   return {
-    containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, zoomBy: view.zoomBy,
+    containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit,
     capture: view.capture, thumbnail, transformRef: view.transformRef
   };
 }

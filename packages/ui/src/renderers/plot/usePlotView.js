@@ -107,6 +107,6 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", onVi
 
   return {
     containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, capture, thumbnail,
-    transformRef: view.transformRef, requestPaint, paintNow, settle, zoomBy: view.zoomBy, setView: view.setView
+    transformRef: view.transformRef, requestPaint, paintNow, settle, setView: view.setView
   };
 }
