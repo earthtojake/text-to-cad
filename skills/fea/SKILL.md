@@ -97,25 +97,26 @@ stress. Restate every load in those units before you write it down.
    higher for a polymer, a fatigue load or a part that must not fail, lower
    only when the user says the load is known exactly.
 
-   Add a `view` when the user's question is better answered by a control
-   than by the default field and deformation sliders: it names the sliders
-   and selects the Viewer's Study panel shows for the result, in the user's
-   words ([The result's controls](references/study-file.md#view)):
+   Add a `view` to pick what the Viewer's Study shows for the result: its
+   checks, its sections and the controls the user will want to drag, each
+   from a closed vocabulary ([The result's view](references/study-file.md#view)).
+   Without one the verdict is the stress check and the controls are the
+   field and deformation.
 
-   - "How much can it take?", "what if it's twice as heavy?": a `load_scale`
-     control labelled with the load as the user says it ("Rider weight"),
-     its range around the loads they care about. Dragging it rescales the
-     colours, the safety factor and each part's "holds" at once, without a
-     second solve (the study is linear).
-   - Named load cases ("landing", "half load"): `presets`, each setting the
-     controls to that case.
-   - "Where is it over the limit?": a `threshold` on `von_mises` ranging up
-     to the limit (half yield, an allowable), so dragging it leaves only the
-     regions over it in colour. A threshold defaults to its minimum (off);
-     set a non-zero `default` only when the user asked to see where the
-     stress is over a limit, since a high one greys most of the model on
-     opening.
-   - A study about deflection: a `field` control opening on `displacement`.
+   - **Checks**, from what the user asked: "will it break", "is it strong
+     enough": `stress`. "How much does it sag or deflect", or a stiffness
+     spec: a `displacement` check with their limit (`limit_mm`), on the
+     faces they mean, labelled in their words ("Tip sag"). Keep `stress` too
+     unless they only care about stiffness.
+   - **Controls**, 2 to 4 of them, each labelled in the user's words: a
+     `load_scale` slider named for the load ("Rider weight") when they ask
+     how much it can take; a `threshold` only when they asked where the
+     stress is over a limit; a `field` opening on `displacement` for a study
+     about deflection. Add `when: failing` to a control that only helps when
+     a check fails (a load slider to find the load that passes).
+   - **Presets** for named load cases ("landing", "half load").
+   - **Sections** only to leave something out (`["verdict", "controls"]` for
+     a quick look); the default shows all.
 
 3. **Solve.**
 

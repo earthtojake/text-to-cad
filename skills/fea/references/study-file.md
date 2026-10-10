@@ -132,25 +132,61 @@ fatigue or a part whose failure hurts someone.
 
 ## `view`
 
-What the Viewer offers for the result: the controls in its Study panel's
-Result group, named presets of them, whether the loads and fixtures are
-drawn and whether an assembly's Parts panel is shown. Optional; without it the Viewer shows a field select over every field,
-opening on stress, and a deformation slider. cadgen checks it with the rest
-of the study and copies it into the GLB (`extras.view`) and the sidecar
+What the Viewer's Study panel shows for the result, all picked from closed
+vocabularies: the `checks` its verdict judges, the `sections` it shows, the
+`controls` of What you see (each shown `when` it helps), named `presets` of
+them, and what is drawn (`show`). Optional; without it the verdict is the
+stress check and Study shows every section, with a field select over every
+field, opening on stress, and a deformation slider. cadgen checks it with the
+rest of the study and copies it into the GLB (`extras.view`) and the sidecar
 (`view`).
 
 ```json
 "view": {
+  "checks": [
+    {"kind": "stress"},
+    {"kind": "displacement", "limit_mm": 0.5, "faces": ["#o1.f23"], "label": "Tip sag"}
+  ],
+  "sections": ["verdict", "setup", "controls", "details"],
   "controls": [
+    {"drives": "load_scale", "type": "number", "label": "Rider weight", "min": 0.5, "max": 3, "default": 1, "unit": "×", "when": "failing"},
     {"drives": "field", "type": "enum", "label": "Show", "options": ["von_mises", "displacement"], "default": "von_mises"},
     {"drives": "deformation", "type": "number", "label": "Exaggerate", "min": 0, "max": 50, "default": 12},
-    {"drives": "load_scale", "type": "number", "label": "Rider weight", "min": 0.5, "max": 3, "default": 1, "unit": "×"},
     {"drives": "threshold", "type": "number", "label": "Over half yield", "field": "von_mises", "min": 0, "max": 300, "default": 0, "unit": "MPa"}
   ],
   "presets": [{"label": "Landing (3×)", "load_scale": 3}],
   "show": {"loads": true, "fixtures": true}
 }
 ```
+
+### `checks`
+
+What the result is judged by. cadgen evaluates every check on the written
+solve and writes each result (`kind`, `label`, `value`, `limit`, `unit`,
+`ratio` = value over limit, `close_at`, `status` of `fails`, `close` or
+`passes`, and `where`, the face and point of the worst value) into the
+summary (`summary.checks`), the GLB (`extras.checks`) and the CLI lines. The
+verdict heads with the worst check, one compact row for each other, all
+scaled by `load_scale` (stress and displacement are linear in the load).
+
+| `kind` | judges | keys |
+| --- | --- | --- |
+| `stress` | peak von Mises against each part's yield (an assembly's weakest part): fails under a safety factor of 1, close under the margin. Today's verdict | `margin` (default the study's `margin`; give it once, the same if both), `label` |
+| `displacement` | the largest displacement over the whole model, or over `faces` (they may span parts), against `limit_mm`: fails past it, close within a tenth of it (the model's own accuracy) | `limit_mm` (required, > 0), `faces` (face refs, resolved like the fixtures'), `label` (the user's words, "Tip sag") |
+
+At most one `stress` check; an empty list is refused (leave `checks` out for
+the stress check alone). A failing displacement check is an error finding
+("'Tip sag' moves 2.1 mm, more than the 0.5 mm allowed"); the stress check's
+findings are the yields and margin findings already made.
+
+### `sections`
+
+The parts of Study, in order, from `verdict`, `setup` (Held at, Pushed, Made
+of, each only where the study has it), `controls` (What you see) and
+`details` (the mesh). Default all four, in that order. A section listed twice
+or unknown is refused. Parts stays its own panel (`show.parts`).
+
+### `controls`
 
 `controls` are listed in the order the panel shows them, at most one per
 `drives`. The agent picks the words (`label`, `unit`) and ranges; the Viewer
@@ -162,6 +198,14 @@ decides what dragging one does:
 | `deformation` | `number` | how many times the displacement is drawn | `min` (default 0), `max` (required), `default` (left out, the result opens at its own `deformation_scale`) |
 | `load_scale` | `number` | the load as a multiple of the solved one: stress, displacement and deformation times it, safety factors divided by it | `min` (default 0.1; more than 0, since at no load there is nothing to show), `max` (required), `default` (1 where the range holds it, else `min`) |
 | `threshold` | `number` | values of `field` under it are drawn grey, so only the regions over it carry colour | `field` (required), `min` (default 0), `max` (required), `default` (default `min`), in that field's units |
+
+Every control may add `when`: `always` (default), `failing` (shown only
+while a check fails or is close at the load shown) or `passing` (only while
+every check passes). A hidden control keeps its value and acts at its
+default meanwhile. A `load_scale` control's own `when` is judged at its
+default load (as solved, unless its `default` says), so dragging it never
+hides it: a load slider `when: failing` appears on a part that fails and
+stays while the person drags it down to a load that passes.
 
 `type` may be left out; given, it must be the one above. `min` is zero or
 more and below `max`, and `default` lies between them. Every number is
@@ -191,9 +235,9 @@ whatever `load_scale` is set to.
   findings name the joints. Set it `true` when the user asked about the
   parts or joints of a small assembly.
 
-An unknown key, an unknown `drives`, a field the result does not write, a
-range out of order or a preset naming no control is refused with a sentence
-naming the key, like every other study error.
+An unknown key, `kind`, `drives`, section or `when`, a field the result does
+not write, a range out of order or a preset naming no control is refused with
+a sentence naming the key, like every other study error.
 
 ## What comes out
 
@@ -208,7 +252,8 @@ path you give (which must end in `.glb`) plus its `.json` twin:
   the summary (max von Mises nodal and Gauss-point, safety factor, max
   displacement and its location, applied and reaction forces; for an assembly
   also `parts`, one entry per part with its material, peak stress, safety
-  factor and displacement, and the weakest part's name and peak), per-fixture
+  factor and displacement, and the weakest part's name and peak; and
+  `checks`, each check judged, also in the GLB's `extras.checks`), per-fixture
   reactions, mesh statistics, timings and warnings, the `findings` (also in
   the GLB's mesh `extras`) and `refined`: the first and the finer solve's
   element size and peak when the run solved twice, else `null`.
