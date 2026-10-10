@@ -665,10 +665,9 @@ def _generate_part_outputs(
                 )
             ),
         }
-        # A board's KiCad project rides the same record: three more outputs, listed
+        # A board's KiCad project rides the same record: its files as more outputs, listed
         # only now so the document hash above stays the STEP's.
-        for extra_path, facts in (getattr(scene, "extra_outputs", None) or {}).items():
-            outputs[str(extra_path)] = dict(facts)
+        outputs.update({path: dict(facts) for path, facts in getattr(scene, "extra_outputs", {}).items()})
         from cadgen.store.trees import get_tree
 
         unannotated = get_tree(str(record["unannotatedTree"]))
