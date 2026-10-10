@@ -213,8 +213,8 @@ the script's folder declares it the standard Python way (`PYTHONPATH=src`).
 care, only the project's imports may.
 
 A script may declare several models, and builds the ones its `__main__` calls.
-Its flags (`--force`, `--json`, `--verbose`, the mesh tolerances) apply to every
-model it builds: no flag names, selects or configures one of them. A command
+Its flags (`--force`, `--json`, `--verbose`, `--profile`, the mesh tolerances)
+apply to every model it builds: no flag names, selects or configures one of them. A command
 that addresses one model, such as `cadgen store why`, names it
 `script.py::function`; a bare `script.py` names its sole model, and a file that
 declares several must be named. *Pressure-test*: put two models in one file and
@@ -433,7 +433,8 @@ src/cadgen/
   store/                 # the store (STORE.md): objects, index, records, trees,
                          #   closure, gate, materialize, publish, lazy, gc, view
   cli/                   # generated command shells, one per <format> <verb>
-  cli_tree.py            # the build tree on stderr / JSONL events
+  cli_tree.py            # the build tree on stderr / JSONL events, and each
+                         #   built model's time line (model code vs cadgen)
   daemon/                # the build pool: executors (daemon + transient),
                          #   broker (job slots, coalescing), pool (workers,
                          #   spares, extras), jobs (the ledger), server,
@@ -446,6 +447,8 @@ src/cadgen/
                          #   (clips to keyframes), mesh_export (the mesh
                          #   writers, a clip's GLB sampling, their ledger),
                          #   cli_from_function, doors (documents by bytes),
+                         #   build_timing (where a build's time went;
+                         #   --profile),
                          #   source_sidecar, step_assemble/step_reemit
   viewer/                # the CAD Viewer's server: launcher (main),
                          #   routes (http_app), files by absolute path

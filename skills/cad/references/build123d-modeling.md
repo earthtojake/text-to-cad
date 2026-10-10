@@ -110,9 +110,9 @@ setting `cad_material` is unsupported.
   box starts at a corner. Set alignment deliberately when placement depends on it.
 - **Absolute versus relative placement:** `.located(loc)` replaces location;
   `.moved(loc)` and `Location * shape` compose it. Applying `.located()` after
-  a rotation can therefore discard the orientation. For placed child models,
-  use `.moved()` or multiplication to preserve shared geometry; `.located()`
-  copies it and loses the child link. Absolute placement remains a native API
+  a rotation can therefore discard the orientation. Place a child model once,
+  with `.moved()` or multiplication: it stays linked, though each call copies
+  its whole tree; `.located()` also loses the link. Absolute placement remains a native API
   option when replacement and copying are actually intended.
 
 ```python

@@ -205,9 +205,9 @@ if __name__ == "__main__":
 LINKS to the child's tree (stored once, shared by every parent; two placements
 are two links to one tree). Modify it (a boolean, a mirror, extracting a
 sub-shape) and the parent owns that geometry as its own components; the
-dependency is tracked either way. **Never `located()`** for placement: it
-deep-copies the geometry, which makes it the parent's own component instead
-of a link (`positioning.md`). Put geometry changes that belong to the child in
+dependency is tracked either way. **Never `located()`** for placement: its
+copy becomes the parent's own component, not a link (`positioning.md`). Each
+`moved()` copies the shape and all under it, so place a child once. Put geometry changes that belong to the child in
 the child's file or its factory.
 
 Child calls submit work and return lazy shapes. Placements, labels and colours
@@ -283,8 +283,8 @@ therefore comes from how the project is split:
 - One entry file per expensive model: every `@step` function in a file is
   stale when any line of that file changes.
 
-A part that builds in a second or two gains nothing from its own file; check
-timings with `--verbose` before splitting further.
+A part that builds in a second or two gains nothing from its own file; read
+each model's time line (below) before splitting further.
 
 ### Annotation caching
 
@@ -556,6 +556,26 @@ is one `{"ok": false, "error": "..."}` line on stdout with exit status 1 — the
 same envelope every `cadgen` command prints. `python part.py --help` lists the
 per-run flags. A script builds the models its `__main__` block calls; no flag
 selects one.
+
+Every model a run builds, its children included, prints where its time went:
+
+```text
+[cadgen] built STEP/arm.step in 9m42s: model code 8m20s, cadgen 1m22s
+```
+
+Model code is the decorated function's call, less its waits for child builds
+(named on the line when they happened); cadgen is loading the script, storing
+parts and writing outputs. A `--json` result carries the same numbers in
+`timings` (`seconds`, `modelSeconds`, `cadgenSeconds`, `childrenSeconds`,
+`queuedSeconds`; `null` for a current model). A model whose code took more
+than twice its last build's, and 30 s more, gets a warning: the time is in the
+script. `python part.py --profile` rebuilds that model with its own code under
+cProfile and prints, after the build, the project's functions by cumulative
+time and the busiest functions anywhere by own time, with `file:line` and
+calls. OCCT calls count in the Python function that made them; children are
+not profiled (run a child's script to profile it); nothing is written to the
+project. cProfile slows typical build123d code about 2x and code made of many
+tiny Python calls up to 10x, so read shares, not seconds.
 For long model bodies, optional `report` and `track` calls expose progress:
 
 ```python

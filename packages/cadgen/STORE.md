@@ -626,7 +626,8 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   ],
   "outputs": {"/abs/models/assemblies/STEP/link_robot/link_robot.step": {"sha256": "823699b0…"}},
   "stepHash": "823699b0…",
-  "writerInput": "5f0c27d1…"
+  "writerInput": "5f0c27d1…",
+  "modelSeconds": 1.84
 }
 ```
 
@@ -634,6 +635,12 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   entered during the body appends `(model, pinned tree)`, whether that child
   ended up linked, inlined, modified or discarded. It is never derived from
   links.
+- `modelSeconds` is how long the build's model code ran: the body's call less
+  its waits for children and the loading of their geometry
+  (`cadgen._internal.build_timing`). It is no input and no gate reads it; the
+  next build compares its own model code against it and warns when that took
+  more than twice as long and at least 30 s more. A record without it (a model
+  last built with no body measured) is never a slowdown.
 - `closure.files` is the model's static reach (AST, transitive,
   first-party, absolute and relative imports alike — a `lib/` package's
   `from .chain import X` counts, and importing `lib.x` executes

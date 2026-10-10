@@ -21,9 +21,9 @@ right.label = "spacer_right"
 assembly = bd.Compound(children=[left, right], label="spacer_pair")
 ```
 
-Place child models with `.moved()` or `Pos/Rot/Location * child` to preserve
-shared geometry. `.located()` replaces the existing placement and copies the
-geometry; it loses the cached child link. Labels identify roles and repeated
+Place each child model once, with `.moved()` or `Pos/Rot/Location * child`:
+the parent links its tree, but every call copies the shape and all under it.
+`.located()` replaces the placement and copies the geometry, losing the link. Labels identify roles and repeated
 occurrences, such as `m3_screw:front_left`. A functional group can be a nested
 labeled `Compound` when the design benefits from that hierarchy.
 

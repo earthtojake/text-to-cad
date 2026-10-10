@@ -37,9 +37,6 @@ one installation, and its warm build daemon, with the CAD app's server:
 - `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.19 cadgen`
 - `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.19 python`
 
-The first run downloads that installation and the first snapshot its headless
-browser; later runs reuse both.
-
 `cadgen doctor <skill-dir>` reports the installation in use and checks that it is
 the one this skill pins, and that the CAD kernel loads; use it for installation or
 kernel load errors. Use the relevant
@@ -79,6 +76,9 @@ python src/bracket.py
 ```
 
 - Edit the model source when it exists, then run it to regenerate its outputs.
+  Make each change where the geometry is defined (the part, its helper or child
+  model), never as a pass that walks a finished assembly and rewrites it: every
+  pass re-copies the whole tree each build, and passes pile up into minutes.
   Document export and snapshot commands take saved files and never run source.
 - A STEP's sidecar (`<name>.step.json`: kinematics, materials and baked
   animation keyframes) is a build output, rewritten by every run. Gitignore
@@ -93,10 +93,13 @@ python src/bracket.py
   selects a configuration. Keep module bodies cheap: create geometry and read
   CAD inputs inside the model or its helpers. Use the lazy `bd` import above;
   use postponed annotations when annotations mention `bd` types.
-- Call child models inside the assembly model. Place their results with
-  `.moved()` or `Location * shape` to preserve shared geometry. Use meaningful
-  occurrence labels and source-defined placements. Rerun the parent assembly
-  to incorporate a changed child.
+- Call child models inside the assembly model and place each once, where it is
+  assembled. `.moved()` and `Location * shape` copy the shape, and everything
+  under an assembly, on every call: never re-place an assembly already built.
+  Use meaningful occurrence labels and source-defined placements.
+- Split a big assembly into child models: a run rebuilds only changed children.
+  Iterate on the smallest model holding the change; build the full assembly
+  once at the end.
 - Read vendor STEP inputs with `cadgen.read_step`. Every file a build opens is
   an input on its own, whatever reads it (`json.load`, `np.load`,
   `bd.import_step`, a project font): nothing is declared. Never read a model's own
@@ -104,10 +107,6 @@ python src/bracket.py
   time, random values, environment variables or the working directory.
 - When named purchasable parts are needed, search `$step-parts` before making
   placeholders. Record an unsuccessful search and any placeholder assumptions.
-
-For unfamiliar dimensions or interfaces, record the assumptions needed to model
-and verify them. Ask for missing information when it materially affects the
-requested result. Inspection and export requests do not need a modeling brief.
 
 ## Mesh exports
 
@@ -178,8 +177,9 @@ cadgen stl snapshot STL/bracket.stl tmp/mesh.png
 Repair failures in the source and rerun the affected checks. Use geometry and
 images for CAD comparisons; path-targeted git status is bookkeeping, not
 geometric evidence. `cadgen store why <model>.py` explains unexpected rebuilds;
-`python <model>.py --force` forces one model, and `cadgen daemon status` shows
-build progress. More diagnostics are in the [model contract](references/step-generation.md).
+`python <model>.py --force` forces one model. Every build prints where its time
+went; if its model code slows, the newest model code is the cause, and
+`--profile` shows where. More diagnostics are in the [model contract](references/step-generation.md).
 
 Include output files, checks actually run, and material assumptions or
 limitations in the final response. The user sees the model in the viewer (Show

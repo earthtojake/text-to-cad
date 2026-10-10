@@ -100,7 +100,7 @@ cadgen step snapshot STEP/assembly.step tmp/assembly.png
 
 This is a placement example; add the fastening features the actual design needs.
 Running the root builds its stale children. After a child changes, rerun the root.
-Placed children use `.moved()` or `Location * shape` to keep their geometry shared.
+Place each child once with `.moved()` or `Location * shape`; each call copies it.
 For mating datums and joint relationships, see [positioning](positioning.md).
 
 ## Add capabilities only when needed
