@@ -347,7 +347,9 @@ function vertexParts(mesh) {
 export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = null, parts = null, softParts = null,
   { valueScale = 1, rangeScale = 1, threshold = null } = {}) {
   const color = mesh.geometry.getAttribute("color");
-  const values = fieldValues(mesh, field) && keptValues(mesh, field);
+  // The attribute's presence, not its values: a ramp playing recolours every frame, and keptValues
+  // reads them once per field.
+  const values = mesh.geometry.getAttribute(field.attribute) && keptValues(mesh, field);
   if (!color || !values) {
     return false;
   }

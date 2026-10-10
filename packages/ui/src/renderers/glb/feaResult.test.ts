@@ -532,6 +532,17 @@ describe('a load other than the solved one', () => {
     expect(bytes.slice(4, 8)).toEqual(solvedAt(vm, 50 / 2));
   });
 
+  it('reads a field\'s values from the geometry once, however many frames a ramp recolours', () => {
+    const { mesh, root } = resultMesh();
+    const [vm] = readFeaResult(root)!.fields;
+    const attribute = mesh.geometry.getAttribute(vm.attribute) as any;
+    const array = attribute.array;
+    let reads = 0;
+    Object.defineProperty(attribute, 'array', { configurable: true, get: () => { reads += 1; return array; } });
+    for (let frame = 1; frame <= 10; frame += 1) recolorByField(mesh, vm, undefined, null, null, null, { valueScale: frame / 10 });
+    expect(reads).toBe(1);
+  });
+
   it('greys every vertex under a threshold, comparing the threshold field at the load', () => {
     const { mesh, root } = resultMesh();
     const [vm, displacement] = readFeaResult(root)!.fields;
