@@ -133,7 +133,7 @@ function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, contents })
  * rows it opens with shut (every part but the weakest). Which rows are open is the panel's own, kept
  * while it is mounted (closed or not).
  */
-function StudyTreePanel({ id, title, rows, startsCollapsed, fit, hidden, chosen, onChoose, contents, lead = null }) {
+function StudyTreePanel({ id, title, blocks, startsCollapsed, fit, hidden, chosen, onChoose, contents }) {
   const [collapsed, setCollapsed] = useState(() => new Set(startsCollapsed));
   const toggle = (rowId) => setCollapsed((current) => {
     const next = new Set(current);
@@ -141,22 +141,39 @@ function StudyTreePanel({ id, title, rows, startsCollapsed, fit, hidden, chosen,
     return next;
   });
   return <ToolPanel id={id} title={title} label={title} actions={<ToolPanelClose />} fit={fit} resizable fitContent closable collapsible={false} hidden={hidden}>
-    {lead}
-    <ul className="flex flex-col px-1 pb-1 text-tiny" aria-label={title}>
-      {rows.map((row) => <StudyRow key={row.id} row={row} depth={0} {...{ chosen, collapsed, toggle, onChoose, contents }} />)}
-    </ul>
+    {blocks.map((block, index) => (block.rows
+      ? <ul key={index} className="flex flex-col px-1 pb-1 text-tiny" aria-label={title}>
+        {block.rows.map((row) => <StudyRow key={row.id} row={row} depth={0} {...{ chosen, collapsed, toggle, onChoose, contents }} />)}
+      </ul>
+      : <div key={index} className={index ? "pt-1" : undefined}>{block.element}</div>))}
   </ToolPanel>;
 }
 
-// What the view shows and how: the study view's controls, under the setup and above Details.
+/**
+ * Study's body in the view's order (`sections`): the verdict as an element of its own, and each run of
+ * row sections (setup, What you see, Details) one list, so the default order is one verdict over one list.
+ * A section with nothing to show is left out.
+ */
+function studyBlocks(sections, { verdict, setup, controls, details }) {
+  const blocks = [];
+  for (const name of sections) {
+    if (name === "verdict") {
+      if (verdict) blocks.push({ element: verdict });
+      continue;
+    }
+    const rows = name === "setup" ? setup : name === "controls" ? controls : name === "details" ? details : NONE;
+    if (!rows.length) continue;
+    const last = blocks[blocks.length - 1];
+    if (last?.rows) last.rows = [...last.rows, ...rows];
+    else blocks.push({ rows });
+  }
+  return blocks;
+}
+
+// What the view shows and how: the study view's controls, under the setup and above Details by default.
 const RESULT_ROW = Object.freeze({ id: "result", label: "What you see", detail: "" });
 const NONE = Object.freeze([]);
-
-/** Study's rows with What you see after the setup, before Details. */
-const withResult = (rows) => {
-  const at = rows.findIndex((row) => row.id === "details");
-  return at < 0 ? [...rows, RESULT_ROW] : [...rows.slice(0, at), RESULT_ROW, ...rows.slice(at)];
-};
+const DEFAULT_SECTIONS = Object.freeze(["verdict", "setup", "controls", "details"]);
 
 /** The ids of the rows that open shut (`collapsed`: a load's faces), at any depth. */
 const collapsedIds = (rows) => rows.flatMap((row) => [...(row.collapsed ? [row.id] : []), ...collapsedIds(row.children || NONE)]);
@@ -170,29 +187,33 @@ export const FEA_STUDY_PANEL_ID = "tree";
  * face picked on the result. They are composed from what the file holds: **Parts** only for an
  * assembly whose panel shows (`parts`: `partRows`, each part with its joints under it, the weakest
  * part open; `feaShowsParts`, from six parts up unless the view says), then
- * **Study**: the verdict at the load shown (`verdict`: `feaVerdict`, none where the file cannot say),
- * then `rows` (`studyRows`: where it is held, what pushes it, what it is made of, each only where the
- * file records it), What you see: the study view's controls (`result`: `FeaResultControls`' props,
- * by default the field and deformation), and Details, shut. A result written before its study was
- * recorded has its verdict and What you see alone. Choosing a row that stands for faces or parts is
- * `onChoose(row)`; `chosen` is the row (or picked face) chosen.
+ * **Study**, its sections in the view's order (`sections`, `feaSections`; by default all four): the
+ * verdict at the load shown (`verdict`: `feaVerdict`, none where the file cannot say), the setup
+ * (`setup`, `studySections`: where it is held, what pushes it, what it is made of, each only where the
+ * file records it), What you see: the study view's controls shown at the moment (`result`:
+ * `FeaResultControls`' props, by default the field and deformation; none, none shown), and Details
+ * (`details`), shut. A result written before its study was recorded has its verdict and What you see
+ * alone. Choosing a row that stands for faces or parts is `onChoose(row)`; `chosen` is the row (or
+ * picked face) chosen.
  *
- * @param {{ active: boolean, parts?: object[], openPart?: number, rows: object[], verdict?: object | null, chosen: string, onChoose(row: object): void,
+ * @param {{ active: boolean, parts?: object[], openPart?: number, setup: object[], details: object[], sections?: string[],
+ *   verdict?: object | null, chosen: string, onChoose(row: object): void,
  *   result: { controls: object[], values: Record<string, unknown>, presets: object[], preset: string,
  *     onChange(id: string, value: unknown): void, onPreset(value: string): void, onReset(): void },
  *   reference: { title: string, ref: string, role: string, part?: string } | null, onClearSelection(): void,
  *   copy: { label: string, shortcut: string, onCopy(): unknown } | null }} props
  */
-export default function FeaStudyPanel({ active, parts = NONE, openPart = -1, rows, verdict = null, chosen, onChoose, result,
+export default function FeaStudyPanel({ active, parts = NONE, openPart = -1, setup, details, sections = DEFAULT_SECTIONS, verdict = null, chosen, onChoose, result,
   reference, onClearSelection, copy }) {
   const contents = {
     [RESULT_ROW.id]: <FeaResultControls {...result} />,
   };
+  const controls = result.controls.length || result.presets.length ? [RESULT_ROW] : NONE;
   const panels = [
-    parts.length ? { id: FEA_PARTS_PANEL_ID, title: "Parts", rows: parts, startsCollapsed: parts.filter((_, index) => index !== openPart).map((row) => row.id), fit: "tree" } : null,
+    parts.length ? { id: FEA_PARTS_PANEL_ID, title: "Parts", blocks: [{ rows: parts }], startsCollapsed: parts.filter((_, index) => index !== openPart).map((row) => row.id), fit: "tree" } : null,
     // Under Parts, Study gives way only after Parts has, as a details panel does, so Result stays in view.
-    { id: FEA_STUDY_PANEL_ID, title: "Study", rows: withResult(rows), startsCollapsed: collapsedIds(rows), fit: parts.length ? "details" : "tree",
-      lead: verdict ? <FeaVerdict verdict={verdict} /> : null },
+    { id: FEA_STUDY_PANEL_ID, title: "Study", startsCollapsed: collapsedIds([...setup, ...details]), fit: parts.length ? "details" : "tree",
+      blocks: studyBlocks(sections, { verdict: verdict ? <FeaVerdict verdict={verdict} /> : null, setup, controls, details }) },
   ].filter(Boolean);
   return <>
     {/* Each headed with its X; Select, pressed while it is the tool, opens the closed ones again. */}

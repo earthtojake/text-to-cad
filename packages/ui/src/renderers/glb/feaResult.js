@@ -17,8 +17,10 @@
  * interface faces of both sides), `_PART` (the index into `parts` of the part
  * each vertex belongs to) and the weakest part's name and peak; a single part has
  * none of these. A study that says what the viewer should offer carries its `view`
- * (`feaControls`): the controls of Study's What you see, named presets and whether the
- * loads and fixtures are drawn.
+ * (`feaControls`): the controls of Study's What you see, each shown `when` the checks say, named
+ * presets, Study's `sections` and whether the loads and fixtures are drawn. A result since the
+ * study picked its checks carries `checks`, each judged (`feaVerdict`); an older one's verdict is
+ * its safety factor's, the stress check derived from the fields it has.
  * GLTFLoader lower-cases custom attribute names and copies extras into
  * `userData`, which is what is read here.
  *
@@ -138,10 +140,31 @@ function readConnections(raw) {
 function readView(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   return {
+    sections: Array.isArray(raw.sections) ? raw.sections.filter((name) => typeof name === "string") : null,
     controls: Array.isArray(raw.controls) ? raw.controls.filter((control) => control && typeof control === "object") : null,
     presets: Array.isArray(raw.presets) ? raw.presets.filter((preset) => preset && typeof preset.label === "string" && preset.label.trim()) : [],
     show: raw.show && typeof raw.show === "object" ? raw.show : {},
   };
+}
+
+/** The checks this viewer can judge; a kind from a newer cadgen is skipped. */
+export const FEA_CHECK_KINDS = Object.freeze(["stress", "displacement"]);
+
+/**
+ * The checks the file judged (`kind`, `label`, `value`, `limit`, `unit`, `ratio`, `closeAt`, `status`, `where`),
+ * in the study's order, those of a kind this viewer does not know or with numbers it cannot use left
+ * out; null for a result written before checks were.
+ */
+function readChecks(raw) {
+  if (!Array.isArray(raw)) return null;
+  return raw.filter((check) => check && FEA_CHECK_KINDS.includes(check.kind) && Number.isFinite(check.value) && Number.isFinite(check.limit)
+    && check.limit > 0 && Number.isFinite(check.ratio))
+    .map((check) => ({
+      kind: check.kind, label: text(check.label), value: Number(check.value), limit: Number(check.limit), unit: text(check.unit),
+      ratio: Number(check.ratio), closeAt: Number.isFinite(check.close_at) ? Number(check.close_at) : 1,
+      margin: Number.isFinite(check.margin) && check.margin >= 1 ? Number(check.margin) : null,
+      status: ["fails", "close", "passes"].includes(check.status) ? check.status : null, part: text(check.part),
+    }));
 }
 
 /** The study the result was solved for, as the file records it; null for a result written before it did. */
@@ -264,6 +287,7 @@ export function readFeaResult(root) {
       weakestPartPeakMPa: finiteOrNull(extras.weakest_part_peak_MPa),
       maxDisplacementMm: finiteOrNull(extras.max_displacement_mm),
       view: readView(extras.view),
+      checks: readChecks(extras.checks),
     };
   });
   return found;
@@ -493,7 +517,7 @@ function viewControls(result, every) {
       const options = fieldOptions(result, Array.isArray(raw.options) ? raw.options.map(fieldAttribute) : every);
       if (!options.length) continue;
       const opening = options.find((option) => option.value === fieldAttribute(raw.default)) || options[0];
-      controls.push({ id: drives, drives, type, label, options, defaultValue: opening.value, wideLabel: true });
+      controls.push({ id: drives, drives, type, label, options, defaultValue: opening.value, wideLabel: true, ...whenOf(raw) });
       continue;
     }
     const min = finiteNumber(raw.min) ? raw.min : 0;
@@ -505,10 +529,41 @@ function viewControls(result, every) {
     const unit = typeof raw.unit === "string" && raw.unit.trim() ? raw.unit.trim() : measured ? measured.units : "×";
     controls.push({
       id: drives, drives, type, label, min, max, defaultValue: clamp(finiteNumber(raw.default) ? raw.default : fallback, min, max), unit, wideLabel: true,
-      ...(measured ? { field: measured.attribute } : {}),
+      ...(measured ? { field: measured.attribute } : {}), ...whenOf(raw),
     });
   }
   return controls;
+}
+
+/** When a control shows, as the view says: `failing` or `passing`; a control that says neither, or what this viewer does not know, always. */
+const whenOf = (raw) => (raw.when === "failing" || raw.when === "passing" ? { when: raw.when } : {});
+
+/** Whether a control with this `when` shows, with the checks failing (or close) or not; null, nothing judged, shows every one. */
+const showsWhen = (when, failing) => failing === null || !when || (when === "failing" ? failing : !failing);
+
+/**
+ * The controls What you see shows, and what each control does, at the values chosen (`values`, by id):
+ * a control shows `when` the checks say, judged at the load shown (`feaFailing`). The load control's
+ * own `when` is judged at its default load, where it opens (the load as solved unless the view says),
+ * so moving it never hides it, the very control a person drags to see what load would pass. A hidden
+ * control acts as if at its default (`values` keeps what was chosen, for when it shows again).
+ * `shown`: the controls, in order; `effective`: every control's value, by id; `loadScale`: the load shown.
+ */
+export function feaShownControls(result, controls, values) {
+  const load = controls.find((control) => control.drives === "load_scale") || null;
+  const loadShown = !load || showsWhen(load.when, feaFailing(result, load.defaultValue));
+  const loadScale = load ? finiteNumber(values[load.id]) && loadShown ? values[load.id] : load.defaultValue : 1;
+  const failing = feaFailing(result, loadScale);
+  const shown = controls.filter((control) => (control === load ? loadShown : showsWhen(control.when, failing)));
+  const effective = Object.fromEntries(controls.map((control) => [control.id, shown.includes(control) ? values[control.id] : control.defaultValue]));
+  return { shown, effective, loadScale };
+}
+
+/** The parts of Study, in order: the view's `sections` this viewer knows, each once; with none, all four. */
+export const FEA_SECTIONS = Object.freeze(["verdict", "setup", "controls", "details"]);
+export function feaSections(result) {
+  const named = (result.view?.sections || []).filter((name, index, all) => FEA_SECTIONS.includes(name) && all.indexOf(name) === index);
+  return named.length ? named : FEA_SECTIONS;
 }
 
 /** Every control at its default, by id. */
@@ -762,14 +817,90 @@ export function weakestPartIndex(result) {
 export const DEFAULT_MARGIN = 2;
 
 /**
+ * The checks the verdict judges: the file's (`checks`), else, for a result written before them, the
+ * stress check derived from what it has, today's verdict (the peak against the weakest part's yield,
+ * its safety factor and the study's margin). [] where the file cannot say: no stress field, or a
+ * stress with no safety factor (older than the factor).
+ */
+export function feaChecks(result) {
+  if (result.checks) return result.checks;
+  const stress = result.fields.find((entry) => entry.attribute === "_von_mises");
+  const factor = result.safetyFactor;
+  if (!stress || factor === null || !(factor > 0)) return [];
+  const margin = result.study?.margin ?? DEFAULT_MARGIN;
+  const weakest = result.parts[weakestPartIndex(result)] || null;
+  const value = result.weakestPartPeakMPa ?? weakest?.peakMPa ?? stress.max;
+  // The limit is the yield of the part these numbers are for; failing that, what the factor says it is.
+  const limit = weakest?.yieldMPa ?? result.study?.material?.yieldMPa ?? value * factor;
+  return [{ kind: "stress", label: "", value, limit, unit: stress.units || "MPa", ratio: 1 / factor, closeAt: 1 / margin, margin,
+    status: factor < 1 ? "fails" : factor < margin ? "close" : "passes", part: "" }];
+}
+
+const STATUS_RANK = Object.freeze({ fails: 0, close: 1, passes: 2 });
+// The verdict's tones: each status as the findings card's tones name it.
+const TONE_OF = Object.freeze({ fails: "weak", close: "close", passes: "strong" });
+const TITLES = Object.freeze({
+  stress: Object.freeze({ fails: "Too weak", close: "Close to the limit", passes: "Strong enough" }),
+  displacement: Object.freeze({ fails: "Moves too much", close: "Close to the limit", passes: "Stiff enough" }),
+});
+const DEFAULT_LABELS = Object.freeze({ stress: "Strength", displacement: "Displacement" });
+const checkLabel = (check) => check.label || DEFAULT_LABELS[check.kind];
+// Each half kept whole, so a narrow panel breaks the line at its comma.
+const unbrokenHalves = (halves) => halves.map((half) => half.replace(/ /g, "\u00a0")).join(", ");
+
+/**
+ * One check at `loadScale` times the solved load (a linear study scales exactly): its value and its
+ * share of its limit (`use`) k times the solved ones, `times` how many times this load it would take
+ * to reach the limit, and its `status` at it. The stress check's is the result's safety factor over
+ * k (its margin, not a share, makes it close), so it says exactly what the safety factor says; at
+ * the solved load a check's status is the one cadgen judged.
+ */
+function checkAt(result, check, k) {
+  const use = check.ratio * k;
+  const times = check.kind === "stress" && result.safetyFactor !== null && result.safetyFactor > 0 ? result.safetyFactor / k : 1 / use;
+  const margin = check.kind === "stress" ? check.margin ?? result.study?.margin ?? DEFAULT_MARGIN : null;
+  const status = k === 1 && check.status ? check.status
+    : times < 1 ? "fails" : (margin !== null ? times < margin : use > check.closeAt) ? "close" : "passes";
+  return { ...check, use: check.kind === "stress" ? 1 / times : use, times, status, margin, shown: check.value * k };
+}
+
+/** A check's line, its value against its limit: "Peak 405 MPa, limit 276 MPa", "Moves 0.62 mm, limit 0.5 mm". */
+function checkLine(check) {
+  const unit = check.unit || (check.kind === "stress" ? "MPa" : "mm");
+  // A displacement keeps three figures: its limit is often under a millimetre, and 1.04 is not 1.
+  const figure = check.kind === "stress" ? plainNumber : (value) => String(Number(Number(value).toPrecision(3)));
+  return unbrokenHalves([`${check.kind === "stress" ? "Peak" : "Moves"} ${figure(check.shown)} ${unit}`, `limit ${figure(check.limit)} ${unit}`]);
+}
+
+/** What a check says of the load: "Would hold 1.5× this load", "Holds only 0.6× this load"; a displacement's "OK up to 1.6× this load". */
+function checkCaption(check) {
+  const times = flooredFactor(check.times);
+  if (check.kind === "stress") return check.times < 1 ? `Holds only ${times}× this load` : `Would hold ${times}× this load`;
+  return check.times < 1 ? `OK only to ${times}× this load` : `OK up to ${times}× this load`;
+}
+
+/**
+ * Whether some check fails or is close at `loadScale` times the solved load: what a control's `when`
+ * reads. null where the file judges nothing (no checks, or no load), so every control shows.
+ */
+export function feaFailing(result, loadScale = 1) {
+  const k = Number(loadScale) >= 0 ? Number(loadScale) : 1;
+  const checks = feaChecks(result);
+  if (!checks.length || !(k > 0)) return null;
+  return checks.some((check) => checkAt(result, check, k).status !== "passes");
+}
+
+/**
  * The answer at a glance, at `loadScale` times the solved load, for the verdict at the top of Study:
- * `status` ("weak" under a safety factor of 1, "close" under the study's margin, "strong" from it up,
- * "none" with no stress: no load reaches the part, or the load is set to 0), its `title` in plain
- * words, `part` (an assembly's weakest part, whose numbers these are; "" for a single part), `line`
- * (the peak against the limit: "Peak 405 MPa, limit 276 MPa"), `use` (how hard the part is working:
- * the peak over the limit, 1 at yield; past 1 it is over), the `margin` the study asked for and the
- * `caption` ("Holds only 0.6× this load", "Would hold 1.5× this load"). null where the file cannot
- * say (no stress field, or a stress with no safety factor: a result older than the factor).
+ * the worst check (`feaChecks`; the first by status, failing before close before passing, then by
+ * how much of its limit it uses) as the headline, and one compact row per further check (`rows`).
+ * The headline: `status` (the tone: "weak" failing, "close", "strong" passing, "none" with no stress:
+ * no load reaches the part, or the load is set to 0), its `title` in plain words ("Too weak", "Moves
+ * too much"), `part` (an assembly's weakest part, whose numbers a stress check's are; "" else),
+ * `label` (a check named in the person's words), `line` (the value against the limit: "Peak 405 MPa,
+ * limit 276 MPa"), `use` (the share of the limit, 1 at it; past 1 it is over), the stress check's
+ * `margin` (null for another) and the `caption` ("Holds only 0.6× this load"). null where the file
+ * cannot say (no stress field, or a stress with no safety factor and no checks: a result older than both).
  */
 export function feaVerdict(result, loadScale = 1) {
   const stress = result.fields.find((entry) => entry.attribute === "_von_mises");
@@ -778,25 +909,25 @@ export function feaVerdict(result, loadScale = 1) {
   const margin = result.study?.margin ?? DEFAULT_MARGIN;
   const weakest = result.parts[weakestPartIndex(result)] || null;
   const part = result.weakestPart ? spaced(result.weakestPart) : weakest?.name ? spaced(weakest.name) : "";
-  const base = { part, margin };
+  const base = { part, margin, label: "", rows: [] };
   if (!(k > 0)) return { ...base, status: "none", title: "No load", line: "The load is set to 0", use: 0, caption: "" };
-  if (result.safetyFactor === null || !(result.safetyFactor > 0)) {
-    return stress.max > 0 ? null : { ...base, status: "none", title: "No stress", line: "Check the load reaches the part", use: 0, caption: "" };
+  const checks = feaChecks(result);
+  const unloaded = checks.some((check) => check.kind === "stress" && !(check.value > 0));
+  if (!checks.length || unloaded) {
+    return stress.max > 0 && !unloaded ? null : { ...base, status: "none", title: "No stress", line: "Check the load reaches the part", use: 0, caption: "" };
   }
-  const factor = result.safetyFactor / k;
-  const peak = (result.weakestPartPeakMPa ?? weakest?.peakMPa ?? stress.max) * k;
-  // The limit is the yield of the part these numbers are for; failing that, what the factor says it is.
-  const limit = weakest?.yieldMPa ?? result.study?.material?.yieldMPa ?? peak * factor;
-  const status = factor < 1 ? "weak" : factor < margin ? "close" : "strong";
+  const judged = checks.map((check, index) => ({ ...checkAt(result, check, k), index }));
+  const [worst] = [...judged].sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.use - a.use || a.index - b.index);
+  const named = (check) => check.label && check.label !== DEFAULT_LABELS[check.kind];
   return {
-    ...base, status, title: VERDICT_TITLES[status], use: 1 / factor,
-    // Each half kept whole, so a narrow panel breaks the line at its comma.
-    line: [`Peak ${plainNumber(peak)} ${stress.units || "MPa"}`, `limit ${plainNumber(limit)} ${stress.units || "MPa"}`].map((part) => part.replace(/ /g, "\u00a0")).join(", "),
-    caption: factor < 1 ? `Holds only ${flooredFactor(factor)}× this load` : `Would hold ${flooredFactor(factor)}× this load`,
+    ...base, part: worst.kind === "stress" ? part : "", margin: worst.margin, label: named(worst) ? checkLabel(worst) : "",
+    status: TONE_OF[worst.status], title: TITLES[worst.kind][worst.status], use: worst.use, line: checkLine(worst), caption: checkCaption(worst),
+    rows: judged.filter((check) => check !== worst).map((check) => ({
+      id: `check:${check.index}`, kind: check.kind, status: TONE_OF[check.status], label: checkLabel(check), line: checkLine(check),
+      use: check.use, margin: check.margin, caption: checkCaption(check),
+    })),
   };
 }
-
-const VERDICT_TITLES = Object.freeze({ weak: "Too weak", close: "Close to the limit", strong: "Strong enough" });
 
 /** Study's "Held at": one row per fixed face, its name alone ("Face 9", "base · face 9"), under the fixture glyph. */
 function heldRows(result) {
@@ -873,7 +1004,14 @@ const DETAIL_GROUPS = Object.freeze([detailRows]);
  * further words are its hint (`hint`). [] for a result written before the study was recorded.
  */
 export function studyRows(result) {
-  return result.study ? [...STUDY_GROUPS, ...DETAIL_GROUPS].flatMap((group) => group(result)) : [];
+  const { setup, details } = studySections(result);
+  return [...setup, ...details];
+}
+
+/** Study's rows by section: `setup` (`STUDY_GROUPS`) and `details` (`DETAIL_GROUPS`), each [] where the file records nothing for it. */
+export function studySections(result) {
+  if (!result.study) return { setup: [], details: [] };
+  return { setup: STUDY_GROUPS.flatMap((group) => group(result)), details: DETAIL_GROUPS.flatMap((group) => group(result)) };
 }
 
 /** The index into the result's `parts` of the part a face is on; -1 for a single part's face. */

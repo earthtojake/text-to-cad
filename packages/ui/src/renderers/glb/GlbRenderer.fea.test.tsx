@@ -804,3 +804,67 @@ it('a slider\'s thumb stands where its value is on its range, not at the left en
   const track = thumb('Exaggerate').closest('[data-slot="slider"]')!;
   expect(track.className).toContain('[&_[data-slot=slider-track]]:bg-foreground/20');
 });
+
+// The checks the study picked, as cadgen judged them: the stress check and a sag on the loaded face.
+const STRESS_CHECK = { kind: 'stress', label: 'Strength', value: 47.3, limit: 276, unit: 'MPa', ratio: 0.171527, close_at: 0.5, margin: 2, status: 'passes', where: { ref: '#o1.f1', at: [0, 0, 0] } };
+const SAG_CHECK = { kind: 'displacement', label: 'Tip sag', value: 0.62, limit: 0.5, unit: 'mm', ratio: 1.24, close_at: 0.9, status: 'fails', where: { ref: '#o1.f2', at: [1, 0, 0] }, faces: ['#o1.f2'] };
+const LOAD_WHEN_FAILING = { drives: 'load_scale', type: 'number', label: 'Load', min: 0.1, max: 2, default: 1, unit: '×', when: 'failing' };
+const checkRows = () => Array.from(verdictOf().section.querySelectorAll('[data-fea-check]')).map(row => [row.getAttribute('data-fea-check'),
+  row.querySelector('[data-fea-check-label]')!.textContent, row.querySelector('[data-fea-check-line]')!.textContent!.replace(/ /g, ' '),
+  row.querySelector('[data-fea-check-caption]')!.textContent]);
+
+it('heads the verdict with the worst check and gives each other check a compact row, all following the load', () => {
+  mount({ ...STUDIED, checks: [STRESS_CHECK, SAG_CHECK], view: { controls: [{ ...LOAD_WHEN_FAILING, when: undefined }] } }, undefined, { faces: FACES });
+  expect(verdictOf()).toMatchObject({ status: 'weak', title: 'Moves too much', part: null, line: 'Moves 0.62 mm, limit 0.5 mm', caption: 'OK only to 0.8× this load' });
+  expect(verdictOf().section.querySelector('[data-fea-verdict-label]')!.textContent).toBe('Tip sag');
+  // No margin tick on a displacement: its limit is the person's.
+  expect(screen.getByRole('meter', { name: 'How hard the part is working' }).querySelector('[data-fea-verdict-tick]')).toBeNull();
+  expect(checkRows()).toEqual([['strong', 'Strength', 'Peak 47 MPa, limit 276 MPa', 'Would hold 5.8× this load']]);
+  expect(screen.getByRole('meter', { name: 'Strength: how much of its limit' }).getAttribute('aria-valuenow')).toBe('17');
+  setValue('Load slider value', '0.5');
+  expect(verdictOf()).toMatchObject({ status: 'strong', title: 'Stiff enough', line: 'Moves 0.31 mm, limit 0.5 mm' });
+  expect(checkRows()).toEqual([['strong', 'Strength', 'Peak 24 MPa, limit 276 MPa', 'Would hold 11× this load']]);
+});
+
+it('a result with no checks in the file has today\'s verdict and no check rows', () => {
+  mount({ ...STUDIED, safety_factor: 1.5 }, undefined, { faces: FACES });
+  expect(verdictOf()).toMatchObject({ status: 'close', title: 'Close to the limit', line: 'Peak 47 MPa, limit 276 MPa', caption: 'Would hold 1.5× this load' });
+  expect(verdictOf().section.querySelector('[data-fea-check], [data-fea-verdict-label]')).toBeNull();
+  // The verdict leads, then one list: the setup, What you see, Details.
+  const body = verdictOf().section.parentElement!.parentElement!;
+  expect(body.querySelectorAll('ul[aria-label="Study"]')).toHaveLength(1);
+  expect(rowTexts(studyPanel()!).map(text => text!.replace(/‑/g, '-'))).toEqual(['Held at', 'Face 1', 'Pushed', '2500 N down', 'Made of', '6061-T6', 'What you see', 'Details']);
+});
+
+it('composes Study from the view\'s sections, in its order, leaving out what it omits and what it does not know', () => {
+  mount({ ...STUDIED, view: { sections: ['controls', 'verdict', 'chart'] } }, undefined, { faces: FACES });
+  const study = studyPanel()!;
+  expect(rowTexts(study)).toEqual(['What you see']);
+  const verdict = verdictOf().section;
+  expect(study.querySelector('[data-study-row="result"]')!.compareDocumentPosition(verdict) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  cleanup();
+  mount({ ...STUDIED, view: { sections: ['setup', 'details'] } }, undefined, { faces: FACES });
+  expect(screen.queryByRole('region', { name: 'Verdict' })).toBeNull();
+  expect(rowTexts(studyPanel()!).map(text => text!.replace(/‑/g, '-'))).toEqual(['Held at', 'Face 1', 'Pushed', '2500 N down', 'Made of', '6061-T6', 'Details']);
+  expect(screen.queryByRole('slider')).toBeNull();
+});
+
+it('shows a control `when` the checks say, live with the load, the hidden one drawn at its default and its value kept', () => {
+  const threshold = { drives: 'threshold', type: 'number', label: 'Show above', field: 'von_mises', min: 0, max: 100, default: 0, unit: 'MPa', when: 'failing' };
+  const { mesh } = mount({ ...STUDIED, checks: [STRESS_CHECK, SAG_CHECK], view: { controls: [LOAD_WHEN_FAILING, threshold] } }, undefined, { faces: FACES });
+  const sliders = () => screen.queryAllByRole('slider').map(slider => slider.getAttribute('aria-label'));
+  const grey = () => [0, 1, 2, 3].map(vertex => colourBytes(mesh).slice(vertex * 4, vertex * 4 + 3).every(byte => byte === 150));
+  // Too much sag as solved: the load and the threshold show.
+  expect(sliders()).toEqual(['Load', 'Show above']);
+  setValue('Show above slider value', '40');
+  expect(grey()).toEqual([true, false, false, true]);
+  // At half the load every check passes: the threshold hides and greys nothing, while the load slider stays to be dragged back.
+  setValue('Load slider value', '0.5');
+  expect(sliders()).toEqual(['Load']);
+  expect(grey()).toEqual([false, false, false, false]);
+  // Back at the load as solved it fails again, and the threshold returns at the value it had.
+  setValue('Load slider value', '1');
+  expect(sliders()).toEqual(['Load', 'Show above']);
+  expect(screen.getByRole('textbox', { name: 'Show above slider value' }).getAttribute('value')).toBe('40.0 MPa');
+  expect(grey()).toEqual([true, false, false, true]);
+});

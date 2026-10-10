@@ -2,7 +2,8 @@ import { BufferAttribute, BufferGeometry, Group, Mesh, Ray, Vector3 } from 'thre
 import { describe, expect, it } from 'vitest';
 import {
   applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaControls, feaMarkerShow, feaPresets, feaRamp, feaSummaryLine, fieldValues, forceDirection,
-  feaVerdict, formatValue, pickFace, readFeaResult, partRows, recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows, weakestPartIndex
+  feaVerdict, formatValue, pickFace, readFeaResult, partRows, recolorByField, resultSourcePath, ringPoint, ringTargets, studyRows, weakestPartIndex,
+  feaChecks, feaFailing, feaSections, feaShownControls, feaDefaults
 } from './feaResult.js';
 
 /** A two-triangle "result" the way GLTFLoader hands one over: lower-cased custom attributes, extras in userData. */
@@ -614,5 +615,94 @@ describe('the verdict', () => {
     const made = (list: object[]) => (studyRows(studyResult({ ...ASSEMBLY, parts: list }).result) as any[]).find((row) => row.id === 'material').children[0];
     expect(made(parts)).toMatchObject({ label: 'Mostly 6061-T6', hint: '6061-T6: 2 parts, Steel: 1 part' });
     expect(made([ASSEMBLY.parts[0], { ...ASSEMBLY.parts[1], material: '6061-T6' }]).label).toBe('6061-T6');
+  });
+});
+
+// The checks cadgen judged, as it writes them into the extras: the stress check (one over the safety
+// factor) and a displacement check named in the person's words.
+const STRESS_CHECK = { kind: 'stress', label: 'Strength', value: 47.3, limit: 276, unit: 'MPa', ratio: 0.171527, close_at: 0.5, margin: 2, status: 'passes',
+  where: { ref: '#o1.f1', at: [0, 0, 0] } };
+const SAG_CHECK = { kind: 'displacement', label: 'Tip sag', value: 0.62, limit: 0.5, unit: 'mm', ratio: 1.24, close_at: 0.9, status: 'fails',
+  where: { ref: '#o1.f2', at: [60, 0, 0] }, faces: ['#o1.f2'] };
+const checked = (checks: unknown, extras: Record<string, unknown> = {}) => studyResult({ study: STUDY, faces: [], safety_factor: 5.83, checks, ...extras }).result;
+const plain = (text: string) => text.replace(/\u00a0/g, ' ');
+
+describe('the study\'s checks', () => {
+  it('head the verdict with the worst check, one compact row for each other', () => {
+    const verdict = feaVerdict(checked([STRESS_CHECK, SAG_CHECK]))!;
+    expect(verdict).toMatchObject({ status: 'weak', title: 'Moves too much', label: 'Tip sag', part: '', margin: null, caption: 'OK only to 0.8× this load' });
+    expect(plain(verdict.line)).toBe('Moves 0.62 mm, limit 0.5 mm');
+    expect(verdict.use).toBeCloseTo(1.24, 6);
+    expect(verdict.rows.map((row: any) => [row.status, row.label, plain(row.line), row.caption])).toEqual([
+      ['strong', 'Strength', 'Peak 47 MPa, limit 276 MPa', 'Would hold 5.8× this load']]);
+    // A failing check heads the card over one that uses more of its limit but passes; then the most used.
+    const big = { ...SAG_CHECK, label: 'Base sag', value: 0.3, ratio: 0.6, status: 'passes' };
+    expect(feaVerdict(checked([big, STRESS_CHECK]))!.label).toBe('Base sag');
+    expect(feaVerdict(checked([STRESS_CHECK, { ...big, status: 'close', close_at: 0.5 }, SAG_CHECK]))!.rows.map((row: any) => row.label)).toEqual(['Strength', 'Base sag']);
+  });
+
+  it('scale with the load: every value and share of its limit k times the solved, and a check can change its word', () => {
+    const result = checked([STRESS_CHECK, SAG_CHECK]);
+    const half = feaVerdict(result, 0.5)!;
+    // At half the load the sag uses 0.62 of its limit: it passes, and the stress check leads only if it uses more.
+    expect(half).toMatchObject({ status: 'strong', title: 'Stiff enough', caption: 'OK up to 1.6× this load' });
+    expect(plain(half.line)).toBe('Moves 0.31 mm, limit 0.5 mm');
+    expect(half.rows[0]).toMatchObject({ status: 'strong', caption: 'Would hold 11× this load' });
+    expect(plain(half.rows[0].line)).toBe('Peak 24 MPa, limit 276 MPa');
+    expect(feaFailing(result, 1)).toBe(true);
+    expect(feaFailing(result, 0.5)).toBe(false);
+    expect(feaFailing(result, 0.75)).toBe(true); // 0.93 of the limit: close, within the model's own tenth
+    expect(feaVerdict(result, 0.75)).toMatchObject({ status: 'close', title: 'Close to the limit' });
+  });
+
+  it('with no checks in the file, judge today\'s stress check from its safety factor, and say exactly what the safety factor says', () => {
+    for (const factor of [0.68, 1.5, 2, 5.83]) {
+      const old = studyResult({ study: STUDY, faces: [], safety_factor: factor }).result;
+      const fresh = checked([{ ...STRESS_CHECK, ratio: Number((1 / factor).toFixed(6)), status: factor < 1 ? 'fails' : factor < 2 ? 'close' : 'passes' }], { safety_factor: factor });
+      expect(feaChecks(old).map((check: any) => check.kind)).toEqual(['stress']);
+      for (const k of [1, 2, 0.5, 1.5]) expect(feaVerdict(fresh, k)).toEqual(feaVerdict(old, k));
+    }
+  });
+
+  it('skip a kind this viewer does not know, and a file whose checks it knows none of judges nothing', () => {
+    const frequency = { kind: 'frequency', label: 'First mode', value: 40, limit: 60, unit: 'Hz', ratio: 0.67, status: 'passes' };
+    expect(feaChecks(checked([frequency, SAG_CHECK])).map((check: any) => check.label)).toEqual(['Tip sag']);
+    expect(feaVerdict(checked([frequency]))).toBeNull();
+    expect(feaFailing(checked([frequency]))).toBeNull();
+  });
+
+  it('show a control `when` they fail or pass at the load shown, the load control judged where it opens, so dragging it never hides it', () => {
+    const view = { controls: [
+      { drives: 'load_scale', label: 'Load', min: 0.1, max: 2, default: 1, when: 'failing' },
+      { drives: 'threshold', label: 'Show above', field: 'von_mises', min: 0, max: 100, default: 0, when: 'failing' },
+      { drives: 'deformation', label: 'Exaggerate', min: 0, max: 50, default: 12, when: 'passing' },
+      { drives: 'field', label: 'Show', when: 'sometimes' },
+    ] };
+    const result = checked([STRESS_CHECK, SAG_CHECK], { view });
+    const controls = feaControls(result);
+    const at = (values: Record<string, unknown>) => {
+      const { shown, effective, loadScale } = feaShownControls(result, controls, { ...feaDefaults(controls), ...values });
+      return { shown: shown.map((control: any) => control.id), effective, loadScale };
+    };
+    // As solved the sag fails: the load and the threshold show, the deformation waits for a pass; an unknown `when` always shows.
+    expect(at({}).shown).toEqual(['load_scale', 'threshold', 'field']);
+    // Dragged to half the load everything passes: the threshold hides and acts at its default, its value kept; the load stays.
+    expect(at({ load_scale: 0.5, threshold: 40, deformation: 30 })).toMatchObject({
+      shown: ['load_scale', 'deformation', 'field'], loadScale: 0.5, effective: { threshold: 0, deformation: 30 } });
+    // While failing, the deformation is hidden and drawn at its default, whatever was chosen.
+    expect(at({ deformation: 30 }).effective.deformation).toBe(12);
+    // A load control shown only while passing hides on a failing result, and the load shown is its default.
+    const passing = checked([STRESS_CHECK, SAG_CHECK], { view: { controls: [{ ...view.controls[0], when: 'passing' }] } });
+    const loadOnly = feaControls(passing);
+    expect(feaShownControls(passing, loadOnly, { load_scale: 0.5 })).toMatchObject({ shown: [], loadScale: 1 });
+    // With nothing judged (no checks, no safety factor) every control shows.
+    const unjudged = studyResult({ study: STUDY, faces: [], safety_factor: null, view }).result;
+    expect(feaShownControls(unjudged, feaControls(unjudged), feaDefaults(feaControls(unjudged))).shown).toHaveLength(4);
+  });
+
+  it('order Study\'s sections as the view lists them, leaving out the rest and any this viewer does not know', () => {
+    expect(feaSections(checked(null))).toEqual(['verdict', 'setup', 'controls', 'details']);
+    expect(feaSections(checked(null, { view: { sections: ['controls', 'chart', 'verdict', 'controls'] } }))).toEqual(['controls', 'verdict']);
+    expect(feaSections(checked(null, { view: { sections: ['chart'] } }))).toEqual(['verdict', 'setup', 'controls', 'details']);
   });
 });

@@ -575,7 +575,11 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     so four parts and their joints do not fill the column; each opens by its chevron. Names and
     details wrap between words, never cut off.
   - **Study** leads with the answer and reads the study in plain words, technical terms after them
-    or in hints, so a person who is not an engineer has the answer in two seconds. Top to bottom:
+    or in hints, so a person who is not an engineer has the answer in two seconds. Its sections are
+    the study's to pick (`view.sections`, `feaSections` in `glb/feaResult.js`: the verdict, the setup,
+    What you see and Details, in the view's order, leaving out what it omits and skipping a name the
+    viewer does not know), each only where the file has something for it; with none named, all four,
+    top to bottom:
     - **The verdict** (`glb/FeaVerdict.jsx`, from `feaVerdict` in `glb/feaResult.js`), a block on
       the status tone's own background at the top of the panel's body: a status word with its icon,
       in the theme's status tones (the findings card's and its alert icon's): **Too weak** under a
@@ -592,6 +596,17 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
       With no stress it says **No stress** and "Check the load reaches the part", in no tone and
       with no bar; at a load of 0, **No load**. A result with a stress but no safety factor (older
       than it) has no verdict.
+      The verdict judges the study's **checks** (`extras.checks`, `feaChecks`: each judged by cadgen,
+      value against limit, `ratio`, `status`), a kind the viewer does not know skipped; a result
+      older than them has the one check above, derived from its fields, so it looks as it always did.
+      The worst check heads it (failing before close before passing, then the most of its limit
+      used); a `displacement` check heads as **Moves too much**, **Close to the limit** (within a
+      tenth of its limit) or **Stiff enough**, with its name in the person's words where the part
+      would be ("Tip sag"), "Moves 0.62 mm, limit 0.5 mm" (three figures: 1.04 is not 1), a bar with
+      no margin tick, and "OK only to 0.8× this load" or "OK up to 1.6× this load". Each further
+      check is one compact row under a hairline, in its own tone: its icon and name (its value against
+      its limit their hint), a thin bar and its caption. Every check follows the load shown, its value
+      and share of its limit k times the solved ones.
     - **The setup**, read as sentences, each heading muted with, in the disclosure column, the glyph
       its marker is drawn as on the model (`glb/feaGlyphs.jsx`, lucide's grid at the trees' light
       stroke): **Held at** (a cone pointing into a face, the fixtures' grey), one row per fixed face,
@@ -610,7 +625,12 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     units, each a generic parameter row drawn by the same `parameterRow` as Position's joints
     (`kit/inspector/parameterRow.jsx`), a sentence-long label wrapping between words on its
     value field's line and the slider the row's whole width under them (`wideLabel`), so the
-    narrow panel still gives the slider room. What each moves is the viewer's, from a closed set (`drives`): **field** (a select
+    narrow panel still gives the slider room. A control the view gives a `when` shows only while a
+    check fails or is close (`failing`) or only while every check passes (`passing`), judged live at
+    the load shown (`feaShownControls`); a hidden one keeps its value and acts at its default meanwhile.
+    The load control's own `when` is judged at its default load, where it opens, so dragging it never
+    hides it: a load slider shown while the part fails stays while the person drags it to a load that
+    passes. What each moves is the viewer's, from a closed set (`drives`): **field** (a select
     of the fields the file carries, in plain words: Stress, Displacement; the file's own name, von
     Mises stress, is the colour bar's), **deformation** (how many times the displacement is drawn,
     "×12.0"), **load_scale** (the load as a multiple of the solved one, "×1.50") and **threshold**

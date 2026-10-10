@@ -18,8 +18,8 @@ import FeaLoadLabels from "./FeaLoadLabels.jsx";
 import { FileSheetStatusText } from "../kit/inspector/FileSheet.js";
 import { DEFAULT_POSE_VALUE, NO_PRESET_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 import {
-  applyDeformation, faceIndices, facePartDetail, faceTitle, facePromptSummary, faceRole, feaControls, feaDefaults, feaMarkerShow, feaPresets, feaShowsParts, feaVerdict, findingSelector, pickFace,
-  readFeaResult, recolorByField, resultSourcePath, partRows, ringTargets, studyRows, weakestPartIndex
+  applyDeformation, faceIndices, facePartDetail, faceTitle, facePromptSummary, faceRole, feaControls, feaDefaults, feaMarkerShow, feaPresets, feaSections, feaShownControls,
+  feaShowsParts, feaVerdict, findingSelector, pickFace, readFeaResult, recolorByField, resultSourcePath, partRows, ringTargets, studySections, weakestPartIndex
 } from "./feaResult.js";
 import { createFeaMarkers } from "./feaMarkers.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
@@ -116,13 +116,14 @@ function GlbSurface({ view, data }) {
   const choice = edited.signature === signature ? { ...restored, ...edited } : restored;
   // Every control's value, held to its own range and options whatever was written.
   const values = Object.fromEntries(controls.map((control) => [control.id, controlValue(control, choice[DRIVE_KEYS[control.drives]])]));
-  const activeField = fea ? fea.fields.find((entry) => entry.attribute === values.field) || fea.fields[0] : null;
-  const activeScale = fea ? finiteOr(values.deformation, fea.deformationScale) : null;
+  // The controls shown `when` the checks say; a hidden one acts at its default and keeps its value for when it shows again.
+  const { shown: shownControls, effective, loadScale } = fea ? feaShownControls(fea, controls, values) : { shown: EMPTY, effective: values, loadScale: 1 };
+  const activeField = fea ? fea.fields.find((entry) => entry.attribute === effective.field) || fea.fields[0] : null;
+  const activeScale = fea ? finiteOr(effective.deformation, fea.deformationScale) : null;
   // The load as a multiple of the solved one (a linear study scales exactly), and what is drawn grey under a threshold.
-  const loadScale = finiteOr(values.load_scale, 1);
-  const thresholdControl = controls.find((control) => control.drives === "threshold");
+  const thresholdControl = shownControls.find((control) => control.drives === "threshold");
   const thresholdField = fea && thresholdControl ? fea.fields.find((entry) => entry.attribute === thresholdControl.field) : null;
-  const thresholdValue = thresholdField ? values.threshold : null;
+  const thresholdValue = thresholdField ? effective.threshold : null;
   const markersOn = Boolean(markerShow) && (typeof choice.markers === "boolean" ? choice.markers : markerShow.on);
   const defaults = useMemo(() => feaDefaults(controls), [controls]);
   const activePreset = presets.some((preset) => preset.value === choice.preset) ? choice.preset
@@ -147,7 +148,10 @@ function GlbSurface({ view, data }) {
   const clearChoice = useCallback(() => { setChosen(NO_FINDING); setChosenFaces(NO_FACES); }, []);
   const finding = findings && chosen.findings === findings ? findings.find((entry) => entry.index === chosen.index) || null : null;
   const faces = fea && chosenFaces.result === fea ? chosenFaces : NO_FACES;
-  const rows = useMemo(() => (fea ? studyRows(fea) : EMPTY), [fea]);
+  // Study's setup and Details, and the parts of Study the view lists, in its order.
+  const sections = useMemo(() => (fea ? studySections(fea) : { setup: EMPTY, details: EMPTY }), [fea]);
+  const rows = useMemo(() => [...sections.setup, ...sections.details], [sections]);
+  const order = useMemo(() => (fea ? feaSections(fea) : EMPTY), [fea]);
   // An assembly's parts, each with its joints, are a panel of their own above Study, from six parts
   // up unless the view says (`feaShowsParts`); under that a picked face's Reference names its part.
   const parts = useMemo(() => (fea && feaShowsParts(fea) ? partRows(fea, loadScale) : EMPTY), [fea, loadScale]);
@@ -276,7 +280,7 @@ function GlbSurface({ view, data }) {
   const copySelection = selectActive && single ? copyFace : null;
   // Study's What you see: each control writes its value, and a moved control leaves the preset (Custom).
   const resultControls = {
-    controls, values, presets, preset: activePreset,
+    controls: shownControls, values, presets, preset: activePreset,
     onChange: (id, value) => choose({ [DRIVE_KEYS[id]]: value, preset: null }),
     onPreset: (value) => {
       const preset = presets.find((entry) => entry.value === value);
@@ -284,7 +288,8 @@ function GlbSurface({ view, data }) {
     },
     onReset: () => choose({ ...NO_VALUES, preset: null }),
   };
-  const toolPanels = fea ? <FeaStudyPanel active={selectActive} parts={parts} openPart={weakestPartIndex(fea)} rows={rows} verdict={verdict} chosen={faces.id} onChoose={chooseFaces}
+  const toolPanels = fea ? <FeaStudyPanel active={selectActive} parts={parts} openPart={weakestPartIndex(fea)} setup={sections.setup} details={sections.details}
+    sections={order} verdict={verdict} chosen={faces.id} onChoose={chooseFaces}
     result={resultControls}
     reference={single ? { title: faceTitle(fea, single), ref: single, role: faceRole(fea, single), part: facePartDetail(fea, single, loadScale) } : null} onClearSelection={clearChoice}
     copy={single ? { label: "Copy", shortcut: shell.frame.copyShortcut, onCopy: copyFace } : null} /> : null;
