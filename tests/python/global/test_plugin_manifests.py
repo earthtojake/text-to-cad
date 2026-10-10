@@ -16,7 +16,12 @@ owns stamping every derived version from the canonical `VERSION` file, and
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -289,6 +294,63 @@ class PluginManifestPolicyTest(unittest.TestCase):
         qoder, claude = load_json(QODER_MCP_PATH)["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
         self.assertEqual(list(load_json(QODER_MCP_PATH)["mcpServers"]), ["cad"])
         self.assertEqual({**qoder, "env": None}, {**claude, "env": None})
+
+    def test_qoder_executes_the_cad_mcp_launch_contract(self) -> None:
+        qoder = load_json(QODER_MCP_PATH)["mcpServers"]["cad"]
+        self.assertEqual(qoder["command"], "uvx")
+
+        with tempfile.TemporaryDirectory(prefix="text-to-cad-qoder-mcp-") as tmp:
+            fixture_root = Path(tmp)
+            probe = fixture_root / "uvx_probe.py"
+            probe.write_text(
+                "import json, os, sys\n"
+                "print(json.dumps({\"args\": sys.argv[1:], \"channel\": "
+                "os.environ.get(\"CADGEN_INSTALL_CHANNEL\")}))\n",
+                encoding="utf-8",
+            )
+            if os.name == "nt":
+                launcher = fixture_root / "uvx.cmd"
+                launcher.write_text(
+                    '@"%FAKE_UVX_PYTHON%" "%FAKE_UVX_PROBE%" %*\r\n',
+                    encoding="utf-8",
+                )
+            else:
+                launcher = fixture_root / "uvx"
+                launcher.write_text(
+                    '#!/bin/sh\nexec "$FAKE_UVX_PYTHON" "$FAKE_UVX_PROBE" "$@"\n',
+                    encoding="utf-8",
+                )
+                launcher.chmod(0o755)
+
+            env = {
+                **os.environ,
+                **qoder.get("env", {}),
+                "FAKE_UVX_PYTHON": sys.executable,
+                "FAKE_UVX_PROBE": str(probe),
+                "PATH": str(fixture_root) + os.pathsep + os.environ.get("PATH", ""),
+            }
+            executable = shutil.which(qoder["command"], path=env["PATH"])
+            self.assertIsNotNone(executable)
+            command = (
+                ["cmd.exe", "/d", "/s", "/c", executable, *qoder["args"]]
+                if os.name == "nt"
+                else [executable, *qoder["args"]]
+            )
+            result = subprocess.run(
+                command,
+                cwd=REPO_ROOT,
+                env=env,
+                text=True,
+                encoding="utf-8",
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        executed = json.loads(result.stdout)
+        self.assertEqual(executed["args"], qoder["args"])
+        self.assertEqual(executed["channel"], "qoder-github")
+        self.assertEqual(executed["args"][-2:], ["cadgen", "mcp"])
 
     def test_cursor_starts_claudes_server_and_shows_its_icon(self) -> None:
         # Cursor reads only .cursor-plugin/plugin.json. Its MCP config format is Claude's, and it starts
