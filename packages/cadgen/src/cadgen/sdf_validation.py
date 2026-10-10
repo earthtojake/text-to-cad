@@ -558,12 +558,20 @@ def _validate_inertial(inertial_element: ET.Element, result: FindingsReport, tar
     for pose_element in children(inertial_element, "pose"):
         # Inertial pose defaults to the owning link frame (unambiguous).
         _validate_pose(pose_element, result, f"{inertial_path}/pose", targets, warn_missing_relative_to=False)
-    mass = _optional_number_child(inertial_element, "mass", result, f"{inertial_path}/mass", required=True)
+    automatic = str(inertial_element.attrib.get("auto", "false")).strip().lower()
+    if automatic not in BOOLEAN_VALUES:
+        result.add("error", "invalid_boolean", "inertial auto attribute must be boolean-like", path=inertial_path)
+    calculates_inertia = automatic in {"1", "true", "yes", "on"}
+    mass = _optional_number_child(
+        inertial_element, "mass", result, f"{inertial_path}/mass", required=not calculates_inertia,
+    )
     if mass is not None and mass <= 0:
         result.add("error", "invalid_mass", "inertial mass must be positive", path=f"{inertial_path}/mass")
 
     inertia_element = _first_child(inertial_element, "inertia")
     if inertia_element is None:
+        if calculates_inertia:
+            return
         result.add("warning", "missing_inertia_matrix", "inertial element has mass but no inertia matrix", path=inertial_path)
         return
     components: dict[str, float] = {}

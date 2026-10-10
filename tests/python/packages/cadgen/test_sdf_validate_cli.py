@@ -172,6 +172,44 @@ class SdfValidateCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertIn("error: gz_check_unavailable", output)
 
+    def test_automatic_inertia_can_omit_computed_values(self) -> None:
+        from cadgen import sdf
+
+        for automatic in ("true", "1"):
+            with self.subTest(automatic=automatic):
+                sdf_path = self._write("auto.sdf", f"""
+                    <sdf version="1.12"><model name="automatic"><link name="base">
+                      <inertial auto="{automatic}"/>
+                      <collision name="box"><geometry><box><size>1 1 1</size></box></geometry></collision>
+                    </link></model></sdf>
+                """)
+                result = sdf.validate(sdf_path, strict=True, gz_check="never")
+                self.assertTrue(result.ok, result.issues)
+
+        sdf_path = self._write("manual.sdf", '<sdf version="1.12"><model name="manual"><link name="base"><inertial auto="false"/></link></model></sdf>')
+        result = sdf.validate(sdf_path, gz_check="never")
+        self.assertFalse(result.ok)
+        self.assertIn("missing_number", {issue.code for issue in result.issues})
+
+    def test_automatic_inertia_still_checks_explicit_input(self) -> None:
+        from cadgen import sdf
+
+        for automatic, mass, code in (
+            ("true", "-1", "invalid_mass"),
+            ("true", "nan", "invalid_number"),
+            ("sometimes", "1", "invalid_boolean"),
+            ("", "1", "invalid_boolean"),
+        ):
+            with self.subTest(automatic=automatic, mass=mass):
+                sdf_path = self._write("invalid-auto.sdf", f"""
+                    <sdf version="1.12"><model name="automatic"><link name="base">
+                      <inertial auto="{automatic}"><mass>{mass}</mass></inertial>
+                    </link></model></sdf>
+                """)
+                result = sdf.validate(sdf_path, gz_check="never")
+                self.assertFalse(result.ok)
+                self.assertIn(code, {issue.code for issue in result.issues})
+
     def test_missing_file_fails(self) -> None:
         exit_code, output = self._run(str(self.temp_root / "absent.sdf"), "--gz-check", "never")
         self.assertEqual(exit_code, 1)
