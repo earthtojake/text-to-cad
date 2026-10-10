@@ -4,7 +4,7 @@
 becomes one equivalent steady load, G g on the whole part, with the faces that hit the floor held
 fixed, and that is solved as a static study. Say "estimate" every time you quote it, and say the
 stopping distance or time you assumed: it sets the answer. For a deeper check, `impact` simulates
-the impact itself (coming).
+the impact itself ([impact.md](impact.md)).
 
 ## When to use it
 
