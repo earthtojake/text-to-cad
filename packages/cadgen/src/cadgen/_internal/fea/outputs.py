@@ -127,6 +127,7 @@ def write_glb(
     triangles6: "np.ndarray",
     face_of_triangle: "np.ndarray",
     scale: float,
+    values_attribute: str | None = "_VON_MISES",
     value_range: tuple[float, float],
     extras: dict,
     values_by_part: "np.ndarray | None" = None,
@@ -147,6 +148,11 @@ def write_glb(
     value of its face's part, so a joint's two sides keep their own stress.
     ``part_of_triangle`` also becomes ``_PART`` (float, an index into
     ``extras["parts"]``), one value per vertex; a single part has no ``_PART``.
+
+    ``values`` colour the surface and are written as ``values_attribute``
+    (``_VON_MISES``); ``None`` colours by them without writing them, for a
+    result whose coloured field is already among ``extra_attributes`` or is
+    a vector's magnitude.
 
     ``triangles6`` may be (B, 3), the boundary of linear elements: each is
     written as it is. ``extra_attributes`` are more per-node fields, written
@@ -210,11 +216,12 @@ def write_glb(
         "POSITION": add(pos, target=ARRAY, kind="VEC3", component=FLOAT, bounds=True),
         "NORMAL": add(normals, target=ARRAY, kind="VEC3", component=FLOAT),
         "COLOR_0": add(rgba, target=ARRAY, kind="VEC4", component=UBYTE, normalized=True),
-        "_VON_MISES": add(vals.reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT),
-        "_DISPLACEMENT": add(disp, target=ARRAY, kind="VEC3", component=FLOAT),
-        # Float: a 2-byte scalar would need padding to the 4-byte vertex alignment glTF asks of attributes.
-        "_FACE": add(face.reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT),
     }
+    if values_attribute is not None:
+        attributes[values_attribute] = add(vals.reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT)
+    attributes["_DISPLACEMENT"] = add(disp, target=ARRAY, kind="VEC3", component=FLOAT)
+    # Float: a 2-byte scalar would need padding to the 4-byte vertex alignment glTF asks of attributes.
+    attributes["_FACE"] = add(face.reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT)
     if vertex_part is not None:
         attributes["_PART"] = add(vertex_part.astype(np.float32).reshape(-1, 1), target=ARRAY, kind="SCALAR", component=FLOAT)
     for more in (extra_attributes or {}, *(series or ())):

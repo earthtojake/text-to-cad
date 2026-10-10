@@ -388,8 +388,11 @@ def _stress_lines(s: dict, safety_factor_text) -> list[str]:
 
 def _check_lines(s: dict) -> list[str]:
     """One line per check the study asked for: what it measured against its limit, and whether it passes."""
+    def unit(check: dict) -> str:  # " MPa", or nothing for a unitless check (a safety factor)
+        return f" {check['unit']}" if check["unit"] else ""
+
     return [
-        f"check '{check['label']}': {check['value']:g} {check['unit']} against a {check['limit']:g} {check['unit']} limit, "
+        f"check '{check['label']}': {check['value']:g}{unit(check)} against a {check['limit']:g}{unit(check)} limit, "
         f"{check['ratio']:.2f}× it, {check['status']}"
         for check in s.get("checks", [])
     ]

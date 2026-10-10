@@ -403,6 +403,13 @@ class CliLines(unittest.TestCase):
         self.assertEqual(lines[1], "first mode 85.0 Hz")
         self.assertFalse(any("safety factor" in line for line in lines))
 
+    def test_a_unitless_check_reads_with_single_spaces(self):
+        check = {"label": "Fatigue life", "value": 1.317, "limit": 1.5, "unit": "", "ratio": 0.759, "status": "close"}
+        stress = {"label": "Strength", "value": 77.1, "limit": 250.0, "unit": "MPa", "ratio": 0.31, "status": "passes"}
+        lines = self._result(summary={"safety_factor": 2.5, "checks": [check, stress]}).human_lines()
+        self.assertIn("check 'Fatigue life': 1.317 against a 1.5 limit, 0.76× it, close", lines)
+        self.assertIn("check 'Strength': 77.1 MPa against a 250 MPa limit, 0.31× it, passes", lines)
+
 
 def _cantilever(directory: Path) -> Path:
     from build123d import Align, Box, export_step
@@ -515,6 +522,53 @@ class Golden(unittest.TestCase):
             self.assertEqual(first, second)
             self.assertNotIn("analysis", second)
             self.assertEqual(named.analysis, "static")
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class WrittenAttributes(unittest.TestCase):
+    """What run.py writes beyond static: a study that names no face, and each field under its own attribute only."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.directory = Path(cls._tmp.name)
+        cls.step = _cantilever(cls.directory)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_static_writes_von_mises_beside_displacement_as_before(self):
+        from cadgen import fea
+
+        fixed, loaded = _end_faces(fea.faces(self.step))
+        study = {"material": "steel", "fixtures": [{"faces": [fixed]}], "mesh": {"size_mm": 4.0},
+                 "loads": [{"faces": [loaded], "type": "force", "vector_N": [0, 0, -20]}]}
+        with redirect_stderr(io.StringIO()):
+            result = fea.solve(self.step, self.directory / "static.glb", study=study)
+        gltf, _ = _glb_parts(result.glb)
+        self.assertEqual(list(gltf["meshes"][0]["primitives"][0]["attributes"]),
+                         ["POSITION", "NORMAL", "COLOR_0", "_VON_MISES", "_DISPLACEMENT", "_FACE"])
+
+    def test_a_free_free_modal_study_names_no_face_and_solves_end_to_end(self):
+        from cadgen import fea
+
+        with redirect_stderr(io.StringIO()):
+            result = fea.solve(self.step, self.directory / "free.glb",
+                               study={"analysis": "modal", "material": "steel", "modes": 2, "mesh": {"size_mm": 4.0}})
+        self.assertTrue(result.ok)
+        self.assertEqual((result.analysis, result.occurrence), ("modal", "#o1"))
+        self.assertEqual(result.summary["rigid_body_modes"], 6)
+        self.assertEqual(len(result.summary["modes"]), 2)
+        gltf, _ = _glb_parts(result.glb)
+        attributes = gltf["meshes"][0]["primitives"][0]["attributes"]
+        # The mode shape is a vector: the surface is coloured by its magnitude, and no stress copy rides along.
+        self.assertNotIn("_VON_MISES", attributes)
+        self.assertEqual(gltf["accessors"][attributes["_DISPLACEMENT"]]["type"], "VEC3")
+        self.assertIn("COLOR_0", attributes)
+        listed = [entry["attribute"] for entry in gltf["meshes"][0]["extras"]["fields"]]
+        self.assertEqual(listed, ["_DISPLACEMENT"])
+        self.assertTrue(set(listed) <= set(attributes))
 
 
 if __name__ == "__main__":

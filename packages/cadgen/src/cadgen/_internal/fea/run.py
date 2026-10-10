@@ -43,14 +43,25 @@ def _resolve_faces(scene: "StepScene", refs: "tuple[str, ...]") -> tuple[dict[st
 
 
 def _single_occurrence(
-    scene: "StepScene", resolved: dict[str, "Selection"], owners: set[str]
+    scene: "StepScene", resolved: dict[str, "Selection"], owners: set[str], chosen: str | None = None
 ) -> tuple["Occurrence", dict[str, "Selection"]]:
-    """The one leaf occurrence every face ref belongs to, and each ref resolved."""
+    """The one leaf occurrence every face ref belongs to, and each ref resolved.
+
+    A study that names no face (a free-free modal study) solves ``chosen`` (``--occurrence``), else
+    the document's only part."""
     if len(owners) > 1:
         raise ValueError(
             f"the study's faces span {len(owners)} occurrences ({', '.join(sorted(owners))}); "
             "a study solves one part, so every face must be on the same occurrence"
         )
+    if not owners:
+        if chosen is None:
+            leaves = list(scene.leaves())
+            if len(leaves) != 1:
+                raise ValueError(f"the study names no face and the document has {len(leaves)} parts; "
+                                 "choose one with --occurrence")
+            chosen = leaves[0].ref
+        return scene.resolve(chosen), resolved  # type: ignore[return-value]
     return scene.resolve(next(iter(owners))), resolved  # type: ignore[return-value]
 
 
@@ -570,7 +581,7 @@ def solve_study(
     vtu_path = glb_path.with_suffix(".vtu") if vtu else None
 
     from cadgen._internal.fea import checks
-    from cadgen._internal.fea.mesh import mesh_assembly, mesh_occurrence, require_fea_stack, small_feature_mm
+    from cadgen._internal.fea.mesh import default_mesh_size, mesh_assembly, mesh_occurrence, require_fea_stack, small_feature_mm
 
     require_fea_stack()
     scene = _open(document)
@@ -596,7 +607,7 @@ def solve_study(
                     f"--occurrence {chosen.ref}: the study's faces are also on {', '.join(stray)}; "
                     f"every face must be on {chosen.ref}"
                 )
-        occurrence, resolved = _single_occurrence(scene, resolved, owners)
+        occurrence, resolved = _single_occurrence(scene, resolved, owners, chosen.ref if occurrence is not None else None)
         occurrence_ref = occurrence.ref
         ordinal_of.update({ref: int(selection._ordinal) for ref, selection in resolved.items()})
     else:
@@ -616,48 +627,134 @@ def solve_study(
     from cadgen._internal.fea.femspace import FemSpace
     from cadgen._internal.fea.outputs import RAMP, write_glb, write_vtu
 
-    # Only an order the study chose that is not the default reaches the mesher, so its calls stay today's.
-    mesh_options = {} if parsed.mesh_order == 2 else {"order": parsed.mesh_order}
-    materials = (parsed.material,) if plan is None else tuple(plan.materials)
+    from cadgen._internal.fea import fit
 
-    def mesh_and_solve(max_h: float | None, automatic: bool = False, refine: float = 1.0):
+    materials = (parsed.material,) if plan is None else tuple(plan.materials)
+    requested = mesh_size or parsed.mesh_size
+
+    # The fit-the-budget ladder, before meshing: targets from the study's `fit`, the part's geometry to estimate from.
+    budget = fit.default_budget(parsed.fit)
+    fit_plan = fit.FitPlan(
+        size_mm=requested, order=parsed.mesh_order,
+        allow=None if not parsed.fit or "allow" not in parsed.fit else tuple(parsed.fit["allow"]),
+    )
+    if plan is None:
+        part_shape = occurrence.shape()
+        geometry = fit.geometry_of(part_shape.wrapped, occurrence.ref)
+        geometry.bbox_diagonal_mm = float(part_shape.bounding_box().diagonal)
+    else:
+        geometry = fit.merge_geometry([fit.geometry_of(part.shape, part.ref, keep_shape=False) for part in plan.parts])
+    fit_plan.requested_mm = requested or default_mesh_size(geometry.bbox_diagonal_mm)
+
+    def context(volume, *, space=None, automatic=False, meshed=None):
+        return SolveContext(
+            volume=volume, materials=materials, ordinal_of=ordinal_of, space=space, log=logger.debug,
+            automatic=automatic, upstream={}, budget=budget, plan=fit_plan,
+            study=parsed, assembly=plan, part_name=document.stem, geometry=geometry, meshed_plan=meshed,
+        )
+
+    def ladder(ctx, *, tail: bool) -> list:
+        try:
+            return fit.fit_budget(analysis, ctx, inputs, tail=tail)
+        except NotImplementedError:  # an analysis that cannot estimate yet takes no rung
+            return []
+
+    steps = ladder(context(None), tail=False)
+
+    def mesh(max_h: float | None, refine: float = 1.0, size_field: dict | None = None):
+        # Only what differs from the default reaches the mesher, so a study the ladder left alone meshes as before.
+        options: dict = {} if fit_plan.order == 2 else {"order": fit_plan.order}
+        if size_field:
+            options["size_field"] = size_field
         logger.debug(f"meshing {occurrence_ref}")
         if plan is None:
-            volume = mesh_occurrence(occurrence, max_h=max_h, refine=refine, **mesh_options)
+            if fit_plan.prepared is not None:
+                options["prepared"] = fit_plan.prepared
+            volume = mesh_occurrence(occurrence, max_h=max_h, refine=refine, **options)
         else:
-            volume = _mesh_assembly(mesh_assembly, scene, plan, parsed, resolved, ordinal_of, max_h, logger.info, refine, **mesh_options)
+            volume = _mesh_assembly(mesh_assembly, scene, plan, parsed, resolved, ordinal_of, max_h, logger.info, refine, **options)
         logger.debug(f"meshed: {len(volume.tets)} tets, {len(volume.nodes)} nodes, size {volume.max_h:.3g} mm in {volume.seconds:.1f}s")
+        return volume
+
+    def solve_on(volume, automatic: bool = False):
         started = time.perf_counter()
-        space = FemSpace.build(volume, parsed.mesh_order)
+        space = FemSpace.build(volume, fit_plan.order)
         built = time.perf_counter() - started
-        ctx = SolveContext(
-            volume=volume, materials=materials, ordinal_of=ordinal_of, space=space, log=logger.debug,
-            automatic=automatic, upstream={}, budget=None, plan=None,
-            study=parsed, assembly=plan, part_name=document.stem,
-        )
+        ctx = context(volume, space=space, automatic=automatic, meshed=fit._mesh_key(fit_plan))
         # Each upstream analysis on the same element space first, from the same study document.
         for name in analysis.upstream:
             upstream = get_analysis(name)
             ctx.upstream[name] = upstream.solve(ctx, upstream.parse(parsed.source))
         result = analysis.solve(ctx, inputs)
         result.timings["mesh_to_fem_s"] = result.timings.get("mesh_to_fem_s", 0.0) + built
-        return volume, ctx, result
+        # The analysis may hand back a different mesh (a symmetric half mirrored into the whole part).
+        return ctx.volume, ctx, result
+
+    def mesh_and_solve(max_h: float | None, automatic: bool = False, refine: float = 1.0):
+        return solve_on(mesh(max_h, refine), automatic)
 
     try:
-        volume, ctx, result = mesh_and_solve(mesh_size or parsed.mesh_size)
+        volume = mesh(fit_plan.size_mm)
+        # The ladder again, on the mesh's own counts: a mesh the geometry under-guessed may still take a rung.
+        key = fit._mesh_key(fit_plan)
+        steps += ladder(context(volume, meshed=key), tail=True)
+        if fit._mesh_key(fit_plan) != key:
+            volume = mesh(fit_plan.size_mm)
+        volume, ctx, result = solve_on(volume)
     except _NotConnected as exc:
         return _unsolved(document, occurrence_ref, _not_connected(plan, exc.groups, logger))
     refined = None
     finer_failure = None
     finer_size = None
     finer_written = False
-    if analysis.needs_finer(result, inputs, []):
+    if fit_plan.two_pass:
+        # local_refine's second pass: fine where the coarse pass peaked, coarse away from it.
+        first = result
+        _, first_value = fit.governing(analysis, first)
+
+        def estimate_with(field):
+            saved, fit_plan.size_field = fit_plan.size_field, field
+            try:
+                return analysis.estimate(context(None), inputs)
+            finally:
+                fit_plan.size_field = saved
+
+        field = fit.refine_field(analysis, ctx, inputs, first, budget, estimate_with)
+        fit_plan.size_field = field
+        refined = analysis.refined_record(first, volume.max_h, fit_plan.refine_to_mm, assembly=plan is not None) \
+            if hasattr(analysis, "refined_record") else None
+        logger.debug(f"local refine: solving again at {fit_plan.refine_to_mm:.3g} mm near the peak")
+        volume, ctx, result = solve_on(mesh(fit_plan.size_mm, size_field=field))
+        _, second_value = fit.governing(analysis, result)
+        if refined is not None:
+            result = analysis.merge_finer(first, result, refined)
+            finer_written = True
+        word = getattr(analysis, "governing_word", "the peak")
+        kept = tuple(volume.faces[o].ref for o in sorted(field.get("faces", {})) if o in volume.faces)
+        steps = [dataclasses.replace(fit.pass_step(s, first_value, second_value, word), faces=kept) if s.rung == "local_refine" else s
+                 for s in steps]
+    elif analysis.needs_finer(result, inputs, []):
         finer_size = finer_mesh_size(volume.max_h, result.dofs)
         if finer_size is None:
             finer_failure = (
                 f"the part's {result.dofs:,} degrees of freedom at {volume.max_h:g} mm leave no room under the "
                 f"{solve.DOF_LIMIT:,} limit for a finer solve; its convergence is unchecked"
             )
+        elif steps:
+            # A model the ladder adapted re-solves finer only when that, too, fits the budget.
+            saved = fit_plan.size_mm
+            fit_plan.size_mm = finer_size
+            try:
+                finer_estimate = analysis.estimate(context(None), inputs)
+            finally:
+                fit_plan.size_mm = saved
+            if not finer_estimate.fits(budget):
+                steps.append(fit.Step(
+                    fit.TAIL, "Did not re-solve finer to stay in budget, so the peak's convergence is unchecked",
+                    "a finer mesh may still move the peak by 10% or more", None,
+                    detail={"finer_size_mm": round(finer_size, 4)},
+                ))
+                finer_size = None
     if finer_size is not None:
         refined = analysis.refined_record(result, volume.max_h, finer_size, assembly=plan is not None)
         logger.debug(f"close to the limit: solving again at {finer_size:.3g} mm")
@@ -678,8 +775,15 @@ def solve_study(
             finer_written = True
             if first.dofs > solve.DOF_WARN:  # the person's own size was already large
                 result.warnings.insert(0, solve.dof_warning(first.dofs, automatic=False, small_feature_mm=first_small))
+    if fit_plan.order == 1 and any(s.rung == "linear_elements" for s in steps):
+        steps = [fit.measure_linear(analysis, s, budget, geometry, fit_plan, mesh, solve_on, context, inputs)
+                 if s.rung == "linear_elements" else s for s in steps]
+    result.steps = list(steps)
 
-    findings = analysis.findings(ctx, result, inputs, [], assembly=plan is not None)
+    # Each check of the study (`Study.checks`) judged on the written solve, in the study's order,
+    # before the findings: an analysis's own check findings (thermal's temperature_over_limit) read them.
+    check_results = [analysis.judge(check, index, ctx, result, inputs) for index, check in enumerate(parsed.checks)]
+    findings = analysis.findings(ctx, result, inputs, check_results, assembly=plan is not None)
     if plan is not None:
         name_of = {part.ref: plan.names[i] for i, part in enumerate(plan.parts)}
         findings += [checks.default_material(plan.names[i], plan.materials[i].name) for i in plan.defaulted]
@@ -695,8 +799,9 @@ def solve_study(
         ]
         findings.sort(key=lambda finding: finding["severity"] != "error")
 
-    # Each check of the study (`Study.checks`) judged on the written solve, in the study's order.
-    check_results = [analysis.judge(check, index, ctx, result, inputs) for index, check in enumerate(parsed.checks)]
+    # Each ladder step is an info finding for the agent, after everything an engineer would say.
+    findings += [step.finding() for step in steps]
+
     if check_found := checks.check_findings(check_results, assembly=plan is not None):
         findings = sorted(findings + check_found, key=lambda finding: finding["severity"] != "error")
     material = parsed.material
@@ -720,7 +825,8 @@ def solve_study(
 
     ranges = analysis.field_ranges(summary, result)
     fields = [_field_entry(spec, *ranges[spec.name], static=static) for spec in analysis.fields if spec.name in ranges]
-    primary = next(spec for spec in analysis.fields if spec.components == 1)
+    # The field the surface is coloured by: the first scalar field, else the first field's magnitude (a mode shape).
+    primary = next((spec for spec in analysis.fields if spec.components == 1), analysis.fields[0])
     extras = {
         "name": analysis.extras_name(document.stem),
         "generator": "cadgen fea",
@@ -772,7 +878,7 @@ def solve_study(
     echo.update(analysis.study_echo(inputs, bare))
     echo["mesh"] = {
         "size_mm": round(volume.max_h, 4),
-        "order": parsed.mesh_order,
+        "order": fit_plan.order,
         "elements": int(len(volume.tets)),
         "refined_from_mm": refined["from_size_mm"] if finer_written else None,
     }
@@ -782,12 +888,22 @@ def solve_study(
     if parsed.view is not None:
         # The agent's controls, presets and markers for the result, as the study checked them.
         extras["view"] = parsed.view
+    fit_steps = [step.as_dict() for step in steps]
+    if fit_steps:
+        # What the fit-the-budget ladder did to make this run fit, in order; omitted when it did nothing.
+        extras["fit"] = fit_steps
     if not static:
         extras["analysis"] = _analysis_extras(analysis, result)
         if result.series is not None:
             extras["series"] = _series_extras(result.series)
 
-    # The first scalar field colours the surface; every other field rides along as its own attribute.
+    # The primary field colours the surface. Its values go into `_VON_MISES` only when that is its own
+    # attribute (static and the stress family, each part's own stress in an assembly); every field rides
+    # along under its own attribute, so a temperature or a life carries no mislabelled stress copy.
+    colour = result.fields[primary.name]
+    if primary.components == 3:
+        colour = np.linalg.norm(colour, axis=1)
+    stress_coloured = primary.attribute == "_VON_MISES"
     written = {"_VON_MISES", "_DISPLACEMENT"}
     extra_attributes = {}
     if not static:
@@ -803,12 +919,13 @@ def solve_study(
                 if name in result.frame_fields and attribute not in written and attribute not in extra_attributes
             })
     deformation = result.deformation if result.deformation is not None else np.zeros_like(result.dof_locations)
-    by_part = result.fields_by_part.get(primary.name)
+    by_part = result.fields_by_part.get(primary.name) if primary.components == 1 else None
     write_glb(
         glb_path,
         positions=result.dof_locations,
         displacement=deformation,
-        values=result.fields[primary.name],
+        values=colour,
+        values_attribute="_VON_MISES" if stress_coloured else None,
         triangles6=result.boundary_quadratic,
         face_of_triangle=face_of_triangle,
         scale=scale if scale is not None else 1.0,
@@ -828,7 +945,7 @@ def solve_study(
             positions=result.dof_locations[:vertex_count],
             tets=result.tets,
             displacement=deformation[:vertex_count],
-            values=result.fields[primary.name][:vertex_count],
+            values=colour[:vertex_count],
         )
 
     mesh_info = {
@@ -836,7 +953,7 @@ def solve_study(
         "nodes": int(len(volume.nodes)),
         "dofs": result.dofs,
         "size_mm": round(volume.max_h, 4),
-        "order": parsed.mesh_order,
+        "order": fit_plan.order,
         "mesher": "netgen",
         "solver": result.solver,
     }
@@ -872,6 +989,7 @@ def solve_study(
         "refined": refined,
         "files": {"glb": glb_path.name, "vtu": vtu_path.name if vtu_path else None},
         **({} if parsed.view is None else {"view": parsed.view}),
+        **({} if not fit_steps else {"fit": fit_steps}),
     }
     if not static:
         sidecar.update({
@@ -896,4 +1014,5 @@ def solve_study(
         warnings=tuple(warnings),
         findings=tuple(findings),
         analysis=analysis.name,
+        fit=tuple(fit_steps),
     )

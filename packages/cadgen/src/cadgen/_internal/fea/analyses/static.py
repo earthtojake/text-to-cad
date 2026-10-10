@@ -168,6 +168,32 @@ def _peak_face(
     return volume.faces[ordinals[0]].ref if ordinals else None
 
 
+def _unfold(volume, outcome, planes):
+    """The solved half (or quarter) mirrored back into the whole part: its mesh and every field the checks read."""
+    import dataclasses
+
+    import numpy as np
+
+    from cadgen._internal.fea import symmetry
+
+    for plane in reversed(planes):
+        whole, keep = symmetry.unfold_volume(volume, plane)
+        locations, scalars, vectors, boundary, tets, elements, vertices = symmetry.unfold_fields(
+            plane, outcome.vertices, outcome.dof_locations, keep, scalars={"von_mises": outcome.von_mises},
+            vectors={"displacement": outcome.displacement}, boundary=outcome.boundary_quadratic, tets=outcome.tets,
+            element_dofs=outcome.element_dofs,
+        )
+        outcome = dataclasses.replace(
+            outcome, dof_locations=locations, von_mises=scalars["von_mises"], displacement=vectors["displacement"],
+            boundary_quadratic=boundary, tets=tets, element_dofs=elements, vertices=vertices,
+            element_von_mises_gauss=np.concatenate([outcome.element_von_mises_gauss] * 2),
+            reactions=[symmetry.unfold_force(plane, r) for r in outcome.reactions],
+            applied=symmetry.unfold_force(plane, outcome.applied), u=None,
+        )
+        volume = whole
+    return volume, outcome
+
+
 def _floored(factor: float | None) -> float | None:
     # Floored, so a factor just under a threshold is never shown as reaching it.
     return None if factor is None else math.floor(factor * 1000) / 1000
@@ -195,6 +221,8 @@ class StaticAnalysis:
     ladder: ClassVar[tuple[str, ...]] = ("iterative", "local_refine", "defeature", "linear_elements", "idealise", "symmetry")
     #: The noun of the viewer's load control and the verdict's takeaway ("OK up to 1.6× this load").
     noun: ClassVar[str] = "this load"
+    #: What the ladder's two passes compare, in its words ("peak stress moved 2.1% between ...").
+    governing_word: ClassVar[str] = "peak stress"
 
     # -- parse ---------------------------------------------------------------------------------------
 
@@ -206,17 +234,50 @@ class StaticAnalysis:
         needs = frozenset({"density"}) if any(load.body for load in loads) else frozenset()
         return StaticInputs(refs, anchors, True, fixtures=fixtures, loads=loads, material_needs=needs)
 
-    # -- the ladder (fit.py drives these; until it exists nothing is taken) -------------------------
+    # -- the ladder (fit.py drives these) -------------------------------------------------------------
 
     def estimate(self, ctx: SolveContext, inputs: StaticInputs):
-        raise NotImplementedError("the fit-the-budget ladder's estimates arrive with fit.py")
+        """One elastic solve on the plan's mesh (fit.solid_estimate): the space, the matrix, the solver's own."""
+        from cadgen._internal.fea import fit
+
+        return fit.solid_estimate(ctx)
 
     def apply(self, rung, ctx: SolveContext, inputs: StaticInputs):
-        return None
+        from cadgen._internal.fea import fit
+
+        return fit.apply_generic(rung, self, ctx, inputs)
+
+    def symmetric_about(self, plane, inputs: StaticInputs, ctx: SolveContext) -> bool:
+        """Whether every fixture, load and check is its own mirror image about ``plane``: the same set of
+        faces, and no force or body load across it. One part only."""
+        if ctx.assembly is not None:
+            return False
+        axis = plane.component
+
+        def maps_onto_itself(refs) -> bool:
+            ordinals = {ctx.ordinal_of[ref] for ref in refs}
+            return {plane.mirror.get(o) for o in ordinals} == ordinals
+
+        checks = ctx.study.checks if ctx.study is not None else ()
+        groups = [fixture.faces for fixture in inputs.fixtures] + [load.faces for load in inputs.surface_loads]
+        groups += [tuple(check["faces"]) for check in checks if check.get("faces")]
+        if not all(maps_onto_itself(group) for group in groups):
+            return False
+        for load in inputs.loads:
+            vector = load.vector_g if load.body else (load.vector if load.type == "force" else None)
+            if vector is not None and abs(vector[axis]) > 1e-9 * max(math.sqrt(sum(c * c for c in vector)), 1e-300):
+                return False
+        return True
+
+    def governing(self, result: AnalysisResult):
+        """local_refine follows the stress field; two passes compare the weakest part's peak."""
+        return result.fields["von_mises"], self.weakest(result).peak_MPa
 
     # -- solve ---------------------------------------------------------------------------------------
 
     def solve(self, ctx: SolveContext, inputs: StaticInputs) -> AnalysisResult:
+        import dataclasses
+
         from cadgen._internal.fea import solve
 
         volume, study, plan = ctx.volume, ctx.study, ctx.assembly
@@ -227,9 +288,23 @@ class StaticAnalysis:
         if ctx.space is not None:
             extra["space"] = ctx.space
         loads = study.loads if not extra.get("body_loads") else inputs.surface_loads
+        fit_plan = ctx.plan
+        planes = list(fit_plan.prepared.planes) if fit_plan is not None and fit_plan.prepared is not None else []
+        if fit_plan is not None and fit_plan.solver != "direct":
+            extra["solver"] = fit_plan.solver
+        if planes:
+            # The half carries its share of each force (its faces are that share of the faces); a pressure,
+            # a body load and a fixture act on what is there. The cut faces may slide in their plane only.
+            share = 0.5 ** len(planes)
+            loads = tuple(dataclasses.replace(load, vector=tuple(share * c for c in load.vector)) if load.type == "force" else load
+                          for load in loads)
+            extra["rollers"] = [((p.ordinal,), p.component) for p in planes]
         outcome = solve.solve_linear_static(
             volume, materials, inputs.fixtures, loads, ctx.ordinal_of, log=ctx.log, automatic=ctx.automatic, **extra
         )
+        if planes:
+            volume, outcome = _unfold(volume, outcome, planes)
+            ctx.volume = volume
         if plan is None:
             solved = [_solved(volume, outcome, study, ctx.ordinal_of, ctx.part_name, inputs.fixtures)]
         else:

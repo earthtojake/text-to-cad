@@ -31,7 +31,8 @@ if TYPE_CHECKING:
 
 __all__ = ["SolveOutcome", "solve_linear_static"]
 
-#: Above this many free DOF the command refuses rather than swap the machine.
+#: Above this many DOF the automatic finer re-solve is not taken (:func:`run.finer_mesh_size`). A first
+#: solve this large is never refused: the fit ladder (fit.py) chose its solver and its mesh to fit.
 DOF_LIMIT = 1_500_000
 #: Above this many it warns that the solve will be slow.
 DOF_WARN = 400_000
@@ -124,10 +125,10 @@ def _project_on_elements(scalar, field: "np.ndarray", rows: "np.ndarray") -> "np
     """
     import numpy as np
     import scipy.sparse.linalg as spla
-    from skfem import Basis, BilinearForm, ElementTetP2, LinearForm, asm
+    from skfem import Basis, BilinearForm, LinearForm, asm
 
     elements = np.flatnonzero(rows)
-    own = Basis(scalar.mesh, ElementTetP2(), elements=elements, quadrature=scalar.quadrature, dofs=scalar.dofs)
+    own = Basis(scalar.mesh, scalar.elem, elements=elements, quadrature=scalar.quadrature, dofs=scalar.dofs)
     used = np.unique(own.element_dofs)
 
     @BilinearForm
@@ -163,6 +164,7 @@ def solve_linear_static(
     facet_pressures: "np.ndarray | None" = None,
     solver: str | None = None,
     space: "FemSpace | None" = None,
+    rollers: "Sequence[tuple[Sequence[int], int]]" = (),
 ) -> SolveOutcome:
     """Solve one study on a meshed occurrence. ``ordinal_of`` maps face refs to ordinals.
 
@@ -180,6 +182,8 @@ def solve_linear_static(
     positive pushing in) per row of ``volume.boundary``. ``solver`` forces
     ``"direct"``, ``"iterative"`` or ``"matrix_free"``; ``space`` reuses a
     :class:`~cadgen._internal.fea.femspace.FemSpace` built on ``volume``.
+    ``rollers`` hold one displacement component on faces given by mesh ordinal, ``(ordinals,
+    component)`` each: a symmetry plane's (fit's ``symmetry`` rung). They carry no reaction.
     """
     import numpy as np
     from cadgen._internal.fea import operators
@@ -196,11 +200,6 @@ def solve_linear_static(
     timings["mesh_to_fem_s"] = time.perf_counter() - started
     if log:
         log(f"element mesh: {mesh.t.shape[1]} tets, {basis.N} DOF")
-    if basis.N > DOF_LIMIT:
-        raise RuntimeError(
-            f"{basis.N} degrees of freedom is past the {DOF_LIMIT} limit; raise mesh.size_mm "
-            f"(now {volume.max_h:.3g} mm) and run again"
-        )
     if basis.N > DOF_WARN:
         warnings.append(dof_warning(basis.N, automatic, small_feature_mm(volume)))
     locations, component = space.locations, space.component
@@ -257,7 +256,11 @@ def solve_linear_static(
 
     # Fixtures
     fixture_dofs = [basis.get_dofs(facets_of(fixture.faces)).all() for fixture in fixtures]
-    fixed = np.unique(np.concatenate(fixture_dofs))
+    held = list(fixture_dofs)
+    for ordinals, axis in rollers:
+        dofs = basis.get_dofs(space.facets_of_ordinals(list(ordinals), "a symmetry plane")).all()
+        held.append(dofs[space.component[dofs] == axis])
+    fixed = np.unique(np.concatenate(held))
     free = np.setdiff1d(np.arange(basis.N), fixed)
 
     started = time.perf_counter()

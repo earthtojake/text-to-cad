@@ -274,12 +274,15 @@ def _generate(geometry, ngocc, h: float, refine: float, order: int, size_field: 
 
 def mesh_occurrence(
     occurrence: "Occurrence", *, max_h: float | None = None, refine: float = 1.0, order: int = 2,
-    size_field: dict | None = None,
+    size_field: dict | None = None, prepared=None,
 ) -> VolumeMesh:
     """Mesh one placed occurrence with second-order tetrahedra (``order=1``: first-order, 4 nodes).
 
     ``refine`` also shrinks the elements at curved features by that ratio (:func:`_meshing`).
     ``size_field`` sets local sizes, faces by cadgen ordinal (:func:`_generate`).
+    ``prepared`` (:class:`~cadgen._internal.fea.defeature.Prepared`, the fit ladder's) meshes its shape
+    instead -- the part defeatured, or a symmetric half -- each of its faces under the occurrence's
+    ordinal it came from (a symmetry plane under its own), so the study's faces mean the same faces.
     """
     require_fea_stack()
     import numpy as np
@@ -289,6 +292,12 @@ def mesh_occurrence(
     shape = occurrence.shape()
     fingerprints = occurrence_fingerprints(occurrence)
     diagonal = float(shape.bounding_box().diagonal)
+    origin = None
+    if prepared is not None:
+        from cadgen._internal.fea.assembly import part_faces
+
+        own = [FaceFingerprint(f"face {k}", k, *_area_center(face)) for k, face in enumerate(part_faces(prepared.shape), 1)]
+        faces_of_occurrence, fingerprints, origin = fingerprints, own, list(prepared.origin)
     if not diagonal > 0:
         raise RuntimeError(f"{occurrence.ref} has no volume to mesh")
     h = float(max_h) if max_h else default_mesh_size(diagonal)
@@ -299,14 +308,16 @@ def mesh_occurrence(
 
     with tempfile.TemporaryDirectory(prefix="cadgen-fea-") as tmp:
         brep = Path(tmp) / "occurrence.brep"
-        _write_brep(shape.wrapped, brep)
+        _write_brep(shape.wrapped if prepared is None else prepared.shape, brep)
         # netgen's C++ side prints to fd 1, the JSON result channel of every door.
         with kernel_messages_on_stderr():
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
             mapping = _match_faces(fingerprints, list(geometry.faces), diagonal)
-            mesh = _generate(geometry, ngocc, h, refine, order, size_field,
-                             {index: [ordinal] for index, ordinal in mapping.items()})
+            if origin is not None:  # netgen face -> the prepared shape's own face -> the occurrence's ordinal
+                mapping = {index: origin[own - 1] for index, own in mapping.items()}
+            keys = {index: [ordinal] for index, ordinal in mapping.items()}
+            mesh = _generate(geometry, ngocc, h, refine, order, size_field, keys)
             # Copies, deliberately: netgen hands out views into the mesh
             # object's own memory, and the mesh does not outlive this block.
             coordinates = np.array(mesh.Coordinates(), dtype=float, copy=True)
@@ -327,7 +338,7 @@ def mesh_occurrence(
         tets=np.ascontiguousarray(e3["nodes"][:, :width].astype(np.int64) - 1),
         boundary=np.ascontiguousarray(e2["nodes"][:, :6 if order == 2 else 3].astype(np.int64) - 1),
         boundary_ordinal=ordinal_of[e2["index"].astype(np.int64)],
-        faces={fp.ordinal: fp for fp in fingerprints},
+        faces={fp.ordinal: fp for fp in (fingerprints if prepared is None else faces_of_occurrence)},
         max_h=h,
         bbox_diagonal=diagonal,
         seconds=time.perf_counter() - started,

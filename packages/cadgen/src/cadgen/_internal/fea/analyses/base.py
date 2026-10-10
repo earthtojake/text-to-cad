@@ -92,6 +92,8 @@ class SolveContext:
     study: Any = None                      # the parsed study.Study (material, margin, loads as written)
     assembly: Any = None                   # run's assembly plan (parts, names, materials); None for one part
     part_name: str = ""                    # one part's name in findings (the document's stem)
+    geometry: Any = None                   # fit.Geometry: what the ladder estimates from before meshing
+    meshed_plan: Any = None                # the plan key ``volume`` was meshed with (fit counts it, not the geometry)
 
 
 @dataclass
@@ -101,7 +103,9 @@ class AnalysisResult:
     tets: "np.ndarray"
     boundary_quadratic: "np.ndarray"       # (B, 6), or (B, 3) for linear elements
     element_dofs: "np.ndarray"
-    fields: dict[str, "np.ndarray"]        # by FieldSpec.name: (M,) or (M, 3), the default frame
+    # By FieldSpec.name: (M,) or (M, 3). For a series result, frame 0 (whatever ``series.default`` the
+    # viewer opens on): run.py writes it under the field's own attribute, the other frames after it.
+    fields: dict[str, "np.ndarray"]
     fields_by_part: dict[str, "np.ndarray"] = field(default_factory=dict)  # assembly per-part scalar
     deformation: "np.ndarray | None" = None   # (M, 3) baked into POSITION and written as _DISPLACEMENT
     series: Series | None = None
