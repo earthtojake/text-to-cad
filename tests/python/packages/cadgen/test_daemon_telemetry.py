@@ -103,6 +103,7 @@ class DaemonTelemetryTest(unittest.TestCase):
              "seconds": 1.0, "longest": 1.0},
             {"name": "build", "kind": "kicad_pcb", "via": "script", "count": 1, "failed": 0, "crashed": 0, "cancelled": 0, "cached": 0,
              "seconds": 3.0, "longest": 3.0},
+            {"name": "build_failure", "kind": "harness", "via": "script", "reason": "other", "count": 1},
         ])
 
     def test_a_jobs_crashes_and_its_reuse_ride_its_exit_frame(self) -> None:
