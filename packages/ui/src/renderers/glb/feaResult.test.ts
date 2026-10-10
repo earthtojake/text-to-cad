@@ -480,6 +480,14 @@ describe('the study\'s view', () => {
     expect(controls[0]).toMatchObject({ min: 0, max: 2, defaultValue: 1 });
   });
 
+  it('falls back to the default controls when the view names none this viewer can draw, and its presets set them', () => {
+    for (const controls of [[], [{ drives: 'gravity', type: 'number', max: 2 }]]) {
+      expect(feaControls(withView({ controls })).map((control: any) => control.id)).toEqual(['field', 'deformation']);
+    }
+    const result = withView({ presets: [{ label: 'Exaggerated', deformation: 30, field: 'displacement' }] });
+    expect(feaPresets(result, feaControls(result))[0].values).toEqual({ field: '_displacement', deformation: 30 });
+  });
+
   it('names its presets as full states over the controls, and says which markers it draws', () => {
     const result = withView(VIEW);
     const presets = feaPresets(result, feaControls(result));

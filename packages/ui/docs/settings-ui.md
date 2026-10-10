@@ -582,7 +582,7 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     Mises stress, is the colour bar's), **deformation** (how many times the displacement is drawn,
     "×12.0"), **load_scale** (the load as a multiple of the solved one, "×1.50") and **threshold**
     (values of its field under it drawn neutral grey, "138 MPa"). A control whose `drives` or type
-    the viewer does not know is skipped. With no `view`, Result is as it always was: a Field select
+    the viewer does not know is skipped. With no `view`, or none of its controls the viewer can draw (an empty list, or all from a newer cadgen), Result is as it always was, and a preset may set those two: a Field select
     with no visible label over every field, opening on stress, and a Deformation slider with its
     committed number, from 0 to four times the file's own exaggeration. When the view names
     `presets`, a **Preset** row leads Result, the Position panel's Pose row (`KinematicsPoseRow`)

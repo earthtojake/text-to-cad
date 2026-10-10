@@ -456,14 +456,16 @@ const finiteNumber = (value) => typeof value === "number" && Number.isFinite(val
  * the displacement is drawn), `load_scale` (the load as a multiple of the solved one) and
  * `threshold` (values of its `field` under it drawn grey). They are the study's `view.controls`, in
  * its order, with its labels and ranges; one whose `drives` or `type` this viewer does not know, or
- * whose range or fields it cannot use, is skipped. With no view, the viewer's own: a field select
+ * whose range or fields it cannot use, is skipped. With no view, or none of its controls this viewer
+ * can draw (an empty list, or all from a newer cadgen), the viewer's own: a field select
  * over every field, opening on the first (stress), and a deformation slider from 0 to four times the
  * file's own scale. The view's are labelled in the agent's words, often a sentence: their labels run
  * over the whole row (`wideLabel`), where the default two keep the one-column look they always had.
  */
 export function feaControls(result) {
   const every = result.fields.map((entry) => entry.attribute);
-  if (!result.view?.controls) {
+  const chosen = result.view?.controls ? viewControls(result, every) : [];
+  if (!chosen.length) {
     const range = deformationRange(result.deformationScale);
     return [
       { id: "field", drives: "field", type: "enum", label: "Field", ariaLabel: "Result field", hideLabel: true,
@@ -473,6 +475,11 @@ export function feaControls(result) {
         defaultValue: clamp(result.deformationScale, range.min, range.max), unit: "×" },
     ];
   }
+  return chosen;
+}
+
+/** The view's controls this viewer can draw, in its order; none when it names none it knows. */
+function viewControls(result, every) {
   const controls = [];
   for (const raw of result.view.controls) {
     const drives = raw.drives;
