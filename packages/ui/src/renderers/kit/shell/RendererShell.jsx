@@ -110,10 +110,10 @@ export default function RendererShell({ shell, tools, toolPanels = null, referen
   const { previewing, setPreviewing } = shell;
   const animation = frame.animation;
   const hasAnimation = animationControlsHaveContent(animation);
-  // Speed and Loop, once chosen in Playback settings — the playbar's, or the Animation tool's — are
-  // the file's: its routine plays with them, whatever it authored, until they are chosen again.
-  // Unset, the routine's own apply.
-  const { speed: chosenSpeed, loop: chosenLoop } = shell.playback;
+  // Speed and Loop, once chosen in the mode on screen — the Animation tool's, the file's, or preview's
+  // Playback settings, preview's alone — are what its routine plays with, whatever it authored, until
+  // they are chosen again. Unset, the routine's own apply.
+  const { speed: chosenSpeed, loop: chosenLoop } = shell.routinePlayback;
   const animationRef = useRef(animation);
   animationRef.current = animation;
   useEffect(() => {
@@ -122,11 +122,11 @@ export default function RendererShell({ shell, tools, toolPanels = null, referen
     if (chosenSpeed != null && Number(runtime.speed) !== chosenSpeed) runtime.onSpeedChange(chosenSpeed);
     if (chosenLoop != null && (runtime.loopEnabled !== false) !== chosenLoop) runtime.onLoopToggle(chosenLoop);
   }, [hasAnimation, animation?.speed, animation?.loopEnabled, animation?.activeClipId, chosenSpeed, chosenLoop]);
-  // What those settings change is chosen for the file and applied to its routine at once.
+  // What those settings change is chosen for the mode on screen and applied to its routine at once.
   const playbackRuntime = hasAnimation ? {
     ...animation,
-    onSpeedChange: value => { shell.setPlayback({ speed: value }); animation.onSpeedChange(value); },
-    onLoopToggle: value => { shell.setPlayback({ loop: value }); animation.onLoopToggle(value); }
+    onSpeedChange: value => { shell.chooseRoutinePlayback({ speed: value }); animation.onSpeedChange(value); },
+    onLoopToggle: value => { shell.chooseRoutinePlayback({ loop: value }); animation.onLoopToggle(value); }
   } : null;
   // Preview orbits the model from the moment it starts, unless the file's Orbit says otherwise:
   // orbit on or off is the file's, kept from one preview to the next.

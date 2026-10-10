@@ -295,12 +295,20 @@ export function useStepMotionControls({
     activatePositionControls();
   }, [activatePositionControls]);
   // Preview's routine is its own (`kit/shell/useRendererShell.js`): the tools view's is saved as it
-  // stands — which routine, where its clock is, whether it plays — and handed back as it was. A
-  // routine that owned the pose takes it again, Position's values set aside as before.
+  // stands — which routine, where its clock is, whether it plays, its Speed and Loop — and handed
+  // back as it was. A routine that owned the pose takes it again, Position's values set aside as before.
   const savePlayback = useCallback(() => {
-    const { activeClipId, enabled, playing, elapsedSec } = animationStateRef.current;
-    return { activeClipId, enabled, playing, elapsedSec: playing ? getAnimationClock() : elapsedSec };
+    const { activeClipId, enabled, playing, elapsedSec, speed, loopEnabled } = animationStateRef.current;
+    return { activeClipId, enabled, playing, elapsedSec: playing ? getAnimationClock() : elapsedSec, speed, loopEnabled };
   }, [getAnimationClock]);
+  // Preview opens on the routine at rest, at its own Speed and Loop, whatever the tools view chose.
+  const resetPlayback = useCallback(() => {
+    releaseAnimation();
+    const clip = findAnimationClip(selectedAnimationClips, animationStateRef.current.activeClipId);
+    const nextState = { ...animationStateRef.current, speed: 1, loopEnabled: clip ? clip.loop !== false : true };
+    animationStateRef.current = nextState;
+    setAnimationState(nextState);
+  }, [releaseAnimation, selectedAnimationClips]);
   const restorePlayback = useCallback((saved) => {
     const clip = findAnimationClip(selectedAnimationClips, saved?.activeClipId);
     if (!clip) return;
@@ -308,7 +316,8 @@ export function useStepMotionControls({
     if (saved.enabled !== false) activateAnimationControls();
     else motionRevisionRef.current += 1;
     const nextState = { ...animationStateRef.current, activeClipId: clip.id, enabled: saved.enabled !== false,
-      playing: saved.enabled !== false && saved.playing === true, elapsedSec };
+      playing: saved.enabled !== false && saved.playing === true, elapsedSec,
+      speed: clampAnimationSpeed(saved.speed), loopEnabled: saved.loopEnabled !== false };
     animationStateRef.current = nextState;
     setAnimationState(nextState);
     setAnimationClock(elapsedSec);
@@ -317,5 +326,5 @@ export function useStepMotionControls({
   return { handleStepModuleParameterChange, applyStepModuleParameterValues, handleResetStepModuleParameters,
     handleApplyPose, handleAnimationClipSelect, handleAnimationPlayToggle, handleAnimationRestart,
     handleAnimationScrub, handleAnimationSpeedChange, handleAnimationLoopToggle, resetMotion, resetPosition,
-    releaseAnimation, savePlayback, restorePlayback };
+    releaseAnimation, savePlayback, resetPlayback, restorePlayback };
 }

@@ -89,8 +89,9 @@ export function RoutineMenu({ animation, onOpenChange }) {
 /**
  * The playbar's Playback settings, at its right end: a cog whose dropdown opens up from it, with
  * the routine's **Speed**, **Loop**, and **Autoplay** (whether entering preview starts it). Ticking
- * a checkbox leaves the menu open. They are the settings the Animation tool's panel holds too
- * (`playbar/AnimationPanel.jsx`).
+ * a checkbox leaves the menu open. Autoplay is the file's, as the Animation tool's panel shows it
+ * (`playbar/AnimationPanel.jsx`); Speed and Loop here are preview's own (`useRendererShell`'s
+ * `routinePlayback`), forgotten on leaving it.
  *
  * @param {{ animation: object, autoplay: boolean, onAutoplayChange(value: boolean): void,
  *   onOpenChange?(open: boolean): void }} props  `animation` is the playbar runtime.

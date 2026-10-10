@@ -63,6 +63,7 @@ export const SHELL_TOOL = Object.freeze({ DRAW: "draw", ANIMATE: "animate" });
 
 const SESSION_SAVE_DELAY_MS = 180;
 const EMPTY = Object.freeze({});
+const NO_CHOICE = Object.freeze({});
 
 /**
  * Everything a file-family renderer needs from its host that is not about its
@@ -196,13 +197,16 @@ export function useRendererShell({
   // Preview and the tools view are two states. The tools view's is never touched by preview: the
   // renderer draws preview from the model as it opens (`previewing`), and keeps its own work as it
   // is. The routine is the one thing both modes play on the same model, so it crosses here, on
-  // every way in and out: entering saves the tools view's routine as it stands and puts it down —
-  // preview opens at rest, playing only under Autoplay — and leaving puts preview's down and hands
-  // the saved one back, as it was.
+  // every way in and out: entering saves the tools view's routine as it stands — with the Speed and
+  // Loop it plays at — and puts it down, and preview opens at rest at the routine's own Speed and
+  // Loop (`resetPlayback`), playing only under Autoplay; leaving puts preview's down, forgets the
+  // Speed and Loop chosen there, and hands the saved routine back, as it was.
   const animationRef = useRef(animation);
   animationRef.current = animation;
   const autoplayRef = useRef(false);
   const toolsRoutine = useRef(null);
+  // Speed and Loop chosen in preview's Playback settings: preview's alone, forgotten on the way out.
+  const [previewChoice, setPreviewChoice] = useState(NO_CHOICE);
   const setPreviewing = useCallback(next => {
     const entering = Boolean(next);
     // A view that does not offer Preview stays as it is, whatever asks.
@@ -210,9 +214,11 @@ export function useRendererShell({
     previewingRef.current = entering;
     const runtime = animationControlsHaveContent(animationRef.current) ? animationRef.current : null;
     if (entering) toolsRoutine.current = runtime ? runtime.savePlayback() : null;
-    runtime?.onRelease();
+    if (entering) runtime?.resetPlayback();
+    else runtime?.onRelease();
     if (!entering && runtime && toolsRoutine.current) runtime.restorePlayback(toolsRoutine.current);
     if (!entering) toolsRoutine.current = null;
+    setPreviewChoice(NO_CHOICE);
     previewState.set(entering);
     if (entering && runtime && autoplayRef.current) runtime.onPlayToggle();
   }, [previewable, previewState.set]);
@@ -252,10 +258,19 @@ export function useRendererShell({
   const recordRef = useRef(null);
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;
-  // Preview's settings — its Orbit (on or off, and its speed), and the playbar's Autoplay and the
-  // routine's chosen speed and loop — are the file's: kept between leaving and re-entering preview, and in its view.
+  // The file's playback settings — preview's Orbit (on or off, and its speed), Autoplay, and the Speed
+  // and Loop the tools view's Animation tool chose — kept between leaving and re-entering preview,
+  // and in its view. Preview's own Speed and Loop are not among them (`previewChoice`).
   const [playback, setPlaybackState] = useState(() => restored.playback);
   const setPlayback = useCallback(patch => setPlaybackState(current => normalizePlayback({ ...current, ...patch })), []);
+  // The Speed and Loop the routine in hand plays at, as chosen in the mode on screen: the tools
+  // view's (the file's, above), or preview's own; unset, the routine's own apply.
+  const routinePlayback = useMemo(() => (previewing ? previewChoice : { speed: playback.speed, loop: playback.loop }),
+    [previewing, previewChoice, playback.speed, playback.loop]);
+  const chooseRoutinePlayback = useCallback(patch => {
+    if (previewingRef.current) setPreviewChoice(current => ({ ...current, ...patch }));
+    else setPlayback(patch);
+  }, [setPlayback]);
   const rendererStateRef = useRef(rendererState);
   rendererStateRef.current = rendererState;
   const latestRecord = useRef(null);
@@ -579,8 +594,10 @@ export function useRendererShell({
   return {
     // Renderer-facing.
     toolMode, selectTool, selectDefaultTool, tools, idle, previewable, previewing, setPreviewing,
-    // Preview's settings, the file's own: orbit and its speed, Autoplay, and the routine's chosen speed and loop.
+    // The file's playback settings: orbit and its speed, Autoplay, and the tools view's chosen Speed and Loop.
     autoplay, setAutoplay, playback, setPlayback,
+    // The Speed and Loop chosen in the mode on screen (preview's are its own), and choosing them there.
+    routinePlayback, chooseRoutinePlayback,
     // Deliver a prompt context through the host, reporting a failure as the viewport's alert.
     reportActionError, deliverPrompt, requestRender: () => viewerRef.current?.requestRender?.(),
     // A frame that keeps the shadow maps, for what moves and reshapes no shadow caster (a highlight).
