@@ -23,13 +23,21 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable, TypeVar
+
+T = TypeVar("T")
 
 # How often a view polls (the page's own pace, written here once for its docs and tests).
 POLL_SECONDS = 1.0
 # A view that has not polled for this long is gone. A browser wakes a page hidden for minutes about
 # once a minute, so a tab in the background still polls well inside it.
 LIVE_SECONDS = 75.0
+# How long an agent's capture waits, all told: for a view it just opened to sync for the first time,
+# for the view to take the request on its next sync, and for its answer. A view waits for the model
+# it was asked about to load before it captures (the page's ``CAPTURE_SETTLE_MS``, less than this),
+# since an agent captures right after it showed or rebuilt one. Within the minute a host gives a
+# tool call.
+CAPTURE_SECONDS = 40.0
 
 
 @dataclass
@@ -45,7 +53,12 @@ class View:
 
 
 class NoAnswer(Exception):
-    """A view did not answer, or answered with an error."""
+    """A view did not answer, or answered with an error: ``reason`` says which, as a failed tool call is
+    counted (``cadgen.analytics.FAILURES``) -- ``no_view``, ``timeout`` or ``view_error``."""
+
+    def __init__(self, message: str, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 class ViewRegistry:
@@ -80,6 +93,7 @@ class ViewRegistry:
                 view.focused = self._clock()
             view.model = model if model is not None else view.model
             view.seen = self._clock()
+            self._cond.notify_all()  # an agent may be waiting for this view to open (:meth:`wait`)
             return view
 
     def report(self, view_id: str, *, model: str | None, state: dict[str, Any] | None, focused: bool) -> None:
@@ -94,6 +108,7 @@ class ViewRegistry:
             view.seen = self._clock()
             if focused:
                 view.focused = view.seen
+            self._cond.notify_all()
 
     def live(self, thread_id: str | None = None) -> list[View]:
         """Live views, most recently focused first."""
@@ -101,6 +116,18 @@ class ViewRegistry:
             self._expire()
             views = [view for view in self._views.values() if thread_id is None or view.thread_id in (None, thread_id)]
             return sorted(views, key=lambda view: view.focused, reverse=True)
+
+    def wait(self, found: Callable[[], T | None], *, timeout: float) -> T | None:
+        """What ``found`` finds among the views, waiting up to ``timeout`` for a view to sync into
+        being it: a view the agent just opened, which the host is still loading."""
+        deadline = self._clock() + timeout
+        while (result := found()) is None:
+            remaining = deadline - self._clock()
+            if remaining <= 0:
+                return None
+            with self._cond:
+                self._cond.wait(min(remaining, 0.25))
+        return result
 
     def forget(self, view_id: str) -> None:
         with self._cond:
@@ -139,29 +166,31 @@ class ViewRegistry:
 
     # -- captures --------------------------------------------------------------
 
-    def ask(self, view_id: str, kind: str, *, timeout: float = 10.0) -> dict[str, Any]:
+    def ask(self, view_id: str, kind: str, *, timeout: float = CAPTURE_SECONDS) -> dict[str, Any]:
         """Ask ``view_id`` for what only it can make (a ``capture``); wait for its reply."""
         request_id = uuid.uuid4().hex
         with self._cond:
             self._replies[request_id] = None
         try:
             if not self.post([view_id], {"type": kind, "requestId": request_id}):
-                raise NoAnswer("that view is not open")
+                raise NoAnswer("that view is not open", "no_view")
             deadline = self._clock() + timeout
             with self._cond:
                 while self._replies.get(request_id) is None:
                     if view_id not in self._views:
-                        raise NoAnswer("that view closed before it answered")
+                        raise NoAnswer("that view closed before it answered", "no_view")
                     remaining = deadline - self._clock()
                     if remaining <= 0:
-                        raise NoAnswer("the view did not answer in time; is its tab still open?")
+                        raise NoAnswer(f"it did not answer within {timeout:.0f} s. A view the host keeps out of sight "
+                                       "(a tab behind another, a minimized window, a card scrolled away or collapsed) "
+                                       "may not run: ask the person to bring it into view, then capture again", "timeout")
                     self._cond.wait(min(remaining, 1.0))
                 reply = self._replies[request_id] or {}
         finally:
             with self._cond:
                 self._replies.pop(request_id, None)
         if reply.get("error"):
-            raise NoAnswer(str(reply["error"]))
+            raise NoAnswer(str(reply["error"]), "view_error")
         return reply
 
     def reply(self, request_id: str, reply: dict[str, Any]) -> bool:

@@ -2,7 +2,7 @@
   "name": "@text-to-cad/web",
   "private": true,
   "type": "module",
-  "version": "0.7.17",
+  "version": "0.7.20",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",

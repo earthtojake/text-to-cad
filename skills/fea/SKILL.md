@@ -40,8 +40,8 @@ one installation with the `$cad` skill and the CAD app's server; `cadgen fea
 solve` needs the `fea` extra, so it runs from its own installation, made the
 first time it is needed (below):
 
-- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.17 cadgen`
-- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.17 python`
+- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.20 cadgen`
+- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.20 python`
 
 Solving needs cadgen's opt-in `fea` extra, which brings the mesher (netgen) and
 the solver (scikit-fem, pyamg). `cadgen fea faces` and `cadgen fea parts` work without it. The first
@@ -51,7 +51,7 @@ hint does not apply under uv: run the same command again with the extra in the
 requirement, and keep using that form for `fea solve` from then on:
 
 ```bash
-uvx --no-config --managed-python --python 3.13 --from "cadgen[fea]==0.7.17" cadgen fea solve part.step --study study.json
+uvx --no-config --managed-python --python 3.13 --from "cadgen[fea]==0.7.20" cadgen fea solve part.step --study study.json
 ```
 
 The first run downloads the mesher and solver (large); later runs reuse them.

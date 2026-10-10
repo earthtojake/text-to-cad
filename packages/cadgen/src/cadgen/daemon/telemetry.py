@@ -4,9 +4,12 @@ commands hand it to count (``counted``). One recorder for the daemon, made as it
 (``start``) and closed, its last batch sent, as it stops (``close``); until then, and in every other
 process, each call here does nothing.
 
-A build worker's job is followed here too (``job_started``, ``job_reused``, ``job_finished``): whether
-what it made came from the store, and the crashes in cadgen's code it met, which ride its exit frame to
-the daemon (``worker.serve``).
+A build worker's job is followed here too (``job_started``, ``job_reused``, ``job_failed``,
+``job_finished``): whether what it made came from the store, why it failed, and the crashes in cadgen's
+code it met, which ride its exit frame to the daemon (``worker.serve``). Why a build failed is decided
+where it failed, in the process that ran it: from the error every command's and model script's failure
+ends in (``cli_from_function.report_failure``: ``analytics.build_failure``), from arguments refused
+(``arguments``), or by the worker for an error nothing reported (``bug``).
 
 A build is counted once, for whoever asked: a model script (``python model.py``) or a ``cadgen``
 command. What a build asks for in turn (a child's build, a document's compile) is that build's work,
@@ -90,8 +93,9 @@ def close() -> None:
 
 @_quiet
 def worker_died(status: Any) -> None:
-    """A worker that died under a job -- not one stopped because whoever asked left -- or could not start
-    for one: a crash, its exit status what there is to tell (a native fault, or killed for memory)."""
+    """A worker that died under a job -- not one stopped because whoever asked left, or by someone's stop
+    signal (``pool.stopped``) -- or could not start for one: a crash, its exit status what there is to
+    tell (a native fault, or killed for memory)."""
     from cadgen.analytics import died
 
     if _RECORDER is not None:
@@ -109,6 +113,8 @@ def exited(frame: dict[str, Any], build: Build | None) -> None:
             _RECORDER.crashed(crash)  # checked there: a worker is another process
     if build is not None and frame.get("reused") is True:
         build.reused = True
+    if build is not None and isinstance(frame.get("failure"), str):
+        build.failure = frame["failure"]  # checked as it is noted (``Recorder.built``)
 
 
 # A build worker's job, while one runs in this process (``worker.serve``): what it saw, for its exit frame.
@@ -117,7 +123,7 @@ _JOB: dict[str, Any] | None = None
 
 def job_started() -> None:
     global _JOB
-    _JOB = {"built": False, "reused": False, "crashes": [], "children": False}
+    _JOB = {"built": False, "reused": False, "crashes": [], "children": False, "failure": None}
 
 
 def building() -> bool:
@@ -157,14 +163,34 @@ def job_crashed(crash: dict[str, Any]) -> None:
         _JOB["crashes"].append(crash)
 
 
+def job_failed(reason: str) -> None:
+    """Why the build this process runs failed (one of ``analytics.BUILD_FAILURES``), decided where it failed:
+    the last word stands, since the failure that ends a build is reported last (the outermost). Nothing
+    outside a build's job."""
+    if _JOB is not None:
+        _JOB["failure"] = reason
+
+
+def job_ended(code: Any, reason: str | None = None) -> None:
+    """A job ended with exit ``code`` and no failure reported (``job_failed``): argparse's ``2`` is arguments
+    refused; anything else failing is ``reason``, when one is given."""
+    if _JOB is None or _JOB["failure"] is not None or code in (0, None):
+        return
+    if code == 2:
+        _JOB["failure"] = "arguments"
+    elif reason is not None:
+        _JOB["failure"] = reason
+
+
 def job_finished() -> dict[str, Any]:
     """What the job's exit frame tells the daemon: ``reused`` when everything it made was the store's,
-    and its ``crashes``."""
+    why it ``failure``-d (a word of ``analytics.BUILD_FAILURES``), and its ``crashes``."""
     global _JOB
     job, _JOB = _JOB, None
     if job is None:
         return {}
     return {**({"reused": True} if job["reused"] and not job["built"] else {}),
+            **({"failure": job["failure"]} if job["failure"] else {}),
             **({"crashes": job["crashes"]} if job["crashes"] else {})}
 
 
@@ -177,6 +203,7 @@ class Build:
         self.states: set[str] = set()  # the model's own transitions (``cadgen.daemon.executors.model_event``)
         self.children = False  # a child's, announced by this model: an assembly
         self.reused = False  # its worker said everything it made was the store's (``exited``)
+        self.failure: str | None = None  # why it failed, as its worker decided (``exited``)
 
     def observe(self, event: Any) -> None:
         """A frame's event, if it is this job's: called for each frame, so cheap."""
@@ -189,14 +216,15 @@ class Build:
     @_quiet
     def finish(self, exit_code: int, ended: str | None, seconds: float) -> None:
         """Count it: ``ended`` is ``crashed`` or ``cancelled`` when its worker died or was stopped, else
-        its exit code says. It was the store's answer when its worker said so (``exited``), or when its
-        model's own transitions say it was current and nothing was built."""
+        its exit code says, and why a failed one failed is what its worker decided (``exited``; ``other``
+        when it said nothing). It was the store's answer when its worker said so, or when its model's own
+        transitions say it was current and nothing was built."""
         recorder = _RECORDER
         if recorder is None:
             return
         outcome = ended or ("ok" if exit_code == 0 else "failed")
         current = "current" in self.states and not self.states & {"building", "done", "failed"}
-        recorder.built(self.kind, self.via, outcome, seconds, cached=self.reused or current)
+        recorder.built(self.kind, self.via, outcome, seconds, cached=self.reused or current, reason=self.failure)
         if self.children:
             recorder.used("assembly")
         if self.meshes:
@@ -251,12 +279,17 @@ def cold_build(kind: str, via: str, run: Callable[[], int], *, meshes: bool = Fa
     try:
         code = run()
         outcome = "ok" if code == 0 else "failed"
+        job_ended(code)
         return code
     except KeyboardInterrupt:
         outcome = "cancelled"
         raise
     except SystemExit as stop:
         outcome = "ok" if stop.code in (0, None) else "failed"
+        job_ended(stop.code)
+        raise
+    except Exception:
+        job_ended(1, "bug")  # past the command's own reporting of what failed: a crash (``cadgen.cli``)
         raise
     finally:
         _hand_cold(kind, via, outcome, time.perf_counter() - started, meshes)
@@ -279,7 +312,9 @@ def _hand_cold(kind: str, via: str, outcome: str, seconds: float, meshes: bool) 
         return
     cached = outcome == "ok" and job["reused"] and not job["built"]
     features = [name for name, used in (("assembly", job["children"]), ("declared_mesh", meshes)) if used]
+    failure = {"reason": job["failure"] or "other"} if outcome == "failed" else {}
     from cadgen.daemon.client import hand_over
 
-    hand_over({"builds": [{"kind": kind, "via": via, "outcome": outcome, "seconds": round(seconds, 3), "cached": cached}],
+    hand_over({"builds": [{"kind": kind, "via": via, "outcome": outcome, "seconds": round(seconds, 3), "cached": cached,
+                           **failure}],
                **({"features": features} if features else {})})

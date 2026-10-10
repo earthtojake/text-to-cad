@@ -22,6 +22,7 @@ import { prepareRobotJointHandles, robotJointHandles, robotPosableJoints } from 
 import { createPoseStore, poseLogic } from "./poseStore.js";
 import { ROBOT_DECLINED_LIVE_COMMANDS, ROBOT_TOOL, ROBOT_TOOL_MODES } from "./tools.js";
 import { useLinkSelection } from "./useLinkSelection.js";
+import { useRobotVisibility } from "./useRobotVisibility.js";
 import { useRobotDocument } from "./useRobotDocument.js";
 
 const NO_HANDLES = Object.freeze([]);
@@ -37,7 +38,7 @@ function RobotSurface({ view, data }) {
   const kind = String(document.entry?.kind || "").toLowerCase();
 
   // ---- pose: outside React ------------------------------------------------------------
-  // This renderer's one slice of the file's view (`kit/shell/fileView.js`): the joint values,
+  // The pose slice of the file's view (`kit/shell/fileView.js`): the joint values,
   // written against the description's revision, so a reopened file takes its pose back only
   // if it is the same robot. The selection and the tree's disclosure are not in it.
   const [stored] = useState(() => view.state);
@@ -59,10 +60,6 @@ function RobotSurface({ view, data }) {
   poseRef.current = pose;
   const robotRef = useRef(robot);
   robotRef.current = robot;
-  // The slice is read when the view is WRITTEN: the pose lives outside React. Until the robot
-  // has loaded there is nothing to say, and what was stored is kept.
-  const rendererState = useMemo(() => (robot && pose
-    ? { signatures: { pose: robot.revision }, read: () => ({ pose: { jointValues: pose.getSnapshot().values } }) } : null), [robot, pose]);
 
   // ---- scene ----------------------------------------------------------------------------
   const [scene, setScene] = useState(null);
@@ -103,6 +100,18 @@ function RobotSurface({ view, data }) {
     // Escape clears the selection.
     handle: () => { if (!selectionRef.current.active) return false; selectionRef.current.clear(); return true; }
   }), [selection.active]);
+
+  const requestVisibilityRender = useCallback(() => {
+    shellRef.current?.requestRender();
+    shellRef.current?.syncSceneBounds();
+    shellRef.current?.scheduleStateSave();
+  }, []);
+  const { hiddenPartIds, changeVisibility } = useRobotVisibility({ robot, scene, requestRender: requestVisibilityRender, stored });
+  // Pose is read when saved; visibility is immutable React state, scoped to this file revision.
+  const rendererState = useMemo(() => (robot && pose ? {
+    signatures: { pose: robot.revision, visibility: robot.revision },
+    read: () => ({ pose: { jointValues: pose.getSnapshot().values }, visibility: { hiddenPartIds } })
+  } : null), [robot, pose, hiddenPartIds]);
 
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: robot?.revision || "",
@@ -202,7 +211,7 @@ function RobotSurface({ view, data }) {
   const linksShown = !shell.previewing && toolMode === ROBOT_TOOL.SELECT;
   const toolPanels = <>
     <LinksSection key={modelKey} active={linksShown} description={robot?.description || null} components={robot?.components}
-      parts={robot?.parts} selection={treeSelection} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={view.onOpenFile} />
+      parts={robot?.parts} hiddenPartIds={hiddenPartIds} onVisibilityChange={changeVisibility} selection={treeSelection} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={view.onOpenFile} />
     {kind === "sdf" ? <ToolPanel id="sdf" title="SDF" label="SDF" fit="details" defaultCollapsed hidden={!linksShown}>
       <SdfSection info={robot?.description?.sdf || null} movableJointCount={pose?.joints.length || 0} />
     </ToolPanel> : null}

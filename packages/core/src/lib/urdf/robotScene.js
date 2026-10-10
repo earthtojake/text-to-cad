@@ -83,10 +83,12 @@ function boxOf(bounds) {
  *   URDF's). `parts`: `buildRobotParts` — one per visual, or per named object of a visual's mesh.
  * @returns {import("../viewer/sceneContract.js").KitScene & object}  The contract, plus: `setJointValues(values)` (true when a
  *   matrix was written), `setHighlight({ hoveredLink, hoveredComponent, selectedLinks, selectedComponents })`,
- *   `linkCentre(name)`, `motionFrame(jointName)`, `linkFrames()`, `hasComponent(id)`,
+ *   `setHiddenPartIds(ids)`, `linkCentre(name)`, `motionFrame(jointName)`, `linkFrames()`, `hasComponent(id)`,
  *   and `stats` (test seam: matrix writes per pose).
  */
 export function createRobotScene(THREE, { description, parts }) {
+  let hiddenPartIds = new Set();
+  const isVisible = record => !hiddenPartIds.has(record.mesh.userData.partId);
   const root = new THREE.Group();
   root.name = "robot";
   place(root, null);
@@ -289,7 +291,7 @@ export function createRobotScene(THREE, { description, parts }) {
   function recordsFor(linkNames, componentIds) {
     const records = [linkNames].flat().flatMap(linkName => (linkName ? meshesByLink.get(linkName) || [] : []));
     for (const id of componentIds) if (recordByComponent.has(id)) records.push(recordByComponent.get(id));
-    return records;
+    return records.filter(isVisible);
   }
   function paint(record, selected) {
     const material = record.mesh.material;
@@ -329,7 +331,7 @@ export function createRobotScene(THREE, { description, parts }) {
 
   // ---- pick --------------------------------------------------------------------------
   const raycaster = new THREE.Raycaster();
-  const pickable = meshes.map(record => record.mesh);
+  let pickable = meshes.map(record => record.mesh);
   // A hover is a pick per frame, and a link mesh is tens of thousands of triangles: each
   // geometry gets its accelerator in idle time, the first time a ray reaches its bounds
   // (until then, and for a mesh too large for one, the ray is tested the plain way).
@@ -338,7 +340,7 @@ export function createRobotScene(THREE, { description, parts }) {
   let disposed = false;
   return {
     object3D: root,
-    get bounds() { return (boundsCache ||= merged(meshes) || restBounds); },
+    get bounds() { return (boundsCache ||= merged(meshes.filter(isVisible)) || restBounds); },
     restBounds,
     links,
     stats,
@@ -383,13 +385,25 @@ export function createRobotScene(THREE, { description, parts }) {
       }
       return [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
     },
+    /** Hide visual meshes only: their link frames still carry and pose child links. */
+    setHiddenPartIds(ids) {
+      if (disposed) return;
+      hiddenPartIds = new Set((Array.isArray(ids) ? ids : []).filter(id => recordByComponent.has(id)));
+      for (const record of meshes) {
+        if (!isVisible(record)) record.mesh.removeFromParent();
+        else if (!record.mesh.parent) links.get(record.mesh.userData.linkName).add(record.mesh);
+      }
+      pickable = meshes.filter(isVisible).map(record => record.mesh);
+      boundsCache = null;
+      applyHighlight();
+    },
     hasComponent(id) { return recordByComponent.has(id); },
     setHighlight(next) {
       if (disposed) return;
       highlight = { hoveredLink: "", hoveredComponent: "", selectedLinks: [], selectedComponents: [], ...next };
       applyHighlight();
     },
-    // The first surface under the ray: a named object is itself, anything else is its
+    // The first visible surface under the ray: a component is itself, anything else is its
     // link, found by walking up the graph. No part table.
     pick(ray) {
       if (disposed) return null;

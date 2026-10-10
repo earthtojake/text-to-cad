@@ -54,6 +54,8 @@ def run_gz_sdf_check(xml_text: str, *, output_path: Path, mode: GzCheckMode = "a
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="backslashreplace",
         )
     finally:
         temp_path.unlink(missing_ok=True)

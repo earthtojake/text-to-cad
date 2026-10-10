@@ -1,5 +1,6 @@
 import { multiplyTransforms } from "./kinematics.js";
 import { resolveCadAssetMeshUrl } from "./meshAssetUrl.js";
+import { parseFourBarCoupling, validateFourBarJointConfiguration } from "./fourBarCoupling.js";
 
 const IDENTITY_TRANSFORM = Object.freeze([
   1, 0, 0, 0,
@@ -322,8 +323,12 @@ function describeInertial(linkElement) {
 
 function parseJointMimic(jointElement, jointName) {
   const mimicElement = childElementsByTag(jointElement, "mimic")[0];
+  const fourBarCoupling = parseFourBarCoupling(jointElement, jointName);
+  if (mimicElement && fourBarCoupling) {
+    throw new Error(`URDF joint ${jointName} cannot declare both mimic and tcad:four_bar`);
+  }
   if (!mimicElement) {
-    return null;
+    return fourBarCoupling;
   }
   const joint = String(mimicElement.getAttribute("joint") || "").trim();
   if (!joint) {
@@ -406,14 +411,15 @@ function parseJoint(jointElement, linkNames) {
 }
 
 function validateMimicJoints(joints) {
-  const jointNames = new Set(joints.map((joint) => joint.name));
+  const jointsByName = new Map(joints.map((joint) => [joint.name, joint]));
   for (const joint of joints) {
     if (!joint.mimic) {
       continue;
     }
-    if (!jointNames.has(joint.mimic.joint)) {
+    if (!jointsByName.has(joint.mimic.joint)) {
       throw new Error(`URDF mimic joint ${joint.name} references missing joint ${joint.mimic.joint}`);
     }
+    validateFourBarJointConfiguration(joint, jointsByName.get(joint.mimic.joint));
   }
 }
 
@@ -491,6 +497,9 @@ export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
     const visuals = childElementsByTag(linkElement, "visual").map((visualElement, index) => {
       const geometryElement = childElementsByTag(visualElement, "geometry")[0];
       const meshElement = geometryElement ? childElementsByTag(geometryElement, "mesh")[0] : null;
+      // The visual's own `name` is what its author called it, and what tells several
+      // visuals of one link apart; without one, it is named for its geometry.
+      const visualName = String(visualElement.getAttribute("name") || "").trim();
       const visualBase = {
         id: `${name}:v${index + 1}`,
         // As written, for inspection; `localTransform` below is what rendering uses.
@@ -511,7 +520,7 @@ export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
         return {
           ...visualBase,
           filename,
-          label: labelForMeshFilename(filename),
+          label: visualName || labelForMeshFilename(filename),
           meshUrl: resolveResource ? resolveResource(filename) : resolveMeshUrl(filename, sourceUrl || "/"),
           localTransform: multiplyTransforms(
             parseOriginTransform(childElementsByTag(visualElement, "origin")[0]),
@@ -528,7 +537,7 @@ export function parseUrdf(xmlText, { sourceUrl, resolveResource } = {}) {
       }
       return {
         ...visualBase,
-        label: primitive.type,
+        label: visualName || primitive.type,
         primitive,
         localTransform: parseOriginTransform(childElementsByTag(visualElement, "origin")[0])
       };

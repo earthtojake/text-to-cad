@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 8, 2026">
+    <LegalPage title="Privacy Policy" updated="October 9, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -37,39 +37,50 @@ export default function PrivacyPolicyPage() {
             each stops:
             <ul>
               <li>
-                a random install ID created on your computer, and a random ID for each time one of
-                them starts;
+                a random install ID created on your computer, a random ID for each time one of them
+                starts, and a random ID for each batch, with the time it was made by your computer’s
+                clock, so that a batch sent again after a failed send is counted once;
               </li>
               <li>
                 which of them sent it, the cadgen version, where it was installed from (a plugin
-                directory, the Cursor Marketplace, GitHub, or a development install), your operating
+                directory, the Cursor Marketplace, GitHub, or a development install, as the plugin’s
+                CAD app names it and notes on your computer for the viewer and the build daemon to
+                report too), your operating
                 system and processor type, and the name and version of your agent app and how it shows
                 CAD (or that it is the browser viewer);
               </li>
               <li>
                 counts, added up over those five minutes: how many times each CAD tool was called and
-                failed; how many times you touched a CAD view; how many different files of each format
+                failed, and why each failure happened, as one of a fixed set of words cadgen chooses
+                (such as no file at the path the agent gave, no view open, a view that did not answer
+                in time, or a bug in cadgen) -- never the error’s message or the path; how many times
+                you touched a CAD view; how many different files of each format
                 (such as STEP or STL) a CAD view showed for the first time that day, told apart on your
                 computer and sent only as a number; how many models were built, of which format,
                 whether a model script or a <code>cadgen</code> command asked, how they ended
                 (finished, failed, crashed or stopped), how many came from cadgen’s cache, and how long
                 they took; how many snapshots were rendered, of which format, how many failed and how
-                long they took; how many times assemblies, mesh exports, posed joints, animations,
-                engineering drawings and Quick Edit were used; and how many of the build daemon’s
-                workers started, crashed or were replaced, and how many builds it turned away for want
-                of memory;
+                long they took; why each build or snapshot failed, again as one of a fixed set of words
+                cadgen chooses from the kind of error and whose code raised it (such as an error in
+                your model’s code, a CAD operation the geometry kernel could not do, a module or file
+                that is not there, the snapshot browser not starting, or a bug in cadgen) -- never the
+                error’s message, your code or the path; how many times assemblies, mesh exports, posed
+                joints, animations, engineering drawings and Quick Edit were used; and how many of the
+                build daemon’s workers started, crashed or were replaced, and how many builds it turned
+                away for want of memory;
               </li>
               <li>
                 crash reports, when cadgen’s own code fails unexpectedly: the error’s type (such as
                 “KeyError”), whether the program carried on, and where in code it failed -- file paths
                 inside cadgen, Python’s standard library, cadgen’s own open-source dependencies or the
                 CAD app’s and viewer’s page scripts, with function names and line numbers -- or, for a
-                build worker that stopped, its exit status. Any part of the failure in your own code is
+                build worker that crashed, its exit status. Any part of the failure in your own code is
                 replaced by a placeholder, and a crash report never includes the error’s message, any
                 values, your files, or file or folder names.
               </li>
             </ul>
-            We record the time each batch arrives, and our server adds the country each request comes
+            We record each batch at the time your computer’s clock says it was made, and our server
+            adds the country each request comes
             from, which it works out from your IP address; it keeps neither the address nor anything
             finer than the country. Nothing is sent while cadgen sits unused. Telemetry never includes
             your files, models, file or folder names, prompts, tool arguments or anything you type. A{" "}
@@ -163,7 +174,9 @@ export default function PrivacyPolicyPage() {
             Telemetry is kept by PostHog for as long as our plan with it keeps events, currently one
             year, then deleted. We do not store IP addresses with it. Your install ID travels in the
             body of each request, which our host’s request logs do not record, and we never combine
-            telemetry with those logs. Turning telemetry off deletes everything stored under your
+            telemetry with those logs. The one exception is a batch our server refuses as malformed:
+            its logs then keep the name of the rule it broke and the cadgen version that sent it,
+            never your install ID or any other value from it. Turning telemetry off deletes everything stored under your
             install ID; PostHog carries the deletion out in the background, which can take some days.
             If our server cannot be reached at that moment, cadgen asks again until it can.
           </li>

@@ -15,6 +15,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cadgen.mcp.protocol import RequestContext
 from cadgen.viewer.recents import RecentStore
@@ -43,6 +44,10 @@ def converse(tmp: Path) -> dict:
         context = RequestContext(1, {"threadId": "t", **(meta or {})})
         return server.handle("tools/call", {"name": name, "arguments": arguments or {}}, context)
 
+    def unwaited(name: str) -> dict:
+        with mock.patch("cadgen.mcp.server.OPENING_SECONDS", 0.0):
+            return call(name)
+
     initialized = server.handle("initialize", CODEX_INITIALIZE, None)
     initialized["serverInfo"]["version"] = "<version>"
     uri = server.handle("resources/list", {}, None)["resources"][0]["uri"]
@@ -58,7 +63,8 @@ def converse(tmp: Path) -> dict:
             "cad_file": call("cad_file", {"file": {"name": "bracket.stl", "resourceUri": "x"}}, {"openai/resource": {"path": str(bracket)}}),
             "cad_show": call("cad_show", {"path": str(bracket)}),
             "cad_view": call("cad_view"),
-            "cad_screenshot": call("cad_screenshot"),
+            # A tab cad_open opened and that never syncs: what the capture answers once it stops waiting for it.
+            "cad_screenshot": unwaited("cad_screenshot"),
         },
     }
     for result in record["launches"].values():

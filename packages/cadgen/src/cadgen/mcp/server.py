@@ -58,7 +58,7 @@ from cadgen.viewer.scanner import SOURCE_EXTENSIONS
 from .protocol import INVALID_PARAMS, METHOD_NOT_FOUND, Connection, RequestContext, RpcError, claim_stdout
 from .ui import MIME, RESOURCE_META, AppPage
 from .sidebar_views import SidebarView
-from .views import NoAnswer, ViewRegistry
+from .views import CAPTURE_SECONDS, NoAnswer, ViewRegistry
 
 LOG = logging.getLogger("cadgen.mcp")
 
@@ -80,6 +80,14 @@ _TAB_HOSTS = frozenset({"codex-mcp-client"})
 _UI_EXTENSION = "io.modelcontextprotocol/ui"
 _TABS_EXTENSION = "dev.texttocad/tabs"
 _TAB_ENTRYPOINTS = frozenset({"global", "thread", "file"})
+# How long a call that reads a view waits for one the agent just opened (a tab from cad_open, a card
+# from an inline cad_show) to sync for the first time: the host loads the page, then the page its
+# model. An agent reads a view right after it opened it.
+OPENING_SECONDS = 15.0
+# How long after an agent opened a view a read that finds none still waits for it; and how many
+# inline views not yet seen are remembered.
+_OPENED_WITHIN = 60.0
+_MOUNTING_KEPT = 64
 
 INSTRUCTIONS = (
     "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. "
@@ -118,7 +126,12 @@ ICON = {
 
 
 class ToolFailed(Exception):
-    """A tool call that fails the way its caller should read: as the tool's result."""
+    """A tool call that fails the way its caller should read: as the tool's result. ``reason`` is why, in
+    telemetry's words (``cadgen.analytics.FAILURES``), named where it is raised: never read from the message."""
+
+    def __init__(self, message: str, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 def _object(properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
@@ -191,13 +204,22 @@ def _data(structured: dict[str, Any]) -> dict[str, Any]:
 
 
 def file_uri_path(value: Any) -> str | None:
-    """The local path a ``file:`` URI names (``file:///C:/x`` is ``C:/x`` on Windows), else None."""
+    """The path a ``file:`` URI names (``file:///C:/x`` names ``/C:/x``), else None."""
     if not isinstance(value, str) or not value.startswith("file:"):
         return None
-    path = unquote(urlparse(value).path)
-    if os.name == "nt" and len(path) > 2 and path[0] == "/" and path[2] == ":":
+    return unquote(urlparse(value).path) or None
+
+
+def local_path(value: str, *, windows: bool = os.name == "nt") -> str:
+    """A path a caller or host named, as this machine spells it: a ``file:`` URI is the path it names,
+    ``~`` is home, and on Windows a drive path loses the slash before its drive. A file URI names
+    ``/C:/x``, and Codex on Windows spells the path of a file opened from its file tree the same way
+    (``openai/resource``: ``/C:/Users/...``); Windows reads ``/C:/x`` as a folder ``C:`` on the
+    current drive, so that slash would name a file that is not there."""
+    path = file_uri_path(value) or os.path.expanduser(value.strip())
+    if windows and len(path) > 2 and path[0] == "/" and path[1].isalpha() and path[2] == ":":
         path = path[1:]
-    return path or None
+    return path
 
 
 class Server:
@@ -216,6 +238,9 @@ class Server:
         self._order = itertools.count(1)
         self._analytics = analytics
         self._update_told = False
+        # Inline views this server named that have not synced yet, oldest first; when cad_open last opened a tab.
+        self._mounting: dict[str, None] = {}
+        self._opened: float | None = None
 
     # -- lazily built parts ----------------------------------------------------
 
@@ -433,15 +458,16 @@ class Server:
         if handler is None:
             raise RpcError(INVALID_PARAMS, f"unknown tool {name!r}")
         started = time.monotonic()
-        ok = False
+        ok, reason = False, "bug"  # anything a handler raises but ToolFailed is cadgen's own (``handle`` reports it)
         try:
             result = handler(arguments, context)
             ok = not (isinstance(result, dict) and result.get("isError"))
             return result
         except ToolFailed as failure:
+            reason = failure.reason
             return _text(str(failure), error=True)
         finally:
-            self.analytics.called(name, ok)
+            self.analytics.called(name, ok, reason)
             if name not in ("cad_sync", "cad_http"):
                 LOG.info("%s %.0fms", name, (time.monotonic() - started) * 1000)
 
@@ -473,6 +499,9 @@ class Server:
         """Stamp a launch that mounts a new inline view: its token, and its place among the views."""
         seq = next(self._order)
         launch["view"] = f"cad-{seq}-{uuid.uuid4().hex[:10]}"
+        self._mounting[launch["view"]] = None
+        while len(self._mounting) > _MOUNTING_KEPT:
+            self._mounting.pop(next(iter(self._mounting)), None)
         # Wall-clock time orders views across restarts of this process; seq breaks a tie.
         launch["order"] = {"createdAt": int(time.time() * 1000), "seq": seq}
         return launch
@@ -480,15 +509,15 @@ class Server:
     def _model_path(self, value: Any) -> str:
         """An existing CAD file, from the absolute path a caller named."""
         if not isinstance(value, str) or not value.strip():
-            raise ToolFailed("Name a CAD file by its absolute path.")
-        path = file_uri_path(value) or os.path.expanduser(value.strip())
+            raise ToolFailed("Name a CAD file by its absolute path.", "no_path")
+        path = local_path(value)
         if not os.path.isabs(path):
-            raise ToolFailed(f"{value} is not an absolute path: name the model by its absolute path.")
+            raise ToolFailed(f"{value} is not an absolute path: name the model by its absolute path.", "relative_path")
         path = os.path.abspath(path)
         if not os.path.isfile(path):
-            raise ToolFailed(f"No file at {path}.")
+            raise ToolFailed(f"No file at {path}.", "no_file")
         if os.path.splitext(path)[1].lower() not in SOURCE_EXTENSIONS:
-            raise ToolFailed(f"CAD opens {', '.join(EXTENSIONS)} files; {os.path.basename(path)} is not one.")
+            raise ToolFailed(f"CAD opens {', '.join(EXTENSIONS)} files; {os.path.basename(path)} is not one.", "not_cad")
         return path
 
     def _tool_cad_home(self, arguments, context):
@@ -502,6 +531,8 @@ class Server:
         return _text("CAD is open.", {"launch": launch})
 
     def _tool_cad_file(self, arguments, context):
+        # Codex names the file in ``openai/resource`` (``/C:/Users/...`` on Windows: ``local_path``);
+        # its ``file.resourceUri`` is a ``codex-resource://`` handle, not a file URI.
         resource = context.meta.get("openai/resource")
         path = resource.get("path") if isinstance(resource, dict) else None
         if not path:
@@ -514,6 +545,7 @@ class Server:
     def _tool_cad_open(self, arguments, context):
         model = self._model_path(arguments.get("path"))
         launch = self._launch(model, surface="agent")
+        self._opened = time.monotonic()
         return _text(f"{model} is open in a new CAD tab. From now on, use cad_show to show models in it.", {"launch": launch})
 
     def _tool_cad_telemetry(self, arguments, context):
@@ -585,15 +617,26 @@ class Server:
             if view.model == model:
                 return _text(f"That view already shows {model}, and shows each rebuild by itself.", {"delivered": 0, "view": view.id})
             raise ToolFailed(f"That view is the app's own view of {os.path.basename(view.model or '') or 'a file'}, and "
-                             "shows that file alone. Call cad_show without a view to show a model in this thread's CAD tab.")
+                             "shows that file alone. Call cad_show without a view to show a model in this thread's CAD tab.",
+                             "wrong_view")
         launch = self._launch(model)
         if isinstance(view, SidebarView):
             if view.model != model:
-                self.sidebar_views.post(view.id, {"type": "show", "launch": launch})
+                self._leave(lambda: self.sidebar_views.post(view.id, {"type": "show", "launch": launch}))
             return _text(f"Showing {model} in the CAD sidebar, which shows each rebuild by itself.",
                          {"delivered": 1, "view": view.id, "sidebar": True})
         self.views.post([view.id], {"type": "show", "launch": launch})
         return _text(f"Showing {model} in CAD.", {"delivered": 1, "view": view.id})
+
+    @staticmethod
+    def _leave(request):
+        """A request left for the CAD sidebar (``sidebar_views.py``): a file this machine's disk may refuse,
+        which is the agent's to read, not this server's crash."""
+        try:
+            return request()
+        except OSError as error:
+            raise ToolFailed(f"The CAD sidebar could not be reached: this computer's disk refused the request "
+                             f"({error.strerror or type(error).__name__}).", "other") from error
 
     def _show_in_browser(self, model: str) -> dict[str, Any]:
         """The model's link in the CAD Viewer this machine runs, started if none is."""
@@ -604,7 +647,8 @@ class Server:
             url = (self._viewer_url or viewer_url)()
         except ViewerUnavailable as failure:
             raise ToolFailed(f"This app cannot show CAD views, and the CAD Viewer did not start ({failure}). Run "
-                             f"`cadgen viewer --host 127.0.0.1 --json --detach` and open {model_link('<the url it prints>', model)}.") from failure
+                             f"`cadgen viewer --host 127.0.0.1 --json --detach` and open {model_link('<the url it prints>', model)}.",
+                             "no_viewer") from failure
         link = model_link(url, model)
         # Text alone: an app that shows a result's structured content shows it in place of the text
         # (Claude Code does), and the agent would get neither this guidance nor the update line.
@@ -625,12 +669,23 @@ class Server:
         return result
 
     def _shown(self, view_id: Any) -> Any:
-        """The inline view the agent names by the token its cad_show returned."""
+        """The inline view the agent names by the token its cad_show returned: one the chat is still
+        drawing is waited for."""
         if not isinstance(view_id, str) or not view_id:
-            raise ToolFailed("Name the viewer: pass the view that cad_show returned.")
-        view = next((view for view in self.views.live() if view.id == view_id), None)
+            raise ToolFailed("Name the viewer: pass the view that cad_show returned.", "no_view")
+
+        def found() -> Any:
+            return next((view for view in self.views.live() if view.id == view_id), None)
+
+        view = found()
+        if view is None and view_id in self._mounting:
+            view = self.views.wait(found, timeout=OPENING_SECONDS)
+            if view is None:
+                raise ToolFailed("That viewer has not opened yet: the chat has not drawn it (it may be waiting for the person "
+                                 "to allow it, or be collapsed or scrolled away). Ask the person to look at it, then try again.", "no_view")
         if view is None:
-            raise ToolFailed("That viewer is not open: it was closed, or a newer one took its place. Show the model again with cad_show.")
+            raise ToolFailed("That viewer is not open: it was closed, or a newer one took its place. Show the model again "
+                             "with cad_show.", "no_view")
         return view
 
     def _tool_cad_view(self, arguments, context):
@@ -644,32 +699,40 @@ class Server:
         return _text(json.dumps({"views": views}, indent=1), {"views": views})
 
     def _tool_cad_screenshot(self, arguments, context):
-        view = self._target(context, arguments.get("view"), needs_model=True) if self.tabs else self._shown(arguments.get("view"))
+        deadline = time.monotonic() + CAPTURE_SECONDS
+        if self.tabs:
+            view = self._target(context, arguments.get("view"), needs_model=True)
+            if view is None and self._opened is not None and time.monotonic() - self._opened < _OPENED_WITHIN:
+                # The tab cad_open just opened: the host is loading it, and it has not synced its model yet.
+                view = self.views.wait(lambda: self._target(context, arguments.get("view"), needs_model=True), timeout=OPENING_SECONDS)
+        else:
+            view = self._shown(arguments.get("view"))
         if view is not None and not view.model:
-            raise ToolFailed("That viewer shows no model yet.")
+            raise ToolFailed("That viewer shows no model yet.", "no_view")
         if view is None:
             raise ToolFailed("No CAD viewer with a model is open in this thread. Open one with cad_open, "
-                             "or render headless with `cadgen snapshot`.")
+                             "or render headless with `cadgen snapshot`.", "no_view")
         if isinstance(view, SidebarView):
-            reply = self.sidebar_views.ask(view.id)
+            reply = self._leave(lambda: self.sidebar_views.ask(view.id, timeout=max(1.0, deadline - time.monotonic())))
             if reply is None:
-                raise ToolFailed("The CAD sidebar did not answer in time; is it still open?")
+                raise ToolFailed("The CAD sidebar did not answer in time: it may be closed or out of sight. Ask the person to "
+                                 "open it, then capture again.", "timeout")
             if reply.get("error"):
-                raise ToolFailed(f"The CAD viewer could not capture: {reply['error']}")
+                raise ToolFailed(f"The CAD viewer could not capture: {reply['error']}", "view_error")
         else:
             try:
-                reply = self.views.ask(view.id, "capture")
+                reply = self.views.ask(view.id, "capture", timeout=max(1.0, deadline - time.monotonic()))
             except NoAnswer as failure:
-                raise ToolFailed(f"The CAD viewer could not capture: {failure}") from failure
+                raise ToolFailed(f"The CAD viewer could not capture: {failure}", failure.reason) from failure
         png = reply.get("png")
         if not isinstance(png, str) or not png:
-            raise ToolFailed("The CAD viewer answered without an image.")
+            raise ToolFailed("The CAD viewer answered without an image.", "view_error")
         from .tunnel import MAX_REPLY_BYTES
 
         if len(png) // 4 * 3 > MAX_REPLY_BYTES:
             # Sent, a message this long could close the host's connection (``tunnel.MAX_REPLY_BYTES``).
             raise ToolFailed(f"The CAD viewer's picture is {len(png) // 4 * 3 / 1e6:.1f} MB, more than one message to this "
-                             "host may carry. Ask the person to make the view smaller, then capture again.")
+                             "host may carry. Ask the person to make the view smaller, then capture again.", "too_large")
         return {"content": [{"type": "image", "data": png, "mimeType": "image/png"},
                             {"type": "text", "text": f"{view.model} as shown in CAD."}],
                 "structuredContent": {"view": view.id, "model": view.model}}
@@ -696,6 +759,7 @@ class Server:
         reads the catalog again only when that moves) and each feed's current status.
         """
         view_id = self._register(arguments, context)
+        self._mounting.pop(view_id, None)
         sidebar = self.tabs and arguments.get("surface") == "sidebar"
         if arguments.get("closed") is True:  # a view a newer one replaced: the agent can no longer reach it
             self.views.forget(view_id)
@@ -746,7 +810,7 @@ class Server:
         try:
             body = base64.b64decode(arguments.get("body") or "", validate=True)
         except (ValueError, binascii.Error) as error:
-            raise ToolFailed(str(error)) from error
+            raise ToolFailed(str(error), "bad_request") from error
         headers = arguments.get("headers") if isinstance(arguments.get("headers"), dict) else {}
         return _data(self.tunnel.serve(method=str(arguments.get("method") or "GET"), url=str(arguments.get("url") or ""),
                                        headers=headers, body=body))
@@ -756,9 +820,18 @@ def serve(argv: list[str] | None = None) -> int:
     """Serve MCP on this process's standard streams until the host closes them."""
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cadgen mcp: %(message)s")
     protocol_out = claim_stdout()
+    import threading
+
     from cadgen import updates
+    from cadgen._internal.channel import remember
     from cadgen.analytics import Recorder, collect_crashes
 
+    # The channel this server's plugin named, written down for the processes of its installation no plugin
+    # names one to -- the build daemon, a skill's commands and the Viewer they open. In the background, so no
+    # start waits on the state directory; an exit waits a moment for it, as a host may start a server only to
+    # list its tools.
+    remembering = threading.Thread(target=remember, name="cadgen-channel", daemon=True)
+    remembering.start()
     analytics = Recorder()
     analytics.start()
     collect_crashes(analytics.crashed)  # what fails in this process, wherever it is caught, is this recorder's
@@ -769,4 +842,5 @@ def serve(argv: list[str] | None = None) -> int:
         connection.serve()
     finally:
         analytics.close()
+        remembering.join(1)
     return 0

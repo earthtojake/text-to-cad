@@ -10,11 +10,19 @@
  * daemon (`daemon`) -- saw since its last batch (`FIELDS`):
  *
  *   tool      a CAD tool's calls, and how many of them failed
+ *   tool_failure
+ *             a CAD tool's failed calls for one reason (`FAILURES`), a word cadgen chose where the call
+ *             failed: never what the failure said
  *   view      times a person touched a CAD view, or it switched models
  *   files     distinct files of one format a view showed for the first time that day
  *   build     builds of one format, by who asked: how they ended, how many the store answered, how long
  *             they took in all and at the longest
+ *   build_failure
+ *             failed builds of one format, by who asked, for one reason (`BUILD_FAILURES`), a word cadgen
+ *             chose where the build failed: never what the failure said
  *   snapshot  snapshots of one format, how many failed, and how long they took
+ *   snapshot_failure
+ *             failed snapshots of one format for one reason (`SNAPSHOT_FAILURES`), likewise
  *   feature   uses of one feature
  *   health    the daemon's build workers: started, crashed and recycled, and builds refused for memory
  *   exception one crash, and how many times it happened: where (a CAD tool's call, a viewer route, a
@@ -24,7 +32,14 @@
  *
  * cadgen 0.7.7 to 0.7.15 (schemas 1 and 2) send `tool`, `view` and `file`: one distinct file, once a day,
  * by a salted code. Its code goes no further: a batch's are read as `files`, one of each format they name.
+ * Schema 4 adds `tool_failure`. Schema 5 adds `build_failure` and `snapshot_failure`, and names each batch: a
+ * random id (`batch`), and when it was made (`at`, whole seconds of the sender's clock). A sender that is not
+ * sure its batch was taken sends it again as it was, so each of its rows gets an id of its own (`id`, a UUIDv5
+ * of the batch's id and the row's key) that is the same every time, and a store tells the copy for what it is.
+ * A receiver that reads a new schema is deployed before any release sends it.
  */
+
+import { createHash } from 'node:crypto';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const TOOL = /^cad_[a-z_]{1,40}$/;
@@ -54,14 +69,32 @@ const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf'
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
 const WHERE = new Set(['tool', 'route', 'request', 'build', 'command', 'page']);
+// Why a CAD tool's call failed (`cadgen/analytics.py`: `FAILURES`): the caller's, the view's, the machine's or
+// cadgen's own, as cadgen named it where the call failed.
+const FAILURES = new Set(['no_path', 'relative_path', 'no_file', 'not_cad', 'no_view', 'wrong_view', 'bad_request',
+  'timeout', 'view_error', 'too_large', 'no_viewer', 'bug', 'other']);
+// Why a build failed (`cadgen/analytics.py`: `BUILD_FAILURES`), from what the error was and whose code raised it:
+// the model's, the CAD kernel's under it, cadgen's refusal or its mistake, the machine's.
+const BUILD_FAILURES = new Set(['model_error', 'kernel_error', 'refused', 'script_error', 'arguments', 'child_failed',
+  'missing_module', 'missing_file', 'io_error', 'timeout', 'memory', 'export_error', 'bug', 'other']);
+// Why a snapshot failed (`SNAPSHOT_FAILURES`), by what it was doing or what the error was.
+const SNAPSHOT_FAILURES = new Set(['bad_request', 'no_file', 'input_error', 'browser', 'timeout', 'memory', 'render_error',
+  'bug', 'other']);
+// A batch's time, in whole seconds since 1970: any a clock can say (a wrong one included), never a fraction.
+const MAX_AT = 100_000_000_000;
+// Ours: the namespace every row's id is made in (`idOf`).
+const ROWS = 'a67b62d4-a188-43d2-bebc-29fd3ae2cb82';
 
 /** Each event as a row carries it: the names it is told apart by, then what it counts. */
 export const FIELDS = {
   tool: ['tool', 'calls', 'errors'],
+  tool_failure: ['tool', 'reason', 'count'],
   view: ['calls'],
   files: ['kind', 'count'],
   build: ['kind', 'via', 'count', 'failed', 'crashed', 'cancelled', 'cached', 'seconds', 'longest'],
+  build_failure: ['kind', 'via', 'reason', 'count'],
   snapshot: ['kind', 'count', 'failed', 'seconds'],
+  snapshot_failure: ['kind', 'reason', 'count'],
   feature: ['feature', 'count'],
   health: ['workers', 'crashes', 'recycles', 'refusals'],
   exception: ['where', 'tool', 'type', 'handled', 'status', 'frames', 'count'],
@@ -75,6 +108,9 @@ const token = (value, name, limit = 64) =>
 const oneOf = (value, allowed, name) => (allowed.has(value) ? value : fail(`${name} is not one of ${[...allowed].join(', ')}`));
 const count = (value, name) => (Number.isInteger(value) && value >= 0 && value <= MAX_COUNT ? value : fail(`${name} is not a count`));
 const some = (value, name) => (count(value, name) > 0 ? value : fail(`${name} counts nothing`));
+// A process's exit status: an exit code or a signal (-N), or on Windows the exception code a fault ended it
+// with (an NTSTATUS error, 0xC0000000 and up).
+const exitStatus = value => Number.isInteger(value) && (Math.abs(value) < 512 || (value >= 0xC0000000 && value <= 0xFFFFFFFF));
 const matches = (value, pattern, name) => (typeof value === 'string' && pattern.test(value) ? value : fail(`${name} is not one`));
 const frameOf = (frame, name) => {
   if (!frame || typeof frame !== 'object' || Array.isArray(frame)) fail(`${name} is not a frame`);
@@ -110,6 +146,12 @@ const READERS = {
     if (errors > calls) fail(`${at} counts more errors than calls`);
     return { key: `tool ${tool}`, fields: { tool, calls, errors } };
   },
+  tool_failure(event, at) {
+    exactly(event, FIELDS.tool_failure, at);
+    const tool = matches(event.tool, TOOL, `${at}.tool`);
+    const reason = oneOf(event.reason, FAILURES, `${at}.reason`);
+    return { key: `tool_failure ${tool} ${reason}`, fields: { tool, reason, count: some(event.count, `${at}.count`) } };
+  },
   view(event, at) {
     only(event, ['name', 'calls'], at);
     return { key: 'view', fields: { calls: some(event.calls, `${at}.calls`) } };
@@ -134,6 +176,19 @@ const READERS = {
     if (failed + crashed + cancelled + cached > builds) fail(`${at} counts more endings than builds`);
     return { key: `build ${kind} ${via}`, fields: { kind, via, count: builds, failed, crashed, cancelled, cached,
       seconds: seconds(event.seconds, `${at}.seconds`), longest: seconds(event.longest, `${at}.longest`) } };
+  },
+  build_failure(event, at) {
+    exactly(event, FIELDS.build_failure, at);
+    const kind = oneOf(event.kind, KINDS, `${at}.kind`);
+    const via = oneOf(event.via, VIAS, `${at}.via`);
+    const reason = oneOf(event.reason, BUILD_FAILURES, `${at}.reason`);
+    return { key: `build_failure ${kind} ${via} ${reason}`, fields: { kind, via, reason, count: some(event.count, `${at}.count`) } };
+  },
+  snapshot_failure(event, at) {
+    exactly(event, FIELDS.snapshot_failure, at);
+    const kind = oneOf(event.kind, KINDS, `${at}.kind`);
+    const reason = oneOf(event.reason, SNAPSHOT_FAILURES, `${at}.reason`);
+    return { key: `snapshot_failure ${kind} ${reason}`, fields: { kind, reason, count: some(event.count, `${at}.count`) } };
   },
   snapshot(event, at) {
     exactly(event, FIELDS.snapshot, at);
@@ -163,7 +218,7 @@ const READERS = {
       ...(event.tool === undefined ? {} : { tool: matches(event.tool, TOOL, `${at}.tool`) }),
       type: matches(event.type, TYPE, `${at}.type`),
       handled: event.handled,
-      ...(event.status === undefined ? {} : { status: Number.isInteger(event.status) && Math.abs(event.status) < 512 ? event.status : fail(`${at}.status is not an exit status`) }),
+      ...(event.status === undefined ? {} : { status: exitStatus(event.status) ? event.status : fail(`${at}.status is not an exit status`) }),
       frames: event.frames.map((frame, index) => frameOf(frame, `${at}.frames[${index}]`)),
       count: some(event.count, `${at}.count`),
     };
@@ -176,6 +231,10 @@ const READERS = {
 // Before schema 3 only the apps sent, and the browser viewer said so by how it shows CAD.
 const appOf = batch => (batch.presentation === 'browser' ? 'viewer' : 'app');
 const BEFORE_DAEMON = new Set(['tool', 'view', 'file']);
+const WITH_DAEMON = ['tool', 'view', 'files', 'build', 'snapshot', 'feature', 'health', 'exception'];
+const byProcess = batch => ({
+  channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: oneOf(batch.process, PROCESSES, 'process'),
+});
 // What each schema says beside the shared fields -- where the install came from, and which process sent
 // it -- and the events it sends. A new schema adds a reader here and keeps the old ones.
 const SCHEMAS = new Map([
@@ -186,13 +245,29 @@ const SCHEMAS = new Map([
   [2, { fields: ['channel'], events: BEFORE_DAEMON,
     origin: batch => ({ channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: appOf(batch) }) }],
   // The build daemon joins the apps: each batch names its process, and counts files rather than naming them.
-  [3, { fields: ['channel', 'process'], events: new Set(['tool', 'view', 'files', 'build', 'snapshot', 'feature', 'health', 'exception']),
-    origin: batch => ({ channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null, process: oneOf(batch.process, PROCESSES, 'process') }) }],
+  [3, { fields: ['channel', 'process'], events: new Set(WITH_DAEMON), origin: byProcess }],
+  // Why tool calls failed, beside how many did.
+  [4, { fields: ['channel', 'process'], events: new Set([...WITH_DAEMON, 'tool_failure']), origin: byProcess }],
+  // Why builds and snapshots failed; and each batch's id and time, which give each row an id of its own.
+  [5, { fields: ['channel', 'process', 'batch', 'at'], events: new Set([...WITH_DAEMON, 'tool_failure', 'build_failure', 'snapshot_failure']),
+    origin: byProcess, named: true }],
 ]);
 
 export function isUuid(value) {
   return typeof value === 'string' && UUID.test(value);
 }
+
+/** RFC 9562's UUIDv5 of `name` in `namespace`: the same name, the same id, anywhere. */
+export function uuidV5(name, namespace = ROWS) {
+  const hash = createHash('sha1').update(Buffer.from(namespace.replace(/-/g, ''), 'hex')).update(name, 'utf8').digest();
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/** A row's id: its batch's id and its key, which one batch never repeats (`rowsOf`), made one UUID. */
+export const idOf = (batch, key) => uuidV5(`${batch}/${key}`);
 
 /** The rows a batch stores, or `Invalid`. */
 export function rowsOf(batch) {
@@ -215,6 +290,12 @@ export function rowsOf(batch) {
     client_version: client.version === undefined ? null : token(client.version, 'client.version', 32),
     presentation: batch.presentation === undefined ? null : oneOf(batch.presentation, PRESENTATIONS, 'presentation'),
   };
+  // Schema 5 names its batch, so each row carries an id that is the same however often the batch is sent, and the
+  // time the batch was made. Earlier schemas' rows carry neither, as ever.
+  const named = schema.named ? {
+    batch: isUuid(batch.batch) ? batch.batch : fail('batch is not a uuid'),
+    at: Number.isInteger(batch.at) && batch.at >= 0 && batch.at <= MAX_AT ? batch.at : fail('at is not a time'),
+  } : null;
   const events = batch.events;
   if (!Array.isArray(events) || events.length === 0 || events.length > MAX_EVENTS) fail(`events is a list of 1 to ${MAX_EVENTS}`);
   // One event per key, as cadgen sends them: a repeat is refused, never added up.
@@ -229,7 +310,7 @@ export function rowsOf(batch) {
     // A file by its code (schemas 1 and 2) is one more of its format's.
     const same = name === 'files' ? rows.find(row => row.event === 'files' && row.kind === fields.kind) : undefined;
     if (same) same.count += fields.count;
-    else rows.push({ ...context, event: name, ...fields });
+    else rows.push({ ...context, ...(named ? { id: idOf(named.batch, key), at: named.at } : {}), event: name, ...fields });
   });
   return rows;
 }

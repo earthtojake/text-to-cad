@@ -142,7 +142,7 @@ async function openRobot() {
       const from = root.localToWorld(new THREE.Vector3(0.25, 0, 5));
       const onto = root.localToWorld(new THREE.Vector3(0.25, 0, 0.2));
       const hit = pick.scene.pick(new THREE.Ray(from, onto.sub(from).normalize()));
-      expect(hit).toMatchObject({ kind: 'link', linkName: 'upper_arm' });
+      expect(hit).toMatchObject({ kind: 'component', linkName: 'upper_arm', componentId: 'upper_arm:v1' });
       act(() => pick.onPick(hit, { multiSelect: false }));
     },
     pressedRows: () => [...pane.querySelectorAll('[aria-label="Robot tree area"] button[aria-pressed="true"]')].map(button => button.getAttribute('aria-label')),
@@ -213,7 +213,7 @@ it('robot Links and Position are each their tool\'s panel, and no pick or tool o
   expect(robot.jointField('shoulder').closest('[hidden]')).toBeNull();
   expect(robot.jointField('shoulder').value).toBe('30°');
 
-  // A link picked in the viewport and the Position tool show their panels in the stack.
+  // A visual picked in the viewport and the Position tool show their panels in the stack.
   robot.open('Select');
   robot.tapUpperArm();
   await waitFor(() => expect(robot.pressedRows()).toHaveLength(1));

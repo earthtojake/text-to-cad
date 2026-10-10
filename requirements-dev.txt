@@ -27,3 +27,6 @@ networkx
 lxml
 pytest
 trimesh
+# The daemon's workers start in an environment uv creates, as uvx runs cadgen
+# (test_daemon_heartbeat.py).
+uv==0.12.18
