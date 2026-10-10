@@ -513,7 +513,10 @@ means something.
 
 Use `FileSheetSliderField` for a useful bounded range with a committed number
 input, `FileSheetNumberProperty` for other scalars, `FileSheetColorProperty` for
-color with opacity, and ordinary Select controls for choices. Drafts stay local
+color with opacity, and ordinary Select controls for choices. A slider draws its whole track, the part past the
+thumb in the foreground at a fifth (`FILE_SHEET_PRECISION_SLIDER_CLASSES`), so where its thumb
+stands on its range reads on the chrome's see-through surfaces too: a hairline in the border colour
+vanished there, and every thumb looked to sit at the left end of a short slider. Drafts stay local
 until Enter or blur; Escape cancels. Clamp at the owner's write boundary, which
 sliders and number inputs share. Omit a visible label only where the value or
 icon is unambiguous, and always keep the accessible name.

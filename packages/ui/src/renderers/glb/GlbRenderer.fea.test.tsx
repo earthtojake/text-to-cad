@@ -790,3 +790,17 @@ it('with no stress, says to check the load reaches the part, in no tone and with
   mountAssembly([]);
   expect(verdictOf()).toMatchObject({ status: 'close', part: 'Weakest: post', line: 'Peak 180 MPa, limit 276 MPa' });
 });
+
+it('a slider\'s thumb stands where its value is on its range, not at the left end', () => {
+  mount({ ...RESULT, view: { controls: [VIEWED.view.controls[5], VIEWED.view.controls[0]] } });
+  const thumb = (name: string) => screen.getByRole('slider', { name });
+  // ×12 on 0 to 50 is 24% along; ×1 on 0.5 to 3 is 20%.
+  expect(thumb('Exaggerate').getAttribute('aria-valuenow')).toBe('12');
+  expect((thumb('Exaggerate').parentElement as HTMLElement).style.left).toMatch(/^calc\(24% \+ /);
+  expect((thumb('Rider weight').parentElement as HTMLElement).style.left).toMatch(/^calc\(20% \+ /);
+  setValue('Exaggerate slider value', '50');
+  expect((thumb('Exaggerate').parentElement as HTMLElement).style.left).toMatch(/^calc\(100% /);
+  // The track it runs along is drawn, unfilled past the thumb, so where the thumb stands reads.
+  const track = thumb('Exaggerate').closest('[data-slot="slider"]')!;
+  expect(track.className).toContain('[&_[data-slot=slider-track]]:bg-foreground/20');
+});

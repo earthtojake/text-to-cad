@@ -48,7 +48,7 @@ export const FILE_SHEET_PRECISION_SLIDER_CLASSES = [
   "h-4",
   "[&_[data-slot=slider-track]]:h-px",
   "[&_[data-slot=slider-track]]:rounded-full",
-  "[&_[data-slot=slider-track]]:bg-border",
+  "[&_[data-slot=slider-track]]:bg-foreground/20",
   "[&_[data-slot=slider-range]]:bg-primary",
   "[&_[data-slot=slider-thumb]]:h-2.5",
   "[&_[data-slot=slider-thumb]]:w-1.5",
