@@ -341,7 +341,8 @@ def _view(raw: Any) -> dict | None:
     (the load as a multiple of the solved one) or ``threshold`` (values of its
     ``field`` under it are drawn grey), at most one each. ``presets`` are
     named states over those controls, ``show`` whether the loads and fixtures
-    are drawn. ``None`` when the study has none.
+    are drawn and whether an assembly's Parts panel is shown (``parts``; by
+    default only from six parts up). ``None`` when the study has none.
     """
     if raw is None:
         return None
@@ -374,9 +375,9 @@ def _view(raw: Any) -> dict | None:
         show = raw["show"]
         if not isinstance(show, dict):
             raise ValueError('view.show: expected an object like {"loads": true, "fixtures": true}')
-        unknown = set(show) - {"loads", "fixtures"}
+        unknown = set(show) - {"loads", "fixtures", "parts"}
         if unknown:
-            raise ValueError(f"view.show: unknown keys {sorted(unknown)}; expected loads, fixtures")
+            raise ValueError(f"view.show: unknown keys {sorted(unknown)}; expected loads, fixtures, parts")
         for key, value in show.items():
             if not isinstance(value, bool):
                 raise ValueError(f"view.show.{key}: true or false, got {_json_text(value)}")

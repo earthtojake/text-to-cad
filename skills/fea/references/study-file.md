@@ -133,8 +133,8 @@ fatigue or a part whose failure hurts someone.
 ## `view`
 
 What the Viewer offers for the result: the controls in its Study panel's
-Result group, named presets of them, and whether the loads and fixtures are
-drawn. Optional; without it the Viewer shows a field select over every field,
+Result group, named presets of them, whether the loads and fixtures are
+drawn and whether an assembly's Parts panel is shown. Optional; without it the Viewer shows a field select over every field,
 opening on stress, and a deformation slider. cadgen checks it with the rest
 of the study and copies it into the GLB (`extras.view`) and the sidecar
 (`view`).
@@ -185,6 +185,11 @@ whatever `load_scale` is set to.
 - `show`: `loads` and `fixtures`, `true` or `false` (default both true): whether
   the arrows on the loaded faces and the cones on the fixed faces are drawn
   when the result opens. The person can still turn them on in Display.
+  `parts`, `true` or `false`: whether an assembly's Parts panel is shown.
+  Left out, it shows from six parts up; under that, a face picked on the
+  model names its part, the part's material and its margin, and the
+  findings name the joints. Set it `true` when the user asked about the
+  parts or joints of a small assembly.
 
 An unknown key, an unknown `drives`, a field the result does not write, a
 range out of order or a preset naming no control is refused with a sentence

@@ -255,6 +255,10 @@ class StudyView(unittest.TestCase):
         self.assertEqual(view["controls"][0], {"drives": "deformation", "type": "number", "min": 0.0, "max": 40.0})
         self.assertEqual(view["controls"][1], {"drives": "load_scale", "type": "number", "min": 0.1, "max": 2.0, "default": 1.0})
 
+    def test_show_parts_overrides_when_the_parts_panel_shows_either_way(self):
+        for shown in (True, False):
+            self.assertEqual(parse_study({**self.BASE, "view": {"show": {"parts": shown}}}).view, {"show": {"parts": shown}})
+
     def test_presets_with_no_controls_set_the_default_field_and_deformation(self):
         presets = [{"label": "Exaggerated", "deformation": 40, "field": "displacement"}]
         self.assertEqual(parse_study({**self.BASE, "view": {"presets": presets}}).view, {"presets": [{"label": "Exaggerated", "deformation": 40.0, "field": "displacement"}]})
@@ -292,7 +296,8 @@ class StudyView(unittest.TestCase):
             (self._view(presets=[{"load_scale": 2}]), "view.presets[0].label"),
             (self._view(presets=[{"label": "Flip", "field": "strain"}]), "view.presets[0].field: 'strain' is not one of"),
             (self._view(show={"loads": "yes"}), "view.show.loads: true or false"),
-            (self._view(show={"arrows": True}), "view.show: unknown keys ['arrows']"),
+            (self._view(show={"arrows": True}), "view.show: unknown keys ['arrows']; expected loads, fixtures, parts"),
+            (self._view(show={"parts": 1}), "view.show.parts: true or false, got 1"),
         ]
         for view, fragment in cases:
             with self.subTest(fragment=fragment), self.assertRaises(ValueError) as caught:
