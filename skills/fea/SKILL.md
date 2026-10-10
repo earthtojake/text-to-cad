@@ -16,14 +16,14 @@ solves, and writes a result the Viewer renders.
 
 **What runs today is strength (the `static` analysis), fatigue life from a
 repeated static load (`fatigue`), a drop estimate (`drop`), vibration
-(`modal`), buckling (`buckling`) and heat: steady
+(`modal`), shaking across a sine sweep (`harmonic`), buckling (`buckling`) and heat: steady
 temperatures (`thermal`), temperatures over time (`thermal_transient`) and the
 stress heat puts in a part (`thermal_stress`).** Static answers
 "will it hold, and by how much" under forces, pressures, the part's own weight
 (`gravity`) and a steady acceleration (`acceleration`). Every other analysis in
 [Choose the analysis](#choose-the-analysis) is planned: its study format and
 its words are settled, but this cadgen does not solve it yet, and `cadgen fea
-solve` refuses a study that names one ("'harmonic' is planned but not in this
+solve` refuses a study that names one ("'shock' is planned but not in this
 cadgen yet"). Do not write such a study; follow [When the question needs an
 analysis that is not here yet](#when-the-question-needs-an-analysis-that-is-not-here-yet).
 
@@ -47,7 +47,7 @@ study names it; left out, it is `static`.
 | "How hot does it get" (settled, steady running) | `thermal` | Heat | **Runs today** | [thermal.md](references/thermal.md) |
 | "How hot during a warm-up or a duty cycle" | `thermal_transient` | Heat over time | **Runs today** | [thermal-transient.md](references/thermal-transient.md) |
 | "It gets hot: does that stress or warp it" | `thermal_stress` | Heat stress | **Runs today** | [thermal-stress.md](references/thermal-stress.md) |
-| "On a shaker", "across a motor's speed range", a sine sweep | `harmonic` | Shaking | Coming, not in this cadgen yet | [harmonic.md](references/harmonic.md) |
+| "On a shaker", "across a motor's speed range", a sine sweep | `harmonic` | Shaking | **Runs today** | [harmonic.md](references/harmonic.md) |
 | A transport or vibration spec in g²/Hz | `random_vibration` | Random vibration | Coming, not in this cadgen yet | [random-vibration.md](references/random-vibration.md) |
 | A shock spec, a shock response spectrum (SRS) | `shock` | Shock | Coming, not in this cadgen yet | [shock.md](references/shock.md) |
 | A load that changes over time, a hammer blow | `transient` | Over time | Coming, not in this cadgen yet | [transient.md](references/transient.md) |
@@ -128,7 +128,7 @@ leave `defeature` out of `fit.allow`) or names a memory or time budget.
 
 | Task | First action | Reference |
 | --- | --- | --- |
-| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate) and `fatigue` (from a static load) run today. | [Choose the analysis](#choose-the-analysis) |
+| **Pick the analysis** | Match the question to a row of the table above; `static`, `modal`, `harmonic`, `buckling`, `thermal`, `thermal_transient`, `thermal_stress`, `drop` (an estimate) and `fatigue` (from a static load) run today. | [Choose the analysis](#choose-the-analysis) |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
 | **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`part.step#o1.f17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |

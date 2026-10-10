@@ -38,17 +38,17 @@ the skill's "Choose the analysis" table says what to do instead.
 | `analysis` | plain word | status | its keys |
 | --- | --- | --- | --- |
 | `static` | Strength | runs today | this page, and [linear-static.md](linear-static.md) |
-| `modal` | Vibration | coming, not in this cadgen yet | [modal.md](modal.md) |
-| `buckling` | Buckling | coming, not in this cadgen yet | [buckling.md](buckling.md) |
-| `thermal` | Heat | coming, not in this cadgen yet | [thermal.md](thermal.md) |
-| `thermal_transient` | Heat over time | coming, not in this cadgen yet | [thermal-transient.md](thermal-transient.md) |
-| `thermal_stress` | Heat stress | coming, not in this cadgen yet | [thermal-stress.md](thermal-stress.md) |
-| `harmonic` | Shaking | coming, not in this cadgen yet | [harmonic.md](harmonic.md) |
+| `modal` | Vibration | runs today | [modal.md](modal.md) |
+| `buckling` | Buckling | runs today | [buckling.md](buckling.md) |
+| `thermal` | Heat | runs today | [thermal.md](thermal.md) |
+| `thermal_transient` | Heat over time | runs today | [thermal-transient.md](thermal-transient.md) |
+| `thermal_stress` | Heat stress | runs today | [thermal-stress.md](thermal-stress.md) |
+| `harmonic` | Shaking | runs today | [harmonic.md](harmonic.md) |
 | `random_vibration` | Random vibration | coming, not in this cadgen yet | [random-vibration.md](random-vibration.md) |
 | `shock` | Shock | coming, not in this cadgen yet | [shock.md](shock.md) |
 | `transient` | Over time | coming, not in this cadgen yet | [transient.md](transient.md) |
-| `fatigue` | Fatigue life | coming, not in this cadgen yet | [fatigue.md](fatigue.md) |
-| `drop` | Drop (estimate) | coming, not in this cadgen yet | [drop.md](drop.md) |
+| `fatigue` | Fatigue life | runs today, from a static load case | [fatigue.md](fatigue.md) |
+| `drop` | Drop (estimate) | runs today, as an estimate | [drop.md](drop.md) |
 | `cfd` | Flow | coming, not in this cadgen yet | [cfd.md](cfd.md) |
 | `impact` | Drop impact | coming, not in this cadgen yet | [impact.md](impact.md) |
 | `nonlinear` | Permanent bend / Stretch | coming, not in this cadgen yet | [nonlinear.md](nonlinear.md) |
