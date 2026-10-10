@@ -1,13 +1,88 @@
 # Heat (`thermal`)
 
-**Not available in this cadgen yet.** `cadgen fea solve` refuses a study with `"analysis": "thermal"` ("'thermal' is planned but not in this cadgen yet"), so do not write one; tell the user it is coming, and see the skill's "When the question needs an analysis that is not here yet". This page is filled in, with its schema, an example, a hand check, its limits and its adapted steps, when it ships.
+It answers "how hot does it get once it has settled": the steady temperature across the part from
+faces held at a temperature, heat put in (a chip, a heater, a motor) and heat carried away by air
+or liquid (convection). The plain word is Heat.
 
-It will answer "how hot does it get once it has settled": the steady temperature across the part from faces held at a temperature, heat put in (a chip, a heater) and heat carried away by air or liquid (convection). A part that is only heated, with nowhere for the heat to go, has no steady temperature, so at least one held temperature or convection is required.
+## When to use it
 
-On top of the common keys in [study-file.md](study-file.md#common-keys), it will take:
+- "How hot does the chip side get", "will the case stay under 60 °C", "is this heat sink enough".
+- Steady running: the temperatures once nothing changes any more. For a warm-up, a duty cycle or
+  "how long until it is too hot", use [`thermal_transient`](thermal-transient.md). For "does the heat
+  stress or warp it", use [`thermal_stress`](thermal-stress.md), which runs this first.
 
-- `temperatures`: `[{"faces": [...], "C": 25}]`, faces held at a temperature in °C.
-- `heat`: `[{"faces": [...], "W": 15}]` (total power) or `{"faces": [...], "W_per_m2": 2000}` (heat flux).
-- `convection`: `[{"faces": [...], "h_W_m2K": 10, "ambient_C": 25}]`.
-- The material needs a conductivity (`conductivity_W_mK`).
-- Check `temperature`: `max_C`, optional `faces`: "Hottest 84 °C, limit 100 °C".
+## The study
+
+On top of the common keys in [study-file.md](study-file.md#common-keys):
+
+```json
+{"analysis": "thermal", "material": "aluminum-6061-t6",
+ "temperatures": [{"faces": ["#o1.f1"], "C": 25}],
+ "heat": [{"faces": ["#o1.f7"], "W": 15}, {"faces": ["#o1.f8"], "W_per_m2": 2000}],
+ "convection": [{"faces": ["#o1.f3", "#o1.f4"], "h_W_m2K": 10, "ambient_C": 25}],
+ "view": {"checks": [{"kind": "temperature", "max_C": 85, "faces": ["#o1.f7"], "label": "Chip side"}]}}
+```
+
+- `temperatures`: faces held at a temperature, in °C (a cold plate, a wall the part is bolted to,
+  water at a known temperature).
+- `heat`: heat going in through faces. `W` is the total power, spread evenly over all its faces'
+  area; `W_per_m2` is a heat flux. Exactly one of the two per entry. A negative value takes heat out.
+- `convection`: air or liquid carrying heat away. `h_W_m2K` is how well it does (still air about
+  5-10, a fan 25-100, water 500 or more), `ambient_C` its temperature. A face with nothing on it is
+  insulated: no heat crosses it.
+- **At least one `temperatures` or `convection` entry is required.** A part only heated, with
+  nowhere for the heat to go, has no steady temperature, and the study is refused with that
+  sentence. Add the air around it or the face it sits on.
+- The material needs a thermal conductivity (`conductivity_W_mK`; every table material has one). An
+  assembly takes each part's own, and heat crosses bonded joints as if they were one piece (no
+  contact resistance).
+- No `fixtures`, `loads` or `margin`: nothing moves.
+- Check `temperature`: `max_C`, the hottest it may get, and optional `faces` (else the whole part).
+  It is measured from the coolest temperature the study sets (the lowest held temperature or
+  ambient, the result's `reference_C`), so 84 °C against a 100 °C limit with 25 °C air has used
+  59/75 = 0.79 of its room; past 0.9 it is close, past 1 it fails. A limit at or under that
+  reference is refused. The row reads "Hottest 84 °C, limit 100 °C"; with no check, the verdict
+  shows none.
+
+## What comes out
+
+- Fields: `temperature` (°C; its colours run from its own coolest to its hottest) and `heat_flux`
+  (the conducted heat flow's size, W/m², "Heat flow" in the viewer). Nothing deforms, and there is
+  no load control.
+- Summary: `max_temperature_C`, `min_temperature_C`, `max_at_mm`, `max_heat_flux_W_m2`,
+  `heat_in_W`, `heat_out_W`, `heat_balance` (their mismatch as a share), `reference_C` and the
+  `checks`. An assembly adds each part's `max_temperature_C` under `parts`.
+- CLI: "hottest 84 °C at [x, y, z] mm, coolest 25 °C" and "heat in 15 W, out 15 W".
+- What goes in comes out: a balance off by more than 1 % is a warning (and a `heat_balance`
+  finding); it means the solve did not settle, so check it on a finer mesh before trusting it.
+- Findings: `temperature_over_limit` (error) and `temperature_close_to_limit` (warning) per check,
+  and `no_heat` (info) when nothing heats it.
+
+## Judging the answer (a hand check)
+
+- A slab held at two temperatures conducts Q = k A ΔT / L: a 10 × 10 mm aluminium bar 20 mm long,
+  100 °C to 20 °C, passes 167 × 1e-4 × 80 / 0.02 = 66.8 W, and its temperature falls in a straight
+  line. The solver matches this to well under 1 %.
+- Heat out to air: Q = h A (T_surface - T_air). 15 W into a part with 0.01 m² of surface in still
+  air (h = 10) needs 150 °C above the air: a hand check that tells you whether the answer is
+  plausible, and that a heat sink or a fan is needed.
+- A pin fin (a rod held hot at its base in air, its tip insulated): T_tip - T_air = (T_base -
+  T_air) / cosh(mL), m = √(hP / (kA)). A 4 × 4 mm aluminium pin 50 mm long in h = 50 keeps 72 % of
+  its base excess at the tip; the solver matches within 2 %.
+- In series (a spreader bonded to a mount): the resistances L / (k A) add, and the joint sits where
+  the drop across each matches its share.
+
+## Limits
+
+- Conduction with constant properties: no radiation (it matters above about 100 °C, or for a dull
+  part in still air), no temperature-dependent conductivity, no contact resistance at bonded joints.
+- `h` is a number you give, not a flow calculation: a range (5-10 still air, 25-100 forced) is
+  often the largest uncertainty. Say which you assumed.
+- Steady state only: how long it takes to get there is `thermal_transient`.
+
+## When the model is big
+
+It runs at any size. The ladder may take: an iterative (multigrid) solver for the temperatures
+(exact, said only when it matters), a mesh kept fine where it is hottest and coarse away from it,
+small far fillets left out, simpler elements, half a symmetric part. Each step is an `adapted:` line
+with its accuracy note; report every one.
