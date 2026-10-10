@@ -646,7 +646,11 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   pulling force stands on the face by its tail); a pressure's arrows run along the inward normal;
   a label beside each load's arrows, past their tails, says its amount at the load shown ("300 N",
   "2 MPa"). On each fixed face, small cones point into it. They stand on the deformed shape as it is
-  drawn and over the surface (no depth test). The theme has no colour to spare (every saturated hue
+  drawn, in two passes, the x-ray look: what is in view solid, depth-tested as the model is,
+  and what the model hides as a faint ghost (a quarter opacity) over the surface, so a fixture
+  under the base reads as under it, never as standing on the face in front; a load's label the
+  part hides is ghosted the same way (a ray from the eye to it, cast at most every 100 ms while
+  the view moves). The theme has no colour to spare (every saturated hue
   is the ramp's or the chosen faces' magenta): loads are the ink, fixtures a muted grey, and a
   chosen load row's arrows, or a chosen fixed row's cones, take the chosen magenta. Display has one
   gate for them, **Loads and fixtures**, after Surfaces, on unless the study's `view.show` turns

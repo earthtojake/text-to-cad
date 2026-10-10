@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BoxGeometry, BufferAttribute, Group, Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import { readFeaResult } from './feaResult.js';
-import { ARROW_LENGTH, createFeaMarkers, loadLabel, markerPoses, markerSites } from './feaMarkers.js';
+import { ARROW_LENGTH, GHOST_OPACITY, createFeaMarkers, loadLabel, markerPoses, markerSites } from './feaMarkers.js';
 
 // A unit cube in the result's glTF space, its six faces in BoxGeometry's order (+X, -X, +Y, -Y, +Z,
 // -Z) as `_FACE` 0..5, wound outward as the writer winds it.
@@ -98,6 +98,40 @@ describe('loads and fixtures on the model', () => {
     expect(new THREE.Vector3().setFromMatrixPosition(matrix).y).toBeCloseTo(0.25, 6);
     markers.dispose();
     expect(markers.object3D.parent).toBeNull();
+  });
+
+  it('draws each marker solid where it is in view and as a faint ghost where the model hides it', () => {
+    const result = cube(STUDY);
+    const markers = createFeaMarkers(THREE, result);
+    markers.update(positionsOf(result));
+    markers.style({ colours: { load: '#18181b', fixture: '#71717a' }, visible: { loads: true, fixtures: true }, chosen: () => false });
+    const byName = (name: string) => markers.object3D.getObjectByName(name) as THREE.InstancedMesh;
+    for (const kind of ['fea-load-shafts', 'fea-load-heads', 'fea-fixture-cones']) {
+      const solid = byName(kind);
+      const ghost = byName(`${kind}-ghost`);
+      const solidMaterial = solid.material as THREE.MeshBasicMaterial;
+      const ghostMaterial = ghost.material as THREE.MeshBasicMaterial;
+      // In view: tested against the model's depth as the model is, opaque.
+      expect([solidMaterial.depthTest, solidMaterial.depthFunc, solidMaterial.opacity]).toEqual([true, THREE.LessEqualDepth, 1]);
+      // Hidden: only where the model is nearer, faint, writing no depth, drawn before the solid pass.
+      expect([ghostMaterial.depthTest, ghostMaterial.depthFunc, ghostMaterial.depthWrite, ghostMaterial.transparent]).toEqual([true, THREE.GreaterDepth, false, true]);
+      expect(ghostMaterial.opacity).toBe(GHOST_OPACITY);
+      expect(ghost.renderOrder).toBeLessThan(solid.renderOrder);
+      // The same markers, in the same places and colours.
+      expect(ghost.count).toBe(solid.count);
+      const [a, b] = [new THREE.Matrix4(), new THREE.Matrix4()];
+      solid.getMatrixAt(0, a);
+      ghost.getMatrixAt(0, b);
+      expect(b.equals(a)).toBe(true);
+      const [c, d] = [new THREE.Color(), new THREE.Color()];
+      solid.getColorAt(0, c);
+      ghost.getColorAt(0, d);
+      expect(d.getHexString()).toBe(c.getHexString());
+    }
+    const disposed: string[] = [];
+    markers.object3D.traverse((object: any) => object.material?.addEventListener('dispose', () => disposed.push(object.name)));
+    markers.dispose();
+    expect(disposed).toHaveLength(6);
   });
 
   it('labels each load with its amount at the load shown, beside its arrows', () => {

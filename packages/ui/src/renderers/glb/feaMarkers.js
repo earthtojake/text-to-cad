@@ -6,8 +6,10 @@
  * The places are sampled once per result (`markerSites`): one to five per face, more on a bigger
  * face, spread over it, each a triangle of the face found by the result's `_FACE` attribute. Where
  * a marker stands is worked out from the positions on screen (`markerPoses`), so the markers follow
- * the deformation as it is drawn. The THREE objects (`createFeaMarkers`) are this module's: one
- * instanced mesh per kind, over the surface (no depth test), never picked, and disposed with it.
+ * the deformation as it is drawn. The THREE objects (`createFeaMarkers`) are this module's: per
+ * kind, one instanced mesh drawn solid where it is in view and one drawn as a faint ghost where the
+ * model hides it (the x-ray look), so a fixture under the part reads as under it, never as standing
+ * on the face in front. Never picked, and disposed with the markers.
  */
 import { clamp } from "@text-to-cad/core/common/numbers.js";
 import { filePositions } from "./feaResult.js";
@@ -22,6 +24,8 @@ const SPREAD = 0.12;
 const MAX_PER_FACE = 5;
 // The chosen load's or fixture's markers take the colour a chosen face is tinted toward.
 const HIGHLIGHT = "#ff40f2";
+// What is left of a marker the model hides: a ghost, drawn over the surface.
+export const GHOST_OPACITY = 0.25;
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -206,22 +210,33 @@ export function createFeaMarkers(THREE, result) {
   shaftGeometry.translate(0, -head - (arrowLength - head) / 2, 0);
   const coneGeometry = new THREE.ConeGeometry(coneHeight * 0.45, coneHeight, 12);
   coneGeometry.translate(0, -coneHeight / 2, 0);
-  // Flat colour over the surface: depth neither tested nor written, drawn after the model.
-  const material = () => new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, depthWrite: false, toneMapped: false });
-  const loadMaterial = material();
-  const fixtureMaterial = material();
-  const instanced = (geometry, mat, count) => {
+  // Two passes, both after the model and in the transparent list so their order holds: first the
+  // ghost, only where something nearer hides the marker (depth greater than what is drawn there,
+  // nothing written), then the solid marker, depth-tested as the model is. Each fragment is one or
+  // the other, so a hidden marker never shows solid and a visible one never carries its ghost.
+  const solidMaterial = () => new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, toneMapped: false });
+  const ghostMaterial = () => new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: GHOST_OPACITY, depthFunc: THREE.GreaterDepth, depthWrite: false, toneMapped: false,
+  });
+  const materials = { load: solidMaterial(), fixture: solidMaterial(), loadGhost: ghostMaterial(), fixtureGhost: ghostMaterial() };
+  const instanced = (geometry, mat, count, renderOrder, name) => {
     const mesh = new THREE.InstancedMesh(geometry, mat, Math.max(count, 1));
+    mesh.name = name;
     mesh.count = count;
-    mesh.renderOrder = 10;
+    mesh.renderOrder = renderOrder;
     mesh.frustumCulled = false;
     mesh.raycast = () => {};
     group.add(mesh);
     return mesh;
   };
-  const shafts = instanced(shaftGeometry, loadMaterial, loads.length);
-  const heads = instanced(headGeometry, loadMaterial, loads.length);
-  const cones = instanced(coneGeometry, fixtureMaterial, fixtures.length);
+  const shafts = instanced(shaftGeometry, materials.load, loads.length, 11, "fea-load-shafts");
+  const heads = instanced(headGeometry, materials.load, loads.length, 11, "fea-load-heads");
+  const cones = instanced(coneGeometry, materials.fixture, fixtures.length, 11, "fea-fixture-cones");
+  const ghostShafts = instanced(shaftGeometry, materials.loadGhost, loads.length, 10, "fea-load-shafts-ghost");
+  const ghostHeads = instanced(headGeometry, materials.loadGhost, loads.length, 10, "fea-load-heads-ghost");
+  const ghostCones = instanced(coneGeometry, materials.fixtureGhost, fixtures.length, 10, "fea-fixture-cones-ghost");
+  const meshes = [shafts, heads, cones, ghostShafts, ghostHeads, ghostCones];
+  const ghostOf = new Map([[shafts, ghostShafts], [heads, ghostHeads], [cones, ghostCones]]);
   const up = new THREE.Vector3(0, 1, 0);
   const matrix = new THREE.Matrix4();
   const rotation = new THREE.Quaternion();
@@ -235,7 +250,9 @@ export function createFeaMarkers(THREE, result) {
     rotation.setFromUnitVectors(up, along.fromArray(pose.direction));
     matrix.compose(at.fromArray(pose.tip), rotation, one);
     mesh.setMatrixAt(index, matrix);
+    ghostOf.get(mesh).setMatrixAt(index, matrix);
   };
+  const paint = (mesh, index, tone) => { mesh.setColorAt(index, tone); ghostOf.get(mesh).setColorAt(index, tone); };
   return {
     object3D: group,
     sites: placed.sites,
@@ -247,19 +264,19 @@ export function createFeaMarkers(THREE, result) {
         if (pose.kind === "load") { place(shafts, load, pose); place(heads, load, pose); load += 1; }
         else { place(cones, fixture, pose); fixture += 1; }
       }
-      for (const mesh of [shafts, heads, cones]) mesh.instanceMatrix.needsUpdate = true;
+      for (const mesh of meshes) mesh.instanceMatrix.needsUpdate = true;
     },
     poses: () => poses,
     style({ colours, visible, chosen }) {
-      shafts.visible = heads.visible = visible.loads && loads.length > 0;
-      cones.visible = visible.fixtures && fixtures.length > 0;
+      shafts.visible = heads.visible = ghostShafts.visible = ghostHeads.visible = visible.loads && loads.length > 0;
+      cones.visible = ghostCones.visible = visible.fixtures && fixtures.length > 0;
       loads.forEach((site, index) => {
         colour.set(chosen(site) ? HIGHLIGHT : colours.load);
-        shafts.setColorAt(index, colour);
-        heads.setColorAt(index, colour);
+        paint(shafts, index, colour);
+        paint(heads, index, colour);
       });
-      fixtures.forEach((site, index) => cones.setColorAt(index, colour.set(chosen(site) ? HIGHLIGHT : colours.fixture)));
-      for (const mesh of [shafts, heads, cones]) if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      fixtures.forEach((site, index) => paint(cones, index, colour.set(chosen(site) ? HIGHLIGHT : colours.fixture)));
+      for (const mesh of meshes) if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     },
     labels(loadScale = 1) {
       const studyLoads = result.study ? result.study.loads.filter((entry) => entry.faces.length) : [];
@@ -272,10 +289,9 @@ export function createFeaMarkers(THREE, result) {
     },
     dispose() {
       group.removeFromParent();
-      for (const mesh of [shafts, heads, cones]) mesh.dispose();
+      for (const mesh of meshes) mesh.dispose();
       for (const geometry of [headGeometry, shaftGeometry, coneGeometry]) geometry.dispose();
-      loadMaterial.dispose();
-      fixtureMaterial.dispose();
+      for (const material of Object.values(materials)) material.dispose();
     },
   };
 }

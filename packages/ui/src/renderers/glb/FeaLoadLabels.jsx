@@ -1,16 +1,21 @@
 import { useEffect, useRef } from "react";
+import { GHOST_OPACITY } from "./feaMarkers.js";
 
 // The panels' 11px, in the viewer's own face.
 const FONT_SIZE = "500 11px";
 // Past the arrows' tails, away from their tips, clear of the shafts.
 const OFFSET_PX = 10;
+// Whether the model hides a label is cast at most this often while the view moves, and once more
+// when it stops: a ray through the result mesh per label, not per frame.
+const HIDDEN_EVERY_MS = 100;
 
 /**
  * Each load's amount ("300 N", "2 MPa") beside its arrows, drawn over the view on a canvas that
  * takes no pointer. `labels()` hands the current ones (`createFeaMarkers().labels`, in the result
  * mesh's space, following the deformation drawn); a frame loop repaints them, as the finding rings
  * are painted, so they follow the camera. A label behind the camera is left out. `colours`: the
- * ink and the halo it sits on.
+ * ink and the halo it sits on. A label the model hides (a ray from the eye meets the part before
+ * it) is drawn as its arrows are there, a faint ghost.
  */
 export default function FeaLoadLabels({ runtimeRef, hostRef, mesh, labels, colours }) {
   const canvasRef = useRef(null);
@@ -21,6 +26,10 @@ export default function FeaLoadLabels({ runtimeRef, hostRef, mesh, labels, colou
     if (!canvas) return undefined;
     let frameId = 0;
     let painted = "";
+    let castFor = "";
+    let castAt = 0;
+    let hidden = [];
+    let raycaster = null;
     const paint = () => {
       frameId = window.requestAnimationFrame(paint);
       const runtime = runtimeRef.current;
@@ -48,9 +57,27 @@ export default function FeaLoadLabels({ runtimeRef, hostRef, mesh, labels, colou
         const dx = tip ? tail[0] - tip[0] : 1;
         const dy = tip ? tail[1] - tip[1] : -1;
         const span = Math.hypot(dx, dy) || 1;
-        placed.push({ text: label.text, x: tail[0] + (dx / span) * OFFSET_PX, y: tail[1] + (dy / span) * OFFSET_PX, align: dx < 0 ? "right" : "left" });
+        placed.push({ text: label.text, at: label.at, x: tail[0] + (dx / span) * OFFSET_PX, y: tail[1] + (dy / span) * OFFSET_PX, align: dx < 0 ? "right" : "left" });
       }
-      const key = JSON.stringify([width, height, dpr, tones, placed.map(({ text, x, y, align }) => [text, Math.round(x), Math.round(y), align])]);
+      const where = JSON.stringify(placed.map(({ text, x, y }) => [text, Math.round(x), Math.round(y)]));
+      const now = window.performance.now();
+      if (where !== castFor && now - castAt >= HIDDEN_EVERY_MS) {
+        castFor = where;
+        castAt = now;
+        raycaster ??= new runtime.THREE.Raycaster();
+        const target = new runtime.THREE.Vector3();
+        const ndc = new runtime.THREE.Vector2();
+        hidden = placed.map(({ at }) => {
+          target.fromArray(at).applyMatrix4(shownMesh.matrixWorld);
+          const projected = target.clone().project(runtime.camera);
+          raycaster.setFromCamera(ndc.set(projected.x, projected.y), runtime.camera);
+          const reach = raycaster.ray.origin.distanceTo(target);
+          raycaster.far = reach * 0.99;
+          return raycaster.intersectObject(shownMesh, false).length > 0;
+        });
+      }
+      placed.forEach((label, index) => { label.hidden = hidden[index] === true; });
+      const key = JSON.stringify([width, height, dpr, tones, placed.map(({ text, x, y, align, hidden: ghost }) => [text, Math.round(x), Math.round(y), align, ghost])]);
       if (key === painted) return;
       painted = key;
       if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
@@ -64,7 +91,8 @@ export default function FeaLoadLabels({ runtimeRef, hostRef, mesh, labels, colou
       context.font = `${FONT_SIZE} ${window.getComputedStyle(host).fontFamily || "sans-serif"}`;
       context.textBaseline = "middle";
       context.lineJoin = "round";
-      for (const { text, x, y, align } of placed) {
+      for (const { text, x, y, align, hidden: ghost } of placed) {
+        context.globalAlpha = ghost ? GHOST_OPACITY : 1;
         context.textAlign = align;
         context.lineWidth = 3;
         context.strokeStyle = tones.halo;
@@ -72,6 +100,7 @@ export default function FeaLoadLabels({ runtimeRef, hostRef, mesh, labels, colou
         context.fillStyle = tones.ink;
         context.fillText(text, x, y);
       }
+      context.globalAlpha = 1;
     };
     frameId = window.requestAnimationFrame(paint);
     return () => {

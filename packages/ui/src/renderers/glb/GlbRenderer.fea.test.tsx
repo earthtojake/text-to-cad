@@ -649,7 +649,7 @@ it('draws the loads and fixtures on the model, the chosen load\'s arrows in the 
   expect(new THREE.Vector3().setFromMatrixPosition(after).z).toBeLessThan(new THREE.Vector3().setFromMatrixPosition(before).z);
   openDisplay();
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Disable Loads and fixtures' })); });
-  expect([shafts.visible, heads.visible, cones.visible]).toEqual([false, false, false]);
+  expect(group.children.map(child => child.visible)).toEqual([false, false, false, false, false, false]);
   unmount();
   expect(group.parent).toBeNull();
 });
@@ -658,8 +658,8 @@ it('a view that turns the markers off opens with the switch off', () => {
   const both = { ...STUDY, loads: [{ type: 'force', faces: ['#o1.f1'], vector_N: [0, 0, -2500] }] };
   const { mesh } = mount({ ...STUDIED, study: both, view: { show: { loads: false, fixtures: false } } }, undefined, { faces: [0, 0, 0, 0] });
   const group = mesh.children.find(child => child.name === 'fea-markers')!;
-  expect(group.children.map(child => child.visible)).toEqual([false, false, false]);
+  expect(group.children.map(child => child.visible)).toEqual([false, false, false, false, false, false]);
   openDisplay();
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Enable Loads and fixtures' })); });
-  expect(group.children.map(child => child.visible)).toEqual([true, true, true]);
+  expect(group.children.map(child => child.visible)).toEqual([true, true, true, true, true, true]);
 });
