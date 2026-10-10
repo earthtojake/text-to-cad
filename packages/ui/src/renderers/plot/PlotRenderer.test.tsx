@@ -351,7 +351,9 @@ it('a board with nothing to report has no card, no icon in the navbar and no Che
 });
 
 it('a board with suggestions alone has no card and no icon: Select\'s Checks panel holds them, folded', async () => {
-  readPlot = boardWith(FINDINGS.filter((finding) => finding.severity === 'warning'));
+  // KiCad reports a silkscreen clearance once per pair: the panel says it once, with its count and what it names.
+  readPlot = boardWith([...FINDINGS.filter((finding) => finding.severity === 'warning'),
+    { check: 'drc', severity: 'warning', type: 'silk_overlap', description: 'Silkscreen clearance', items: [{ text: 'Pad 2 of J1', ref: '#J1.2', at: [30, 11.27] }] }]);
   const view = await open('blinky.kicad_pcb');
   const { pane, dispose } = view;
   await opened(pane);
@@ -367,8 +369,10 @@ it('a board with suggestions alone has no card and no icon: Select\'s Checks pan
   expect(within(checks).getByRole('button', { name: 'R1 is 9.1 mm from J1 (aim for under 3 mm)' })).not.toBeNull();
   // A finding without a sentence of its own reads as KiCad wrote it.
   const silk = within(checks).getByRole('button', { name: 'Silkscreen clearance' });
+  expect(within(checks).getAllByRole('button').filter((button) => button.hasAttribute('data-finding-row'))).toHaveLength(2);
+  expect(silk.textContent).toBe('Silkscreen clearance2J1, R1');
   await act(async () => { silk.click(); });
-  expect(view.controller.readState().selection[0]).toMatchObject({ target: { selectors: ['#R1'] } });
+  expect(view.controller.readState().selection[0]).toMatchObject({ target: { selectors: ['#R1', '#J1.2'] } });
   expect(pane.querySelector('[data-tool-panel-id="reference"] [data-tool-panel-heading] h3')!.textContent).toBe('Silkscreen clearance');
   dispose();
 });
