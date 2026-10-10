@@ -225,9 +225,9 @@ class AssemblyChecksTest(unittest.TestCase):
         close = solved(part="post", assembly=True, peak_MPa=120.0, peak_gauss_MPa=130.0, coarser_peak_MPa=200.0)  # SF 2.3
         self.assertIn("mesh_not_converged", [f["type"] for f in findings(close)])
 
-    def test_yields_names_the_part_as_it_always_does(self):
+    def test_yields_names_the_part_quoted_in_an_assembly(self):
         (f,) = findings(solved(part="post", assembly=True, peak_MPa=310.0, peak_gauss_MPa=320.0))
-        self.assertEqual(f["summary"], "The post yields: peak stress 310 MPa is above the 276 MPa yield strength of 6061-T6")
+        self.assertEqual(f["summary"], "'post' yields: peak stress 310 MPa is above the 276 MPa yield strength of 6061-T6")
         self.assertEqual(f["items"][0]["text"], "the peak stress in 'post'")
 
     def test_the_other_sentences_of_an_assembly_name_the_part(self):

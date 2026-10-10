@@ -706,7 +706,7 @@ class SolveAssemblyTest(unittest.TestCase):
 
     def test_each_part_that_falls_short_is_named_in_its_findings(self):
         (yields,) = [f for f in self.mixed.findings if f["type"] == "yields"]
-        self.assertTrue(yields["summary"].startswith("The post yields: peak stress "), yields["summary"])
+        self.assertTrue(yields["summary"].startswith("'post' yields: peak stress "), yields["summary"])
         self.assertEqual(self.mixed.findings[0], yields)
         (low,) = [f for f in self.mixed.findings if f["type"] == "low_margin"]
         self.assertTrue(low["summary"].startswith("'base' holds, but only 1."), low["summary"])

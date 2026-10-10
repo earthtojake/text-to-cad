@@ -167,8 +167,9 @@ def findings(solved: Solved) -> list[dict]:
     peak = _item(f"the peak stress in {quoted(solved.part)}" if solved.assembly else "the peak stress", solved.peak_face, solved.peak_at)
     factor = safety_factor(solved)
     peak_MPa = solved.peak_MPa
-    # An assembly's sentences name the part; "The post yields" already does.
+    # An assembly's sentences name the part, quoted like every other finding's.
     it = quoted(solved.part) if solved.assembly else "It"
+    subject = quoted(solved.part) if solved.assembly else f"The {solved.part}"
 
     def about(summary: str) -> str:
         return f"In {quoted(solved.part)}: {summary[0].lower()}{summary[1:]}" if solved.assembly else summary
@@ -230,7 +231,7 @@ def findings(solved: Solved) -> list[dict]:
         add(
             "error",
             "yields",
-            f"The {solved.part} yields: peak stress {shown_peak} MPa is above "
+            f"{subject} yields: peak stress {shown_peak} MPa is above "
             f"the {shown_yield} MPa yield strength of {solved.material_name}{qualifier}",
             f"safety factor {safety_factor_text(factor)}",
             [peak],

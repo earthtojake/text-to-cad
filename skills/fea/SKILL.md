@@ -181,7 +181,7 @@ joined, through bonded neighbours, to a part that is fixed.
    single-part path instead, ignoring the study's `parts` and `connections`
    (it says so), and every face named must be on that part.
 
-4. **Read the findings by part.** Each finding names its part ("The post
+4. **Read the findings by part.** Each finding names its part ("'post'
    yields: ..."). Fix the named part, not the assembly in general: a thicker
    section, a fillet, a different material in `parts`, a larger joint area
    (the joint's `area_mm2` is in the sidecar's `connections`). The Viewer's
