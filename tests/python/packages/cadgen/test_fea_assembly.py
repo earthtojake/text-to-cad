@@ -1242,7 +1242,7 @@ class SolveAssemblyTest(unittest.TestCase):
             "mesh": {"size_mm": 4.0},
         }
         for connections in ([], [{"between": ["left", "right"], "type": "free"}]):
-            with self.assertRaisesRegex(ValueError, r"'left' and 'right' overlap by .* mm³ and are both bonded to 'base'"), quiet():
+            with self.assertRaisesRegex(ValueError, r"'left' and 'right' overlap by .* mm³ and are joined through 'base'"), quiet():
                 fea.solve(step, self.tmp / "overlapping.glb", study={**study, "connections": connections})
 
     def test_gluing_refuses_a_solid_two_parts_both_became(self):

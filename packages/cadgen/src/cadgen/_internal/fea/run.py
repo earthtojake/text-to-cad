@@ -261,7 +261,7 @@ def _plan_assembly(scene: "StepScene", parsed, logger: CliLogger) -> _Plan:
         if group_of[i] == group_of[j]:
             through = _joined_through([(index_of[c.a], index_of[c.b]) for c in bonded], i, j)
             raise ValueError(
-                f"{quoted(names[i])} and {quoted(names[j])} overlap by {o.volume_mm3:.3g} mm³ and are both bonded to "
+                f"{quoted(names[i])} and {quoted(names[j])} overlap by {o.volume_mm3:.3g} mm³ and are joined through "
                 f"{' and '.join(quoted(names[k]) for k in through)}, so gluing would fuse them: fix the geometry"
             )
     for pair in freed:
