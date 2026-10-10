@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "@text-to-cad/ui/utils";
 import { TREE_INDENT_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@text-to-cad/ui/primitives/tree-row";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
 import { KinematicsPoseRow } from "../kit/inspector/kinematicsControls.jsx";
 import { parameterRow } from "../kit/inspector/parameterRow.jsx";
@@ -28,10 +29,13 @@ function FeaResultControls({ controls, values, presets, preset, onChange, onPres
   );
 }
 
-/** A row's name, then what it says in muted text: in a narrow panel the detail takes the truncation. */
+/**
+ * A row's name, then what it says in muted text: in a narrow panel the detail takes the truncation,
+ * then the name ("display base rounded countersunk · face 9"), hinted whole when cut off.
+ */
 function RowText({ row }) {
   return <>
-    <TreeRowLabel className="max-w-full shrink-0">{row.label}</TreeRowLabel>
+    <TreeRowLabel className={row.detail ? "max-w-full shrink-0" : "flex-1"}>{row.label}</TreeRowLabel>
     {row.detail ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{row.detail}</TreeRowLabel> : null}
   </>;
 }
@@ -49,14 +53,21 @@ function WrappedRowText({ row }) {
 }
 
 /**
- * A row that only says something (Material, Mesh): its detail wraps between words onto further
- * lines, as a Reference's values do, so nothing of it is cut off at the panel's one width.
+ * A row that only says something (Material, Mesh): its label then its detail ("Aluminum 6061-T6",
+ * "3.7 mm elements"), on one line where both fit, else the detail whole on the line under the label
+ * ("Default material" over the name), never broken between words. Its further words are its hint
+ * ("refined from 6 mm"); a detail cut off even on its own line is hinted whole.
  */
 function StudyFactRow({ row }) {
+  const hint = row.hint || `${row.label} ${row.detail}`;
   return <li className="min-w-0">
-    <TreeRowSurface dense className="h-auto min-h-6 items-baseline gap-1.5 py-1 pl-4" style={{ height: "auto" }} data-study-row={row.id}>
-      <span className="shrink-0">{row.label}</span>
-      <span className="min-w-0 flex-1 text-micro text-muted-foreground [overflow-wrap:break-word]" data-study-detail="">{unbroken(row.detail)}</span>
+    <TreeRowSurface dense className="h-auto min-h-6 pl-4" style={{ height: "auto" }} data-study-row={row.id}>
+      <TooltipHint content={hint} overflowOnly={!row.hint}>
+        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 py-1 pr-2">
+          <span className="shrink-0">{row.label}</span>
+          <span className="min-w-0 max-w-full truncate text-micro text-muted-foreground" data-study-detail="">{row.detail}</span>
+        </span>
+      </TooltipHint>
     </TreeRowSurface>
   </li>;
 }
@@ -81,11 +92,13 @@ function StudyRow({ row, depth, chosen, collapsed, toggle, onChoose, contents })
       {branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${row.label}`} aria-expanded={open}
         className="grid h-6 w-4 shrink-0 place-items-center self-start rounded focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => toggle(row.id)}><TreeRowChevron expanded={open} /></button> : <span className="w-4 shrink-0" />}
-      {choosable ? <button type="button" aria-label={`Select ${row.name || row.label}`} aria-pressed={active} onClick={() => onChoose(row)}
-        className={cn("flex min-w-0 flex-1 gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          row.wrap ? "flex-wrap items-baseline py-1" : "h-full items-center")}>
-        {row.wrap ? <WrappedRowText row={row} /> : <RowText row={row} />}
-      </button> : <span className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"><RowText row={row} /></span>}
+      {choosable ? <TooltipHint content={row.wrap ? null : [row.label, row.detail].filter(Boolean).join(" ")} overflowOnly>
+        <button type="button" aria-label={`Select ${row.name || row.label}`} aria-pressed={active} onClick={() => onChoose(row)}
+          className={cn("flex min-w-0 flex-1 gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            row.wrap ? "flex-wrap items-baseline py-1" : "h-full items-center")}>
+          {row.wrap ? <WrappedRowText row={row} /> : <RowText row={row} />}
+        </button>
+      </TooltipHint> : <span className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"><RowText row={row} /></span>}
     </TreeRowSurface>
     {open && row.children ? <ul>{row.children.map((child) => <StudyRow key={child.id} row={child} depth={depth + 1}
       {...{ chosen, collapsed, toggle, onChoose, contents }} />)}</ul> : null}
@@ -116,6 +129,9 @@ function StudyTreePanel({ id, title, rows, startsCollapsed, fit, hidden, chosen,
 const RESULT_ROW = Object.freeze({ id: "result", label: "Result", detail: "" });
 const NONE = Object.freeze([]);
 
+/** The ids of the rows that open shut (`collapsed`: a load's faces), at any depth. */
+const collapsedIds = (rows) => rows.flatMap((row) => [...(row.collapsed ? [row.id] : []), ...collapsedIds(row.children || NONE)]);
+
 // The panel ids: Study keeps the tree's, so a single part's is as it always was; Parts is its own.
 export const FEA_PARTS_PANEL_ID = "parts";
 export const FEA_STUDY_PANEL_ID = "tree";
@@ -123,7 +139,8 @@ export const FEA_STUDY_PANEL_ID = "tree";
 /**
  * An FEA result's Select panels, each closable as the Features tree is, and the **Reference** for a
  * face picked on the result. They are composed from what the file holds: **Parts** only for an
- * assembly (`parts`: `partRows`, each part with its joints under it, the weakest part open), then
+ * assembly whose panel shows (`parts`: `partRows`, each part with its joints under it, the weakest
+ * part open; `feaShowsParts`, from six parts up unless the view says), then
  * **Study** (`rows`: `studyRows`, the material, fixed faces, loads with their faces and mesh, each
  * only where the file records it), ending in Result: the study view's controls (`result`:
  * `FeaResultControls`' props), by default the field and deformation. A result written before its
@@ -133,7 +150,7 @@ export const FEA_STUDY_PANEL_ID = "tree";
  * @param {{ active: boolean, parts?: object[], openPart?: number, rows: object[], chosen: string, onChoose(row: object): void,
  *   result: { controls: object[], values: Record<string, unknown>, presets: object[], preset: string,
  *     onChange(id: string, value: unknown): void, onPreset(value: string): void, onReset(): void },
- *   reference: { title: string, ref: string, role: string } | null, onClearSelection(): void,
+ *   reference: { title: string, ref: string, role: string, part?: string } | null, onClearSelection(): void,
  *   copy: { label: string, shortcut: string, onCopy(): unknown } | null }} props
  */
 export default function FeaStudyPanel({ active, parts = NONE, openPart = -1, rows, chosen, onChoose, result,
@@ -144,18 +161,19 @@ export default function FeaStudyPanel({ active, parts = NONE, openPart = -1, row
   const panels = [
     parts.length ? { id: FEA_PARTS_PANEL_ID, title: "Parts", rows: parts, startsCollapsed: parts.filter((_, index) => index !== openPart).map((row) => row.id), fit: "tree" } : null,
     // Under Parts, Study gives way only after Parts has, as a details panel does, so Result stays in view.
-    { id: FEA_STUDY_PANEL_ID, title: "Study", rows: [...rows, RESULT_ROW], startsCollapsed: NONE, fit: parts.length ? "details" : "tree" },
+    { id: FEA_STUDY_PANEL_ID, title: "Study", rows: [...rows, RESULT_ROW], startsCollapsed: collapsedIds(rows), fit: parts.length ? "details" : "tree" },
   ].filter(Boolean);
   return <>
     {/* Each headed with its X; Select, pressed while it is the tool, opens the closed ones again. */}
     {panels.map((panel) => <StudyTreePanel key={panel.id} {...panel} hidden={!active} chosen={chosen} onChoose={onChoose} contents={contents} />)}
     {/* The face picked, sized on its own under Study: its ref, what the study does to it, and Copy. */}
-    {reference ? <ToolPanel id="reference" title={reference.title} label="Reference details" closeLabel="Clear selection" fit="details" resizable
+    {reference ? <ToolPanel id="reference" title={reference.title} label="Reference details" closeLabel="Clear selection" fit="details" resizable fitContent
       collapsible={false} hidden={!active} onClose={onClearSelection}
       footer={copy ? <ToolPanelFooterButton label={copy.label} shortcut={copy.shortcut} onClick={copy.onCopy} /> : null}>
       <div className="px-2 pb-1.5">
         <InfoRow label="Ref"><MonoValue>{reference.ref}</MonoValue></InfoRow>
         <InfoRow label="Study">{reference.role}</InfoRow>
+        {reference.part ? <InfoRow label="Part">{unbroken(reference.part)}</InfoRow> : null}
       </div>
     </ToolPanel> : null}
   </>;

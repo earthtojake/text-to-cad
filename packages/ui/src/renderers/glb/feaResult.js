@@ -545,6 +545,20 @@ export function feaMarkerShow(result) {
   return { on: loads || fixtures, loads: loads || !fixtures, fixtures: fixtures || !loads };
 }
 
+/** An assembly's Parts panel shows from this many parts up; under it the picked face's Reference names its part. */
+export const PARTS_PANEL_FROM = 6;
+
+/**
+ * Whether an assembly's Parts panel is shown: as the study's `view.show.parts` says, else only from
+ * `PARTS_PANEL_FROM` parts up, since a few parts are told apart on the model, a picked face's
+ * Reference naming its part, and the findings name the joints. Never for a single part.
+ */
+export function feaShowsParts(result) {
+  if (!result.parts.length) return false;
+  const chosen = result.view?.show?.parts;
+  return typeof chosen === "boolean" ? chosen : result.parts.length >= PARTS_PANEL_FROM;
+}
+
 /** A figure for a sentence: whole numbers from 10 up, two significant figures below. */
 function plainNumber(value) {
   const v = Number(value) || 0;
@@ -638,7 +652,7 @@ const AXIS_NAMES = ["X", "Y", "Z"];
 
 /**
  * Which way a force points, in words, in the part's CAD axes (Z up): "down", "up", "along +X"
- * for one along an axis, else "along (0.6, 0, -0.8)", its unit vector. "" for no force.
+ * for one along an axis, else "along (0.6, 0, −0.8)", its unit vector, with a true minus. "" for no force.
  */
 export function forceDirection(force) {
   const length = Math.hypot(...force);
@@ -646,8 +660,8 @@ export function forceDirection(force) {
   const unit = force.map((value) => value / length);
   const axis = unit.findIndex((value) => Math.abs(value) > 1 - 1e-6);
   if (axis === 2) return unit[2] < 0 ? "down" : "up";
-  if (axis >= 0) return `along ${unit[axis] < 0 ? "-" : "+"}${AXIS_NAMES[axis]}`;
-  return `along (${unit.map((value) => plainNumber(value)).join(", ")})`;
+  if (axis >= 0) return `along ${unit[axis] < 0 ? "\u2212" : "+"}${AXIS_NAMES[axis]}`;
+  return `along (${unit.map((value) => plainNumber(value).replace(/^-/, "\u2212")).join(", ")})`;
 }
 
 /** A load as its row says it: what it is ("2500 N", "2 MPa pressure") and which way it points. */
@@ -743,46 +757,50 @@ export function weakestPartIndex(result) {
   return weakest;
 }
 
-/** Study's Material row: "6061-T6 · yield 276 MPa". */
-function materialRows({ study }) {
-  const material = study.material;
+/**
+ * Study's Material row: the name alone ("6061-T6"); its yield is the findings' and the colour bar's
+ * to say. In an assembly it is the default a part with none of its own takes ("Default material").
+ */
+function materialRows(result) {
+  const material = result.study.material;
   if (!material?.name) return [];
-  const yieldText = material.yieldMPa === null ? "" : `yield ${plainNumber(material.yieldMPa)} MPa`;
-  return [{ id: "material", label: "Material", detail: [material.name, yieldText].filter(Boolean).join(" · ") }];
+  return [{ id: "material", label: result.parts.length ? "Default material" : "Material", detail: material.name }];
 }
 
-/** In an assembly a face's row leads with its part's name, which wraps (`wrap`) rather than being cut off. */
-const partNamed = (result) => (result.parts.length ? { wrap: true } : {});
-
-/** Study's Fixed group: one row per fixed face. */
+/** Study's Fixed group: one row per fixed face, its name alone ("Face 9", "base · face 9"): the group says fixed. */
 function fixedRows(result) {
   const study = result.study;
   const fixed = study.fixtures.flatMap((fixture, index) => fixture.faces.map((ref) => ({
-    id: `fixed:${index}:${ref}`, label: faceTitle(result, ref), detail: fixture.type, faces: [ref], summary: faceSummary(study, ref), ...partNamed(result),
+    id: `fixed:${index}:${ref}`, label: faceTitle(result, ref), detail: "", faces: [ref], summary: faceSummary(study, ref),
   })));
   return fixed.length ? [{ id: "fixed", label: "Fixed", detail: "", children: fixed }] : [];
 }
 
-/** Study's Loads group: one row per load, its faces under it. */
+/**
+ * Study's Loads group: one row per load, what it is and which way ("300 N · along −X"), its faces
+ * under it by name alone (the group says loaded), shut until opened (`collapsed`).
+ */
 function loadRows(result) {
   const study = result.study;
   const loads = study.loads.filter((load) => load.faces.length).map((load, index) => {
     const words = loadWords(load);
     return {
-      id: `load:${index}`, label: words.amount, detail: words.direction, faces: load.faces, summary: loadSummary(words, load.faces),
-      children: load.faces.map((ref) => ({ id: `load:${index}:${ref}`, label: faceTitle(result, ref), detail: "loaded", faces: [ref], ...partNamed(result),
+      id: `load:${index}`, label: [words.amount, words.direction].filter(Boolean).join(" · "), name: [words.amount, words.direction].filter(Boolean).join(" "),
+      detail: "", faces: load.faces,
+      summary: loadSummary(words, load.faces), collapsed: true,
+      children: load.faces.map((ref) => ({ id: `load:${index}:${ref}`, label: faceTitle(result, ref), detail: "", faces: [ref],
         summary: study.fixtures.some((fixture) => fixture.faces.includes(ref)) ? faceSummary(study, ref) : loadSummary(words, [ref]) })),
     };
   });
   return loads.length ? [{ id: "loads", label: "Loads", detail: "", children: loads }] : [];
 }
 
-/** Study's Mesh row: "1.9 mm elements · refined from 2.8 mm". */
+/** Study's Mesh row: "1.9 mm elements", and how it got there as its hint (`hint`: "refined from 2.8 mm", "not refined"). */
 function meshRows({ study }) {
   const mesh = study.mesh;
   if (mesh?.sizeMm === null || mesh?.sizeMm === undefined) return [];
   const refined = mesh.refinedFromMm === null ? "not refined" : `refined from ${plainNumber(mesh.refinedFromMm)} mm`;
-  return [{ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements · ${refined}` }];
+  return [{ id: "mesh", label: "Mesh", detail: `${plainNumber(mesh.sizeMm)} mm elements`, hint: refined }];
 }
 
 // Study's groups, in order, each from what the file records and none when it records nothing for
@@ -793,16 +811,30 @@ const STUDY_GROUPS = Object.freeze([materialRows, fixedRows, loadRows, meshRows]
  * Study's rows for a result's study, in order: the material, the fixed faces, the loads (each with
  * its faces under it) and the mesh (`STUDY_GROUPS`). An assembly's parts and joints are the Parts
  * panel's (`partRows`). A row that stands for faces carries them (`faces`, the file's refs) and
- * what a prompt calls them (`summary`); a group row (`children`) carries none. [] for a result
- * written before the study was recorded.
+ * what a prompt calls them (`summary`); a group row (`children`) carries none. A row that opens
+ * shut says so (`collapsed`: a load's faces), and a fact's further words are its hint (`hint`). Each
+ * row is one line. [] for a result written before the study was recorded.
  */
 export function studyRows(result) {
   return result.study ? STUDY_GROUPS.flatMap((group) => group(result)) : [];
 }
 
+/** The index into the result's `parts` of the part a face is on; -1 for a single part's face. */
+const facePartIndex = (result, ref) => result.parts.findIndex((entry) => entry.ref && String(ref).startsWith(`${entry.ref}.`));
+
+/**
+ * What a picked face's Reference says of its part, in an assembly: its material and what it holds
+ * at `loadScale` times the load ("6061-T6 · holds 1.4×", "yields"), as Parts' rows say it. "" for a
+ * single part's face.
+ */
+export function facePartDetail(result, ref, loadScale = 1) {
+  const index = facePartIndex(result, ref);
+  return index < 0 ? "" : partDetail(result.parts[index], loadScale);
+}
+
 /** A face's heading: "Face 17", and in an assembly "post · face 17", the part it is on (a long name's underscores spaced). */
 export function faceTitle(result, ref) {
-  const part = result.parts.find((entry) => entry.ref && String(ref).startsWith(`${entry.ref}.`));
+  const part = result.parts[facePartIndex(result, ref)];
   return part?.name ? `${spaced(part.name)} · ${faceLabel(ref).toLowerCase()}` : faceLabel(ref);
 }
 

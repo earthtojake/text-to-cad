@@ -559,8 +559,11 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   tree's rows. FEA tools keep the model apart from the study, as a STEP and a board keep their
   parts tree on the left: a STEP's and a board's tree is Select's panel, with no button of its own
   on the strip, so an assembly's Parts is one too, stacked above Study and sharing the column.
-  - **Parts**, only for an assembly (`parts` in the file; a single part's result has none, and
-    looks as ever): one row per part, its name, then its material and "holds 1.5×", or "yields"
+  - **Parts**, only for an assembly of six parts or more (`parts` in the file, `feaShowsParts` in
+    `glb/feaResult.js`; a single part's result has none, and looks as ever). Under six, the parts
+    are told apart on the model: a face picked there names its part, and its Reference says the
+    part's material and what it holds; the findings name the joints. The study's `view.show.parts`
+    shows or hides it whatever the count. One row per part, its name, then its material and "holds 1.5×", or "yields"
     under 1, as the colour bar words it. Under each part, the joints it is in, each naming only the
     OTHER part ("↔ chassis bulkhead"), then "bonded · 88 mm²", with "· 0.1 mm gap closed" when a gap
     was closed to bond it, or "not connected" and how far apart for a free pair. A joint is so under
@@ -568,11 +571,16 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     (the one the file names, else the lowest factor) opens with its joints and the rest start shut,
     so four parts and their joints do not fill the column; each opens by its chevron. Names and
     details wrap between words, never cut off.
-  - **Study**: in order **Material** ("6061-T6 · yield 276 MPa"); **Fixed**, one row per fixed
-    face ("Face 17", "fixed"; in an assembly "post · face 17", wrapping); **Loads**, one row per
-    load ("2500 N", its direction in words: "down" and "up" are CAD Z, else "along +X" or the unit
-    vector; or "2 MPa pressure"), its faces under it ("Face 22", "loaded"); **Mesh** ("1.9 mm
-    elements · refined from 2.8 mm", or "not refined"); and **Result**: the controls the study's
+  - **Study**, every row one line, so it reads light and fits a laptop's height: in order
+    **Material**, the name alone ("Aluminum 6061-T6"; its yield is the findings' and the colour
+    bar's to say), "Default material" in an assembly, the name taking the line under its label
+    whole where the two do not fit side by side; **Fixed**, one row per fixed face, its name
+    alone ("Face 17"; in an assembly "post · face 17"), since the group says fixed; **Loads**, one
+    row per load, what and which way ("2500 N · down": "down" and "up" are CAD Z, else
+    "along −X" or the unit vector; or "2 MPa pressure"), its faces under it by name, shut until
+    its chevron opens them (choosing the load row still tints all its faces and its arrows);
+    **Mesh**, the size alone ("1.9 mm elements"), how it got there ("refined from 2.8 mm", "not
+    refined") its hint; and **Result**: the controls the study's
     `view` chose (`feaControls` in `glb/feaResult.js`), in its order, with its labels, ranges and
     units, each a generic parameter row drawn by the same `parameterRow` as Position's joints
     (`kit/inspector/parameterRow.jsx`), a sentence-long label wrapping between words on its
@@ -590,10 +598,10 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
     the preset sets), and Custom once any control moves. Each group shows only where the file records
     something for it (`STUDY_GROUPS` in `glb/feaResult.js`: a result kind with more to say adds a
     group there, touching no other), so a result written before its study was recorded has Result
-    alone. Nothing in Study is cut off at the one width: Material's and Mesh's details wrap under
-    their label's row onto a second line, as a Reference's values wrap, between words only (a
-    hyphenated name, "6061‑T6", a number with its unit, "276 MPa", and "holds 1.4×" never part).
-    It opens at its content's height (see Heights), so Result's slider is in view.
+    alone. A row too long for the one width (a long part's name before "· face 9", a long
+    material) is cut off at its end and hinted whole (`TooltipHint`, `overflowOnly`), never
+    wrapped onto further lines. It opens at its content's height (see Heights), so Result's
+    slider is in view.
 
   A GLB that is not a result has no strip at all.
 - **Choosing faces.** A fixed face, a load or a load's face chosen in Study tints its triangles
@@ -605,7 +613,10 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   to), and one face chosen shows the **Reference** under Study: headed "Face 17", its ref and
   what the study does to it ("fixed", "2500 N load, down", "free"), with **Copy** (the STEP's
   path and the ref, as a STEP's Copy writes it). Escape, the Reference's X, Quick Edit's clear
-  and a press on nothing let go; one choice at a time, a finding or faces.
+  and a press on nothing let go; one choice at a time, a finding or faces. In an assembly the
+  Reference has one more row, **Part**: the part's material and what it holds at the load shown
+  ("6061‑T6 · holds 1.4×", or "yields"), as Parts' rows say it, so a small assembly with no Parts
+  panel loses nothing The Reference opens at its content's height, so the row is never under its foot.
 - **Choosing a part or a joint** in Parts is choosing faces, for an assembly (`_PART`, `parts` and `connections`
   in the file). A part tints all its triangles and
   carries its ref into Quick Edit ("Part 'post'"); a joint tints the interface faces of both sides and
@@ -631,7 +642,7 @@ the view; Display is the view's alone, as a STEP's is. It has no mode of its own
   the card back let go of the choice.
 - **A load other than the solved one** (`load_scale` k; the study is linear, so it scales exactly):
   the colour bar's range and its line are k times the solved ones ("at 1.5× the load" ends the
-  line when k ≠ 1), the safety factor and every part's "holds" in Parts are divided by k, so a part
+  line when k ≠ 1), the safety factor and every part's "holds" (in Parts and a picked face's Reference) are divided by k, so a part
   can turn to "yields" (at no load there is no factor, and "holds" is left out), and the displacement is drawn k times further. The colours keep their place
   on the bar, which reads k times higher. A threshold compares its field at the load shown. **The
   findings card stays as solved, at 1×**: its sentences are the checks cadgen made, not a reading of

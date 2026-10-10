@@ -356,17 +356,14 @@ it('Study lists the material, the fixed faces, each load with its faces and the 
   const study = studyPanel()!;
   expect(study.querySelector('h3')!.textContent).toBe('Study');
   expect(study.querySelector('button[aria-label="Close study"]')).toBeTruthy();
-  expect(rowTexts(study)).toEqual([
-    'Material6061\u2011T6 · yield 276\u00a0MPa', 'Fixed', 'Face 1fixed', 'Loads', '2500 Ndown', 'Face 2loaded',
-    'Mesh1.9\u00a0mm elements · refined from 2.8\u00a0mm', 'Result',
-  ]);
+  // One line a row: the material's name alone, each face by name (the group says fixed or loaded), a
+  // load as what and which way with its faces shut under it, and the mesh's size (how it got there is its hint).
+  expect(rowTexts(study)).toEqual(['Material6061-T6', 'Fixed', 'Face 1', 'Loads', '2500 N · down', 'Mesh1.9 mm elements', 'Result']);
   expect(study.querySelector('[role="combobox"][aria-label="Result field"]')).toBeTruthy();
-  // Material's and Mesh's details wrap rather than being cut off at the one width.
-  const details = Array.from(study.querySelectorAll('[data-study-detail]'));
-  // ... between words only: a hyphenated name and a number with its unit never part.
-  expect(details.map(detail => detail.textContent)).toEqual(['6061\u2011T6 · yield 276\u00a0MPa', '1.9\u00a0mm elements · refined from 2.8\u00a0mm']);
-  for (const detail of details) expect(detail.className).not.toMatch(/truncate|whitespace-nowrap/);
-  for (const detail of details) expect((detail.closest('[data-study-row]') as HTMLElement).style.height).toBe('auto');
+  for (const detail of Array.from(study.querySelectorAll('[data-study-detail]'))) expect(detail.className).toMatch(/truncate/);
+  // The load's faces open by its chevron.
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand 2500 N · down' })); });
+  expect(rowTexts(study)).toEqual(['Material6061-T6', 'Fixed', 'Face 1', 'Loads', '2500 N · down', 'Face 2', 'Mesh1.9 mm elements', 'Result']);
   // It opens at its content's height, so Result's slider is not under its foot; a person's own cap still holds.
   expect(study.style.maxHeight).toBe('');
   cleanup();
@@ -411,7 +408,7 @@ it('choosing a load tints its face and says how much, on which face', async () =
   const copied: string[] = [];
   const { mesh } = mount(STUDIED, undefined, { faces: FACES, host: clipboardHost(copied) });
   const plain = colourBytes(mesh);
-  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select 2500 N' })); });
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select 2500 N down' })); });
   expect(colourBytes(mesh).slice(0, 12)).toEqual(plain.slice(0, 12));
   expect(colourBytes(mesh).slice(12, 15)).not.toEqual(plain.slice(12, 15));
   expect(await copiedPrompt(copied)).toBe('move it\n\nFile: /models/part.glb\nReferences:\n2500 N load on face 2 · /models/part.step#o1.f2');
@@ -444,6 +441,26 @@ it('a press on the result with Select picks the face under it into a Reference w
   host.remove();
 });
 
+// Looking down at the first triangle (face index 0) from above its middle, for a press on the result.
+function pressOnTheResult(mounting: () => void) {
+  const host = document.createElement('div');
+  host.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON() {} });
+  const canvas = document.createElement('canvas');
+  host.append(canvas);
+  document.body.append(host);
+  const camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.375, -0.375, 0.001, 10);
+  camera.position.set(0.25, 0.25, 1);
+  camera.updateMatrixWorld();
+  loaded.runtime = { THREE, camera, renderer: { domElement: canvas } };
+  loaded.host = host;
+  mounting();
+  act(() => {
+    fireEvent.pointerDown(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+    fireEvent.pointerUp(canvas, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+  });
+  return () => host.remove();
+}
+
 const ASSEMBLED = {
   ...STUDIED, faces: ['#o1.1.f1', '#o1.2.f1', '#o1.1.f9'], weakest_part: 'post', weakest_part_peak_MPa: 180, safety_factor: 1.46, max_displacement_mm: 0.2,
   parts: [
@@ -452,8 +469,9 @@ const ASSEMBLED = {
   ],
   connections: [{ between: ['#o1.1', '#o1.2'], names: ['post', 'base'], type: 'bonded', area_mm2: 100, gap_mm: 0, faces: ['#o1.1.f1', '#o1.2.f1'] }],
 };
-function mountAssembly(copied: string[]) {
-  const built = mount(ASSEMBLED, undefined, { faces: [0, 0, 2, 1], host: clipboardHost(copied) });
+// Two parts would have no Parts panel (it shows from six up); the view asks for it.
+function mountAssembly(copied: string[], extras: Record<string, unknown> = { view: { show: { parts: true } } }) {
+  const built = mount({ ...ASSEMBLED, ...extras }, undefined, { faces: [0, 0, 2, 1], host: clipboardHost(copied) });
   built.mesh.geometry.setAttribute('_part', new BufferAttribute(new Float32Array([0, 0, 0, 1]), 1));
   return built;
 }
@@ -475,7 +493,7 @@ it('an assembly has a Parts panel above Study, each part with its joints, the we
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Expand base' })); });
   expect(plain(parts).slice(2)).toEqual(['baseSteel · holds 2.5×', '↔ postbonded · 100 mm²']);
   // Study no longer lists parts or joints.
-  expect(rowTexts(study)[0]).toMatch(/^Material/);
+  expect(rowTexts(study)[0]).toBe('Default material6061-T6');
   expect(study.querySelector('[data-study-row^="part:"], [data-study-row^="joint:"], [data-study-row="parts"], [data-study-row="connections"]')).toBeNull();
   expect(document.querySelector('[data-fea-summary]')!.textContent).toBe('Weakest: post · peak stress 180 MPa · holds 1.4× this load · the assembly moves up to 0.029 mm');
 });
@@ -492,10 +510,30 @@ it('Select carries the mark while Parts or Study is closed, and a press brings b
   expect(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-description')).toBeNull();
 });
 
+it('an assembly shows Parts from six parts up, and its view can show or hide it either way', () => {
+  const more = (count: number) => Array.from({ length: count }, (_, index) => ({ ...ASSEMBLED.parts[index % 2], ref: `#o1.${index + 1}`, name: `part ${index + 1}` }));
+  for (const [count, view, shown] of [[4, undefined, false], [6, undefined, true], [4, { show: { parts: true } }, true], [6, { show: { parts: false } }, false]] as const) {
+    mountAssembly([], { parts: more(count), ...(view ? { view } : {}) });
+    expect(Boolean(partsPanel())).toBe(shown);
+    expect(studyPanel()).toBeTruthy();
+    cleanup();
+  }
+});
+
 it('a single part has no Parts panel', () => {
   mount(STUDIED, undefined, { faces: FACES });
   expect(partsPanel()).toBeNull();
   expect(studyPanel()).toBeTruthy();
+});
+
+it('with Parts hidden, a face picked on an assembly names its part, and the Reference says the part\'s material and what it holds', () => {
+  const release = pressOnTheResult(() => { mountAssembly([], {}); });
+  expect(partsPanel()).toBeNull();
+  const reference = screen.getByRole('region', { name: 'Reference details' });
+  expect(reference.querySelector('h3')!.textContent).toBe('post · face 1');
+  const rows = Array.from(reference.querySelectorAll('[data-info-row]')).map(row => row.textContent!.replace(/\u2011/g, '-').replace(/\u00a0/g, ' '));
+  expect(rows).toEqual(['Ref#o1.1.f1', 'Studyfree', 'Part6061-T6 · holds 1.4×']);
+  release();
 });
 
 it('choosing a part tints its triangles and carries it into Quick Edit', async () => {
@@ -603,7 +641,7 @@ it('each slider\'s thumb stands at its control\'s value, and the slider takes th
 
 it('at twice the load, the bar, its line and the deformation are twice the solved ones, what each part holds is half, and a part flips to yields', () => {
   const parts = [{ ref: '#o1.1', name: 'post', material: 'steel', safety_factor: 5.83 }, { ref: '#o1.2', name: 'base', material: 'steel', safety_factor: 1.5 }];
-  const { container, mesh } = mount({ ...VIEWED, view: { controls: [VIEWED.view.controls[0], VIEWED.view.controls[5]] }, parts });
+  const { container, mesh } = mount({ ...VIEWED, view: { controls: [VIEWED.view.controls[0], VIEWED.view.controls[5]], show: { parts: true } }, parts });
   const colours = colourBytes(mesh);
   const tip = mesh.geometry.getAttribute('position').getZ(2);
   const partDetails = () => Array.from(screen.getByRole('region', { name: 'Parts' }).querySelectorAll('[data-study-detail]')).map(detail => detail.textContent!.replace(/\u00a0/g, ' '));
@@ -653,7 +691,7 @@ it('draws the loads and fixtures on the model, the chosen load\'s arrows in the 
   const colour = new THREE.Color();
   heads.getColorAt(0, colour);
   expect(colour.getHexString()).toBe('18181b');
-  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select 2500 N' })); });
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select 2500 N down' })); });
   heads.getColorAt(0, colour);
   expect(colour.getHexString()).toBe('ff40f2');
   cones.getColorAt(0, colour);

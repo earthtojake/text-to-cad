@@ -200,32 +200,32 @@ function studyResult(extras: Record<string, unknown> = { study: STUDY, faces: ['
   Object.assign(built.mesh.userData, extras);
   return { ...built, result: readFeaResult(built.root)! };
 }
-const strip = (rows: any[]): any[] => rows.map(({ id, label, detail, summary, faces, children }) =>
-  ({ id, label, detail, ...(summary ? { summary, faces } : {}), ...(children ? { children: strip(children) } : {}) }));
+const strip = (rows: any[]): any[] => rows.map(({ id, label, detail, hint, collapsed, summary, faces, children }) =>
+  ({ id, label, detail, ...(hint ? { hint } : {}), ...(collapsed ? { collapsed } : {}), ...(summary ? { summary, faces } : {}), ...(children ? { children: strip(children) } : {}) }));
 
 describe('a result\'s study', () => {
   it('reads as Study\'s rows: material, each fixed face, each load with its faces, and the mesh', () => {
     expect(strip(studyRows(studyResult().result))).toEqual([
-      { id: 'material', label: 'Material', detail: '6061-T6 · yield 276 MPa' },
+      { id: 'material', label: 'Material', detail: '6061-T6' },
       { id: 'fixed', label: 'Fixed', detail: '', children: [
-        { id: 'fixed:0:#o1.f1', label: 'Face 1', detail: 'fixed', summary: 'Fixed face 1', faces: ['#o1.f1'] },
+        { id: 'fixed:0:#o1.f1', label: 'Face 1', detail: '', summary: 'Fixed face 1', faces: ['#o1.f1'] },
       ] },
       { id: 'loads', label: 'Loads', detail: '', children: [
-        { id: 'load:0', label: '2500 N', detail: 'down', summary: '2500 N load on face 2', faces: ['#o1.f2'], children: [
-          { id: 'load:0:#o1.f2', label: 'Face 2', detail: 'loaded', summary: '2500 N load on face 2', faces: ['#o1.f2'] },
+        { id: 'load:0', label: '2500 N · down', detail: '', collapsed: true, summary: '2500 N load on face 2', faces: ['#o1.f2'], children: [
+          { id: 'load:0:#o1.f2', label: 'Face 2', detail: '', summary: '2500 N load on face 2', faces: ['#o1.f2'] },
         ] },
-        { id: 'load:1', label: '2 MPa pressure', detail: '', summary: '2 MPa pressure on faces 3, 4', faces: ['#o1.f3', '#o1.f4'], children: [
-          { id: 'load:1:#o1.f3', label: 'Face 3', detail: 'loaded', summary: '2 MPa pressure on face 3', faces: ['#o1.f3'] },
-          { id: 'load:1:#o1.f4', label: 'Face 4', detail: 'loaded', summary: '2 MPa pressure on face 4', faces: ['#o1.f4'] },
+        { id: 'load:1', label: '2 MPa pressure', detail: '', collapsed: true, summary: '2 MPa pressure on faces 3, 4', faces: ['#o1.f3', '#o1.f4'], children: [
+          { id: 'load:1:#o1.f3', label: 'Face 3', detail: '', summary: '2 MPa pressure on face 3', faces: ['#o1.f3'] },
+          { id: 'load:1:#o1.f4', label: 'Face 4', detail: '', summary: '2 MPa pressure on face 4', faces: ['#o1.f4'] },
         ] },
       ] },
-      { id: 'mesh', label: 'Mesh', detail: '1.9 mm elements · refined from 2.8 mm' },
+      { id: 'mesh', label: 'Mesh', detail: '1.9 mm elements', hint: 'refined from 2.8 mm' },
     ]);
   });
 
   it('says a mesh was not refined, and a result written before the study was recorded has no rows', () => {
     const plain = studyResult({ study: { ...STUDY, mesh: { ...STUDY.mesh, refined_from_mm: null } }, faces: [] });
-    expect(studyRows(plain.result).at(-1)).toMatchObject({ id: 'mesh', detail: '1.9 mm elements · not refined' });
+    expect(studyRows(plain.result).at(-1)).toMatchObject({ id: 'mesh', detail: '1.9 mm elements', hint: 'not refined' });
     const old = resultMesh();
     expect(readFeaResult(old.root)!.study).toBeNull();
     expect(studyRows(readFeaResult(old.root)!)).toEqual([]);
@@ -235,8 +235,8 @@ describe('a result\'s study', () => {
     expect(forceDirection([0, 0, -2500])).toBe('down');
     expect(forceDirection([0, 0, 10])).toBe('up');
     expect(forceDirection([5, 0, 0])).toBe('along +X');
-    expect(forceDirection([0, -2500, 0])).toBe('along -Y');
-    expect(forceDirection([3, 0, -4])).toBe('along (0.6, 0, -0.8)');
+    expect(forceDirection([0, -2500, 0])).toBe('along \u2212Y');
+    expect(forceDirection([3, 0, -4])).toBe('along (0.6, 0, \u22120.8)');
     expect(forceDirection([0, 0, 0])).toBe('');
   });
 
@@ -398,7 +398,9 @@ describe('an assembly result', () => {
     const loads = rows.find((row) => row.id === 'loads');
     expect(fixed.children[0].label).toBe('base · face 9');
     expect(loads.children[0].children[0].label).toBe('post · face 23');
-    expect(loads.children[0].label).toBe('5 N');
+    expect(loads.children[0].label).toBe('5 N · down');
+    // The study's material is the default a part with none of its own takes.
+    expect(rows[0]).toMatchObject({ label: 'Default material', detail: '6061-T6' });
     expect((studyRows(studyResult().result) as any[])[1].children[0].label).toBe('Face 1');
   });
 

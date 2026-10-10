@@ -18,7 +18,7 @@ import FeaLoadLabels from "./FeaLoadLabels.jsx";
 import { FileSheetStatusText } from "../kit/inspector/FileSheet.js";
 import { DEFAULT_POSE_VALUE, NO_PRESET_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 import {
-  applyDeformation, faceIndices, faceTitle, facePromptSummary, faceRole, feaControls, feaDefaults, feaMarkerShow, feaPresets, findingSelector, pickFace,
+  applyDeformation, faceIndices, facePartDetail, faceTitle, facePromptSummary, faceRole, feaControls, feaDefaults, feaMarkerShow, feaPresets, feaShowsParts, findingSelector, pickFace,
   readFeaResult, recolorByField, resultSourcePath, partRows, ringTargets, studyRows, weakestPartIndex
 } from "./feaResult.js";
 import { createFeaMarkers } from "./feaMarkers.js";
@@ -148,8 +148,9 @@ function GlbSurface({ view, data }) {
   const finding = findings && chosen.findings === findings ? findings.find((entry) => entry.index === chosen.index) || null : null;
   const faces = fea && chosenFaces.result === fea ? chosenFaces : NO_FACES;
   const rows = useMemo(() => (fea ? studyRows(fea) : EMPTY), [fea]);
-  // An assembly's parts, each with its joints, are a panel of their own above Study.
-  const parts = useMemo(() => (fea ? partRows(fea, loadScale) : EMPTY), [fea, loadScale]);
+  // An assembly's parts, each with its joints, are a panel of their own above Study, from six parts
+  // up unless the view says (`feaShowsParts`); under that a picked face's Reference names its part.
+  const parts = useMemo(() => (fea && feaShowsParts(fea) ? partRows(fea, loadScale) : EMPTY), [fea, loadScale]);
   const chooseFaces = useCallback((row) => { setChosen(NO_FINDING); setChosenFaces({ result: fea, id: row.id, faces: row.faces || EMPTY, refs: row.refs || EMPTY, parts: row.parts || EMPTY, softParts: row.softParts || EMPTY, summary: row.summary }); }, [fea]);
   // A press on the result picks the face under it, called what Study calls it.
   const pickScene = useMemo(() => (fea ? { pick: (ray) => pickFace(fea, ray) } : null), [fea]);
@@ -283,7 +284,7 @@ function GlbSurface({ view, data }) {
   };
   const toolPanels = fea ? <FeaStudyPanel active={selectActive} parts={parts} openPart={weakestPartIndex(fea)} rows={rows} chosen={faces.id} onChoose={chooseFaces}
     result={resultControls}
-    reference={single ? { title: faceTitle(fea, single), ref: single, role: faceRole(fea, single) } : null} onClearSelection={clearChoice}
+    reference={single ? { title: faceTitle(fea, single), ref: single, role: faceRole(fea, single), part: facePartDetail(fea, single, loadScale) } : null} onClearSelection={clearChoice}
     copy={single ? { label: "Copy", shortcut: shell.frame.copyShortcut, onCopy: copyFace } : null} /> : null;
 
   const showingFindings = Boolean(card) && shell.frame.viewerAlert === card;
