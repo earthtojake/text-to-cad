@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import contextlib
 import os
+import shutil
 import signal
 import subprocess
 import sys
+import sysconfig
 import textwrap
 import threading
 import time
@@ -70,6 +72,8 @@ _TOOL = textwrap.dedent('''
             os.kill(os.getpid(), signal.SIGSTOP)
         elif verb == "prefix":
             print(sys.prefix, flush=True)
+            for entry in sys.path:
+                print(entry, flush=True)
         print("body done", flush=True)
         return 0
 ''')
@@ -137,31 +141,51 @@ class SilenceIsNotBusy(_WorkerCase):
         self.assertTrue(all(value is not None for value in reads))
 
 
+def _uv() -> str | None:
+    """The uv requirements-dev.txt installs, else one on PATH."""
+    try:
+        import uv
+    except ImportError:
+        return shutil.which("uv")
+    return uv.find_uv_bin()
+
+
 class AVirtualEnvironmentsWorker(_WorkerCase):
     """A daemon running in a virtual environment, as ``uvx`` runs cadgen. On Windows the
     environment's ``python.exe`` is a launcher that runs the base interpreter as its child:
     a worker started through it was two processes, and the CPU clock the silence watch read
     was the launcher's, which never moves, so a long native call was killed as a hang."""
 
-    def interpreter(self):
-        environment = self.root / "env"
+    def create(self, environment: Path) -> None:
         subprocess.run([sys.executable, "-m", "venv", "--system-site-packages", "--without-pip", str(environment)],
                        check=True, capture_output=True)
+
+    def interpreter(self):
+        environment = self.root / "env"
+        self.create(environment)
         self.environment = environment
         python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        # What a daemon in that environment sees, as the environment itself reports it: its
+        # executable (the launcher), and the base interpreter behind it.
+        reported = subprocess.run(
+            [str(python), "-c", "import sys; print(sys.executable); print(getattr(sys, '_base_executable', ''))"],
+            check=True, capture_output=True, text=True,
+        ).stdout.splitlines()
         stack = contextlib.ExitStack()
-        # What a daemon in that environment sees: its launcher, and the interpreter behind it.
-        stack.enter_context(mock.patch.object(sys, "executable", str(python)))
-        stack.enter_context(mock.patch.object(sys, "_base_executable", getattr(sys, "_base_executable", sys.executable),
-                                              create=True))
+        stack.enter_context(mock.patch.object(sys, "executable", reported[0]))
+        stack.enter_context(mock.patch.object(sys, "_base_executable", reported[1] or reported[0], create=True))
         return stack
 
     def test_the_worker_is_the_interpreter_and_runs_in_the_environment(self):
         self.assertEqual(self.worker.proc.pid, self.worker.pid)
         frames = self.run_job("prefix")
         self.assertEqual(frames[-1]["exit"], 0)
-        printed = "".join(frame.get("data", "") for frame in frames if frame.get("stream") == "stdout")
-        self.assertEqual(os.path.normcase(printed.splitlines()[0]), os.path.normcase(str(self.environment)))
+        printed = "".join(frame.get("data", "") for frame in frames if frame.get("stream") == "stdout").splitlines()
+        self.assertEqual(os.path.normcase(printed[0]), os.path.normcase(str(self.environment)))
+        # Its own site-packages, where an installation puts cadgen, is on its path.
+        site_packages = sysconfig.get_path("purelib", vars={"base": str(self.environment),
+                                                            "platbase": str(self.environment)})
+        self.assertIn(os.path.normcase(site_packages), [os.path.normcase(entry) for entry in printed[1:]])
 
     def test_a_native_call_holding_the_gil_while_computing_survives_on_its_cpu_clock(self):
         reads: list[float | None] = []
@@ -175,6 +199,18 @@ class AVirtualEnvironmentsWorker(_WorkerCase):
             frames = self.run_job("gil-busy", str(SILENCE * 3))
         self.assertEqual(frames[-1]["exit"], 0)
         self.assertTrue(reads, "the silence window never elapsed; the busy body did not starve the heartbeat")
+
+
+@unittest.skipUnless(_uv(), "needs uv: pip install -r requirements-dev.txt")
+class AUvEnvironmentsWorker(AVirtualEnvironmentsWorker):
+    """The environment ``uvx`` runs cadgen in is uv's, not ``venv``'s: uv writes its
+    ``python.exe`` and ``pyvenv.cfg``. A worker started from the base interpreter, told
+    the environment through ``__PYVENV_LAUNCHER__``, comes up in it all the same."""
+
+    def create(self, environment: Path) -> None:
+        subprocess.run([_uv(), "venv", "--quiet", "--no-config", "--system-site-packages",
+                        "--python", sys.executable, str(environment)],
+                       check=True, capture_output=True, env={**os.environ, "UV_PYTHON_DOWNLOADS": "never"})
 
 
 class WedgedIsStillKilled(_WorkerCase):
