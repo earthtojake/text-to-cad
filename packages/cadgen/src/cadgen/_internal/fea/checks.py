@@ -4,7 +4,10 @@ The KiCad findings' shape (``check``, ``severity``, ``type``, ``summary``,
 ``description``, ``items``), so the viewer's alert card and the agent read FEA
 the way they read a board. Errors are what make the part unfit to use; the
 rest are suggestions. An assembly's findings come from one :class:`Solved` per
-part (:func:`assembly_findings`) and name the part. Stdlib only: nothing here
+part (:func:`assembly_findings`) and name the part. The study's checks
+(``view.checks``) are judged here too: :func:`stress_check` and
+:func:`displacement_check` turn the solve's numbers into each check's result,
+and :func:`check_findings` says the ones that fail. Stdlib only: nothing here
 needs the solver.
 """
 
@@ -14,7 +17,7 @@ import math
 import re
 from dataclasses import dataclass
 
-__all__ = ["CONVERGED_WITHIN", "GAUSS_RATIO", "MATERIALLY_FINER", "LARGE_DISPLACEMENT", "RESOLVE_BELOW", "Solved", "assembly_findings", "default_material", "findings", "gap_closed", "needs_finer", "safety_factor", "safety_factor_text"]
+__all__ = ["CLOSE_WITHIN", "CONVERGED_WITHIN", "GAUSS_RATIO", "MATERIALLY_FINER", "LARGE_DISPLACEMENT", "RESOLVE_BELOW", "Solved", "assembly_findings", "check_findings", "check_status", "default_material", "displacement_check", "findings", "floored_factor", "gap_closed", "needs_finer", "safety_factor", "safety_factor_text", "stress_check"]
 
 #: Re-solve finer only when the safety factor is this close to failing.
 RESOLVE_BELOW = 3.0
@@ -27,6 +30,9 @@ MATERIALLY_FINER = 1.3
 LARGE_DISPLACEMENT = 0.01
 #: A Gauss-point peak over the nodal peak by this factor: an unresolved concentration.
 GAUSS_RATIO = 1.5
+#: A check with no margin of its own (a displacement) is close to failing within this share of its
+#: limit: the model's own accuracy, the share a finer mesh may still move a number.
+CLOSE_WITHIN = CONVERGED_WITHIN
 
 
 @dataclass(frozen=True)
@@ -312,3 +318,81 @@ def assembly_findings(parts: list[Solved]) -> list[dict]:
             )
         )
     return sorted(found, key=lambda finding: finding["severity"] != "error")
+
+
+def floored_factor(solved: Solved) -> float | None:
+    """The safety factor as the summary writes it: floored to three decimals, never rounded up."""
+    factor = safety_factor(solved)
+    return None if factor is None else math.floor(factor * 1000) / 1000
+
+
+def check_status(ratio: float, close_at: float) -> str:
+    """``fails`` past the limit, ``close`` past ``close_at`` of it, else ``passes``."""
+    return "fails" if ratio > 1 else "close" if ratio > close_at else "passes"
+
+
+def _where(ref: str | None, at: tuple[float, float, float]) -> dict:
+    return {"ref": ref, "at": [round(c, 3) for c in at]}
+
+
+def stress_check(solved: Solved, *, label: str | None = None) -> dict:
+    """The stress check's result: the peak against the yield of the part it is in (an assembly's
+    weakest), ``fails`` under a safety factor of 1 and ``close`` under the margin, as the summary's
+    factor says it. ``ratio`` is the peak over the yield, one over that factor; 0 with no load."""
+    factor = floored_factor(solved)
+    result = {
+        "kind": "stress",
+        "label": label or "Strength",
+        "value": round(solved.peak_MPa, 4),
+        "limit": solved.yield_MPa,
+        "unit": "MPa",
+        "ratio": 0.0 if factor is None else round(1 / factor, 6) if factor > 0 else round(solved.peak_MPa / solved.yield_MPa, 6),
+        "close_at": round(1 / solved.margin, 6),
+        "margin": solved.margin,
+        "status": "passes" if factor is None else "fails" if factor < 1 else "close" if factor < solved.margin else "passes",
+        "where": _where(solved.peak_face, solved.peak_at),
+    }
+    return {**result, "part": solved.part} if solved.assembly else result
+
+
+def displacement_check(
+    value_mm: float, limit_mm: float, *, at: tuple[float, float, float], ref: str | None,
+    faces: tuple[str, ...] = (), label: str | None = None,
+) -> dict:
+    """A displacement check's result: the largest displacement (over ``faces``, else the whole
+    model) against the most it may move, close within :data:`CLOSE_WITHIN` of it."""
+    ratio = value_mm / limit_mm
+    close_at = 1 - CLOSE_WITHIN
+    return {
+        "kind": "displacement",
+        "label": label or "Displacement",
+        "value": round(value_mm, 6),
+        "limit": limit_mm,
+        "unit": "mm",
+        "ratio": round(ratio, 6),
+        "close_at": close_at,
+        "status": check_status(ratio, close_at),
+        "where": _where(ref, at),
+        **({"faces": list(faces)} if faces else {}),
+    }
+
+
+def check_findings(results: list[dict], *, assembly: bool = False) -> list[dict]:
+    """A finding for each check that fails. The stress check's are :func:`findings`' own (it yields,
+    or holds under the margin), so only the others say anything here."""
+    found = []
+    for result in results:
+        if result["kind"] != "displacement" or result["status"] != "fails":
+            continue
+        labelled = result["label"] != "Displacement"
+        subject = quoted(result["label"]) if labelled else "The checked faces" if result.get("faces") else (
+            "The assembly" if assembly else "The part")
+        verb = "move" if subject == "The checked faces" else "moves"
+        found.append(_finding(
+            "error",
+            "displacement_over_limit",
+            f"{subject} {verb} {_number(result['value'])} mm, more than the {result['limit']:g} mm allowed",
+            f"largest displacement {result['value']:.4g} mm, {result['ratio']:.2f}× the {result['limit']:g} mm limit",
+            [{"text": "the largest displacement", **result["where"]}],
+        ))
+    return found

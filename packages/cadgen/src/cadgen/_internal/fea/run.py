@@ -36,7 +36,7 @@ def _resolve_faces(scene: "StepScene", refs: "tuple[str, ...]") -> tuple[dict[st
     for ref in refs:
         selection = scene.resolve(ref)
         if selection.kind != "face":
-            raise ValueError(f"{ref} is a {selection.kind} reference; fixtures and loads take faces (#o1.f17)")
+            raise ValueError(f"{ref} is a {selection.kind} reference; fixtures, loads and checks take faces (#o1.f17)")
         resolved[ref] = selection
         owners.add(selection.occurrence_ref)
     return resolved, owners
@@ -555,6 +555,8 @@ def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_
     ordinal_of.update({ref: position[selection.ref] for ref, selection in resolved.items()})
     index_of = {part.ref: i for i, part in enumerate(plan.parts)}
     for ref, selection in resolved.items():
+        if ref not in parsed.face_refs:  # a check's face: `_check_results` says when there is nothing of it to judge
+            continue
         # A face only partly covered by a joint has outer triangles: it holds or loads its exposed area.
         exposed = (volume.boundary_ordinal == position[selection.ref]).any()
         if selection.ref in volume.interface_faces and not exposed:
@@ -572,6 +574,42 @@ def _mesh_assembly(mesh_assembly, scene, plan: _Plan, parsed, resolved, ordinal_
     if unheld := _unheld_after_meshing(volume, held, len(plan.parts)):
         raise _NotConnected(unheld)
     return volume
+
+
+def _check_results(parsed, solved: "Solved", volume, outcome, ordinal_of: dict[str, int], magnitude) -> list[dict]:
+    """Every check of the study (`Study.checks`) judged on the written solve, in the study's order.
+
+    The stress check is the weakest part's (`solved`). A displacement check takes the largest
+    displacement magnitude over the nodes of its faces' surface triangles (faces of several parts
+    alike), else over the whole model, and names the face it is on.
+    """
+    import numpy as np
+
+    from cadgen._internal.fea import checks
+
+    results = []
+    for index, check in enumerate(parsed.checks):
+        if check["kind"] == "stress":
+            results.append(checks.stress_check(solved, label=check.get("label")))
+            continue
+        faces = tuple(check.get("faces", ()))
+        ordinals = sorted({ordinal_of[ref] for ref in faces})
+        rows = np.isin(volume.boundary_ordinal, ordinals) if faces else np.ones(len(volume.boundary_ordinal), bool)
+        nodes = np.unique(outcome.boundary_quadratic[rows]) if faces else np.arange(len(magnitude))
+        if len(nodes) == 0:
+            raise ValueError(
+                f"view.checks[{index}]: {', '.join(faces)} {'is' if len(faces) == 1 else 'are'} wholly covered by a bonded joint, "
+                "so there is no surface of it to judge; choose a face, or part of one, that is not covered by another part"
+            )
+        node = int(nodes[magnitude[nodes].argmax()])
+        on = rows & (outcome.boundary_quadratic == node).any(axis=1)
+        ordinal = int(volume.boundary_ordinal[on][0]) if on.any() else 0
+        results.append(checks.displacement_check(
+            float(magnitude[node]), check["limit_mm"], at=tuple(float(c) for c in outcome.dof_locations[node]),
+            ref=volume.faces[ordinal].ref if ordinal in volume.faces else None, faces=tuple(volume.faces[o].ref for o in ordinals),
+            label=check.get("label"),
+        ))
+    return results
 
 
 def _document_ref(document: Path, glb_path: Path) -> str:
@@ -641,7 +679,7 @@ def solve_study(
 
     require_fea_stack()
     scene = _open(document)
-    resolved, owners = _resolve_faces(scene, parsed.face_refs)
+    resolved, owners = _resolve_faces(scene, tuple(dict.fromkeys((*parsed.face_refs, *parsed.check_faces))))
     # A document of several parts is an assembly, whichever faces the study names; one part's study keeps the one-part path.
     plan = None
     if occurrence is None and (len(list(scene.leaves())) > 1 or parsed.parts or parsed.connections):
@@ -769,6 +807,9 @@ def solve_study(
     # The summary is the one place the numbers are rounded; everything else
     # (the GLB's extras, the sidecar) is derived from it.
     magnitude = np.linalg.norm(outcome.displacement, axis=1)
+    check_results = _check_results(parsed, solved, volume, outcome, ordinal_of, magnitude)
+    if check_found := checks.check_findings(check_results, assembly=plan is not None):
+        findings = sorted(findings + check_found, key=lambda finding: finding["severity"] != "error")
     max_disp_index = int(magnitude.argmax())
     max_vm_index = int(outcome.von_mises.argmax())
     material = parsed.material
@@ -809,6 +850,8 @@ def solve_study(
             }
             for i, part in enumerate(all_solved)
         ]
+    # Each check the study asked for (the stress check alone by default), judged at the load as solved.
+    summary["checks"] = check_results
 
     warnings = list(outcome.warnings)
     if ignored_note:
@@ -840,6 +883,8 @@ def solve_study(
         "ramp": [[stop, list(colour)] for stop, colour in RAMP],
         # What an engineer would say about the result (checks.py), errors first.
         "findings": findings,
+        # Each check judged (`kind`, `label`, `value`, `limit`, `unit`, `ratio`, `close_at`, `status`, `where`): the verdict's.
+        "checks": check_results,
     }
     if plan is not None:
         # What the viewer reads for an assembly (`_PART` indexes `parts`): the weakest part's line and each joint.

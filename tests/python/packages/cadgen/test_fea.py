@@ -59,6 +59,9 @@ def _bending_stress(x: float) -> float:
     return 6.0 * FORCE * (LENGTH - x) / (WIDTH * HEIGHT ** 2)
 
 
+TIP = _timoshenko_tip_deflection()
+
+
 def _write_cantilever(directory: Path, length: float = LENGTH, side: float = WIDTH) -> Path:
     from build123d import Align, Box, export_step
 
@@ -297,6 +300,7 @@ class StudyView(unittest.TestCase):
             (self._view(presets=[{"label": "Flip", "field": "strain"}]), "view.presets[0].field: 'strain' is not one of"),
             (self._view(show={"loads": "yes"}), "view.show.loads: true or false"),
             (self._view(show={"arrows": True}), "view.show: unknown keys ['arrows']; expected loads, fixtures, parts"),
+            (self._view(colours=1), "expected checks, sections, controls, presets, show"),
             (self._view(show={"parts": 1}), "view.show.parts: true or false, got 1"),
         ]
         for view, fragment in cases:
@@ -307,6 +311,54 @@ class StudyView(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             parse_study({**self.BASE, "view": {"controls": [VIEW["controls"][0]], "presets": [{"label": "Heavy", "load_scale": 2}]}})
         self.assertIn("'load_scale' is not a control", str(caught.exception))
+
+    def test_checks_sections_and_when_parse_as_written(self):
+        view = {
+            "checks": [{"kind": "stress", "margin": 2, "label": "Strength"}, {"kind": "displacement", "limit_mm": 0.5, "faces": ["#o1.f2"], "label": "Tip sag"}],
+            "sections": ["verdict", "controls"],
+            "controls": [{"drives": "load_scale", "max": 2, "when": "failing"}],
+        }
+        study = parse_study({**self.BASE, "view": view})
+        self.assertEqual(study.view["checks"], [
+            {"kind": "stress", "margin": 2.0, "label": "Strength"}, {"kind": "displacement", "limit_mm": 0.5, "faces": ["#o1.f2"], "label": "Tip sag"}])
+        self.assertEqual(study.view["sections"], ["verdict", "controls"])
+        self.assertEqual(study.view["controls"][0]["when"], "failing")
+        self.assertEqual(study.check_faces, ("#o1.f2",))
+        # The stress check's margin is the study's.
+        self.assertEqual(study.margin, 2.0)
+        self.assertEqual(parse_study({**self.BASE, "view": {"checks": [{"kind": "stress", "margin": 3}]}}).margin, 3.0)
+
+    def test_with_no_checks_the_stress_check_alone_judges_the_result(self):
+        self.assertEqual(parse_study(self.BASE).checks, ({"kind": "stress"},))
+        self.assertEqual(parse_study({**self.BASE, "view": {"show": {"loads": True}}}).checks, ({"kind": "stress"},))
+        self.assertEqual(parse_study(self.BASE).check_faces, ())
+
+    def test_a_malformed_check_section_or_when_is_a_plain_sentence(self):
+        cases = [
+            ({"checks": []}, "view.checks is empty: leave it out for the stress check alone"),
+            ({"checks": {"kind": "stress"}}, "view.checks: expected a list"),
+            ({"checks": [{"kind": "frequency"}]}, 'view.checks[0].kind: "frequency" is not a check this cadgen makes'),
+            ({"checks": ["stress"]}, "view.checks[0]: expected an object"),
+            ({"checks": [{"kind": "stress"}, {"kind": "stress"}]}, "only one stress check"),
+            ({"checks": [{"kind": "stress", "limit_mm": 1}]}, "view.checks[0]: unknown keys ['limit_mm']; a stress check takes"),
+            ({"checks": [{"kind": "stress", "margin": 0.5}]}, "view.checks[0].margin: a safety factor below 1 means the part yields"),
+            ({"checks": [{"kind": "displacement"}]}, "view.checks[0].limit_mm: a displacement check needs the most it may move"),
+            ({"checks": [{"kind": "displacement", "limit_mm": 0}]}, "view.checks[0].limit_mm: must be > 0"),
+            ({"checks": [{"kind": "displacement", "limit_mm": 1, "faces": []}]}, "view.checks[0]: 'faces' must be a non-empty list"),
+            ({"checks": [{"kind": "displacement", "limit_mm": 1, "label": ""}]}, "view.checks[0].label: expected a short piece of text"),
+            ({"sections": []}, "view.sections: list the parts of Study to show"),
+            ({"sections": ["verdict", "chart"]}, 'view.sections[1]: "chart" is not one of'),
+            ({"sections": ["setup", "setup"]}, "view.sections[1]: 'setup' is listed twice"),
+            ({"controls": [{"drives": "load_scale", "max": 2, "when": "sometimes"}]}, 'view.controls[0].when: "sometimes" is not one of'),
+        ]
+        for view, fragment in cases:
+            with self.subTest(fragment=fragment), self.assertRaises(ValueError) as caught:
+                parse_study({**self.BASE, "view": view})
+            self.assertIn(fragment, str(caught.exception))
+            self.assertNotIn("\u2014", str(caught.exception))
+        with self.assertRaises(ValueError) as caught:
+            parse_study({**self.BASE, "margin": 2, "view": {"checks": [{"kind": "stress", "margin": 3}]}})
+        self.assertIn("the stress check's margin (3) is not the study's margin (2); give it once", str(caught.exception))
 
 
 class GlbJson(unittest.TestCase):
@@ -346,7 +398,13 @@ class Cantilever(unittest.TestCase):
             "fixtures": [{"faces": [cls.fixed_ref], "type": "fixed"}],
             "loads": [{"faces": [cls.load_ref], "type": "force", "vector_N": [0, 0, -FORCE]}],
             "mesh": {"size_mm": 2.0},
-            "view": VIEW,
+            # Generous limits: the checks pass, so the part still has nothing to say.
+            "view": {**VIEW, "checks": [
+                {"kind": "stress"},
+                {"kind": "displacement", "limit_mm": 2 * TIP},
+                {"kind": "displacement", "limit_mm": 1.05 * TIP, "faces": [cls.load_ref], "label": "Tip sag"},
+                {"kind": "displacement", "limit_mm": TIP, "faces": [cls.fixed_ref], "label": "Clamp"},
+            ]},
         }
         cls.out = directory / "results" / "cantilever.glb"
         cls.solver = _CountingSolve()
@@ -423,8 +481,40 @@ class Cantilever(unittest.TestCase):
         self.assertLessEqual({f"_{name.upper()}" for name in VIEW_FIELDS}, written)
 
     def test_the_studys_view_is_copied_into_the_glb_and_the_sidecar(self):
-        self.assertEqual(_glb_extras(self.result.glb)["view"], VIEW)
-        self.assertEqual(json.loads(self.result.sidecar.read_text(encoding="utf-8"))["view"], VIEW)
+        self.assertEqual(_glb_extras(self.result.glb)["view"], self.study["view"])
+        self.assertEqual(json.loads(self.result.sidecar.read_text(encoding="utf-8"))["view"], self.study["view"])
+
+    def test_a_displacement_check_measures_the_tip_against_beam_theory(self):
+        stress, whole, tip, clamp = self.result.summary["checks"]
+        # The whole model and the loaded face both find the tip, where beam theory puts the largest deflection.
+        for check in (whole, tip):
+            self.assertAlmostEqual(check["value"] / TIP, 1.0, delta=0.04)
+            self.assertAlmostEqual(check["where"]["at"][0], LENGTH, delta=1e-6)
+        self.assertEqual(whole["value"], self.result.summary["max_displacement_mm"])
+        self.assertEqual((tip["label"], tip["faces"], tip["where"]["ref"], tip["unit"]), ("Tip sag", [self.load_ref], self.load_ref, "mm"))
+        self.assertEqual((whole["label"], whole["status"], whole["close_at"]), ("Displacement", "passes", 0.9))
+        self.assertAlmostEqual(whole["ratio"], whole["value"] / whole["limit"], places=5)
+        # Within a tenth of its limit, the model's own accuracy, a check is close; the clamped face does not move.
+        self.assertEqual(tip["status"], "close")
+        self.assertEqual((clamp["value"], clamp["status"]), (0.0, "passes"))
+        self.assertNotIn("faces", whole)
+
+    def test_the_stress_check_is_the_safety_factors_verdict(self):
+        stress = self.result.summary["checks"][0]
+        factor = self.result.summary["safety_factor"]
+        self.assertEqual((stress["kind"], stress["label"], stress["unit"]), ("stress", "Strength", "MPa"))
+        self.assertEqual((stress["value"], stress["limit"]), (self.result.summary["max_von_mises_MPa"], STEEL.yield_strength))
+        self.assertEqual(stress["ratio"], round(1 / factor, 6))
+        self.assertEqual((stress["margin"], stress["close_at"], stress["status"]), (2.0, 0.5, "passes" if factor >= 2 else "close"))
+
+    def test_the_checks_are_written_into_the_glb_the_sidecar_and_the_lines(self):
+        checks = self.result.summary["checks"]
+        self.assertEqual(_glb_extras(self.result.glb)["checks"], checks)
+        self.assertEqual(json.loads(self.result.sidecar.read_text(encoding="utf-8"))["summary"]["checks"], checks)
+        lines = self.result.human_lines()
+        tip = checks[2]
+        self.assertIn(f"check 'Tip sag': {tip['value']:g} mm against a {tip['limit']:g} mm limit, {tip['ratio']:.2f}× it, close", lines)
+        self.assertEqual(sum(line.startswith("check '") for line in lines), 4)
 
     def test_the_glb_names_its_step_relative_to_its_own_folder(self):
         self.assertEqual(_glb_extras(self.result.glb)["document"], f"../{self.step.name}")
@@ -587,6 +677,15 @@ class Yielding(unittest.TestCase):
     def test_a_study_without_a_view_writes_none(self):
         self.assertNotIn("view", _glb_extras(self.result.glb))
         self.assertNotIn("view", self.sidecar)
+
+    def test_with_no_view_the_stress_check_alone_says_what_the_safety_factor_says(self):
+        (check,) = self.result.summary["checks"]
+        self.assertEqual((check["kind"], check["status"]), ("stress", "fails"))
+        self.assertEqual(check["ratio"], round(1 / self.result.summary["safety_factor"], 6))
+        self.assertEqual(_glb_extras(self.result.glb)["checks"], [check])
+        # The stress check's findings are the yields finding already made; it adds none of its own.
+        self.assertEqual([f["type"] for f in self.result.findings].count("yields"), 1)
+        self.assertNotIn("displacement_over_limit", [f["type"] for f in self.result.findings])
 
     def test_a_close_call_is_solved_again_finer_and_the_finer_result_is_written(self):
         self.assertEqual(self.solver.calls, 2)

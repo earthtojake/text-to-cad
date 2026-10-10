@@ -9,7 +9,8 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal.fea.checks import (  # noqa: E402
-    Solved, assembly_findings, default_material, findings, gap_closed, needs_finer, safety_factor, safety_factor_text,
+    Solved, assembly_findings, check_findings, default_material, displacement_check, findings, gap_closed, needs_finer, safety_factor,
+    safety_factor_text, stress_check,
 )
 
 
@@ -277,3 +278,47 @@ class AssemblyChecksTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StudyChecksTest(unittest.TestCase):
+    """The study's checks (``view.checks``) judged from the solve's numbers, and the findings of those that fail."""
+
+    def test_the_stress_check_says_what_the_safety_factor_says(self):
+        for peak, status in ((310.0, "fails"), (197.0, "close"), (47.3, "passes"), (138.0, "passes")):
+            with self.subTest(peak=peak):
+                check = stress_check(solved(peak_MPa=peak))
+                self.assertEqual(check["status"], status)
+                self.assertEqual((check["value"], check["limit"], check["unit"], check["close_at"]), (peak, 276.0, "MPa", 0.5))
+                self.assertAlmostEqual(check["ratio"], peak / 276.0, places=2)
+        self.assertEqual(stress_check(solved(peak_MPa=197.0, margin=1.25))["status"], "passes")
+
+    def test_an_assemblys_stress_check_is_its_weakest_parts_against_that_parts_yield(self):
+        check = stress_check(solved(peak_MPa=200.0, yield_MPa=250.0, part="post", assembly=True), label="Strong enough?")
+        self.assertEqual((check["part"], check["limit"], check["label"], check["status"]), ("post", 250.0, "Strong enough?", "close"))
+        self.assertEqual(check["where"], {"ref": "#o1.f12", "at": [10.0, 40.0, 5.0]})
+        self.assertNotIn("part", stress_check(solved()))
+
+    def test_no_load_passes_the_stress_check_at_no_ratio(self):
+        self.assertEqual({k: stress_check(solved(peak_MPa=0.0))[k] for k in ("ratio", "status")}, {"ratio": 0.0, "status": "passes"})
+
+    def test_a_displacement_check_is_close_within_a_tenth_of_its_limit(self):
+        at = (60.0, 0.0, 0.0)
+        for value, status in ((0.6, "fails"), (0.46, "close"), (0.45, "passes")):
+            with self.subTest(value=value):
+                self.assertEqual(displacement_check(value, 0.5, at=at, ref="#o1.f2")["status"], status)
+        check = displacement_check(0.25, 0.5, at=at, ref="#o1.f2", faces=("#o1.f2",), label="Tip sag")
+        self.assertEqual(check, {"kind": "displacement", "label": "Tip sag", "value": 0.25, "limit": 0.5, "unit": "mm", "ratio": 0.5,
+                                 "close_at": 0.9, "status": "passes", "where": {"ref": "#o1.f2", "at": [60.0, 0.0, 0.0]}, "faces": ["#o1.f2"]})
+
+    def test_a_failing_displacement_check_is_an_error_in_the_users_words(self):
+        at = (60.0, 0.0, 0.0)
+        failing = displacement_check(2.1, 0.5, at=at, ref="#o1.f23", faces=("#o1.f23",), label="Tip sag")
+        (finding,) = check_findings([stress_check(solved(peak_MPa=310.0)), failing, displacement_check(0.1, 0.5, at=at, ref=None)])
+        self.assertEqual((finding["severity"], finding["type"]), ("error", "displacement_over_limit"))
+        self.assertEqual(finding["summary"], "'Tip sag' moves 2.1 mm, more than the 0.5 mm allowed")
+        self.assertEqual(finding["items"], [{"text": "the largest displacement", "ref": "#o1.f23", "at": [60.0, 0.0, 0.0]}])
+        unnamed = check_findings([displacement_check(2.1, 0.5, at=at, ref=None)], assembly=True)[0]["summary"]
+        self.assertEqual(unnamed, "The assembly moves 2.1 mm, more than the 0.5 mm allowed")
+        faces = check_findings([displacement_check(2.1, 0.5, at=at, ref=None, faces=("#o1.f2",))])[0]["summary"]
+        self.assertEqual(faces, "The checked faces move 2.1 mm, more than the 0.5 mm allowed")
+        self.assertEqual(check_findings([displacement_check(0.48, 0.5, at=at, ref=None)]), [])

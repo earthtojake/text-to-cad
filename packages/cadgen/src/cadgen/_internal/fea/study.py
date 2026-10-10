@@ -16,7 +16,7 @@ caller) of this shape::
       "parts": {"post": {"material": "steel"}},   # assemblies: a material per part, by name or ref
       "connections": [{"between": ["post", "base"], "type": "free"}],  # assemblies: overrides of the bonded default
       "contact_tolerance_mm": 0.1,               # assemblies: faces this close are bonded
-      "view": {"controls": [...], "presets": [...], "show": {...}}  # optional; what the viewer offers
+      "view": {"checks": [...], "sections": [...], "controls": [...], "presets": [...], "show": {...}}  # optional
     }
 
 Face references are the viewer's own selectors (``#o1.f17``, or with the
@@ -40,7 +40,7 @@ from typing import Any
 
 from cadgen._internal.fea.materials import Material, lookup_material
 
-__all__ = ["Connection", "Fixture", "Load", "Study", "parse_study"]
+__all__ = ["CHECK_KINDS", "Connection", "Fixture", "Load", "Study", "VIEW_SECTIONS", "parse_study"]
 
 FIXTURE_TYPES = ("fixed",)
 LOAD_TYPES = ("force", "pressure")
@@ -50,6 +50,14 @@ UNSUPPORTED_CONNECTION_TYPES = ("bolt", "contact")
 VIEW_DRIVES = ("field", "deformation", "load_scale", "threshold")
 #: The fields a result writes, as a view names them: outputs.py's `_VON_MISES` and `_DISPLACEMENT`.
 VIEW_FIELDS = ("von_mises", "displacement")
+#: What a view's check can judge; cadgen evaluates each (checks.py). With none, the stress check alone.
+CHECK_KINDS = ("stress", "displacement")
+DEFAULT_CHECKS = ({"kind": "stress"},)
+_CHECK_KEYS = {"stress": {"kind", "margin", "label"}, "displacement": {"kind", "limit_mm", "faces", "label"}}
+#: The parts of Study, in the order a view may list them; with no list, all four in this order.
+VIEW_SECTIONS = ("verdict", "setup", "controls", "details")
+#: When a control is shown: always, only while a check fails or is close, or only while every check passes.
+CONTROL_WHEN = ("always", "failing", "passing")
 # The controls the viewer shows when a view declares none: every field, and the exaggeration from
 # zero up (its top is the viewer's, from the result's own scale, so a preset is held only to >= 0).
 _DEFAULT_CONTROLS = {
@@ -57,10 +65,10 @@ _DEFAULT_CONTROLS = {
     "deformation": {"drives": "deformation", "type": "number", "min": 0.0, "max": None},
 }
 _CONTROL_KEYS = {
-    "field": {"drives", "type", "label", "options", "default"},
-    "deformation": {"drives", "type", "label", "min", "max", "default", "unit"},
-    "load_scale": {"drives", "type", "label", "min", "max", "default", "unit"},
-    "threshold": {"drives", "type", "label", "field", "min", "max", "default", "unit"},
+    "field": {"drives", "type", "label", "options", "default", "when"},
+    "deformation": {"drives", "type", "label", "min", "max", "default", "unit", "when"},
+    "load_scale": {"drives", "type", "label", "min", "max", "default", "unit", "when"},
+    "threshold": {"drives", "type", "label", "field", "min", "max", "default", "unit", "when"},
 }
 
 
@@ -108,12 +116,23 @@ class Study:
     connections: tuple[Connection, ...] = ()
     #: Assemblies: faces this close (or closer) count as touching.
     contact_tolerance_mm: float = 0.1
-    #: What the viewer offers for the result (controls, presets, markers), checked; ``None`` for its defaults.
+    #: What the viewer offers for the result (checks, sections, controls, presets, markers), checked; ``None`` for its defaults.
     view: dict | None = None
 
     @property
     def face_refs(self) -> tuple[str, ...]:
+        """The faces the fixtures and loads name, each once."""
         return tuple(dict.fromkeys(ref for group in (*self.fixtures, *self.loads) for ref in group.faces))
+
+    @property
+    def checks(self) -> tuple[dict, ...]:
+        """What the result is judged by: the view's checks, else the stress check alone."""
+        return tuple((self.view or {}).get("checks") or DEFAULT_CHECKS)
+
+    @property
+    def check_faces(self) -> tuple[str, ...]:
+        """The faces the checks name (a displacement check over some faces), each once."""
+        return tuple(dict.fromkeys(ref for check in self.checks for ref in check.get("faces", ())))
 
 
 def _load_document(study: str | dict | Path) -> dict:
@@ -260,6 +279,10 @@ def _control(entry: Any, *, where: str) -> dict:
     if entry.get("type", kind) != kind:
         raise ValueError(f"{where}.type: a {drives} control is a{'n' if kind == 'enum' else ''} {kind}, not {entry['type']!r}")
     control = {"drives": drives, "type": kind, **_text(entry, "label", where=where)}
+    if "when" in entry:
+        if entry["when"] not in CONTROL_WHEN:
+            raise ValueError(f"{where}.when: {_json_text(entry['when'])} is not one of {list(CONTROL_WHEN)}")
+        control["when"] = entry["when"]
     if drives == "field":
         options = entry.get("options", list(VIEW_FIELDS))
         if not isinstance(options, list) or not options:
@@ -331,6 +354,52 @@ def _preset(entry: Any, controls: dict[str, dict], *, where: str) -> dict:
     return preset
 
 
+def _check(entry: Any, *, where: str) -> dict:
+    if not isinstance(entry, dict):
+        raise ValueError(f"{where}: expected an object like {{\"kind\": \"displacement\", \"limit_mm\": 0.5}}")
+    kind = entry.get("kind")
+    if kind not in CHECK_KINDS:
+        raise ValueError(f"{where}.kind: {_json_text(kind)} is not a check this cadgen makes; use one of {list(CHECK_KINDS)}")
+    unknown = set(entry) - _CHECK_KEYS[kind]
+    if unknown:
+        raise ValueError(f"{where}: unknown keys {sorted(unknown)}; a {kind} check takes {sorted(_CHECK_KEYS[kind])}")
+    check = {"kind": kind}
+    if kind == "stress" and "margin" in entry:
+        margin = _number(entry["margin"], where=f"{where}.margin", positive=True)
+        if margin < 1:
+            raise ValueError(f"{where}.margin: a safety factor below 1 means the part yields; must be 1 or more, got {margin:g}")
+        check["margin"] = margin
+    if kind == "displacement":
+        if "limit_mm" not in entry:
+            raise ValueError(f"{where}.limit_mm: a displacement check needs the most it may move, in mm")
+        check["limit_mm"] = _number(entry["limit_mm"], where=f"{where}.limit_mm", positive=True)
+        if "faces" in entry:
+            check["faces"] = list(_faces(entry, where=where))
+    return {**check, **_text(entry, "label", where=where)}
+
+
+def _checks(entries: Any) -> list[dict]:
+    if not isinstance(entries, list):
+        raise ValueError('view.checks: expected a list like [{"kind": "stress"}, {"kind": "displacement", "limit_mm": 0.5}]')
+    if not entries:
+        raise ValueError("view.checks is empty: leave it out for the stress check alone")
+    checks = [_check(entry, where=f"view.checks[{index}]") for index, entry in enumerate(entries)]
+    if sum(check["kind"] == "stress" for check in checks) > 1:
+        raise ValueError("view.checks: only one stress check; it judges the weakest part already")
+    return checks
+
+
+def _sections(entries: Any) -> list[str]:
+    if not isinstance(entries, list) or not entries:
+        raise ValueError(f"view.sections: list the parts of Study to show, in order, from {list(VIEW_SECTIONS)}")
+    for index, name in enumerate(entries):
+        if name not in VIEW_SECTIONS:
+            raise ValueError(f"view.sections[{index}]: {_json_text(name)} is not one of {list(VIEW_SECTIONS)}")
+        if name in entries[:index]:
+            raise ValueError(f"view.sections[{index}]: {name!r} is listed twice")
+    return list(entries)
+
+
 def _view(raw: Any) -> dict | None:
     """The study's ``view``, checked: what the viewer offers for the result.
 
@@ -339,7 +408,10 @@ def _view(raw: Any) -> dict | None:
     ``drives``, which names what each moves: ``field`` (an enum of the fields
     the result writes), ``deformation`` (the exaggeration), ``load_scale``
     (the load as a multiple of the solved one) or ``threshold`` (values of its
-    ``field`` under it are drawn grey), at most one each. ``presets`` are
+    ``field`` under it are drawn grey), at most one each, and each shown
+    ``when`` the checks say (``always``, ``failing``, ``passing``). ``checks``
+    are what the result is judged by (``stress``, ``displacement``; cadgen
+    evaluates them), ``sections`` the parts of Study in order. ``presets`` are
     named states over those controls, ``show`` whether the loads and fixtures
     are drawn and whether an assembly's Parts panel is shown (``parts``; by
     default only from six parts up). ``None`` when the study has none.
@@ -347,11 +419,15 @@ def _view(raw: Any) -> dict | None:
     if raw is None:
         return None
     if not isinstance(raw, dict):
-        raise ValueError('study.view: expected an object like {"controls": [...], "presets": [...], "show": {...}}')
-    unknown = set(raw) - {"controls", "presets", "show"}
+        raise ValueError('study.view: expected an object like {"checks": [...], "controls": [...], "show": {...}}')
+    unknown = set(raw) - {"checks", "sections", "controls", "presets", "show"}
     if unknown:
-        raise ValueError(f"view: unknown keys {sorted(unknown)}; expected controls, presets, show")
+        raise ValueError(f"view: unknown keys {sorted(unknown)}; expected checks, sections, controls, presets, show")
     view: dict = {}
+    if "checks" in raw:
+        view["checks"] = _checks(raw["checks"])
+    if "sections" in raw:
+        view["sections"] = _sections(raw["sections"])
     entries = raw.get("controls", [])
     if not isinstance(entries, list):
         raise ValueError("view.controls: expected a list of controls")
@@ -461,6 +537,15 @@ def parse_study(study: str | dict | Path | None) -> Study:
     margin = _number(document.get("margin", 2.0), where="margin", positive=True)
     if margin < 1:
         raise ValueError(f"margin: a safety factor below 1 means the part yields; must be >= 1, got {margin:g}")
+    view = _view(document.get("view"))
+    # A stress check's margin is the study's margin: one number, said once or said the same.
+    stress = next((check for check in (view or {}).get("checks", ()) if check["kind"] == "stress"), {})
+    if "margin" in stress:
+        if "margin" in document and stress["margin"] != margin:
+            raise ValueError(
+                f"view.checks: the stress check's margin ({stress['margin']:g}) is not the study's margin ({margin:g}); give it once"
+            )
+        margin = stress["margin"]
 
     parts = _parts(document.get("parts"))
     connections = _connections(document.get("connections"))
@@ -470,5 +555,5 @@ def parse_study(study: str | dict | Path | None) -> Study:
 
     return Study(
         material, tuple(fixtures), tuple(loads), mesh_size, deformation_scale, margin, document,
-        parts=parts, connections=connections, contact_tolerance_mm=tolerance, view=_view(document.get("view")),
+        parts=parts, connections=connections, contact_tolerance_mm=tolerance, view=view,
     )

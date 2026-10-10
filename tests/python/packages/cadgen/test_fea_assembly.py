@@ -622,7 +622,9 @@ class SolveAssemblyTest(unittest.TestCase):
         cls.load = _face_at(scene, cls.refs["post"], 40.0)
         cls.scene = scene
         with quiet():
-            cls.mixed = cls.solve(cls.step, {"base": "6061", "post": "steel"}, name="mixed")
+            # Its checks: the stress check and one displacement check over a face of each part, both passing.
+            cls.mixed = cls.solve(cls.step, {"base": "6061", "post": "steel"}, name="mixed", view={"checks": [
+                {"kind": "stress"}, {"kind": "displacement", "limit_mm": 100.0, "faces": [cls.load, cls.fixed], "label": "Post and base"}]})
             cls.steel = cls.solve(cls.step, {"base": "steel", "post": "steel"}, name="steel")
             cls.aluminium = cls.solve(cls.step, {"base": "6061", "post": "6061"}, name="aluminium")
 
@@ -703,6 +705,21 @@ class SolveAssemblyTest(unittest.TestCase):
         )
         self.assertTrue(any(line.startswith(f"assembly peak von Mises {summary['max_von_mises_MPa']} MPa") for line in lines))
         self.assertTrue(any(line.startswith("  'base' (Aluminum 6061-T6): peak ") for line in lines))
+
+    def test_the_stress_check_is_the_weakest_parts_and_a_displacement_check_may_span_parts(self):
+        stress, both = self.mixed.summary["checks"]
+        summary = self.mixed.summary
+        self.assertEqual((stress["part"], stress["value"], stress["limit"]), ("post", summary["weakest_part_peak_MPa"], 250.0))
+        self.assertEqual(stress["ratio"], round(1 / summary["safety_factor"], 6))
+        self.assertEqual(stress["status"], "fails" if summary["safety_factor"] < 1 else "close" if summary["safety_factor"] < 2 else "passes")
+        # The post's loaded top moves the most of the two faces; the fixed base face not at all.
+        self.assertEqual(both["faces"], [self.fixed, self.load])
+        self.assertEqual(both["where"]["ref"], self.load)
+        self.assertAlmostEqual(both["value"], summary["max_displacement_mm"], delta=0.05 * summary["max_displacement_mm"])
+        self.assertEqual(both["status"], "passes")
+        from tests.python.packages.cadgen.test_fea import _glb_extras
+
+        self.assertEqual(_glb_extras(self.mixed.glb)["checks"], summary["checks"])
 
     def test_each_part_that_falls_short_is_named_in_its_findings(self):
         (yields,) = [f for f in self.mixed.findings if f["type"] == "yields"]

@@ -386,13 +386,23 @@ def _stress_lines(s: dict, safety_factor_text) -> list[str]:
     return lines
 
 
+def _check_lines(s: dict) -> list[str]:
+    """One line per check the study asked for: what it measured against its limit, and whether it passes."""
+    return [
+        f"check '{check['label']}': {check['value']:g} {check['unit']} against a {check['limit']:g} {check['unit']} limit, "
+        f"{check['ratio']:.2f}× it, {check['status']}"
+        for check in s.get("checks", [])
+    ]
+
+
 @dataclass(frozen=True)
 class FeaResult:
     """The outcome of ``cadgen fea solve``: where the results went, and the numbers.
 
     ``summary`` carries the answer an engineer asks for first: max von Mises
     (nodal and Gauss-point), safety factor against yield, max displacement,
-    and the applied-versus-reaction balance. ``findings`` is what an engineer
+    the applied-versus-reaction balance, and each check the study asked for
+    judged (``checks``: the verdict's). ``findings`` is what an engineer
     would say about it, errors first, in the KiCad findings' shape. The GLB is
     what the viewer shows; the JSON sidecar holds this whole result plus the
     study it came from.
@@ -422,6 +432,7 @@ class FeaResult:
             f"solved {self.occurrence} of {_display(self.document)}: {self.mesh.get('elements')} tets, "
             f"{self.mesh.get('dofs')} DOF, {self.mesh.get('size_mm')} mm elements",
             *_stress_lines(s, safety_factor_text),
+            *_check_lines(s),
             f"max displacement {s.get('max_displacement_mm')} mm at {s.get('max_displacement_at_mm')}",
             f"applied {s.get('applied_force_N')} N, reactions {s.get('reaction_force_N')} N",
             f"wrote GLB: {_display(self.glb)} (deformation x{s.get('deformation_scale')}), sidecar: {_display(self.sidecar)}"
