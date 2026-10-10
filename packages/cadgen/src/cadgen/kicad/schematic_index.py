@@ -50,7 +50,6 @@ board's are.
 
 from __future__ import annotations
 
-import difflib
 import json
 import math
 import os
@@ -64,7 +63,7 @@ from typing import Iterable, Mapping, Sequence
 from cadgen.kicad import sexpr
 from cadgen.kicad.geometry import XY, arc_points, box, format_xy, nm
 from cadgen.kicad.naming import natural, netclass_of, project_netclasses, unescape_net_name
-from cadgen.kicad.refs import BoardSelector, format_board_selector, parse_board_selector, parse_board_token, selector_or_none
+from cadgen.kicad.refs import BoardSelector, ReferenceView, format_board_selector, selector_or_none
 
 __all__ = [
     "Junction",
@@ -1126,13 +1125,20 @@ def erc_payload(report: Path, index: dict) -> list[dict]:
 # --- answering references ---------------------------------------------------------------------
 
 
-class SchematicView:
+class SchematicView(ReferenceView):
     """A schematic read for references, in the sheet frame (millimetres, y down).
 
     ``parts`` and ``nets`` are everything on it, ``sheets`` each sheet instance (an item's
-    ``sheet`` is its index here); :meth:`resolve` answers a schematic reference (``#U3``,
-    ``#U3.9``, ``#net:VIN``, with or without its file).
+    ``sheet`` is its index here); :meth:`resolve` answers a schematic reference (with or without
+    its file): ``#U3`` is a :class:`Part` (its ``script`` is the line that made it, its ``units``
+    where each is drawn), ``#U3.9`` a :class:`Pin` and its net, ``#net:VIN`` a :class:`Net` with
+    its pins and parts. A point (``#@x..y..``, ``#net:VIN@x..y..``) names a place on a board,
+    never on a schematic.
     """
+
+    _DOCUMENT = "schematic"
+    _FORMS = "a schematic's are a part #U3, a pin #U3.9 or a net #net:VIN"
+    _NAMEABLE = "a part, pin or net"
 
     def __init__(self, path: Path, index: SchematicIndex):
         self.path = Path(path)
@@ -1164,75 +1170,14 @@ class SchematicView:
     def __repr__(self) -> str:
         return f"SchematicView({self.path.name}: {len(self.sheets)} sheets, {len(self.parts)} parts, {len(self.nets)} nets)"
 
-    def part(self, ref: str) -> Part:
-        """The part ``ref`` (``"U3"``)."""
-        found = self._parts.get(str(ref))
-        if found is None:
-            close = sorted(difflib.get_close_matches(str(ref), list(self._parts), n=3), key=natural)
-            hint = f"; did you mean {', '.join(close)}?" if close else f"; its parts are {_listing(self._parts)}"
-            raise ValueError(f"{self.path.name} has no part {ref}{hint}")
-        return found
+    def _pad(self, part: Part, number: str) -> Pin:
+        return part.pin(number)
 
-    def net(self, name: str) -> Net:
-        """The net ``name``, as KiCad shows it (``"TX/RX"``, ``"/Power/EN"``)."""
-        found = self._nets.get(str(name))
-        if found is None:
-            close = sorted(difflib.get_close_matches(str(name), list(self._nets), n=3), key=natural)
-            hint = f"; did you mean {', '.join(close)}?" if close else ""
-            raise ValueError(f"{self.path.name} has no net {name!r}{hint}")
-        return found
-
-    def resolve(self, ref: str) -> Part | Pin | Net:
-        """What the schematic reference ``ref`` names.
-
-        ``#U3`` is a :class:`Part` (its ``script`` is the line that made it, its ``units`` where
-        each is drawn), ``#U3.9`` a :class:`Pin` and its net, ``#net:VIN`` a :class:`Net` with
-        its pins and parts. A file before the ``#`` must name this schematic; a point
-        (``#@x..y..``, ``#net:VIN@x..y..``) names a place on a board, never on a schematic.
-        """
-        answers = self.resolve_all(ref)
-        if len(answers) != 1:
-            raise ValueError(
-                f"{ref!r} names {len(answers)} things; resolve_all() answers each, in the order written"
-            )
-        return answers[0]
-
-    def resolve_all(self, ref: str) -> list[Part | Pin | Net]:
-        """Every selector of a reference token (``power.kicad_sch#U3,C14.2``), each resolved."""
-        from cadgen.cad_ref_syntax import ref_prefix_names
-
-        token = parse_board_token(ref)
-        if token is None:
-            selector = parse_board_selector(ref)
-            if selector is None:
-                raise ValueError(
-                    f"not a schematic reference: {ref!r}; a schematic's are a part #U3, a pin #U3.9 or a net #net:VIN"
-                )
-            path, selectors = "", (selector,)
-        else:
-            path, selectors = token.path, token.selectors
-        if path and not ref_prefix_names(path, str(self.path)):
-            raise ValueError(f"reference names {path!r}, but this schematic is {str(self.path)!r}")
-        if not selectors:
-            raise ValueError(f"{ref!r} names the whole schematic; name a part, pin or net in it")
-        return [self._answer(selector) for selector in selectors]
-
-    def _answer(self, selector: BoardSelector):
-        if selector.kind == "part":
-            return self.part(selector.ref)
-        if selector.kind == "pad":
-            return self.part(selector.ref).pin(selector.pad)
-        if selector.kind == "net":
-            return self.net(selector.net)
+    def _place(self, selector: BoardSelector):
         raise ValueError(
             f"{selector.canonical} names a point, and points belong to boards: on a schematic, name a "
             "part #U3, a pin #U3.9 or a net #net:VIN (the board's .kicad_pcb answers points)"
         )
-
-
-def _listing(parts: Mapping[str, Part]) -> str:
-    refs = sorted(parts, key=natural)
-    return ", ".join(refs[:40]) + (f" and {len(refs) - 40} more" if len(refs) > 40 else "")
 
 
 def stage_files(files: Sequence[tuple[Path, bytes]], folder: Path) -> Path:

@@ -39,7 +39,6 @@ references, and a KiCad 5 board's modules and its arcs drawn by centre and angle
 
 from __future__ import annotations
 
-import difflib
 import math
 import re
 from collections import deque
@@ -50,7 +49,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 from cadgen.kicad import sexpr
 from cadgen.kicad.geometry import XY, arc_points, area, bezier_points, board_origin, box, format_xy, hull, inside, script_frame
 from cadgen.kicad.naming import natural, netclass_of, project_netclasses, unescape_net_name
-from cadgen.kicad.refs import BoardSelector, format_board_selector, parse_board_selector, parse_board_token, selector_or_none
+from cadgen.kicad.refs import BoardSelector, ReferenceView, format_board_selector, selector_or_none
 
 __all__ = [
     "BoardIndex",
@@ -1031,13 +1030,22 @@ def read_index(text: str | list, *, project: Path | None = None) -> BoardIndex:
 # --- answering references -------------------------------------------------------------
 
 
-class BoardView:
+class BoardView(ReferenceView):
     """A board read for references, in the script's frame (millimetres, y up).
 
     ``parts`` and ``nets`` are everything on it; :meth:`resolve` answers a board
-    reference (``#U3``, ``#U3.9``, ``#net:VIN``, ``#net:VIN@x40.1y21.6``,
-    ``#@x40.1y21.6``, with or without its file), :meth:`at` what is at a point.
+    reference (with or without its file): ``#U3`` is a :class:`Part` (its ``script`` is the
+    line that made it), ``#U3.9`` a :class:`Pad`, ``#net:VIN`` a :class:`Net` with everything
+    on it, ``#net:VIN@x40.1y21.6`` that net's :class:`Copper` at the point (within
+    ``COPPER_TOLERANCE``), ``#@x40.1y21.6`` a :class:`Point` and what is there (:meth:`at`).
     """
+
+    _DOCUMENT = "board"
+    _FORMS = (
+        "a board's are a part #U3, a pad #U3.9, a net #net:VIN, copper #net:VIN@x40.1y21.6 or a point "
+        "#@x40.1y21.6 (millimetres from the board's origin, y up)"
+    )
+    _NAMEABLE = "a part, pad, net, copper or point"
 
     def __init__(self, path: Path, index: BoardIndex):
         self.path = Path(path)
@@ -1065,67 +1073,10 @@ class BoardView:
     def __repr__(self) -> str:
         return f"BoardView({self.path.name}: {len(self.parts)} parts, {len(self.nets)} nets)"
 
-    def part(self, ref: str) -> Part:
-        """The part ``ref`` (``"U3"``)."""
-        found = self._parts.get(str(ref))
-        if found is None:
-            close = sorted(difflib.get_close_matches(str(ref), list(self._parts), n=3), key=natural)
-            hint = f"; did you mean {', '.join(close)}?" if close else f"; its parts are {_listing(self._parts)}"
-            raise ValueError(f"{self.path.name} has no part {ref}{hint}")
-        return found
+    def _pad(self, part: Part, number: str) -> Pad:
+        return part.pad(number)
 
-    def net(self, name: str) -> Net:
-        """The net ``name``, as KiCad shows it (``"TX/RX"``)."""
-        found = self._nets.get(str(name))
-        if found is None:
-            close = sorted(difflib.get_close_matches(str(name), list(self._nets), n=3), key=natural)
-            hint = f"; did you mean {', '.join(close)}?" if close else ""
-            raise ValueError(f"{self.path.name} has no net {name!r}{hint}")
-        return found
-
-    def resolve(self, ref: str) -> Part | Pad | Net | Copper | Point:
-        """What the board reference ``ref`` names, in the script's frame.
-
-        ``#U3`` is a :class:`Part` (its ``script`` is the line that made it), ``#U3.9`` a
-        :class:`Pad`, ``#net:VIN`` a :class:`Net` with everything on it, ``#net:VIN@x40.1y21.6``
-        that net's :class:`Copper` at the point (within ``COPPER_TOLERANCE``), ``#@x40.1y21.6``
-        a :class:`Point` and what is there. A file before the ``#`` must name this board.
-        """
-        answers = self.resolve_all(ref)
-        if len(answers) != 1:
-            raise ValueError(
-                f"{ref!r} names {len(answers)} things; resolve_all() answers each, in the order written"
-            )
-        return answers[0]
-
-    def resolve_all(self, ref: str) -> list[Part | Pad | Net | Copper | Point]:
-        """Every selector of a reference token (``board.kicad_pcb#U3,C14.2``), each resolved."""
-        from cadgen.cad_ref_syntax import ref_prefix_names
-
-        token = parse_board_token(ref)
-        if token is None:
-            selector = parse_board_selector(ref)
-            if selector is None:
-                raise ValueError(
-                    f"not a board reference: {ref!r}; a board's are a part #U3, a pad #U3.9, a net #net:VIN, "
-                    "copper #net:VIN@x40.1y21.6 or a point #@x40.1y21.6 (millimetres from the board's origin, y up)"
-                )
-            path, selectors = "", (selector,)
-        else:
-            path, selectors = token.path, token.selectors
-        if path and not ref_prefix_names(path, str(self.path)):
-            raise ValueError(f"reference names {path!r}, but this board is {str(self.path)!r}")
-        if not selectors:
-            raise ValueError(f"{ref!r} names the whole board; name a part, pad, net, copper or point in it")
-        return [self._answer(selector) for selector in selectors]
-
-    def _answer(self, selector: BoardSelector):
-        if selector.kind == "part":
-            return self.part(selector.ref)
-        if selector.kind == "pad":
-            return self.part(selector.ref).pad(selector.pad)
-        if selector.kind == "net":
-            return self.net(selector.net)
+    def _place(self, selector: BoardSelector) -> Copper | Point:
         if selector.kind == "copper":
             return self.copper(selector.net, *selector.at)
         return self.at(*selector.at)
@@ -1174,11 +1125,6 @@ def _reach(item, point: XY) -> float:
     if isinstance(item, Zone):
         return min((_polygon_distance(point, fill) for fill in item.fills), default=math.inf)
     return math.inf
-
-
-def _listing(parts: Mapping[str, Part]) -> str:
-    refs = sorted(parts, key=natural)
-    return ", ".join(refs[:40]) + (f" and {len(refs) - 40} more" if len(refs) > 40 else "")
 
 
 def read_board(path: Path | str) -> BoardView:
