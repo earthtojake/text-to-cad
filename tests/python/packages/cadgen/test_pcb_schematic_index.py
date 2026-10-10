@@ -35,7 +35,8 @@ from cadgen.kicad import sexpr  # noqa: E402
 from cadgen.kicad.design import Board  # noqa: E402
 from cadgen.kicad.ids import Ids  # noqa: E402
 from cadgen.kicad.project_writer import project_document  # noqa: E402
-from cadgen.kicad.schematic_index import Net, Part, Pin, SchematicView, erc_payload, read_index, read_schematic  # noqa: E402
+from cadgen.kicad.schematic_index import Net, Part, Pin, SchematicView, read_index, read_schematic  # noqa: E402
+from cadgen.kicad.schematic_plot import erc_payload  # noqa: E402
 from cadgen.kicad.schematic_writer import schematic_document  # noqa: E402
 
 

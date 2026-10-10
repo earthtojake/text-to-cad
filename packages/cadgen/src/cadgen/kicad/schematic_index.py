@@ -50,7 +50,6 @@ board's are.
 
 from __future__ import annotations
 
-import json
 import math
 import os
 import re
@@ -79,10 +78,8 @@ __all__ = [
     "Wire",
     "export_netlist",
     "hierarchy_files",
-    "payload_index",
     "read_index",
     "read_schematic",
-    "stage_files",
 ]
 
 _IU = 10_000  # KiCad's schematic unit is 100 nm: points meet when they agree to it
@@ -1063,65 +1060,6 @@ def export_netlist(root: Path, install) -> str:
     return (root.parent / _NETLIST).read_text(encoding="utf-8")
 
 
-def payload_index(root: Path, install, plotted: Sequence[str]) -> dict:
-    """The index a schematic's plot payload carries as ``schematic``, for the staged root sheet
-    ``root`` the plot drew (``plotted``: the names of its pictures): KiCad's netlist exported
-    beside it (one ``kicad-cli`` run), on the plot's sheets in KiCad's page order, then any
-    picture the hierarchy does not name. The plot orders its pictures as these sheets."""
-    root = Path(root)
-    instances, _files = _hierarchy(root)
-    index = _index(instances, netlist=export_netlist(root, install), project=root.with_suffix(".kicad_pro"))
-    pictures = set(plotted)
-    names = [sheet.name for sheet in index.sheets if sheet.name in pictures]
-    names += [name for name in plotted if name not in set(names)]
-    return index.aligned(names).as_json()
-
-
-_SYMBOL = re.compile(r"^Symbol (\S+)")
-
-
-def _erc_ref(index: dict, sheet: int | None, at: list[float] | None, text: str) -> str | None:
-    """A board reference to what an ERC item names: the pin at its point, else the label's net, else its symbol."""
-    if sheet is not None and at is not None:
-        for pin in index.get("pins", []):
-            if pin.get("sheet") == sheet and math.dist(pin.get("at") or (math.inf, math.inf), at) < 0.01:
-                return selector_or_none("pad", ref=pin["part"], pad=pin["number"])
-        for label in index.get("labels", []):
-            if label.get("sheet") == sheet and label.get("net") and math.dist(label.get("at") or (math.inf, math.inf), at) < 0.01:
-                return selector_or_none("net", net=label["net"])
-    match = _SYMBOL.match(text)
-    return selector_or_none("part", ref=match[1]) if match else None
-
-
-def erc_payload(report: Path, index: dict) -> list[dict]:
-    """KiCad's ERC of the schematic, for its plot payload: each finding in a plain sentence, each
-    item with the reference it names on the sheet ``index`` (``payload_index``'s) draws it on."""
-    from cadgen.kicad.phrasing import summarize
-
-    data = json.loads(Path(report).read_text(encoding="utf-8"))
-    sheets = {sheet["path"]: number for number, sheet in enumerate(index.get("sheets", []))}
-    found: list[dict] = []
-    for sheet in data.get("sheets", []) or []:
-        number = sheets.get(str(sheet.get("path", "")))
-        for violation in sheet.get("violations", []) or []:
-            items = []
-            for item in violation.get("items", []) or []:
-                text = str(item.get("description", ""))
-                position = item.get("pos")
-                # KiCad's ERC JSON says "mm" but writes page millimetres divided by 100 (verified on KiCad 10).
-                at = [round(float(position.get("x", 0.0)) * 100, 4), round(float(position.get("y", 0.0)) * 100, 4)] \
-                    if isinstance(position, dict) and number is not None else None
-                items.append({"text": text, "ref": _erc_ref(index, number, at, text), "at": at, "sheet": number})
-            kind, description = str(violation.get("type", "")), str(violation.get("description", ""))
-            entry = {
-                "check": "erc", "severity": str(violation.get("severity", "error")), "type": kind, "description": description,
-                "summary": summarize("erc", kind, description, [item["text"] for item in items]), "items": items,
-            }
-            if entry not in found:
-                found.append(entry)
-    return found
-
-
 # --- answering references ---------------------------------------------------------------------
 
 
@@ -1180,25 +1118,6 @@ class SchematicView(ReferenceView):
         )
 
 
-def stage_files(files: Sequence[tuple[Path, bytes]], folder: Path) -> Path:
-    """Write ``files`` (absolute paths and their bytes, the document first: :func:`hierarchy_files`)
-    into ``folder`` as they lie relative to one another; the staged document. A sheet on another
-    drive than the document is left out: KiCad reads a sheet named by an absolute path where it
-    lies."""
-    document = files[0][0]
-    try:
-        base = Path(os.path.commonpath([str(path.parent) for path, _data in files]))
-    except ValueError:  # a sheet on another drive
-        base = document.parent
-    for path, data in files:
-        if not path.is_relative_to(base):
-            continue
-        target = folder / path.relative_to(base)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
-    return folder / document.relative_to(base)
-
-
 def read_schematic(path: Path | str) -> SchematicView:
     """The KiCad schematic at ``path`` (a ``.kicad_sch``, the root of its hierarchy; any KiCad 10
     schematic) for schematic references.
@@ -1209,6 +1128,7 @@ def read_schematic(path: Path | str) -> SchematicView:
     (the project's files are only read). Net classes come from the netlist, else the
     ``.kicad_pro`` beside it.
     """
+    from cadgen.kicad.cli import stage_files
     from cadgen.kicad.install import find_kicad
 
     schematic = Path(path).expanduser()

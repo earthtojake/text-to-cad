@@ -29,7 +29,7 @@ from typing import Callable, Sequence
 from cadgen.kicad.install import KicadInstall
 from cadgen.kicad.phrasing import Finding, FindingItem, summarize
 
-__all__ = ["Finding", "KicadRunError", "erc_findings", "drc_findings", "run_kicad_cli"]
+__all__ = ["Finding", "KicadRunError", "erc_findings", "drc_findings", "run_kicad_cli", "stage_files"]
 
 _TIMEOUT_SECONDS = 600
 _NOISE = ("Fontconfig error",)
@@ -54,6 +54,24 @@ def _private_config() -> Path:
 
 def config_home() -> Path:
     return _private_config()
+
+
+def stage_files(files: Sequence[tuple[Path, bytes]], folder: Path) -> Path:
+    """Write ``files`` (absolute paths and their bytes, the document first) into ``folder`` as
+    they lie relative to one another; the staged document. A sheet on another drive than the
+    document is left out: KiCad reads a sheet named by an absolute path where it lies."""
+    document = files[0][0]
+    try:
+        base = Path(os.path.commonpath([str(path.parent) for path, _data in files]))
+    except ValueError:  # a sheet on another drive
+        base = document.parent
+    for path, data in files:
+        if not path.is_relative_to(base):
+            continue
+        target = folder / path.relative_to(base)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    return folder / document.relative_to(base)
 
 
 def _quiet(text: str) -> str:

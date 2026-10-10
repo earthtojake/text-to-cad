@@ -377,8 +377,7 @@ def _findings(report: list[tuple], index) -> tuple:
 
 def _board_payload(inputs: _Inputs, install) -> dict:
     from cadgen.kicad.board_index import read_index
-    from cadgen.kicad.cli import run_kicad_cli
-    from cadgen.kicad.schematic_index import stage_files
+    from cadgen.kicad.cli import run_kicad_cli, stage_files
 
     path = inputs.document
     try:
@@ -460,8 +459,8 @@ def _board_payload(inputs: _Inputs, install) -> dict:
 
 
 def _schematic_payload(inputs: _Inputs, install) -> dict:
-    from cadgen.kicad.cli import run_kicad_cli
-    from cadgen.kicad.schematic_index import erc_payload, payload_index, stage_files
+    from cadgen.kicad.cli import run_kicad_cli, stage_files
+    from cadgen.kicad.schematic_plot import erc_payload, payload_index
 
     path = inputs.document
     if not inputs.files[0][1].lstrip().startswith(b"(kicad_sch"):
