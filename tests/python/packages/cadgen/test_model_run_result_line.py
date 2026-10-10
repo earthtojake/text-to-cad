@@ -191,5 +191,79 @@ class SeveralModelsInOneFileTest(_ModelRunCase):
         self.assertTrue((self.project / "draw.dxf").is_file())
 
 
+class BuildTimeTest(_ModelRunCase):
+    """Every model a run BUILDS says where its time went: on stderr, in the --json
+    result, and in its record, which the next build compares itself against."""
+
+    def test_built_models_report_their_time_split_and_profile_names_the_slow_code(self) -> None:
+        self._write("wheel.py", """\
+            from cadgen import build123d as bd
+            from cadgen import step
+
+
+            @step
+            def wheel():
+                return bd.Cylinder(5, 2)
+
+
+            if __name__ == "__main__":
+                wheel()
+            """)
+        self._write("cart.py", """\
+            from cadgen import build123d as bd
+            from cadgen import step
+            from wheel import wheel
+
+
+            def spin_the_planner():
+                total = 0
+                for i in range(400_000):
+                    total += i * i
+                return total
+
+
+            @step
+            def cart():
+                spin_the_planner()
+                return bd.Compound(children=[bd.Box(20, 10, 4), wheel()])
+
+
+            if __name__ == "__main__":
+                cart()
+            """)
+
+        first = self._run("cart.py", "--json")
+        result = json.loads(first.stdout.strip())
+        timings = result["timings"]
+        self.assertEqual(set(timings), {"seconds", "modelSeconds", "cadgenSeconds", "childrenSeconds", "queuedSeconds"})
+        self.assertGreater(timings["modelSeconds"], 0.0)
+        # The parent AND the child it built each get their own line.
+        built = [line for line in first.stderr.splitlines() if line.startswith("[cadgen] built ")]
+        self.assertEqual(len(built), 2, first.stderr)
+        self.assertRegex(built[0], r"^\[cadgen\] built wheel\.step in \S+: model code \S+, cadgen \S+$")
+        self.assertRegex(built[1], r"^\[cadgen\] built cart\.step in \S+: model code \S+, cadgen \S+")
+
+        # A current model was not built: no line, and no timings in its result.
+        again = self._run("cart.py", "--json")
+        self.assertIsNone(json.loads(again.stdout.strip())["timings"])
+        self.assertNotIn("[cadgen] built ", again.stderr)
+
+        # --profile rebuilds the model (it is current) with its own code profiled; its
+        # child is reused, so only the parent has a line. The record kept the first
+        # build's model-code time, and this build compares itself against it.
+        profiled = self._run("cart.py", "--profile")
+        self.assertEqual(self._lines(profiled), ["built cart.step"])
+        lines = profiled.stderr.splitlines()
+        self.assertEqual(sum(line.startswith("[cadgen] built ") for line in lines), 1, profiled.stderr)
+        start = lines.index("[cadgen]   in this project, by cumulative time:")
+        project_rows = lines[start + 1:lines.index("[cadgen]   everywhere, by own time:")]
+        self.assertTrue(any(row.endswith("cart.py:6 spin_the_planner") for row in project_rows), profiled.stderr)
+        done = [
+            json.loads(line) for line in lines
+            if line.startswith('{"model":') and '"state":"done"' in line
+        ]
+        self.assertEqual(done[-1]["timings"]["lastModelSeconds"], timings["modelSeconds"])
+
+
 if __name__ == "__main__":
     unittest.main()

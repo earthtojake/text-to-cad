@@ -365,6 +365,9 @@ def _write_drawing_record(
         "outputs": {str(written): {"sha256": hashlib.sha256(written.read_bytes()).hexdigest()}},
         "stepHash": "",
     }
+    from cadgen._internal.build_timing import record_fields
+
+    record.update(record_fields())
     decision = decide(model_path, ran_closure_hash=closure_hash, ran_files=closure_files,
                       ran_names=record["closure"]["names"], ran_shas=record["closure"]["shas"],
                       ran_wholes=record["closure"]["wholes"], ran_own=record["closure"]["own"])
@@ -562,6 +565,7 @@ def _run_script_generator_body(
         # function takes no arguments and so cannot be handed the run,
         # and without this the longest phase of most builds reports nothing at all. Silent
         # generators are unaffected -- nothing reads the binding unless they ask for it.
+        from cadgen._internal.build_timing import model_body
         from cadgen.authoring import building
         # The execution window includes imports during module initialization.
         # The loader already recorded the script's exact compiled source bytes;
@@ -571,7 +575,10 @@ def _run_script_generator_body(
             reporting_as(progress),
             building(spec.script_path, entry_name) as frame,
         ):
-            raw_payload = generator()
+            # The model's own code: what a build's time line calls "model code", and
+            # all that --profile profiles (cadgen._internal.build_timing).
+            with model_body(spec.script_path.parent):
+                raw_payload = generator()
 
     # A model's own outputs are never its inputs: reading one back reads the
     # previous run, so a read the trace saw is dropped here, and a folder its

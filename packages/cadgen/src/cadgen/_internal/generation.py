@@ -710,8 +710,12 @@ def _generate_part_outputs(
                 if geometry_closure is not None:
                     record["geometryClosure"] = geometry_closure
         if generated:
+            from cadgen._internal.build_timing import record_fields
             from cadgen.store.publish import decide
             from cadgen.store.trees import claim_tree
+
+            # The model-code time the next build compares itself against.
+            record.update(record_fields())
 
             # Claimed, not just checked: the record below names these closures,
             # so no sweep may take any part of them from here on (STORE.md §8).
@@ -1173,10 +1177,17 @@ def _run_with_spec_generation_status(
     progress_sink: object | None = None,
     logger: CliLogger | None = None,
     on_queued: Callable[[], None] | None = None,
+    profile: bool = False,
+    on_timed: Callable[[dict[str, float]], None] | None = None,
 ) -> object:
     """Run ``action`` under the model's progress record.
 
     ``on_queued`` is told when the job had to wait for a slot before its body.
+
+    The build is measured (cadgen._internal.build_timing): its ``done`` event carries
+    the time split the root prints, and ``on_timed`` receives the same numbers for
+    the run's result. ``profile`` profiles the model body and the ``done`` event
+    carries the report.
 
     Delegates to :func:`cadgen.coordination.artifact_build`, the SAME primitive
     ``cadgen.step_artifact_cli`` uses, so every producer reports the same way.
@@ -1197,12 +1208,19 @@ def _run_with_spec_generation_status(
         checked_tree = verdict if isinstance(verdict, str) else None
         return bool(verdict)
 
+    from cadgen._internal import build_timing
+
     with artifact_build(
         kind,
         _spec_output_dir(spec, model_format),
         is_current=is_current if skip_if_current is not None else None,
         sink=_tree_progress_sink(spec, progress_sink),
-    ) as run:
+    ) as run, build_timing.measuring(
+        model_ref=_model_for_spec(spec),
+        last_model_seconds=_last_model_seconds(spec),
+        profile=profile,
+    ) as clock:
+        clock.started = started
         if run.skipped:
             if model_format == "step":
                 _current_source_result(spec, checked_tree)
@@ -1223,16 +1241,51 @@ def _run_with_spec_generation_status(
         # The build's own artifact work -- its declared meshes' surfaces and meshes --
         # runs in this process under that slot, where the kernel and the store are
         # already loaded, whichever process runs the build (daemon/artifacts.py).
+        waiting_from = time.perf_counter()
         with broker.held(spec.source_ref, on_queued=queued), \
                 artifacts.worker_context(artifacts.store_path()), settle_child_builds():
+            clock.queued = time.perf_counter() - waiting_from
             _tree_event(spec, "building", phase="generate")
             try:
                 result = action(spec, run)
             except BaseException:
                 _tree_event(spec, "failed", elapsed=time.perf_counter() - started)
                 raise
-    _tree_event(spec, "done", elapsed=time.perf_counter() - started, stale=_stale_after_build(spec))
+        measured = clock.timings().payload()
+        profile_report = clock.profile_report
+    if on_timed is not None:
+        on_timed(measured)
+    timings = {
+        **measured,
+        "document": _timed_document(spec, model_format),
+        "lastModelSeconds": clock.last_model_seconds,
+    }
+    _tree_event(
+        spec, "done", elapsed=time.perf_counter() - started, stale=_stale_after_build(spec),
+        timings=timings, profile=profile_report,
+    )
     return result
+
+
+def _last_model_seconds(spec: EntrySpec) -> float | None:
+    """The model-code time the model's record kept from its last build, if any."""
+    model = _model_for_spec(spec)
+    if model is None or spec.source != "generated":
+        return None
+    from cadgen.store.records import read_record
+
+    try:
+        value = (read_record(model) or {}).get("modelSeconds")
+    except Exception:  # noqa: BLE001 - a missing comparison never fails a build
+        return None
+    return float(value) if isinstance(value, (int, float)) and value > 0 else None
+
+
+def _timed_document(spec: EntrySpec, model_format: str) -> str | None:
+    """The document a time line names: the one the run's result line names."""
+    if model_format == "dxf":
+        return str(spec.dxf_path.expanduser().resolve()) if spec.dxf_path is not None else None
+    return _reported_document(spec)
 
 
 def _stale_after_build(spec: EntrySpec) -> str | None:
@@ -1378,6 +1431,7 @@ def generate_step_targets(
     force: bool = False,
     verbose: bool = False,
     json_output: bool = False,
+    profile: bool = False,
 ) -> int:
     """Build trees for ``targets``. Returns the process exit code.
 
@@ -1389,6 +1443,9 @@ def generate_step_targets(
     tool_name = "cadgen"
     logger = CliLogger("cadgen", verbose=verbose)
     reported: list[dict[str, object]] = []
+    # Where each built model's time went (cadgen._internal.build_timing); a model
+    # that was current has none.
+    timed: dict[str, dict[str, float]] = {}
 
     def _emit(spec: EntrySpec, outcome: str, tree: str | None) -> None:
         from cadgen.daemon.telemetry import job_reused
@@ -1410,6 +1467,7 @@ def generate_step_targets(
                 # shows it relative to the cwd.
                 "document": _reported_document(spec),
                 "tree": tree,
+                "timings": timed.get(spec.source_ref) if outcome == "built" else None,
             }
         )
 
@@ -1507,6 +1565,8 @@ def generate_step_targets(
                     progress_sink=progress_sink,
                     logger=logger,
                     on_queued=lambda: verdicts.pop(spec.source_ref, None),
+                    profile=profile,
+                    on_timed=lambda measured: timed.__setitem__(spec.source_ref, measured),
                 )
                 captured._finish(0)
                 if spec.source == "generated":
@@ -1534,6 +1594,7 @@ def generate_dxf_targets(
     force: bool = False,
     verbose: bool = False,
     json_output: bool = False,
+    profile: bool = False,
 ) -> int:
     """Build drawings. A drawing is a model (STORE.md §3), so its run answers on
     stdout exactly as a STEP model's does: one `outcome document` line per
@@ -1542,6 +1603,7 @@ def generate_dxf_targets(
     from cadgen.store.gate import stale
 
     reported: list[dict[str, object]] = []
+    timed: dict[str, dict[str, float]] = {}
 
     def _emit(spec: EntrySpec, outcome: str) -> None:
         from cadgen.daemon.telemetry import job_reused
@@ -1556,6 +1618,7 @@ def generate_dxf_targets(
                 # shows it relative to the cwd.
                 "document": str(spec.dxf_path.expanduser().resolve()) if spec.dxf_path is not None else None,
                 "tree": None,
+                "timings": timed.get(spec.source_ref) if outcome == "built" else None,
             }
         )
 
@@ -1634,6 +1697,8 @@ def generate_dxf_targets(
                 skip_if_current=_built_by_a_peer,
                 progress_sink=progress_sink,
                 logger=logger,
+                profile=profile,
+                on_timed=lambda measured, ref=spec.source_ref: timed.__setitem__(ref, measured),
             ),
             logger=logger,
             success_message=_generated_dxf_summary,

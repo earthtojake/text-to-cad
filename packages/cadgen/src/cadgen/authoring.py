@@ -40,7 +40,7 @@ Semantics:
   sharing a file each write ``<function>.<fmt>``.
 
 Per-run flags ride ``sys.argv`` of the top-level call: ``--force``,
-``--verbose``, ``--json``, ``--mesh-tolerance``,
+``--verbose``, ``--json``, ``--profile``, ``--mesh-tolerance``,
 ``--mesh-angular-tolerance``. Durable configuration lives
 in the decorator call. A model function takes no parameters: it is one
 configuration of one output. Parametric geometry lives in a plain factory the

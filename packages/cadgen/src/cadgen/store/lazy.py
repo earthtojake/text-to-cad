@@ -337,9 +337,10 @@ class LazyCompound(Compound):
                 if job.result_ready:
                     tree = job.wait_result()
                 else:
+                    from cadgen._internal.build_timing import waiting_for_children
                     from cadgen.daemon.broker import yielded
 
-                    with yielded():
+                    with waiting_for_children(), yielded():
                         tree = job.wait_result()
             except RuntimeError as exc:
                 raise ChildBuildError(
@@ -365,9 +366,10 @@ class LazyCompound(Compound):
         if job.done:
             code = job.wait()
         else:
+            from cadgen._internal.build_timing import waiting_for_children
             from cadgen.daemon.broker import yielded
 
-            with yielded():
+            with waiting_for_children(), yielded():
                 code = job.wait()
         if code != 0:
             raise ChildBuildError(
@@ -378,6 +380,14 @@ class LazyCompound(Compound):
     def _force(self) -> None:
         if self._lazy_forcing:
             raise RuntimeError(f"child model {self.model_name} forced re-entrantly")
+        from cadgen._internal.build_timing import cadgen_work
+
+        # Waiting for the child and loading its geometry is cadgen's time, not the
+        # parent's model code (cadgen._internal.build_timing).
+        with cadgen_work():
+            self._force_now()
+
+    def _force_now(self) -> None:
         _ready_children.prepare_for(self)
         self._lazy_forcing = True
         try:

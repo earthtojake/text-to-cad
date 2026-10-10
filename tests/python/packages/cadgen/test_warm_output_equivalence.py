@@ -96,9 +96,17 @@ def _run(argv: list[str], cwd: pathlib.Path, **env_extra) -> tuple[int, str]:
     output = re.sub(r"/private/var/folders/\S+", "<TMP>", output)
     output = re.sub(r"/(?:var|tmp)/\S*tmp\S+", "<TMP>", output)
     # The build tree's JSONL transitions carry wall-clock elapsed times and, warm, arrive
-    # relayed through the daemon; they narrate the build and are not its output.
-    output = "".join(line for line in output.splitlines(keepends=True) if not line.startswith('{"model":'))
+    # relayed through the daemon; they narrate the build and are not its output. So
+    # does each built model's time line (`[cadgen] built x.step in 1.2s: ...`), whose
+    # numbers are the clock's; the line itself must still be there, once per model.
+    output = "".join(
+        _TIME_LINE.sub(r"\1 <TIME>", line)
+        for line in output.splitlines(keepends=True) if not line.startswith('{"model":')
+    )
     return proc.returncode, output
+
+
+_TIME_LINE = re.compile(r"^(\[cadgen\] built \S+) in .*$", re.MULTILINE)
 
 
 # Fields that record WHEN a build ran rather than WHAT it produced. Two cold builds a
@@ -378,6 +386,36 @@ class WarmOutputEquivalence(unittest.TestCase):
         # that whatever cold says, warm says exactly the same.
         self.assertEqual(warm_out, cold_out)
         self.assertIn("FAILED", warm_out)
+
+
+    def test_profile_reaches_the_process_that_runs_the_body_warm(self):
+        """``--profile`` is parsed where the user typed it and acted on by whichever
+        process runs the body: warm, that is the daemon's worker, and its report must
+        name the model's own slow function exactly as the cold run's does."""
+        slow = (
+            "from cadgen import build123d as bd\n"
+            "from cadgen import step\n"
+            "def plan_holes():\n"
+            "    total = 0\n"
+            "    for i in range(300_000):\n"
+            "        total += i * i\n"
+            "    return total\n"
+            "@step\n"
+            "def plate():\n"
+            "    plan_holes()\n"
+            "    return bd.Box(10, 10, 2)\n"
+            "if __name__ == '__main__':\n"
+            "    plate()\n"
+        )
+        row = re.compile(r"^\[cadgen\] +\S+ +1 call +plate\.py:3 plan_holes$", re.MULTILINE)
+        cold_code, cold_out = _run(["plate.py", "--profile"], self._tree("plate.py", slow), CADGEN_DAEMON="0")
+        self.assertEqual(cold_code, 0, cold_out)
+        self.assertRegex(cold_out, row)
+        tree = self._tree("plate.py", slow)
+        with _WarmRun(self, tree) as daemon:
+            warm_code, warm_out = _run(["plate.py", "--profile"], tree, **daemon.env())
+        self.assertEqual(warm_code, 0, warm_out)
+        self.assertRegex(warm_out, row)
 
 
 @unittest.skipUnless(_DAEMON_AVAILABLE, "no daemon transport on this platform")
