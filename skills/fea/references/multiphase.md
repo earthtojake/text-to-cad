@@ -42,7 +42,8 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
 
 - The part is the container. The liquid fills its inside: the space it encloses, closed or open on sides
   of its bounding box (an open-top tank opens on `z_max`). An open side nobody names is open to the air
-  at 0 Pa (liquid that reaches it spills out). A part with no inside is a study error.
+  at 0 Pa (liquid that reaches it spills out; what flows back in through it, there or at an outlet, is
+  the air outside, never liquid). A part with no inside is a study error.
 - `material` is not needed. It is the structure's, given in `map_to_structure.material` (or the top-level
   `material`), and only a mapped study needs one.
 - `fluids` (optional): `liquid` is `"water"` (998.2 kg/m³, 1.002e-3 Pa·s, 20 °C), `"oil"` (870, 0.1),

@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, SolveContext
-from cadgen._internal.fea.analyses.static import StaticAnalysis, StaticInputs
+from cadgen._internal.fea.analyses.static import StaticAnalysis, StaticInputs, colour_range
 from cadgen._internal.fea.crack import CrackSpec, parse_crack
 
 if TYPE_CHECKING:
@@ -51,8 +51,6 @@ LIMITS = (
     "Crack growth holds the crack's shape and geometry factor as solved, growing straight on in its own plane",
 )
 GROWTH_KEYS = frozenset({"load_ratio", "paris_C", "paris_m", "final_mm"})
-#: The von Mises colours stop at this quantile: the field is singular at the front.
-COLOUR_QUANTILE = 0.99
 #: K moving more than this share between the two J domains is said as a finding.
 SPREAD_WARNING = 0.05
 
@@ -539,14 +537,11 @@ class FractureAnalysis(StaticAnalysis):
         summary["checks"] = checks
         return summary
 
-    def field_ranges(self, summary: dict, result: AnalysisResult) -> dict[str, tuple[float, float]]:
-        """Static's, the stress colours capped below the front's singular peak (its 99th percentile)."""
-        import numpy as np
-
-        stress = np.asarray(result.fields["von_mises"], dtype=float)
-        cap = float(np.quantile(stress, COLOUR_QUANTILE)) if len(stress) else 0.0
-        top = min(summary["max_von_mises_MPa"], round(cap, 4)) if cap > 0 else summary["max_von_mises_MPa"]
-        return {"von_mises": (0.0, top), "displacement": (0.0, summary["max_displacement_mm"])}
+    def field_ranges(self, summary: dict, result: AnalysisResult) -> dict[str, tuple]:
+        """Static's, the stress colours capped below the front's singular peak (its 99th percentile), always: the
+        field's entry says so and keeps the peak."""
+        return {"von_mises": colour_range(result.fields["von_mises"], summary["max_von_mises_MPa"], spike=1.0),
+                "displacement": (0.0, summary["max_displacement_mm"])}
 
     def extras_name(self, stem: str) -> str:
         return f"{stem} crack"

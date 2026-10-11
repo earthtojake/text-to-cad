@@ -371,6 +371,93 @@ class ChokedNozzle(unittest.TestCase):
         self.assertIn("shock", [finding["type"] for finding in self.result.findings])
 
 
+def cone_nozzle_step(directory: Path) -> Path:
+    """A conical converging-diverging bore through a 45 x 16 x 16 mm block along x: radius 6 mm for 5 mm, in straight
+    to a sharp 2.5 mm throat at x = 20, out to 3.25 mm at x = 45 (the gallery's nozzle)."""
+    from build123d import Align, Axis, Box, BuildLine, BuildPart, BuildSketch, Mode, Plane, Polyline, export_step, make_face, revolve
+
+    with BuildPart() as part:
+        Box(45, 16, 16, align=(Align.MIN, Align.CENTER, Align.CENTER))
+        with BuildSketch(Plane.XY):
+            with BuildLine():
+                Polyline((0, 0), (0, 6), (5, 6), (20, 2.5), (45, 3.25), (45, 0), close=True)
+            make_face()
+        revolve(axis=Axis.X, mode=Mode.SUBTRACT)
+    step = directory / "cone_nozzle.step"
+    export_step(part.part, str(step))
+    return step
+
+
+def solve_gas_with(**options):
+    """compressible.solve_gas with ``options`` laid over what the analysis passes, and every flow it returns."""
+    from cadgen._internal.fea import compressible
+
+    original, flows = compressible.solve_gas, []
+
+    def run(problem, **given):
+        flows.append(original(problem, **{**given, **options}))
+        return flows[-1]
+
+    return mock.patch.object(compressible, "solve_gas", run), flows
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class ChokingStage(unittest.TestCase):
+    """The gallery's conical nozzle at half its drive (p0 = 118 kPa to 101 kPa): the gas speeds up through a low
+    residual on its way to choking. The stabilisation's coefficients used to be held there, still subsonic ones,
+    so the gas ran away where it went supersonic (Mach 10, a limit cycle) and the stage spent all 150 steps; they
+    are held now only once the peak Mach number has settled, and the stage settles in well under that."""
+
+    def test_the_half_drive_stage_settles_without_running_away(self):
+        from cadgen._internal.fea.compressible import MAX_STEPS
+
+        lines: list[str] = []
+        patch, flows = solve_gas_with(schedule=(0.5,), log=lines.append)
+        with tempfile.TemporaryDirectory() as tmp, patch:
+            directory = Path(tmp)
+            study = {**nozzle_study(101325.0 / 135100.0), "mesh": {"size_mm": 2.0}}
+            solve(cone_nozzle_step(directory), directory / "cone.glb", study)
+        flow = flows[0]
+        self.assertTrue(flow.converged)                 # at the stage's own tolerance
+        self.assertLess(flow.steps, MAX_STEPS // 2)
+        self.assertLess(float(flow.mach.max()), 2.0)
+        peaks = [float(line.rsplit("peak Mach ", 1)[1]) for line in lines if "peak Mach" in line]
+        self.assertLess(max(peaks), 2.0)
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class UnsettledMarch(unittest.TestCase):
+    """A march stopped short of its tolerance (three steps a stage here) is not a settled pass: every check says
+    the flow did not settle and none passes outright, and the finding says why."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory()
+        directory = Path(cls._tmp.name)
+        study = nozzle_study(0.95, view={"checks": [{"kind": "mach", "limit": 2.0}, {"kind": "pressure_drop", "limit_Pa": 50000}]})
+        patch, cls.flows = solve_gas_with(max_steps=3)
+        with patch:
+            cls.result, _ = solve(nozzle_step(directory), directory / "unsettled.glb", study)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_its_checks_are_labelled_not_settled_and_none_passes(self):
+        self.assertFalse(self.result.summary["solve"]["converged"])
+        for check in self.result.summary["checks"]:
+            with self.subTest(kind=check["kind"]):
+                self.assertLess(check["ratio"], 0.9)    # a pass, had the flow settled
+                self.assertEqual((check["status"], check["settled"]), ("close", False))
+                self.assertTrue(check["label"].endswith("(flow not settled)"))
+        lines = "\n".join(self.result.human_lines())
+        self.assertIn("check 'Mach number (flow not settled)'", lines)
+        self.assertIn("(not settled)", lines)
+        types = [finding["type"] for finding in self.result.findings]
+        self.assertIn("gas_flow_unsettled", types)
+        self.assertFalse(any(kind.endswith("_close_to_limit") for kind in types))
+
+
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class LowSpeedLimit(unittest.TestCase):
     """0.5 m/s of air (Mach 0.0015, Re 140) through the cfd tests' tube: laminar walls, the incompressible pressure drop."""

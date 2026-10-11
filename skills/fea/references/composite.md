@@ -92,7 +92,9 @@ Hahn's textbook lamina):
   - Tsai-Wu index F1 σ1 + F2 σ2 + F11 σ1² + F22 σ2² + F66 τ12² + 2 F12 σ1 σ2, with F1 = 1/Xt − 1/Xc,
     F2 = 1/Yt − 1/Yc, F11 = 1/(Xt Xc), F22 = 1/(Yt Yc), F66 = 1/S², F12 = −½ √(F11 F22);
   - max-stress index, the largest of σ1/Xt (or −σ1/Xc), σ2/Yt (or −σ2/Yc) and |τ12|/S.
-- Fields: `failure_index` (the envelope over the plies, at each point of the plate), `von_mises`
+- Fields: `failure_index` (the governing criterion, Tsai-Wu or max stress, the larger, enveloped over the
+  plies and drawn unsmoothed: each point shows the worst of the elements around it, so the colour bar tops
+  out at the `ply_failure` check's own value), `von_mises`
   (the plies' in-plane von Mises, enveloped), `displacement`.
 - The summary carries `method`, the `layup` (plies, `notation` such as "[0/90]s", thickness),
   `max_failure_index`, `worst_ply` (number, angle, material, criterion, both indices, its σ1, σ2,

@@ -91,8 +91,9 @@ A partitioned, strongly coupled iteration on two meshes, the part's and the flui
 1. The flow is solved around the part as it stands (Taylor-Hood Navier-Stokes, or RANS k-omega SST).
 2. Its traction on each wetted wall triangle (the pressure along the wall's normal, and the viscous
    shear from the velocity gradient in the element the triangle closes; turbulent: the wall
-   function's shear) is carried to the part's nearest surface triangle on the same face, and
-   applied as a surface load (no corner, a third of the area at each mid-edge node).
+   function's shear) is carried to the part's nearest surface triangle on the same face: the
+   pressure as a number along the part's own normal, the shear as a vector, integrated over the
+   part's curved faces as a static pressure load is (an even pressure gives exactly static's load).
 3. The part's linear elastic bending is solved (its stiffness factored once).
 4. The part's displacement is evaluated where each of the fluid's wall nodes sits (the quadratic
    field on the part's surface triangles), and carried into the fluid by a harmonic mesh-motion
@@ -105,12 +106,20 @@ A relaxed step that would fold the moved flow mesh over is halved, up to four ti
 that grows for three iterations running is restarted once with the inflow ramped up in steps (25 %,
 50 %, 100 %) and a first relaxation of at most 0.5, each stage starting from the one before.
 
+Each flow solve prints a progress line every 10 s ("flow solve 2: flow: Newton step 3 ...") and
+stops at what is left of the coupling's time budget (twice the study's `fit.seconds` or of the
+default 600 s, whichever is longer; at least 30 s each); the coupling starts no iteration past it. A run stopped that way
+reports its last state as not settled and says "the coupling stopped at its time budget", and the
+flow's own "the flow solve stopped at its time limit ... approximate" when that solve did not settle.
+
 ## Judging the answer (hand checks)
 
 - A soft tube swelling under its own flow, away from its ends: the bore grows by the thin-wall
   formula δ = p R_m² (1 − ν²) / (E t) with the flow's local wall pressure p (both ends held; a free
   end drops the (1 − ν²)). In the test, a 2 mm bore with a 0.2 mm wall at E 1 MPa agrees within 5 %
-  along its length.
+  along its length; a 2 mm bore with a 0.5 mm wall at E 0.5 MPa swells evenly round its bore, within
+  15 % of the formula, its one-way deflection exactly four times the same tube's at E 2 MPa, and
+  two-way settles in a few iterations a little below one-way.
 - Its pressure drop: Poiseuille's law where the radius follows the pressure, dp/dx = −8 μ Q / (π a⁴)
   with a = R + c p, c = R_m² (1 − ν²) / (E t), integrates to a_in⁵ = R⁵ + 5 c (8 μ Q / π) L. The
   test's tube agrees within 1 % (3027 Pa against 3010 Pa; rigid, 3200 Pa).

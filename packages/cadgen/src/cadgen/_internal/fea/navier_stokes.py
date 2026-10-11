@@ -17,13 +17,16 @@ The equations are solved divided by mu, for the velocity and p / mu, so the
 momentum and the continuity rows are of one size whatever the fluid (water's
 mu is 1e-9 MPa s in the engine's units). The order is the textbook one:
 Stokes first (the convection left out), then Picard (Oseen) iterations,
-convection taken at the previous velocity, down to a residual of 1e-3, then
-Newton down to 1e-8, both relative to the Stokes problem's right-hand side.
-When Newton does not converge from there, the Reynolds number is reached by
-continuation: the density is stepped through Re/8, Re/4, Re/2 and Re, each
-stage starting from the one before (a stage that fails is halved, a few
-times). A run that still does not reach 1e-8 returns its best state and says
-how far it got; it is never refused.
+convection taken at the previous velocity, down to a residual of 1e-2 (or
+until Picard stalls), then Newton down to 1e-8, both relative to the Stokes
+problem's right-hand side. Newton's Jacobian is exact, the streamline
+diffusion's derivative included, and each step is backtracked until it lowers
+the residual. When Newton does not converge from there, the Reynolds number is
+reached by continuation: the density is stepped through Re/8, Re/4, Re/2 and
+Re, each stage starting from the one before (a stage that fails is halved, a
+few times, then the target is tried from the last settled stage). A run that
+still does not reach 1e-8, or reaches its deadline, returns its best state at
+the target and says how far it got; it is never refused.
 
 Linear systems are solved by SuperLU, or (the ladder's ``iterative`` rung)
 by Krylov methods with a block preconditioner: algebraic multigrid on the
@@ -47,10 +50,16 @@ if TYPE_CHECKING:
     from cadgen._internal.fea.femspace import FemSpace
 
 __all__ = ["CONTINUATION", "FlowProblem", "FlowSolution", "developed_profile", "fill_unreached_pressures", "solve_flow",
-           "unreached_pressures", "vector_dofs"]
+           "unreached_pressures", "unsettled_sentence", "vector_dofs"]
 
 #: Picard stops at this residual (relative to the Stokes right-hand side), Newton at this one.
-PICARD_TOL, NEWTON_TOL = 1e-3, 1e-8
+PICARD_TOL, NEWTON_TOL = 1e-2, 1e-8
+#: Picard has stalled (and Newton takes over) when STALL_STEPS steps have not cut its residual by STALL_RATIO.
+STALL_STEPS, STALL_RATIO = 3, 0.5
+#: Newton's line search halves a step that does not lower the residual this many times at most.
+MAX_BACKTRACK = 8
+#: A progress line goes to the log at most this often, seconds.
+PROGRESS_S = 10.0
 #: A continuation stage short of the target stops here: close enough to start the next from.
 STAGE_TOL = 1e-4
 #: Iteration caps: Picard's, and Newton's per stage.
@@ -91,6 +100,8 @@ class FlowSolution:
     linear_solves: int
     warnings: list[str] = field(default_factory=list)
     timings: dict[str, float] = field(default_factory=dict)
+    timed_out: bool = False           # stopped at ``deadline_s`` before settling
+    deadline_s: float | None = None
 
 
 def vector_dofs(space: "FemSpace") -> "np.ndarray":
@@ -246,15 +257,21 @@ def _forms():
     def newton(u, v, w):  # (u . grad) w . v
         return dot(along(w["w"].grad, u.value), v)
 
-    @LinearForm
-    def self_convection(v, w):  # (w . grad) w . v
-        return dot(along(w["w"].grad, w["w"].value), v)
+    @BilinearForm
+    def streamline_newton(u, v, w):
+        """The rest of streamline diffusion's derivative along u: delta (u . grad) w . (w . grad) v
+        + delta (w . grad) w . (u . grad) v + delta'(|w|) (w . u) / |w| (w . grad) w . (w . grad) v
+        (``streamline`` is its first part). ``slope`` is delta'(|w|) / |w|."""
+        W = w["w"].value
+        advected, test = along(w["w"].grad, W), along(grad(v), W)
+        return (w["delta"] * (dot(along(w["w"].grad, u.value), test) + dot(advected, along(grad(v), u.value)))
+                + w["slope"] * dot(W, u.value) * dot(advected, test))
 
     @LinearForm
     def outflow(v, w):
         return dot(w.n, v)
 
-    return laplace, divergence, mass, convection, streamline, newton, self_convection, outflow
+    return laplace, divergence, mass, convection, streamline, newton, streamline_newton, outflow
 
 
 # -- the solver ---------------------------------------------------------------------------------------
@@ -274,7 +291,7 @@ class _System:
         space = problem.space
         self.basis = space.basis
         self.pbasis = self.basis.with_element(ElementTetP1())
-        (self.f_laplace, self.f_div, self.f_mass, self.f_conv, self.f_sd, self.f_newton, self.f_self,
+        (self.f_laplace, self.f_div, self.f_mass, self.f_conv, self.f_sd, self.f_newton, self.f_sd_newton,
          self.f_out) = _forms()
         # Each element's size for the streamline diffusion (a quadratic element resolves half of it).
         volume = np.asarray(self.basis.dx).sum(axis=1)
@@ -316,13 +333,14 @@ class _System:
         A = self.L + (self.nu_inv * scale) * asm(self.f_conv, self.basis, w=field)
         delta = self._delta(field, scale)
         if delta is not None:
-            A = A + (self.nu_inv * scale) * asm(self.f_sd, self.basis, w=field, delta=delta)
+            A = A + (self.nu_inv * scale) * asm(self.f_sd, self.basis, w=field, delta=delta[0])
         return A.tocsr()
 
     def _delta(self, field, scale: float):
         """Streamline diffusion's time scale per element and point: h / 2|w| (1 - 1/Pe) where the cell
         Peclet number Pe = |w| h / 2 nu passes 1, else 0. It acts only along the flow's own direction,
-        so fully developed flow (no change along a streamline) is untouched. None where it is 0 everywhere."""
+        so fully developed flow (no change along a streamline) is untouched. None where it is 0 everywhere;
+        else (delta, its derivative by the speed divided by the speed), the second for Newton's Jacobian."""
         import numpy as np
 
         speed = np.linalg.norm(field.value, axis=0)
@@ -331,17 +349,27 @@ class _System:
         peclet = speed * h / (2.0 * nu)
         if not (peclet > 1.0).any():
             return None
+        on = peclet > 1.0
         with np.errstate(divide="ignore", invalid="ignore"):
-            delta = np.where(peclet > 1.0, h / (2.0 * speed) * (1.0 - 1.0 / peclet), 0.0)
-        return delta
+            # delta = h / 2s - nu / s^2, so d delta / ds = -h / 2s^2 + 2 nu / s^3.
+            delta = np.where(on, h / (2.0 * speed) * (1.0 - 1.0 / peclet), 0.0)
+            slope = np.where(on, (-h / (2.0 * speed ** 2) + 2.0 * nu / speed ** 3) / speed, 0.0)
+        return delta, slope
 
     def newton_parts(self, u, scale: float):
+        """The Jacobian's part beyond the Oseen block at ``u`` (convection's and streamline diffusion's
+        derivative through the advecting velocity and delta), and that part applied to ``u``: Newton's
+        system is (A + J) x = f + J u. With the streamline term's whole derivative Newton converges
+        quadratically (without it, linearly, and it diverged past Re ~100 through a sharp orifice)."""
         from skfem import asm
 
         field = self.basis.interpolate(u)
-        jacobian = (self.nu_inv * scale) * asm(self.f_newton, self.basis, w=field)
-        rhs = (self.nu_inv * scale) * asm(self.f_self, self.basis, w=field)
-        return jacobian.tocsr(), rhs
+        jacobian = asm(self.f_newton, self.basis, w=field)
+        delta = self._delta(field, scale)
+        if delta is not None:
+            jacobian = jacobian + asm(self.f_sd_newton, self.basis, w=field, delta=delta[0], slope=delta[1])
+        jacobian = ((self.nu_inv * scale) * jacobian).tocsr()
+        return jacobian, jacobian @ u
 
     def reduced_rhs(self, K, rhs):
         x = self._lifted()
@@ -423,20 +451,48 @@ def _norm(vector) -> float:
     return float(np.linalg.norm(vector))
 
 
+def unsettled_sentence(flow: "FlowSolution") -> str:
+    """The warning a flow solve short of NEWTON_TOL carries (empty when it converged)."""
+    if flow.converged:
+        return ""
+    if flow.timed_out:
+        return (f"the flow solve stopped at its time limit ({flow.deadline_s:.0f} s) at a residual of {flow.residual:.1e}, "
+                "short of 1e-8: its numbers are approximate")
+    return f"the flow solve stopped at a residual of {flow.residual:.1e}, short of 1e-8: its numbers are approximate"
+
+
 def solve_flow(problem: FlowProblem, *, schedule: tuple[float, ...] = (), solver: str = "direct",
-               log: Callable[[str], None] | None = None) -> FlowSolution:
-    """The steady flow of ``problem``: Stokes, then Picard to 1e-3, then Newton to 1e-8.
+               log: Callable[[str], None] | None = None, deadline_s: float | None = None) -> FlowSolution:
+    """The steady flow of ``problem``: Stokes, then Picard to 1e-2 (or until it stalls), then damped Newton to 1e-8.
 
     ``schedule`` (the ladder's continuation, fractions of the target Re) steps the Reynolds number up
     from the start; without one, continuation is taken only when Newton fails at the target.
+
+    ``log`` gets a progress line (the step, the Re stage, the residual, the time so far) at most every
+    PROGRESS_S seconds, besides one per continuation stage. ``deadline_s``: seconds after which no new
+    linear solve starts; the run returns its best state at the target Re, ``timed_out`` and unconverged,
+    with :func:`unsettled_sentence` saying so. A single linear solve is never interrupted.
     """
     import numpy as np
 
     timings: dict[str, float] = {}
-    started = time.perf_counter()
+    began = started = time.perf_counter()
     system = _System(problem, solver, log)
     timings["assemble_s"] = time.perf_counter() - started
     counts = {"picard": 0, "newton": 0}
+    clock = {"line": began, "timed_out": False}
+
+    def out_of_time() -> bool:
+        if deadline_s is not None and time.perf_counter() - began > deadline_s:
+            clock["timed_out"] = True
+        return clock["timed_out"]
+
+    def progress(kind: str, scale: float, r: float) -> None:
+        now = time.perf_counter()
+        if log and now - clock["line"] >= PROGRESS_S:
+            clock["line"] = now
+            log(f"flow: {kind} step {counts[kind.lower()]} at {scale:.3g} of the target Re, residual {r:.1e} "
+                f"({now - began:.0f} s)")
 
     started = time.perf_counter()
     K0 = system.matrix(system.L)
@@ -449,49 +505,88 @@ def solve_flow(problem: FlowProblem, *, schedule: tuple[float, ...] = (), solver
         return A, _norm(system.residual(system.matrix(A), x)) / reference
 
     def nonlinear(x, scale, tol=NEWTON_TOL) -> tuple[bool, "np.ndarray", float]:
-        """Picard to PICARD_TOL, then Newton to ``tol``, at ``scale`` times the density."""
+        """Picard to PICARD_TOL (or until it stalls), then Newton to ``tol`` with a backtracking line
+        search, at ``scale`` times the density. Returns its best state when Newton cannot go on."""
         A, r = state(x, scale)
+        history = [r]
         for _ in range(MAX_PICARD):
             if r < PICARD_TOL or not np.isfinite(r):
                 break
+            # Picard stalled (a sharp orifice at Re ~300 oscillates near 1): Newton takes it from here.
+            if len(history) > STALL_STEPS and r > STALL_RATIO * history[-1 - STALL_STEPS]:
+                break
+            if out_of_time():
+                return False, x, r
             x = system.solve(system.matrix(A), system.f)
             counts["picard"] += 1
             A, r = state(x, scale)
+            history.append(r)
+            progress("Picard", scale, r)
+        if not np.isfinite(r):
+            return False, x, r
         best, best_r = x, r
         for _ in range(MAX_NEWTON):
             if r < tol:
                 return True, x, r
-            if not np.isfinite(r) or r > 1e3 * max(best_r, 1e-12):
-                return False, best, best_r
+            if out_of_time():
+                break
             jacobian, extra = system.newton_parts(x[:system.nu], scale)
             rhs = system.f.copy()
             rhs[:system.nu] += extra
-            x = system.solve(system.matrix(A + jacobian), rhs)
+            step = system.solve(system.matrix(A + jacobian), rhs) - x
             counts["newton"] += 1
-            A, r = state(x, scale)
+            # Backtrack: the full step first, halved while it does not lower the residual.
+            for halving in range(MAX_BACKTRACK + 1):
+                trial = x + 0.5 ** halving * step
+                A_trial, r_trial = state(trial, scale)
+                if np.isfinite(r_trial) and r_trial < r:
+                    break
+            else:
+                break   # no step along Newton's direction lowers the residual: this start is lost
+            x, A, r = trial, A_trial, r_trial
             if r < best_r:
                 best, best_r = x, r
+            progress("Newton", scale, r)
         return best_r < tol, best, best_r
 
     def continue_from(x, fractions) -> tuple[bool, "np.ndarray", float, list[float]]:
+        """Step through ``fractions`` of the target Re. A stage that fails is split (up to MAX_SPLITS
+        times in a row); one that still fails hands over to the target directly from the last settled
+        stage. The state and residual returned are always the target's."""
         done: list[float] = []
         last = 0.0
-        ok, r = True, 0.0
+        ok, r = False, float("inf")
+        at_target = False
         queue = list(fractions)
         splits = 0
-        while queue:
+        while queue and not out_of_time():
             target = queue.pop(0)
             # An intermediate stage only needs to land near its flow; the target is solved to NEWTON_TOL.
             final = target >= 1.0 - 1e-12
             ok, trial, r = nonlinear(x, target, NEWTON_TOL if final else STAGE_TOL)
-            if ok or splits >= MAX_SPLITS:
-                x, last = trial, target
+            if ok:
+                x, last, splits, at_target = trial, target, 0, final
                 done.append(target)
                 if log:
                     log(f"flow: Re stage {target:.3g} of the target, residual {r:.2e}")
                 continue
-            splits += 1
-            queue[:0] = [0.5 * (last + target), target]
+            if splits < MAX_SPLITS and not clock["timed_out"]:
+                splits += 1
+                queue[:0] = [0.5 * (last + target), target]
+                continue
+            if final:
+                x, at_target = trial, True
+                done.append(target)
+                if log:
+                    log(f"flow: Re stage {target:.3g} of the target, residual {r:.2e} (not settled)")
+                break
+            if log:
+                log(f"flow: Re stage {target:.3g} did not settle (residual {r:.2e}); going to the target from {last:.3g}")
+            queue = [1.0]
+        if not at_target:
+            ok, r = False, state(x, 1.0)[1]
+            if not done or done[-1] < 1.0:
+                done.append(1.0)
         return ok, x, r, done
 
     continued = bool(schedule)
@@ -500,7 +595,7 @@ def solve_flow(problem: FlowProblem, *, schedule: tuple[float, ...] = (), solver
     else:
         ok, x, r = nonlinear(stokes, 1.0)
         stages = [1.0]
-        if not ok:
+        if not ok and not clock["timed_out"]:
             continued = True
             if log:
                 log(f"flow: Newton did not converge at the target (residual {r:.2e}); stepping the Reynolds number up")
@@ -508,12 +603,13 @@ def solve_flow(problem: FlowProblem, *, schedule: tuple[float, ...] = (), solver
             if ok2 or r2 < r:
                 ok, x, r = ok2, x2, r2
     timings["nonlinear_s"] = time.perf_counter() - started
-    warnings = list(system.warnings)
-    if not ok:
-        warnings.append(f"the flow solve stopped at a residual of {r:.1e}, short of 1e-8: its numbers are approximate")
     pressure = fill_unreached_pressures(problem.mu * x[system.nu:], system.unreached, system.pbasis.element_dofs)
-    return FlowSolution(
+    solution = FlowSolution(
         u=x[:system.nu], p=pressure, pressure_basis=system.pbasis, converged=ok, residual=r,
         picard=counts["picard"], newton=counts["newton"], stages=stages, continued=continued, solver=solver,
-        linear_solves=system.solves, warnings=warnings, timings=timings,
+        linear_solves=system.solves, warnings=list(system.warnings), timings=timings,
+        timed_out=bool(clock["timed_out"]) and not ok, deadline_s=deadline_s,
     )
+    if not ok:
+        solution.warnings.append(unsettled_sentence(solution))
+    return solution

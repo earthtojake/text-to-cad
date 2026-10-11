@@ -172,6 +172,26 @@ class ViewFactors(unittest.TestCase):
         F_blocked, _ = radiation.view_factors(corners, area, normal, centroid, patch, np.concatenate([corners, shield]))
         self.assertLess(F_blocked[0, 1], 1e-9)
 
+    def test_the_patches_never_pass_the_cap_the_reference_states(self):
+        """A heat sink's 38 faces each rounded their share up and made 301 patches against a stated cap of 300."""
+        import numpy as np
+
+        from cadgen._internal.fea import radiation
+
+        self.assertEqual(radiation.MAX_PATCHES, 300)
+        reference = Path(__file__).resolve().parents[4] / "skills/fea/references/thermal.md"
+        self.assertIn(f"at most {radiation.MAX_PATCHES} patches", reference.read_text(encoding="utf-8"))
+        rng = np.random.default_rng(3)
+        for faces in (3, 38, 120, 299):
+            # Faces of mixed sizes whose rounded shares add up past the cap; plenty of triangles each.
+            sizes = rng.uniform(0.2, 5.0, faces)
+            face = np.repeat(np.arange(faces), 400)
+            area = np.repeat(sizes / 400, 400)
+            centroids = rng.uniform(0, 1, (len(area), 3))
+            count = int(radiation.patches_of(centroids, area, face).max()) + 1
+            self.assertLessEqual(count, radiation.MAX_PATCHES, faces)
+            self.assertEqual(count, radiation.MAX_PATCHES, faces)
+
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class Benchmarks(unittest.TestCase):

@@ -14,7 +14,7 @@ const RUNOUT = { kind: 'fatigue', label: '', value: 2.4, limit: 1.5, unit: '', r
   status: 'passes', where: { ref: null, at: [0, 0, 0] }, need: 1e6 };
 
 /** A fatigue result as cadgen writes one: life (log10 cycles) first, the fatigue factor, the displacement. */
-function fatigueResult(checks: unknown[]) {
+function fatigueResult(checks: unknown[], { capped = false, view = null }: { capped?: boolean; view?: unknown } = {}) {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3));
   geometry.setAttribute('_von_mises', new BufferAttribute(new Float32Array([7.6, 8, 8.7]), 1));
@@ -25,11 +25,11 @@ function fatigueResult(checks: unknown[]) {
   Object.assign(mesh.userData, {
     generator: 'cadgen fea', name: 'beam fatigue life', deformation_scale: 2,
     fields: [
-      { attribute: '_LIFE', name: 'fatigue life', units: 'log10 cycles', min: 7.59, max: 8.699, attribute_scale: 1, field: 'life' },
+      { attribute: '_LIFE', name: 'fatigue life', units: 'log10 cycles', min: capped ? 6 : 7.59, max: capped ? 6 : 8.699, attribute_scale: 1, field: 'life' },
       { attribute: '_FATIGUE_FACTOR', name: 'fatigue safety factor', units: '', min: 1.317, max: 100, attribute_scale: 1, field: 'fatigue_factor' },
       { attribute: '_DISPLACEMENT', name: 'displacement', units: 'mm', min: 0, max: 1.4, attribute_scale: 1000, field: 'displacement' }],
     analysis: { type: 'fatigue', tier: 1, word: 'Fatigue life', estimate: false, limits: [], noun: 'this load', reference_C: null, warnings: [] },
-    checks, faces: ['#o1.f1', '#o1.f2'], occurrence: '#o1',
+    checks, faces: ['#o1.f1', '#o1.f2'], occurrence: '#o1', ...(view ? { view } : {}),
     study: { material: { name: 'Aluminum 7075-T6', yield_MPa: 503 }, fixtures: [{ type: 'fixed', faces: ['#o1.f1'] }],
       loads: [{ type: 'force', faces: ['#o1.f2'], vector_N: [0, 0, -150] }], mesh: { size_mm: 1.5, refined_from_mm: 3 },
       fatigue: { from: 'static', loading: 'zero_based', stress_ratio: 0, cycles: 1e6, surface: 'machined', factor: 1 } },
@@ -71,5 +71,22 @@ describe('fatigue', () => {
       options: [{ value: '_life', label: 'Life' }, { value: '_fatigue_factor', label: 'Fatigue margin' }, { value: '_displacement', label: 'Displacement' }] });
     expect(deformation).toMatchObject({ drives: 'deformation' });
     expect(studyRows(result).map((row: any) => row.id)).toEqual(['fixed', 'loads', 'material', 'details']);
+  });
+
+  it('opens on the fatigue margin where the life is capped everywhere (one number, nothing to see)', () => {
+    const [field, deformation] = feaControls(fatigueResult([RUNOUT], { capped: true }));
+    expect(field).toMatchObject({ drives: 'field', defaultValue: '_fatigue_factor' });
+    expect(deformation).toMatchObject({ drives: 'deformation' });
+  });
+
+  it('keeps the Deformation slider when the view picks only the field', () => {
+    const view = { controls: [{ drives: 'field', type: 'enum', label: 'Show', options: ['fatigue_factor', 'life'], default: 'fatigue_factor' }] };
+    expect(feaControls(fatigueResult([RUNOUT], { view })).map((control: any) => [control.drives, control.label]))
+      .toEqual([['field', 'Show'], ['deformation', 'Deformation']]);
+  });
+
+  it('breaks the factor line between the factor and the cycles, never inside a word', () => {
+    const [row] = feaVerdict(fatigueResult([{ ...RUNOUT, need: 1e8 }]))!.rows;
+    expect(row.line).toBe('Factor\u00a02.4 at\u00a0100\u00a0million\u00a0cycles, needs\u00a01.5');
   });
 });

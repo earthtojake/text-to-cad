@@ -321,6 +321,8 @@ class Run:
     #: Each watched group's peak deceleration along the fall (mm/s², filtered) and when.
     watched: dict = field(default_factory=dict)
     energy: dict = field(default_factory=dict)
+    #: The run went on past its planned end because the first contact pulse had not ended (``extend_to_s``).
+    extended: bool = False
 
 
 class _Elements:
@@ -416,9 +418,11 @@ def simulate(
     log: Callable[[str], None] | None = None,
     curve_points: int = 4000,
     watch: "dict[str, np.ndarray] | None" = None,
+    extend_to_s: float | None = None,
 ) -> Run:
     """The drop, followed from first contact for ``end_s`` (or, with ``stop_after_pulse``, until the first contact pulse
-    ends, plus 20 % of it). ``frames`` snapshots, evenly spaced, plus the moment of the peak stress. ``watch``: groups of
+    ends, plus 20 % of it). ``extend_to_s``: a window that is only a guess (the automatic one) is not ended while the
+    part is still on the floor: the run goes on, up to ``extend_to_s``, until the first pulse ends, plus 20 % of it. ``frames`` snapshots, evenly spaced, plus the moment of the peak stress. ``watch``: groups of
     nodes whose mass-weighted mean acceleration along the fall is followed (filtered like the floor's push)."""
     import time
 
@@ -544,6 +548,8 @@ def simulate(
     peak_force = 0.0
     stop_at = planned
     stopped_early = False
+    extended = False
+    extend_to = float(extend_to_s) if extend_to_s is not None and extend_to_s > planned else None
     curve_every = max(1, int(math.ceil(planned / big / curve_points)))
     eps = 1e-12 * planned
 
@@ -632,6 +638,15 @@ def simulate(
             if stop_after_pulse:
                 stop_at = min(planned, t * (1.0 + WINDOW_TAIL))
                 stopped_early = stop_at < planned - eps
+            elif extended:
+                stop_at = min(extend_to, max(t * (1.0 + WINDOW_TAIL), planned))
+        # The planned end came with the part still on the floor: go on (snapshots at the same spacing) until it lifts.
+        if (extend_to is not None and not extended and started_contact and pulse_end is None and t >= stop_at - eps
+                and not stop_after_pulse):
+            extended = True
+            spacing = planned / stride_frames
+            snap_times.extend(float(x) for x in np.arange(planned + spacing, extend_to + 0.5 * spacing, spacing))
+            stop_at = extend_to
         if log and big_steps % 2000 == 0:
             log(f"impact: {t * 1e6:.1f} of {stop_at * 1e6:.1f} µs")
     if curve_t[-1] != t:
@@ -664,7 +679,7 @@ def simulate(
         vm_peak=vm_peak, vm_peak_t=vm_peak_t, u_peak=u_peak, u_peak_t=u_peak_t,
         plastic=None if plastic is None else element_alpha(sets, model.elements),
         curve_t=curve_t, curve_force=curve_f, steps=small_steps, big_steps=big_steps, dt=small, end_s=end,
-        planned_end_s=planned, pulse_end_s=pulse_end, stopped_early=stopped_early, touched=touched,
+        planned_end_s=planned, pulse_end_s=pulse_end, stopped_early=stopped_early, touched=touched, extended=extended,
         seconds=time.perf_counter() - started,
         filter_s=tau, raw_peak_vm=raw["vm"], raw_peak_force=raw["force"], peak_force=raw["peak_f"],
         peak_force_t=raw["peak_t"], watched={name: (abs(a), t_at) for name, (a, t_at) in group_peak.items()},

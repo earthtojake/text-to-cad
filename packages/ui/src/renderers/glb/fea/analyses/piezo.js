@@ -3,7 +3,7 @@
  * study's `solve`. Static: the voltage on its electrodes moves it (or a force makes a voltage on an
  * open electrode); its fields are the stress, the voltage (signed), the electric field and the
  * displacement. Resonance: a series of modes, each frame its shape, stress and voltage; the mode
- * picker chooses one and Vibrate plays it. Harmonic: a series of frequencies across the sweep, each
+ * picker chooses one and Vibrate plays it; a static result plays the Load ramp, the voltage going on. Harmonic: a series of frequencies across the sweep, each
  * its displacement, stress and voltage amplitude; the Frequency scrubber chooses one. Its verdict
  * judges stress, displacement, an open electrode's signal (`voltage`: "0.82 V, needs at least 0.5 V")
  * or a frequency; no load control moves them. Its takeaway leads with "Linear · " (small signal, no
@@ -16,6 +16,7 @@ import { frameControl } from "../series.js";
 import { axisWords, faceTitle, heldRows, madeOfRows, pushedRows, spaced } from "../setup.js";
 import { VIBRATE as HARMONIC_VIBRATE } from "./harmonic.js";
 import { VIBRATE } from "./modal.js";
+import { LOAD_RAMP } from "./static.js";
 import { planned } from "./stub.js";
 
 /** The piezo study as the viewer read it (`readStudy`'s `piezo`): its solve, electrodes and poling; null for none. */
@@ -96,11 +97,11 @@ export function piezoControls(result) {
   return series ? [series, field, deformation] : [field, deformation];
 }
 
-/** Its routine: Vibrate through a mode or a frequency's cycle; none for a static result. */
+/** Its routine: Vibrate through a mode or a frequency's cycle; a static result's Load ramp, the voltage going on. */
 export function piezoRoutine(result) {
   if (result?.series?.kind === "mode") return VIBRATE;
   if (result?.series?.kind === "frequency") return HARMONIC_VIBRATE;
-  return null;
+  return result?.series ? null : LOAD_RAMP;
 }
 
 export default planned({

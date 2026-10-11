@@ -56,6 +56,12 @@ PLASTICITY_KEYS = frozenset({"tangent_MPa"})
 LIMITS_LINE = "Rigid floor; linear tets; elastic unless plasticity is given."
 #: ``window_ms: "auto"`` follows this many times the contact-time estimate.
 AUTO_WINDOWS = 3.0
+#: An automatic window is a guess: while the part is still on the floor at its end, the run goes on until the first
+#: contact pulse ends (plus 20 %), up to this many times the window.
+AUTO_EXTEND = 4.0
+#: A peak stress over this many times ρ c v (a plain bar end-on) is explained: at the landing patch, or concentrated
+#: on its way (a change of section, a sharp shoulder).
+WAVE_OVER = 1.3
 #: The window rung expects the run to stop about this long after first contact, in contact-time estimates.
 WINDOW_EXPECTED = 1.2
 #: The mass-scaling rung's effect on peak g is measured on this share of the window, rerun unscaled.
@@ -459,8 +465,11 @@ class ImpactAnalysis:
         watch = self._watch(ctx, model)
         frames_wanted = max_frames(ctx)
         started = time.perf_counter()
+        # The automatic window is the estimate's: past it, a part still on the floor is followed until it lifts off.
+        extend_to = AUTO_EXTEND * window if inputs.window_s is None and not stop_after_pulse else None
         run = explicit.simulate(model, drop, end_s=window, stop_after_pulse=stop_after_pulse, subcycle=subcycle,
-                                added_rho=added, plastic=plastic, frames=frames_wanted, log=ctx.log, watch=watch)
+                                added_rho=added, plastic=plastic, frames=frames_wanted, log=ctx.log, watch=watch,
+                                extend_to_s=extend_to)
         timings["march_s"] = time.perf_counter() - started
         if ctx.log:
             ctx.log(f"impact: {run.steps} steps of {run.dt * 1e6:.3g} µs to {run.end_s * 1e6:.4g} µs in {run.seconds:.1f}s")
@@ -671,6 +680,39 @@ class ImpactAnalysis:
         element = int(result.scalars["element_peak"].argmax())
         return node, float(envelope[node]), float(result.scalars["element_peak_t"][element])
 
+    def _wave_finding(self, ctx: SolveContext, result: AnalysisResult, inputs: ImpactInputs) -> tuple[str, str] | None:
+        """Why the peak is well over ρ c v, the stress a plain bar dropped end-on feels (summary and description), or
+        None. Away from the floor the stress wave was concentrated on its way: where the part widens the wave steps up
+        (by 2 A2 / (A1 + A2), up to 2×) and a sharp shoulder concentrates it further. At the floor, the wave a widening
+        sends back meets the floor's push again (a bar widening from A1 to A2 feels 1 + 2 (A2 - A1) / (A2 + A1) times
+        ρ c v at its landing end), and a landing on a small patch (an edge, a corner, a chamfer) is stiff on linear
+        tets: the finding names both."""
+        import numpy as np
+
+        node, peak, _ = self._stress_peak(result)
+        domains = result.scalars["node_domain"]
+        material = ctx.materials[0 if domains is None or len(ctx.materials) == 1 else int(domains[node])]
+        rho_c_v = material.density * math.sqrt(material.E / material.density) * inputs.speed_mm_s
+        if not (rho_c_v > 0 and peak > WAVE_OVER * rho_c_v):
+            return None
+        d = np.asarray(inputs.direction, dtype=float)
+        d = d / np.linalg.norm(d)
+        height = np.asarray(result.dof_locations) @ d
+        size = float(getattr(ctx.volume, "max_h", 0.0) or 0.05 * result.scalars["length_mm"])
+        times = f"{peak / rho_c_v:.1f}×"
+        base = f"ρ c v = {rho_c_v:.3g} MPa"
+        if float(height.max() - height[node]) <= 2.0 * size:
+            return (f"The peak stress is {times} the {base} a plain bar dropped end-on feels, where it lands: the wave sent "
+                    "back from where the part widens meets the floor's push there again, and where the floor meets only a "
+                    "small patch (an edge, a corner or a chamfer) the linear tets are stiff; a fillet or a finer mesh "
+                    "there tells the two apart",
+                    f"peak {peak:.4g} MPa within two elements of the floor; ρ c v with c = √(E/ρ) and v the impact speed")
+        return (f"The peak stress is {times} the {base} a plain bar dropped end-on feels, away from where it lands: "
+                "the impact's stress wave is concentrated on its way, where the part widens (the wave steps up there, "
+                "up to 2×) and at a sharp shoulder or corner; a fillet there lowers it",
+                f"peak {peak:.4g} MPa {float(height.max() - height[node]):.3g} mm from the floor; ρ c v with c = √(E/ρ) "
+                "and v the impact speed")
+
     def _yield_at(self, result: AnalysisResult, node: int) -> float:
         domains = result.scalars["node_domain"]
         yields = result.scalars["yields"]
@@ -774,6 +816,9 @@ class ImpactAnalysis:
                                      f"It is left bent for good: {check['value']:.3g}% permanent strain, {verb} the "
                                      f"{check['limit']:g}% allowed ({check['label']})",
                                      "the plastic strain left at the end of the run", item))
+        wave = self._wave_finding(ctx, result, inputs)
+        if wave is not None:
+            found.append(finding("info", "impact_stress_wave", *wave, []))
         g, g_at = self.peak_g(result)
         contact = run.pulse_end_s
         found.append(finding(
@@ -824,6 +869,8 @@ class ImpactAnalysis:
             "contact_ms": None if run.pulse_end_s is None else round(run.pulse_end_s * 1e3, 9),
             "end_ms": round(run.end_s * 1e3, 9),
             "stopped_after_pulse": run.stopped_early,
+            # The automatic window was followed on past its end until the first impact was over.
+            "extended_to_pulse_end": run.extended,
             "step_us": round(run.dt * 1e6, 9),
             "steps": run.steps,
             "subcycle": scalars["subcycle"],
@@ -894,7 +941,9 @@ class ImpactAnalysis:
             f"{height_words(drop['height_mm'])} drop at {drop['impact_speed_m_s']} m/s onto a rigid floor, falling along "
             f"{drop['direction']}; followed for {time_words(summary['end_ms'] / 1e3)} in {summary['steps']} steps of "
             f"{summary['step_us']:.3g} µs"
-            + (" (stopped after the first impact)" if summary["stopped_after_pulse"] else ""),
+            + (" (stopped after the first impact)" if summary["stopped_after_pulse"] else "")
+            + (f" (on past the automatic {time_words(summary['window_ms'] / 1e3)}, until the first impact was over)"
+               if summary.get("extended_to_pulse_end") else ""),
             f"peak {_figure(summary['peak_g'])} g ({summary['peak_force_N']:.4g} N from the floor) at "
             f"{time_words(summary['peak_g_at_ms'] / 1e3)}; "
             + (f"on the floor for {time_words(contact / 1e3)}" if contact is not None else "still on the floor at the end")

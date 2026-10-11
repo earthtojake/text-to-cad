@@ -61,7 +61,8 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
   as if nothing of the part stood in its way. Right for an outside face of a convex part.
 - With `"surface_to_surface": true`, the entry's faces also exchange heat with every other such
   face (fins facing each other, the inside of a box, two plates). cadgen computes the view factors
-  itself: the faces' surface triangles grouped into at most 300 patches, each pair's view factor by
+  itself: the faces' surface triangles grouped into at most 300 patches (one per face only if more
+  faces than that radiate), each pair's view factor by
   the contour integral from every triangle's centroid, obstruction by ray casting against every
   surface triangle of the part. Whatever a face does not see of the other radiating faces goes to
   its entry's `ambient_C`; a face nobody named counts as surroundings too (it blocks rays, but does

@@ -119,4 +119,15 @@ describe('bolt', () => {
     expect(plain(checkLine(check('joint_slip', 950, 1000)))).toBe('Sideways 950 N, friction holds 1 kN');
     expect([forceWords(800), forceWords(5000), forceWords(12500)]).toEqual(['800 N', '5 kN', '13 kN']);
   });
+
+  it('says its worst check\'s own sentence, never a load multiple, even with no load applied (a preload only)', () => {
+    for (const scaling of [{ scaling: 'none' }, {}]) {
+      const checks = [{ kind: 'bolt_load', label: 'Bolt load', value: 12500, limit: 21228, unit: 'N', ratio: 0.5888, close_at: 0.9, status: 'passes',
+        where: { ref: null, at: [0, 0, 12] }, ...scaling }, { kind: 'stress', label: 'Strength', value: 300, limit: 250, unit: 'MPa', ratio: 1.2,
+        close_at: 0.5, margin: 2, status: 'fails', where: { ref: null, at: [0, 0, 0] }, ...scaling }];
+      const verdict = feaVerdict(boltedResult({ checks }));
+      expect(verdict.caption).not.toMatch(/×/);
+      expect(plain(verdict.caption)).toBe('Lite · Peak 300 MPa, limit 250 MPa');
+    }
+  });
 });

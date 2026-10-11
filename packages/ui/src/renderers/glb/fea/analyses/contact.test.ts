@@ -133,4 +133,12 @@ describe('contact', () => {
     expect(details.children[0]).toMatchObject({ id: 'unsettled', label: sentence, summary: sentence });
     expect(feaVerdict(pressedResult()).caption.startsWith('Not reliable')).toBe(false);
   });
+
+  it('says its worst check\'s own sentence, never a load multiple: contact opens, closes and slides', () => {
+    for (const scaling of [{ scaling: 'none' }, {}]) {
+      const verdict = feaVerdict(pressedResult({ checks: [{ kind: 'stress', label: 'Strength', value: 13.8, limit: 250, unit: 'MPa', ratio: 0.0552, close_at: 0.5, margin: 2, status: 'passes', where: { ref: null, at: [0, 0, 0] }, ...scaling }] }));
+      expect(verdict.caption).not.toMatch(/×/);
+      expect(verdict.caption.replace(/[\u00a0\u202f]/g, ' ')).toBe('Lite · Peak 14 MPa, limit 250 MPa');
+    }
+  });
 });

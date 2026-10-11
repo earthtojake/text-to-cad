@@ -42,6 +42,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import math
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, ClassVar
@@ -72,6 +73,9 @@ GROWING = 3
 BACKTRACK = 4
 #: The cost model: coupling iterations expected, and a structural re-solve's share of its first solve.
 EXPECTED_ITERATIONS, RESOLVE_SHARE = 4.0, 0.15
+#: The whole coupling's time: this many times the study's time target (at least the default one) before it stops at
+#: its last state and says so; each flow solve may take what is left of it, and at least FLOW_FLOOR_S.
+COUPLING_BUDGET, FLOW_FLOOR_S = 2.0, 30.0
 #: Engine units: MPa -> Pa, m/s -> mm/s.
 PASCAL, SPEED = 1e6, 1000.0
 #: A check is close once its value passes this share of its limit (pressure drop).
@@ -82,6 +86,13 @@ def not_converged_sentence(iterations: int, residual: float, tolerance: float) -
     """The plain words for a coupling that did not settle, the same everywhere."""
     return (f"the flow and the bending did not settle in {iterations} coupling iterations (they still changed by "
             f"{residual:.1e} of themselves, short of {tolerance:.0e}): this is the last state, not a converged answer")
+
+
+def budget_sentence(seconds: float) -> str:
+    """The plain words for a coupling stopped by its time budget."""
+    return (f"the coupling stopped at its time budget ({seconds:.0f} s, twice the study's time target or the default): a flow solve "
+            "that does not settle, or a slow one, used it; raise fit.seconds, coarsen the flow mesh, or check the "
+            "flow's regime")
 
 
 @dataclass(frozen=True)
@@ -360,6 +371,8 @@ class FsiAnalysis:
         if not state.converged:
             # Said once as a finding (coupling_not_converged) and in extras.analysis.warnings, not again as a warning.
             analysis_warnings.append(not_converged_sentence(state.iterations, state.residual, inputs.tolerance))
+        if coupling.out_of_time:
+            analysis_warnings.append(budget_sentence(coupling.budget_s))
         if state.inverted:
             sentence = (f"the moved flow mesh folded over ({state.inverted} elements) at the deflection the coupling "
                         "reached: the deflection is too large for this mesh motion; the last unfolded state is reported")
@@ -423,7 +436,7 @@ class FsiAnalysis:
         if not state.converged:
             found.append({
                 "check": "fea", "severity": "warning", "type": "coupling_not_converged",
-                "summary": "The f" + not_converged_sentence(state.iterations, state.residual, inputs.tolerance)[1:],
+                "summary": "T" + not_converged_sentence(state.iterations, state.residual, inputs.tolerance)[1:],
                 "description": "raise coupling.max_iterations, lower coupling.relaxation, or ramp the flow (a slower flow first)",
                 "items": [],
             })
@@ -601,6 +614,10 @@ class FlowState:
     flow: Any
     traction: Any          # (fluid wall rows, 3) MPa, on the part (pushing it)
     force: Any             # (3,) N, the total
+    #: (fluid wall rows,) MPa: the pressure part of the traction, a scalar, which the part takes along its own normal.
+    pressure: Any = None
+    #: (fluid wall rows, 3) MPa: the rest of the traction: the shear, and the pressure's turn as the wall moved.
+    shear: Any = None
 
 
 @dataclass
@@ -643,6 +660,24 @@ class Coupling:
         self.motion = MeshMotion(reference, fluid, row_kind, face_of, self.interface.fluid_nodes)
         self.one_way: dict = {}
         self.one_way_post: dict = {}
+        # The time the coupling may take: each flow solve stops at what is left of it (a solve that cannot settle,
+        # a laminar flow past a flap at Re 1600, once ran over an hour with no output), and no new iteration starts
+        # once it is spent.
+        from cadgen._internal.fea import fit
+
+        budget = getattr(ctx, "budget", None)
+        # A time target is what the ladder fits to, never a refusal: a small one does not cut the coupling short.
+        self.budget_s = COUPLING_BUDGET * max(float(getattr(budget, "seconds", 0.0) or 0.0), fit.DEFAULT_SECONDS)
+        self.began = time.perf_counter()
+        self.out_of_time = False
+
+    def left_s(self) -> float:
+        """Seconds of the coupling's budget left."""
+        return self.budget_s - (time.perf_counter() - self.began)
+
+    def flow_log(self, line: str) -> None:
+        if self.ctx.log:
+            self.ctx.log(f"flow solve {self.flow_solves + 1}: {line}")
 
     # -- one flow solve ------------------------------------------------------------------------------
 
@@ -673,19 +708,26 @@ class Coupling:
         plan = self.ctx.plan
         if self.turbulent:
             march = MARCH_FAST if plan is not None and "continuation" in plan.taken else MARCH
-            flow = turbulence.solve_rans(problem, solver=self.solver, cfl=march, log=None)
+            flow = turbulence.solve_rans(problem, solver=self.solver, cfl=march, log=self.flow_log)
         else:
             reynolds = self.setup.reynolds * share
             schedule = tuple(min(1.0, re / reynolds) for re in plan.re_schedule if re <= reynolds * 1.0000001) \
                 if plan is not None and plan.re_schedule and reynolds > 0 else ()
             if schedule and schedule[-1] < 1.0:
                 schedule = (*schedule, 1.0)
-            flow = navier_stokes.solve_flow(problem, schedule=schedule, solver=self.solver, log=None)
+            flow = navier_stokes.solve_flow(problem, schedule=schedule, solver=self.solver, log=self.flow_log,
+                                            deadline_s=max(FLOW_FLOOR_S, self.left_s()))
+            if flow.timed_out:
+                self.out_of_time = True
         self.flow_solves += 1
         self.timings["flow_s"] += time.perf_counter() - started
         traction = self.traction(space, flow)
         force = (traction * self.interface.fluid_area[:, None]).sum(axis=0)
-        return FlowState(space, flow, traction, force)
+        pressure = self.wall_pressure(space, flow)
+        # Split along the wall's normal at rest: what the wall has turned since (a leaning flap's pressure, turned with
+        # it) stays in the rest, so the part still feels its pressure follow the bent wall.
+        shear = traction - pressure[:, None] * self.interface.fluid_normal
+        return FlowState(space, flow, traction, force, pressure, shear)
 
     def traction(self, space, flow):
         """(wall rows, 3) MPa: the fluid's push on the part over each wetted wall triangle, its mean over the
@@ -698,12 +740,8 @@ class Coupling:
 
         rows = self.wall_rows
         triangles, _, normal = wall_triangles(space, rows)            # normal out of the fluid
-        p = np.zeros(space.scalar_count)
-        p[: space.vertices] = flow.p[: space.vertices]
-        edges = space.mesh.edges
-        p[space.scalar.edge_dofs[0]] = 0.5 * (flow.p[edges[0]] + flow.p[edges[1]])
         mids = triangles[:, 3:]
-        push = p[mids].mean(axis=1)[:, None] * normal                  # (F, 3)
+        push = self.wall_pressure(space, flow)[:, None] * normal       # (F, 3)
         if self.turbulent:
             shear = np.zeros((space.scalar_count, 3))
             if len(flow.wall_nodes):
@@ -718,6 +756,19 @@ class Coupling:
         strain = gradient + np.swapaxes(gradient, 2, 3)
         viscous = mu * np.einsum("fkij,fj->fki", strain, normal).mean(axis=1)
         return push - viscous
+
+    def wall_pressure(self, space, flow):
+        """(wall rows,) MPa: the flow's pressure on each wetted wall triangle, its mean over the mid-edge nodes."""
+        import numpy as np
+
+        from cadgen._internal.fea.analyses.cfd import wall_triangles
+
+        triangles, _, _ = wall_triangles(space, self.wall_rows)
+        p = np.zeros(space.scalar_count)
+        p[: space.vertices] = flow.p[: space.vertices]
+        edges = space.mesh.edges
+        p[space.scalar.edge_dofs[0]] = 0.5 * (flow.p[edges[0]] + flow.p[edges[1]])
+        return p[triangles[:, 3:]].mean(axis=1)
 
     # -- the iteration -------------------------------------------------------------------------------
 
@@ -808,6 +859,10 @@ class Coupling:
                 rising = 0
             if iterations >= cap or rising >= GROWING:
                 break
+            if self.out_of_time or self.left_s() <= 0:
+                # The budget is spent (or a flow solve stopped at it): the last state, said as not settled.
+                self.out_of_time = True
+                break
             if inputs.method == "aitken" and previous_residual is not None:
                 delta = residual - previous_residual
                 denominator = float(delta @ delta)
@@ -851,7 +906,7 @@ class Coupling:
         import time
 
         started = time.perf_counter()
-        f = self.interface.load(flow_state.traction)
+        f = self.interface.load(flow_state.traction, flow_state.pressure, flow_state.shear)
         outcome = self.structure.solve(f)
         self.timings["structure_s"] += time.perf_counter() - started
         return outcome, f
@@ -997,6 +1052,18 @@ class Interface:
             _, nearest = cKDTree(fluid_centres[on_fluid]).query(part_centres[on_part])
             source[on_part] = on_fluid[nearest]
         self.source = source
+        # The fluid wall triangles' normals out of the fluid, at rest.
+        from cadgen._internal.fea.analyses.cfd import wall_triangles
+
+        self.fluid_normal = wall_triangles(fluid_space, wall_rows)[2]
+        # The part's wetted faces as facets for integrating a load on them, and each facet's row in ``part_rows``.
+        facets = space.facets_of_rows(part_rows) if len(part_rows) else np.zeros(0, dtype=np.int64)
+        self.part_basis = space.basis.boundary(facets) if len(part_rows) else None
+        if self.part_basis is not None:
+            position = {int(facet): row for row, facet in enumerate(facets)}
+            self.facet_order = np.array([position[int(facet)] for facet in self.part_basis.find], dtype=np.int64)
+        else:
+            self.facet_order = np.zeros(0, dtype=np.int64)
         corners = fluid_locations[fluid_boundary[:, :3]]
         self.fluid_area = 0.5 * np.linalg.norm(np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0]), axis=1)
         # The quadratic triangle's consistent load under an even traction: nothing at the corners, a third of the
@@ -1060,17 +1127,39 @@ class Interface:
         """(fluid wall nodes, 3): the part's displacement where each fluid wall node sits."""
         return self.to_fluid_matrix @ displacement
 
-    def load(self, traction):
-        """The part's load vector (N) from the traction on each fluid wall row (MPa, on the part)."""
+    def load(self, traction, pressure=None, shear=None):
+        """The part's load vector (N) from the traction on each fluid wall row (MPa, on the part).
+
+        With ``pressure`` (MPa per fluid wall row) and ``shear`` (the rest of the traction, MPa: the traction less
+        the pressure along the fluid wall's normal at rest), the pressure is taken as that scalar along the part's own
+        normal, integrated over its curved faces as a static pressure load is, and only the rest as a vector. (Taken as a vector, the pressure carried the normal of the nearest fluid triangle, up to
+        ten degrees off the part's on a bore meshed at a different size: a sideways push of a sixth of the pressure,
+        varying from triangle to triangle, that a thin wall takes in bending, its softest way. A soft tube's bore
+        dented in by four times its true swelling, and the coupling chased that noise and never settled.)"""
         import numpy as np
+        from skfem import LinearForm, asm
 
         f = np.zeros(self.space.basis.N)
         if len(self.part_rows) == 0:
             return f
-        per = traction[self.source] * (self.part_area / 3.0)[:, None]   # (part rows, 3) N at each mid node
-        for k in range(3):
-            np.add.at(f, self.dof_table[self.part_mids[:, k]].ravel(), per.ravel())
-        return f
+        if pressure is None:
+            per = traction[self.source] * (self.part_area / 3.0)[:, None]   # (part rows, 3) N at each mid node
+            for k in range(3):
+                np.add.at(f, self.dof_table[self.part_mids[:, k]].ravel(), per.ravel())
+            return f
+        pressure = np.asarray(pressure, dtype=float)
+        shear = np.zeros_like(traction) if shear is None else np.asarray(shear, dtype=float)
+        basis = self.part_basis
+        q = basis.X.shape[1]
+        on_p = np.repeat(pressure[self.source][self.facet_order][:, None], q, axis=1)
+        on_s = np.repeat(shear[self.source][self.facet_order].T[:, :, None], q, axis=2)    # (3, F, Q)
+
+        @LinearForm
+        def push(v, w):
+            # The fluid's pressure pushes the part in, along minus its outward normal; the shear as it is.
+            return sum((-w["p"] * w.n[i] + w["s"][i]) * v[i] for i in range(3))
+
+        return asm(push, basis, p=on_p, s=on_s)
 
 
 def _mid_order(locations, boundary):

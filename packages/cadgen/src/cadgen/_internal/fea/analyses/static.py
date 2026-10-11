@@ -194,6 +194,26 @@ def _unfold(volume, outcome, planes):
     return volume, outcome
 
 
+#: A stress's colours stop at this quantile of its values when its peak is a spike above them (a clamped edge's, a
+#: crack front's): the peak, singular, would otherwise turn the rest of the part blue.
+COLOUR_QUANTILE = 0.99
+#: The peak is a spike once it stands this many times above the quantile.
+SPIKE = 1.1
+
+
+def colour_range(values, peak: float, spike: float = SPIKE) -> tuple:
+    """A stress's colour range: ``(0, peak)``, or, where the peak stands ``spike`` times above the field's
+    :data:`COLOUR_QUANTILE` (a singular edge or front), ``(0, quantile, {"quantile", "peak"})``: the colours stop at
+    the quantile and the field's entry says so and keeps the peak. The checks judge the peak either way."""
+    import numpy as np
+
+    values = np.asarray(values, dtype=float)
+    cap = round(float(np.quantile(values, COLOUR_QUANTILE)), 4) if len(values) else 0.0
+    if cap <= 0 or peak <= cap * spike:
+        return (0.0, peak)
+    return (0.0, cap, {"quantile": COLOUR_QUANTILE, "peak": peak})
+
+
 def floored(factor: float | None) -> float | None:
     # Floored, so a factor just under a threshold is never shown as reaching it.
     return None if factor is None else math.floor(factor * 1000) / 1000

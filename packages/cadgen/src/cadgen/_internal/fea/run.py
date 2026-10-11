@@ -508,10 +508,13 @@ def finer_mesh_size(size_mm: float, dofs: int) -> float | None:
 _STATIC = "static"
 
 
-def _field_entry(spec, low: float, high: float, *, static: bool) -> dict:
-    """One ``extras.fields`` entry: today's keys; a non-static analysis also says the view name, signed and per-frame."""
+def _field_entry(spec, low: float, high: float, capped: dict | None = None, *, static: bool) -> dict:
+    """One ``extras.fields`` entry: today's keys; a non-static analysis also says the view name, signed and per-frame,
+    and, where its colours stop below the field's peak (``capped``: ``{"quantile", "peak"}``), where and the peak."""
     entry = {"attribute": spec.attribute, "name": spec.title, "units": spec.units, "min": low, "max": high,
              "attribute_scale": spec.attribute_scale}
+    if capped and not static:
+        entry["capped"] = dict(capped)
     if not static:
         entry["field"] = spec.name
         if spec.signed:
@@ -870,6 +873,11 @@ def solve_study(
     }
     if plan is not None:
         extras.update(analysis.extras_assembly(summary))
+        if not extras.get("parts"):
+            # An analysis with no per-part results of its own still says what each part is and is made of, so the
+            # viewer names a face's part ("coil · face 3") and lists each part's material, not the study's alone.
+            extras["parts"] = [{"ref": part.ref, "name": name, "material": material.name, "yield_MPa": material.yield_strength}
+                               for part, name, material in zip(plan.parts, plan.names, plan.materials)]
         extras["connections"] = [
             {"between": c["refs"], "names": c["between"], "type": c["type"], "area_mm2": c["area_mm2"],
              "gap_mm": c["gap_mm"], "faces": c["faces"]}
@@ -945,16 +953,23 @@ def solve_study(
             })
     deformation = result.deformation if result.deformation is not None else np.zeros_like(result.dof_locations)
     by_part = result.fields_by_part.get(primary.name) if primary.components == 1 else None
+    surface = result.boundary_quadratic
+    if (shown_faces := result.scalars.get("shown_faces")) is not None:
+        # An analysis that shows some of the faces alone (the air closed inside a part: the faces it wets).
+        keep = np.isin(np.asarray(volume.boundary_ordinal), np.asarray(shown_faces, dtype=np.int64))
+        surface, face_of_triangle = surface[keep], face_of_triangle[keep]
+        if plan is not None:
+            part_of_triangle = part_of_triangle[keep]
     write_glb(
         glb_path,
         positions=result.dof_locations,
         displacement=deformation,
         values=colour,
         values_attribute="_VON_MISES" if stress_coloured else None,
-        triangles6=result.boundary_quadratic,
+        triangles6=surface,
         face_of_triangle=face_of_triangle,
         scale=scale if scale is not None else 1.0,
-        value_range=ranges[primary.name],
+        value_range=tuple(ranges[primary.name][:2]),
         extras=extras,
         **({} if plan is None or by_part is None else {
             "values_by_part": by_part,

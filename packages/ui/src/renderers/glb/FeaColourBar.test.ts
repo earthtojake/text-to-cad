@@ -8,9 +8,21 @@ describe('the colour bar\'s words', () => {
     expect(colourBarText({ attribute: '_temperature', name: 'temperature', units: '°C', min: -12, max: 84 })).toEqual({ word: 'Temperature', min: '-12.0', max: '84.0 °C' });
   });
 
-  it('write a life in cycles as powers of ten', () => {
-    expect(colourBarText({ attribute: '_life', name: 'life', units: 'log10 cycles', min: 3, max: 9 })).toEqual({ word: 'Life', min: '10³', max: '10⁹ cycles' });
-    expect(colourBarText({ attribute: '_life', name: 'life', units: 'log10 cycles', min: -2.2, max: 12 }).min).toBe('10⁻²');
+  it('write a life in cycles as powers of ten, the shortest life at the red end', () => {
+    expect(colourBarText({ attribute: '_life', name: 'life', units: 'log10 cycles', min: 3, max: 9 })).toEqual({ word: 'Life', min: '10⁹', max: '10³ cycles' });
+    expect(colourBarText({ attribute: '_life', name: 'life', units: 'log10 cycles', min: -2.2, max: 12 }).max).toBe('10⁻² cycles');
+  });
+
+  it('put the lowest fatigue margin, the worst, at the red end as a stress puts its peak', () => {
+    expect(colourBarText({ attribute: '_fatigue_factor', name: 'fatigue safety factor', units: '', min: 4.09, max: 100 }))
+      .toEqual({ word: 'Fatigue margin', min: '100', max: '4.09' });
+  });
+
+  it('say a top stopped below a singular peak as "≥", with the percentile and the peak', () => {
+    const capped = { attribute: '_von_mises', name: 'von Mises stress', units: 'MPa', min: 0, max: 360.6, capped: { quantile: 0.99, peak: 948.2 } };
+    expect(colourBarText(capped)).toEqual({ word: 'Stress', min: '0', max: '≥361 MPa',
+      note: 'Colours stop at the 99th percentile; the peak is 948 MPa' });
+    expect(colourBarText(capped, 2).note).toBe('Colours stop at the 99th percentile; the peak is 1896 MPa');
   });
 
   it('say the sigma level an RMS field is shown at', () => {

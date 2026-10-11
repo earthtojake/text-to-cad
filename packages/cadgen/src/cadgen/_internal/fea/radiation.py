@@ -206,6 +206,30 @@ def surface_triangles(space: "FemSpace", rows) -> tuple["np.ndarray", "np.ndarra
     return corners, area, normal, corners.mean(axis=1)
 
 
+def _shares(areas: list, counts: list, limit: int) -> list:
+    """Each face's number of patches: in proportion to its area, at least one, at most its triangles, and
+    ``limit`` in all (largest remainders; rounding each face on its own could pass the limit). Only more faces
+    than ``limit`` pass it: every face keeps one."""
+    import math
+
+    total = sum(areas) or 1.0
+    ideal = [limit * a / total for a in areas]
+    shares = [max(1, min(c, math.floor(x))) for x, c in zip(ideal, counts)]
+    spare = limit - sum(shares)
+    for i in sorted(range(len(areas)), key=lambda i: (shares[i] - ideal[i], i)):
+        if spare <= 0:
+            break
+        if shares[i] < counts[i]:
+            shares[i] += 1
+            spare -= 1
+    while spare < 0 and max(shares, default=1) > 1:
+        # The minimum of one pushed past the limit: take from the face most over its proportion that can spare one.
+        i = max((i for i in range(len(shares)) if shares[i] > 1), key=lambda i: (shares[i] - ideal[i], -i))
+        shares[i] -= 1
+        spare += 1
+    return shares
+
+
 def patches_of(centroids: "np.ndarray", area: "np.ndarray", face: "np.ndarray", limit: int = MAX_PATCHES) -> "np.ndarray":
     """Each triangle's patch: every face split into compact pieces by area, at most ``limit`` in all.
 
@@ -217,11 +241,10 @@ def patches_of(centroids: "np.ndarray", area: "np.ndarray", face: "np.ndarray", 
 
     patch = np.zeros(len(area), dtype=np.int64)
     faces = list(dict.fromkeys(face.tolist()))
-    total = float(area.sum()) or 1.0
+    members_of = [np.flatnonzero(face == f) for f in faces]
+    shares = _shares([float(area[m].sum()) for m in members_of], [len(m) for m in members_of], limit)
     next_id = 0
-    for f in faces:
-        members = np.flatnonzero(face == f)
-        share = max(1, min(len(members), int(round(limit * float(area[members].sum()) / total))))
+    for members, share in zip(members_of, shares):
         groups = [members]
         while len(groups) < share:
             largest = max(range(len(groups)), key=lambda g: (float(area[groups[g]].sum()), len(groups[g])))

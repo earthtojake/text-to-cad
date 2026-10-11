@@ -15,15 +15,24 @@ const powerOfTen = (exponent) => `10${String(Math.round(Number(exponent) || 0)).
  * cycles, stored as log10) as powers of ten ("10³" … "10⁹ cycles"); any other its own min (0 for
  * most, below 0 for a signed field: a temperature) and max with its units. A per-frame field's
  * range is the file's, across every frame, so the colours compare frame to frame. An RMS field
- * says the sigma level it is shown at ("Stress (3σ)").
+ * says the sigma level it is shown at ("Stress (3σ)"). A field whose worst is its lowest (a life, a
+ * fatigue margin: `lowWorst`) is drawn down the ramp, so its ends swap: its max at the blue end, its
+ * min, the worst, at the red ("Fatigue margin 100 … 4.1"). A field whose colours stop below its peak
+ * (`capped`: a clamped edge's singular spike) says its top as "≥", and `note` says the percentile and the peak.
  */
 export function colourBarText(field, scale = 1, sigma = null) {
   const word = isRms(field) && sigma ? fieldWord(field).replace("(1σ)", `(${sigma}σ)`) : fieldWord(field);
-  if (fieldInfo(field.attribute)?.log) {
-    const units = String(field.units || "").replace(/^log10\s*/i, "");
-    return { word, min: powerOfTen(field.min), max: `${powerOfTen(field.max)}${units ? ` ${units}` : ""}` };
-  }
-  return { word, min: formatValue(field.min * scale), max: `${formatValue(field.max * scale)}${field.units ? ` ${field.units}` : ""}` };
+  const info = fieldInfo(field.attribute);
+  const log = info?.log;
+  const units = log ? String(field.units || "").replace(/^log10\s*/i, "") : String(field.units || "");
+  const figure = (value) => (log ? powerOfTen(value) : formatValue(value * scale));
+  const [left, right] = info?.lowWorst ? [field.max, field.min] : [field.min, field.max];
+  const shown = { word, min: figure(left), max: `${figure(right)}${units ? ` ${units}` : ""}` };
+  if (!field.capped || log) return shown;
+  // Colours stopped below a singular peak: the red end is that value or more, and the peak is said.
+  const percentile = Math.round(field.capped.quantile * 100);
+  return { ...shown, max: `≥${shown.max}`,
+    note: `Colours stop at the ${percentile}th percentile; the peak is ${figure(field.capped.peak)}${units ? ` ${units}` : ""}` };
 }
 
 // A result that is also animated has a playbar on that line in preview: the bar steps up above it.
@@ -58,7 +67,7 @@ export default function FeaColourBar({ result, field, loadScale = 1, sigma = nul
           style={{ background: feaRampGradient(result.ramp) }}
           aria-hidden="true"
         />
-        <span data-fea-max="">{shown.max}</span>
+        <span data-fea-max="" title={shown.note} aria-description={shown.note}>{shown.max}</span>
       </div>
     </div>
   );

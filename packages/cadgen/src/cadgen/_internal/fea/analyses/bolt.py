@@ -47,9 +47,9 @@ from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, Series, SeriesFrame, SolveContext
 from cadgen._internal.fea.analyses.contact import (
     LIMITS as CONTACT_LIMITS, MAX_FRICTION, ContactAnalysis, ContactInputs, ContactPair, parse_rigid_planes, parse_steps, contact_words,
-    mark_unsettled, stop_words, unsettled_extras, unsettled_sentence, unsettled_steps,
+    mark_unsettled, path_deadline, stop_words, unsettled_extras, unsettled_sentence, unsettled_steps,
 )
-from cadgen._internal.fea.analyses.nonlinear import pick_frames, load_label
+from cadgen._internal.fea.analyses.nonlinear import load_label, part_materials, pick_frames
 from cadgen._internal.fea.bolt_ops import DEFAULT_GRADE, DEFAULT_NUT_FACTOR, PROOF_MPa, SIZES, BoltSize, bolt_size
 from cadgen._internal.fea.study import parse_fixtures, parse_loads
 
@@ -66,8 +66,6 @@ PRELOAD_STEPS = 2
 OPEN_SHARE = 1e-3
 #: A part held by contacts and bolts alone is kept from drifting by springs this share of its mean stiffness.
 STABILISE = 1e-8
-#: The bolted faces' contact penalty, as a share of contact_ops' (module comment in solve).
-JOINT_PENALTY = 0.01
 #: A sideways force under this share of the clamp is the solve's round-off, not a load.
 SHEAR_NOISE = 1e-4
 #: The keys a bolt connection takes.
@@ -505,10 +503,9 @@ class BoltAnalysis(ContactAnalysis):
         bolted_rows = np.isin(owner, list(joint_of.values()))
         friction = constraints.friction.copy()
         constraints.friction = np.where(bolted_rows, 0.0, friction)
-        # A softer tangential penalty between the bolted faces (the normal one kept whole): friction's stick and slip
-        # then settle in a few Newton iterations where contact's own stiff one chatters near slip.
-        constraints.penalty = np.where(bolted_rows, JOINT_PENALTY * constraints.penalty, constraints.penalty)
-        normal_scale = np.where(bolted_rows, 1.0 / JOINT_PENALTY, 1.0)
+        # Friction's stick spring is contact_ops.TANGENTIAL_SHARE of the normal penalty everywhere (it chatters near
+        # slip when stiffer): the bolted faces need no softening of their own.
+        normal_scale = np.ones(constraints.count)
         after = bolt_ops.drift_springs(K, vdofs, [(np.flatnonzero(node_body == b), None) for b in loose], STABILISE)
         problem = bolt_ops.BoltedProblem(space, K + drift, free, preload, constraints, stabilise, method=method, on_commit=record,
                                          springs=springs, normal_scale=normal_scale, drift=after)
@@ -517,7 +514,8 @@ class BoltAnalysis(ContactAnalysis):
             ctx.log(f"{len(springs)} bolts, {constraints.count} contact nodes over {len(contacts)} contacts")
         # Step 1: the preload, the shanks pulling head and nut together; then each shank is locked there.
         tightened = path_to_global(nonlinear_driver.solve_path(driven(problem, supports, free), steps=PRELOAD_STEPS,
-                                                               solver=solver, adaptive=False, runaway=None, log=ctx.log), supports)
+                                                               solver=solver, adaptive=False, runaway=None, log=ctx.log,
+                                                               deadline_s=path_deadline(ctx)), supports)
         warnings += tightened.warnings
         preload_frame = len(history) - 1
         clamped = bool(tightened.records) and not tightened.collapsed
@@ -529,7 +527,9 @@ class BoltAnalysis(ContactAnalysis):
                 # Step 2: the study's loads, the shanks now springs of the bolts' stiffness.
                 loaded = path_to_global(nonlinear_driver.solve_path(driven(problem, supports, free), steps=inputs.steps,
                                                                     solver=solver, adaptive=adaptive, runaway=None,
-                                                                    log=ctx.log), supports)
+                                                                    log=ctx.log,
+                                                                    deadline_s=max(path_deadline(ctx) - tightened.seconds, 0.0)),
+                                 supports)
                 warnings += loaded.warnings
                 path = loaded
         timings["solve_s"] = tightened.seconds + (loaded.seconds if loaded is not None else 0.0)
@@ -716,7 +716,7 @@ class BoltAnalysis(ContactAnalysis):
                 + [unsettled_sentence(step["percent"], step["of"]) for step in unsettled[:1]],
                 "unsettled": unsettled,
                 "analysis_extras": {"unsettled": unsettled_extras(unsettled)} if unsettled else {},
-                "part_refs": refs, "part_names": names, "bolts": bolts_out, "joints": joints,
+                "part_refs": refs, "part_names": names, "part_materials": part_materials(ctx), "bolts": bolts_out, "joints": joints,
                 "preload_steps": len(tightened.records), "load_steps": len(loaded.records) if loaded is not None else 0,
             },
         )
@@ -762,6 +762,7 @@ class BoltAnalysis(ContactAnalysis):
             if joint["opens_at_percent"] is not None:
                 judged["opens_at_percent"] = round(joint["opens_at_percent"], 4)
         judged["at"] = self._at(result)
+        judged["scaling"] = "none"  # preload, contact and friction: not linear in the load
         if scalars["collapsed"]:
             judged["status"] = "fails"
             judged["collapsed_at_percent"] = round(scalars["factor"] * 100.0, 4)

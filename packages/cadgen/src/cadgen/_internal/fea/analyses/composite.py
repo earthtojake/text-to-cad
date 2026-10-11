@@ -302,6 +302,12 @@ class CompositeAnalysis(StaticAnalysis):
         rotation = np.einsum("pk,pkc->pc", weights, U[corner, 3:])
         displacement = translation + np.cross(rotation, height[:, None] * n[None, :])
         mapped = np.einsum("pk,pkc->pc", weights, nodal[corner])
+        # The failure index is drawn as its envelope, not smoothed: each node takes the worst of the elements around
+        # it, each point the worst of its triangle's corners, so the colour bar tops out at the check's own value (the
+        # governing criterion, Tsai-Wu or max stress, at the worst ply), not under it.
+        worst_at_node = np.zeros(len(nodes))
+        np.maximum.at(worst_at_node, triangles.ravel(), np.repeat(index, triangles.shape[1]))
+        mapped[:, 1] = worst_at_node[corner].max(axis=1)
         timings = dict(mid.timings, stress_s=time.perf_counter() - started)
         outcome = shell.outcome_on_carrier(ctx, displacement, mapped[:, 0], float(envelope.max()), mid.reactions,
                                            mid.applied, mid.size, timings, "direct (laminated shell)")
@@ -365,7 +371,13 @@ class CompositeAnalysis(StaticAnalysis):
             at = np.unravel_index(int(np.argmax(here)), here.shape)
             if best is None or here[at] > best[0]:
                 best = (float(here[at]), k, at, float(tw[at]), float(ms[at]), (float(s1[at]), float(s2[at]), float(t12[at])))
-        nodal = np.maximum(space.scalar.project(index), 0.0)
+        # The failure index drawn as its envelope (each node the worst quadrature point of the elements around it), not
+        # projected: a projection smooths the peak under the check's own value. Field and check are the same number:
+        # the governing criterion (Tsai-Wu or max stress, the larger) at the worst ply.
+        element_worst = np.maximum(index.max(axis=1), 0.0)
+        dofs = space.scalar.element_dofs
+        nodal = np.zeros(space.scalar.N)
+        np.maximum.at(nodal, dofs.ravel(), np.tile(element_worst, dofs.shape[0]))
         location = points[:, best[2][0], best[2][1]]
         worst = self._worst_record(inputs, best[1], best[3], best[4], best[5], location)
         records = [self._ply_record(inputs, k, tw_max[k], ms_max[k]) for k in range(plies)]
@@ -465,7 +477,8 @@ class CompositeAnalysis(StaticAnalysis):
         from cadgen._internal.fea import checks
 
         if check["kind"] == "displacement":
-            return super().judge(check, index, ctx, result, inputs)
+            # Judged with the ply failure, which is not linear in the load (Tsai-Wu): the verdict quotes no load multiple.
+            return {**super().judge(check, index, ctx, result, inputs), "scaling": "none"}
         worst = result.scalars["worst"]
         criterion = check.get("criterion")
         value = worst["index"] if criterion is None else self._by_criterion(result, criterion)
@@ -483,6 +496,7 @@ class CompositeAnalysis(StaticAnalysis):
             "where": {"ref": peak.ref, "at": [round(c, 3) for c in ply["at"]]},
             "ply": ply["ply"], "angle_deg": ply["angle_deg"],
             "criterion": criterion or ply["criterion"],
+            "scaling": "none",
         }
 
     @staticmethod

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
     from cadgen._internal.fea.mesh import VolumeMesh
 
-__all__ = ["FacetLookup", "FemSpace", "NETGEN_TET10_TO_SKFEM", "element_mesh"]
+__all__ = ["FacetLookup", "FemSpace", "NETGEN_TET10_TO_SKFEM", "element_mesh", "facet_reference_points", "facet_safe_mapping"]
 
 # netgen's 10-node tetrahedron lists the four corners, then the mid-edge nodes of
 # edges (0,1) (0,2) (0,3) (1,2) (1,3) (2,3); skfem's quadratic tet wants them on
@@ -85,6 +85,69 @@ class FacetLookup:
         return self._order[where]
 
 
+_FACET_SAFE: Any = None
+
+
+def facet_safe_mapping(mesh):
+    """The isoparametric mapping of a curved (quadratic) mesh, made safe for facet integrals.
+
+    scikit-fem finds where a facet's quadrature points sit in their element by Newton's method on the element's
+    map (``invF``), started from the element's middle. On a strongly curved element -- a refined pin hole, the
+    elements around a crack front -- it can stall against the reference element's edge and raise. Those points need
+    no search: a facet's own corners are three of its element's corners, and the facet's map is the element's map
+    restricted to that face, so each point's place in the element is the same blend of those corners
+    (:func:`facet_reference_points`). Newton is still tried first, so every mesh it solves is integrated exactly as
+    before; only the facets it fails on are placed this way.
+    """
+    global _FACET_SAFE
+    if _FACET_SAFE is None:
+        from skfem.mapping import MappingIsoparametric
+
+        class FacetSafeMapping(MappingIsoparametric):
+            _last_g: Any = None
+
+            def G(self, X, find=None):
+                out = super().G(X, find=find)
+                self._last_g = (out, X, find)
+                return out
+
+            def invF(self, x, tind=None, newton_max_iters=50, newton_tol=1e-12):
+                try:
+                    return super().invF(x, tind=tind, newton_max_iters=newton_max_iters, newton_tol=newton_tol)
+                except Exception as error:
+                    last = self._last_g
+                    if "Newton" not in str(error) or last is None or last[0] is not x or last[2] is None or tind is None:
+                        raise
+                    return facet_reference_points(self.mesh, last[1], last[2], tind)
+
+        _FACET_SAFE = FacetSafeMapping
+    return _FACET_SAFE(mesh, mesh.elem(), mesh.bndelem)
+
+
+def facet_reference_points(mesh, X: "np.ndarray", facets: "np.ndarray", elements: "np.ndarray") -> "np.ndarray":
+    """(3, facets, points) reference coordinates in ``elements`` of the facet reference points ``X`` (2, points).
+
+    A facet's reference triangle has its corners at (0, 0), (1, 0), (0, 1) for its vertices in ``mesh.facets`` order;
+    each vertex is a corner of the element, so a point's barycentric weights carry it to the same blend of the
+    element's reference corners. The quadratic map restricted to the face is the face's own quadratic map (they share
+    the six face nodes), so this is exact, curved or not.
+    """
+    import numpy as np
+
+    from skfem.refdom import RefTet
+
+    facets = np.asarray(facets)
+    elements = np.asarray(elements)
+    vertices = mesh.facets[:, facets]                       # (3, F)
+    corners = mesh.t[:, elements]                           # (4, F)
+    local = np.argmax(corners[None, :, :] == vertices[:, None, :], axis=1)  # (3, F): each facet vertex's corner
+    if not (np.take_along_axis(corners, local, axis=0) == vertices).all():
+        raise RuntimeError("a facet is not a face of the element it was integrated on")
+    weights = np.stack([1.0 - X[0] - X[1], X[0], X[1]])     # (3, Q)
+    reference = RefTet.p[:, local]                          # (3 dims, 3 vertices, F)
+    return np.einsum("dvf,vq->dfq", reference, weights)
+
+
 @dataclass
 class FemSpace:
     """One mesh's element space: what every operator and every analysis on that mesh reads."""
@@ -134,6 +197,9 @@ class FemSpace:
         from skfem import Basis, ElementTetP1, ElementTetP2, ElementVector
 
         element = ElementTetP2() if order == 2 else ElementTetP1()
+        if not mesh.affine and not hasattr(mesh, "_cached_mapping"):
+            # Every basis on this mesh (its facet bases included) reads the mesh's cached mapping: the safe one.
+            mesh._cached_mapping = facet_safe_mapping(mesh)
         basis = Basis(mesh, ElementVector(element))
         scalar = basis.with_element(element)
         vertices = int(mesh.t.max()) + 1

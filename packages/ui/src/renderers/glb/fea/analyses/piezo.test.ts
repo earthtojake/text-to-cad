@@ -5,6 +5,7 @@ import { checkLine, checkTitle } from '../checkKinds.js';
 import { heldRows, madeOfRows } from '../setup.js';
 import { feaAnalysis } from './index.js';
 import { VIBRATE } from './modal.js';
+import { LOAD_RAMP } from './static.js';
 import piezo, { PIEZO_SETUP, electrodeLabel, piezoElectrodeRows, poledRows, polingWords } from './piezo.js';
 
 const LIMITS = ['Linear, small signal: room-temperature constants at low field; no depolarisation, hysteresis, ageing or self-heating.'];
@@ -77,7 +78,8 @@ describe('piezo', () => {
     expect(piezo).toMatchObject({ name: 'piezo', tier: 3, word: 'Piezo', noun: 'this voltage', family: null, scalesWithLoad: false,
       limitWord: 'Linear', checks: ['stress', 'displacement', 'voltage', 'frequency'] });
     expect(feaAnalysis(piezoResult())).toBe(piezo);
-    expect(piezo.routine(piezoResult())).toBeNull();
+    // A static result plays the voltage going on (the Load ramp), so an actuator's stroke moves in preview.
+    expect(piezo.routine(piezoResult())).toBe(LOAD_RAMP);
   });
 
   it('opens on the Field select, stress, voltage, field and displacement, and the deformation', () => {

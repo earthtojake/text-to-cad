@@ -28,6 +28,7 @@ import io
 import json
 import math
 import re
+import struct
 import tempfile
 import unittest
 from contextlib import redirect_stderr
@@ -421,6 +422,14 @@ class Bimorph(unittest.TestCase):
         """δ = 3 d31 V L² / (2 t²), mm."""
         t = 2 * self.H * 1e-3
         return 3 * abs(d31) * self.V * (self.L * 1e-3) ** 2 / (2 * t ** 2) * 1e3
+
+    def test_the_glb_names_each_layer_so_a_held_face_reads_by_its_part(self):
+        # Piezo writes no per-part results; the viewer still needs each part's name and material ("upper · face 1").
+        raw = self.real.glb.read_bytes()
+        length, _ = struct.unpack_from("<II", raw, 12)
+        extras = json.loads(raw[20:20 + length])["meshes"][0]["extras"]
+        self.assertEqual([(part["ref"], part["name"], part["material"]) for part in extras["parts"]],
+                         [("#o1.1", "upper", "pzt-5a"), ("#o1.2", "lower", "pzt-5a")])
 
     def test_with_weak_coupling_the_tip_meets_the_closed_form(self):
         from cadgen._internal.fea import piezo_ops

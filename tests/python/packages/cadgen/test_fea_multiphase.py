@@ -251,6 +251,42 @@ class TwoDimensional(unittest.TestCase):
         self.assertLess(max(speeds), 1e-6)                       # m/s: still to round-off
         self.assertLess(abs(state.volume - length * depth) / (length * depth), 1e-9)
 
+    def test_an_open_tank_lets_air_in_never_liquid(self):
+        # Fixed bug: where the flow came back in through an open side the level set took no condition, so liquid that
+        # had splashed near an open top stayed on it as a skin, and the air coming in through the skin was counted as
+        # liquid coming in: the volume kept was raised step by step (+26% here, +14% to +73% on 3D tanks) and the fill
+        # level stuck at the brim. Air now comes in as air. Still, the tank keeps its liquid; sloshed to just below
+        # the brim, it keeps it within 1% (it may only lose what the smeared surface spills) and its surface settles.
+        import numpy as np
+        from skfem import MeshTri
+
+        from cadgen._internal.fea.multiphase_ops import Opening, Phases, TwoPhaseProblem, TwoPhaseSolver, interface_heights
+
+        length, height, depth, shake = 0.06, 0.04, 0.016, 0.2
+        mesh = MeshTri.init_tensor(np.linspace(0, length, 13), np.linspace(0, height, 9))
+        top = mesh.facets_satisfying(lambda x: np.isclose(x[1], height), boundaries_only=True)
+        start = length * depth
+        for amplitude in (0.0, 0.35):
+            def acceleration(t, g=amplitude * G0):
+                return np.array([g * math.sin(math.pi * t / shake) if t < shake else 0.0, 0.0])
+
+            solver = TwoPhaseSolver(TwoPhaseProblem(mesh, Phases(WATER, AIR, 1.002e-3, 1.81e-5), depth - mesh.p[1], [0, -G0],
+                                                    acceleration=acceleration, openings=[Opening(top, "outlet")]))
+            volumes, levels = [], []
+
+            def record(state):
+                volumes.append(state.volume / start)
+                levels.append(float(np.max(interface_heights(mesh, state.distance, solver.up))))
+
+            state = solver.run(1.5, dt_max=0.01, on_step=record)
+            with self.subTest(amplitude_g=amplitude):
+                self.assertLess(max(volumes), 1.0 + 1e-4)                    # never gains liquid through the open top
+                self.assertGreater(min(volumes), 0.99)
+                self.assertLess(abs(state.volume - solver.expected_volume) / start, 1e-9)
+                self.assertLess(levels[-1], 0.03)                            # the surface came back down (brim 40 mm)
+                if amplitude:
+                    self.assertGreater(max(levels), 0.035)                   # it did slosh up near the brim
+
     def test_the_rebuild_sees_a_squeezed_level_function(self):
         # Fixed bug: the band the rebuild watches was picked by each element's farthest corner, so a level function
         # squeezed four times steeper than a distance (the case the hydrostatic split cannot stand) fell out of it
@@ -387,6 +423,25 @@ class BoxDuct(unittest.TestCase):
         self.assertAlmostEqual(volume["start_L"], 0.5 * inside_L, delta=1e-6 * inside_L)
         self.assertLess(abs(volume["error_percent"]), 1e-3)
         self.assertLessEqual(volume["net_inflow_L"], inflow * side * side * 1e-6 * end * 1e3)
+
+    def test_a_completely_full_duct_is_single_fluid_flow_at_its_inflow(self):
+        """Full (fill fraction 1) has no free surface: keeping the volume chased a share the smeared interface at the
+        brim cannot reach and ran away (2.9e6 m/s, the volume 1900% off). Solved as the liquid's flow alone, the duct
+        carries plug flow at the inlet's speed, and the result says it was solved so."""
+        inflow, side, length = 0.05, 10.0, 30.0
+        with tempfile.TemporaryDirectory() as tmp:
+            step = box_duct_step(Path(tmp), side, length, wall=2.0)
+            result = solve(step, {"analysis": "multiphase", "fill": {"fraction": 1.0}, "end_s": 0.02, "mesh": {"size_mm": 3},
+                                  "inlets": [{"opening": "x_min", "velocity_m_s": inflow}], "outlets": [{"opening": "x_max"}]})
+            extras, _ = glb_extras(result.glb)
+        self.assertTrue(result.ok)
+        summary = result.summary
+        self.assertAlmostEqual(summary["max_speed_m_s"] / inflow, 1.0, delta=0.1)
+        self.assertEqual(summary["single_fluid"], "Completely full: solved as single-fluid flow, no free surface")
+        self.assertEqual(summary["volume"]["change_percent"], 0.0)
+        self.assertIn("Completely full: solved as single-fluid flow, no free surface", result.human_lines())
+        self.assertIn("single_fluid", [finding["type"] for finding in result.findings])
+        self.assertIn("Completely full: solved as single-fluid flow, no free surface", extras["analysis"]["warnings"])
 
 
 if __name__ == "__main__":

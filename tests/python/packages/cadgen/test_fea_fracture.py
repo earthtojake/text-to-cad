@@ -315,6 +315,34 @@ class EdgeCrack(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class PinLoadedLink(unittest.TestCase):
+    """A link bar pulled by its pin holes with an edge crack at mid-length: the load on a curved hole face, whose
+    stalling facet search once crashed the solve ("Newton iteration didn't converge")."""
+
+    def test_the_pin_loaded_link_solves_and_K_is_the_edge_crack_closed_form(self):
+        from build123d import Align, Box, Cylinder, Pos, export_step
+
+        width, thick, force, a = 30.0, 8.0, 36000.0, 2.0
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            step = directory / "link_bar.step"
+            low = (Align.CENTER, Align.CENTER, Align.MIN)
+            export_step(Box(140, width, thick, align=low) - Pos(-58, 0, 0) * Cylinder(5, thick, align=low)
+                        - Pos(58, 0, 0) * Cylinder(5, thick, align=low), str(step))
+            study = {"analysis": "fracture", "material": "aluminum-7075-t6", "fixtures": [{"faces": ["#o1.f7"]}],
+                     "loads": [{"faces": ["#o1.f8"], "type": "force", "vector_N": [force, 0, 0]}],
+                     "crack": {"kind": "edge", "face": "#o1.f2", "at_mm": [0, -15, 4], "normal": [1, 0, 0], "size_mm": a},
+                     "view": {"checks": [{"kind": "fracture", "margin": 1.5}]}}
+            result = _solve(step, directory / "link.fea.glb", study)
+        self.assertTrue(result.ok)
+        # Tada's edge crack (free to rotate, as a pin lets it) at a/W = 0.067, on the bar's 150 MPa section stress.
+        x = a / width
+        tada = 1.12 - 0.231 * x + 10.55 * x ** 2 - 21.72 * x ** 3 + 30.39 * x ** 4
+        expected = tada * force / (width * thick) * math.sqrt(math.pi * a / 1000.0)
+        self.assertLess(abs(result.summary["K_max_MPa_sqrt_m"] / expected - 1.0), 0.10)
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class Ladder(unittest.TestCase):
     """A tiny budget: the symmetric quarter and the coarse pass, each said everywhere, K still within 7 %."""
 

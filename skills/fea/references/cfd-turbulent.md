@@ -120,7 +120,8 @@ pseudo-time term, then k, then omega, each with the new velocity. The pseudo-tim
 the change per step shrinks and is halved when it stalls; the march stops when the velocity
 changes by under 1e-5 of the reference speed in a step. A developed pipe settles in about 15 steps;
 a body in a free stream takes 100 or more. A run that does not settle returns its last state with
-a `turbulent_unsettled` warning, never a refusal.
+a `turbulent_unsettled` warning, never a refusal; its checks read `settled: false`, their labels
+end "(flow not settled)" and a pass becomes `close`.
 
 ## When the model is big
 

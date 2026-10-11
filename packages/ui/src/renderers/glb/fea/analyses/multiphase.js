@@ -43,7 +43,13 @@ export function shakeWords(acceleration) {
   return `shaken ${plainNumber(Math.abs(shake.amplitude_g))} g${along ? ` along ${along}` : ""}`;
 }
 
-/** Study's "Filled": how full it starts and how it is shaken, its hint how the shake changes over time. */
+const SINGLE_FLUID = /^Completely full: solved as single-fluid flow/;
+
+/**
+ * Study's "Filled": how full it starts and how it is shaken, its hint how the shake changes over time; a
+ * completely full inside's hint says it was solved as the liquid's flow alone ("Completely full: solved as
+ * single-fluid flow, no free surface").
+ */
 export function filledRows(result) {
   const { study, fill } = twoFluids(result);
   if (!study && !fill) return [];
@@ -51,9 +57,12 @@ export function filledRows(result) {
   const shake = shakeWords(study?.acceleration);
   const label = shake ? `${words}, ${shake}` : words;
   const history = study?.acceleration ? historyWords(study.acceleration.history) : "";
+  // A completely full inside has no free surface: cadgen solves the liquid's flow alone and says so.
+  const single = (result.analysis?.warnings || []).find((line) => SINGLE_FLUID.test(line)) || "";
+  const hint = [single, history ? `Over time: ${history}` : ""].filter(Boolean).join(". ");
   const refs = wholeRefs(result);
   return [{ id: "filled", label: "Filled", detail: "", glyph: "flow", children: [{ id: "filled:0", label, detail: "", wrap: true,
-    ...(history ? { hint: `Over time: ${history}` } : {}),
+    ...(hint ? { hint } : {}),
     ...(refs.length ? { refs, summary: `Filled: ${label.charAt(0).toLowerCase()}${label.slice(1)}${history ? `, ${history}` : ""}` } : {}) }] }];
 }
 

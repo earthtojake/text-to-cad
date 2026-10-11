@@ -304,6 +304,7 @@ class Electrostatics(unittest.TestCase):
                          {"faces": [under["#o1.3"][-gap / 2]], "V": 0, "name": "bottom"}],
             "capacitance": {"between": ["centre", "bottom"]},
             "probes": [{"at_mm": [0, 0, 0], "label": "gap"}],
+            "view": {"checks": [{"kind": "electric_field", "limit_kV_mm": 3}]},
             # A small budget: the air is coarsened away from the plates to fit (the ladder's air rung).
             "fit": {"memory_GB": 0.01, "seconds": 0.001}})
 
@@ -338,6 +339,17 @@ class Electrostatics(unittest.TestCase):
         self.assertAlmostEqual(probe["electric_field_kV_mm"], 0.05, delta=0.002)  # 100 V over 2 mm
         self.assertTrue(summary["air"])
         self.assertGreater(summary["region"]["elements"], 0)
+
+    def test_a_peak_out_in_the_air_says_so_and_names_the_part_beside_it(self):
+        # The colours are on the parts' surface; the check judges the air too, so it says where its peak is.
+        summary = self.plates.summary
+        check = summary["checks"][0]
+        self.assertEqual(check["where"]["in"], "air")
+        self.assertIn(check["where"]["near"], ("centre", "guard", "bottom"))
+        self.assertEqual(summary["max_in"], {key: check["where"][key] for key in ("in", "near", "gap_mm")})
+        self.assertIn(f"in the air near {check['where']['near']}", self.plates.human_lines()[1])
+        # A field judged inside a part (the slab, no air) names no air.
+        self.assertEqual(self.slab.summary["checks"][0]["where"].get("in"), "part")
 
     def test_the_air_is_coarsened_to_fit_and_says_so(self):
         step = next(step for step in self.plates.fit if step["rung"] == "far_field")
@@ -435,8 +447,11 @@ class Magnetostatics(unittest.TestCase):
         self.assertEqual(summary["structure"]["part"], "upper")
         check = summary["checks"][0]
         self.assertEqual((check["kind"], check["status"]), ("stress", "passes"))
+        # The force grows with the current squared, and so does the stress: the viewer's headroom in current is a root.
+        self.assertEqual(check["scaling"], "quadratic")
         self.assertGreater(summary["structure"]["max_von_mises_MPa"], 0.0)
         extras, _ = glb(self.pair.glb, ())
+        self.assertEqual(extras["checks"][0]["scaling"], "quadratic")
         self.assertEqual([entry["field"] for entry in extras["fields"]], ["magnetic_field", "von_mises", "displacement"])
 
 

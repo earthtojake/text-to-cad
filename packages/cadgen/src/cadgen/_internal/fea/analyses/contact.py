@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Series, SeriesFrame, SolveContext
-from cadgen._internal.fea.analyses.nonlinear import NonlinearAnalysis, NonlinearInputs, pick_frames, load_label
+from cadgen._internal.fea.analyses.nonlinear import NonlinearAnalysis, NonlinearInputs, load_label, part_materials, pick_frames, with_materials
 from cadgen._internal.fea.study import parse_fixtures, parse_loads
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ContactAnalysis", "ContactInputs", "ContactPair", "DEFAULT_STEPS", "LIMITS", "RigidPlane", "contact_words",
-    "mark_unsettled", "parse_rigid_planes", "parse_steps", "unsettled_extras", "unsettled_sentence", "unsettled_steps",
+    "mark_unsettled", "parse_rigid_planes", "path_deadline", "parse_steps", "unsettled_extras", "unsettled_sentence", "unsettled_steps",
 ]
 
 #: Load steps a study starts with when it names none.
@@ -205,6 +205,13 @@ def unsettled_steps(path, of: str = "the load") -> list[dict]:
 def unsettled_extras(unsettled: list[dict]) -> dict:
     """``extras.analysis.unsettled``: the shares of the load whose contact did not settle, and the first."""
     return {"at_percent": [step["percent"] for step in unsettled], "first_percent": unsettled[0]["percent"]}
+
+
+def path_deadline(ctx) -> float:
+    """Seconds after which a load path stuck cutting its steps stops (``nonlinear_driver.solve_path``'s ``deadline_s``):
+    the study's time target (``fit.Budget.seconds``, 600 s by default)."""
+    budget = getattr(ctx, "budget", None)
+    return float(getattr(budget, "seconds", 0.0) or 600.0)
 
 
 def mark_unsettled(judged: dict, scalars: dict) -> dict:
@@ -479,7 +486,8 @@ class ContactAnalysis(NonlinearAnalysis):
             ctx.log(f"{constraints.count} contact nodes over {len(contacts)} contacts; {len(floating)} bodies rest on contacts alone")
         # runaway=None: a part that rests on a contact has no stiffness of its own until the contact closes.
         path = path_to_global(nonlinear_driver.solve_path(driven(problem, supports, free), steps=inputs.steps, solver=solver,
-                                                          adaptive=adaptive, runaway=None, log=ctx.log), supports)
+                                                          adaptive=adaptive, runaway=None, log=ctx.log,
+                                                          deadline_s=path_deadline(ctx)), supports)
         timings["solve_s"] = path.seconds
         warnings += path.warnings
         if problem.unsettled > UNSETTLED:
@@ -595,7 +603,7 @@ class ContactAnalysis(NonlinearAnalysis):
                 "unsettled": unsettled,
                 "analysis_extras": {"unsettled": unsettled_extras(unsettled)} if unsettled else {},
                 "part_refs": None if ctx.assembly is None else [part.ref for part in ctx.assembly.parts],
-                "part_names": names,
+                "part_names": names, "part_materials": part_materials(ctx),
             },
         )
 
@@ -650,6 +658,7 @@ class ContactAnalysis(NonlinearAnalysis):
         if check.get("faces"):
             judged["faces"] = list(peak.faces)
         judged["at"] = self._at(result)
+        judged["scaling"] = "none"  # contact opens, closes and slides: not linear in the load
         if result.scalars["collapsed"]:
             judged["status"] = "fails"
             judged["collapsed_at_percent"] = round(result.scalars["factor"] * 100.0, 4)
@@ -811,7 +820,8 @@ class ContactAnalysis(NonlinearAnalysis):
             "deformation_scale": scalars.get("deformation_scale"),
         }
         if scalars.get("part_refs"):
-            summary["parts"] = [{"ref": ref, "name": name} for ref, name in zip(scalars["part_refs"], scalars["part_names"])]
+            summary["parts"] = with_materials([{"ref": ref, "name": name} for ref, name in zip(scalars["part_refs"], scalars["part_names"])],
+                                              scalars)
         summary["checks"] = check_results
         return summary
 

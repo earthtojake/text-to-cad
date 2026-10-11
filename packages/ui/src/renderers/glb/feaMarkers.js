@@ -711,9 +711,13 @@ export function createFeaMarkers(THREE, result) {
       return entries.map(({ kind, group: index, ends }) => {
         const text = labelText(result, kind, index, loadScale);
         if (!text) return null;
-        // The label stands past the markers' free end, off the part: a push's tails, a pull's tips.
-        const middle = (pick) => scaled(ends.map(pick).reduce(plus, [0, 0, 0]), 1 / ends.length);
-        return { kind, group: index, text, at: middle((end) => end.free), face: middle((end) => end.anchor) };
+        // The label stands past one marker's free end, off the part (a push's tail, a pull's tip), and FeaLoadLabels
+        // carries it on along that arrow. Of several, the one nearest their middle: the middle itself may be inside
+        // the part (arrows all round a shaft, a shake held at both ends), one arrow's end never is.
+        const middle = scaled(ends.map((end) => end.free).reduce(plus, [0, 0, 0]), 1 / ends.length);
+        const away = (end) => length(sub(end.free, middle));
+        const chosen = ends.reduce((best, end) => (away(end) < away(best) ? end : best));
+        return { kind, group: index, text, at: chosen.free, face: chosen.anchor };
       }).filter(Boolean);
     },
     dispose() {

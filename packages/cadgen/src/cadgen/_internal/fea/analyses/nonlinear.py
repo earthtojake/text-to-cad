@@ -41,7 +41,8 @@ from cadgen._internal.fea.analyses.static import StaticAnalysis, StaticInputs
 if TYPE_CHECKING:
     import numpy as np
 
-__all__ = ["DEFAULT_STEPS", "LIMITS", "NonlinearAnalysis", "NonlinearInputs", "collapse_words", "load_label"]
+__all__ = ["DEFAULT_STEPS", "LIMITS", "NonlinearAnalysis", "NonlinearInputs", "collapse_words", "load_label", "part_materials",
+           "with_materials"]
 
 #: Load steps a study starts with when it names none.
 DEFAULT_STEPS = 10
@@ -92,6 +93,20 @@ class NonlinearInputs(StaticInputs):
     steps: int = DEFAULT_STEPS
     #: "plasticity" or "hyperelastic": the model the study's materials ask for.
     model: str = "plasticity"
+
+
+def part_materials(ctx) -> "list[dict] | None":
+    """Each part's material, in the assembly's part order (``ctx.materials`` is indexed as the mesh's domains are):
+    its name and yield, for the summary's and the GLB's ``parts``. ``None`` for one part."""
+    if ctx.assembly is None:
+        return None
+    return [{"material": m.name, "yield_MPa": m.yield_strength} for m in ctx.materials]
+
+
+def with_materials(parts: list[dict], scalars: dict) -> list[dict]:
+    """The summary's ``parts``, each with the material it was solved with (where the solve recorded them)."""
+    materials = scalars.get("part_materials") or []
+    return [{**part, **(materials[i] if i < len(materials) else {})} for i, part in enumerate(parts)]
 
 
 def material_specs(document: dict) -> list[tuple[str, Any]]:
@@ -532,6 +547,7 @@ class NonlinearAnalysis:
                 "plastic_gauss_max": alpha_gauss, "frame_factors": factors,
                 "analysis_warnings": [collapse_words(path.factor)] if path.collapsed else [],
                 "part_refs": None if ctx.assembly is None else [part.ref for part in ctx.assembly.parts],
+                "part_materials": part_materials(ctx),
             },
         )
         return result
@@ -609,6 +625,8 @@ class NonlinearAnalysis:
                 "status": checks.check_status(ratio, 0.9), "where": {"ref": peak.ref, "at": [round(c, 3) for c in peak.at]},
             }
         judged["at"] = self._at(result)
+        # Not linear in the load: the check holds at this load only, so the verdict says its own sentence, no load multiple.
+        judged["scaling"] = "none"
         if result.scalars["collapsed"]:
             # It does not carry the load: whatever the numbers at the last load it carried, the check fails.
             judged["status"] = "fails"
@@ -714,7 +732,7 @@ class NonlinearAnalysis:
             "deformation_scale": scalars.get("deformation_scale"),
         })
         if scalars.get("part_refs"):
-            summary["parts"] = [{"ref": ref} for ref in scalars["part_refs"]]
+            summary["parts"] = with_materials([{"ref": ref} for ref in scalars["part_refs"]], scalars)
         summary["checks"] = check_results
         return summary
 

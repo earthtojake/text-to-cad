@@ -56,6 +56,8 @@ export default Object.freeze({
   family: null,
   estimate: false,
   scalesWithLoad: false,
+  // Not linear in the load: every check is judged as solved, its takeaway its own sentence, never "OK up to 18× this load".
+  scaling: "none",
   checks: Object.freeze(["ply_failure", "displacement"]),
   checkLabels: Object.freeze({}),
   defaultControls: fieldAndDeformation,

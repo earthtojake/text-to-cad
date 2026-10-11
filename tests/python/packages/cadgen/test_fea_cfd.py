@@ -377,6 +377,86 @@ class Ladder(unittest.TestCase):
                                                              "fluid": {"name": "air", "density_kg_m3": 1.204, "viscosity_Pa_s": 1.81e-05}})
 
 
+def orifice_step(directory: Path, length: float = 10.0) -> Path:
+    """A 6 mm bore through a 10 x 10 mm block along x, closed down to 3 mm by a sharp 2 mm thick plate at its middle."""
+    from build123d import Box, Cylinder, Rotation, export_step
+
+    step = directory / "orifice.step"
+    along = Rotation(0, 90, 0)
+    block = Box(length, 10, 10) - along * Cylinder(3, length)
+    export_step(block + along * (Cylinder(3, 2) - Cylinder(1.5, 2)), str(step))
+    return step
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class SharpOrifice(unittest.TestCase):
+    """Re 300 through a sharp orifice (a jet at Re 600 through it): it settles to 1e-8. Newton's Jacobian used to
+    leave out the streamline diffusion's derivative, so Newton converged only linearly and diverged past Re ~100
+    here; the gallery's orifice stopped at a residual of 4.4 after 369 Picard and 69 Newton steps, its checks
+    passing. A solve short of its tolerance stops at its deadline, says so, and its checks are not passes."""
+
+    @classmethod
+    def setUpClass(cls):
+        from cadgen._internal.fea import navier_stokes
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        directory = Path(cls._tmp.name)
+        study = {**PIPE, "mesh": {"size_mm": 1.25},
+                 "flow": {**PIPE["flow"], "inlets": [{"opening": "x_min", "velocity_m_s": 0.05}]},
+                 "view": {"checks": [{"kind": "pressure_drop", "limit_Pa": 1000}]}}
+        original, cls.problems = navier_stokes.solve_flow, []
+
+        def keep(problem, **options):
+            cls.problems.append(problem)
+            return original(problem, **options)
+
+        with mock.patch.object(navier_stokes, "solve_flow", keep):
+            cls.result, _ = solve(orifice_step(directory), directory / "orifice.glb", study)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_re_300_settles_to_the_tolerance(self):
+        solve_info = self.result.summary["solve"]
+        self.assertGreater(self.result.summary["reynolds"]["value"], 290)
+        self.assertTrue(solve_info["converged"])
+        self.assertLess(solve_info["residual"], 1e-8)
+        self.assertFalse(any("approximate" in warning for warning in self.result.warnings))
+        self.assertEqual(self.result.summary["checks"][0]["status"], "passes")
+        self.assertNotIn("settled", self.result.summary["checks"][0])
+        # The orifice loses far more than the straight bore would (Poiseuille through 6 mm over the 10 mm).
+        straight = 8 * WATER_MU * 0.010 * self.result.summary["flow_rate_m3_s"] / (math.pi * 0.003 ** 4)
+        self.assertGreater(self.result.summary["pressure_drop_Pa"], 5 * straight)
+
+    def test_newton_reaches_re_300_directly_and_says_where_it_is(self):
+        from cadgen._internal.fea import navier_stokes
+
+        lines: list[str] = []
+        with mock.patch.object(navier_stokes, "PROGRESS_S", 0.0):
+            flow = navier_stokes.solve_flow(self.problems[0], log=lines.append)
+        self.assertTrue(flow.converged)
+        self.assertEqual((flow.stages, flow.continued), ([1.0], False))
+        # Every step said where it was: the progress line a long solve prints.
+        self.assertIn(f"flow: Newton step {flow.newton} at 1 of the target Re", "\n".join(lines))
+
+    def test_at_its_deadline_it_stops_at_the_target_and_says_so(self):
+        from cadgen._internal.fea import navier_stokes
+        from cadgen._internal.fea.analyses.cfd import unsettled_check
+
+        flow = navier_stokes.solve_flow(self.problems[0], deadline_s=0.0)
+        self.assertEqual((flow.converged, flow.timed_out, flow.picard + flow.newton), (False, True, 0))
+        self.assertEqual(flow.stages[-1], 1.0)
+        self.assertGreater(flow.residual, 1e-3)    # measured at the target Re, from the Stokes flow
+        self.assertIn("stopped at its time limit (0 s)", flow.warnings[-1])
+        self.assertIn("its numbers are approximate", navier_stokes.unsettled_sentence(flow))
+        # A check on that flow is not a pass: labelled, held at close; a failure stays one.
+        judged = unsettled_check({"label": "Flow resistance", "status": "passes", "ratio": 0.4}, flow.converged)
+        self.assertEqual((judged["label"], judged["status"], judged["settled"]),
+                         ("Flow resistance (flow not settled)", "close", False))
+        self.assertEqual(unsettled_check({"label": "x", "status": "fails", "ratio": 2}, False)["status"], "fails")
+
+
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class MappedToStructure(unittest.TestCase):
     """A thick fluid (10 Pa s) pushes on the bore at a few kPa; held at its outlet end, the tube is stressed by it."""

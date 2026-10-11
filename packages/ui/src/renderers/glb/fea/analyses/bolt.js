@@ -67,6 +67,8 @@ export default Object.freeze({
   family: null,
   estimate: false,
   scalesWithLoad: false,
+  // Not linear in the load: every check is judged as solved, its takeaway its own sentence, never "OK up to 18× this load".
+  scaling: "none",
   checks: Object.freeze(["bolt_load", "joint_separation", "joint_slip", "stress", "displacement", "contact_pressure"]),
   checkLabels: Object.freeze({}),
   // The load-step scrubber (from the preload), the field, the deformation.

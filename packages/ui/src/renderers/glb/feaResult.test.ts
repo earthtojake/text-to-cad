@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyDeformation, deformationRange, faceLabel, faceTitle, faceRole, feaControls, feaMarkerShow, feaPresets, feaRamp, fieldValues, forceDirection,
   feaVerdict, formatValue, pickFace, readFeaResult, partRows, recolorByField, resultSourcePath, studyRows, weakestPartIndex,
-  feaChecks, feaFailing, feaSections, feaShownControls, feaDefaults, facePromptSummary
+  feaChecks, feaFailing, feaSections, feaShownControls, feaDefaults, facePromptSummary, routineScale, ROUTINE_MOTION_SHARE, symmetricRange
 } from './feaResult.js';
 import { shakenRows } from './fea/setup.js';
 
@@ -57,6 +57,14 @@ describe('readFeaResult', () => {
     expect(result?.fields[1]).toMatchObject({ units: 'mm', max: 0.0288, attributeScale: 1000 });
     expect(result?.ramp.length).toBe(5);  // no ramp in the file: the default
     expect(result?.safetyFactor).toBe(5.83);
+  });
+
+  it('keeps a stress whose colours stop below its singular peak, with the percentile and the peak', () => {
+    const { mesh, root } = resultMesh();
+    mesh.userData.fields[0] = { ...mesh.userData.fields[0], capped: { quantile: 0.99, peak: 948.2 } };
+    const result = readFeaResult(root);
+    expect(result?.fields[0]).toMatchObject({ max: 47.3, capped: { quantile: 0.99, peak: 948.2 } });
+    expect(result?.fields[1].capped).toBeUndefined();
   });
 
   it('is null for a GLB that is not a result', () => {
@@ -822,7 +830,8 @@ describe('the takeaway by tier', () => {
     expect(caption({})).toBe('OK up to 5.8× this load');
     expect(caption({ analysis: { type: 'drop', tier: 2, estimate: true } })).toBe('Estimate · OK up to 5.8× this drop');
     expect(caption({ analysis: { type: 'impact', tier: 3 } })).toBe('Rigid floor · OK up to 5.8× this drop');
-    expect(caption({ analysis: { type: 'nonlinear', tier: 3 } })).toBe('Lite · OK up to 5.8× this load');
+    // Nonlinear is not linear in the load: its worst check's own sentence, no load multiple.
+    expect(caption({ analysis: { type: 'nonlinear', tier: 3 } })).toBe('Lite · Peak 47 MPa, limit 276 MPa');
     expect(caption({ fit: [REFINED] })).toBe('OK up to 5.8× this load · adapted');
     // A step with no cost to the answer (an iterative solver) is not "adapted".
     expect(caption({ fit: [ITERATIVE] })).toBe('OK up to 5.8× this load');
@@ -896,5 +905,65 @@ describe('another analysis\'s setup', () => {
     expect(rows[3].children[0]).toMatchObject({ id: 'drop:0', faces: ['#o1.f2'], summary: '1 m drop, stopping in 2 mm, landing on face 2', hint: 'stopping in 2 mm' });
     // Static's setup is as it was: its own three groups, a body load its one addition.
     expect(studyRows(studyResult({ study, faces: [] }).result).map((row: any) => row.id)).toEqual(['fixed', 'loads', 'material', 'details']);
+  });
+});
+
+describe('a routine moves the model clearly', () => {
+  // A 30 mm by 3 mm strip (glTF metres) whose largest motion is 0.035 mm, as a piezo bimorph's free stroke.
+  function strip() {
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array([0, 0, 0, 0.03, 0, 0, 0.03, 0.003, 0]), 3));
+    geometry.setAttribute('_displacement', new BufferAttribute(new Float32Array([0, 0, 0, 0, 0.000035, 0, 0, 0.00002, 0]), 3));
+    return new Mesh(geometry);
+  }
+
+  it('plays at the Exaggerate value, raised so its largest motion is a tenth of the model', () => {
+    const mesh = strip();
+    const diagonal = Math.hypot(0.03, 0.003);
+    const least = (ROUTINE_MOTION_SHARE * diagonal) / 0.000035;
+    expect(routineScale(mesh, ['_displacement'], 43)).toBeCloseTo(least, 3);
+    // An Exaggerate past that is the person's, kept; 0 (no motion asked for) stays 0.
+    expect(routineScale(mesh, ['_displacement'], 5000)).toBe(5000);
+    expect(routineScale(mesh, ['_displacement'], 0)).toBe(0);
+    // Nothing to move by: as asked.
+    expect(routineScale(mesh, ['_missing'], 43)).toBe(43);
+  });
+});
+
+describe('a field whose worst is its lowest', () => {
+  it('draws its lowest at the red end of the ramp, as a stress draws its peak', () => {
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array(6), 3));
+    geometry.setAttribute('color', new BufferAttribute(new Uint8Array(8), 4, true));
+    geometry.setAttribute('_fatigue_factor', new BufferAttribute(new Float32Array([1.5, 100]), 1));
+    geometry.setAttribute('_von_mises', new BufferAttribute(new Float32Array([1.5, 100]), 1));
+    const mesh = new Mesh(geometry);
+    const ramp = [[0, [0, 0, 1]], [1, [1, 0, 0]]];
+    recolorByField(mesh, { attribute: '_von_mises', min: 1.5, max: 100 }, ramp);
+    const stress = Array.from(geometry.getAttribute('color').array);
+    recolorByField(mesh, { attribute: '_fatigue_factor', min: 1.5, max: 100 }, ramp);
+    const margin = Array.from(geometry.getAttribute('color').array);
+    expect(stress.slice(0, 3)).toEqual([0, 0, 255]);
+    expect(margin.slice(0, 3)).toEqual([255, 0, 0]);
+    expect(margin.slice(4, 7)).toEqual([0, 0, 255]);
+  });
+});
+
+describe('Ring', () => {
+  it('swings a mode through its sign on a ramp symmetric about 0, so its ends trade colours', () => {
+    expect(symmetricRange({ attribute: '_sound_pressure', min: -0.3, max: 1 })).toMatchObject({ min: -1, max: 1 });
+    expect(symmetricRange({ attribute: '_sound_pressure', min: 0, max: 0 })).toMatchObject({ min: 0, max: 0 });
+    // Half a cycle on (cos = -1), the end that was red is blue: p·cos 2πt on the symmetric ramp.
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array(6), 3));
+    geometry.setAttribute('color', new BufferAttribute(new Uint8Array(8), 4, true));
+    geometry.setAttribute('_sound_pressure', new BufferAttribute(new Float32Array([1, -0.3]), 1));
+    const mesh = new Mesh(geometry);
+    const ramp = [[0, [0, 0, 1]], [1, [1, 0, 0]]];
+    const field = symmetricRange({ attribute: '_sound_pressure', min: -0.3, max: 1 });
+    recolorByField(mesh, field, ramp, null, null, null, { valueScale: 1 });
+    expect(Array.from(geometry.getAttribute('color').array).slice(0, 3)).toEqual([255, 0, 0]);
+    recolorByField(mesh, field, ramp, null, null, null, { valueScale: -1 });
+    expect(Array.from(geometry.getAttribute('color').array).slice(0, 3)).toEqual([0, 0, 255]);
   });
 });

@@ -41,11 +41,12 @@ import { feaAnalysis } from "./fea/analyses/index.js";
 import { CHECK_KINDS, FEA_CHECK_KINDS, checkCaption, checkLabel as kindLabel, checkLine as kindLine, checkTitle, loadCaption } from "./fea/checkKinds.js";
 import { deformationRange, fieldOptions } from "./fea/controls.js";
 import { flooredFactor, plainNumber, threeFigures } from "./fea/numbers.js";
-import { DISPLACEMENT, frameControl, sigmaControl, snapFrame } from "./fea/series.js";
+import { DISPLACEMENT, SIGMA_LEVELS, frameControl, isRms, sigmaControl, snapFrame } from "./fea/series.js";
 import { detailRows, faceLabel, facePartIndex, faceSummary, isRoller, loadWords, spaced, wholeRefs } from "./fea/setup.js";
 
 export { FEA_CHECK_KINDS } from "./fea/checkKinds.js";
 export { deformationRange } from "./fea/controls.js";
+import { fieldInfo } from "./fea/fields.js";
 export { FIELD_WORDS } from "./fea/fields.js";
 export { faceLabel, faceTitle, forceDirection } from "./fea/setup.js";
 
@@ -200,6 +201,12 @@ function readChecks(raw, kinds) {
       ...(typeof check.point === "string" && check.point ? { point: check.point } : {}),
       // A fill level judged against the tank's own brim (multiphase, no limit_mm given): its line says so.
       ...(check.brim === true ? { brim: true } : {}),
+      // A check that grows with the square of what drives it (a magnetic force's stress, with the current).
+      ...(check.scaling === "quadratic" ? { scaling: "quadratic" } : {}),
+      // A check of an analysis not linear in the load (nonlinear, contact, bolt, composite): judged as solved only.
+      ...(check.scaling === "none" ? { scaling: "none" } : {}),
+      // A field's peak out in the air (electrostatic, no faces named), above what the colours on the parts show.
+      ...(check.where?.in === "air" ? { inAir: { near: text(check.where.near) } } : {}),
     }));
 }
 
@@ -587,6 +594,9 @@ export function readFeaResult(root) {
         ...(typeof field.field === "string" && field.field ? { view: field.field } : {}),
         ...(field.signed === true ? { signed: true } : {}),
         ...(field.per_frame === true ? { perFrame: true } : {}),
+        // Colours stopped below the field's peak (a singular edge's spike): where, and the peak itself.
+        ...(Number.isFinite(field.capped?.peak) && Number.isFinite(field.capped?.quantile)
+          ? { capped: { quantile: Number(field.capped.quantile), peak: Number(field.capped.peak) } } : {}),
       }));
     if (fields.length === 0) {
       return;
@@ -692,7 +702,8 @@ function vertexParts(mesh) {
  * vertices of the faces in `highlight` (indices into the result's `faces`) and of the parts in
  * `parts` (indices into its `parts`) tinted, and the parts in `softParts` tinted lightly (a joint's
  * two parts; its interface faces keep the full tint).
- * `scaling`, for a load other than the solved one: the values are drawn at `valueScale` times
+ * A field whose worst is its lowest (`lowWorst` in `fea/fields.js`: a life, a fatigue margin) is drawn
+ * down the ramp, its lowest red. `scaling`, for a load other than the solved one: the values are drawn at `valueScale` times
  * their own and the ramp spans `rangeScale` times the field's range (both the load scale; while a
  * load ramp plays the values climb toward the range). `threshold`: `{ field, value, scale }`, every
  * vertex whose value of that field (times `scale`) is under `value` drawn grey. `blend`: `{ field,
@@ -731,8 +742,11 @@ export function recolorByField(mesh, field, ramp = DEFAULT_RAMP, highlight = nul
   const stride = color.itemSize;
   const bytes = color.array;
   const cutScale = under ? threshold.scale ?? 1 : 1;
+  // A field whose worst is its lowest (a life, a fatigue margin) runs down the ramp, so its worst is red.
+  const lowWorst = fieldInfo(field.attribute)?.lowWorst === true;
   for (let i = 0; i < values.length; i += 1) {
-    const t = span > 0 ? clamp((values[i] * valueScale - low) / span, 0, 1) : 0;
+    const along = span > 0 ? clamp((values[i] * valueScale - low) / span, 0, 1) : 0;
+    const t = lowWorst ? 1 - along : along;
     const entry = Math.round(t * 255) * 3;
     const grey = under !== null && under[i] * cutScale < threshold.value;
     const base = i * stride;
@@ -810,6 +824,51 @@ export function applyDeformation(mesh, scale, baseScale, attribute = DISPLACEMEN
   return true;
 }
 
+/** A field over a range symmetric about 0 (± its largest magnitude): a signed shape that swings through its sign (Ring). */
+export function symmetricRange(field) {
+  const most = Math.max(Math.abs(field.min), Math.abs(field.max));
+  return most > 0 ? { ...field, min: -most, max: most } : field;
+}
+
+/** The least a routine (Vibrate, the Load ramp, Play) moves the model: its largest motion this share of the model's size. */
+export const ROUTINE_MOTION_SHARE = 0.1;
+
+/**
+ * The exaggeration a routine plays at: the one shown (the Exaggerate control's, `scale`), raised where that would
+ * move the model's largest motion (over the vectors `attributes`) less than `ROUTINE_MOTION_SHARE` of its diagonal,
+ * so a small part's motion (a piezo bimorph, a disc's mode) is clearly seen; an exaggeration of 0 stays 0.
+ */
+export function routineScale(mesh, attributes, scale) {
+  const wanted = Number(scale) || 0;
+  if (!(wanted > 0)) return wanted;
+  const kept = shown(mesh);
+  if (kept.diagonal === undefined) {
+    const rest = kept.position;
+    const low = [Infinity, Infinity, Infinity];
+    const high = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < rest.length; i += 1) {
+      low[i % 3] = Math.min(low[i % 3], rest[i]);
+      high[i % 3] = Math.max(high[i % 3], rest[i]);
+    }
+    kept.diagonal = rest.length ? Math.hypot(high[0] - low[0], high[1] - low[1], high[2] - low[2]) : 0;
+  }
+  kept.peaks ||= {};
+  let peak = 0;
+  for (const name of attributes) {
+    if (kept.peaks[name] === undefined) {
+      const vectors = mesh.geometry.getAttribute(name);
+      let most = 0;
+      if (vectors?.itemSize === 3) {
+        const a = vectors.array;
+        for (let i = 0; i + 2 < a.length; i += 3) most = Math.max(most, Math.hypot(a[i], a[i + 1], a[i + 2]));
+      }
+      kept.peaks[name] = most;
+    }
+    peak = Math.max(peak, kept.peaks[name]);
+  }
+  return peak > 0 && kept.diagonal > 0 ? Math.max(wanted, (ROUTINE_MOTION_SHARE * kept.diagonal) / peak) : wanted;
+}
+
 /**
  * What a view's control can move, the closed set the viewer knows how to apply: the four every
  * result has, and over a series the `mode` shown (modal, buckling) or the `frame` (a time, a
@@ -837,14 +896,25 @@ const finiteNumber = (value) => typeof value === "number" && Number.isFinite(val
  * whose range or fields it cannot use, is skipped. With no view, or none of its controls this viewer
  * can draw (an empty list, or all from a newer cadgen), the analysis's own (`defaultControls`): for
  * static, a field select over every field, opening on the first (stress), and a deformation slider
- * from 0 to four times the file's own scale. The view's are labelled in the agent's words, often a
+ * from 0 to four times the file's own scale. A view that picks the field but names no deformation keeps
+ * the analysis's own Deformation slider after its controls. The view's are labelled in the agent's words, often a
  * sentence: their labels run over the whole row (`wideLabel`), where the default two keep the
  * one-column look they always had.
  */
 export function feaControls(result) {
   const every = result.fields.map((entry) => entry.attribute);
   const chosen = result.view?.controls ? viewControls(result, every) : [];
-  return chosen.length ? chosen : feaAnalysis(result).defaultControls(result);
+  return chosen.length ? keptDeformation(result, chosen) : feaAnalysis(result).defaultControls(result);
+}
+
+/**
+ * A view that picks the field but says nothing of the deformation keeps the analysis's own Deformation
+ * slider, after its controls: choosing what the colours show is no reason to lose how far it is drawn.
+ */
+function keptDeformation(result, chosen) {
+  if (!chosen.some((control) => control.drives === "field") || chosen.some((control) => control.drives === "deformation")) return chosen;
+  const own = feaAnalysis(result).defaultControls(result).find((control) => control.drives === "deformation");
+  return own ? [...chosen, own] : chosen;
 }
 
 /** The view's controls this viewer can draw, in its order; none when it names none it knows. */
@@ -908,7 +978,22 @@ export function feaShownControls(result, controls, values) {
   const failing = feaFailing(result, loadScale);
   const shown = controls.filter((control) => (control === load ? loadShown : showsWhen(control.when, failing)));
   const effective = Object.fromEntries(controls.map((control) => [control.id, shown.includes(control) ? values[control.id] : control.defaultValue]));
-  return { shown, effective, loadScale };
+  return { shown: atSigma(shown, effective), effective, loadScale };
+}
+
+/**
+ * The field select's RMS options at the sigma level chosen ("Stress (3σ)"), as the colour bar says it;
+ * the controls as they are with no sigma control.
+ */
+function atSigma(controls, effective) {
+  const sigma = controls.find((control) => control.drives === "sigma");
+  const level = sigma ? Number(effective[sigma.id]) : NaN;
+  if (!SIGMA_LEVELS.includes(level) || level === 1) return controls;
+  return controls.map((control) => (control.drives !== "field" ? control : {
+    ...control,
+    options: control.options.map((option) => (isRms({ attribute: option.value })
+      ? { ...option, label: option.label.replace("(1σ)", `(${level}σ)`) } : option)),
+  }));
 }
 
 /** The parts of Study, in order: the view's `sections` this viewer knows, each once; with none, all four. */
@@ -1113,24 +1198,31 @@ function marginOf(result, check) {
 /**
  * One check at `loadScale` times the solved load (a linear study scales exactly), as its kind moves
  * with the load (`scaling`): a linear kind's value and share of its limit (`use`) k times the solved
- * ones, an inverse kind's value (buckling's load factor) over k and its share k times, and a kind
- * that does not scale as solved. `times`: how many times this load it would take to reach the limit
+ * ones, an inverse kind's value (buckling's load factor) over k and its share k times, a quadratic
+ * check (`scaling` on the check: a magnetic force's stress, with the current squared) k² times, its
+ * `times` the square root of the room left, and a kind that does not scale as solved. `times`: how many times this load it would take to reach the limit
  * (null for a kind that does not scale), and its `status` at it. The stress check's is the result's
  * safety factor over k (its margin, not a share, makes it close), so it says exactly what the safety
  * factor says; at the solved load a check's status is the one cadgen judged.
  */
 function checkAt(result, check, k) {
-  const scaling = CHECK_KINDS[check.kind].scaling;
+  // The check's own scaling (cadgen's: "none" for an analysis not linear in the load, "quadratic" for a magnetic
+  // force's), else its analysis's for every check (nonlinear, contact, bolt, composite: "none"), else its kind's.
+  const scaling = check.scaling || feaAnalysis(result).scaling || CHECK_KINDS[check.kind].scaling;
   const moves = scaling !== "none";
-  const use = check.ratio * (moves ? k : 1);
-  const times = !moves ? null
-    : check.kind === "stress" && result.safetyFactor !== null && result.safetyFactor > 0 ? result.safetyFactor / k : 1 / use;
+  // A quadratic check (a magnetic force's stress) is k² times as much at k times the drive.
+  const power = scaling === "quadratic" ? 2 : 1;
+  const grown = k ** power;
+  const use = check.ratio * (moves ? grown : 1);
+  // How many times this drive reaches the limit: the power's root of the room left.
+  const factor = check.kind === "stress" && result.safetyFactor !== null && result.safetyFactor > 0 ? result.safetyFactor / grown : 1 / use;
+  const times = !moves ? null : factor ** (1 / power);
   const margin = marginOf(result, check);
   const status = (k === 1 || !moves) && check.status ? check.status
     : times === null ? (use >= 1 ? "fails" : use > check.closeAt ? "close" : "passes")
-      : times < 1 ? "fails" : (margin !== null ? times < margin : use > check.closeAt) ? "close" : "passes";
-  const shown = scaling === "linear" ? check.value * k : scaling === "inverse" ? check.value / k : check.value;
-  return { ...check, use: check.kind === "stress" ? 1 / times : use, times, status, margin, shown };
+      : factor < 1 ? "fails" : (margin !== null ? factor < margin : use > check.closeAt) ? "close" : "passes";
+  const shown = scaling === "linear" || scaling === "quadratic" ? check.value * grown : scaling === "inverse" ? check.value / k : check.value;
+  return { ...check, use: check.kind === "stress" ? 1 / factor : use, times, status, margin, shown };
 }
 
 const STATUS_WORDS = Object.freeze({ fails: "fails", close: "is close to its limit", passes: "passes" });
@@ -1421,13 +1513,14 @@ const raycaster = new Raycaster();
 /**
  * The source face of the result's triangle under a world-space ray: `{ id, ref, point }`, the
  * scene contract's pick (`kit/scene.js`), with `ref` the file's face ref. null over nothing, and
- * over a triangle the mesher matched to no face.
+ * over a triangle the mesher matched to no face. `clip`: a world-space plane the view cuts the result
+ * with (`feaClip.js`): what lies past it is not there to pick, so the ray goes on to what the cut shows.
  */
-export function pickFace(result, ray) {
+export function pickFace(result, ray, clip = null) {
   const faces = vertexFaces(result.mesh);
   if (!faces) return null;
   raycaster.ray.copy(ray);
-  const hit = raycaster.intersectObject(result.mesh, false)[0];
+  const hit = raycaster.intersectObject(result.mesh, false).find((entry) => !clip || clip.distanceToPoint(entry.point) >= -1e-6);
   const ref = hit?.face ? result.faces[Math.round(faces[hit.face.a])] : null;
   return ref ? { id: ref, ref, point: hit.point } : null;
 }

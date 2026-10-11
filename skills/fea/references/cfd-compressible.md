@@ -87,6 +87,10 @@ A fixed mass flow instead: `"inlets": [{"opening": "x_min", "mass_flow_kg_s": 0.
   `gas_flow_unsettled` (warning), `mach_over_limit` / `pressure_drop_over_limit` /
   `velocity_over_limit` (error) and their `_close_to_limit` (warning), `flow_balance`, and the
   static findings when mapped.
+- A march that does not settle (a limit cycle at a shock or along a wall: its residual not halving
+  in 40 steps stops it early, at its best state) is never a settled pass: every check reads
+  `settled: false`, its label ends "(flow not settled)", a pass becomes `close`, and
+  `gas_flow_unsettled` says so.
 
 ## The speed warning (never a refusal)
 

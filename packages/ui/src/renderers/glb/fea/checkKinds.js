@@ -85,8 +85,20 @@ function fatigueLine(check) {
   if (check.life !== null && check.life !== undefined && need !== null) {
     return unbrokenHalves([`Lasts ${cyclesWords(check.life)} cycles`, `needs ${cyclesWords(need)}`]);
   }
-  const at = need !== null ? ` at ${cyclesWords(need)} cycles` : "";
-  return unbrokenHalves([`Factor ${flooredFactor(check.shown)}${at}`, `needs ${plainNumber(check.margin ?? check.limit)}`]);
+  // The factor and the cycles each kept whole but free to break between ("Factor 4.0 at 100 million cycles" is too
+  // wide for the panel's one width kept as one piece).
+  const at = need !== null ? ` ${unbrokenHalves([`at ${cyclesWords(need)} cycles`])}` : "";
+  return `${unbrokenHalves([`Factor ${flooredFactor(check.shown)}`])}${at}, ${unbrokenHalves([`needs ${plainNumber(check.margin ?? check.limit)}`])}`;
+}
+
+/**
+ * The strongest electric field against its limit: "Peak 2.8 kV/mm, limit 3 kV/mm"; a peak out in the air (`inAir`),
+ * where the colours on the parts' surface do not reach, says so: "Peak 4.5 kV/mm, in the air by hv-rod, limit 3 kV/mm".
+ */
+function electricFieldLine(check) {
+  const unit = unitOf(check, "kV/mm");
+  const where = check.inAir ? [check.inAir.near ? `in the air by ${check.inAir.near.replace(/_/g, " ")}` : "in the air"] : [];
+  return unbrokenHalves([`Peak ${plainNumber(check.shown)} ${unit}`, ...where, `limit ${plainNumber(check.limit)} ${unit}`]);
 }
 
 /** A force as people say it: "5 kN", "1.3 kN", "800 N". */
@@ -240,7 +252,7 @@ export const CHECK_KINDS = Object.freeze({
   // The strongest electric field against the field the gap holds (dry air: about 3 kV/mm); it grows with the voltage.
   electric_field: kind({
     titles: titles("Arcs over", "Close to arcing", "Holds the voltage"), defaultLabel: "Arcing", unit: "kV/mm", scaling: "linear",
-    line: peakLine("Peak", "kV/mm"),
+    line: electricFieldLine,
   }),
   // A bolt's force after loading (its preload plus its share of the load) against its proof load or a limit.
   bolt_load: kind({
@@ -348,5 +360,9 @@ export function checkLine(check, { bare = false, noun = "this load" } = {}) {
  * that does not, the check's own sentence ("Hottest 84 °C, 16 °C under its limit").
  */
 export function checkCaption(check, { times = null, noun = "this load" } = {}) {
-  return CHECK_KINDS[check.kind].caption(check, { times, noun });
+  const entry = CHECK_KINDS[check.kind];
+  // A kind that scales, judged where nothing scales (a nonlinear, contact, bolt or composite result: `times` null):
+  // no load multiple means anything, so its own sentence ("Peak 120 MPa, limit 276 MPa").
+  if (times === null && check.times == null && entry.caption === loadTakeaway) return plain(entry.line(check, { noun }));
+  return entry.caption(check, { times, noun });
 }

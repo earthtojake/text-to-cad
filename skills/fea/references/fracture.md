@@ -90,7 +90,8 @@ A 7075-T6 plate with a 2 mm edge crack, pulled at 100 MPa, cycled from 10 % to f
 ## What comes out
 
 - Fields as static: von Mises stress (its colours stop at the 99th percentile: the field is
-  singular at the front) and displacement, which shows the crack opening (the faces are drawn on
+  singular at the front; the field's entry carries `capped` with the peak, and the colour bar says
+  "≥") and displacement, which shows the crack opening (the faces are drawn on
   both sides). The viewer draws dots along the crack's front, and its Study panel has a "Crack" row
   ("2 mm edge crack on face 4", the largest K its hint).
 - Summary: `crack` (as given, with `words`), `K_max_MPa_sqrt_m` (the equivalent K that is judged),

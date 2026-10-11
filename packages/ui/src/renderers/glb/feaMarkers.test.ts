@@ -235,6 +235,16 @@ describe('every other kind of marker', () => {
     expect(shaker.labels().map((label: any) => label.text)).toEqual(['shaken 1 g along Z']);
     shaker.dispose();
 
+    // Held at two opposite faces, the shake's label stands at one shaker, off the part, not at their middle (inside it).
+    const both = cube({ fixtures: [{ type: 'fixed', faces: ['#o1.f1', '#o1.f2'] }], loads: [], excitation: { type: 'base', direction: [0, 0, 1], amplitude_g: 1 } },
+      [0, 0, 0], { analysis: { type: 'harmonic' } });
+    const twoShakers = createFeaMarkers(THREE, both);
+    twoShakers.update(positionsOf(both));
+    const [outside] = twoShakers.labels();
+    expect(Math.max(...outside.at.map(Math.abs))).toBeGreaterThanOrEqual(0.5 - 1e-6);
+    expect(Math.abs(outside.at[0])).toBeGreaterThanOrEqual(0.5 - 1e-6);
+    twoShakers.dispose();
+
     const dropped = cube({ fixtures: [], loads: [], drop: { height_mm: 1000, onto: ['#o1.f4'], stop_mm: 2 } }, [0, 0, 0], { analysis: { type: 'drop' } });
     const [fall] = markerPoses(dropped, markerSites(dropped), positionsOf(dropped));
     // Along the landing face's outward normal, standing on it by its tail.

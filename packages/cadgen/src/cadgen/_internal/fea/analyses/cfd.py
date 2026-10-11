@@ -39,7 +39,8 @@ from typing import Any, ClassVar
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Inputs, SolveContext
 
-__all__ = ["CfdAnalysis", "CfdInputs", "FLUIDS", "Fluid", "Inlet", "LIMITS", "Outlet", "RE_LIMIT", "reynolds_sentence"]
+__all__ = ["CfdAnalysis", "CfdInputs", "FLUIDS", "Fluid", "Inlet", "LIMITS", "Outlet", "RE_LIMIT", "reynolds_sentence",
+           "unsettled_check"]
 
 #: Fluids by name at 20 °C: density kg/m³, dynamic viscosity Pa·s.
 FLUIDS = {"air": (1.204, 1.81e-5), "water": (998.2, 1.002e-3)}
@@ -50,6 +51,9 @@ OPENINGS = ("x_min", "x_max", "y_min", "y_max", "z_min", "z_max")
 PROFILES = ("developed", "uniform")
 #: A check is close once its value passes this share of its limit.
 CLOSE_AT = 0.9
+#: The nonlinear flow solve stops at its best state after the time target, or this many times its estimate when the
+#: run went ahead past the target (a flap in water sat over 100 minutes on its first flow solve, silent).
+DEADLINE_OVER = 3.0
 #: The ladder: fluid_coarsen grows the free-stream size by this; continuation is offered above this Re.
 COARSEN, CONTINUE_FROM, FAIL_FROM = 2.5, 100.0, 500.0
 #: External flow: the walls are meshed at L / this by default, the free stream this many times coarser.
@@ -106,6 +110,18 @@ def reynolds_sentence(value: float, limit: int) -> str:
     return (f"Re {value:.0f} is past the laminar range (laminar above Re {limit} is unreliable): real flow is likely "
             "turbulent, so this pressure drop is a lower bound and the flow pattern may be wrong; "
             "run the same study as cfd_turbulent for the turbulent answer")
+
+
+def unsettled_check(judged: dict, settled: bool) -> dict:
+    """A check on a flow that did not settle (its solve stopped short of its tolerance) is not a pass: it is marked
+    ``settled: false``, its label says so, and a pass becomes ``close``. A failure stays a failure."""
+    if settled:
+        return judged
+    judged["settled"] = False
+    judged["label"] = f"{judged['label']} (flow not settled)"
+    if judged["status"] == "passes":
+        judged["status"] = "close"
+    return judged
 
 
 # -- parse --------------------------------------------------------------------------------------------
@@ -444,6 +460,19 @@ class CfdAnalysis:
 
     # -- solve ---------------------------------------------------------------------------------------
 
+    def deadline(self, ctx: SolveContext, inputs: CfdInputs) -> float:
+        """Seconds the nonlinear flow solve may take before it stops at its best state, saying so: the study's
+        time target, or DEADLINE_OVER times the estimate when the run went ahead past the target."""
+        from cadgen._internal.fea import fit
+
+        budget = getattr(ctx, "budget", None)
+        target = float(getattr(budget, "seconds", 0.0) or fit.DEFAULT_SECONDS)
+        try:
+            expected = float(self.estimate(ctx, inputs).seconds)
+        except Exception:  # noqa: BLE001 - no estimate: the target alone
+            expected = 0.0
+        return max(target, DEADLINE_OVER * expected)
+
     def solve(self, ctx: SolveContext, inputs: CfdInputs) -> AnalysisResult:
         import time
 
@@ -471,7 +500,8 @@ class CfdAnalysis:
         problem, inlet_rows, outlet_rows = self._problem(space, fluid, face_of, row_kind, inputs)
         schedule = tuple(re / setup.reynolds for re in ctx.plan.re_schedule) if ctx.plan.re_schedule and setup.reynolds > 0 else ()
         solver = "iterative" if ctx.plan.solver == "iterative" else "direct"
-        flow = navier_stokes.solve_flow(problem, schedule=schedule, solver=solver, log=ctx.log)
+        flow = navier_stokes.solve_flow(problem, schedule=schedule, solver=solver, log=ctx.log,
+                                        deadline_s=self.deadline(ctx, inputs))
         timings["flow_s"] = time.perf_counter() - started
         if ctx.log:
             ctx.log(f"flow: {flow.picard} Picard and {flow.newton} Newton steps, residual {flow.residual:.1e}")
@@ -492,7 +522,7 @@ class CfdAnalysis:
             analysis_warnings.append(f"the flow in and out differ by {post['imbalance']:.1%}: the solve did not settle; "
                                      "check the result with a finer mesh")
         if not flow.converged:
-            analysis_warnings.append(f"the flow solve stopped at a residual of {flow.residual:.1e}, short of 1e-8: its numbers are approximate")
+            analysis_warnings.append(navier_stokes.unsettled_sentence(flow))
         # The Reynolds and balance sentences are findings (and extras.analysis.warnings); an unsettled solve is a warning too.
         warnings += [w for w in analysis_warnings if w.startswith("the flow solve stopped") and w not in warnings]
 
@@ -619,7 +649,7 @@ class CfdAnalysis:
         if check["kind"] in ("stress", "displacement"):
             from cadgen._internal.fea.analyses import get_analysis
 
-            return get_analysis("static").judge(check, index, ctx, result, inputs)
+            return unsettled_check(get_analysis("static").judge(check, index, ctx, result, inputs), result.scalars["flow"].converged)
         if check["kind"] == "pressure_drop":
             value, limit, unit, label = post["pressure_drop_Pa"], check["limit_Pa"], "Pa", "Flow resistance"
             at = post["inlet_at"]
@@ -627,11 +657,11 @@ class CfdAnalysis:
             value, limit, unit, label = post["max_velocity_m_s"], check["limit_m_s"], "m/s", "Flow speed"
             at = post["max_velocity_at"]
         ratio = value / limit
-        return {
+        return unsettled_check({
             "kind": check["kind"], "label": check.get("label") or label, "value": round(value, 6), "limit": limit,
             "unit": unit, "ratio": round(ratio, 6), "close_at": CLOSE_AT, "status": check_status(ratio, CLOSE_AT),
             "where": {"ref": None, "at": [round(float(c), 3) for c in at]},
-        }
+        }, result.scalars["flow"].converged)
 
     def findings(self, ctx: SolveContext, result: AnalysisResult, inputs: CfdInputs,
                  check_results: list[dict], *, assembly: bool) -> list[dict]:
@@ -659,9 +689,21 @@ class CfdAnalysis:
                 "description": "the steady flow was reached by continuation; the answer is the same steady flow",
                 "items": [],
             })
+        if not flow.converged:
+            from cadgen._internal.fea import navier_stokes
+
+            found.append({
+                "check": "fea", "severity": "warning", "type": "flow_unsettled",
+                "summary": navier_stokes.unsettled_sentence(flow)[:1].upper() + navier_stokes.unsettled_sentence(flow)[1:],
+                "description": "every check on this flow is marked not settled and none passes outright; a finer mesh, "
+                               "a slower flow or a longer time target may settle it",
+                "items": [],
+            })
         for check in check_results:
             if check["kind"] not in ("pressure_drop", "velocity") or check["status"] == "passes":
                 continue
+            if check.get("settled") is False and check["ratio"] <= check["close_at"]:
+                continue   # held back from passing only because the flow did not settle: the finding above says so
             what = "pressure drop" if check["kind"] == "pressure_drop" else "fastest flow"
             value = f"{check['value']:.4g} {check['unit']}"
             fails = check["status"] == "fails"
@@ -786,7 +828,7 @@ class CfdAnalysis:
             f"wall shear up to {summary['max_wall_shear_Pa']:.4g} Pa, force on the part {summary['force_N']} N",
             f"solved by {solve['picard']} Picard and {solve['newton']} Newton steps"
             + (f" through Re {', '.join(f'{re:g}' for re in solve['stages_Re'])}" if solve["continuation"] else "")
-            + f", residual {solve['residual']:.1e}",
+            + f", residual {solve['residual']:.1e}" + ("" if solve["converged"] else " (not settled)"),
         ]
         if "max_von_mises_MPa" in summary:
             lines.append(f"under the flow's pressure: peak von Mises {summary['max_von_mises_MPa']:.4g} MPa, "

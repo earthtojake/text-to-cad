@@ -339,7 +339,7 @@ class UniformShaft(unittest.TestCase):
         self.assertEqual(checks["stress"]["status"], "passes")
         found = {finding["type"]: finding for finding in self.result.findings}
         self.assertEqual(found["critical_speed_inside"]["severity"], "error")
-        self.assertIn("runs at a critical speed: forward whirl 1 meets the spin at 6,600 rpm", found["critical_speed_inside"]["summary"])
+        self.assertIn("runs at a critical speed: 1st forward whirl meets the spin at 6,600 rpm", found["critical_speed_inside"]["summary"])
         self.assertIn("undamped_whirl", found)
 
     def test_the_glb_carries_each_criticals_whirl_and_the_spinning_stress(self):
@@ -484,6 +484,107 @@ class SpinningDisc(unittest.TestCase):
         self.assertAlmostEqual(math.hypot(at[0], at[1]), inner, delta=0.5)
         self.assertEqual(next(check for check in summary["checks"] if check["kind"] == "stress")["label"], "Spin stress")
         self.assertIn("rotor_held_still", [finding["type"] for finding in result.findings])
+
+
+class Wording(unittest.TestCase):
+    """Whirls counted in plain order, and the stability check's line: the log decrement against the least it needs."""
+
+    def test_whirls_are_numbered_in_plain_order(self):
+        from cadgen._internal.fea.analyses.rotordynamics import whirl_words
+
+        said = [whirl_words({"mode": mode, "whirl": "forward"}) for mode in (1, 2, 3, 4, 11, 12, 13, 21, 22)]
+        self.assertEqual(said, ["1st forward whirl", "2nd forward whirl", "3rd forward whirl", "4th forward whirl",
+                                "11th forward whirl", "12th forward whirl", "13th forward whirl", "21st forward whirl",
+                                "22nd forward whirl"])
+
+    def test_the_stability_line_says_the_log_decrement_against_the_least_it_needs(self):
+        from pathlib import Path
+
+        from cadgen.results import FeaResult
+
+        lowest = {"value": 0.000552, "rpm": 8000.0, "forward": False, "mode": 1}
+        check = stability_check({"kind": "stability"}, lowest)
+        self.assertEqual(check["status"], "close")
+        result = FeaResult(ok=True, document=Path("r.step"), occurrence="#o1", glb=Path("r.glb"), sidecar=Path("r.json"),
+                           analysis="rotordynamics", summary={"checks": [check]}, mesh={})
+        line = next(line for line in result.human_lines() if line.startswith("check 'Stability'"))
+        self.assertEqual(line, "check 'Stability': log decrement 0.000552 (1st backward whirl at 8,000 rpm), "
+                               "under the 0.1 it needs, close")
+        self.assertNotIn("×", line)
+        grows = stability_check({"kind": "stability"}, {**lowest, "value": -0.02, "forward": True})
+        result = FeaResult(ok=True, document=Path("r.step"), occurrence="#o1", glb=Path("r.glb"), sidecar=Path("r.json"),
+                           analysis="rotordynamics", summary={"checks": [grows]}, mesh={})
+        self.assertIn("log decrement -0.02 (1st forward whirl at 8,000 rpm), under the 0.1 it needs, fails", "\n".join(result.human_lines()))
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (numpy, scipy) is not installed")
+class Stations(unittest.TestCase):
+    def test_kept_stations_a_rounding_apart_are_one(self):
+        """A found disc's centre (199.99999999999997) and an unbalance (200) were both kept: the zero-length element
+        between them crashed the slab cut (``BRepPrimAPI_MakeBox``)."""
+        from cadgen._internal.fea.rotor import merge_stations
+
+        merged = merge_stations([96.25, 303.75], [0.0, 400.0, 10.0, 390.0, 200.0, 199.99999999999997], 0.2)
+        self.assertEqual(len(merged), 7)
+        self.assertTrue(all(b - a > 0.2 for a, b in zip(merged, merged[1:])))
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class FanShaft(unittest.TestCase):
+    """A fan: a 400 mm shaft 20 mm across with a 140 mm disc, 15 mm thick, at mid-span, on stiff damped bearings
+    10 mm in from each end, its unbalance on the disc's rim; the default (rigid) disc model."""
+
+    @classmethod
+    def setUpClass(cls):
+        from build123d import Align, Cylinder, Pos, export_step
+
+        from cadgen import fea
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        directory = Path(cls._tmp.name)
+        step = directory / "fan_shaft.step"
+        low = (Align.CENTER, Align.CENTER, Align.MIN)
+        export_step(Cylinder(10, 400, align=low) + Pos(0, 0, 192.5) * Cylinder(70, 15, align=low), str(step))
+        rim = next(face.ref for face in fea.faces(step).faces
+                   if face.surface == "cylinder" and abs(face.area_mm2 - 2 * math.pi * 70 * 15) < 1.0)
+        study = {"analysis": "rotordynamics", "material": "steel", "spin": {"axis": "Z", "rpm": [0, 8000]},
+                 "bearings": [{"at_mm": 10, "k": 200000, "c": 10}, {"at_mm": 390, "k": 200000, "c": 10}],
+                 "unbalance": [{"faces": [rim], "g_mm": 20}],
+                 "view": {"checks": [{"kind": "critical_speed", "margin_percent": 15}, {"kind": "stability"}, {"kind": "stress"}]}}
+        with redirect_stderr(io.StringIO()):
+            cls.result = fea.solve(step, directory / "fan.fea.glb", study=study)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_it_solves_with_the_disc_lumped(self):
+        self.assertTrue(self.result.ok)
+        (disc,) = self.result.summary["discs"]
+        self.assertEqual((disc["lumped"], disc["at_mm"]), (True, 200.0))
+
+    def test_the_first_critical_is_the_first_forward_whirl_near_rayleighs(self):
+        """Rayleigh: the disc plus 17/35 of the shaft's mass on the span's 48EI/L³ (the bearings far stiffer)."""
+        steel = STEEL.density  # t/mm^3
+        disc = steel * math.pi * 70 ** 2 * 15
+        shaft = steel * math.pi * 10 ** 2 * 385
+        k = 48 * E * (math.pi * 20 ** 4 / 64) / 380 ** 3
+        k = 1 / (1 / k + 1 / 400000)
+        rpm = math.sqrt(k / (disc + 17 / 35 * shaft)) * 60 / (2 * math.pi)
+        forward = [c for c in self.result.summary["critical_speeds"] if c["whirl"] == "forward" and c["order"] == 1]
+        self.assertEqual(forward[0]["mode"], 1)
+        self.assertAlmostEqual(forward[0]["rpm"] / rpm, 1.0, delta=0.05)
+        critical = next(check for check in self.result.summary["checks"] if check["kind"] == "critical_speed")
+        self.assertEqual((critical["status"], critical["mode"]), ("fails", 1))
+        said = "\n".join(finding["summary"] for finding in self.result.findings)
+        self.assertIn("1st forward whirl meets the spin", said)
+
+    def test_no_overdamped_root_is_counted_as_a_whirl(self):
+        """The bearing nodes on their 10 N s/mm dampers are overdamped: once spinning they picked up a frequency in
+        proportion to the spin (0.29 Hz at 200 rpm) and were counted as whirls 1 and 2."""
+        curves = json.loads(self.result.sidecar.read_text(encoding="utf-8"))["curves"]
+        first = curves["forward_1_Hz"]["y"]
+        self.assertTrue(all(value is None or value > 100 for value in first), first[:4])
 
 
 if __name__ == "__main__":

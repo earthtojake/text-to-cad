@@ -96,7 +96,13 @@ External flow (around the part):
   shear and force, the solver steps, and the mapped stress.
 - Findings: `reynolds_past_laminar` (warning), `pressure_drop_over_limit` / `velocity_over_limit`
   (error), `..._close_to_limit` (warning), `flow_balance` (warning: in and out differ by over 1 %),
-  `continuation` (info), and the static findings when mapped.
+  `continuation` (info), `flow_unsettled` (warning), and the static findings when mapped.
+- A solve that stops short of its tolerance (1e-8), or at its time limit (the study's time target,
+  or three times the estimate when the run went past it), returns its best state at the full Re and
+  says so: "the flow solve stopped at a residual of ..., its numbers are approximate". Every check
+  on it then reads `settled: false`, its label ends "(flow not settled)", and a pass becomes
+  `close`; the CLI's solve line ends "(not settled)". A long solve logs a progress line (step, Re
+  stage, residual, seconds) at most every 10 s.
 
 ## The Reynolds warning (never a refusal)
 

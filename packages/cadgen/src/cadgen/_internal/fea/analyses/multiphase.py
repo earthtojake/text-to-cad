@@ -56,6 +56,13 @@ LIMITS = ("Laminar (no turbulence model), incompressible; the interface is smear
           "slide freely; no evaporation, boiling, mixing or foam.",)
 G0 = 9.80665
 FILL_KINDS = ("level_mm", "fraction", "box_mm", "bubble")
+#: What a completely full inside says: it has no free surface, so it is solved as the liquid's flow alone.
+SINGLE_FLUID = "Completely full: solved as single-fluid flow, no free surface"
+
+
+def full(setup) -> bool:
+    """Whether the liquid fills the whole inside at the start (a fraction of 1, or a level at the brim)."""
+    return setup.fraction is not None and setup.fraction >= 1.0 - 1e-9
 WALLS = ("slip", "no_slip")
 OPENINGS = ("x_min", "x_max", "y_min", "y_max", "z_min", "z_max")
 #: A check is close once its value passes this share of its limit.
@@ -686,7 +693,12 @@ class MultiphaseAnalysis:
         problem = ops.TwoPhaseProblem(mesh, phases, distance, g, acceleration=acceleration, noslip=noslip, openings=openings)
         solver = "iterative" if ctx.plan.solver == "iterative" else "direct"
         march = ops.TwoPhaseSolver(problem, solver=solver, cfl=ADAPTIVE_CFL if ctx.plan.adaptive_steps else CFL, log=ctx.log)
-        if "fraction" in inputs.fill:
+        if full(setup):
+            # Completely full: no free surface, so the liquid alone flows (no level set to carry, no volume to keep).
+            # Keeping the volume chased a share the smeared interface at the brim can never reach, and ran away.
+            march.set_level_set(self._liquid_everywhere(mesh, setup))
+            march.single_fluid = True
+        elif "fraction" in inputs.fill:
             total = float(np.asarray(march.pbasis.dx).sum())
             march.set_level_set(march.keep_volume(distance, inputs.fill["fraction"] * total))
         timings["setup_s"] = time.perf_counter() - started - timings["fluid_mesh_s"]
@@ -761,6 +773,14 @@ class MultiphaseAnalysis:
         if len(keep) > 4000:
             keep = keep[np.linspace(0, len(keep) - 1, 4000).astype(int)]
         return {"points": [[*map(float, p), float(fine)] for p in keep], "radius_mm": float(fine)}
+
+    @staticmethod
+    def _liquid_everywhere(mesh, setup: _Setup):
+        """A level function deep in the liquid at every corner (at least the inside's height above the brim): the
+        liquid's share is 1 everywhere and the hydrostatic split is the liquid's alone."""
+        import numpy as np
+
+        return (setup.floor_mm + 2.0 * setup.height_mm) * 1e-3 - np.array(setup.up) @ mesh.p
 
     def _initial_distance(self, mesh, inputs: MultiphaseInputs, setup: _Setup):
         """The signed distance to the starting interface at the fluid mesh's corners, m (positive in the liquid)."""
@@ -891,7 +911,7 @@ class MultiphaseAnalysis:
             **{f"height_{label}_mm": curve(np.array(values), "mm") for label, values in record["probes"].items()},
         }
         warnings = list(march.warnings)
-        analysis_warnings = []
+        analysis_warnings = [SINGLE_FLUID] if march.single_fluid else []
         if march.max_drift > 0.01:
             analysis_warnings.append(f"the liquid's volume drifted by up to {100 * march.max_drift:.2g}% in a step before it was "
                                      "put back: the surface moved fast for the mesh; a finer mesh would follow it better")
@@ -912,7 +932,8 @@ class MultiphaseAnalysis:
                           "expected_volume": march.expected_volume, "h_min_mm": march.h_min * 1e3,
                           "smallest_step_s": float(np.diff(t).min()) if len(t) > 1 else 0.0,
                           "largest_step_s": float(np.diff(t).max()) if len(t) > 1 else 0.0,
-                          "krylov_fallbacks": march.krylov_fallbacks, "solver": march.solver, "cfl": march.cfl},
+                          "krylov_fallbacks": march.krylov_fallbacks, "solver": march.solver, "cfl": march.cfl,
+                          "single_fluid": march.single_fluid},
                 "fluid_mesh": {"elements": int(mesh.t.shape[1]), "nodes": int(mesh.p.shape[1]), "size_mm": round(fine, 4),
                                "away_mm": round(away, 4) if size_field else None},
                 "setup": setup, "end_s": float(t[-1]), "frame_t": times,
@@ -1031,6 +1052,11 @@ class MultiphaseAnalysis:
                 "items": [],
             })
         for sentence in result.scalars.get("analysis_warnings", ()):
+            if sentence == SINGLE_FLUID:
+                found.append({"check": "fea", "severity": "info", "type": "single_fluid", "summary": sentence,
+                              "description": "a completely full inside has no free surface: the liquid's flow alone is "
+                                             "solved, with no level set and no gas", "items": []})
+                continue
             found.append({"check": "fea", "severity": "warning", "type": "volume_drift", "summary": sentence,
                           "description": "the level set's volume is put back every step; a large drift means the mesh is coarse "
                                          "for how fast the surface moves", "items": []})
@@ -1104,6 +1130,8 @@ class MultiphaseAnalysis:
             "fluid_mesh": dict(s["fluid_mesh"]),
             "deformation_scale": s.get("deformation_scale"),
         }
+        if march.get("single_fluid"):
+            summary["single_fluid"] = SINGLE_FLUID
         if result.solved:
             from cadgen._internal.fea import checks
             from cadgen._internal.fea.analyses.static import floored
@@ -1169,9 +1197,11 @@ class MultiphaseAnalysis:
         fill = summary["fill"]
         force = summary["force_N"]
         volume = summary["volume"]
+        fluids = (f"{summary['fluids']['liquid']['name']} alone" if summary.get("single_fluid")
+                  else f"{summary['fluids']['liquid']['name']} under {summary['fluids']['gas']['name']}")
         lines = [
-            f"{fill['words']} ({summary['fluids']['liquid']['name']} under {summary['fluids']['gas']['name']}), "
-            f"followed for {summary['end_s']:g} s in {summary['march']['steps']} steps",
+            *([summary["single_fluid"]] if summary.get("single_fluid") else []),
+            f"{fill['words']} ({fluids}), followed for {summary['end_s']:g} s in {summary['march']['steps']} steps",
             f"liquid rises to {summary['peak_fill_level_mm']:.4g} mm above the floor at {summary['peak_fill_level_at_s']:.3g} s "
             f"(brim {summary['brim_mm']:.4g} mm)"
             + (f"; first sloshing mode {summary['first_sloshing_Hz']:.3g} Hz by linear theory" if summary.get("first_sloshing_Hz") else ""),

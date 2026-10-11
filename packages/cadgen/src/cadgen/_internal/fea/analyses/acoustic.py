@@ -860,6 +860,11 @@ class AcousticAnalysis:
             result.scalars["air_mesh"]["box_mm"] = [[round(c, 4) for c in corner] for corner in region.box]
         result.scalars["analysis_warnings"] = list(warnings)
         result.scalars["analysis_extras"] = {"acoustic": {"solve": inputs.solve, "domain": inputs.domain}}
+        if inputs.domain == "inside" and region.wetted:
+            # The air closed inside the part is shown as its own solid: the part's faces it wets, alone. The part's
+            # outside reads no pressure and would hide the air's.
+            result.scalars["shown_faces"] = sorted(int(o) for o in region.wetted)
+            result.scalars["analysis_extras"]["acoustic"]["shown"] = "air"
         # The mesh's resolution is a finding (and the ladder's step); the rest are the run's warnings too.
         result.warnings.extend(w for w in warnings if "elements per wavelength" not in w and w not in result.warnings)
         return result

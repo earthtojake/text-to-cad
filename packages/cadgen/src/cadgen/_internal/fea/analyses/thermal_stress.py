@@ -25,7 +25,7 @@ from typing import Any, ClassVar
 
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, SolveContext
-from cadgen._internal.fea.analyses.static import StaticAnalysis, StaticInputs, solved_record, solved_part_record
+from cadgen._internal.fea.analyses.static import StaticAnalysis, StaticInputs, colour_range, solved_record, solved_part_record
 from cadgen._internal.fea.analyses.thermal import HEAT_KEYS, RADIATION_KEY, ThermalAnalysis, heat_echo
 from cadgen._internal.fea.study import VIEW_DRIVES, parse_fixtures, parse_loads
 
@@ -172,8 +172,11 @@ class ThermalStressAnalysis(StaticAnalysis):
     def extras_name(self, stem: str) -> str:
         return f"{stem} heat stress"
 
-    def field_ranges(self, summary: dict, result: AnalysisResult) -> dict[str, tuple[float, float]]:
+    def field_ranges(self, summary: dict, result: AnalysisResult) -> dict[str, tuple]:
+        """Static's, the stress colours stopped at the 99th percentile where the peak is a spike above it (a clamped
+        edge, where heat stress is singular: the part would read all blue), and the temperatures'."""
         return {**super().field_ranges(summary, result),
+                "von_mises": colour_range(result.fields["von_mises"], summary["max_von_mises_MPa"]),
                 "temperature": (summary["min_temperature_C"], summary["max_temperature_C"])}
 
     def study_echo(self, inputs: ThermalStressInputs, bare: Callable[[tuple[str, ...]], list[str]]) -> dict:

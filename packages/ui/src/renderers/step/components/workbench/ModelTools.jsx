@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import ToolPanel from "../../../kit/tools/ToolPanel.jsx";
+import { ClipIcon } from "../../../kit/view-settings/ClipControls.jsx";
 import { CrossSectionControls, ExplodeControls, clipSummary } from "./ModelViewControls.js";
 import { explodablePartCount } from "../../workbench/explodableParts.js";
 
@@ -8,13 +9,6 @@ function ExplodeIcon(props) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" {...props}>
     <path d="m12 2 8 4-8 4-8-4Z M4 11l8 4 8-4 M4 17l8 4 8-4" />
     <path d="M4 6v2l8 4 8-4V6 M4 17v2l8 4 8-4v-2" />
-  </svg>;
-}
-
-function ClipIcon(props) {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M16 4.5a8.5 8.5 0 1 0 0 15" />
-    <ellipse cx="16" cy="12" rx="3" ry="7.5" />
   </svg>;
 }
 

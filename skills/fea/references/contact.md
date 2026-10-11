@@ -56,7 +56,14 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
   load: the forces here do not balance, so this result is not reliable", as an error finding, in
   `extras.analysis.warnings` and `extras.analysis.unsettled`, in that frame's label ("80 % load ·
   did not settle") and on every check, which fails. Report it as not reliable, never its numbers
-  as the answer: try more `steps`, a finer mesh where the parts touch, or friction 0.
+  as the answer: try more `steps`, a finer mesh where the parts touch, or friction 0. Once the
+  study's time target (`fit.seconds`, 600 s by default) has passed, a step that needs cutting is not
+  cut again: the path ends there as a stop ("could not be followed past 40%"), with a warning that
+  it ran out of time, never an hour of cutting. Friction's stick spring is a hundredth of the
+  normal penalty, so stick and slip settle in a few Newton iterations; faces modelled flush (apart
+  by round-off) count as touching from the first iteration, so a part held only by contact or a
+  bolt has something under it at once. A part pushed past what friction holds slides away, said
+  as an error (`slides_away`).
 - Checks, each judged at the last load solved:
   - `stress` (the default with no `view.checks`): the peak von Mises against the yield, as static.
   - `contact_pressure`: `limit_MPa` (for bearing, often 1.5 times the yield for a static load; for

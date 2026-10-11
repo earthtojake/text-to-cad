@@ -237,6 +237,17 @@ class Benchmarks(unittest.TestCase):
         self.assertEqual((check["kind"], check["label"], check["status"], check["mode"]), ("frequency", "Boom", "fails", 1))
         self.assertEqual(check["at"]["frame"], 0)
         self.assertIn("acoustic_resonance", [finding["type"] for finding in result.findings])
+        # The air is what is shown, as its own solid: the faces it wets (the box's inside), not the shell's outside,
+        # which reads no pressure and hid it.
+        raw = result.glb.read_bytes()
+        length, _ = struct.unpack_from("<II", raw, 12)
+        gltf = json.loads(raw[20:20 + length])
+        position = gltf["accessors"][gltf["meshes"][0]["primitives"][0]["attributes"]["POSITION"]]
+        inner = [BOX[0] / 2000, BOX[2] / 2000, BOX[1] / 2000]                 # glTF (x, z, -y), metres
+        for axis in range(3):
+            self.assertAlmostEqual(position["max"][axis], inner[axis], places=4)
+            self.assertAlmostEqual(position["min"][axis], -inner[axis], places=4)
+        self.assertEqual(gltf["meshes"][0]["extras"]["analysis"]["acoustic"]["shown"], "air")
         print(f"\n  inside modes {got} Hz against {[round(e, 2) for e in expected]} Hz", file=sys.stderr)
 
     def test_a_closed_duct_resonates_at_n_c_over_2L_and_a_piston_drives_it_as_theory_says(self):

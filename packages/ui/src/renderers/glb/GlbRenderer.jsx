@@ -7,6 +7,9 @@ import { EDGELESS_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
 import { useRendererShell } from "../kit/shell/useRendererShell.js";
+import ToolPanel from "../kit/tools/ToolPanel.jsx";
+import { ClipControls, ClipIcon, NEUTRAL_CLIP, clipApplied, clipSummary } from "../kit/view-settings/ClipControls.jsx";
+import { useViewSettings } from "../kit/view-settings/useViewSettings.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { useViewerHost } from "../../host/context.js";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
@@ -17,9 +20,12 @@ import { FileSheetStatusText } from "../kit/inspector/FileSheet.js";
 import { DEFAULT_POSE_VALUE, NO_PRESET_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 import {
   applyDeformation, faceIndices, facePartDetail, faceTitle, facePromptSummary, faceRole, feaControls, feaDefaults, feaMarkerShow, feaPresets, feaSections, feaShownControls,
-  feaShowsParts, feaVerdict, findingSelector, pickFace, readFeaResult, recolorByField, resultSourcePath, partRows, studySections, weakestPartIndex
+  feaShowsParts, feaVerdict, findingSelector, pickFace, readFeaResult, recolorByField, resultSourcePath, partRows, routineScale, studySections, symmetricRange,
+  weakestPartIndex
 } from "./feaResult.js";
 import { createFeaMarkers, markerGateText } from "./feaMarkers.js";
+import { feaDrawnBounds } from "./feaBounds.js";
+import { createFeaClip } from "./feaClip.js";
 import { feaAnalysis } from "./fea/analyses/index.js";
 import { activeFrameIndex, deformationAt, fieldAtFrame, framesBetween, sigmaScale, snapFrame } from "./fea/series.js";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
@@ -47,6 +53,10 @@ const EMPTY = Object.freeze([]);
 // `refs`: what Quick Edit gets when it is not the faces' own (a part's or a joint's parts); `parts`: parts to tint.
 const NO_FACES = Object.freeze({ result: null, id: "", faces: EMPTY, refs: EMPTY, parts: EMPTY, softParts: EMPTY, summary: "" });
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
+const CLIP_ICON = <ClipIcon className="size-3" strokeWidth={2} aria-hidden="true" />;
+// A result offers Clip besides what any GLB view does: a cut through it shows what is inside (a channel's
+// walls, a flow's surfaces past an opening) in the field's colours. It has no edges, so no X-ray.
+const FEA_VIEW_FEATURES = Object.freeze({ ...EDGELESS_VIEW_FEATURES, sections: Object.freeze([...EDGELESS_VIEW_FEATURES.sections, "clip"]) });
 // Select's own panels, which a person can close: Study, and above it an assembly's Parts. A result
 // opens with them up, except on a phone.
 const STUDY_PANEL = Object.freeze({ id: FEA_STUDY_PANEL_ID, label: "Study", startsClosed: false });
@@ -110,6 +120,12 @@ function GlbSurface({ view, data }) {
   // the file's view (`kit/shell/fileView.js`), written against the result's own fields, scale and
   // view: a re-solved result opens at its own defaults.
   const fea = useMemo(() => readFeaResult(scene?.document?.scene), [scene]);
+  // The box the model is drawn in over its whole series (`feaBounds.js`), grown on the scene before the shell frames
+  // it and fits the camera's near and far planes to it: a strap stretched at its last load step is never sliced off.
+  useMemo(() => {
+    const grown = feaDrawnBounds(THREE, scene, fea);
+    if (grown) Object.assign(scene, { bounds: grown, restBounds: grown });
+  }, [scene, fea]);
   const analysis = fea ? feaAnalysis(fea) : null;
   const controls = useMemo(() => (fea ? feaControls(fea) : EMPTY), [fea]);
   const presets = useMemo(() => (fea ? feaPresets(fea, controls) : EMPTY), [fea, controls]);
@@ -170,8 +186,9 @@ function GlbSurface({ view, data }) {
     setChosenFaces({ result: fea, id: row.id, faces: row.faces || EMPTY, refs: row.refs || EMPTY, parts: row.parts || EMPTY, softParts: row.softParts || EMPTY, summary: row.summary });
     if (Number.isInteger(row.frame)) jumpRef.current?.(row.frame);
   }, [fea]);
-  // A press on the result picks the face under it, called what Study calls it.
-  const pickScene = useMemo(() => (fea ? { pick: (ray) => pickFace(fea, ray) } : null), [fea]);
+  // A press on the result picks the face under it, called what Study calls it: never one Clip has cut away.
+  const clipRef = useRef(null);
+  const pickScene = useMemo(() => (fea ? { pick: (ray) => pickFace(fea, ray, clipRef.current?.plane() || null) } : null), [fea]);
   const pick = useCallback((hit) => {
     if (!hit) { clearChoice(); return; }
     const row = faceRow(rows, hit.ref);
@@ -225,9 +242,11 @@ function GlbSurface({ view, data }) {
   // The markers built for the result (below), whose kinds Display's gate names.
   const [markers, setMarkers] = useState(null);
   const chosenSomething = faces.faces.length > 0 || faces.refs.length > 0;
+  // The file's Display settings, held here as well as handed to the shell: Clip's panel edits them.
+  const displaySettings = useViewSettings(view.appearance?.colorScheme === "dark" ? "dark" : "light");
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: loaded.revision,
-    features: EDGELESS_VIEW_FEATURES, toolModes: GLB_TOOL_MODES, previewable: true, scene,
+    features: fea ? FEA_VIEW_FEATURES : EDGELESS_VIEW_FEATURES, toolModes: GLB_TOOL_MODES, previewable: true, scene, viewSettings: displaySettings,
     load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
     animation, live: LIVE, rendererState, displaySections: markerShow ? [{
       id: "fea-markers", title: analysis.displayTitle, enabled: markersOn, onEnabledChange: (on) => choose({ markers: on }),
@@ -239,6 +258,34 @@ function GlbSurface({ view, data }) {
   shellRef.current = shell;
   requestRenderRef.current = shell.requestRender;
   useDeclinedSelectReference(document);
+
+  // Clip: the view's cut through the result (`feaClip.js`), as the viewport has applied it; none in
+  // preview, which suspends the tool effects. It cuts the box the result is drawn in over its series.
+  useEffect(() => {
+    if (!fea || !scene) return undefined;
+    const clip = createFeaClip(THREE, fea.mesh, scene.object3D);
+    clipRef.current = clip;
+    return () => { clipRef.current = null; clip.dispose(); requestRenderRef.current?.(); };
+  }, [fea, scene, requestRenderRef]);
+  const cut = shell.previewing ? null : shell.frame.resolvedScene?.view?.clip || null;
+  const clipBounds = scene?.restBounds || scene?.bounds || null;
+  useEffect(() => { if (clipRef.current?.set(cut, clipBounds)) requestRenderRef.current?.(); }, [fea, cut, clipBounds, requestRenderRef]);
+  // Its panel is a kept effect's, as a STEP's is: up while Clip is the tool or the view cuts, and through a
+  // drag that passes its neutral end, until the pointer lets go.
+  const shownView = displaySettings.scene.view;
+  const [clipHeld, setClipHeld] = useState(false);
+  useEffect(() => {
+    if (!clipHeld) return undefined;
+    const release = () => setClipHeld(false);
+    window.addEventListener("pointerup", release, true);
+    window.addEventListener("pointercancel", release, true);
+    return () => { window.removeEventListener("pointerup", release, true); window.removeEventListener("pointercancel", release, true); };
+  }, [clipHeld]);
+  const clipShown = Boolean(fea) && !shell.previewing && (shell.toolMode === GLB_TOOL.CLIP || clipHeld || clipApplied(shownView));
+  const removeClip = () => {
+    displaySettings.store.patch({ clip: NEUTRAL_CLIP });
+    if (shell.toolMode === GLB_TOOL.CLIP) shell.selectDefaultTool();
+  };
 
   // The colours and the drawn displacement follow the choice, in place on the loaded geometry, with
   // the faces (or a part's triangles) chosen in Study, or picked, tinted over the field. At a load
@@ -260,7 +307,8 @@ function GlbSurface({ view, data }) {
     const blend = between?.weight > 0 ? { field: fieldAtFrame(fea, activeField, between.to), weight: between.weight } : null;
     const level = sigmaScale(activeField, sigma);
     const threshold = thresholdField ? { field: fieldAtFrame(fea, thresholdField, index), value: thresholdValue, scale: shownLoad } : null;
-    let changed = recolorByField(fea.mesh, field, fea.ramp, tinted, faces.parts, faces.softParts,
+    // Ring swings the shape's sign (p·cos 2πt) on a ramp symmetric about 0, so a mode's ends visibly trade colours.
+    let changed = recolorByField(fea.mesh, routine?.kind === "pulse" ? symmetricRange(field) : field, fea.ramp, tinted, faces.parts, faces.softParts,
       { valueScale: shownLoad * level * (routine?.kind === "pulse" ? Math.cos(routine.value) : 1), rangeScale: fieldLoad * level, threshold,
         ...(blend ? { blend } : {}) });
     const { attribute, imaginary } = deformationAt(fea, index);
@@ -268,9 +316,20 @@ function GlbSurface({ view, data }) {
     if (attribute && routine?.kind === "vibrate") {
       vector = imaginary ? [[attribute, Math.cos(routine.value)], [imaginary, -Math.sin(routine.value)]] : [[attribute, Math.sin(routine.value)]];
     } else if (attribute && blend) {
-      vector = [[attribute, 1 - blend.weight], [deformationAt(fea, between.to).attribute || attribute, blend.weight]];
+      // Two frames deformed by the same vector (a temperature series, whose displacement is the file's
+      // one in every frame) are that vector: Play then steps the colours alone, never rewriting every
+      // position and normal and re-placing every marker each tick for a model that does not move.
+      const next = deformationAt(fea, between.to).attribute || attribute;
+      vector = next === attribute ? attribute : [[attribute, 1 - blend.weight], [next, blend.weight]];
     }
-    if (vector && applyDeformation(fea.mesh, activeScale * shownLoad, fea.deformationScale, vector)) {
+    // Vibrate, and a Load ramp outside the static family (a voltage, a buckle), move the model clearly: at the
+    // Exaggerate value, raised where that moves it less than a tenth of its size. The static family's Load ramp is
+    // drawn as it always was, and Play's frames as the scrubber shows them.
+    const swings = routine?.kind === "vibrate" || (routine?.kind === "load_ramp" && analysis.family !== "static");
+    const moving = swings && attribute
+      ? routineScale(fea.mesh, [attribute, ...(imaginary ? [imaginary] : []), ...(blend ? [deformationAt(fea, between.to).attribute || attribute] : [])], activeScale)
+      : activeScale;
+    if (vector && applyDeformation(fea.mesh, moving * shownLoad, fea.deformationScale, vector)) {
       markersRef.current?.update(fea.mesh.geometry.getAttribute("position").array);
       changed = true;
     }
@@ -307,7 +366,14 @@ function GlbSurface({ view, data }) {
 
   // Select is an FEA result's one tool, with Study (and an assembly's Parts) its panels; a GLB that is not a result has none.
   const selectActive = Boolean(fea) && !shell.previewing && shell.toolMode === GLB_TOOL.SELECT;
-  const tools = fea ? [shell.tools.own({ id: GLB_TOOL.SELECT, label: "Select", icon: SELECT_ICON, panel: parts.length ? ASSEMBLY_PANELS : STUDY_PANEL })] : [];
+  const tools = fea ? [shell.tools.own({ id: GLB_TOOL.SELECT, label: "Select", icon: SELECT_ICON, panel: parts.length ? ASSEMBLY_PANELS : STUDY_PANEL }),
+    // A press opens its panel neutral (an edit cuts); a press while it is up, as its X, removes the cut.
+    shell.tools.own({ id: GLB_TOOL.CLIP, label: "Clip", icon: CLIP_ICON, active: clipShown,
+      onSelect: () => {
+        if (clipShown) { removeClip(); return; }
+        shell.selectTool(GLB_TOOL.CLIP);
+        displaySettings.store.patch({ clip: NEUTRAL_CLIP });
+      } })] : [];
   // One face chosen is the Reference's: its ref, what the study does to it, and Copy (the copy key too).
   const single = faces.faces.length === 1 && !faces.refs.length ? faces.faces[0] : "";
   const copyFace = useCallback(async () => {
@@ -328,11 +394,18 @@ function GlbSurface({ view, data }) {
     },
     onReset: () => choose({ ...NO_VALUES, preset: null }),
   };
-  const toolPanels = fea ? <FeaStudyPanel active={selectActive} parts={parts} openPart={weakestPartIndex(fea)} setup={sections.setup} details={sections.details}
-    sections={order} verdict={verdict} chosen={faces.id} onChoose={chooseFaces}
-    result={resultControls}
-    reference={single ? { title: faceTitle(fea, single), ref: single, role: faceRole(fea, single), part: facePartDetail(fea, single, loadScale) } : null} onClearSelection={clearChoice}
-    copy={single ? { label: "Copy", shortcut: shell.frame.copyShortcut, onCopy: copyFace } : null} /> : null;
+  const toolPanels = fea ? <>
+    <FeaStudyPanel active={selectActive} parts={parts} openPart={weakestPartIndex(fea)} setup={sections.setup} details={sections.details}
+      sections={order} verdict={verdict} chosen={faces.id} onChoose={chooseFaces}
+      result={resultControls}
+      reference={single ? { title: faceTitle(fea, single), ref: single, role: faceRole(fea, single), part: facePartDetail(fea, single, loadScale) } : null} onClearSelection={clearChoice}
+      copy={single ? { label: "Copy", shortcut: shell.frame.copyShortcut, onCopy: copyFace } : null} />
+    {clipShown ? <div className="contents" data-fea-clip-panel="" onPointerDownCapture={() => setClipHeld(true)}>
+      <ToolPanel id="clip" title="Clip" label="Clip controls" summary={clipSummary(shownView)} fit="fixed" collapsible={false} onClose={removeClip}>
+        <div className="space-y-1 pb-1"><ClipControls viewSettings={shownView} onViewSettingsPatch={displaySettings.store.patch} bounds={clipBounds} /></div>
+      </ToolPanel>
+    </div> : null}
+  </> : null;
 
   const overlay = fea ? (viewport) => <>
     <PointerPick viewport={viewport} scene={pickScene} enabled={selectActive} onPick={pick} />

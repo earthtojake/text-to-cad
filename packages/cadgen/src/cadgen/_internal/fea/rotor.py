@@ -54,6 +54,10 @@ _TWO_PI = 2.0 * math.pi
 RIGID_SHARE = 1e-6
 #: An eigenvalue past this size is the infinite one a massless DOF gives.
 _INFINITE = 1e12
+#: A root dying away this many times faster than it swings (log decrement over 2π times it, damping ratio over
+#: 0.9988) is no whirl: an overdamped motion, a bearing node held on a damper stiffer than its mass can swing,
+#: whose tiny frequency is the spin's gyroscopic coupling. It is left out of the whirl list (and of its numbering).
+OVERDAMPED = 20.0
 
 
 def rpm_of(omega: float) -> float:
@@ -415,7 +419,8 @@ def whirl(system: System, omega_spin: float, *, scale: float | None = None) -> l
     """Every whirl mode at spin ``omega_spin`` (rad/s), slowest first: the state-space eigenproblem
     ``[[I, 0], [0, M]] z' = [[0, I], [-K, -(C + ΩG)]] z``. A massless DOF's infinite eigenvalue, and a
     rigid-body motion's zero one (a tilt nothing holds), are left out: a whirl slower than a millionth of ``scale``
-    (rad/s; the sweep's top speed), else of the fastest whirl found."""
+    (rad/s; the sweep's top speed), else of the fastest whirl found. So is an overdamped root
+    (:data:`OVERDAMPED`), which dies away before it swings."""
     import numpy as np
     import scipy.linalg as la
 
@@ -436,7 +441,7 @@ def whirl(system: System, omega_spin: float, *, scale: float | None = None) -> l
         values, vectors = la.eig(A, B, check_finite=False)
     finite = np.isfinite(values) & (np.abs(values) < _INFINITE)
     zero = RIGID_SHARE * (scale if scale else max(1.0, float(np.max(np.abs(values[finite]), initial=1.0))))
-    chosen = np.flatnonzero(finite & (values.imag > zero))
+    chosen = np.flatnonzero(finite & (values.imag > zero) & (-values.real <= OVERDAMPED * values.imag))
     chosen = chosen[np.argsort(values[chosen].imag)]
     lams = values[chosen]
     shapes = system.expand(vectors[:n, chosen]) if len(chosen) else np.zeros((system.rotor.dofs, 0), dtype=complex)
@@ -860,9 +865,14 @@ def disc_runs(slabs: Sequence[Slab]) -> list[tuple[int, int]]:
 
 
 def merge_stations(points: Sequence[float], keep: Sequence[float], tolerance: float) -> list[float]:
-    """The stations sorted, any within ``tolerance`` of a kept one (or of each other) merged into it."""
-    kept = sorted(set(float(k) for k in keep))
-    out = list(kept)
+    """The stations sorted, any within ``tolerance`` of a kept one (or of each other) merged into it.
+
+    Kept stations within ``tolerance`` of each other are one station too: a found disc's centre computed at
+    199.99999999999997 mm and an unbalance at 200 mm would otherwise leave a zero-length element between them."""
+    out: list[float] = []
+    for k in sorted(set(float(k) for k in keep)):
+        if all(abs(k - q) > tolerance for q in out):
+            out.append(k)
     for p in sorted(points):
         if all(abs(p - q) > tolerance for q in out):
             out.append(float(p))

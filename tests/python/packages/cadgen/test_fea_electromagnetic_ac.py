@@ -277,6 +277,67 @@ class PlateInUniformField(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_FEA, "needs the [fea] extra")
+class InductionHeatedPart(unittest.TestCase):
+    """A coil (its own part, stranded) around an aluminium disc at 2 kHz, the disc cooled by still air.
+
+    An assembly's face refs have no mesh ordinal until it is meshed, and the fit ladder sizes the skin before that:
+    this study once failed there (KeyError on the disc's face ref). Solved, every watt the disc loses leaves through
+    its cooled faces, T = T_air + P / (h A), and the coil, which no heat reaches and nothing cools, reads the ambient.
+    """
+
+    RADIUS, THICK, H, AIR_C = 8.0, 2.0, 10.0, 20.0
+
+    @classmethod
+    def setUpClass(cls):
+        from build123d import Compound, Cylinder, export_step
+
+        from cadgen import fea
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        directory = Path(cls._tmp.name)
+        coil = Cylinder(14, 6) - Cylinder(11, 6)
+        coil.label = "coil"
+        disc = Cylinder(cls.RADIUS, cls.THICK)
+        disc.label = "disc"
+        step = directory / "induction.step"
+        export_step(Compound(children=[coil, disc]), str(step))
+        disc_faces = [face.ref for face in fea.faces(step, occurrence="#o1.2").faces]
+        cls.result = solve(step, directory / "induction.glb", {
+            "analysis": "electromagnetic", "mode": "ac_magnetic", "frequency_Hz": 2000, "material": ALUMINIUM,
+            "parts": {"coil": {"material": "brass"}, "disc": {"material": ALUMINIUM}},
+            "mesh": {"size_mm": 1.5}, "air": {"around_mm": 8},
+            "coils": [{"part": "coil", "turns": 50, "A": 10, "axis": {"direction": [0, 0, 1], "point_mm": [0, 0, 0]}}],
+            "electro_thermal": {"convection": [{"faces": disc_faces, "h_W_m2K": cls.H, "ambient_C": cls.AIR_C}]},
+            "view": {"checks": [{"kind": "temperature", "max_C": 1000}]}})
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_the_loss_heats_the_workpiece_by_p_over_h_a(self):
+        self.assertTrue(self.result.ok)
+        summary = self.result.summary
+        self.assertEqual([loss["part"] for loss in summary["losses"]], ["disc"])  # the coil's wire is stranded
+        self.assertGreater(summary["loss_W"], 0.0)
+        self.assertAlmostEqual(summary["heat_in_W"] / summary["loss_W"], 1.0, delta=1e-3)
+        area_m2 = (2 * math.pi * self.RADIUS ** 2 + 2 * math.pi * self.RADIUS * self.THICK) * 1e-6
+        rise = summary["loss_W"] / (self.H * area_m2)
+        self.assertAlmostEqual((summary["max_temperature_C"] - self.AIR_C) / rise, 1.0, delta=0.02)
+
+    def test_the_glb_names_each_part_and_its_own_material(self):
+        # The viewer's "Made of" and a face's part ("coil · face 3") read these; electromagnetic writes no per-part
+        # results of its own, so they come from the assembly's plan.
+        extras, _ = glb_extras(self.result.glb)
+        self.assertEqual([(part["ref"], part["name"], part["material"]) for part in extras["parts"]],
+                         [("#o1.1", "coil", "Brass (C36000)"), ("#o1.2", "disc", "Aluminum 6061-T6")])
+
+    def test_the_coil_no_heat_reaches_reads_the_ambient_not_zero(self):
+        extras, _ = glb_extras(self.result.glb)
+        temperature = next(entry for entry in extras["fields"] if entry["field"] == "temperature")
+        self.assertAlmostEqual(temperature["min"], self.AIR_C, places=3)
+
+
+@unittest.skipUnless(HAVE_FEA, "needs the [fea] extra")
 class LowFrequencyLimit(unittest.TestCase):
     def test_a_coil_at_one_hertz_has_the_magnetostatic_field_and_inductance(self):
         from build123d import Cylinder, export_step

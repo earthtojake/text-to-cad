@@ -523,6 +523,27 @@ def hertz(frequency: float) -> str:
     return f"{frequency:.3g} Hz"
 
 
+def _unheld_and_unheated(system) -> "np.ndarray":
+    """The temperature DOF of every piece of the mesh conduction does not join to a held or cooled face and no heat
+    goes into: its temperature is not set by anything (a singular block of the steady solve)."""
+    import numpy as np
+    from scipy.sparse.csgraph import connected_components
+
+    count, piece = connected_components(system.conduction, directed=False)
+    if count == 1:
+        return np.zeros(0, dtype=np.int64)
+    held = np.zeros(count, dtype=bool)
+    for entry in system.fixed:
+        held[piece[entry.dofs]] = True
+    for film in system.films:
+        held[piece[np.unique(film.matrix.tocoo().row)]] = True
+    heated = np.zeros(count)
+    for entry in system.heat:
+        np.add.at(heated, piece, np.abs(entry.load))
+    loose = ~held & (heated == 0)
+    return np.flatnonzero(loose[piece]).astype(np.int64)
+
+
 def _place(at) -> list[float]:
     return [round(float(c), 3) for c in at]
 
@@ -642,7 +663,9 @@ class ElectromagneticAnalysis:
         return min(size, depth / SKIN_ELEMENTS)
 
     def _thinnest_skin(self, ctx: SolveContext, inputs: ElectromagneticInputs) -> float:
-        parts = _parts(ctx, inputs.face_refs)
+        # Only the parts' materials: this runs in the fit ladder before meshing, when an assembly's face refs have
+        # no mesh ordinal yet.
+        parts = _parts(ctx, ())
         depths = [_skin(parts.materials[i], inputs.frequency_Hz) for i in _eddy_parts(parts, inputs)]
         return min(depths) if depths else math.inf
 
@@ -928,6 +951,7 @@ class ElectromagneticAnalysis:
         if electro:
             scalars["energy_J"] = em_ops.EPS0 * energy / share
             scalars["max_field_kV_mm"] = peak
+            scalars["max_in"] = self._where_peak(region, parts, int(e_peak), region.space.dof_locations[peak_dof])
             if inputs.between is not None:
                 # As a bridge measures it: the charge on the first electrode over the voltage between the two, every
                 # other electrode at its own voltage (a guard ring at the first's voltage keeps the fringe off it).
@@ -1001,11 +1025,35 @@ class ElectromagneticAnalysis:
 
         load = asm(into, space.scalar, q=joule) * thermal_ops.WATT
         system.heat.append(thermal_ops.Heat(load, float(load.sum()) / thermal_ops.WATT))
+        unheld = _unheld_and_unheated(system)
+        if len(unheld):
+            # A part no heat reaches and nothing holds or cools (an induction coil beside its workpiece, the air
+            # not modelled) has no temperature of its own: it is drawn at the ambient, not at 0 °C.
+            system.fixed.append(thermal_ops.Fixed(unheld, float(inputs.reference_C or 0.0)))
         T, how = thermal_ops.solve_steady(system, warnings, solver=plan_solver(ctx))
         balance = thermal_ops.heat_balance(system, T)
         scalars["thermal"] = {"balance": balance, "reference_C": inputs.reference_C, "how": how}
         scalars["reference_C"] = inputs.reference_C
         return T
+
+    @staticmethod
+    def _where_peak(region, parts: _Parts, element: int, at) -> dict:
+        """Where the strongest field is: in a part (its name), or in the air and the part nearest it. The colours are
+        on the parts' surface, so a peak out in the air reads higher than the colour bar: the result says where."""
+        import numpy as np
+
+        domain = int(region.domain[element])
+        if not region.air or domain < region.parts:
+            return {"in": "part", "part": parts.names[domain]}
+        points = region.space.mesh.p
+        nearest, best = None, math.inf
+        for part in range(region.parts):
+            corners = np.unique(region.space.mesh.t[:, region.domain == part])
+            if len(corners):
+                gap = float(np.linalg.norm(points[:, corners] - np.asarray(at, dtype=float)[:, None], axis=0).min())
+                if gap < best:
+                    nearest, best = part, gap
+        return {"in": "air", **({"near": parts.names[nearest], "gap_mm": round(best, 3)} if nearest is not None else {})}
 
     def _unfold(self, ctx: SolveContext, result: AnalysisResult, planes) -> None:
         """The solved half (or quarter) mirrored back into the whole part."""
@@ -1333,7 +1381,10 @@ class ElectromagneticAnalysis:
         if check["kind"] in ("stress", "displacement"):
             from cadgen._internal.fea.analyses import get_analysis
 
-            return get_analysis("static").judge(check, index, ctx, result, inputs)
+            judged = get_analysis("static").judge(check, index, ctx, result, inputs)
+            # The magnetic force, and so the stress and displacement it makes, grow with the current squared:
+            # twice the current is four times the stress, so the current that reaches a limit is its square root.
+            return {**judged, "scaling": "quadratic"}
         if check["kind"] == "temperature":
             from cadgen._internal.fea.analyses.thermal import temperature_check
 
@@ -1344,6 +1395,7 @@ class ElectromagneticAnalysis:
             )
             return temperature_check(check, peak.value, inputs.reference_C, at=peak.at, ref=peak.ref, faces=peak.faces)
         faces = tuple(check.get("faces", ()))
+        peak_in = None
         if faces:
             peak = kinds.field_max_over(
                 result.fields["electric_field"], faces, boundary=result.boundary_quadratic,
@@ -1354,12 +1406,14 @@ class ElectromagneticAnalysis:
         else:
             # The strongest field anywhere: in a dielectric part or in the air between the parts.
             value, at, ref, named = result.scalars["max_field_kV_mm"], result.scalars["max_at"], None, ()
+            peak_in = result.scalars.get("max_in")
         limit = check["limit_kV_mm"]
         ratio = value / limit
         return {
             "kind": "electric_field", "label": check.get("label") or "Arcing", "value": round(value, 6), "limit": limit,
             "unit": "kV/mm", "ratio": round(ratio, 6), "close_at": CLOSE_AT, "status": check_status(ratio, CLOSE_AT),
-            "where": {"ref": ref, "at": _place(at)}, **({"faces": list(named)} if named else {}),
+            "where": {"ref": ref, "at": _place(at), **(peak_in if not faces and peak_in else {})},
+            **({"faces": list(named)} if named else {}),
         }
 
     def findings(self, ctx: SolveContext, result: AnalysisResult, inputs: ElectromagneticInputs,
@@ -1430,6 +1484,7 @@ class ElectromagneticAnalysis:
                 "min_potential_V": round(float(potential.min()), 6),
                 "max_potential_V": round(float(potential.max()), 6),
                 "max_surface_field_kV_mm": round(float(result.fields["electric_field"].max()), 6),
+                **({"max_in": s["max_in"]} if s.get("max_in") else {}),
                 "electrodes": [{"name": e["name"], "V": e["V"], "charge_nC": float(f"{e['charge_nC']:.6g}")}
                                for e in s["electrodes"]],
             })
@@ -1572,8 +1627,13 @@ class ElectromagneticAnalysis:
         mode = summary["mode"]
         lines = []
         if mode == "electrostatic":
-            lines.append(f"strongest field {summary['max_field_kV_mm']:.4g} kV/mm at {summary['max_at_mm']} mm; "
-                         f"voltage {summary['min_potential_V']:g} to {summary['max_potential_V']:g} V")
+            where = summary.get("max_in") or {}
+            inside = (f" in the air near {where['near']}" if where.get("in") == "air" and where.get("near")
+                      else " in the air" if where.get("in") == "air" else "")
+            on_surface = (f" ({summary['max_surface_field_kV_mm']:.4g} kV/mm on the parts' surface)"
+                          if where.get("in") == "air" else "")
+            lines.append(f"strongest field {summary['max_field_kV_mm']:.4g} kV/mm{inside} at {summary['max_at_mm']} mm"
+                         f"{on_surface}; voltage {summary['min_potential_V']:g} to {summary['max_potential_V']:g} V")
             if "capacitance_pF" in summary:
                 a, b = summary["capacitance_between"]
                 lines.append(f"capacitance between {a} and {b}: {summary['capacitance_pF']:.6g} pF; "

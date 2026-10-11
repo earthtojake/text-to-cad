@@ -43,8 +43,11 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
 - `drop.floor`: `"rigid"`, the only floor modelled (and the default).
 - `drop.friction`: the Coulomb friction coefficient between the part and the floor, default 0.
 - `window_ms`: how long after first contact to follow it, or `"auto"` (the default): three times
-  the contact-time estimate below. A part still pressing on the floor at the end says so (an info
-  finding, `still_in_contact`); give a longer window.
+  the contact-time estimate below. The estimate is a guess (a corner landing on a soft part stays
+  down several times longer), so an automatic window still pressing on the floor at its end goes on
+  until the first impact is over, plus 20 %, up to four times itself (`extended_to_pulse_end` in the
+  summary). A part still pressing on the floor at the end of the run says so (an info finding,
+  `still_in_contact`); give a longer window.
 - `plasticity`: optional, `{"tangent_MPa": 200}`. Bilinear J2: the material is E up to its yield,
   then the tangent slope (0 is perfectly plastic). Without it the part stays elastic and the stress
   can run past yield. The material's yield is required with it. `tangent_MPa` may be left out when

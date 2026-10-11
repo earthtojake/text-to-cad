@@ -67,10 +67,10 @@ if TYPE_CHECKING:
     from cadgen._internal.fea.femspace import FemSpace
 
 __all__ = [
-    "AUGMENT_TOLERANCE", "Constraints", "ContactProblem", "ContactResponse", "ContactState", "MAX_AUGMENTATIONS",
+    "AUGMENT_TOLERANCE", "Constraints", "ContactProblem", "ContactResponse", "ContactState", "GAP_ROUNDOFF_MM", "MAX_AUGMENTATIONS",
     "PENALTY", "PairSpec", "PlaneSpec", "body_of_nodes", "close_gaps", "closest_on_triangles", "pair_constraints",
     "plane_constraints", "pressure_field", "respond", "shape_weights", "stabilising_springs", "surface_triangles",
-    "vector_dofs",
+    "TANGENTIAL_SHARE", "vector_dofs",
 ]
 
 #: The penalty, ε = PENALTY · E · sqrt(node's area): stiff against the elements under the node, so a first solve
@@ -511,6 +511,17 @@ def plane_constraints(space: "FemSpace", plane: PlaneSpec, node_part: "np.ndarra
                     np.repeat(n[None, :], len(point), axis=0), gap[point], E, plane.friction)
 
 
+#: Friction's stick spring, as a share of the normal penalty. The normal penalty is as stiff as a few elements in
+#: series, and a stick spring that stiff chatters near slip: Newton flips a point between stick and slip and the
+#: sideways stiffness of a part held only by contact comes and goes (a block pushed sideways on a plate stalled every
+#: Uzawa re-solve at any load, for an hour). A hundredth of it settles stick and slip in a few iterations; the elastic
+#: give it allows before a point slips is a hundredth of an element's own deformation or less.
+TANGENTIAL_SHARE = 0.01
+
+#: A gap this small (mm) is faces modelled flush, apart by round-off only: touching, for the tangent.
+GAP_ROUNDOFF_MM = 1e-9
+
+
 def respond(constraints: Constraints, u: "np.ndarray", state: ContactState, vdofs: "np.ndarray", *, tangent: bool,
             scale: float = 1.0, stick: bool = False) -> ContactResponse:
     """The contacts' force (and tangent) at ``u`` from the committed ``state``: augmented normal force, and the
@@ -536,7 +547,9 @@ def respond(constraints: Constraints, u: "np.ndarray", state: ContactState, vdof
     trial = state.multiplier - eps * gap
     p = np.maximum(trial, 0.0)
     # Touching (or held closed by its multiplier) gives the tangent its stiffness, so a part resting with no gap is held.
-    closed = (trial > 0) | (gap <= 0)
+    # A gap of round-off (faces modelled flush, 1e-15 mm apart) is touching: else a part held by contact alone has
+    # nothing under it at the first Newton step and is flung (a bolted strap under its preload).
+    closed = (trial > 0) | (gap <= GAP_ROUNDOFF_MM)
     pressing = trial > 0
     nn = n[:, :, None] * n[:, None, :]
     P = np.eye(3)[None] - nn                                              # (m, 3, 3) the tangent plane's projector
@@ -547,7 +560,7 @@ def respond(constraints: Constraints, u: "np.ndarray", state: ContactState, vdof
     rubbing = closed & (c.friction > 0)
     if rubbing.any():
         r = np.flatnonzero(rubbing)
-        stiff = c.penalty[r]
+        stiff = TANGENTIAL_SHARE * c.penalty[r]
         t_trial = stiff[:, None] * (sliding[r] - state.slip[r])
         size_t = np.linalg.norm(t_trial, axis=1)
         limit = c.friction[r] * state.multiplier[r]
@@ -693,7 +706,7 @@ class ContactProblem:
         rubbing = self.constraints.friction > 0
         if rubbing.any():
             eps = self.constraints.penalty
-            self.state.slip = np.where(rubbing[:, None], response.sliding - response.tangential / eps[:, None], 0.0)
+            self.state.slip = np.where(rubbing[:, None], response.sliding - response.tangential / (TANGENTIAL_SHARE * eps[:, None]), 0.0)
         self.scale, self.stick = SOFT, True
         if self.on_commit is not None:
             self.on_commit(u, response)

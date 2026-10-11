@@ -90,4 +90,14 @@ describe('composite', () => {
     root.add(named.mesh);
     expect(readFeaResult(root)!.study.laminae).toEqual({ cfrp: { E1_MPa: 135000, E2_MPa: 10000, nu12: 0.3 } });
   });
+
+  it('says its worst check\'s own sentence, never a load multiple: a Tsai-Wu index is not proportional to the load', () => {
+    const result = compositeResult();
+    for (const scaling of [{ scaling: 'none' }, {}]) {
+      const verdict = feaVerdict({ ...result, checks: [result.checks![0], { kind: 'displacement', label: 'Displacement', value: 0.0115, limit: 0.01,
+        unit: 'mm', ratio: 1.155, closeAt: 0.9, margin: null, status: 'fails', part: '', faces: [], where: '', ...scaling }] })!;
+      expect(verdict.caption).not.toMatch(/×/);
+      expect(plain(verdict.caption)).toBe('Lite · Moves 0.0115 mm, limit 0.01 mm');
+    }
+  });
 });

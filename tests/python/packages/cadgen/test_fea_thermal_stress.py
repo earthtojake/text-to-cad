@@ -146,6 +146,25 @@ class HeatedBar(unittest.TestCase):
         self.assertIsNotNone(extras["safety_factor"])
         self.assertIn("max_temperature_C", self.clamped_sidecar["upstream"]["thermal"])
 
+    def test_the_clamped_edge_spike_does_not_swamp_the_colours_but_the_check_judges_it(self):
+        """A clamped edge is singular in heat stress: its peak (here ~4x the bar's E α ΔT) once set the colour bar's
+        top, so the rest of the part read all blue. The colours stop at the 99th percentile, the entry says so and
+        keeps the peak, and the stress check still judges the peak."""
+        import numpy as np
+
+        peak = self.clamped.summary["max_von_mises_MPa"]
+        stress = {entry["field"]: entry for entry in self.clamped_extras["fields"]}["von_mises"]
+        self.assertEqual(stress["capped"], {"quantile": 0.99, "peak": peak})
+        self.assertLess(stress["max"] * 1.1, peak)
+        self.assertGreater(stress["max"], STEEL.E * STEEL.expansion * RISE)  # the bar's own stress is inside the range
+        check = next(check for check in self.clamped_extras["checks"] if check["kind"] == "stress")
+        self.assertEqual(check["value"], peak)
+        # A field with no spike keeps its colours to the peak and says nothing.
+        from cadgen._internal.fea.analyses.static import colour_range
+
+        smooth = np.linspace(0.0, 100.0, 1001)
+        self.assertEqual(colour_range(smooth, 100.0), (0.0, 100.0))
+
     def test_the_findings_and_the_cli_say_it_was_heated(self):
         heated = [finding for finding in self.clamped.findings if finding["type"] == "heated"]
         self.assertEqual(len(heated), 1)

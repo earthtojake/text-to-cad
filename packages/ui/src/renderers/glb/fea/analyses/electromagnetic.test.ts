@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import { feaControls, feaVerdict, readFeaResult, studyRows } from '../../feaResult.js';
-import { heldRows, madeOfRows } from '../setup.js';
+import { faceTitle, heldRows, madeOfRows } from '../setup.js';
 import electromagnetic, { ELECTROMAGNETIC_SETUP, coilRows, electrodeRows, hertz } from './electromagnetic.js';
 import { feaAnalysis } from './index.js';
 
@@ -83,6 +83,39 @@ describe('electromagnetic', () => {
       ratio: 0.5 / 3, close_at: 0.9, status: 'passes', where: { ref: null, at: [0, 0, 0] } }] }));
     expect(holds.title).toBe('Holds the voltage');
     expect(JSON.stringify(holds)).not.toContain('No stress');
+  });
+
+  it("lists each part's own material and names a face by its part in an assembly", () => {
+    const result = electricResult({
+      faces: ['#o1.1.f1', '#o1.2.f1'],
+      parts: [{ ref: '#o1.1', name: 'coil', material: 'Copper', yield_MPa: 69 }, { ref: '#o1.2', name: 'shaft', material: 'Stainless steel 304', yield_MPa: 215 }],
+      study: { material: { name: 'Stainless steel 304', yield_MPa: 215 }, mode: 'ac_magnetic', frequencyHz: 25000 },
+    });
+    const [made] = madeOfRows(result);
+    expect(made.children[0]).toMatchObject({ label: '2 materials', hint: 'Copper: 1 part, Stainless steel 304: 1 part',
+      summary: 'Made of Copper (coil) and Stainless steel 304 (shaft)' });
+    expect(faceTitle(result, '#o1.2.f1')).toBe('shaft · face 1');
+  });
+
+  it('says where a peak out in the air is, so it does not read against the colour bar on the parts', () => {
+    const verdict = feaVerdict(electricResult({ checks: [{ kind: 'electric_field', label: 'Arcing', value: 4.512, limit: 3, unit: 'kV/mm',
+      ratio: 1.504, close_at: 0.9, status: 'fails', where: { ref: null, at: [0, 0, 6], in: 'air', near: 'hv-rod', gap_mm: 0 } }] }));
+    expect(verdict.rows[0].line.replace(/\u00a0/g, ' ')).toBe('Peak 4.5 kV/mm, in the air by hv-rod, limit 3 kV/mm');
+    expect(verdict.rows[0].choice.summary).toContain('in the air by hv-rod');
+    // A peak inside a part, or one judged over named faces, reads as ever.
+    expect(feaVerdict(electricResult()).rows[0].line.replace(/\u00a0/g, ' ')).toBe('Peak 2.8 kV/mm, limit 3 kV/mm');
+  });
+
+  it('says the current a magnetic force\'s stress allows as the square root of its room: force grows with the current squared', () => {
+    const stress = { kind: 'stress', label: 'Plunger strength', value: 0.00525, limit: 250, unit: 'MPa', ratio: 2.1e-5, close_at: 0.5,
+      margin: 2, status: 'passes', where: { ref: '#o1.2.f3', at: [0, 0, 48] }, part: 'plunger' };
+    const magnetic = (check: Record<string, unknown>) => electricResult({
+      analysis: { type: 'electromagnetic', tier: 3, word: 'Magnetic / electric', estimate: false, limits: [], noun: 'this current',
+        reference_C: null, warnings: [], mode: 'magnetostatic' }, checks: [check] });
+    // sqrt(250 / 0.00525) = 218, not 47619.
+    expect(feaVerdict(magnetic({ ...stress, scaling: 'quadratic' })).caption).toBe('Static · OK up to 218× this current');
+    // A file written before checks said how they scale reads as it did.
+    expect(feaVerdict(magnetic(stress)).caption).toBe('Static · OK up to 47619× this current');
   });
 
   it('reads an AC field: Field select with Eddy current, "Coil 2 A at 50 kHz", and a takeaway that leads with "AC · "', () => {

@@ -1,11 +1,12 @@
 /**
  * The fields an FEA result can carry, by the attribute that holds them (lower-cased, as GLTFLoader
  * names it, with no frame suffix): the word Show and the colour bar call each by, whether its
- * colours run from its own minimum rather than 0 (`signed`: a temperature) and whether it is a power
- * of ten (`log`: a life in cycles). Pure data: no three.js, no React.
+ * colours run from its own minimum rather than 0 (`signed`: a temperature), whether it is a power
+ * of ten (`log`: a life in cycles) and whether its worst is its lowest (`lowWorst`: a life, a fatigue
+ * margin, drawn on the ramp reversed so the worst is red as a stress's peak is). Pure data: no three.js, no React.
  */
 
-const field = (word, { signed = false, log = false } = {}) => Object.freeze({ word, signed, log });
+const field = (word, { signed = false, log = false, lowWorst = false } = {}) => Object.freeze({ word, signed, log, lowWorst });
 
 export const FIELDS = Object.freeze({
   _von_mises: field("Stress"),
@@ -19,8 +20,8 @@ export const FIELDS = Object.freeze({
   _wall_heat_flux: field("Heat into the flow", { signed: true }),
   _heat_transfer_coefficient: field("Heat transfer coefficient"),
   _mode_shape: field("Mode shape"),
-  _life: field("Life", { log: true }),
-  _fatigue_factor: field("Fatigue margin"),
+  _life: field("Life", { log: true, lowWorst: true }),
+  _fatigue_factor: field("Fatigue margin", { lowWorst: true }),
   _pressure: field("Pressure", { signed: true }),
   _wall_shear: field("Wall shear"),
   // A gas flow's speed over the local speed of sound, at its wetted walls.

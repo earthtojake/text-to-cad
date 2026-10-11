@@ -123,6 +123,8 @@ class PathResult:
     how: str
     seconds: float
     warnings: list[str] = field(default_factory=list)
+    #: The path stopped cutting its steps because ``deadline_s`` had passed (it is ``collapsed`` there).
+    out_of_time: bool = False
 
     @property
     def u(self) -> "np.ndarray":
@@ -286,12 +288,17 @@ def solve_path(
     tolerance: float = TOLERANCE,
     runaway: float | None = RUNAWAY,
     log: Callable[[str], None] | None = None,
+    deadline_s: float | None = None,
 ) -> PathResult:
     """Follow the load from λ = 0 to 1 in ``steps`` starting steps (module docstring). Never raises for a load
     the part cannot carry: the result is ``collapsed`` at the last converged load factor.
 
     ``runaway`` (None to turn it off): a step whose stiffness, load over the largest displacement it adds, falls
-    under this share of the unloaded part's is cut as if it had not converged."""
+    under this share of the unloaded part's is cut as if it had not converged.
+
+    ``deadline_s``: seconds after which a step that needs cutting is not cut again: the path ends there, ``collapsed``
+    and ``out_of_time``, with a warning that says so. A path still getting through its steps is never stopped; one
+    cutting a stuck step over and over (each cut a dozen re-solves) ends in minutes, not hours."""
     import numpy as np
 
     started = time.perf_counter()
@@ -309,6 +316,14 @@ def solve_path(
     collapsed = False
     warnings: list[str] = []
     elastic = _elastic_reach(problem, linear) if runaway else None
+    out_of_time = False
+
+    def late() -> bool:
+        nonlocal out_of_time
+        if deadline_s is not None and time.perf_counter() - started > deadline_s:
+            out_of_time = True
+        return out_of_time
+
     while factor < 1.0 - 1e-12:
         target = min(1.0, factor + step)
         found, taken, relative = newton(problem, linear, u, target, max_iterations, tolerance)
@@ -318,7 +333,7 @@ def solve_path(
             if moved > 0 and (target - factor) * elastic / moved < runaway:
                 found, relative = None, math.inf
         if found is None:
-            if step <= smallest_allowed * (1.0 + 1e-9):
+            if step <= smallest_allowed * (1.0 + 1e-9) or late():
                 collapsed = True
                 break
             step = max(step / 2.0, smallest_allowed)
@@ -332,6 +347,12 @@ def solve_path(
         settle = getattr(problem, "settle", None)
         if settle is not None:
             outcome = settle(found, target)
+            if not outcome.settled and late():
+                # Past the deadline a step that does not settle ends the path, at any size: kept unsettled steps
+                # marching on at the smallest one can take as long as cutting.
+                problem.rollback()
+                collapsed = True
+                break
             if not outcome.settled and step > smallest_allowed * (1.0 + 1e-9):
                 # Its forces did not settle: forget the step and take a smaller one, as for one that did not converge.
                 problem.rollback()
@@ -353,9 +374,15 @@ def solve_path(
         factor = target
         if adaptive and taken <= EASY_ITERATIONS and settled:
             step = min(2.0 * step, MAX_GROWTH * base)
-    if collapsed and log:
+    if out_of_time:
+        warnings.append(f"stopped cutting the load steps after {time.perf_counter() - started:.0f} s, past the "
+                        f"{deadline_s:.0f} s allowed: the load could not be followed past {factor * 100:.4g}%")
+        if log:
+            log(warnings[-1])
+    elif collapsed and log:
         log(f"no equilibrium past {factor * 100:.4g}% of the load: the part collapses there")
     return PathResult(
         records=records, collapsed=collapsed, factor=factor, starting_step=base, smallest_step=smallest, cuts=cuts,
         iterations=iterations, how=linear.how, seconds=time.perf_counter() - started, warnings=warnings,
+        out_of_time=out_of_time,
     )

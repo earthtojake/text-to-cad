@@ -233,6 +233,14 @@ class StackedBlocks(unittest.TestCase):
         self.assertIn("peaks at", found["peak_contact_pressure"]["summary"])
         self.assertTrue(any(line.startswith("top on base: presses with") for line in self.result.human_lines()))
 
+    def test_no_check_quotes_a_load_multiple(self):
+        """Not linear in the load: every check says it holds at this load only (scaling none), in the summary and the
+        GLB the viewer reads, so the verdict's takeaway is the worst check's own sentence, never "OK up to 18× this load"."""
+        checks = self.result.summary["checks"]
+        self.assertTrue(checks)
+        self.assertEqual({check.get("scaling") for check in checks}, {"none"})
+        self.assertEqual({check.get("scaling") for check in self.extras["checks"]}, {"none"})
+
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class PulledApart(unittest.TestCase):
@@ -454,6 +462,84 @@ class UnsettledContact(unittest.TestCase):
         self.assertEqual(extras["analysis"]["unsettled"], {"at_percent": [100.0], "first_percent": 100.0})
         self.assertEqual(extras["series"]["frames"][-1]["label"], "100 % load · did not settle")
         self.assertEqual([check["status"] for check in extras["checks"]], ["fails", "fails"])
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class PartMaterials(unittest.TestCase):
+    """The stacked blocks pressed by 1000 N, the base 6061 aluminium, the top steel: each part's own material is solved
+    with (the column shortens by F/A (L_base/E_al + L_top/E_steel)) and listed in the summary and the GLB."""
+
+    def test_each_part_is_solved_and_listed_with_its_own_material(self):
+        from cadgen._internal.fea.materials import lookup_material
+
+        aluminium, steel = lookup_material("aluminum-6061-t6"), lookup_material("steel")
+        with tempfile.TemporaryDirectory() as name:
+            step, refs, scene = _stack(Path(name))
+            study = {"analysis": "contact", "material": "steel", "mesh": {"size_mm": 3.0}, "steps": 2,
+                     "parts": {"base": {"material": "aluminum-6061-t6"}, "top": {"material": "steel"}},
+                     "connections": [{"between": ["top", "base"], "type": "contact"}],
+                     "fixtures": [{"faces": [_face(scene, refs["base"], 2, 0.0)]}],
+                     "loads": [{"faces": [_face(scene, refs["top"], 2, 30.0)], "type": "force", "vector_N": [0, 0, -FORCE]}]}
+            result, extras, sidecar = _solve(step, study, "two-materials")
+        hand = FORCE / AREA * (20.0 / aluminium.E + 10.0 / steel.E)
+        # The held base face stops its Poisson spread, a little stiffer than the bar formula.
+        self.assertAlmostEqual(result.summary["max_displacement_mm"] / hand, 1.0, delta=0.04)
+        all_steel = FORCE / AREA * 30.0 / steel.E
+        self.assertGreater(result.summary["max_displacement_mm"], 2.0 * all_steel)
+        listed = {part["name"]: (part["material"], part["yield_MPa"]) for part in result.summary["parts"]}
+        self.assertEqual(listed, {"base": (aluminium.name, aluminium.yield_strength), "top": (steel.name, steel.yield_strength)})
+        self.assertEqual({part["name"]: part["material"] for part in extras["parts"]}, {"base": aluminium.name, "top": steel.name})
+        self.assertEqual({part["name"]: part["material"] for part in sidecar["summary"]["parts"]},
+                         {"base": aluminium.name, "top": steel.name})
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class PushedSideways(unittest.TestCase):
+    """A 24 mm steel block resting on a held plate, nothing else holding it, pressed down by 3000 N and pushed sideways,
+    friction 0.2 (it holds 600 N). Friction's stick spring as stiff as the normal penalty chattered between stick and
+    slip: every Uzawa re-solve failed at any load and the step cutting ran for an hour."""
+
+    @classmethod
+    def setUpClass(cls):
+        from build123d import Align, Box, Compound, Pos, export_step
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        base = Box(80, 50, 6, align=(Align.CENTER, Align.CENTER, Align.MAX))
+        block = Box(24, 24, 20, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        base.label, block.label = "base", "block"
+        cls.step = Path(cls._tmp.name) / "block_on_plate.step"
+        export_step(Compound(children=[base, block]), str(cls.step))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def _push(self, sideways: float, name: str):
+        study = {"analysis": "contact", "material": "steel", "mesh": {"size_mm": 5}, "steps": 3,
+                 "connections": [{"between": ["block", "base"], "type": "contact", "friction": 0.2}],
+                 "fixtures": [{"faces": ["#o1.1.f5"]}],
+                 "loads": [{"faces": ["#o1.2.f6"], "type": "force", "vector_N": [0, 0, -3000]},
+                           {"faces": ["#o1.2.f1"], "type": "force", "vector_N": [sideways, 0, 0]}]}
+        return _solve(self.step, study, name)
+
+    def test_under_what_friction_holds_it_sticks_and_settles_in_a_few_updates(self):
+        result, _, _ = self._push(500.0, "sticks")
+        summary = result.summary
+        self.assertFalse(summary["collapsed"])
+        self.assertEqual(summary["unsettled_at_percent"], [])
+        self.assertEqual(summary["step_cuts"], 0)
+        (contact,) = summary["contacts"]
+        self.assertAlmostEqual(contact["force_N"] / 3000, 1.0, delta=1e-3)
+        self.assertAlmostEqual(contact["friction_N"] / 500, 1.0, delta=0.02)
+        self.assertAlmostEqual(summary["reaction_force_N"][0], -500, delta=5)
+        self.assertNotIn("slides_away", [finding["type"] for finding in result.findings])
+
+    def test_past_what_friction_holds_it_slides_away_and_says_so_quickly(self):
+        """700 N against the 600 N friction holds: the block slides away, said plainly, in seconds."""
+        result, _, _ = self._push(700.0, "slides")
+        found = {finding["type"]: finding for finding in result.findings}
+        self.assertIn("slides away", found["slides_away"]["summary"])
+        self.assertLess(result.timings.get("solve_s", 0.0), 300.0)
 
 
 if __name__ == "__main__":

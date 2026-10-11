@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BearingInput", "DiscInput", "RotordynamicsAnalysis", "RotordynamicsInputs", "UnbalanceInput", "critical_check",
-    "orbit_text", "rpm_text", "stability_check",
+    "orbit_text", "rpm_text", "stability_check", "whirl_words",
 ]
 
 _TWO_PI = 2.0 * math.pi
@@ -396,6 +396,13 @@ def critical_check(check: dict, criticals: list[dict], operating: tuple[float, f
     if nearest.get("frame") is not None:
         judged_check["at"] = {"frame": nearest["frame"], "value": round(rpm, 3), "unit": "rpm"}
     return judged_check
+
+
+def whirl_words(entry: dict) -> str:
+    """A whirl mode counted in plain order among those whirling the same way: "1st forward whirl", "2nd backward whirl"."""
+    mode = int(entry["mode"])
+    suffix = "th" if 10 <= mode % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(mode % 10, "th")
+    return f"{mode}{suffix} {entry['whirl']} whirl"
 
 
 def stability_check(check: dict, lowest: dict | None, *, damped: bool = True) -> dict:
@@ -1119,7 +1126,7 @@ class RotordynamicsAnalysis:
         for check in check_results:
             status = check["status"]
             if check["kind"] == "critical_speed" and "mode" in check and status in ("fails", "close"):
-                which = f"{check['whirl']} whirl {check['mode']}"
+                which = whirl_words(check)
                 at = rpm_text(check["value"])
                 if status == "fails":
                     sentence = f"{whole} runs at a critical speed: {which} meets the spin at {at}, inside its {span} operating range"
@@ -1140,11 +1147,11 @@ class RotordynamicsAnalysis:
                                      "rigid bearings and springs alone take no energy out of a whirl: its log decrement is 0", []))
             elif check["kind"] == "stability" and status in ("fails", "close"):
                 if status == "fails":
-                    sentence = (f"{whole} is unstable: {check['whirl']} whirl {check['mode']} grows at {rpm_text(check['rpm'])} "
+                    sentence = (f"{whole} is unstable: {whirl_words(check)} grows at {rpm_text(check['rpm'])} "
                                 f"(log decrement {check['value']:.3g})")
                     kind = "unstable_whirl"
                 else:
-                    sentence = (f"{whole}'s {check['whirl']} whirl {check['mode']} is barely damped at {rpm_text(check['rpm'])}: "
+                    sentence = (f"{whole}'s {whirl_words(check)} is barely damped at {rpm_text(check['rpm'])}: "
                                 f"log decrement {check['value']:.3g}, under the {check['limit']:g} asked ({check['label']})")
                     kind = "barely_damped_whirl"
                 found.append(finding("error" if status == "fails" else "warning", kind, sentence,
@@ -1309,7 +1316,7 @@ class RotordynamicsAnalysis:
             lines.append(f"no forward critical speed up to {rpm_text(spin.get('sweep_rpm') or high)}")
         lowest = summary.get("lowest_log_decrement")
         if lowest:
-            lines.append(f"lowest log decrement {lowest['value']:.3g} ({lowest['whirl']} whirl {lowest['mode']} at "
+            lines.append(f"lowest log decrement {lowest['value']:.3g} ({whirl_words(lowest)} at "
                          f"{rpm_text(lowest['rpm'])})")
         if summary.get("unbalance_peak_um"):
             lines.append(f"unbalance orbit peaks at {orbit_text(summary['unbalance_peak_um'] / 1000.0)} at "

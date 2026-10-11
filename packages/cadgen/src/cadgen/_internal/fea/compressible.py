@@ -41,9 +41,10 @@ system with a local pseudo-time term (rho / dtau on momentum, (rho/p) / dtau on
 mass, dtau = CFL h / (|u| + c)), from a first step that is potential flow; the
 CFL grows as the steady residual falls (switched evolution relaxation), a step
 that would move the gas by more than a fifth of the speed of sound is cut
-back, and once the residual is a thousandth of its largest the stabilisation's
-coefficients are held, so the march ends as Newton on fixed discrete
-equations. Inlets are held by total pressure and total temperature (the
+back, and once the residual is a thousandth of its largest and the peak Mach
+number has settled the stabilisation's coefficients are held, so the march
+ends as Newton on fixed discrete equations. A march whose residual stops
+falling (a limit cycle) stops early at its best state, unsettled. Inlets are held by total pressure and total temperature (the
 inflow's direction held, its speed free, pushed by the static pressure the
 total pressure leaves at that speed) or by mass flow (the inflow speed from
 the mass, the inlet's static pressure and the speed's own temperature,
@@ -188,9 +189,12 @@ class GasSolution:
 CFL_START, CFL_GROWTH, CFL_MAX, CFL_MIN = 5.0, 2.0, 1e8, 0.5
 #: The march stops when the steady residual has fallen by this much and the state changes by less than this.
 RESIDUAL_TOL, CHANGE_TOL = 1e-7, 1e-6
-#: An intermediate continuation stage stops at these.
-STAGE_RESIDUAL, STAGE_CHANGE = 1e-4, 1e-4
+#: An intermediate continuation stage stops at these: near enough its flow to start the next stage from.
+STAGE_RESIDUAL, STAGE_CHANGE = 1e-4, 1e-2
 MAX_STEPS = 150
+#: A march whose last STALL_STEPS steps have not cut its best residual by STALL_GAIN has stalled (a limit cycle at
+#: the shock or along a wall: each step moves the gas by the step limit and back) and stops there.
+STALL_STEPS, STALL_GAIN = 40, 0.5
 #: Continuation: the shares of the drive each stage solves at.
 CONTINUATION = (0.5, 1.0)
 #: The share of the new inflow speed taken each step.
@@ -201,8 +205,10 @@ SHOCK_C = 4.0
 UPWIND_FROM, UPWIND_FULL = 0.9, 1.1
 #: The most one pseudo-time step may move the velocity (a share of c0) or the pressure (of the outlet's).
 STEP_LIMIT = 0.2
-#: The stabilisation's coefficients are held once the steady residual is under this share of its largest.
-FREEZE_AT = 1e-3
+#: The stabilisation's coefficients are held once the steady residual is under this share of its largest and the
+#: peak Mach number has held within FREEZE_STEADY (relative) for FREEZE_STEPS steps: the flow's regime is set.
+#: They follow the flow again if the peak Mach number then moves by more than THAW (relative).
+FREEZE_AT, FREEZE_STEADY, FREEZE_STEPS, THAW = 1e-3, 0.01, 5, 0.05
 #: The share of the shock capturing's and the upwinding's new coefficients taken each step.
 RELAX = 0.3
 #: The coldest the temperature may get, as a share of T0 (a guard, never reached in a converged flow).
@@ -390,7 +396,7 @@ def solve_gas(problem: GasProblem, *, schedule: tuple[float, ...] = (), solver: 
 
     dx = ops.dx
     D, DT = ops.D, ops.DT
-    frozen: dict[str, Any] = {"coefficients": None, "last": None}
+    frozen: dict[str, Any] = {"coefficients": None, "last": None, "peak": 0.0}
 
     def system(u, p, cfl_now: float, floor: float, share: float = 1.0, uniform: bool = False):
         """The linearised step at (u, p): the matrix, its right-hand side, the peak Mach and the shock cells."""
@@ -427,46 +433,44 @@ def solve_gas(problem: GasProblem, *, schedule: tuple[float, ...] = (), solver: 
             bulk = RELAX * bulk + (1.0 - RELAX) * frozen["last"][0]
             tau = RELAX * tau + (1.0 - RELAX) * frozen["last"][2]
         frozen["last"] = (bulk, sd, tau)
-        C2 = sum(sparse.diags(b[c]) @ ops.G2[c] for c in range(3)).tocsr()
-        scalar = ops.N2T @ sparse.diags(dx * rho) @ C2 + ops.N2T @ sparse.diags(dx * m) @ ops.N2
-        scalar = scalar + C2.T @ sparse.diags(dx * sd) @ C2
+        # The point operators are scaled row by row (diag(w) @ M without a sparse product) and the sums over the
+        # components folded into one product each where they share a factor: a step's assembly is a few dozen
+        # sparse products, not the ~140 it was (most of a step's time on a coarse mesh).
+        scaled, by_component = ops.scaled, ops.by_component
+        C2 = (scaled(b[0], ops.G2[0]) + scaled(b[1], ops.G2[1]) + scaled(b[2], ops.G2[2])).tocsr()   # (u_k . grad)
+        scalar = ops.N2T @ (scaled(dx * rho, C2) + scaled(dx * m, ops.N2)) + C2.T @ scaled(dx * sd, C2)
         if problem.walls == "no_slip":
-            scalar = scalar + sum(ops.G2T[c] @ sparse.diags(dx * mu) @ ops.G2[c] for c in range(3))
-        A = ops.expand(scalar) + DT @ sparse.diags(dx * bulk) @ D
-        f_u = ops.expand(ops.N2T @ sparse.diags(dx * m) @ ops.N2) @ u + f_outlets
-        # Newton's part of the convection: rho (u . grad) u_k, and its right-hand side rho (u_k . grad) u_k.
-        rows, cols, data = [], [], []
-        for i in range(3):
-            f_u[table[:, i]] += ops.N2T @ (dx * rho * np.einsum("j...,j...->...", gb[i], b))
-            for j in range(3):
-                block = (ops.N2T @ sparse.diags(dx * rho * gb[i, j]) @ ops.N2).tocoo()
-                rows.append(table[block.row, i]); cols.append(table[block.col, j]); data.append(block.data)
-        A = A + sparse.csr_matrix((np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))), shape=(nv, nv))
-        Cu = -sum(ops.G1T[c] @ sparse.diags(dx * rho) @ ops.N2 @ ops.pick[c] for c in range(3))
-        # The density falls with the speed (T = T0 - |u|^2 / 2 cp): d rho / d u = rho (gamma - 1) u / T, Newton's part.
+            scalar = scalar + sum(ops.G2T[c] @ scaled(dx * mu, ops.G2[c]) for c in range(3))
+        A = ops.expand(scalar) + DT @ scaled(dx * bulk, D)
+        # The pseudo-time term's right-hand side m u_k, and Newton's parts of the convection: rho (u . grad) u_k with
+        # its right-hand side rho (u_k . grad) u_k, and the momentum's density, d rho (u_k . grad) u_k with
+        # d rho = (rho/p) dp + (d rho / d u) . du. The density falls with the speed (T = T0 - |u|^2 / 2 cp):
+        # d rho / d u = rho (gamma - 1) u / T.
         k = rho * (g - 1.0) / temperature
-        Cu = Cu - sum(ops.G1T[c] @ sparse.diags(dx * k * b[c] * b[j]) @ ops.N2 @ ops.pick[j] for c in range(3) for j in range(3))
-        # ... and the momentum's density too: d rho (u_k . grad) u_k, with d rho = (rho/p) dp + (d rho / d u) . du.
         acc = np.einsum("ij...,j...->i...", gb, b)
+        f_u = f_outlets.copy()
         rows, cols, data, p_rows, p_cols, p_data = [], [], [], [], [], []
         for i in range(3):
-            f_u[table[:, i]] += ops.N2T @ (dx * (psi * pq + k * speed2) * acc[i])
-            block = (ops.N2T @ sparse.diags(dx * psi * acc[i]) @ ops.N1).tocoo()
+            f_u[table[:, i]] += ops.N2T @ (dx * (m * b[i] + (rho + psi * pq + k * speed2) * acc[i]))
+            block = (ops.N2T @ scaled(dx * psi * acc[i], ops.N1)).tocoo()
             p_rows.append(table[block.row, i]); p_cols.append(block.col); p_data.append(block.data)
             for j in range(3):
-                block = (ops.N2T @ sparse.diags(dx * k * acc[i] * b[j]) @ ops.N2).tocoo()
+                block = (ops.N2T @ scaled(dx * (rho * gb[i, j] + k * acc[i] * b[j]), ops.N2)).tocoo()
                 rows.append(table[block.row, i]); cols.append(table[block.col, j]); data.append(block.data)
         A = A + sparse.csr_matrix((np.concatenate(data), (np.concatenate(rows), np.concatenate(cols))), shape=(nv, nv))
         density_p = sparse.csr_matrix((np.concatenate(p_data), (np.concatenate(p_rows), np.concatenate(p_cols))), shape=(nv, npr))
-        Bq = sum(sparse.diags(b[c]) @ ops.G1[c] for c in range(3)).tocsr()
-        Cp = -sum(ops.G1T[c] @ sparse.diags(dx * psi * b[c]) @ ops.N1 for c in range(3))
-        Cp = Cp + ops.N1T @ sparse.diags(dx * mc) @ ops.N1 + Bq.T @ sparse.diags(dx * tau * psi) @ Bq
-        # The upwinding is SUPG: it weights mass's whole residual along the flow, div(rho u) = (rho/p) u . grad p
-        # + rho div u + (d rho / d u) . (grad u) u, so it vanishes on the exact flow and moves no mass.
-        Cu = Cu + Bq.T @ sparse.diags(dx * tau * rho) @ D
-        Cu = Cu + sum(Bq.T @ sparse.diags(dx * tau * k * b[i] * b[j]) @ ops.G2[j] @ ops.pick[i] for i in range(3) for j in range(3))
-        f_p = -sum(ops.G1T[c] @ (dx * psi * b[c] * pq) for c in range(3)) + ops.N1T @ (dx * mc * pq)
-        f_p = f_p - sum(ops.G1T[c] @ (dx * k * b[c] * speed2) for c in range(3))
+        # (u_k . grad) q at the points: sum_c G1[c]^T diag(w u_c) = Bq^T diag(w).
+        Bq = (scaled(b[0], ops.G1[0]) + scaled(b[1], ops.G1[1]) + scaled(b[2], ops.G1[2])).tocsr()
+        # u . u_k and u_k . (u_k . grad) u at the points, as operators on the velocity DOFs.
+        U = sum(scaled(b[c], by_component(ops.N2, c)) for c in range(3))
+        W = sum(scaled(b[c], by_component(C2, c)) for c in range(3))
+        # Mass: -(rho u, grad q) and the density's fall with the speed, Newton's part; the upwinding is SUPG: it
+        # weights mass's whole residual along the flow, div(rho u) = (rho/p) u . grad p + rho div u
+        # + (d rho / d u) . (grad u) u, so it vanishes on the exact flow and moves no mass.
+        Cu = -sum(ops.G1T[c] @ scaled(dx * rho, by_component(ops.N2, c)) for c in range(3))
+        Cu = Cu + Bq.T @ (scaled(-dx * k, U) + scaled(dx * tau * k, W) + scaled(dx * tau * rho, D))
+        Cp = Bq.T @ (scaled(-dx * psi, ops.N1) + scaled(dx * tau * psi, Bq)) + ops.N1T @ scaled(dx * mc, ops.N1)
+        f_p = ops.N1T @ (dx * mc * pq) - Bq.T @ (dx * (psi * pq + k * speed2))
         # The mass flux through the openings.
         bu = fbV.interpolate(u).value
         pv = fbQ.interpolate(p).value
@@ -486,10 +490,9 @@ def solve_gas(problem: GasProblem, *, schedule: tuple[float, ...] = (), solver: 
             f_u = f_u - asm(f_inlet_rhs, fb, b=fb.interpolate(u).value, p0=p0, g=g, pref=P_REF)
         # SUPG's pressure part: the streamline test function sees the whole momentum residual, so the
         # stabilisation vanishes on the exact flow (no total-pressure loss from it in a smooth expansion).
-        weight = sparse.diags(dx * sd / rho)
         rows_p, cols_p, data_p = [], [], []
         for i in range(3):
-            block = (C2.T @ weight @ ops.G1[i]).tocoo()
+            block = (C2.T @ scaled(dx * sd / rho, ops.G1[i])).tocoo()
             rows_p.append(table[block.row, i]); cols_p.append(block.col); data_p.append(block.data)
         Gp = ops.grad_p + density_p + sparse.csr_matrix((np.concatenate(data_p), (np.concatenate(rows_p), np.concatenate(cols_p))),
                                                     shape=(nv, npr))
@@ -516,6 +519,8 @@ def solve_gas(problem: GasProblem, *, schedule: tuple[float, ...] = (), solver: 
         steps = 0
         shocks = 0
         history = []
+        peaks: list[float] = []
+        best = (math.inf, x, 0, 0)                     # (residual, its state, its shock cells, its step)
         for steps in range(1, steps_left + 1):
             targets = [inflow_speed(i, share, p, speed) for i, speed in enumerate(speeds)]
             speeds = [s + INLET_RELAX * (t - s) for s, t in zip(speeds, targets)]
@@ -529,6 +534,9 @@ def solve_gas(problem: GasProblem, *, schedule: tuple[float, ...] = (), solver: 
             residual_abs = float(np.linalg.norm((Tbig.T @ (K @ xs - rhs))[free_ids]))
             largest = max(largest, residual_abs)
             residual = residual_abs / max(largest, 1e-300)
+            if residual < best[0]:
+                best = (residual, x, shocks, steps)
+            peaks.append(peak)
             x_new = linear(K, rhs, values)
             # A step that would move the gas by more than STEP_LIMIT of the speed of sound (or its pressure by that
             # share) is cut back along its own direction: the march stays where the linearisation holds.
@@ -542,21 +550,34 @@ def solve_gas(problem: GasProblem, *, schedule: tuple[float, ...] = (), solver: 
             x = x_new
             u, p = x[:nv], x[nv:]
             history.append(residual)
-            if frozen["coefficients"] is None and residual < FREEZE_AT and alpha == 1.0:
-                frozen["coefficients"] = frozen["last"]
+            # Hold the coefficients only once the flow's regime is set: frozen while the gas was still speeding up
+            # (a choked nozzle's march passes a low residual on its way to supersonic), the shock capturing and the
+            # upwinding stayed off where the flow went supersonic and it ran away (Mach 10 in a Mach 1.3 nozzle).
+            recent = peaks[-FREEZE_STEPS:]
+            steady = len(recent) == FREEZE_STEPS and max(recent) - min(recent) <= FREEZE_STEADY * max(max(recent), 1e-12)
+            if frozen["coefficients"] is None and residual < FREEZE_AT and alpha == 1.0 and steady:
+                frozen["coefficients"], frozen["peak"] = frozen["last"], peak
+            elif frozen["coefficients"] is not None and abs(peak - frozen["peak"]) > THAW * max(frozen["peak"], 1e-12):
+                frozen["coefficients"] = None
             if log and (steps % 10 == 0 or steps < 4):
                 log(f"gas flow: share {share:.3g}, step {steps}, CFL {cfl_now:.3g}, residual {residual:.1e}, "
                     f"change {change:.1e}, peak Mach {peak:.3f}")
             inflow_settled = all(abs(t - s) <= 10 * change_tol * max(abs(t), 1e-12) for s, t in zip(speeds, targets))
             if residual < residual_tol and change < change_tol and inflow_settled:
                 return True, x, residual, steps, shocks, history
+            if steps > STALL_STEPS and min(history[-STALL_STEPS:]) > STALL_GAIN * min(history[:-STALL_STEPS]):
+                if log:
+                    log(f"gas flow: share {share:.3g}, the residual has not halved in {STALL_STEPS} steps (best "
+                        f"{best[0]:.1e}): the march has stalled, so it stops at its best state")
+                break
             # Switched evolution relaxation on the steady residual; a cut step or a growing residual halves the CFL.
             if alpha < 1.0 or residual > 2.0 * last:
                 cfl_now = max(cfl_now / 2.0, CFL_MIN)
             elif residual < last:
                 cfl_now = min(cfl_now * growth, CFL_MAX)
             last = residual
-        return False, x, residual, steps, shocks, history
+        # Unsettled: the best state the march passed through, with its own residual.
+        return False, best[1], best[0], steps, best[2], history
 
 
     def stepped(x, shares):
@@ -690,6 +711,21 @@ class _Operators:
         self.DT = self.D.T.tocsr()
         # -(p, div v): constant.
         self.grad_p = (-(self.DT @ sparse.diags(self.dx) @ self.N1)).tocsr()
+
+    @staticmethod
+    def scaled(weight, M):
+        """diag(weight) @ M for a CSR M, row by row (no sparse product)."""
+        import numpy as np
+
+        out = M.copy()
+        out.data = out.data * np.repeat(weight, np.diff(M.indptr))
+        return out
+
+    def by_component(self, M, c: int):
+        """M @ pick[c]: a points-by-scalar-nodes operator acting on velocity component ``c`` (its columns renumbered)."""
+        from scipy import sparse
+
+        return sparse.csr_matrix((M.data, self.table[M.indices, c], M.indptr), shape=(M.shape[0], self.nv))
 
     def weighted(self, left_T, weight, right):
         from scipy import sparse

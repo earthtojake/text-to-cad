@@ -98,6 +98,14 @@ describe('multiphase', () => {
     expect([shakeWords({ direction: [0, 1, 0], amplitude_g: 0.5 }), shakeWords(null)]).toEqual(['shaken 0.5 g along Y', '']);
   });
 
+  it('says a completely full inside was solved as single-fluid flow, with no free surface', () => {
+    const result = twoFluids({ acceleration: null, inlets: [{ opening: 'x_min', velocity_m_s: 0.05, fluid: 'liquid' }] });
+    result.mesh.userData.analysis.fill = { fraction: 1, level_mm: 50, liquid: 'water', gas: 'air' };
+    result.analysis.warnings = ['Completely full: solved as single-fluid flow, no free surface'];
+    expect(filledRows(result)[0].children[0]).toMatchObject({ label: 'Full of water',
+      hint: 'Completely full: solved as single-fluid flow, no free surface' });
+  });
+
   it('says whether it stays in, leading with Laminar, and spills over past the brim', () => {
     expect(feaVerdict(twoFluids()).title).toBe('Passes all checks');
     const verdict = feaVerdict(twoFluids({}, [{ kind: 'fill_level', label: '', value: 27.04, limit: 50, unit: 'mm', ratio: 0.5408, close_at: 0.9,

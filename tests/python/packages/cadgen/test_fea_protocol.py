@@ -449,6 +449,22 @@ class CliLines(unittest.TestCase):
         self.assertIn("check 'Fatigue life': 1.317 against a 1.5 limit, 0.76× it, close", lines)
         self.assertIn("check 'Strength': 77.1 MPa against a 250 MPa limit, 0.31× it, passes", lines)
 
+    def test_a_frequency_check_says_how_many_hertz_it_clears_its_minimum_or_band_by(self):
+        def minimum(value, limit, status):
+            return {"kind": "frequency", "label": "Stiff", "value": value, "limit": limit, "unit": "Hz",
+                    "ratio": limit / value, "status": status, "mode": 1}
+
+        band = {"kind": "frequency", "label": "Clear", "value": 95.04, "limit": 110, "unit": "Hz", "ratio": 0.86,
+                "status": "passes", "mode": 1, "avoid_Hz": [110, 130]}
+        inside = {**band, "value": 118.2, "mode": 2, "status": "fails"}
+        lines = self._result(summary={"safety_factor": 2.5, "checks": [
+            minimum(127.1815, 100.0, "passes"), minimum(9.3, 10.0, "fails"), band, inside]}).human_lines()
+        self.assertIn("check 'Stiff': 127 Hz, 27 Hz above the 100 Hz minimum, passes", lines)
+        self.assertIn("check 'Stiff': 9.3 Hz, 0.7 Hz below the 10 Hz minimum, fails", lines)
+        self.assertIn("check 'Clear': mode 1 at 95 Hz, 15 Hz below the 110–130 Hz band to avoid, passes", lines)
+        self.assertIn("check 'Clear': mode 2 at 118 Hz, inside the 110–130 Hz band to avoid, fails", lines)
+        self.assertFalse(any("× it" in line for line in lines))
+
     def test_a_decibel_check_says_how_far_over_or_under_its_limit_it_is(self):
         def level(value, status):
             return {"label": "Loudness", "value": value, "limit": 80.0, "unit": "dB", "ratio": 10 ** ((value - 80) / 20),

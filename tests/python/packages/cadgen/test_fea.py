@@ -1192,6 +1192,104 @@ class HumanLine(unittest.TestCase):
         self.assertNotIn("1.684", result.human_lines()[1])
 
 
+# One quadratic tetrahedron from the pin hole of a link bar (netgen, 3.6 mm elements): its edge (0, 2) bows 0.8 mm
+# off the chord. scikit-fem's Newton search for its facets' quadrature points (``invF``) stalls on three of its faces.
+CURVED_TET = (
+    (63.0, 0.0, 4.0), (64.203724, 4.944669, 8.0), (60.153373, 4.512536, 5.229239), (60.783194, 4.153773, 2.427272),
+    (63.601862, 2.472335, 6.0), (62.178549, 4.728603, 6.614619), (62.228881, 2.667689, 4.614619),
+    (62.411121, 2.354149, 3.213636), (62.493459, 4.549221, 5.213636), (60.474793, 4.344583, 3.828255),
+)
+
+
+def _write_link_bar(directory: Path) -> Path:
+    """A 140 x 30 x 8 mm bar with a 10 mm pin hole 12 mm in from each end (f7 at x = -58, f8 at x = +58)."""
+    from build123d import Align, Box, Cylinder, Pos, export_step
+
+    low = (Align.CENTER, Align.CENTER, Align.MIN)
+    path = directory / "link_bar.step"
+    export_step(Box(140, 30, 8, align=low) - Pos(-58, 0, 0) * Cylinder(5, 8, align=low)
+                - Pos(58, 0, 0) * Cylinder(5, 8, align=low), str(path))
+    return path
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class CurvedFacetLoads(unittest.TestCase):
+    """A load on a curved face: the facet integrals need each quadrature point's place in its element, which
+    scikit-fem's Newton search fails to find on a strongly curved quadratic tet."""
+
+    @staticmethod
+    def _element():
+        import numpy as np
+        from skfem import MeshTet2
+
+        return MeshTet2(np.array(CURVED_TET).T.copy(), np.arange(10)[:, None])
+
+    def test_skfem_alone_fails_on_this_element(self):
+        import numpy as np
+        from skfem import Basis, ElementTetP2
+
+        with self.assertRaisesRegex(Exception, "Newton iteration"):
+            Basis(self._element(), ElementTetP2()).boundary(np.array([0]))
+
+    def test_every_facet_integrates_with_the_space_and_its_points_lie_on_the_facet(self):
+        import numpy as np
+
+        from cadgen._internal.fea.femspace import FemSpace, facet_reference_points
+
+        mesh = self._element()
+        space = FemSpace.from_mesh(mesh)
+        for facet in range(4):
+            boundary = space.basis.boundary(np.array([facet]))
+            mapping = boundary.mapping
+            # The points found are the facet's own: the element's map at them is the facet's map.
+            Y = facet_reference_points(mesh, boundary.X, boundary.find, boundary.tind)
+            np.testing.assert_allclose(mapping.F(Y, boundary.tind), mapping.G(boundary.X, find=boundary.find), atol=1e-9)
+            normal = np.asarray(boundary.normals)
+            np.testing.assert_allclose(np.linalg.norm(normal, axis=0), 1.0, atol=1e-9)
+            # A force spread over the facet sums back to the force.
+            from skfem import LinearForm, asm
+
+            traction = np.array([3.0, -2.0, 5.0]) / float(boundary.dx.sum())
+
+            @LinearForm
+            def form(v, w):
+                return traction[0] * v[0] + traction[1] * v[1] + traction[2] * v[2]
+
+            f = asm(form, boundary)
+            np.testing.assert_allclose([f[space.component == c].sum() for c in range(3)], [3.0, -2.0, 5.0], atol=1e-9)
+
+    def test_where_newton_converges_the_facet_points_are_newtons(self):
+        import numpy as np
+
+        from cadgen._internal.fea.femspace import facet_reference_points
+
+        mesh = self._element()
+        boundary = mesh.mapping()  # skfem's own mapping: Newton
+        from skfem import Basis, ElementTetP2
+
+        newton = Basis(mesh, ElementTetP2()).boundary(np.array([3]))
+        Y = facet_reference_points(mesh, newton.X, newton.find, newton.tind)
+        np.testing.assert_allclose(Y, boundary.invF(boundary.G(newton.X, find=newton.find), tind=newton.tind), atol=1e-9)
+
+    def test_a_force_on_a_pin_hole_solves_and_balances(self):
+        """Before the fix this solve raised "Newton iteration didn't converge" building the pin hole's facet basis."""
+        from cadgen import fea
+
+        with tempfile.TemporaryDirectory() as tmp, quiet():
+            step = _write_link_bar(Path(tmp))
+            # Light enough to keep a safety factor over 3: one solve, at the size that met the stalling element.
+            study = {"material": "aluminum-7075-t6", "fixtures": [{"faces": ["#o1.f7"]}],
+                     "loads": [{"faces": ["#o1.f8"], "type": "force", "vector_N": [3600, 0, 0]}], "mesh": {"size_mm": 3.585}}
+            result = fea.solve(step, Path(tmp) / "bar.fea.glb", study=study)
+        self.assertTrue(result.ok)
+        self.assertEqual(result.summary["applied_force_N"], [3600.0, 0.0, 0.0])
+        self.assertAlmostEqual(result.summary["reaction_force_N"][0], -3600.0, places=3)
+        # The net section past the hole carries 3600 N over (30 - 10) x 8 mm: 22.5 MPa; a pin-loaded lug peaks at
+        # two to three times its net-section stress.
+        self.assertGreater(result.summary["max_von_mises_MPa"], 1.5 * 22.5)
+        self.assertLess(result.summary["max_von_mises_MPa"], 4.0 * 22.5)
+
+
 class MissingExtra(unittest.TestCase):
     def test_the_install_hint_names_the_extra(self):
         import builtins

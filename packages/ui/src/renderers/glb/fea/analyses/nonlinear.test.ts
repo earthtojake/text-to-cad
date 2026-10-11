@@ -114,4 +114,13 @@ describe('nonlinear', () => {
     expect(checkTitle(check, 'passes')).toBe('Springs back');
     expect(checkLine(check).replace(/[\u00a0\u202f]/g, ' ')).toBe('0.4 % permanent, limit 0.2 %');
   });
+
+  it('says its worst check\'s own sentence, never a load multiple: the response is not proportional to the load', () => {
+    // The file's checks say they do not scale; an older file without that still reads them so (the analysis's own scaling).
+    for (const scaling of [{ scaling: 'none' }, {}]) {
+      const verdict = feaVerdict(bentResult({ collapsed: false, checks: [{ kind: 'stress', label: 'Strength', value: 13.8, limit: 250, unit: 'MPa', ratio: 0.0552, close_at: 0.5, margin: 2, status: 'passes', where: { ref: null, at: [0, 0, 0] }, ...scaling }] }))!;
+      expect(verdict.caption).not.toMatch(/×/);
+      expect(verdict.caption.replace(/[\u00a0\u202f]/g, ' ')).toBe('Lite · Peak 14 MPa, limit 250 MPa');
+    }
+  });
 });

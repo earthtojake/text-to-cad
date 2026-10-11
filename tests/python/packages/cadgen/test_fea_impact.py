@@ -324,6 +324,53 @@ class BarDroppedEndOn(unittest.TestCase):
         self.assertLess(summary["rebound_speed_m_s"], 0.5 * SPEED / 1000)
 
 
+    def test_a_plain_bar_needs_no_word_on_its_peak_and_a_stepped_one_says_why_its_is_over_rho_c_v(self):
+        """End-on, a plain bar feels ρ c v (175 MPa here). A bar that widens from 10 to 20 mm square half-way up sends a
+        compressive wave R = (A2 - A1) / (A2 + A1) = 0.6 of it back from the shoulder, which the floor holds and doubles:
+        its landing end feels (1 + 2 R) ρ c v = 2.2× it. The peak is real, and said, not a filter or floor-penalty error."""
+        from build123d import Align, Box, Pos, export_step
+
+        from cadgen import fea
+
+        self.assertNotIn("impact_stress_wave", [finding["type"] for finding in self.result.findings])
+        step = self.directory / "stepped.step"
+        low = (Align.CENTER, Align.CENTER, Align.MIN)
+        export_step(Box(SIDE, SIDE, LENGTH / 2, align=low) + Pos(0, 0, LENGTH / 2) * Box(2 * SIDE, 2 * SIDE, LENGTH / 2, align=low),
+                    str(step))
+        study = _study(material=STEEL_1D, mesh={"size_mm": 3.0}, window_ms=0.03, view={"checks": [{"kind": "stress"}]})
+        with redirect_stderr(io.StringIO()):
+            result = fea.solve(step, self.directory / "stepped.fea.glb", study=study)
+        peak = result.summary["max_von_mises_MPa"]
+        self.assertAlmostEqual(peak / (2.2 * STRESS_MPA), 1.0, delta=0.15)
+        found = {finding["type"]: finding for finding in result.findings}
+        self.assertIn("where it lands: the wave sent back from where the part widens", found["impact_stress_wave"]["summary"])
+        self.assertIn("ρ c v = 175 MPa", found["impact_stress_wave"]["summary"])
+
+    def test_an_automatic_window_goes_on_until_the_part_lifts_off(self):
+        """A soft (20 MPa yield, perfectly plastic) bar stays down about ρ L v / σy = 174 µs, four times the elastic
+        estimate: the automatic three-estimate window ended with it still on the floor; now the run goes on until the
+        first impact is over, plus 20 %."""
+        from cadgen import fea
+
+        yield_MPa = 20.0
+        study = _study(material={**STEEL_1D, "yield_MPa": yield_MPa}, mesh={"size_mm": 3.0}, plasticity={"tangent_MPa": 0},
+                       view={"checks": [{"kind": "stress"}]})
+        with redirect_stderr(io.StringIO()):
+            result = fea.solve(self.step, self.directory / "soft.fea.glb", study=study)
+        summary = result.summary
+        self.assertAlmostEqual(summary["window_ms"], 3 * CONTACT_S * 1e3, places=9)
+        self.assertIsNotNone(summary["contact_ms"])
+        self.assertGreater(summary["contact_ms"], summary["window_ms"])
+        self.assertTrue(summary["extended_to_pulse_end"])
+        self.assertAlmostEqual(summary["end_ms"] / (1.2 * summary["contact_ms"]), 1.0, delta=0.02)
+        # Momentum over the crushing force: the bar is stopped by σy A.
+        crush = RHO * LENGTH * SPEED / yield_MPa
+        self.assertAlmostEqual(summary["contact_ms"] / (crush * 1e3), 1.0, delta=0.25)
+        self.assertNotIn("still_in_contact", [finding["type"] for finding in result.findings])
+        self.assertTrue(any("until the first impact was over" in line for line in result.human_lines()))
+        frames = json.loads(result.sidecar.read_text(encoding="utf-8"))["series"]["frames"]
+        self.assertGreater(frames[-2]["value"], summary["window_ms"] / 1e3)  # frames cover the extension too
+
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class OverBudget(unittest.TestCase):
     """A bar with a small fillet at its top (small elements, a short step) and a tiny time target."""

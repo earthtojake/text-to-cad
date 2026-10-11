@@ -19,6 +19,7 @@ vi.mock('../../../dist/renderers/glb/useGlbScene.js', () => ({
 // The renderer's own clips (its analysis's routine) are kept to be played by hand.
 vi.mock('../../../dist/renderers/glb/useGlbAnimation.js', () => ({ useGlbAnimation: (_document: any, _render: any, own: any) => { loaded.own = own; return loaded.animation; } }));
 import GlbRenderer from '../../../dist/renderers/glb/GlbRenderer.js';
+import { routineScale } from '../../../dist/renderers/glb/feaResult.js';
 import { writeFileView } from '../../../dist/renderers/kit/shell/fileView.js';
 import { createAnimationClock } from '../../../dist/renderers/kit/tools/playbar/animationClock.js';
 import { ViewerElementContext, ViewerHostContext } from '../../../dist/host/context.js';
@@ -820,14 +821,17 @@ it('a modal result picks its mode, deforms by that mode\'s shape, jumps to the m
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Select Motor speed' })); });
   expect(screen.getByRole('combobox', { name: 'Mode' }).textContent).toBe('Mode 2 · 118 Hz');
   expect(zOf(mesh, 2)).toBeCloseTo(-0.06, 6);
-  // Its routine is Vibrate: one swing a second, through rest, out to the shape and back the other way.
+  // Its routine is Vibrate: one swing a second, through rest, out to the shape and back the other way, at the
+  // Exaggerate value (10x) raised so the swing is a tenth of the model's size (this one's 0.04 is less).
   expect([own().label, own().duration]).toEqual(['Vibrate', 1]);
+  const swing = routineScale(mesh, ['_mode_shape_f1'], 10);
+  expect(swing).toBeGreaterThan(10);
   play(0);
   expect(zOf(mesh, 2)).toBeCloseTo(-0.02, 6);
   play(0.25);
-  expect(zOf(mesh, 2)).toBeCloseTo(-0.06, 6);
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.02 - 0.004 * swing, 6);
   play(0.75);
-  expect(zOf(mesh, 2)).toBeCloseTo(0.02, 6);
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.02 + 0.004 * swing, 6);
   release();
   expect(zOf(mesh, 2)).toBeCloseTo(-0.06, 6);
   // Its markers are its fixtures, and Display's gate says so.
@@ -974,11 +978,13 @@ it('a harmonic result vibrates its frame through its phase, the real part then t
     series: { kind: 'frequency', unit: 'Hz', default: 0, frames: [{ value: 118, label: '118 Hz', attributes: { displacement: '_DISPLACEMENT', displacement_im: '_DISPLACEMENT_IM_F0' } }] } };
   const { mesh } = mount(harmonic, undefined, { faces: FACES, attributes: { _displacement_im_f0: vectorsUp([0, 0, 0.001, 0]) } });
   expect([own().label, own().duration]).toEqual(['Vibrate', 1]);
-  // At phase 0 the real part, as baked; a quarter turn on, minus the imaginary part.
+  // At phase 0 the real part; a quarter turn on, minus the imaginary part: at the Exaggerate value (10x) raised so
+  // the swing is a tenth of the model's size.
+  const swing = routineScale(mesh, ['_displacement', '_displacement_im_f0'], 10);
   play(0);
-  expect(zOf(mesh, 2)).toBeCloseTo(0, 6);
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.02 + 0.002 * swing, 6);
   play(0.25);
-  expect(zOf(mesh, 2)).toBeCloseTo(-0.02 - 0.01, 6);
+  expect(zOf(mesh, 2)).toBeCloseTo(-0.02 - 0.001 * swing, 6);
   release();
   expect(zOf(mesh, 2)).toBeCloseTo(0, 6);
 });

@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import { checkTitle } from '../checkKinds.js';
-import { feaControls, readFeaResult, studyRows } from '../../feaResult.js';
+import { feaControls, feaDefaults, feaShownControls, readFeaResult, studyRows } from '../../feaResult.js';
 import { feaAnalysis } from './index.js';
 import random, { fieldAndSigma, psdGrms, psdWords, shakenAtRandomRows } from './random_vibration.js';
 
@@ -63,6 +63,15 @@ describe('random_vibration', () => {
     // With no RMS field there is no level to choose.
     expect(fieldAndSigma({ ...result, fields: result.fields.map((entry: { attribute: string }) => ({ ...entry, attribute: '_von_mises' })) })
       .map((control: { drives: string }) => control.drives)).toEqual(['field']);
+  });
+
+  it("names the field select's RMS fields at the sigma level shown, as the colour bar does", () => {
+    const result = shaken();
+    const controls = feaControls(result);
+    const labels = (values: Record<string, unknown>) => feaShownControls(result, controls, { ...feaDefaults(controls), ...values })
+      .shown[0].options.map((option: { label: string }) => option.label);
+    expect(labels({})).toEqual(['Stress (3σ)', 'Displacement (3σ)']);
+    expect(labels({ sigma: '1' })).toEqual(['Stress (1σ)', 'Displacement (1σ)']);
   });
 
   it('says it is held, shaken at random with the PSD summarised, and what it is made of', () => {

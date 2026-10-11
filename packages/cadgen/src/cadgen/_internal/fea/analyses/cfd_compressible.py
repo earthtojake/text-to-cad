@@ -49,7 +49,8 @@ from typing import Any, ClassVar
 
 from cadgen._internal.fea.analyses import kinds
 from cadgen._internal.fea.analyses.base import AnalysisResult, FieldSpec, Inputs, SolveContext
-from cadgen._internal.fea.analyses.cfd import OPENINGS, PASCAL, RE_LIMIT, CfdAnalysis, surface_integral, wall_triangles
+from cadgen._internal.fea.analyses.cfd import (OPENINGS, PASCAL, RE_LIMIT, CfdAnalysis, surface_integral, unsettled_check,
+                                              wall_triangles)
 
 __all__ = ["CfdCompressibleAnalysis", "CfdCompressibleInputs", "GASES", "GasInletSpec", "LIMITS", "MACH_CHECKED", "mach_sentence"]
 
@@ -655,7 +656,7 @@ class CfdCompressibleAnalysis(CfdAnalysis):
         if check["kind"] in ("stress", "displacement"):
             from cadgen._internal.fea.analyses import get_analysis
 
-            return get_analysis("static").judge(check, index, ctx, result, inputs)
+            return unsettled_check(get_analysis("static").judge(check, index, ctx, result, inputs), result.scalars["flow"].converged)
         if check["kind"] == "pressure_drop":
             value, limit, unit, label, at = post["pressure_drop_Pa"], check["limit_Pa"], "Pa", "Flow resistance", post["inlet_at"]
         elif check["kind"] == "velocity":
@@ -663,11 +664,12 @@ class CfdCompressibleAnalysis(CfdAnalysis):
         else:
             value, limit, unit, label, at = post["max_mach"], check["limit"], "", "Mach number", post["max_mach_at"]
         ratio = value / limit
-        return {
+        # A not-settled march is not a pass: the check says so in its label and is held at close (cfd's rule).
+        return unsettled_check({
             "kind": check["kind"], "label": check.get("label") or label, "value": round(value, 6), "limit": limit,
             "unit": unit, "ratio": round(ratio, 6), "close_at": CLOSE_AT, "status": check_status(ratio, CLOSE_AT),
             "where": {"ref": None, "at": [round(float(c), 3) for c in at]},
-        }
+        }, result.scalars["flow"].converged)
 
     def findings(self, ctx: SolveContext, result: AnalysisResult, inputs: CfdCompressibleInputs,
                  check_results: list[dict], *, assembly: bool) -> list[dict]:
@@ -699,13 +701,16 @@ class CfdCompressibleAnalysis(CfdAnalysis):
             found.append({
                 "check": "fea", "severity": "warning", "type": "gas_flow_unsettled",
                 "summary": f"The gas flow's residual was {flow.residual:.1e} of its largest when it stopped, short of 1e-7",
-                "description": "its numbers are approximate; a finer or a coarser mesh, or a gentler pressure ratio, may settle",
+                "description": "its numbers are approximate and every check on it is marked not settled (none passes "
+                               "outright); a finer or a coarser mesh, or a gentler pressure ratio, may settle",
                 "items": [],
             })
         words = {"pressure_drop": "pressure drop", "velocity": "fastest flow", "mach": "fastest Mach number"}
         for check in check_results:
             if check["kind"] not in words or check["status"] == "passes":
                 continue
+            if check.get("settled") is False and check["ratio"] <= check["close_at"]:
+                continue   # held back from passing only because the march did not settle: gas_flow_unsettled says so
             what = words[check["kind"]]
             unit = f" {check['unit']}" if check["unit"] else ""
             value = f"{check['value']:.4g}{unit}"

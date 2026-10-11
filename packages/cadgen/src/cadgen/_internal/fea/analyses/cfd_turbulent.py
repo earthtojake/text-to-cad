@@ -406,6 +406,8 @@ class CfdTurbulentAnalysis(CfdAnalysis):
         for check in check_results:
             if check["kind"] not in ("pressure_drop", "velocity") or check["status"] == "passes":
                 continue
+            if check.get("settled") is False and check["ratio"] <= check["close_at"]:
+                continue   # held back from passing only because the flow did not settle: the finding above says so
             what = "pressure drop" if check["kind"] == "pressure_drop" else "fastest flow"
             value = f"{check['value']:.4g} {check['unit']}"
             fails = check["status"] == "fails"

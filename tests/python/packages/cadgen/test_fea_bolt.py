@@ -291,6 +291,14 @@ class PulledApart(unittest.TestCase):
         self.assertEqual({c["type"] for c in self.sidecar["connections"]}, {"contact"})
         self.assertTrue(any(line.startswith("bolt 1 (M6, 8.8): preload 5000 N") for line in self.result.human_lines()))
 
+    def test_no_check_quotes_a_load_multiple(self):
+        """Not linear in the load: every check says it holds at this load only (scaling none), in the summary and the
+        GLB the viewer reads, so the verdict's takeaway is the worst check's own sentence, never "OK up to 18× this load"."""
+        checks = self.result.summary["checks"]
+        self.assertTrue(checks)
+        self.assertEqual({check.get("scaling") for check in checks}, {"none"})
+        self.assertEqual({check.get("scaling") for check in self.extras["checks"]}, {"none"})
+
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class Slip(unittest.TestCase):
@@ -346,6 +354,64 @@ class Ladder(unittest.TestCase):
         self.assertIn(words, [step["words"] for step in sidecar["fit"]])
         self.assertTrue(any(line.startswith(f"adapted: {words}") for line in result.human_lines()))
         self.assertIn("fit_adaptive_steps", [finding["type"] for finding in result.findings])
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class LapJoint(unittest.TestCase):
+    """A strap bolted (M8, 12.5 kN) under a held link, the strap held by nothing but the bolt and the contact, as the
+    bolt reference allows. Its faces are flush to round-off (1e-15 mm apart, not 0): at the first Newton step no
+    contact point counted as touching, the strap had nothing under it along the bolt and the preload never applied
+    ("the parts did not settle under it")."""
+
+    @classmethod
+    def setUpClass(cls):
+        from build123d import Align, Box, Compound, Cylinder, Pos, export_step
+
+        from cadgen.step_scene import read_scene
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        low = (Align.MIN, Align.CENTER, Align.MIN)
+        strap = Box(100, 40, 6, align=low) - Pos(80, 0, 0) * Cylinder(4.5, 40)
+        link = Pos(60, 0, 6) * Box(100, 40, 6, align=low) - Pos(80, 0, 0) * Cylinder(4.5, 40)
+        strap.label, link.label = "base_strap", "link"
+        cls.step = Path(cls._tmp.name) / "lap_joint.step"
+        export_step(Compound(children=[strap, link]), str(cls.step))
+        scene = read_scene(cls.step)
+        refs = {leaf.label: leaf.ref for leaf in scene.leaves()}
+        wall = 2 * math.pi * 4.5 * 6
+        cls.holes = [_face(scene, refs["link"], 2, 9.0, wall), _face(scene, refs["base_strap"], 2, 3.0, wall)]
+        cls.held = _face(scene, refs["link"], 0, 160.0)
+        cls.strap_end = _face(scene, refs["base_strap"], 0, 0.0)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def _study(self, **more) -> dict:
+        return {"analysis": "bolt", "material": "steel", "mesh": {"size_mm": 3.5},
+                "connections": [{"between": ["link", "base_strap"], "type": "bolt", "size": "M8", "preload_N": 12500,
+                                 "friction": 0.2, "holes": self.holes}],
+                "fixtures": [{"faces": [self.held]}], **more}
+
+    def test_a_part_held_only_by_its_bolt_is_clamped_with_the_whole_preload(self):
+        result, _, _ = _solve(self.step, self._study(), "preload-only")
+        self.assertFalse(result.summary["collapsed"])
+        (joint,) = result.summary["joints"]
+        # Nothing else holds the strap along the bolt: the faces carry all of the preload.
+        self.assertAlmostEqual(joint["preload_clamp_N"] / 12500, 1.0, delta=0.01)
+        self.assertNotIn("preload_fails", [finding["type"] for finding in result.findings])
+
+    def test_a_sideways_load_under_friction_times_the_clamp_is_held(self):
+        """2000 N sideways on the strap against μ N = 0.2 × 12.5 kN = 2.5 kN: it holds by friction."""
+        load = {"loads": [{"faces": [self.strap_end], "type": "force", "vector_N": [-2000, 0, 0]}], "steps": 2}
+        result, _, _ = _solve(self.step, self._study(**load), "sideways")
+        self.assertFalse(result.summary["collapsed"])
+        checks = {check["kind"]: check for check in result.summary["checks"]}
+        (joint,) = result.summary["joints"]
+        self.assertFalse(joint["slips"])
+        self.assertAlmostEqual(joint["friction_holds_N"] / (0.2 * joint["clamp_N"]), 1.0, delta=0.02)
+        self.assertAlmostEqual(joint["shear_N"] / 2000, 1.0, delta=0.05)
+        self.assertEqual(checks.get("joint_slip", {"status": "passes"})["status"], "passes")
 
 
 if __name__ == "__main__":

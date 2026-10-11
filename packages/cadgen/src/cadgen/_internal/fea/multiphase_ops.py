@@ -56,7 +56,9 @@ step, and land on the times asked for.
 
 **Boundaries.** Walls slide freely by default (a penalty on the normal
 velocity, so a contact line moves) or hold the fluid (no slip). Inlets give a
-velocity and a fluid; outlets a pressure (do-nothing, backflow stabilised). A
+velocity and a fluid; outlets a pressure (do-nothing, backflow stabilised), and
+what flows back in through one is the gas outside, let into the level set upwind as
+an inlet's fluid is and counted as no liquid in the volume kept. A
 closed container's pressure is pinned to 0 at its highest corner. An inlet's
 fluid enters the level set upwind and weakly, |a . n| (d - d_in) on its face,
 with d_in one element deeper into that fluid than d is there: d grows at about
@@ -345,6 +347,13 @@ def _triangle_distance(p, a, b, c):
     return np.linalg.norm(p - closest, axis=1)
 
 
+def opening_facets_of(problem, kind: str):
+    """Every facet of the problem's openings of this kind (``inlet`` or ``outlet``)."""
+    import numpy as np
+
+    return np.concatenate([np.asarray(o.facets, dtype=np.int64) for o in problem.openings if o.kind == kind])
+
+
 class TwoPhaseSolver:
     """The march: build once, then ``run`` steps to the end, calling back after each."""
 
@@ -447,6 +456,12 @@ class TwoPhaseSolver:
         self.expected_volume = self.volume0
         self.max_drift = 0.0
         self.corrections = 0
+        #: One fluid filling the whole inside: no free surface, so no level set to carry and no volume to keep, and its
+        #: hydrostatic pressure (zero at ``reference_corner``) carries the body force; an outlet holds the flow's own.
+        self.single_fluid = False
+        outlet_corners = np.unique(mesh.facets[:, opening_facets_of(problem, "outlet")]) \
+            if any(o.kind == "outlet" for o in problem.openings) else np.array([self.top])
+        self.reference_corner = int(outlet_corners[np.argmax(self.up @ mesh.p[:, outlet_corners])])
 
     # -- helpers ------------------------------------------------------------------------------------
 
@@ -511,6 +526,10 @@ class TwoPhaseSolver:
         import numpy as np
 
         ph = self.phases
+        if self.single_fluid:
+            # One fluid, no free surface: the body force is balanced by the liquid's own hydrostatic pressure, zero at
+            # the highest corner of the outlets (of the inside, when it is closed).
+            return ph.rho_liquid * (np.einsum("i,i...->...", f, x) - float(f @ self.mesh.p[:, self.reference_corner]))
         size = float(np.linalg.norm(f))
         return ph.rho_gas * np.einsum("i,i...->...", f, x) \
             + (ph.rho_liquid - ph.rho_gas) * size * self.epsilon * np.logaddexp(0.0, distance / self.epsilon)
@@ -593,8 +612,33 @@ class TwoPhaseSolver:
         speed = np.sqrt((a * a).sum(axis=0))
         tau = self._tau(speed, dt)
         Ms = self.Mphi + asm(self.forms["supg_mass"], self.pbasis, a=a, tau=tau)
-        Cs = asm(self.forms["supg_convection"], self.pbasis, a=a, tau=tau) + self.F_in
-        return splu((Ms + 0.5 * dt * Cs).tocsc()).solve((Ms - 0.5 * dt * Cs) @ distance + dt * self.inflow(distance))
+        F_out, air_in = self.outlet_inflow(distance, u_adv)
+        Cs = asm(self.forms["supg_convection"], self.pbasis, a=a, tau=tau) + self.F_in + F_out
+        return splu((Ms + 0.5 * dt * Cs).tocsc()).solve((Ms - 0.5 * dt * Cs) @ distance
+                                                        + dt * (self.inflow(distance) + air_in))
+
+    def outlet_inflow(self, distance, u_adv):
+        """Where the flow comes back in through an outlet or an open side, it brings the air outside: the same upwind
+        condition as an inlet's, |a . n| (d - d_in) with d_in one element deeper into the gas than d is there, on
+        the part of the outlet the flow enters by, this step. (With nothing there, the level set took no condition
+        where air came in: liquid that had splashed up to an open top stayed on it as a skin, and the air coming in
+        through it was counted as liquid, so an open tank filled itself to the brim.)"""
+        import numpy as np
+        from scipy import sparse
+        from skfem import asm
+
+        F = sparse.csr_matrix((self.np_, self.np_))
+        load = np.zeros(self.np_)
+        cap = INLET_DEPTH * self.epsilon
+        for fb, fs in () if self.single_fluid else self.outlet_bases:
+            inward = np.maximum(-np.einsum("i...,i...->...", fb.interpolate(u_adv).value, np.asarray(fs.normals)), 0.0)
+            if not inward.any():
+                continue
+            deep = -fs.interpolate(distance).value                       # how far into the gas
+            h = self.h[fs.tind][:, None]
+            F = F + asm(self.forms["inflow_mass"], fs, inward=inward)
+            load += asm(self.forms["inflow_load"], fs, inward=-inward * np.maximum(np.minimum(deep + h, cap), deep))
+        return F, load
 
     def inflow(self, distance):
         """The inlets' upwind load, the integral of |a . n| d_in w: the fluid each brings enters as a continuation of
@@ -661,7 +705,10 @@ class TwoPhaseSolver:
         return distance + delta
 
     def interface_step(self, distance, u_adv, dt: float):
-        """Carry the level set, rebuild it when it has drifted from a distance, keep the liquid's volume."""
+        """Carry the level set, rebuild it when it has drifted from a distance, keep the liquid's volume. A single fluid
+        (``single_fluid``: the inside completely full) has no interface to carry: the level set stays as it is."""
+        if self.single_fluid:
+            return distance
         distance = self.advect(distance, u_adv, dt)
         if self.open:
             self.expected_volume += dt * self._inflow(distance, u_adv)
@@ -710,9 +757,11 @@ class TwoPhaseSolver:
         share = heaviside(level.value, self.epsilon)
         drive = (self.phases.rho_liquid - self.phases.rho_gas) * share[None] \
             * (f[:, None, None] - float(np.linalg.norm(f)) * level.grad)
+        if self.single_fluid:
+            drive = np.zeros_like(drive)     # a uniform body force on one fluid filling the inside moves nothing
         history = self.ubasis.interpolate(c1 * u_n + c2 * u_nm1).value
         rhs_u = self._vector_load(drive - rho[None] * history) + self.outlet_rhs
-        for fb, fs in self.outlet_bases:
+        for fb, fs in () if self.single_fluid else self.outlet_bases:
             d_f = fs.interpolate(distance).value
             rhs_u = rhs_u + asm(self.forms["potential_push"], fb, Phi=self.potential(d_f, fb.global_coordinates().value, f))
         if self.phases.sigma > 0:
@@ -921,7 +970,8 @@ class TwoPhaseSolver:
 
     def _inflow(self, distance, u) -> float:
         """The liquid's volume flow into the container through its openings, m^3/s: minus the integral of H u . n,
-        H the fluid an inlet brings (1 liquid, 0 gas) and, at an outlet, the share of what is there."""
+        H the fluid an inlet brings (1 liquid, 0 gas) and, at an outlet, the share of what is there where the flow
+        leaves and 0 (the air outside) where it comes back in."""
         import numpy as np
         from skfem import FacetBasis, Functional
 
@@ -930,8 +980,12 @@ class TwoPhaseSolver:
         for opening in self.problem.openings:
             fu = FacetBasis(self.mesh, velocity, facets=np.asarray(opening.facets, dtype=np.int64), intorder=3)
             fp = fu.with_element(scalar)
-            share = heaviside(fp.interpolate(distance).value, self.epsilon) if opening.kind == "outlet" \
-                else np.full(fp.interpolate(distance).value.shape, 1.0 if opening.phase >= 0.5 else 0.0)
-            total -= Functional(lambda w: w["phi"] * (w["u"] * w.n).sum(axis=0)).assemble(
-                fu, u=fu.interpolate(u).value, phi=share)
+            value = fu.interpolate(u).value
+            if opening.kind == "outlet":
+                # What leaves is the share of liquid there; what comes back in is the air outside.
+                out = np.einsum("i...,i...->...", value, np.asarray(fu.normals)) > 0
+                share = np.where(out, heaviside(fp.interpolate(distance).value, self.epsilon), 0.0)
+            else:
+                share = np.full(fp.interpolate(distance).value.shape, 1.0 if opening.phase >= 0.5 else 0.0)
+            total -= Functional(lambda w: w["phi"] * (w["u"] * w.n).sum(axis=0)).assemble(fu, u=value, phi=share)
         return float(total)

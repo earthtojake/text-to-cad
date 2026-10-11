@@ -223,6 +223,48 @@ class Bars(unittest.TestCase):
         self.assertAlmostEqual(0.6 * (stretched - stretched ** -2) / nominal, 1.0, delta=0.02)
 
 
+    def test_a_path_stuck_cutting_its_steps_stops_at_its_deadline_and_says_so(self):
+        """A step that never converges is cut six times, each cut a dozen re-solves on a real mesh; past the deadline
+        the driver cuts no more: the path ends there, collapsed and out of time, with a warning that says so."""
+        import numpy as np
+        import scipy.sparse as sparse
+
+        from cadgen._internal.fea import nonlinear_driver
+
+        class Stuck:
+            size, free, external = 1, np.array([0]), np.array([1.0])
+            locations, component = None, None
+
+            def evaluate(self, u, *, tangent):
+                return np.array([np.nan]), (sparse.csr_matrix(np.eye(1)) if tangent else None)
+
+            def commit(self, u, factor):
+                pass
+
+        patient = nonlinear_driver.solve_path(Stuck(), steps=2, runaway=None)
+        self.assertEqual((patient.collapsed, patient.out_of_time, patient.cuts), (True, False, nonlinear_driver.MAX_HALVINGS))
+        hurried = nonlinear_driver.solve_path(Stuck(), steps=2, runaway=None, deadline_s=0.0)
+        self.assertEqual((hurried.collapsed, hurried.out_of_time, hurried.cuts), (True, True, 0))
+        self.assertTrue(any(warning.startswith("stopped cutting the load steps after") for warning in hurried.warnings))
+
+        class Unsettling(Stuck):
+            """Converges, but its forces never settle: kept, marked, at the smallest step, step after step."""
+
+            def evaluate(self, u, *, tangent):
+                return u.copy(), (sparse.csr_matrix(np.eye(1)) if tangent else None)
+
+            def settle(self, u, factor):
+                return nonlinear_driver.Settled(u, False)
+
+            def rollback(self):
+                pass
+
+        marching = nonlinear_driver.solve_path(Unsettling(), steps=1, runaway=None)
+        self.assertEqual((marching.collapsed, len(marching.unsettled)), (False, 2 ** nonlinear_driver.MAX_HALVINGS))
+        stopped = nonlinear_driver.solve_path(Unsettling(), steps=1, runaway=None, deadline_s=0.0)
+        self.assertEqual((stopped.collapsed, stopped.out_of_time, stopped.records), (True, True, []))
+
+
 def _glb(path: Path) -> dict:
     raw = path.read_bytes()
     length, _ = struct.unpack_from("<II", raw, 12)
@@ -312,6 +354,14 @@ class CantileverCollapse(unittest.TestCase):
         self.assertEqual((extras["study"]["steps"], extras["study"]["material_model"]), (10, "plasticity"))
         self.assertIn("max_displacement_mm", self.sidecar["curves"])
         self.assertTrue(self.sidecar["limits"])
+
+    def test_no_check_quotes_a_load_multiple(self):
+        """Not linear in the load: every check says it holds at this load only (scaling none), in the summary and the
+        GLB the viewer reads, so the verdict's takeaway is the worst check's own sentence, never "OK up to 18× this load"."""
+        checks = self.result.summary["checks"]
+        self.assertTrue(checks)
+        self.assertEqual({check.get("scaling") for check in checks}, {"none"})
+        self.assertEqual({check.get("scaling") for check in self.extras["checks"]}, {"none"})
 
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")

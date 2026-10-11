@@ -40,6 +40,8 @@ export default Object.freeze({
   family: null,
   estimate: false,
   scalesWithLoad: false,
+  // Not linear in the load: every check is judged as solved, its takeaway its own sentence, never "OK up to 18× this load".
+  scaling: "none",
   checks: Object.freeze(["plastic_strain", "stress", "displacement"]),
   checkLabels: Object.freeze({}),
   // The load-step scrubber, the field, the deformation (controls.seriesControls words a % series "Load step").

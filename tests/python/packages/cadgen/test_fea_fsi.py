@@ -364,8 +364,122 @@ class NotSettled(unittest.TestCase):
         self.assertIn("did not settle in 2 coupling iterations", sentence)
         self.assertIn("this is the last state, not a converged answer", sentence)
         self.assertFalse(extras["analysis"]["coupling"]["converged"])
-        self.assertIn("coupling_not_converged", [finding["type"] for finding in result.findings])
+        finding = next(finding for finding in result.findings if finding["type"] == "coupling_not_converged")
+        self.assertTrue(finding["summary"].startswith("The flow and the bending did not settle in 2"), finding["summary"])
         self.assertIn("NOT converged", "\n".join(result.human_lines()))
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class TimeBudget(unittest.TestCase):
+    """Fixed bug: the coupling's flow solves ran with no log and no time limit, so a laminar flow past a flap in water
+    at Re 1600 sat over 100 minutes on its first solve with nothing printed. Each flow solve now prints progress and
+    stops at what is left of the coupling's budget, and the coupling stops there too, saying so."""
+
+    def test_a_spent_budget_stops_the_coupling_at_its_last_state_and_says_so(self):
+        from cadgen import fea
+        from cadgen._internal.fea import navier_stokes
+        from cadgen._internal.fea.analyses import fsi
+
+        with tempfile.TemporaryDirectory() as tmp:
+            step = tube_step(Path(tmp))
+            printed = io.StringIO()
+            with redirect_stderr(printed), mock.patch.object(fsi, "COUPLING_BUDGET", 1e-9), \
+                    mock.patch.object(navier_stokes, "PROGRESS_S", 0.0):
+                result = fea.solve(step, Path(tmp) / "budget.glb", study=tube_study(step), verbose=True)
+            extras, _ = glb_extras(result.glb)
+        self.assertTrue(result.ok)
+        coupling = result.summary["coupling"]
+        self.assertEqual((coupling["converged"], coupling["iterations"]), (False, 1))   # the one-way state
+        self.assertIn("flow solve 1: flow:", printed.getvalue())
+        self.assertTrue(any("stopped at its time budget" in sentence for sentence in extras["analysis"]["warnings"]))
+
+
+@unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
+class SoftThickTube(unittest.TestCase):
+    """A soft silicone tube (bore 4 mm, wall 0.5 mm, E 0.5 MPa) under a syrup flow.
+
+    Fixed bug: the wall pressure reached the part as a vector along the nearest fluid triangle's normal, up to ten
+    degrees off the part's own on a bore meshed at another size. The sideways part, varying triangle to triangle, bent
+    the thin wall (its softest way): a 30 mm tube's bore dented in by four times its true swelling (0.13 or 0.27 mm
+    by mesh size, against 0.10), and the coupling chased that noise, Aitken at its floor, and never settled. The
+    pressure now goes on as a scalar along the part's normal, integrated as a static pressure load is."""
+
+    @classmethod
+    def setUpClass(cls):
+        from build123d import Align, Cylinder, Rotation, export_step
+
+        from cadgen._internal.fea.analyses import fsi
+
+        cls._tmp = tempfile.TemporaryDirectory()
+        directory = Path(cls._tmp.name)
+        step = directory / "thick_tube.step"
+        along = (Align.CENTER, Align.CENTER, Align.MIN)
+        export_step(Rotation(0, 90, 0) * (Cylinder(2.5, 16.0, align=along) - Cylinder(2.0, 16.0, align=along)), str(step))
+
+        def study(E, **changes):
+            return {"analysis": "fsi", "material": {"name": "silicone", "E_MPa": E, "nu": 0.45, "yield_MPa": 3.0},
+                    "fixtures": [{"faces": [plane_face(step, 0, 0.0)]}, {"faces": [plane_face(step, 0, 16.0)]}],
+                    "mesh": {"size_mm": 0.8},
+                    "flow": {"kind": "internal", "fluid": {"name": "syrup", "density_kg_m3": 1300, "viscosity_Pa_s": 1.0},
+                             "inlets": [{"opening": "x_min", "velocity_m_s": 0.1}],
+                             "outlets": [{"opening": "x_max", "pressure_Pa": 0}]}, **changes}
+
+        captured = {}
+        original = fsi.Coupling.bend
+
+        def bend(self, flow_state):
+            captured.setdefault("coupling", self)
+            captured.setdefault("flow", flow_state)
+            return original(self, flow_state)
+
+        with mock.patch.object(fsi.Coupling, "bend", bend):
+            cls.soft, cls.own = solve(step, directory / "soft.glb", study(0.5))
+        cls.coupling, cls.flow = captured["coupling"], captured["flow"]
+        cls.stiff, _ = solve(step, directory / "stiff.glb", study(2.0, coupling={"max_iterations": 1}))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_an_even_pressure_reaches_the_part_as_a_static_pressure_load_does(self):
+        import numpy as np
+        from skfem import LinearForm, asm
+
+        from cadgen._internal.fea.analyses.cfd import wall_triangles
+
+        coupling, interface = self.coupling, self.coupling.interface
+        space = coupling.ctx.space
+        normal = wall_triangles(self.flow.space, coupling.wall_rows)[2]
+        pressure = np.full(len(normal), 1e-3)                         # MPa
+        load = interface.load(pressure[:, None] * normal, pressure, 0.0 * normal)
+        exact = asm(LinearForm(lambda v, w: -1e-3 * (w.n[0] * v[0] + w.n[1] * v[1] + w.n[2] * v[2])),
+                    space.basis.boundary(space.facets_of_rows(interface.part_rows)))
+        self.assertLess(np.linalg.norm(load - exact) / np.linalg.norm(exact), 1e-9)   # 5% off, with a net force, before
+
+    def test_one_way_goes_as_one_over_E_and_two_way_settles_below_it(self):
+        one_soft = self.soft.summary["one_way"]["max_displacement_mm"]
+        one_stiff = self.stiff.summary["one_way"]["max_displacement_mm"]
+        self.assertAlmostEqual(one_soft / one_stiff, 4.0, delta=0.01)
+        coupling = self.soft.summary["coupling"]
+        self.assertTrue(coupling["converged"], coupling)
+        self.assertLessEqual(coupling["iterations"], 8)
+        # Swollen, the bore passes the flow for less pressure, so it swells a little less than one-way says.
+        two = self.soft.summary["max_displacement_mm"]
+        self.assertLess(two, one_soft)
+        self.assertGreater(two, 0.85 * one_soft)
+        self.assertLess(self.soft.summary["pressure_drop_Pa"], self.soft.summary["one_way"]["pressure_drop_Pa"])
+
+    def test_the_bore_swells_evenly_by_the_thin_wall_formula(self):
+        import numpy as np
+
+        where, moved = self.own.dof_locations, self.own.fields["displacement"]
+        radius = np.hypot(where[:, 1], where[:, 2])
+        on = (np.abs(where[:, 0] - 8.0) < 0.4) & (np.abs(radius - 2.0) < 1e-3)
+        radial = (moved[on, 1] * where[on, 1] + moved[on, 2] * where[on, 2]) / radius[on]
+        pressure = float(self.own.fields["pressure"][on].mean()) / 1e6
+        thin_wall = pressure * 2.25 ** 2 * (1 - 0.45 ** 2) / (0.5 * 0.5)
+        self.assertLess(abs(radial.mean() - thin_wall) / thin_wall, 0.15, (radial.mean(), thin_wall))
+        self.assertLess(radial.std() / radial.mean(), 0.15)            # round, not dented
 
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")

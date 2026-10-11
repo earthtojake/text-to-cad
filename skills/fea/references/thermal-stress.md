@@ -44,6 +44,11 @@ On top of the common keys in [study-file.md](study-file.md#common-keys):
   findings), plus the `temperature` field, `max_temperature_C`, `min_temperature_C` and
   `reference_C` in the summary, and the thermal solve's own summary under the sidecar's `upstream`.
 - An `info` finding `heated` says the temperature range against the stress-free one.
+- Where the peak stress stands more than 1.1× above the field's 99th percentile (a clamped edge
+  that cannot grow is singular in heat stress), the von Mises colours stop at that percentile so the
+  rest of the part still reads; the field's entry carries `capped` (`quantile`, `peak`) and the
+  colour bar says "≥". The stress check and the summary still judge the true peak, with static's
+  notes on peaks at a fixture and peaks that rise on a finer mesh.
 - The load control scales the temperature change and the mechanical loads together ("OK up to 1.6×
   this heat"): exact, because both act linearly. 2× means twice the rise above `reference_C`.
 - CLI: the stress and displacement lines, then "temperatures 25 to 120 °C, stress-free at 20 °C".

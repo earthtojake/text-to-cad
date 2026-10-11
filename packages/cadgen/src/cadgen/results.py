@@ -13,6 +13,7 @@ import this at module scope and must stay inside the ~0.2s pre-gate budget.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -405,10 +406,66 @@ def _check_lines(s: dict) -> list[str]:
             where = "at" if gap == 0 else f"{abs(gap):g}{unit(check)} {'over' if gap > 0 else 'under'}"
             return (f"check '{check['label']}': {check['value']:g}{unit(check)}, {where} the {check['limit']:g}{unit(check)} "
                     f"limit, {check['status']}")
+        if check.get("kind") == "frequency" and check["unit"] == "Hz":
+            return _frequency_line(check)
+        if check.get("kind") == "stability":
+            return _stability_line(check)
         return (f"check '{check['label']}': {check['value']:g}{unit(check)} against a {check['limit']:g}{unit(check)} limit, "
                 f"{check['ratio']:.2f}× it, {check['status']}")
 
     return [line(check) for check in s.get("checks", [])]
+
+
+def _stability_line(check: dict) -> str:
+    """A rotor's stability by its smallest log decrement against the least it needs:
+    "log decrement 0.000552 (1st backward whirl at 8,000 rpm), under the 0.1 it needs, close".
+
+    A log decrement is a least-allowed value, not a limit to stay under: its ratio (the verdict meter's place) is
+    no "times the limit" a person reads, so the line says the two numbers and which side it is on.
+    """
+    need = float(check["limit"])
+    head = f"check '{check['label']}': "
+    if check.get("undamped"):
+        return f"{head}no damping modelled, so no whirl grows or dies away (it needs a log decrement of {need:g}), {check['status']}"
+    if check.get("mode") is None:
+        return f"{head}no whirl in the speed range, {check['status']}"
+    from cadgen._internal.fea.analyses.rotordynamics import rpm_text, whirl_words  # stdlib only
+
+    value = float(check["value"])
+    where = "under" if value < need else "at" if value == need else "over"
+    return (f"{head}log decrement {value:.3g} ({whirl_words(check)} at {rpm_text(check['rpm'])}), {where} the {need:g} it needs, "
+            f"{check['status']}")
+
+
+def _frequency_line(check: dict) -> str:
+    """A frequency check by its distance from the limit, in hertz: "127 Hz, 27 Hz above the 100 Hz minimum".
+
+    A minimum and a band to keep clear of are not ratios a person reads: the margin in hertz is.
+    Every number keeps the measured frequency's three significant figures.
+    """
+    value = float(check["value"])
+    decimals = max(0, 2 - math.floor(math.log10(abs(value)))) if value else 0
+
+    def num(number: float) -> str:
+        return f"{round(float(number), decimals):g}"
+
+    def hz(number: float) -> str:
+        return f"{num(number)} Hz"
+
+    mode = f"mode {check['mode']} at " if check.get("mode") is not None and check.get("avoid_Hz") else ""
+    if band := check.get("avoid_Hz"):
+        low, high = (float(edge) for edge in band)
+        if low <= value <= high:
+            where = f"inside the {num(low)}–{hz(high)} band to avoid"
+        else:
+            side, edge = ("below", low) if value < low else ("above", high)
+            where = f"{hz(abs(value - edge))} {side} the {num(low)}–{hz(high)} band to avoid"
+    else:
+        limit = float(check["limit"])
+        gap = value - limit
+        where = (f"at the {hz(limit)} minimum" if round(gap, decimals) == 0
+                 else f"{hz(abs(gap))} {'above' if gap > 0 else 'below'} the {hz(limit)} minimum")
+    return f"check '{check['label']}': {mode}{hz(value)}, {where}, {check['status']}"
 
 
 @dataclass(frozen=True)

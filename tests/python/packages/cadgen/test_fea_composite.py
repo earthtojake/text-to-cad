@@ -73,6 +73,18 @@ def _glb(path: Path):
     return to_cad(at), to_cad(moved), extras, set(primitive["attributes"])
 
 
+def _attribute(path: Path, name: str):
+    """One scalar vertex attribute of a GLB."""
+    import numpy as np
+
+    raw = path.read_bytes()
+    length, _ = struct.unpack_from("<II", raw, 12)
+    gltf = json.loads(raw[20:20 + length])
+    accessor = gltf["accessors"][gltf["meshes"][0]["primitives"][0]["attributes"][name]]
+    view = gltf["bufferViews"][accessor["bufferView"]]
+    return np.frombuffer(raw[20 + length + 8:], np.float32, accessor["count"], view["byteOffset"]).astype(float)
+
+
 class Parsing(unittest.TestCase):
     """Stdlib: the registry, the study and the orthotropic material object."""
 
@@ -414,6 +426,22 @@ class CrossPlyStrip(unittest.TestCase):
         self.assertIn(f"Worst ply {worst['ply']} (+90°)" if worst["angle_deg"] == 90 else f"Worst ply {worst['ply']} (0°)",
                       "\n".join(self.result.human_lines()))
 
+    def test_no_check_quotes_a_load_multiple(self):
+        """Not linear in the load: every check says it holds at this load only (scaling none), in the summary and the
+        GLB the viewer reads, so the verdict's takeaway is the worst check's own sentence, never "OK up to 18× this load"."""
+        checks = self.result.summary["checks"]
+        self.assertTrue(checks)
+        self.assertEqual({check.get("scaling") for check in checks}, {"none"})
+        self.assertEqual({check.get("scaling") for check in self.extras["checks"]}, {"none"})
+
+    def test_the_failure_index_field_tops_out_at_the_checks_value(self):
+        """The field was a smoothed fit of the elements' index (0.573 at the top of the bar against a check of 0.62):
+        now both are the governing criterion's worst, the field drawn as its envelope."""
+        (field,) = [f for f in self.extras["fields"] if f["field"] == "failure_index"]
+        check = self.result.summary["checks"][0]
+        self.assertEqual(field["max"], check["value"])
+        self.assertAlmostEqual(float(_attribute(self.result.glb, "_FAILURE_INDEX").max()), check["value"], delta=1e-6)  # float32 against six decimals
+
 
 @unittest.skipUnless(HAVE_FEA, "the fea extra (netgen-mesher, scikit-fem, pyamg) is not installed")
 class ThickLaminate(unittest.TestCase):
@@ -445,6 +473,12 @@ class ThickLaminate(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls._tmp.cleanup()
+
+    def test_the_failure_index_field_tops_out_at_the_checks_value(self):
+        extras = _glb(self.full.glb)[2]
+        (field,) = [f for f in extras["fields"] if f["field"] == "failure_index"]
+        self.assertEqual(field["max"], self.full.summary["max_failure_index"])
+        self.assertEqual(self.full.summary["checks"][0]["value"], self.full.summary["max_failure_index"])
 
     def test_it_is_a_layered_solid(self):
         self.assertTrue(self.full.ok)
