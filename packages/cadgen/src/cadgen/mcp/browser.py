@@ -31,9 +31,12 @@ def viewer_url(*, cwd: str | None = None, command=LAUNCH, timeout: float = LAUNC
 
     try:
         # Its stderr is thrown away, so the analytics notice a command says once would reach nobody.
+        # No window on Windows: a host that started this server without a console would otherwise
+        # give the launcher a new console, with a window, for as long as it waits on the Viewer (#597).
         process = subprocess.Popen(list(command), cwd=cwd or os.path.expanduser("~"), stdin=subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                   env={**os.environ, NOTICE_ENV: "0"})
+                                   env={**os.environ, NOTICE_ENV: "0"},
+                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except OSError as error:
         raise ViewerUnavailable(str(error)) from error
     try:

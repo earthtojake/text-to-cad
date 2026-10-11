@@ -551,11 +551,8 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
     child_argv = [item for item in argv if item != "--detach"]
     if "--json" not in child_argv:
         child_argv.append("--json")
-    popen_options: dict = {}
-    if sys.platform.startswith("win"):
-        popen_options["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-    else:
-        popen_options["start_new_session"] = True
+    from cadgen.daemon.client import detach_kwargs  # noqa: PLC0415 - kernel-free, needed only now
+
     log_file = log_path()
     try:
         with open(log_file, "wb") as log:
@@ -567,7 +564,7 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
                 close_fds=True,
                 # It outlives this command, so it goes by the person's telemetry settings, not this shell's.
                 env=for_others(os.environ),
-                **popen_options,
+                **detach_kwargs(),
             )
     except OSError as error:
         _err(f"CAD Viewer could not start in the background: {error}\n")
