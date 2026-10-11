@@ -25,8 +25,17 @@ PARENT = textwrap.dedent(r"""
                              text=True, creationflags=child_flags)
     seen = json.loads(child.stdout.readline())
     if close and seen["hwnd"]:
-        WM_CLOSE = 0x0010
-        ctypes.windll.user32.PostMessageW(seen["hwnd"], WM_CLOSE, 0, 0)
+        u = ctypes.windll.user32
+        u.SendMessageTimeoutW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t, ctypes.c_uint, ctypes.c_uint, ctypes.POINTER(ctypes.c_size_t)]
+        res = ctypes.c_size_t()
+        me["visible"] = u.IsWindowVisible(ctypes.c_void_p(seen["hwnd"]))
+        me["sc_close"] = u.SendMessageTimeoutW(seen["hwnd"], 0x0112, 0xF060, 0, 0x0002, 5000, ctypes.byref(res))
+        me["sc_close_err"] = k.GetLastError()
+        try:
+            code = child.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            me["wm_close"] = u.SendMessageTimeoutW(seen["hwnd"], 0x0010, 0, 0, 0x0002, 5000, ctypes.byref(res))
+            me["wm_close_err"] = k.GetLastError()
         try:
             code = child.wait(timeout=20)
         except subprocess.TimeoutExpired:
