@@ -26,6 +26,17 @@ class SdfValidationTests(unittest.TestCase):
     def _warning_codes(self, body: str) -> set[str]:
         return {finding.code for finding in self._validate(body).warnings}
 
+    def test_empty_include_uri_is_missing_required_text(self) -> None:
+        for uri in ("<uri />", "<uri></uri>", "<uri>   </uri>"):
+            with self.subTest(uri=uri):
+                self.assertIn(
+                    "missing_child_text",
+                    self._error_codes(f'<sdf version="1.12"><include>{uri}</include></sdf>'),
+                )
+        self.assertEqual(
+            set(), self._error_codes('<sdf version="1.12"><include><uri>model://sun</uri></include></sdf>'),
+        )
+
     def test_valid_minimal_model_passes(self) -> None:
         result = self._validate(
             """
