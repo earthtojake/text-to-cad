@@ -134,6 +134,21 @@ profile or a size outside that range is refused, never clamped.
 `output.padding` is 0–0.15, `output.renderScale` 1–3, and `timeoutSeconds` a
 positive number, checked when the job is resolved.
 
+## The browser
+
+A snapshot renders in Playwright's headless Chromium shell, which is a download of
+its own (about 100 MB) into Playwright's browser cache. The first snapshot on a
+machine downloads it and then renders, saying so on stderr; later snapshots reuse
+it. One cadgen command installs it at a time (a lock in the state directory, beside
+`settings.json`), and a snapshot started while another installs it waits for that
+install rather than launching a half-unpacked browser. A browser that does not
+start for any other reason has its install checked (which finishes one a killed
+command left half done) and is launched once more before the snapshot fails with
+the launch's own error.
+Where the fix is not cadgen's to make, the failure names the command: no network
+for the download, or a Linux host without the browser's system libraries
+(`sudo … -m playwright install-deps chromium`, which needs root and apt).
+
 ## Diagnostics
 
 `cadgen step snapshot part.step review.png --debug --json` adds diagnostics to

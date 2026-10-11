@@ -3,6 +3,7 @@ import * as React from "react"
 import { Pipette } from "lucide-react"
 
 import { cn } from "@text-to-cad/ui/utils"
+import { capturePointer } from "../lib/pointerCapture.js"
 import { Button } from "@text-to-cad/ui/primitives/button"
 import { Input } from "@text-to-cad/ui/primitives/input"
 import {
@@ -288,12 +289,12 @@ function ColorPicker({
   }, [colorNumbers.hsv.s, colorNumbers.hsv.v, commitHex])
 
   const handleSvPointerDown = (event) => {
-    svPlaneRef.current?.setPointerCapture(event.pointerId)
+    capturePointer(svPlaneRef.current, event.pointerId)
     updateFromSvPointer(event)
   }
 
   const handleHuePointerDown = (event) => {
-    hueTrackRef.current?.setPointerCapture(event.pointerId)
+    capturePointer(hueTrackRef.current, event.pointerId)
     updateFromHuePointer(event)
   }
 

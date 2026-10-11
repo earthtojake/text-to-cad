@@ -703,6 +703,8 @@ def _digit_range_regex(low: str, high: str) -> str:
         return low[0] + _digit_range_regex(low[1:], high[1:])
 
     def at_least(digits: str) -> str:  # same-width strings >= digits
+        if not digits:  # the ranges differed only in their last digit: nothing follows it
+            return ""
         if len(digits) == 1:
             return f"[{digits}-9]"
         parts = [digits[0] + at_least(digits[1:])]
@@ -711,6 +713,8 @@ def _digit_range_regex(low: str, high: str) -> str:
         return "(?:" + "|".join(parts) + ")"
 
     def at_most(digits: str) -> str:  # same-width strings <= digits
+        if not digits:
+            return ""
         if len(digits) == 1:
             return f"[0-{digits}]"
         parts = [digits[0] + at_most(digits[1:])]
@@ -727,8 +731,15 @@ def _digit_range_regex(low: str, high: str) -> str:
 
 def _tail_reference_pattern(tail_start: int, total: int) -> "re.Pattern[bytes]":
     """Matches any `#N` token whose integer value is a tail number — including
-    a leading-zero spelling, which ``int()`` would also map into the tail."""
-    body = _digit_range_regex(str(tail_start), str(total)).encode()
+    a leading-zero spelling, which ``int()`` would also map into the tail. A range
+    that crosses a power of ten is matched one digit count at a time."""
+    low, high = str(tail_start), str(total)
+    pieces = [
+        _digit_range_regex(low if width == len(low) else "1" + "0" * (width - 1),
+                           high if width == len(high) else "9" * width)
+        for width in range(len(low), len(high) + 1)
+    ]
+    body = ("(?:" + "|".join(pieces) + ")").encode()
     return re.compile(rb"#0*" + body + rb"(?!\d)")
 
 

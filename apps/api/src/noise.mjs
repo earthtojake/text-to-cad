@@ -47,6 +47,9 @@ export const NEVER_OURS = [
   // Of cadgen's code, only the decorator wrapper that calls the model may be in it: anything else may be cadgen's cycle.
   { name: 'their_recursion', test: row => row.type === 'RecursionError' && row.frames.some(frame => frame.file === USER)
     && row.frames.every(frame => !frame.file.startsWith('cadgen/') || THEIR_CYCLE.has(frame.file)) },
+  // A page's cancellation: an AbortError is what the page's own `abort()`, or the browser leaving the page, makes
+  // -- a view's feed aborting its request as the view unmounts. Asked for, never a crash: cadgen 0.7.20 and earlier.
+  { name: 'page_cancelled', test: row => row.where === 'page' && row.type === 'AbortError' },
 ];
 
 /**

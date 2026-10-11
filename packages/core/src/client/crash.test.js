@@ -64,6 +64,12 @@ test("other engines' stacks are frames alone, and a host can name its own script
 test("what is no error -- a value thrown, a cross-origin script's error -- is no crash, and a type that is no name is <?>", () => {
   for (const thrown of ['a secret string', 42, null, undefined, { message: 'secret' }]) assert.equal(crashOf(thrown), null);
   assert.equal(crashOf(Object.assign(new Error('x'), { name: 'Error: secret part' })).type, '<?>');
+  // A cancellation the page asked for -- a view's feed aborting its request as the view unmounts -- is no crash.
+  const controller = new AbortController();
+  controller.abort();
+  assert.equal(controller.signal.reason.name, 'AbortError');
+  assert.equal(crashOf(Object.assign(controller.signal.reason, { stack: chromium.stack })), null);
+  assert.equal(crashOf(Object.assign(new DOMException('x', 'TimeoutError'), { stack: chromium.stack })).type, 'TimeoutError');
   const deep = Object.assign(new Error('x'), { stack: Array.from({ length: 50 }, (_, i) => `    at f${i} (https://h/assets/a.js:${i + 1}:1)`).join('\n') });
   const frames = crashOf(deep).frames;
   assert.equal(frames.length, 30);

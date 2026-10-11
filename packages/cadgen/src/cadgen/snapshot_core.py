@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import mimetypes
 import os
@@ -27,7 +28,7 @@ import re
 import struct
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from hashlib import sha256
 from math import isfinite
@@ -223,6 +224,14 @@ class SnapshotError(RuntimeError):
 # a Linux host lacks the system libraries it links against (a slim container).
 _BROWSER_MISSING = "Executable doesn't exist"
 _HOST_LIBRARIES_MISSING = "Host system is missing dependencies"
+# One cadgen process installs the browser at a time, and none launches it while one does
+# (``browser_install_lock``). Playwright locks its own installs against each other, but not a
+# launch against an install: a browser launched while another snapshot is still unpacking it is
+# a half-written executable, and fails with whatever the OS says about that ("spawn ENOEXEC").
+_BROWSER_LOCK = "snapshot-browser.lock"
+# Present while a holder of that lock is installing, not merely checking that nobody is: a launch
+# that meets another launch's check says nothing about an install.
+_BROWSER_INSTALLING = "snapshot-browser.installing"
 
 
 def browser_problem(message: str) -> str | None:
@@ -234,53 +243,130 @@ def browser_problem(message: str) -> str | None:
     return None
 
 
+@contextlib.contextmanager
+def browser_install_lock(*, installing: bool = False) -> Iterator[bool]:
+    """Hold the browser's install lock; yields whether another cadgen process was installing the
+    browser when this one came to it (so it has just installed it). ``installing`` says this holder
+    is about to install. It lives in the state directory, beside the settings. A state directory
+    that cannot be written leaves the install to Playwright's own lock alone."""
+    waited: list[bool] = []
+    marker: Path | None = None
+
+    def wait() -> None:
+        if marker is not None and marker.exists():  # another launch's check holds it only for an instant
+            waited.append(True)
+            _say("cadgen: waiting for the snapshot browser another cadgen command is installing...")
+
+    with contextlib.ExitStack() as held:
+        try:
+            from cadgen.viewer.recents import state_dir  # noqa: PLC0415 -- the state directory's one definition
+            from cadgen._internal.file_lock import exclusive
+
+            directory = state_dir()
+            marker = directory / _BROWSER_INSTALLING
+            directory.mkdir(parents=True, exist_ok=True)
+            held.enter_context(exclusive(directory / _BROWSER_LOCK, waiting=wait))
+            if installing:
+                marker.touch()
+                held.callback(marker.unlink, missing_ok=True)
+        except OSError:
+            pass
+        yield bool(waited)
+
+
 def install_browser(problem: str) -> None:
     """Fix ``problem`` the way Playwright documents, so the first snapshot needs no setup step.
 
     The browser is the headless shell alone (``--only-shell``): the full Chromium beside it is
     ~350 MB a snapshot never launches. It goes where Playwright keeps its browsers, which shares
-    it with any other Playwright install and keeps Playwright's own cleanup of old builds. The
-    host's libraries need root and apt; without them the fix is the user's to run, and this says
-    exactly which command. Progress goes to stderr: stdout is the snapshot's result.
+    it with any other Playwright install and keeps Playwright's own cleanup of old builds. Run
+    with the browser missing, ``playwright install`` downloads it; run with it there, it returns
+    at once, and with it half there (another install still unpacking it, or one that was killed
+    while it did), it waits for that install or finishes it -- so ``"start"``, a browser that did
+    not start for a reason Playwright does not name, runs the same command. The host's libraries
+    need root and apt; without them the fix is the user's to run, and this says exactly which
+    command. Progress goes to stderr: stdout is the snapshot's result.
     """
     import shutil
+
+    with browser_install_lock(installing=True) as installed_meanwhile:
+        if problem == "libraries":
+            command = [sys.executable, "-m", "playwright", "install-deps", "chromium"]
+            root = hasattr(os, "geteuid") and os.geteuid() == 0
+            if not (sys.platform.startswith("linux") and root and shutil.which("apt-get")):
+                raise SnapshotError(
+                    "The snapshot browser needs system libraries this machine does not have. "
+                    f"Install them with: sudo {' '.join(command)}"
+                )
+            message = "installing the snapshot browser's system libraries"
+        else:
+            command = [sys.executable, "-m", "playwright", "install", "--only-shell", "chromium"]
+            message = ("downloading the snapshot browser (once, about 100 MB)" if problem == "browser"
+                       else "the snapshot browser did not start; checking its install, then trying once more")
+        if not installed_meanwhile:
+            _say(f"cadgen: {message}...")
+        returncode, why = _run_to_stderr(command)
+    if returncode != 0:
+        need = "" if problem == "libraries" else " It is downloaded once, and needs the network that once."
+        raise SnapshotError(
+            f"Could not install the snapshot browser ({why or f'exit status {returncode}'}).{need} "
+            f"Run {' '.join(command)} to see why, then retry."
+        )
+
+
+def _run_to_stderr(command: list[str]) -> tuple[int, str]:
+    """Run ``command``, copying its output to ``sys.stderr`` line by line, whatever ``sys.stderr``
+    is (a model script's snapshot in a build worker writes it into the build's frames, which have
+    no file descriptor to hand a child). Returns the exit code and the first error it printed
+    (Playwright's names the cause, "Error: connect ECONNREFUSED ..."; the ones after it, its stack)."""
     import subprocess
 
-    if problem == "browser":
-        sys.stderr.write("cadgen: downloading the snapshot browser (once, about 100 MB)...\n")
-        command = [sys.executable, "-m", "playwright", "install", "--only-shell", "chromium"]
-    else:
-        command = [sys.executable, "-m", "playwright", "install-deps", "chromium"]
-        root = hasattr(os, "geteuid") and os.geteuid() == 0
-        if not (sys.platform.startswith("linux") and root and shutil.which("apt-get")):
-            raise SnapshotError(
-                "The snapshot browser needs system libraries this machine does not have. "
-                f"Install them with: sudo {' '.join(command)}"
-            )
-        sys.stderr.write("cadgen: installing the snapshot browser's system libraries...\n")
-    result = subprocess.run(command, stdout=sys.stderr, stderr=sys.stderr)
-    if result.returncode != 0:
-        raise SnapshotError(f"{' '.join(command)} exited {result.returncode}; run it to see why, then retry.")
+    why = ""
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL) as process:
+        for raw in process.stdout or ():
+            line = raw.decode("utf-8", errors="replace").rstrip()
+            if line:
+                why = why or (line if line.startswith("Error") else "")
+                _say(line)
+    return process.returncode, why
+
+
+def _say(line: str) -> None:
+    """``line`` on stderr, which a caller may have taken away (``None``, or closed): progress the
+    caller cannot show never fails the install it reports."""
+    try:
+        sys.stderr.write(line + "\n")
+        sys.stderr.flush()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def launch_with_browser(launch: Any, fix: Any = install_browser) -> Any:
-    """``await launch()``, fixing a missing browser (then its libraries) and retrying.
+    """``await launch()`` once the browser is installed, installing it the first time.
 
-    At most one fix per problem: a launch that still fails after both is the job's real error.
+    First it waits out an install another cadgen process is running (``browser_install_lock``).
+    A launch that fails is fixed and retried, once per problem: a missing browser is downloaded,
+    a Linux host's missing libraries installed, and any other failure (``"start"``: an install
+    another program has not finished, one a killed process left half done, a first launch a
+    virus scan held past the startup timeout) has the install checked and the launch tried once
+    more. A launch that still fails is the browser that did not start (telemetry's ``browser``).
     """
+    with browser_install_lock():
+        pass
     fixed: set[str] = set()
     while True:
         try:
             return await launch()
         except Exception as error:  # noqa: BLE001 - Playwright raises its own Error for both cases
-            problem = browser_problem(str(error))
-            if problem is None or problem in fixed:
+            problem = browser_problem(str(error)) or "start"
+            if problem in fixed:
                 raise _browser_failed(error)
             fixed.add(problem)
             try:
                 fix(problem)
             except Exception as unfixed:
-                raise _browser_failed(unfixed)
+                # An install check that fails says nothing about a launch that failed for its own reason.
+                raise _browser_failed(error if problem == "start" else unfixed) from unfixed
 
 
 def _browser_failed(error: BaseException) -> BaseException:

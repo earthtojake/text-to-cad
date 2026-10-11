@@ -353,9 +353,11 @@ class StepWriteDeterminismTest(unittest.TestCase):
         ``int()`` would map those into the tail too) and nothing else."""
         from cadgen.step_export import _tail_reference_pattern
 
-        for tail_start, total in ((39957, 44756), (100, 999), (5, 5), (1000, 1000), (2960431, 3012345)):
+        # Ranges that differ only in their last digit (a shared prefix, or a single digit) once raised IndexError,
+        # and ranges that cross a power of ten were only ever matched by luck.
+        for tail_start, total in ((39957, 44756), (100, 999), (5, 5), (1000, 1000), (2960431, 3012345),
+                                  (125, 129), (5, 9), (12340, 12349), (95, 120), (9990, 10010), (7, 1003)):
             pattern = _tail_reference_pattern(tail_start, total)
-            width = len(str(total))
             low = max(1, tail_start - 1500)
             for value in list(range(low, min(total, tail_start + 1500))) + list(range(max(low, total - 1500), total + 1500)):
                 expected = tail_start <= value <= total
@@ -364,9 +366,9 @@ class StepWriteDeterminismTest(unittest.TestCase):
                         pattern.fullmatch(spelling) is not None, expected,
                         f"{spelling!r} against [{tail_start}, {total}]",
                     )
-            self.assertIsNone(pattern.search(b"#%d0" % tail_start), "a longer number is not a tail reference")
+            if tail_start * 10 > total:  # the start with a digit more is past the tail, so no match
+                self.assertIsNone(pattern.search(b"#%d0" % tail_start), "a longer number is not a tail reference")
             self.assertIsNotNone(pattern.search(b"(#%d,#%d)" % (tail_start - 1, total)))
-            self.assertEqual(len(str(tail_start)), width, "fixture ranges are same-width")
 
     def test_styled_item_target_reads_the_third_parameter(self) -> None:
         from cadgen.step_export import _styled_item_target

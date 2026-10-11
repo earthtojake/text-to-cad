@@ -673,6 +673,37 @@ class CadGenerationTests(unittest.TestCase):
         self.assertIsNotNone(scene)
         self.assertIn("printing_part: 1 box placed", captured_out.getvalue())
 
+    def test_an_empty_shape_is_refused_as_the_models_mistake_not_a_crash(self) -> None:
+        # build123d asserts on an empty shape's geometry; unchecked, that
+        # AssertionError surfaced from inside the STEP export as cadgen's bug.
+        from cadgen import analytics
+
+        script_path = self.temp_root / "empty_part.py"
+        script_path.write_text(
+            "\n".join(
+                [
+                    "from cadgen import step",
+                    "@step",
+                    "def model():",
+                    "    import build123d",
+                    "    return build123d.Part()",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        spec = next(spec for spec in list_entry_specs() if spec.source_path == script_path)
+        # Caught by hand: assertRaises drops the traceback, which is what telemetry reads.
+        try:
+            cad_generation.run_script_generator(spec, "step")
+        except ValueError as error:
+            refusal = error
+        else:
+            self.fail("an empty shape built")
+        self.assertRegex(str(refusal), r"empty_part\.py @step returned an empty shape: it holds no geometry")
+        self.assertEqual("refused", analytics.build_failure(refusal))
+        self.assertIsNone(analytics.signature(refusal, "build", bugs_only=True))
+
     def test_bare_shape_return_is_supported_for_step_generation(self) -> None:
         script_path = self.temp_root / "bare_part.py"
         script_path.write_text(

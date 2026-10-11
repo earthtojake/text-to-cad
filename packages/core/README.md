@@ -202,7 +202,8 @@ library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Open
 (`consent`, `features`), the update check (`version`) and what the page did for
 telemetry (`reportActivity`: a touch, a Quick Edit that went, or a crash); every
 change is a POST with the viewer's guard header. A host reports its page's crashes
-with `createCrashReporter(send, { fileOf })`, which makes each with `crashOf` -- the
+with `createCrashReporter(send, { fileOf })`, which makes each with `crashOf` (a
+cancellation, an `AbortError`, is none) -- the
 error's type and its script frames, oldest first, never its message, a value or a
 URL (`fileOf` names a script by its file's own name, `scriptFileOf` by default, and
 a frame in one of the page's own chunks also names its debug id, from the table the

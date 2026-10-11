@@ -24,6 +24,9 @@ const NOISE = {
   their_recursion: [crash({ where: 'build', type: 'RecursionError' }, [
     ...Array(14).fill([USER, { file: 'cadgen/authoring.py', function: '_decorator.<locals>._apply.<locals>.model', line: 573 }]).flat(),
     { file: 'cadgen/authoring.py', function: '_same_file', line: 223 }, { file: 'pathlib/_local.py', function: 'PurePath.__str__', line: 233 }])],
+  page_cancelled: [crash({ where: 'page', type: 'AbortError', handled: false }, [
+    { file: 'vendor-react.js', function: 'commitHookEffectListUnmount', line: 8, column: 52011 },
+    { file: 'index.js', function: '<anonymous>', line: 1, column: 48213 }])],
 };
 
 // cadgen's bugs, which look like noise in one way or another: every one goes on to PostHog.
@@ -47,6 +50,7 @@ const BUGS = [
     { file: 'cadgen/build123d.py', function: '__getattr__', line: 49 }]),
   crash({ where: 'build', type: 'KeyError' }, [USER, { file: 'cadgen/color.py', function: '_parse_hex', line: 42 }]),
   crash({ where: 'build', type: 'RecursionError' }, Array(30).fill({ file: 'cadgen/_internal/tree.py', function: 'walk', line: 12 })),
+  crash({ where: 'page', type: 'TimeoutError' }), // only a cancellation is asked for; a timeout is a server that did not answer
   crash({ where: 'tool', tool: 'cad_sync', type: 'OSError' }, [{ file: 'cadgen/_internal/atomic_replace.py', function: 'write_bytes_atomic', line: 246 },
     { file: 'pathlib/_local.py', function: 'Path.open', line: 537 }]),
   crash({ where: 'page', type: 'NotFoundError' }, [{ file: 'assets/vendor-react.js', function: 'Au', line: 8, column: 109111 }]),
