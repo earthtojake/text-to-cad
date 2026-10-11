@@ -78,6 +78,13 @@ test('a batch becomes one row per event, carrying its context and its own counts
   assert.deepEqual([store.rows[0].process, store.rows[0].client, store.rows[0].presentation], ['app', 'codex-mcp-client', 'tabs']);
 });
 
+test('the Qoder plugin channel is accepted as the package names it', async () => {
+  const store = memory();
+  const reply = await send(store, 'POST', '/v1/events', { ...BATCH, channel: 'qoder-github', events: [{ name: 'view', calls: 1 }] });
+  assert.equal(reply.status, 204);
+  assert.equal(store.rows[0].channel, 'qoder-github');
+});
+
 test("the build daemon's counts are rows of their own, under the process that saw them", async () => {
   const store = memory();
   assert.equal((await send(store, 'POST', '/v1/events', DAEMON)).status, 204);

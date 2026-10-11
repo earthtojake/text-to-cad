@@ -214,7 +214,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_prose_and_metadata_run_only_the_contracts_that_read_them(self):
         for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "LICENSE", ".claude-plugin/plugin.json",
-                     "claude.mcp.json", "skills.sh.json", "skills/urdf/SKILL.md", "skills/urdf/references/joints.md",
+                     ".qoder-plugin/plugin.json", "claude.mcp.json", "qoder.mcp.json", "skills.sh.json",
+                     "skills/urdf/SKILL.md", "skills/urdf/references/joints.md",
                      "skills/step-parts/agents/openai.yaml", "packages/core/README.md", "packages/ui/docs/lod.md",
                      "docs/migrations/migrating-0.4-to-0.5.md", "models/examples/src/part.py",
                      ".github/workflows/release-publish.yml", ".github/workflows/release-prepare.yml",

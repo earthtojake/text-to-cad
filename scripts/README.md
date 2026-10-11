@@ -176,8 +176,8 @@ where those files ship, so these scripts are what produces them.
 
 - `dev_install.py <host> [--uninstall] [--no-build] [--restart] [--wheel]` — installs this
   checkout into an agent app: the development plugin `text-to-cad@earthtojake-dev`
-  for `claude` (which Cursor and Grok Build load too), `codex`, `cursor`, `grok`
-  and `gemini` (skills copied, server run by `.venv`, serving a copy of the page
+  for `claude` (which Cursor and Grok Build load too), `codex`, `qoder`, `cursor`,
+  `grok` and `gemini` (skills copied, server run by `.venv`, serving a copy of the page
   taken at install, assembled under `tmp/<host>-dev`), with the skills' launch
   command rewritten to that same runtime; `--wheel` builds the checkout's wheel and
   runs both through `uvx --from <wheel>`; the server alone for `claude-desktop`. Refuses a host where another copy of the plugin, or this

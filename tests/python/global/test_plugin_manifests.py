@@ -16,7 +16,12 @@ owns stamping every derived version from the canonical `VERSION` file, and
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -27,10 +32,12 @@ MARKETPLACE_NAME = "earthtojake"
 
 CLAUDE_PLUGIN_PATH = REPO_ROOT / ".claude-plugin" / "plugin.json"
 CODEX_MCP_PATH = REPO_ROOT / "codex.mcp.json"
+QODER_MCP_PATH = REPO_ROOT / "qoder.mcp.json"
 CLAUDE_MCP_PATH = REPO_ROOT / "claude.mcp.json"
 CURSOR_MCP_PATH = REPO_ROOT / "cursor.mcp.json"
 MCP_PATH = REPO_ROOT / "mcp.json"
 CODEX_PLUGIN_PATH = REPO_ROOT / ".codex-plugin" / "plugin.json"
+QODER_PLUGIN_PATH = REPO_ROOT / ".qoder-plugin" / "plugin.json"
 CURSOR_PLUGIN_PATH = REPO_ROOT / ".cursor-plugin" / "plugin.json"
 PLUGIN_PATH = REPO_ROOT / "plugin.json"
 GEMINI_EXTENSION_PATH = REPO_ROOT / "gemini-extension.json"
@@ -52,14 +59,14 @@ def load_json(path: Path) -> dict:
 
 class PluginManifestPolicyTest(unittest.TestCase):
     def test_every_provider_plugin_manifest_exists_at_the_repo_root(self) -> None:
-        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH, PLUGIN_PATH):
+        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, QODER_PLUGIN_PATH, CURSOR_PLUGIN_PATH, PLUGIN_PATH):
             self.assertTrue(
                 path.is_file(),
                 f"missing plugin manifest: {path.relative_to(REPO_ROOT)}",
             )
 
     def test_plugin_manifests_name_the_plugin_consistently(self) -> None:
-        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH, PLUGIN_PATH):
+        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, QODER_PLUGIN_PATH, CURSOR_PLUGIN_PATH, PLUGIN_PATH):
             manifest = load_json(path)
             self.assertEqual(
                 manifest.get("name"),
@@ -75,6 +82,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         descriptions = {
             "claude": load_json(CLAUDE_PLUGIN_PATH).get("description"),
             "codex": codex.get("description"),
+            "qoder": load_json(QODER_PLUGIN_PATH).get("description"),
             "codex interface": codex["interface"].get("longDescription"),
             "cursor": load_json(CURSOR_PLUGIN_PATH).get("description"),
             "agent plugins": load_json(PLUGIN_PATH).get("description"),
@@ -118,7 +126,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
     def test_plugin_manifests_link_the_same_pages(self) -> None:
         # The listing links every directory shows: homepage, docs, support, privacy policy and terms.
         # Claude and Cursor spell them as top-level fields, Codex under `interface`.
-        claude, cursor = load_json(CLAUDE_PLUGIN_PATH), load_json(CURSOR_PLUGIN_PATH)
+        claude, qoder, cursor = load_json(CLAUDE_PLUGIN_PATH), load_json(QODER_PLUGIN_PATH), load_json(CURSOR_PLUGIN_PATH)
         codex = load_json(CODEX_PLUGIN_PATH)["interface"]
         for claude_key, codex_key in (("homepage", "websiteURL"), ("supportUrl", "supportURL"),
                                       ("privacyPolicyUrl", "privacyPolicyURL"),
@@ -130,6 +138,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
         for key in ("documentationUrl", "repository", "author", "license"):
             with self.subTest(key):
                 self.assertEqual(cursor.get(key), claude.get(key))
+        for key in ("homepage", "repository", "author", "license", "keywords"):
+            with self.subTest(f"qoder {key}"):
+                self.assertEqual(qoder.get(key), claude.get(key))
         standard = load_json(PLUGIN_PATH)
         for key in ("homepage", "repository", "author", "license"):
             with self.subTest(f"agent plugins {key}"):
@@ -147,7 +158,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertEqual(set(shorts.values()), {"Design 3D models"}, shorts)
 
     def test_plugin_manifests_point_at_the_canonical_skills_directory(self) -> None:
-        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH):
+        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, QODER_PLUGIN_PATH, CURSOR_PLUGIN_PATH):
             manifest = load_json(path)
             self.assertIn(
                 manifest.get("skills"),
@@ -213,8 +224,9 @@ class PluginManifestPolicyTest(unittest.TestCase):
                 for item in value:
                     yield from keys(item)
 
-        for path in (MARKETPLACE_PATH, CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH, GEMINI_EXTENSION_PATH,
-                     PLUGIN_PATH, CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH):
+        for path in (MARKETPLACE_PATH, CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, QODER_PLUGIN_PATH,
+                     CURSOR_PLUGIN_PATH, GEMINI_EXTENSION_PATH, PLUGIN_PATH, CLAUDE_MCP_PATH,
+                     CODEX_MCP_PATH, QODER_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH):
             with self.subTest(path=path.name):
                 self.assertFalse({"ref", "sha"} & set(keys(load_json(path))), f"{path.name} names a git ref")
         for entry in load_json(MARKETPLACE_PATH)["plugins"]:
@@ -226,6 +238,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         commands = (
             "claude plugin marketplace add earthtojake/text-to-cad#latest",
             "codex plugin marketplace add earthtojake/text-to-cad --ref latest",
+            "qoder plugins marketplace add earthtojake/text-to-cad#latest",
             "git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad",
             "grok plugin install earthtojake/text-to-cad@latest",
             "gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest",
@@ -273,6 +286,71 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertEqual(args[-2:], ["cadgen", "mcp"])
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(args[args.index("--from") + 1], f"cadgen=={version}")
+
+    def test_qoder_starts_the_cad_server_and_loads_canonical_skills(self) -> None:
+        manifest = load_json(QODER_PLUGIN_PATH)
+        self.assertEqual(manifest.get("skills"), "./skills/")
+        self.assertEqual(manifest.get("mcpServers"), "./qoder.mcp.json")
+        qoder, claude = load_json(QODER_MCP_PATH)["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
+        self.assertEqual(list(load_json(QODER_MCP_PATH)["mcpServers"]), ["cad"])
+        self.assertEqual({**qoder, "env": None}, {**claude, "env": None})
+
+    def test_qoder_executes_the_cad_mcp_launch_contract(self) -> None:
+        qoder = load_json(QODER_MCP_PATH)["mcpServers"]["cad"]
+        self.assertEqual(qoder["command"], "uvx")
+
+        with tempfile.TemporaryDirectory(prefix="text-to-cad-qoder-mcp-") as tmp:
+            fixture_root = Path(tmp)
+            probe = fixture_root / "uvx_probe.py"
+            probe.write_text(
+                "import json, os, sys\n"
+                "print(json.dumps({\"args\": sys.argv[1:], \"channel\": "
+                "os.environ.get(\"CADGEN_INSTALL_CHANNEL\")}))\n",
+                encoding="utf-8",
+            )
+            if os.name == "nt":
+                launcher = fixture_root / "uvx.cmd"
+                launcher.write_text(
+                    '@"%FAKE_UVX_PYTHON%" "%FAKE_UVX_PROBE%" %*\r\n',
+                    encoding="utf-8",
+                )
+            else:
+                launcher = fixture_root / "uvx"
+                launcher.write_text(
+                    '#!/bin/sh\nexec "$FAKE_UVX_PYTHON" "$FAKE_UVX_PROBE" "$@"\n',
+                    encoding="utf-8",
+                )
+                launcher.chmod(0o755)
+
+            env = {
+                **os.environ,
+                **qoder.get("env", {}),
+                "FAKE_UVX_PYTHON": sys.executable,
+                "FAKE_UVX_PROBE": str(probe),
+                "PATH": str(fixture_root) + os.pathsep + os.environ.get("PATH", ""),
+            }
+            executable = shutil.which(qoder["command"], path=env["PATH"])
+            self.assertIsNotNone(executable)
+            command = (
+                ["cmd.exe", "/d", "/s", "/c", executable, *qoder["args"]]
+                if os.name == "nt"
+                else [executable, *qoder["args"]]
+            )
+            result = subprocess.run(
+                command,
+                cwd=REPO_ROOT,
+                env=env,
+                text=True,
+                encoding="utf-8",
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        executed = json.loads(result.stdout)
+        self.assertEqual(executed["args"], qoder["args"])
+        self.assertEqual(executed["channel"], "qoder-github")
+        self.assertEqual(executed["args"][-2:], ["cadgen", "mcp"])
 
     def test_cursor_starts_claudes_server_and_shows_its_icon(self) -> None:
         # Cursor reads only .cursor-plugin/plugin.json. Its MCP config format is Claude's, and it starts
@@ -331,7 +409,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         expected = [*LAUNCHER[1:], f"cadgen=={version}", "cadgen", "mcp"]
-        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH):
+        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, QODER_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH,
+                     GEMINI_EXTENSION_PATH):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]
                 self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
@@ -351,12 +430,14 @@ class PluginManifestPolicyTest(unittest.TestCase):
         from cadgen._internal.channel import is_channel
 
         said = {path.name: load_json(path)["mcpServers"]["cad"]["env"]
-                for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, MCP_PATH, GEMINI_EXTENSION_PATH)}
+                for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, QODER_MCP_PATH, CURSOR_MCP_PATH,
+                             MCP_PATH, GEMINI_EXTENSION_PATH)}
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         said["README.md"] = json.loads(re.search(r'"env": (\{"CADGEN_INSTALL_CHANNEL"[^}]*\})', readme).group(1))
         self.assertEqual(said, {
             "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-github"},
             "codex.mcp.json": {"CADGEN_INSTALL_CHANNEL": "codex-github"},
+            "qoder.mcp.json": {"CADGEN_INSTALL_CHANNEL": "qoder-github"},
             "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-marketplace", "CADGEN_AUTO_UPDATED": "1"},
             "mcp.json": {"CADGEN_INSTALL_CHANNEL": "agent-plugins"},
             "gemini-extension.json": {"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"},

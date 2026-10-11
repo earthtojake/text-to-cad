@@ -51,6 +51,8 @@ FILES = (MANIFEST, ".claude-plugin/icon.png", ".cursor-plugin/plugin.json", "gem
          "cursor.mcp.json", "LICENSE")
 # What Claude Code's and Codex's marketplaces read besides: the catalog, and Codex's manifest and config.
 MARKETPLACE_FILES = (CATALOG, ".codex-plugin/plugin.json", ".codex-plugin/logo.png", "codex.mcp.json")
+# Qoder follows the release branch too, but its files do not belong in claude.ai's directory copy.
+QODER_FILES = (".qoder-plugin/plugin.json", "qoder.mcp.json")
 # The Agent Plugins standard's manifest and server config (agent-plugins.org), which VS Code reads before
 # Claude's manifest.
 STANDARD_FILES = ("plugin.json", "mcp.json")
@@ -63,7 +65,8 @@ class Copy(NamedTuple):
 
 
 COPIES = {
-    "latest": Copy(FILES + MARKETPLACE_FILES + STANDARD_FILES, {"cursor.mcp.json": ("cursor-github", False)}),
+    "latest": Copy(FILES + MARKETPLACE_FILES + QODER_FILES + STANDARD_FILES,
+                   {"cursor.mcp.json": ("cursor-github", False)}),
     "directory": Copy(FILES, {"claude.mcp.json": ("claude-directory", True), "cursor.mcp.json": ("cursor-github", False)}),
 }
 DIRECTORIES = ("skills/",)

@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from tests.python.support.paths import REPO_ROOT
 
@@ -22,6 +23,7 @@ spec.loader.exec_module(dev_install)
 class DevPluginTests(unittest.TestCase):
     def test_every_plugin_host_gets_the_skills_and_this_checkouts_server(self) -> None:
         manifests = {"claude": ".claude-plugin/plugin.json", "codex": ".codex-plugin/plugin.json",
+                     "qoder": ".qoder-plugin/plugin.json",
                      "cursor": ".cursor-plugin/plugin.json", "grok": ".claude-plugin/plugin.json",
                      "gemini": "gemini-extension.json"}
         skills = sorted(path.parent.name for path in (REPO_ROOT / "skills").glob("*/SKILL.md"))
@@ -58,6 +60,16 @@ class DevPluginTests(unittest.TestCase):
                     if "below means" in text:
                         self.assertIn("`cadgen` below means `/w/.venv/bin/python -m cadgen.cli`", text)
                         self.assertIn("`python` below means `/w/.venv/bin/python`", text)
+
+    def test_qoder_dev_install_refuses_a_marketplace_copy(self) -> None:
+        class Args:
+            uninstall = False
+
+        listing = json.dumps([{"id": "text-to-cad@earthtojake", "name": "text-to-cad"}])
+        with mock.patch.object(dev_install, "qoder_cli", return_value="qoder"), \
+             mock.patch.object(dev_install, "run", return_value=listing):
+            with self.assertRaisesRegex(dev_install.Refused, "text-to-cad@earthtojake"):
+                dev_install.install_qoder(Args())
 
     def test_wheel_mode_runs_one_wheel_for_the_server_and_the_skills(self) -> None:
         import argparse
