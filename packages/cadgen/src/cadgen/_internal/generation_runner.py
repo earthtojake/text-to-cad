@@ -276,10 +276,20 @@ def _normalize_step_payload(
 
 def _empty_shape(shape: object) -> str | None:
     """What in the returned tree is empty (build123d's ``is_null``), named for the
-    person: the shape itself, or a child by its label or position; else None."""
+    person: the shape itself, or a child by its label or position; else None.
+
+    A stored child (``LazyCompound``) and an assembly of them (the reference
+    compound) are promises: reading ``is_null`` would load the one and turn the
+    other native, undoing what lets an assembly of stored children skip both. Each
+    was a build of its own, which this same check refused if it was empty."""
+    from cadgen.store._references import _ReferenceCompound
+    from cadgen.store.lazy import LazyCompound
+
     pending: list[tuple[object, str]] = [(shape, "an empty shape")]
     while pending:
         node, name = pending.pop()
+        if isinstance(node, (LazyCompound, _ReferenceCompound)):
+            continue
         if getattr(node, "is_null", False):
             return name
         for index, child in enumerate(getattr(node, "children", None) or ()):
