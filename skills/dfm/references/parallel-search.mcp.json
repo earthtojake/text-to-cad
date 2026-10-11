@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "parallel-search": {
+      "type": "streamable-http",
+      "url": "https://search.parallel.ai/mcp",
+      "headers": {
+        "User-Agent": "text-to-cad-dfm/Parallel-Search-MCP"
+      }
+    }
+  }
+}
