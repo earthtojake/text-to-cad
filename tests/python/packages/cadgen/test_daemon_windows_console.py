@@ -57,7 +57,7 @@ class DetachedDaemonWorkersOpenNoWindow(unittest.TestCase):
                     **client.detach_kwargs(),
                 )
                 # A hang guard, not a wait for time to pass: both processes exit at once.
-                self.assertEqual(daemon.wait(timeout=120), 0, log.read_text(errors="replace"))
+                self.assertEqual(daemon.wait(timeout=120), 0, log.read_text(encoding="utf-8", errors="replace"))
             report = json.loads(log.read_text(encoding="utf-8").strip().splitlines()[-1])
         self.assertEqual(report["parent_window"], 0, "the detached daemon itself has a console window")
         self.assertEqual(report["window"], 0, "a worker of the detached daemon opened a console window")
