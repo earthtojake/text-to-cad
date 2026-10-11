@@ -57,6 +57,9 @@ def run_gz_sdf_check(xml_text: str, *, output_path: Path, mode: GzCheckMode = "a
             encoding="utf-8",
             errors="backslashreplace",
         )
+    except OSError as exc:
+        result.add("error", "gz_check_failed", f"gz sdf --check could not start: {exc}")
+        return result
     finally:
         temp_path.unlink(missing_ok=True)
 
