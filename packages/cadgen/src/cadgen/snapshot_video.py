@@ -237,10 +237,10 @@ def ffmpeg_binary() -> str:
     """
     override = str(os.environ.get("CADGEN_FFMPEG") or "").strip()
     if override:
-        resolved = shutil.which(override) or (override if Path(override).is_file() else "")
+        resolved = shutil.which(override)
         if not resolved:
             raise SnapshotError(
-                f"CADGEN_FFMPEG names an ffmpeg that is not there: {override}"
+                f"CADGEN_FFMPEG names an ffmpeg that is missing or not executable: {override}"
             )
         return resolved
     found = shutil.which("ffmpeg")
