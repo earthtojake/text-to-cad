@@ -250,6 +250,16 @@ def _normalize_step_payload(
     from build123d import Shape as Build123dShape
 
     if isinstance(result, Build123dShape):
+        empty = _empty_shape(result)
+        if empty is not None:
+            # build123d asserts on an empty shape's geometry the moment the export
+            # reads it, so unchecked this surfaced as a bare AssertionError from
+            # inside cadgen: refused here, in words, as the model's mistake.
+            raise ValueError(
+                f"{_display_path(script_path)} @step returned {empty}: it holds no geometry "
+                "(an empty Part(), Compound() or Solid(), or a builder nothing was added to). "
+                "Return the shape the model built."
+            )
         return {"shape": result}
     if isinstance(result, dict):
         raise TypeError(
@@ -262,6 +272,21 @@ def _normalize_step_payload(
         f"{_display_path(script_path)} @step must return a build123d Shape, got "
         f"{type(result).__name__}"
     )
+
+
+def _empty_shape(shape: object) -> str | None:
+    """What in the returned tree is empty (build123d's ``is_null``), named for the
+    person: the shape itself, or a child by its label or position; else None."""
+    pending: list[tuple[object, str]] = [(shape, "an empty shape")]
+    while pending:
+        node, name = pending.pop()
+        if getattr(node, "is_null", False):
+            return name
+        for index, child in enumerate(getattr(node, "children", None) or ()):
+            label = getattr(child, "label", "") or ""
+            pending.append((child, f"a shape with an empty child {label!r}" if label
+                            else f"a shape with an empty child (children[{index}])"))
+    return None
 
 
 def _mark_scene_step_payload(
