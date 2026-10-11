@@ -73,23 +73,25 @@ def producer_fields(value: dict) -> dict:
 
 @lru_cache(maxsize=1)
 def kernel_versions() -> tuple[str, str, str]:
-    """The loaded build123d, OCP and cadquery-ocp-novtk versions: who produced
-    a derived fact (an extracted surface, a measured box).
+    """The installed build123d, the loaded OCP and cadquery-ocp-novtk versions:
+    who produced a derived fact (an extracted surface, a measured box).
 
     OCP.__version__ is exported by the native extension, not inferred from
-    build123d. An unknown version is a ValueError: a derived fact must never
-    share an identity with an unrelated kernel build.
+    build123d. build123d's is its installed metadata: importing build123d to
+    read it was most of the start of a worker that derives and meshes, which
+    never imports build123d otherwise (``component_package.NativeShape``). An
+    unknown version is a ValueError: a derived fact must never share an
+    identity with an unrelated kernel build.
     """
     from importlib.metadata import PackageNotFoundError, version
 
     import OCP
-    import build123d
 
     try:
-        distribution = version("cadquery-ocp-novtk")
+        build123d, distribution = version("build123d"), version("cadquery-ocp-novtk")
     except PackageNotFoundError as error:
-        raise ValueError("a derived fact needs the cadquery-ocp-novtk distribution") from error
-    versions = (getattr(build123d, "__version__", None), getattr(OCP, "__version__", None), distribution)
+        raise ValueError("a derived fact needs the build123d and cadquery-ocp-novtk distributions") from error
+    versions = (build123d, getattr(OCP, "__version__", None), distribution)
     if any(not isinstance(value, str) or not value.strip() or "unknown" in value.lower() for value in versions):
         raise ValueError("a derived fact needs known build123d and OCP versions")
     return versions
@@ -265,7 +267,7 @@ def _derive_meshes(entry: dict, surface: dict, tessellations: list[tuple[float, 
         with _meshing():
             # Meshing stores its triangulation on the shape: each tessellation meshes
             # a fresh private decode, so no level depends on another having run.
-            shape = decode_display_shape(entry, payload)
+            shape = decode_display_shape(entry, payload, native=True)
             body = mesh_component(getattr(shape, "wrapped", shape), index, surface_input=surface_key,
                                   surface_object=surface["object"], chord=chord, angle=angle)
             meshes.write(meshes.tessellation_key(surface_key, chord, angle), body)
@@ -291,7 +293,7 @@ def _derive_selectors(entry: dict, surface: dict, shape: Any = None) -> None:
     with _meshing():
         index, _floats = read_surf(read_verified_object(surface["object"]))
         if shape is None:
-            shape = decode_display_shape(entry, read_verified_object(entry["brep"]))
+            shape = decode_display_shape(entry, read_verified_object(entry["brep"]), native=True)
         table = build_selector_table(getattr(shape, "wrapped", shape), index)
         selectors.write(key, surface["object"], selector_table_bytes(table))
 
@@ -399,7 +401,7 @@ def derive(tree_hash: str, cids: list[str] | None = None, *, force: bool = False
             if actual is None:
                 if keep_going is not None and not keep_going():
                     break
-                shape = decode_geometry_component(entry, read_verified_object(entry["brep"]))
+                shape = decode_geometry_component(entry, read_verified_object(entry["brep"]), native=True)
                 payload = extract_surface_component(shape.wrapped, face_colors=shape.cad_face_ordinal_colors)
                 validate_surface_bytes(payload)
                 digest = hashlib.sha256(payload).hexdigest()

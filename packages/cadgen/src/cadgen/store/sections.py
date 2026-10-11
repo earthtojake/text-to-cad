@@ -170,7 +170,7 @@ def produce(items: list[dict], *, keep_going: Callable[[], bool] | None = None) 
                 break
             try:
                 payload = read_verified_object(item["component"]["brep"])
-                shape = decode_display_shape(item["component"], payload)
+                shape = decode_display_shape(item["component"], payload, native=True)
                 loops = section_loops(getattr(shape, "wrapped", shape),
                                       normal=tuple(item["normal"]), offset=item["offset"])
             except Exception as error:  # noqa: BLE001 - the component's failure, reported by name
