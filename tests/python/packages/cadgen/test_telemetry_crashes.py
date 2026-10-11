@@ -156,6 +156,22 @@ class SignatureTest(unittest.TestCase):
                     self.assertEqual((found["type"], {frame["file"] for frame in found["frames"]}),
                                      ("RecursionError", {"cadgen/authoring.py"}), "the person's call is far outside it")
 
+    def test_cadgens_own_module_gone_is_its_installation_removed_and_never_a_crash(self) -> None:
+        import importlib
+
+        # uv replacing the environment under a running command: a module of cadgen's that shipped is not there.
+        for missing in ("cadgen._gone_under_this_test", "cadgen._internal._gone_under_this_test"):
+            with self.subTest(missing=missing):
+                gone = _caught(lambda: importlib.import_module(missing))
+                self.assertIsInstance(gone, ModuleNotFoundError)
+                self.assertIsNone(analytics.signature(gone, "command", handled=False))
+        # A module cadgen imports from another package that is not installed is cadgen's to fix; so is a name a
+        # module of cadgen's does not have (the module is there).
+        missing_dependency = _caught(lambda: importlib.import_module("cadgen_test_absent_dependency"))
+        self.assertEqual(analytics.signature(missing_dependency, "command", handled=False)["type"], "ModuleNotFoundError")
+        no_such_name = _caught(lambda: exec("from cadgen.analytics import no_such_name_here", {}))  # noqa: S102
+        self.assertEqual(analytics.signature(no_such_name, "command", handled=False)["type"], "ImportError")
+
     def test_an_installed_package_that_is_not_cadgens_is_never_named(self) -> None:
         site = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, site, ignore_errors=True)

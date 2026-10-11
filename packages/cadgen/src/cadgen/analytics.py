@@ -260,13 +260,24 @@ _RAISED = re.compile(r"(?:^|:)\s*raise\b")
 # Errors that are never cadgen's bug: a command's own output closed by whatever read it (``cadgen ... | head``,
 # which the command answers by stopping quietly) -- that pipe, not another the command wrote to (``stdout_closed``);
 # a page leaving a viewer route mid-reply is the response writer's to swallow (``cadgen.viewer.response``), so a
-# route's connection error that reaches here is cadgen's own connection failing, and is reported. And a
+# route's connection error that reaches here is cadgen's own connection failing, and is reported. A
 # ``RecursionError`` whose cycle is the person's: their code among its innermost frames, and of cadgen's only the
-# decorator wrapper that calls it (``_THEIR_CYCLE``). The rule for the next noisy class: an error goes here only when,
+# decorator wrapper that calls it (``_THEIR_CYCLE``). And a module of cadgen's own that is not there
+# (``_installation_gone``): every one ships in the wheel, so one missing is cadgen's installation removed under
+# the running process -- uv replacing its cached environment -- as the daemon finds it (``pool.installation_gone``);
+# a module cadgen imports from another package that is not installed is still reported. The receiver cannot tell
+# it from a row (it gets the type and frames, not the module's name), so the releases already out still send it.
+# The rule for the next noisy class: an error goes here only when,
 # there, it can never be a mistake in cadgen's code -- never because it is frequent -- and in the same change the
 # receiver drops it from the releases already out (``NEVER_OURS`` in the API's ``noise.mjs``), so it stops costing
 # anything at once.
 _THEIR_CYCLE = frozenset({"cadgen/authoring.py"})
+
+
+def _installation_gone(error: BaseException) -> bool:
+    """Whether ``error`` says a module of cadgen's own is not there: its installation, not its code."""
+    name = getattr(error, "name", None) if isinstance(error, ModuleNotFoundError) else None
+    return isinstance(name, str) and (name == "cadgen" or name.startswith("cadgen."))
 
 
 def stdout_closed() -> bool:
@@ -746,6 +757,8 @@ def signature(error: BaseException, where: str, *, tool: str | None = None, hand
     if where not in WHERE or not isinstance(error, Exception):  # an interrupt, an exit: no crash
         return None
     if where == "command" and isinstance(error, BrokenPipeError) and stdout_closed():  # its reader left: no crash
+        return None
+    if _installation_gone(error):  # cadgen's own files removed under it: no crash
         return None
     if bugs_only and not isinstance(error, BUGS):  # before reading any frame: a failure is never kept waiting
         return None
