@@ -229,6 +229,9 @@ _HOST_LIBRARIES_MISSING = "Host system is missing dependencies"
 # launch against an install: a browser launched while another snapshot is still unpacking it is
 # a half-written executable, and fails with whatever the OS says about that ("spawn ENOEXEC").
 _BROWSER_LOCK = "snapshot-browser.lock"
+# Present while a holder of that lock is installing, not merely checking that nobody is: a launch
+# that meets another launch's check says nothing about an install.
+_BROWSER_INSTALLING = "snapshot-browser.installing"
 
 
 def browser_problem(message: str) -> str | None:
@@ -241,15 +244,18 @@ def browser_problem(message: str) -> str | None:
 
 
 @contextlib.contextmanager
-def browser_install_lock() -> Iterator[bool]:
-    """Hold the browser's install lock; yields whether another cadgen process held it first (so it
-    has just installed the browser). It lives in the state directory, beside the settings. A state
-    directory that cannot be written leaves the install to Playwright's own lock alone."""
+def browser_install_lock(*, installing: bool = False) -> Iterator[bool]:
+    """Hold the browser's install lock; yields whether another cadgen process was installing the
+    browser when this one came to it (so it has just installed it). ``installing`` says this holder
+    is about to install. It lives in the state directory, beside the settings. A state directory
+    that cannot be written leaves the install to Playwright's own lock alone."""
     waited: list[bool] = []
+    marker: Path | None = None
 
     def wait() -> None:
-        waited.append(True)
-        _say("cadgen: waiting for the snapshot browser another cadgen command is installing...")
+        if marker is not None and marker.exists():  # another launch's check holds it only for an instant
+            waited.append(True)
+            _say("cadgen: waiting for the snapshot browser another cadgen command is installing...")
 
     with contextlib.ExitStack() as held:
         try:
@@ -257,8 +263,12 @@ def browser_install_lock() -> Iterator[bool]:
             from cadgen._internal.file_lock import exclusive
 
             directory = state_dir()
+            marker = directory / _BROWSER_INSTALLING
             directory.mkdir(parents=True, exist_ok=True)
             held.enter_context(exclusive(directory / _BROWSER_LOCK, waiting=wait))
+            if installing:
+                marker.touch()
+                held.callback(marker.unlink, missing_ok=True)
         except OSError:
             pass
         yield bool(waited)
@@ -279,7 +289,7 @@ def install_browser(problem: str) -> None:
     """
     import shutil
 
-    with browser_install_lock() as installed_meanwhile:
+    with browser_install_lock(installing=True) as installed_meanwhile:
         if problem == "libraries":
             command = [sys.executable, "-m", "playwright", "install-deps", "chromium"]
             root = hasattr(os, "geteuid") and os.geteuid() == 0
@@ -311,14 +321,14 @@ def _run_to_stderr(command: list[str]) -> tuple[int, str]:
     (Playwright's names the cause, "Error: connect ECONNREFUSED ..."; the ones after it, its stack)."""
     import subprocess
 
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
     why = ""
-    for raw in process.stdout or ():
-        line = raw.decode("utf-8", errors="replace").rstrip()
-        if line:
-            why = why or (line if line.startswith("Error") else "")
-            _say(line)
-    return process.wait(), why
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL) as process:
+        for raw in process.stdout or ():
+            line = raw.decode("utf-8", errors="replace").rstrip()
+            if line:
+                why = why or (line if line.startswith("Error") else "")
+                _say(line)
+    return process.returncode, why
 
 
 def _say(line: str) -> None:
@@ -355,7 +365,8 @@ async def launch_with_browser(launch: Any, fix: Any = install_browser) -> Any:
             try:
                 fix(problem)
             except Exception as unfixed:
-                raise _browser_failed(unfixed)
+                # An install check that fails says nothing about a launch that failed for its own reason.
+                raise _browser_failed(error if problem == "start" else unfixed) from unfixed
 
 
 def _browser_failed(error: BaseException) -> BaseException:

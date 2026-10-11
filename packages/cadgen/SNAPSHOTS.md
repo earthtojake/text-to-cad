@@ -143,7 +143,8 @@ it. One cadgen command installs it at a time (a lock in the state directory, bes
 `settings.json`), and a snapshot started while another installs it waits for that
 install rather than launching a half-unpacked browser. A browser that does not
 start for any other reason has its install checked (which finishes one a killed
-command left half done) and is launched once more before the snapshot fails.
+command left half done) and is launched once more before the snapshot fails with
+the launch's own error.
 Where the fix is not cadgen's to make, the failure names the command: no network
 for the download, or a Linux host without the browser's system libraries
 (`sudo … -m playwright install-deps chromium`, which needs root and apt).

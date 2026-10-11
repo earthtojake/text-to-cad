@@ -33,14 +33,14 @@ LIBRARIES = "BrowserType.launch: Host system is missing dependencies to run brow
 HALF_UNPACKED = "BrowserType.launch: spawn ENOEXEC"
 SLOW_FIRST_START = "BrowserType.launch: Timeout 15000ms exceeded."
 
-# A cadgen command installing the browser: holds the install lock until told to finish, then
-# leaves the browser it installed (a file) behind.
+# A cadgen command installing the browser (or, with "check", a launch checking nobody is): holds
+# the install lock until told to finish, then leaves the browser it installed (a file) behind.
 HOLDER = """
 import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
 from cadgen.snapshot_core import browser_install_lock
-with browser_install_lock():
+with browser_install_lock(installing=sys.argv[3] == "install"):
     print("held", flush=True)
     sys.stdin.readline()
     Path(sys.argv[2]).write_text("installed")
@@ -102,10 +102,24 @@ class SnapshotBrowserTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "target closed"):
             self.run_launch("target closed", "target closed")
 
+        def install_fails(problem: str) -> None:
+            raise snapshot_core.SnapshotError("Could not install the snapshot browser (offline).")
+
+        # An install check that fails is not why the launch failed: the launch's error is still the one raised.
+        with self.assertRaisesRegex(RuntimeError, "target closed"):
+            asyncio.run(snapshot_core.launch_with_browser(launcher("target closed"), install_fails))
+        with self.assertRaisesRegex(snapshot_core.SnapshotError, "offline"):
+            asyncio.run(snapshot_core.launch_with_browser(launcher(MISSING), install_fails))
+
     def test_a_launch_waits_for_the_install_another_command_is_running(self) -> None:
-        installed = self.tmp / "browser"
+        for holds in ("install", "check"):
+            with self.subTest(holds=holds):
+                self.launch_beside(holds)
+
+    def launch_beside(self, holds: str) -> None:
+        installed = self.tmp / f"browser-{holds}"
         holder = subprocess.Popen(
-            [sys.executable, "-c", HOLDER, str(Path(snapshot_core.__file__).parents[1]), str(installed)],
+            [sys.executable, "-c", HOLDER, str(Path(snapshot_core.__file__).parents[1]), str(installed), holds],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=os.environ.copy())
         self.addCleanup(lambda: (holder.kill(), holder.wait(), holder.stdin.close(), holder.stdout.close()))
         self.assertEqual(holder.stdout.readline().strip(), "held")
@@ -136,13 +150,16 @@ class SnapshotBrowserTests(unittest.TestCase):
         with mock.patch.object(snapshot_core, "_say", say):
             thread = threading.Thread(target=snapshot)
             thread.start()
-            self.assertTrue(waiting.wait(60), "the launch did not wait for the install")
+            if holds == "install":
+                self.assertTrue(waiting.wait(60), "the launch did not wait for the install")
             holder.stdin.write("done\n")
             holder.stdin.flush()
             thread.join(60)
         self.assertEqual(holder.wait(60), 0)
         self.assertEqual(outcome, ["browser"])
         self.assertEqual(fixed, [], "it launched before the install finished")
+        # Another launch's check holds the lock too, but nothing is installing, so nothing says so.
+        self.assertFalse(holds == "check" and said, f"a check said {said!r}")
 
     def test_the_install_reports_through_any_stderr_and_names_why_it_failed(self) -> None:
         # A model script's snapshot in a build worker has a stderr with no file descriptor.

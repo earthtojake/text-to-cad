@@ -262,10 +262,11 @@ _RAISED = re.compile(r"(?:^|:)\s*raise\b")
 # a page leaving a viewer route mid-reply is the response writer's to swallow (``cadgen.viewer.response``), so a
 # route's connection error that reaches here is cadgen's own connection failing, and is reported. A
 # ``RecursionError`` whose cycle is the person's: their code among its innermost frames, and of cadgen's only the
-# decorator wrapper that calls it (``_THEIR_CYCLE``). And a module of cadgen's own that is not there
-# (``_installation_gone``): every one ships in the wheel, so one missing is cadgen's installation removed under
-# the running process -- uv replacing its cached environment -- as the daemon finds it (``pool.installation_gone``);
-# a module cadgen imports from another package that is not installed is still reported. The receiver cannot tell
+# decorator wrapper that calls it (``_THEIR_CYCLE``). And a module of cadgen's own that is not there while cadgen's
+# installation is gone too (``_installation_gone``): uv replacing its cached environment under the running process,
+# as the daemon finds it (``pool.installation_gone``). A cadgen module missing from an installation that is still
+# there is a stale import, cadgen's bug, and is reported; so is a module from another package that is not installed.
+# The receiver cannot tell
 # it from a row (it gets the type and frames, not the module's name), so the releases already out still send it.
 # The rule for the next noisy class: an error goes here only when,
 # there, it can never be a mistake in cadgen's code -- never because it is frequent -- and in the same change the
@@ -275,9 +276,17 @@ _THEIR_CYCLE = frozenset({"cadgen/authoring.py"})
 
 
 def _installation_gone(error: BaseException) -> bool:
-    """Whether ``error`` says a module of cadgen's own is not there: its installation, not its code."""
+    """Whether ``error`` says a module of cadgen's own is not there because its installation was removed: cadgen's
+    own ``__init__.py``, or its virtual environment's ``pyvenv.cfg``, is gone with it."""
     name = getattr(error, "name", None) if isinstance(error, ModuleNotFoundError) else None
-    return isinstance(name, str) and (name == "cadgen" or name.startswith("cadgen."))
+    if not (isinstance(name, str) and (name == "cadgen" or name.startswith("cadgen."))):
+        return False
+    import cadgen  # noqa: PLC0415 -- already imported: this module is cadgen's
+
+    needed = [cadgen.__file__ or ""]
+    if sys.prefix != sys.base_prefix:
+        needed.append(os.path.join(sys.prefix, "pyvenv.cfg"))
+    return not all(os.path.isfile(path) for path in needed)
 
 
 def stdout_closed() -> bool:
