@@ -4,7 +4,7 @@
 
 Give your agent CAD superpowers.
 
-[Docs](https://www.texttocad.dev)
+[Docs](https://www.texttocad.dev) | 🇮🇷 [فارسی](https://github.com/ussefT/text-to-cad/edit/main/README-fa.md)
 
 [![GitHub stars](https://img.shields.io/github/stars/earthtojake/text-to-cad?style=for-the-badge&logo=github&label=Stars)](https://github.com/earthtojake/text-to-cad/stargazers)
 [![skills.sh](https://skills.sh/b/earthtojake/text-to-cad?style=for-the-badge)](https://skills.sh/earthtojake/text-to-cad)
