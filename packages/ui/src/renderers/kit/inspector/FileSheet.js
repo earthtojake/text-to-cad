@@ -48,7 +48,7 @@ export const FILE_SHEET_PRECISION_SLIDER_CLASSES = [
   "h-4",
   "[&_[data-slot=slider-track]]:h-px",
   "[&_[data-slot=slider-track]]:rounded-full",
-  "[&_[data-slot=slider-track]]:bg-border",
+  "[&_[data-slot=slider-track]]:bg-foreground/20",
   "[&_[data-slot=slider-range]]:bg-primary",
   "[&_[data-slot=slider-thumb]]:h-2.5",
   "[&_[data-slot=slider-thumb]]:w-1.5",
@@ -371,11 +371,23 @@ const valueInputWidth = value => {
 };
 
 /**
- * A slider row (a joint of Position), compact: its label tight above its slider in the flexible
- * left column, and a small committed value input (24px tall, as wide as its figure and unit need,
- * its figures tabular) in the right column (`docs/settings-ui.md`).
+ * A slider with its committed value (`docs/settings-ui.md`): a compact value input (24px tall, as
+ * wide as its figure and unit need, its figures tabular) in the right column. Its label sits tight
+ * above the slider in the flexible left column (Position's joints). `wideLabel` is for a narrow
+ * panel whose labels are sentences (an FEA result's controls): the label, wrapping between words,
+ * shares its line with the value field, and the slider takes the whole row's width under them.
  */
-export function FileSheetSliderField({ label, value, onValueCommit, valueInputProps, labelTitle, children }) {
+export function FileSheetSliderField({ label, value, onValueCommit, valueInputProps, labelTitle, children, wideLabel = false }) {
+  if (wideLabel) {
+    return <FileSheetControlRow>
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5" data-position-control="" data-slider-layout="wide">
+        {label != null ? <span className={cn(FILE_SHEET_FIELD_LABEL_CLASSES, "whitespace-normal [overflow-wrap:break-word]")} title={labelTitle && labelTitle !== label ? labelTitle : undefined}>{label}</span> : <span />}
+        {onValueCommit ? <FileSheetValueInput value={value} onValueCommit={onValueCommit} {...valueInputProps}
+          className={cn("h-6 px-1.5", valueInputWidth(value), valueInputProps?.className)} /> : null}
+        <div className="col-span-2 min-w-0">{children}</div>
+      </div>
+    </FileSheetControlRow>;
+  }
   return <FileSheetControlRow>
     <div className="grid min-h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5" data-position-control="">
       <div className="min-w-0">

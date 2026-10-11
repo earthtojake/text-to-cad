@@ -188,6 +188,12 @@ export const skillGroups = [
       "Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding.",
   },
   {
+    name: "FEA",
+    path: "skills/fea",
+    summary:
+      "Runs a linear static stress study on a STEP part, reporting peak stress, safety factor and displacement with a colour-mapped result.",
+  },
+  {
     name: "G-code",
     path: "skills/gcode",
     summary:

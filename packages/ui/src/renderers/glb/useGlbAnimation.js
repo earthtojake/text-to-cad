@@ -7,14 +7,16 @@ import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationT
 import { createAnimationClock } from "../kit/tools/playbar/animationClock.js";
 import { playbackFrameTime, usePlaybackFrames } from "../kit/tools/playbar/usePlaybackFrames.js";
 
-function clipRows(document) {
-  return (document?.clips || []).map((clip, index) => ({
+function clipRows(document, own) {
+  return [...(document?.clips || []).map((clip, index) => ({
     id: `glb:${index}`,
     label: String(clip.name || `Clip ${index + 1}`),
     duration: Math.max(Number(clip.duration) || 0, 0.001),
     clip
-  }));
+  })), ...own];
 }
+
+const NONE = Object.freeze([]);
 
 const REST = Object.freeze({ activeClipId: "", enabled: false, playing: false, elapsedSec: 0, speed: 1, loopEnabled: true });
 
@@ -26,13 +28,20 @@ const REST = Object.freeze({ activeClipId: "", enabled: false, playing: false, e
  * first play, scrub or clip choice, and disposing it restores every animated
  * property to the value it had at rest.
  *
+ * The renderer may add clips of its own that the file does not carry (an FEA
+ * result's Load ramp): `{ id, label, duration, play: { apply(elapsedSec), release() } }`,
+ * listed after the file's. While one owns the pose, each frame is `apply` instead
+ * of a mixer's, and `release` puts the model back as it was. Hand the same array
+ * while they are the same clips: a new one starts the playbar over.
+ *
  * @param {object | null} document  The native GLB document on screen.
  * @param {() => void} requestRender  Asks the viewport for a frame.
+ * @param {readonly object[]} [own]  The renderer's own clips.
  * @returns the playbar runtime, or null for a file without playable clips.
  */
-export function useGlbAnimation(document, requestRender) {
+export function useGlbAnimation(document, requestRender, own = NONE) {
   const clock = useMemo(() => createAnimationClock(), []);
-  const clips = useMemo(() => clipRows(document), [document]);
+  const clips = useMemo(() => clipRows(document, own), [document, own]);
   const [state, setState] = useState(REST);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -104,10 +113,26 @@ export function useGlbAnimation(document, requestRender) {
   }, [activeClip, state.playing, clock, update]);
 
   // The mixer exists exactly while a routine owns the pose.
-  const clip = state.enabled ? activeClip?.clip || null : null;
+  const owner = state.enabled ? activeClip : null;
+  const clip = owner?.clip || null;
+  const play = owner?.play || null;
   const mixerRef = useRef(null);
   const frameRef = useRef(null);
   usePlaybackFrames(clock, state.playing, frameRef);
+  // The renderer's own clip poses the model itself, each frame, until it lets go.
+  useEffect(() => {
+    if (!play) return undefined;
+    frameRef.current = (elapsedSec) => {
+      play.apply(elapsedSec);
+      requestRenderRef.current?.();
+    };
+    frameRef.current(playbackFrameTime(clock, stateRef.current));
+    return () => {
+      frameRef.current = null;
+      play.release();
+      requestRenderRef.current?.();
+    };
+  }, [play, clock]);
   useEffect(() => {
     if (!document?.scene || !clip) return undefined;
     const mixer = createGlbAnimationRuntime(THREE, document.scene, clip);

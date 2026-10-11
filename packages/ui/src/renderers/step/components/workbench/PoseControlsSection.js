@@ -1,54 +1,17 @@
-import { cn } from "@text-to-cad/ui/utils";
-import { resolveParameterNumberControlStep } from "../../workbench/parameterControls.js";
 import {
   poseControlDisplayValue,
   poseControlWrite,
   poseDisplayValues,
   poseDrivenDofs
 } from "../../workbench/poseDrivenControls.js";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { Slider } from "@text-to-cad/ui/primitives/slider";
 import {
   NO_PRESET_VALUE, DEFAULT_POSE_VALUE, positionValuesAreDefault,
   KinematicsPoseRow
 } from "../../../kit/inspector/kinematicsControls.jsx";
-import {
-  FILE_SHEET_COMPACT_BUTTON_CLASSES,
-  FILE_SHEET_PRECISION_SLIDER_CLASSES,
-  FileSheetButtonRow,
-  FileSheetColorPicker,
-  FileSheetControlRow,
-  FileSheetSelectRow,
-  FileSheetSliderField,
-  FileSheetStatusText,
-  FileSheetCheckboxRow,
-  FileSheetValueInput,
-  parseFileSheetNumberInput
-} from "../../../kit/inspector/FileSheet.js";
+import { FileSheetStatusText } from "../../../kit/inspector/FileSheet.js";
+import { parameterRow } from "../../../kit/inspector/parameterRow.jsx";
 
 // The host coordinates pose ownership with Animation; these rows stay editable.
-
-const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
-
-function formatControlNumber(value) {
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) {
-    return "0";
-  }
-  if (Math.abs(numericValue) >= 100) {
-    return numericValue.toFixed(0);
-  }
-  if (Math.abs(numericValue) >= 10) {
-    return numericValue.toFixed(1);
-  }
-  return numericValue.toFixed(2);
-}
-
-// A value's unit as its compact field shows it: degrees as the sign ("90.0°"), others after a space.
-function unitSuffix(unit) {
-  const text = String(unit || "").trim();
-  return !text ? "" : /^(deg|degrees?|°)$/i.test(text) ? "\u00b0" : ` ${text}`;
-}
 
 // The model's named configurations, straight off the sidecar's kinematics
 // block. A preset is a full configuration, not a patch: applying one puts every
@@ -155,102 +118,14 @@ export default function PoseControlsSection({ runtime = null }) {
               values,
               parameter
             });
-            const controlStep = resolveParameterNumberControlStep(parameter);
-            if (parameter.type === "boolean") {
-              return (
-                <FileSheetCheckboxRow
-                  key={parameter.id}
-                  label={parameter.label}
-                  checked={currentValue === true}
-                  onCheckedChange={(checked) => runtime?.onParameterChange?.(parameter.id, checked)}
-                />
-              );
-            }
-            if (parameter.type === "enum") {
-              return (
-                <FileSheetSelectRow
-                  key={parameter.id}
-                  label={parameter.label}
-                  value={String(currentValue ?? "")}
-                  onValueChange={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                  ariaLabel={parameter.label}
-                  options={parameter.options}
-                />
-              );
-            }
-            if (parameter.type === "color") {
-              return (
-                <FileSheetControlRow
-                  key={parameter.id}
-                  label={parameter.label}
-                  trailing={(
-                    <FileSheetColorPicker
-                      value={String(currentValue || "#ffffff")}
-                      onChange={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                      aria-label={parameter.label}
-                    />
-                  )}
-                />
-              );
-            }
-            if (parameter.type === "button") {
-              return (
-                <FileSheetButtonRow key={parameter.id}>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={cn(compactButtonClasses, "justify-center")}
-                    onClick={() => runtime?.onParameterChange?.(parameter.id, Number(currentValue || 0) + 1)}
-                  >
-                    {parameter.label}
-                  </Button>
-                </FileSheetButtonRow>
-              );
-            }
-            if (parameter.type === "string") {
-              return (
-                <FileSheetControlRow
-                  key={parameter.id}
-                  label={parameter.label}
-                  trailing={(
-                    <FileSheetValueInput
-                      value={String(currentValue ?? "")}
-                      onValueCommit={(nextValue) => runtime?.onParameterChange?.(parameter.id, nextValue)}
-                      inputMode="text"
-                      ariaLabel={`${parameter.label} value`}
-                      className="w-40 max-w-[min(12rem,55vw)] text-left tabular-nums"
-                    />
-                  )}
-                />
-              );
-            }
-            return (
-              <FileSheetSliderField
-                key={parameter.id}
-                label={parameter.label}
-                labelTitle={driver ? `${parameter.label} · driven by ${driver.coupling}` : parameter.label}
-                value={`${formatControlNumber(currentValue)}${unitSuffix(parameter.unit)}`}
-                onValueCommit={(nextValue) => {
-                  changeParameter(parameter.id, parseFileSheetNumberInput(nextValue, {
-                    fallback: currentValue,
-                    min: parameter.min,
-                    max: parameter.max
-                  }));
-                }}
-                valueInputProps={{ ariaLabel: `${parameter.label} slider value` }}
-              >
-                <Slider
-                  className={FILE_SHEET_PRECISION_SLIDER_CLASSES}
-                  value={[Number(currentValue) || 0]}
-                  min={parameter.min}
-                  max={parameter.max}
-                  step={controlStep}
-                  onValueChange={(nextValue) => changeParameter(parameter.id, nextValue?.[0] ?? currentValue)}
-                  thumbProps={{ "aria-label": parameter.label }}
-                />
-              </FileSheetSliderField>
-            );
+            // A number goes through the back-drive routing; every other type is written as it is.
+            const numeric = !["boolean", "enum", "color", "button", "string"].includes(parameter.type);
+            return parameterRow({
+              parameter,
+              value: currentValue,
+              labelTitle: driver ? `${parameter.label} · driven by ${driver.coupling}` : parameter.label,
+              onChange: (nextValue) => numeric ? changeParameter(parameter.id, nextValue) : runtime?.onParameterChange?.(parameter.id, nextValue)
+            });
           })}
           {!parameters.length && !poseNames.length ? <FileSheetStatusText>No pose controls.</FileSheetStatusText> : null}
         </>

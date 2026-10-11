@@ -68,6 +68,11 @@ class Selection:
     _ordinal: int | None = None
 
     @property
+    def ordinal(self) -> int | None:
+        """The entity's 1-based ordinal in its occurrence (``f17`` is 17); ``None`` for an occurrence."""
+        return self._ordinal
+
+    @property
     def ref(self) -> str:
         if self.kind == "occurrence":
             return self.occurrence_ref

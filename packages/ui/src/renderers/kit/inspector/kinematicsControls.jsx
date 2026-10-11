@@ -18,18 +18,19 @@ export function positionValuesAreDefault(values, defaults) {
 /**
  * The Pose row of a Position panel: a "Pose" label beside its dropdown, drawn only when there is a
  * named pose to choose; Default leads the options when the panel can reset. Without a named pose
- * there is no row: Reset is the panel heading's (`MotionResetButton`).
+ * there is no row: Reset is the panel heading's (`MotionResetButton`). An FEA result's named states
+ * are the same row, labelled "Preset" (`label`).
  */
-export function KinematicsPoseRow({ poses = [], activeValue, onSelect, onReset }) {
+export function KinematicsPoseRow({ poses = [], activeValue, onSelect, onReset, label = "Pose" }) {
   if (!poses.length) return null;
   const options = [...(onReset ? [{ value: DEFAULT_POSE_VALUE, label: "Default" }] : []), ...poses];
   const active = options.find(pose => pose.value === activeValue);
   return <div data-position-header="" className="flex min-w-0 items-center gap-2 px-2">
-    <span className={cn(FILE_SHEET_FIELD_LABEL_CLASSES, "shrink-0")}>Pose</span>
+    <span className={cn(FILE_SHEET_FIELD_LABEL_CLASSES, "shrink-0")}>{label}</span>
     {/* Compact and at the row's right end, the size of the joint value boxes under it. */}
     <FileSheetSelectRow hideLabel className="ml-auto min-w-0 px-0" triggerClassName="!h-6 w-auto max-w-full gap-1 !px-1.5 text-tiny" value={active?.value || NO_PRESET_VALUE}
       onValueChange={value => value === DEFAULT_POSE_VALUE ? onReset?.() : onSelect?.(value)}
-      ariaLabel="Pose" triggerContent={<span className="truncate">{active?.label || "Custom"}</span>}
+      ariaLabel={label} triggerContent={<span className="truncate">{active?.label || "Custom"}</span>}
       options={options} />
   </div>;
 }

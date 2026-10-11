@@ -13,12 +13,19 @@ import this at module scope and must stay inside the ~0.2s pre-gate budget.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
 __all__ = [
     "BuildResult",
     "CompileResult",
+    "FeaFace",
+    "FeaFacesResult",
+    "FeaPair",
+    "FeaPart",
+    "FeaPartsResult",
+    "FeaResult",
     "MeshExportFile",
     "MeshExportResult",
     "SnapshotFile",
@@ -317,4 +324,289 @@ class ValidationResult:
         else:
             blocking = sum(1 for issue in self.issues if issue.severity == "error")
             lines.append(f"FAILED {_display(self.path)}: {blocking or len(self.issues)} blocking finding(s)")
+        return lines
+
+
+@dataclass(frozen=True)
+class FeaFace:
+    """One B-rep face of a part, as ``cadgen fea faces`` lists it: the selector a
+    study names it by, and enough geometry to pick it from a description."""
+
+    #: The viewer's selector (``#o1.f17``).
+    ref: str
+    area_mm2: float
+    #: Centre of mass, mm.
+    center_mm: tuple[float, float, float]
+    #: ``plane``, ``cylinder``, ``torus``, ... (the underlying surface type).
+    surface: str
+    #: Unit normal for a plane, else ``None``.
+    normal: tuple[float, float, float] | None
+    #: ``plane, normal -Z, largest`` -- words an agent can match to a request.
+    hint: str
+
+
+@dataclass(frozen=True)
+class FeaFacesResult:
+    """The outcome of ``cadgen fea faces``: the faces of one part occurrence."""
+
+    ok: bool
+    document: Path
+    occurrence: str
+    faces: tuple[FeaFace, ...] = ()
+
+    def human_lines(self) -> list[str]:
+        lines = [f"{self.occurrence} in {_display(self.document)}: {len(self.faces)} faces"]
+        for face in self.faces:
+            c = face.center_mm
+            lines.append(
+                f"  {face.ref:<10} {face.area_mm2:>10.2f} mm^2  at ({c[0]:.2f}, {c[1]:.2f}, {c[2]:.2f})  {face.hint}"
+            )
+        return lines
+
+
+def _stress_lines(s: dict, safety_factor_text) -> list[str]:
+    """The stress lines of a result: one scope per line (the part, then the assembly, then each part)."""
+    def factor(value):
+        return "n/a" if value is None else safety_factor_text(value)
+
+    if not s.get("weakest_part"):
+        return [
+            f"max von Mises {s.get('max_von_mises_MPa')} MPa (Gauss {s.get('max_von_mises_gauss_MPa')} MPa), "
+            f"yield {s.get('yield_MPa')} MPa, safety factor {factor(s.get('safety_factor'))}"
+        ]
+    lines = [
+        f"weakest part '{s['weakest_part']}': peak {s.get('weakest_part_peak_MPa')} MPa, "
+        f"yield {s.get('yield_MPa')} MPa, safety factor {factor(s.get('safety_factor'))}",
+        f"assembly peak von Mises {s.get('max_von_mises_MPa')} MPa (Gauss {s.get('max_von_mises_gauss_MPa')} MPa)",
+    ]
+    for part in s.get("parts", []):
+        lines.append(
+            f"  '{part['name']}' ({part['material']}): peak {part['peak_MPa']} MPa, yield {part['yield_MPa']} MPa, "
+            f"safety factor {factor(part['safety_factor'])}, moves up to {part['max_displacement_mm']} mm"
+        )
+    return lines
+
+
+#: Units on a log scale: a check in one says how far over or under its limit it is, not a ratio of the two.
+LOG_UNITS = ("dB", "dBA", "dB(A)")
+
+
+def _check_lines(s: dict) -> list[str]:
+    """One line per check the study asked for: what it measured against its limit, and whether it passes.
+
+    A level on a log scale (dB) is judged by its difference from the limit ("4 dB over the 80 dB limit"):
+    the ratio of two decibel numbers means nothing.
+    """
+    def unit(check: dict) -> str:  # " MPa", or nothing for a unitless check (a safety factor)
+        return f" {check['unit']}" if check["unit"] else ""
+
+    def line(check: dict) -> str:
+        if check["unit"] in LOG_UNITS:
+            gap = round(float(check["value"]) - float(check["limit"]), 2)
+            where = "at" if gap == 0 else f"{abs(gap):g}{unit(check)} {'over' if gap > 0 else 'under'}"
+            return (f"check '{check['label']}': {check['value']:g}{unit(check)}, {where} the {check['limit']:g}{unit(check)} "
+                    f"limit, {check['status']}")
+        if check.get("kind") == "frequency" and check["unit"] == "Hz":
+            return _frequency_line(check)
+        if check.get("kind") == "stability":
+            return _stability_line(check)
+        return (f"check '{check['label']}': {check['value']:g}{unit(check)} against a {check['limit']:g}{unit(check)} limit, "
+                f"{check['ratio']:.2f}× it, {check['status']}")
+
+    return [line(check) for check in s.get("checks", [])]
+
+
+def _stability_line(check: dict) -> str:
+    """A rotor's stability by its smallest log decrement against the least it needs:
+    "log decrement 0.000552 (1st backward whirl at 8,000 rpm), under the 0.1 it needs, close".
+
+    A log decrement is a least-allowed value, not a limit to stay under: its ratio (the verdict meter's place) is
+    no "times the limit" a person reads, so the line says the two numbers and which side it is on.
+    """
+    need = float(check["limit"])
+    head = f"check '{check['label']}': "
+    if check.get("undamped"):
+        return f"{head}no damping modelled, so no whirl grows or dies away (it needs a log decrement of {need:g}), {check['status']}"
+    if check.get("mode") is None:
+        return f"{head}no whirl in the speed range, {check['status']}"
+    from cadgen._internal.fea.analyses.rotordynamics import rpm_text, whirl_words  # stdlib only
+
+    value = float(check["value"])
+    where = "under" if value < need else "at" if value == need else "over"
+    return (f"{head}log decrement {value:.3g} ({whirl_words(check)} at {rpm_text(check['rpm'])}), {where} the {need:g} it needs, "
+            f"{check['status']}")
+
+
+def _frequency_line(check: dict) -> str:
+    """A frequency check by its distance from the limit, in hertz: "127 Hz, 27 Hz above the 100 Hz minimum".
+
+    A minimum and a band to keep clear of are not ratios a person reads: the margin in hertz is.
+    Every number keeps the measured frequency's three significant figures.
+    """
+    value = float(check["value"])
+    decimals = max(0, 2 - math.floor(math.log10(abs(value)))) if value else 0
+
+    def num(number: float) -> str:
+        return f"{round(float(number), decimals):g}"
+
+    def hz(number: float) -> str:
+        return f"{num(number)} Hz"
+
+    mode = f"mode {check['mode']} at " if check.get("mode") is not None and check.get("avoid_Hz") else ""
+    if band := check.get("avoid_Hz"):
+        low, high = (float(edge) for edge in band)
+        if low <= value <= high:
+            where = f"inside the {num(low)}–{hz(high)} band to avoid"
+        else:
+            side, edge = ("below", low) if value < low else ("above", high)
+            where = f"{hz(abs(value - edge))} {side} the {num(low)}–{hz(high)} band to avoid"
+    else:
+        limit = float(check["limit"])
+        gap = value - limit
+        where = (f"at the {hz(limit)} minimum" if round(gap, decimals) == 0
+                 else f"{hz(abs(gap))} {'above' if gap > 0 else 'below'} the {hz(limit)} minimum")
+    return f"check '{check['label']}': {mode}{hz(value)}, {where}, {check['status']}"
+
+
+@dataclass(frozen=True)
+class FeaResult:
+    """The outcome of ``cadgen fea solve``: where the results went, and the numbers.
+
+    ``summary`` carries the answer an engineer asks for first: max von Mises
+    (nodal and Gauss-point), safety factor against yield, max displacement,
+    the applied-versus-reaction balance, and each check the study asked for
+    judged (``checks``: the verdict's). Another ``analysis`` (modal, thermal,
+    ...) writes its own summary and CLI lines. ``fit`` lists the steps the
+    fit-the-budget ladder took, each printed as an "adapted: ..." line. ``findings`` is what an engineer
+    would say about it, errors first, in the KiCad findings' shape. The GLB is
+    what the viewer shows; the JSON sidecar holds this whole result plus the
+    study it came from.
+    """
+
+    ok: bool
+    document: Path
+    occurrence: str
+    #: ``None`` when the study stopped before the solve (``ok`` is false; ``findings`` say why).
+    glb: Path | None
+    sidecar: Path | None
+    vtu: Path | None = None
+    summary: dict = field(default_factory=dict)
+    mesh: dict = field(default_factory=dict)
+    timings: dict = field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
+    findings: tuple[dict, ...] = ()
+    #: The analysis that was run (``static`` unless the study named another).
+    analysis: str = "static"
+    #: The fit-the-budget ladder's steps, in order (``rung``, ``words``, ``accuracy``, ...); empty when none was taken.
+    fit: tuple[dict, ...] = ()
+
+    def human_lines(self) -> list[str]:
+        from cadgen._internal.fea.checks import safety_factor_text  # stdlib only; kept out of module import time
+
+        if not self.ok:
+            return [f"not solved: {_display(self.document)}"] + [f"{finding['severity']}: {finding['summary']}" for finding in self.findings]
+        if self.analysis != "static":
+            return self._analysis_lines()
+        s = self.summary
+        safety = s.get("safety_factor")
+        lines = [
+            f"solved {self.occurrence} of {_display(self.document)}: {self.mesh.get('elements')} tets, "
+            f"{self.mesh.get('dofs')} DOF, {self.mesh.get('size_mm')} mm elements",
+            *_stress_lines(s, safety_factor_text),
+            *_check_lines(s),
+            f"max displacement {s.get('max_displacement_mm')} mm at {s.get('max_displacement_at_mm')}",
+            f"applied {s.get('applied_force_N')} N, reactions {s.get('reaction_force_N')} N",
+            f"wrote GLB: {_display(self.glb)} (deformation x{s.get('deformation_scale')}), sidecar: {_display(self.sidecar)}"
+            + (f", VTU: {_display(self.vtu)}" if self.vtu else ""),
+        ]
+        lines += self._fit_lines()
+        lines += [f"{finding['severity']}: {finding['summary']}" for finding in self.findings]
+        lines += [f"warning: {warning}" for warning in self.warnings]
+        return lines
+
+    def _fit_lines(self) -> list[str]:
+        """One line per fit-the-budget step: what was adapted, and what it may have cost."""
+        return [
+            f"adapted: {step['words']}" + (f" ({step['accuracy']})" if step.get("accuracy") else "")
+            for step in self.fit
+        ]
+
+    def _analysis_lines(self) -> list[str]:
+        """A non-static analysis: its own lines (``Analysis.human_lines``), then the files, fit steps, findings and warnings."""
+        from cadgen._internal.fea.analyses import get_analysis  # stdlib only; kept out of module import time
+
+        lines = [
+            f"solved {self.occurrence} of {_display(self.document)} ({self.analysis}): {self.mesh.get('elements')} tets, "
+            f"{self.mesh.get('dofs')} DOF, {self.mesh.get('size_mm')} mm elements",
+            *get_analysis(self.analysis).human_lines(self.summary),
+            *_check_lines(self.summary),
+            f"wrote GLB: {_display(self.glb)}, sidecar: {_display(self.sidecar)}" + (f", VTU: {_display(self.vtu)}" if self.vtu else ""),
+        ]
+        lines += self._fit_lines()
+        lines += [f"{finding['severity']}: {finding['summary']}" for finding in self.findings]
+        lines += [f"warning: {warning}" for warning in self.warnings]
+        return lines
+
+
+@dataclass(frozen=True)
+class FeaPart:
+    """One part of an assembly, as ``cadgen fea parts`` lists it."""
+
+    #: The occurrence selector (``#o1.2``), what a study's faces are scoped by.
+    ref: str
+    name: str
+    volume_mm3: float
+
+
+@dataclass(frozen=True)
+class FeaPair:
+    """Two parts that touch or nearly touch, and what a study does with them by default."""
+
+    #: The part names, the smaller part (the one attached) first.
+    between: tuple[str, str]
+    refs: tuple[str, str]
+    #: The area the two faces share, mm^2.
+    area_mm2: float
+    #: The gap between the faces, mm (0 = touching).
+    gap_mm: float
+    #: ``bonded`` (glued into one body), ``not_connected`` (too far apart to bond) or
+    #: ``overlapping`` (the solids share volume, so the pair is not bonded).
+    type: str
+    #: The volume the two solids share, mm^3 (``overlapping`` only).
+    overlap_mm3: float = 0.0
+    #: How deep the solids overlap, mm, for an interference within the tolerance: ``bonded``, the glue closes it.
+    interference_mm: float = 0.0
+
+
+@dataclass(frozen=True)
+class FeaPartsResult:
+    """The outcome of ``cadgen fea parts``: the parts of an assembly and its touching pairs."""
+
+    ok: bool
+    document: Path
+    contact_tolerance_mm: float
+    parts: tuple[FeaPart, ...] = ()
+    pairs: tuple[FeaPair, ...] = ()
+
+    def human_lines(self) -> list[str]:
+        overlapping = sum(1 for pair in self.pairs if pair.type == "overlapping")
+        near = sum(1 for pair in self.pairs if pair.type == "not_connected")
+        touching = (
+            f"{len(self.pairs) - overlapping - near} touching pairs"
+            + (f", {near} near {'miss' if near == 1 else 'misses'}" if near else "")
+            + (f", {overlapping} overlapping" if overlapping else "")
+        )
+        lines = [f"{_display(self.document)}: {len(self.parts)} parts, {touching}"]
+        for part in self.parts:
+            lines.append(f"  {part.ref:<8} {part.name}  {part.volume_mm3:.4g} mm^3")
+        for pair in self.pairs:
+            a, b = pair.between
+            if pair.type == "overlapping":
+                lines.append(f"{a} ↔ {b} · overlapping · {pair.overlap_mm3:.4g} mm³")
+            elif pair.type == "bonded":
+                gap = f" · gap {pair.gap_mm:.3g} mm" if pair.gap_mm else ""
+                gap += f" · interference {pair.interference_mm:.2g} mm" if pair.interference_mm else ""
+                lines.append(f"{a} ↔ {b} · {pair.area_mm2:.4g} mm²{gap} · bonded")
+            else:
+                lines.append(f"{a} ↔ {b} · gap {pair.gap_mm:.3g} mm · not connected")
         return lines

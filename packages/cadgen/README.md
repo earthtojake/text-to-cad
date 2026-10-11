@@ -387,6 +387,9 @@ waits on a request beyond the two waits above.
 src/cadgen/
   <format>.py            # public namespaces: step, stl, threemf, glb, dxf,
                          #   urdf, srdf, sdf — each binds its verbs
+  fea.py                 # linear static stress: `faces` and `solve` over a
+                         #   STEP part (the `fea` extra: netgen, scikit-fem,
+                         #   pyamg); mechanism in _internal/fea/
   authoring.py           # @step/@dxf/@stl/@glb/@threemf decorators; a call
                          #   builds at top level and composes (a lazy child)
                          #   inside a body; a model's outputs are what they
@@ -447,7 +450,8 @@ src/cadgen/
 
 Verbs by format: `step` compile · build · snapshot;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
-validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
+validate · snapshot; `srdf` validate; `fea` faces · solve (a linear static study of a STEP part, with
+the `fea` extra). `cadgen snapshot` routes any suffix.
 `cadgen store|daemon|doctor` are status commands, `cadgen viewer
 [stop]` the CAD Viewer's launcher, and `cadgen mcp`
 the server an agent host starts — all deliberately outside the mirror pattern. `cadgen step compile` is internal tooling: skills never

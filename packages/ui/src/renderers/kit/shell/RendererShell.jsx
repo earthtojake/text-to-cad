@@ -67,8 +67,8 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   a file whose viewport only orbits, pans and zooms hands over. A tool the
  *   file cannot offer is left out, never handed over disabled. A tool that names a `closable`
  *   panel of its own (`panel: { id, label, startsClosed }`: Select's tree, which a single part
- *   opens with closed) is marked while that panel is closed, and a press on it while it is up
- *   opens the panel again.
+ *   opens with closed; or a list of them, an FEA assembly's Parts and Study) is marked while that
+ *   panel (any of them) is closed, and a press on it while it is up opens the closed ones again.
  *   `toolPanels`: the tool stack's panels, top to bottom — each a `ToolPanel`
  *   (`kit/tools/ToolPanel.jsx`), shown or `hidden` by the renderer as its tools say: what
  *   the tool in hand shows (Select's tree and Reference, Position's joints), then the
@@ -97,13 +97,16 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   `frameProvider`: the renderer wraps the WHOLE frame — its own context, above the tool
  *   stack as well as the viewport, because both read it. It is given the frame and returns
  *   it wrapped; a renderer that passes none is mounted exactly as it is.
+ *   `alertBody`, `alertStartsDismissed`: what a renderer lists under the alert it raised itself (a
+ *   result's findings: `kit/status/findings.jsx`) — a function of the card's `dismiss`, so a row
+ *   chosen can put the card away — and whether that alert starts put away (suggestions only).
  *   `onCanvasPointerDown`: a press that landed on the canvas, before anything in the viewport sees
  *   it. The frame focuses itself on such a press whatever the renderer does; this is for a renderer
  *   that also has something to put down when the person reaches for the model.
  */
 export default function RendererShell({ shell, tools, playback = null, toolPanels = null, references = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null,
-  frameProvider = null, onCanvasPointerDown = null }) {
+  alertBody = null, alertStartsDismissed = false, frameProvider = null, onCanvasPointerDown = null }) {
   const frame = shell.frame;
   const mobile = useViewerMobile();
   const { view, resolvedScene, viewerLoading, scene } = frame;
@@ -170,12 +173,16 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // Until the person has closed or opened it, the tree starts as the tool says this file starts it
   // (`panel.startsClosed`: a single part's) and closed on a phone.
   // One object while those starts stay the same: the stack's panels read it.
-  const panelStarts = JSON.stringify(tools.filter(tool => tool.panel).map(tool => [tool.panel.id, Boolean(tool.panel.startsClosed)]));
+  // A tool may own more than one such panel (an FEA assembly's Parts above its Study): it is marked
+  // while any is closed, and the press brings back every closed one.
+  const panelsOf = tool => (tool.panel ? [].concat(tool.panel) : []);
+  const panelStarts = JSON.stringify(tools.flatMap(tool => panelsOf(tool).map(panel => [panel.id, Boolean(panel.startsClosed)])));
   const startsClosed = useMemo(() => Object.fromEntries(JSON.parse(panelStarts)), [panelStarts]);
   const stripTools = tools.map(tool => {
-    if (!tool.panel || !toolPanelClosed(frame.toolStack, tool.panel.id, { mobile, startsClosed: startsClosed[tool.panel.id] })) return tool;
-    const reopen = () => frame.changeToolStack(current => ({ closed: { ...current.closed, [tool.panel.id]: false } }));
-    return { ...tool, panelClosed: true, description: tool.description || `${tool.panel.label} closed`,
+    const closed = panelsOf(tool).filter(panel => toolPanelClosed(frame.toolStack, panel.id, { mobile, startsClosed: startsClosed[panel.id] }));
+    if (!closed.length) return tool;
+    const reopen = () => frame.changeToolStack(current => ({ closed: { ...current.closed, ...Object.fromEntries(closed.map(panel => [panel.id, false])) } }));
+    return { ...tool, panelClosed: true, description: tool.description || `${closed.map(panel => panel.label).join(" and ")} closed`,
       onSelect: () => { if (tool.active) reopen(); tool.onSelect(); } };
   });
   // The shell's own tool's panel leads the stack while its tool is up: Draw's tools, color and
@@ -195,7 +202,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   const failed = Boolean(frame.viewerAlert) && !alertDismissible(frame.viewerAlert, hasContent);
   // The card's dismissal is the frame's, so it outlives the card (gone in preview): while the person
   // has the card put away, its icon is the navbar's way back to it, leftmost of the right-hand group.
-  const alertDismissal = useAlertDismissal(frame.viewerAlert, { hasContent, scope: frame.modelKey, onNavigationActionsChange: view.onNavigationActionsChange });
+  const alertDismissal = useAlertDismissal(frame.viewerAlert, { hasContent, scope: frame.modelKey,
+    startDismissed: alertStartsDismissed, onNavigationActionsChange: view.onNavigationActionsChange });
   // While the model loads, or once it has failed to, the viewer shows none of its own chrome: no
   // tools, no Quick Edit, no cube, no view actions and no update status -- only the load itself,
   // or the card saying why it failed. They arrive with the model, and stay through a rebuild that
@@ -288,7 +296,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                   >{overlay}</ShellViewport>
                   {/* The file as the alert names it (the catalog's absolute path), which Report Issue keeps out of its issue. */}
                   {!previewing ? <ViewerAlertCard alert={frame.viewerAlert} hasContent={hasContent} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss}
-                    onReload={view.reload} file={frame.modelKey || view.file?.path} /> : null}
+                    onReload={view.reload} file={frame.modelKey || view.file?.path}
+                    body={alertBody ? alertBody(alertDismissal.dismiss) : null} /> : null}
                 </div>
               </div>
 

@@ -245,12 +245,39 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for(f"{SKILLS}/cad/__init__.py")["skills_tests"], [f"{SKILLS}/cad"])
 
     def test_cadgen_runs_its_suites_its_hosts_and_the_wheel(self):
-        self.assertEqual(jobs_for("packages/cadgen/src/cadgen/step.py"), GATED - {"core-js", "mcp", "api", "docs"})
+        self.assertEqual(jobs_for("packages/cadgen/src/cadgen/step.py"), GATED - {"core-js", "mcp", "api", "docs", "fea"})
         chosen = tests_for("packages/cadgen/src/cadgen/step.py")
         self.assertEqual(chosen["cadgen_tests"], [CADGEN])
         self.assertEqual(chosen["skills_tests"], [f"{SKILLS}/cad", f"{SKILLS}/dxf"])
         self.assertEqual(set(chosen["skills_policy"]), {f"{POLICY}/{name}" for name in selector.HEAVY_POLICY})
         self.assertEqual(route("packages/cadgen/src/cadgen/step.py")["web_ui"], "false")
+
+    def test_the_solver_runs_its_own_job_with_the_extra_installed(self):
+        self.assertIn("cadgen[fea]", JOBS["fea"])
+        # The accuracy tests' margins were measured with this mesher; pyproject only sets a floor.
+        self.assertIn('"netgen-mesher==6.2.2608"', JOBS["fea"])
+        # One glob runs every analysis's suite, so a new test_fea_<name>.py needs no workflow edit.
+        self.assertIn(f"{CADGEN}/test_fea*.py", JOBS["fea"])
+        self.assertIn("timeout-minutes: 40", JOBS["fea"])
+        # Every FEA suite on disk is one the glob runs, and a change to it selects the job.
+        on_disk = sorted(path.name for path in (REPO_ROOT / CADGEN).glob("test_fea*.py"))
+        self.assertLessEqual({"test_fea.py", "test_fea_assembly.py", "test_fea_checks.py"}, set(on_disk))
+        for name in on_disk:
+            with self.subTest(name=name):
+                self.assertIn("fea", jobs_for(f"{CADGEN}/{name}"))
+        fea = {"fea", "skills"}
+        for path in (
+            "packages/cadgen/src/cadgen/_internal/fea/solve.py",
+            "packages/cadgen/src/cadgen/fea.py",
+            "packages/cadgen/src/cadgen/cli/fea_solve.py",
+            "packages/cadgen/src/cadgen/results.py",
+            "skills/fea/SKILL.md",
+        ):
+            with self.subTest(path=path):
+                self.assertIn("fea", jobs_for(path))
+        self.assertEqual(jobs_for("skills/fea/SKILL.md"), fea)
+        self.assertEqual(jobs_for(f"{CADGEN}/test_fea.py"), {"cadgen-linux", "cadgen-windows", "fea", "skills"})
+        self.assertNotIn("fea", jobs_for("packages/cadgen/src/cadgen/step.py"))
 
     def test_the_viewer_and_the_mcp_server_reach_only_what_reaches_them(self):
         viewer = tests_for("packages/cadgen/src/cadgen/viewer/scanner.py")
@@ -303,10 +330,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-js.sh": {"core-js", "web", "mcp", "skills"},
             "scripts/test/check-dependencies.mjs": {"core-js", "web", "mcp", "skills"},
             "scripts/test/test-global.sh": {"skills"},
-            "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
+            "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "fea", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "mcp", "api", "docs"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "mcp", "api", "docs", "fea"},
             "scripts/brand/generate-logos.mjs": {"docs", "skills"},
             "scripts/bench/viewer-memory/helpers.mjs": {"core-js", "skills"},
         }

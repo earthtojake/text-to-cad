@@ -3,29 +3,11 @@ import {
   normalizeParameterValues
 } from "@text-to-cad/core/common/parameters.js";
 
-const DEFAULT_NUMBER_CONTROL_STEP = 0.01;
-const MIN_NUMBER_CONTROL_STEP = 0.000001;
-const TARGET_NUMBER_SLIDER_STEPS = 1000;
+// The slider step is every parameter panel's, Position's and an FEA result's alike.
+export { resolveParameterNumberControlStep } from "../../kit/inspector/parameterNumbers.js";
 
 function isObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function toFiniteNumber(value, fallback = 0) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? numericValue : fallback;
-}
-
-function positiveNumber(value) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0;
-}
-
-function compactNumber(value) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue)
-    ? Number(numericValue.toPrecision(12))
-    : DEFAULT_NUMBER_CONTROL_STEP;
 }
 
 function parseJsonText(text, label = "parameters") {
@@ -45,19 +27,6 @@ function parseJsonText(text, label = "parameters") {
   }
 }
 
-export function resolveParameterNumberControlStep(parameter) {
-  const declaredStep = positiveNumber(parameter?.step);
-  const min = toFiniteNumber(parameter?.min, 0);
-  const max = toFiniteNumber(parameter?.max, min);
-  const range = Math.abs(max - min);
-  const rangeStep = range > 0
-    ? Math.max(
-        10 ** Math.floor(Math.log10(range / TARGET_NUMBER_SLIDER_STEPS)),
-        MIN_NUMBER_CONTROL_STEP
-      )
-    : DEFAULT_NUMBER_CONTROL_STEP;
-  return compactNumber(declaredStep > 0 ? Math.min(declaredStep, rangeStep) : rangeStep);
-}
 
 export function buildParameterValuesCopyText(definition, values = {}) {
   const parameters = Array.isArray(definition?.parameters) ? definition.parameters : [];
