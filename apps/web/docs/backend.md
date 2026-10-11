@@ -9,8 +9,8 @@ and browser runtimes used by the CLI. Skills invoke the installed distribution.
 The HTTP layer uses Python's standard library and requires Python 3.11 or newer.
 It imports the lightweight cadgen catalog and store helpers, but never imports
 the CAD kernel at module scope. Viewing renders existing artifacts, their
-optional `<name>.step.json` kinematics sidecar and `<name>.step.js` authored
-render module, and their cached geometry. Model source changes never trigger a
+optional `<name>.step.json` sidecar (kinematics, appearance and animation
+keyframes), and their cached geometry. Model source changes never trigger a
 rebuild. The one compile operation offered by the viewer is importing a foreign
 STEP through cadgen's build worker pool.
 
@@ -168,20 +168,24 @@ does not maintain a second store layout. See
 `packages/cadgen/STORE.md` for objects,
 document indexes, output records and cache-root resolution.
 
-The tessellation routes likewise delegate reads, writes and TESB batch framing
-to `cadgen.store.tess_cache`. `index/mesh/<key>` points to the object containing
-the cached bytes. The shared JavaScript entry codec and key scheme live in
-`@text-to-cad/core/lib/surf/tessellationCache.js`. Cache names are validated before
-access: a request names an entry of the store, never a path.
+The mesh routes likewise delegate reads and TESB batch framing to
+`cadgen.store.tess_cache`. `index/mesh/<key>` points to the object holding the
+mesh cadgen made (OCCT's mesh of a component's exact BREP); a client never
+writes one. The shared JavaScript reader and key scheme live in
+`@text-to-cad/core/lib/surf/tessellationCache.js`. Mesh names are validated
+before access: a request names an entry of the store, never a path. A mesh the
+store lacks is made by naming its tolerances in the component's
+`POST /__cad/surfaces` request (`tessellation`), which meshes it in the same
+build-pool job that derives the surface; its ready row carries the mesh's probe
+row (`mesh`).
 
 The browser host constructs a `CadClient` from `@text-to-cad/core/client` and
 injects it into the viewer renderers. Catalog subscriptions share the client's
 two-second poll and stop when its last subscriber leaves. Each prepared render
-session owns its tessellation provider, work queue and cancellation signal;
+session owns its mesh-store provider, work queue and cancellation signal;
 there is no page-global provider registration. Session disposal releases its
-resources, and the host disposes the client when finished. A cache miss or
-failure falls back to ordinary tessellation; `CADGEN_MESH_CACHE=0` disables
-cache reads and writes.
+resources, and the host disposes the client when finished. A missing mesh is
+asked for through the surface request, never tessellated in the page.
 
 ## HTTP routes
 
@@ -194,6 +198,7 @@ cache reads and writes.
 | `GET /__cad/asset?file=...` | A CAD file's or sidecar's bytes. |
 | `GET /__cad/store?file=...` | Virtual render assets from the shared store. |
 | `GET /__cad/drawing?file=...` | A `.dxf` flattened to 2D render primitives; the DXF pane's only source. |
+| `GET /__cad/tube-skins?file=...&documentHash=...` | A STEP's bending tubes, bound as its clips play them (the catalog's `tubeSkinsUrl`). |
 | `GET /__cad/artifact?file=...` | Artifact status and advisory progress. |
 | `POST /__cad/artifact?file=...` | Start importing a foreign STEP and answer at once (`compiling`; `compiled` when there is nothing to build); `&force=1` requests a rebuild. The import is followed through `GET /__cad/artifact`, whose `failed` carries the job's reason until the file's bytes change. |
 | `GET /__cad/recents` | The model library every CAD view shares. |
@@ -208,9 +213,10 @@ cache reads and writes.
 | `GET /__cad/version` | Whether a newer text-to-cad is out: the update button's `notice`, or null. |
 | `POST /__cad/sketches?name=...` | Save a PNG a copied prompt names by path (a Quick Edit's sketch) as scratch in the system's temporary directory; answers its absolute path. |
 | `POST /__cad/shutdown` | Exit: a newer launch replacing this viewer, or `cadgen viewer stop`. Answers 202, then stops and frees the port. |
-| `GET /__tess_cache/<key>.tess` | Read a tessellation-cache entry. |
-| `POST /__tess_cache/<key>.tess` | Best-effort tessellation-cache write-back. |
-| `POST /__tess_cache/batch` | Read a batch of entries in a TESB container. |
+| `POST /__cad/surfaces` | Resolve components' exact surfaces, deriving them in the build pool; with `tessellation`, their meshes at those tolerances too. |
+| `POST /__tess_cache/probe` | The stored meshes' index records, for keys. |
+| `GET /__tess_cache/<key>.glb` | Read a stored mesh, a GLB body (POST answers 405: cadgen writes every mesh). |
+| `POST /__tess_cache/batch` | Read a batch of stored meshes in a TESB container. |
 
 Every POST must send `x-cadgen-viewer: 1`. The custom header forces a browser
 preflight for cross-origin POSTs, and the server sends no CORS headers. When
@@ -225,6 +231,25 @@ generation/export remain outside this HTTP interface.
 Backend tests live in `tests/python/packages/cadgen/viewer` and are run by
 `scripts/test/test-python.sh`. The web app's `npm run test` covers its JavaScript
 host only.
+
+## `GET /__cad/tube-skins`
+
+A clip that bends a tube (`.deform_tube()`) plays cadgen's skin for it:
+`cadgen._internal.tube_skin_payload` binds each tube occurrence's stored mesh and
+edges to joints along its centerline, in its component's frame, and poses the
+joints at every key; the store's `skin` index caches the payload by the
+document's bytes, its animation and the meshes it binds. The catalog names the
+URL as `tubeSkinsUrl` for a built document whose animation bends a tube, and the
+STEP renderer reads it once, with the clips (`@text-to-cad/core/common/tubeSkin.js`
+plays it; `packages/core/docs/tube-skins.md`).
+
+`?file=` names the STEP by its absolute path; anything else is 400, as is a
+tessellation (`&chord=`, `&angle=`) that is not one. A missing file, a document
+not built, a sidecar the server cannot read or an animation that bends no tube
+is 404. `&documentHash=` that names other bytes than the file holds now is 409:
+the page is behind the file, and its next catalog read names the current skins.
+The answer is GLB-framed (`model/gltf-binary`): a glTF JSON chunk whose
+`extras.cadgenTubeSkins` says what each buffer view holds.
 
 ## `GET /__cad/drawing`
 
@@ -248,7 +273,7 @@ not add one).
 
 ```jsonc
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "units": { "insunits": 4, "name": "Millimeters", "toMillimetres": 1.0 },
   "bounds": [minX, minY, maxX, maxY],        // null when nothing was drawn
   "layers": [{ "name": "CUT", "color": "#ff0000", "count": 12 }],
@@ -270,7 +295,10 @@ not add one).
   foreground, which is why one payload serves both the light and the dark
   theme. Every other ACI and every true colour is a literal `#rrggbb`. A layer
   row's `color` is null on the same rule. Lineweights are not in the payload:
-  the client draws hairlines, as AutoCAD does with LWDISPLAY off.
+  the client draws hairlines, as AutoCAD does with LWDISPLAY off. The payload
+  shape also lets a stroke (`lines`, `path`) name its own screen `width` (CSS
+  pixels) and any primitive its `opacity`, which a STEP section's drawing uses
+  and a DXF's never does.
 - **`primitives[].type`** is ezdxf's own vocabulary: `point` (`[x, y]`),
   `lines` (`[[x0,y0,x1,y1], …]`), `path` (SVG-like `["M"|"L"|"Q"|"C"|"Z", …]`
   commands), `filled-paths` (a list of those command lists, even-odd filled)

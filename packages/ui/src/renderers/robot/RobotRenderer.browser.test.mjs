@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,73 +9,23 @@ import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
-import { writeGlb } from '@text-to-cad/core/glb/writeGlb.js';
 
-// The robot renderer end to end in a real browser, over inline fixtures made of
-// primitives: a URDF, the SRDF paired with it (a "home" state, a named pose, an end
-// effector), an SDF, a long chain, and the files that must raise an alert instead of a
-// robot. Scene, pose store and handle adapter have unit tests; these are the flows a
-// person actually uses.
+// The robot renderer end to end in a real browser, over the fixture descriptions in `__fixtures__`
+// as cadgen resolved them (`make_fixtures.py`; the Python suite holds the files current): a URDF of
+// primitives, the SRDF paired with it (a "home" state, a named pose, an end effector), an SDF, a
+// long chain, a four-bar linkage cadgen closes, and the two cadgen refuses, whose refusal must raise
+// an alert instead of a robot. This server answers `GET /__cad/robot` as the viewer's does, from
+// those files, so the page here is the page a CAD Viewer serves. Scene, pose store and handle adapter
+// have unit tests; these are the flows a person actually uses.
 
-const box = (size, xyz, rgba, name = '') => `<visual${name ? ` name="${name}"` : ''}><origin xyz="${xyz}"/><geometry><box size="${size}"/></geometry><material name="m${rgba.replaceAll(' ', '')}"><color rgba="${rgba}"/></material></visual>`;
-const limit = (lower, upper) => `<limit lower="${lower}" upper="${upper}" effort="1" velocity="1"/>`;
-const ARM_URDF = `<?xml version="1.0"?>
-<robot name="arm">
-  <link name="base_footprint"/>
-  <link name="base">${box('0.4 0.4 0.1', '0 0 0.05', '0.3 0.3 0.35 1')}</link>
-  <link name="upper_arm">${box('0.5 0.08 0.08', '0.25 0 0', '0.9 0.5 0.1 1', 'upper_arm_shell')}</link>
-  <link name="carriage">${box('0.1 0.1 0.1', '0 0 0', '0.1 0.4 0.9 1')}</link>
-  <link name="camera">${box('0.06 0.06 0.06', '0 0 0', '0.1 0.7 0.3 1')}</link>
-  <link name="finger_left">${box('0.02 0.02 0.08', '0 0 0.09', '0.8 0.8 0.2 1')}</link>
-  <link name="finger_right">${box('0.02 0.02 0.08', '0 0 0.09', '0.8 0.8 0.2 1')}</link>
-  <link name="head"><visual><geometry><mesh filename="meshes/head.glb" scale="0.001 0.001 0.001"/></geometry></visual></link>
-  <joint name="footprint" type="fixed"><parent link="base_footprint"/><child link="base"/></joint>
-  <joint name="shoulder" type="revolute"><parent link="base"/><child link="upper_arm"/><origin xyz="0 0 0.2"/><axis xyz="0 1 0"/>${limit(-1.5708, 1.5708)}</joint>
-  <joint name="lift" type="prismatic"><parent link="base"/><child link="carriage"/><origin xyz="-0.15 0.15 0.15"/><axis xyz="0 0 1"/>${limit(0, 0.3)}</joint>
-  <joint name="camera_mount" type="fixed"><parent link="base"/><child link="camera"/><origin xyz="0.15 -0.15 0.13"/></joint>
-  <joint name="grip" type="prismatic"><parent link="carriage"/><child link="finger_left"/><origin xyz="0 0.01 0"/><axis xyz="0 1 0"/>${limit(0, 0.04)}</joint>
-  <joint name="grip_mirror" type="prismatic"><parent link="carriage"/><child link="finger_right"/><origin xyz="0 -0.01 0"/><axis xyz="0 1 0"/>${limit(-0.04, 0)}<mimic joint="grip" multiplier="-1"/></joint>
-  <joint name="nod" type="revolute"><parent link="base"/><child link="head"/><origin xyz="-0.15 -0.15 0.14"/><axis xyz="0 1 0"/>${limit(-1, 1)}</joint>
-</robot>
-`;
-const ARM_SRDF = `<?xml version="1.0"?>
-<robot name="arm">
-  <group name="arm"><joint name="shoulder"/><joint name="lift"/></group>
-  <group name="gripper"><joint name="grip"/></group>
-  <end_effector name="tool" parent_link="carriage" group="gripper" parent_group="arm"/>
-  <group_state name="home" group="arm"><joint name="shoulder" value="-0.5"/><joint name="lift" value="0.1"/></group_state>
-  <group_state name="raised" group="arm"><joint name="shoulder" value="-1.0"/><joint name="lift" value="0.2"/></group_state>
-</robot>
-`;
-const SWING_SDF = `<?xml version="1.0"?>
-<sdf version="1.9"><world name="lab"><light name="sun" type="directional"/><model name="swing">
-  <link name="base"><visual name="v"><pose>0 0 0.05 0 0 0</pose><geometry><box><size>0.4 0.4 0.1</size></box></geometry></visual></link>
-  <link name="arm"><pose relative_to="hinge">0.05 0 0 0 0 0</pose><visual name="v"><pose>0.25 0 0 0 0 0</pose><geometry><box><size>0.5 0.08 0.06</size></box></geometry></visual></link>
-  <joint name="hinge" type="revolute"><pose relative_to="base">0 0 0.2 0 0 0</pose><parent>base</parent><child>arm</child><axis><xyz>0 1 0</xyz><limit><lower>-1.2</lower><upper>1.2</upper></limit></axis></joint>
-</model></world></sdf>`;
+const FIXTURES = new URL('./__fixtures__/', import.meta.url);
+const DESCRIPTIONS = ['arm.urdf', 'arm.srdf', 'swing.sdf', 'chain.urdf', 'linkage.urdf', 'gone.urdf', 'lonely.srdf'];
+const payloadFile = name => new URL(`${name.slice(0, name.lastIndexOf('.'))}.${name.split('.').pop()}.robot.json`, FIXTURES);
+// cadgen's answer for each description: its payload, or the sentence it refuses it with.
+const PAYLOADS = Object.fromEntries(DESCRIPTIONS.filter(name => existsSync(payloadFile(name))).map(name => [name, readFileSync(payloadFile(name), 'utf8')]));
+const REFUSALS = JSON.parse(readFileSync(new URL('refusals.json', FIXTURES), 'utf8'));
 // A chain long enough that a per-pose cost proportional to the robot would show.
-const CHAIN_LINKS = 30;
-const CHAIN_URDF = `<?xml version="1.0"?>\n<robot name="chain">\n${Array.from({ length: CHAIN_LINKS }, (_, index) => `  <link name="l${index}">${box('0.1 0.04 0.04', '0.05 0 0', '0.5 0.5 0.55 1')}</link>`).join('\n')}
-${Array.from({ length: CHAIN_LINKS - 1 }, (_, index) => `  <joint name="j${index}" type="revolute"><parent link="l${index}"/><child link="l${index + 1}"/><origin xyz="0.1 0 0"/><axis xyz="0 ${index % 2} ${1 - (index % 2)}"/>${limit(-1, 1)}</joint>`).join('\n')}\n</robot>\n`;
-const GONE_URDF = `<?xml version="1.0"?><robot name="gone"><link name="base"><visual><geometry><mesh filename="meshes/absent.stl"/></geometry></visual></link></robot>`;
-const LONELY_SRDF = `<?xml version="1.0"?><robot name="nobody"><group name="arm"><joint name="shoulder"/></group></robot>`;
-
-function glbBox([x, y, z], [sx, sy, sz]) {
-  const [a, b, c] = [x + sx, y + sy, z + sz];
-  const corners = [[x, y, z], [a, y, z], [a, b, z], [x, b, z], [x, y, c], [a, y, c], [a, b, c], [x, b, c]];
-  const faces = [[0, 2, 1, 0, 3, 2], [4, 5, 6, 4, 6, 7], [0, 1, 5, 0, 5, 4], [2, 3, 7, 2, 7, 6], [1, 2, 6, 1, 6, 5], [3, 0, 4, 3, 4, 7]];
-  return new Float32Array(faces.flat().flatMap(index => corners[index]));
-}
-// A link mesh with two NAMED objects: the visor sits on the nod joint's pivot, the antenna stands up from it
-// (a GLB is Y-up, so that is the robot's Z).
-const headGlb = writeGlb({ primitives: [
-  { name: 'visor', node: 'visor', positions: glbBox([-0.03, -0.03, -0.03], [0.06, 0.06, 0.06]), color: '#d02020' },
-  { name: 'antenna', node: 'antenna', positions: glbBox([-0.01, 0.04, -0.01], [0.02, 0.3, 0.02]), color: '#e8e8e8' },
-] }, { preset: 'export' });
-const FILES = {
-  'arm.urdf': ARM_URDF, 'arm.srdf': ARM_SRDF, 'swing.sdf': SWING_SDF, 'chain.urdf': CHAIN_URDF,
-  'gone.urdf': GONE_URDF, 'lonely.srdf': LONELY_SRDF, 'meshes/head.glb': Buffer.from(headGlb.buffer, headGlb.byteOffset, headGlb.byteLength),
-};
+const CHAIN_JOINTS = JSON.parse(PAYLOADS['chain.urdf']).articulation.controls.length;
 
 // The harness renders its panes at a fixed CSS size; the spec draws them smaller, so a software
 // GL (CI's SwiftShader) has fewer pixels to fill and a capture fewer to read.
@@ -92,18 +43,25 @@ before(async () => {
     const url = new URL(request.url, 'http://test');
     const [, root, ...rest] = url.pathname.split('/');
     const name = rest.join('/');
+    const json = (status, body) => { response.statusCode = status; response.setHeader('Content-Type', 'application/json'); response.end(body); };
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
     else if (url.pathname.endsWith('/__cad/catalog')) {
-      const entry = file => ({ kind: file.split('.').pop(), file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}-${revision}`, bytes: FILES[file].length });
-      response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ entries: Object.keys(FILES).filter(file => !file.startsWith('meshes/'))
-        .map(file => (file === 'arm.srdf' ? { ...entry(file), relations: { urdf: entry('arm.urdf') } } : entry(file))) }));
-    } else if (url.pathname.endsWith('/__cad/server')) {
-      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
-    } else if (FILES[name] ?? FILES[url.pathname.slice(1)]) { response.end(FILES[name] ?? FILES[url.pathname.slice(1)]); }
-    else if (/\.(woff2|ttf|stl|glb)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
-    else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
+      const entry = file => ({ kind: file.split('.').pop(), file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}-${revision}`, bytes: 1 });
+      json(200, JSON.stringify({ entries: DESCRIPTIONS.map(file => (file === 'arm.srdf' ? { ...entry(file), relations: { urdf: entry('arm.urdf') } } : entry(file))) }));
+    } else if (url.pathname.endsWith('/__cad/server')) json(200, JSON.stringify({ backend: 'cadgen' }));
+    else if (url.pathname.endsWith('/__cad/robot')) {
+      // As the viewer's route answers: the payload, or cadgen's refusal as a 400.
+      const file = String(url.searchParams.get('file') || '').replace(/^\/models\//, '');
+      if (PAYLOADS[file]) json(200, PAYLOADS[file]);
+      else json(REFUSALS[file] ? 400 : 404, JSON.stringify({ error: REFUSALS[file] || `${file}: no such description` }));
+    } else {
+      // A link mesh file beside the descriptions, or a primitive cadgen meshed, by the URL the payload names.
+      const asset = [url.pathname.slice(1), name].find(candidate => /^(meshes|primitives)\/[^/]+\.glb$/.test(candidate) && existsSync(new URL(candidate, FIXTURES)));
+      if (asset) { response.setHeader('Content-Type', 'model/gltf-binary'); response.end(readFileSync(new URL(asset, FIXTURES))); }
+      else if (/\.(woff2|ttf|stl|glb)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
+      else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
+    }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1') ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -211,6 +169,8 @@ async function open(t, file, { panel = true } = {}) {
 const sameCamera = (a, b) => a.every((value, index) => Math.abs(value - b[index]) < 1e-9);
 const round6 = value => Math.round(value * 1e6) / 1e6;
 const translation = matrix => [matrix[3], matrix[7], matrix[11]];
+// A point of a link, in the robot's space: through the link's row-major frame.
+const through = (matrix, [x, y, z]) => [0, 4, 8].map(row => matrix[row] * x + matrix[row + 1] * y + matrix[row + 2] * z + matrix[row + 3]);
 
 test('a robot can enter Position with sidebar controls: knobs drag joints, the camera keeps every other press, every pose write is a jump, and a pose step renders no component', async (t) => {
   const robot = await open(t, 'arm.srdf');
@@ -235,8 +195,9 @@ test('a robot can enter Position with sidebar controls: knobs drag joints, the c
   // It does not fold: its heading is Reset, then the X that puts Position down.
   assert.deepEqual(await positionHeading.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Reset', 'Close position']);
   await robot.openPosition();
-  // One knob per joint a person can drive: no fixed joint, no mimic follower. The follower has no slider either.
-  assert.deepEqual(Object.keys(await robot.handles()).sort(), ['grip', 'lift', 'nod', 'shoulder']);
+  // One knob per moving joint row of the articulation: no fixed joint; a mimic follower's knob
+  // writes its leader. A slider exists per CONTROL, so the follower has none, nor the fixed joint.
+  assert.deepEqual(Object.keys(await robot.handles()).sort(), ['grip', 'grip_mirror', 'lift', 'nod', 'shoulder']);
   assert.equal(await robot.jointField('grip_mirror', 'm').count(), 0);
   assert.equal(await robot.jointField('camera_mount').count(), 0);
   // The SRDF's "home" state is the pose the robot opens in, and the Position panel's Pose row
@@ -355,13 +316,14 @@ test('a robot can enter Position with sidebar controls: knobs drag joints, the c
   await page.mouse.up();
   await page.waitForFunction(() => window.__cadJointHandles().find(handle => handle.id === 'lift').value === 0.3);
 
-  // A mimic follower moves with its master: the fingers part symmetrically.
+  // A mimic follower moves with its leader: the fingers part symmetrically.
   await robot.type('grip', 0.03, 'm');
   await page.waitForFunction(() => window.__cadJointHandles().find(handle => handle.id === 'grip').value === 0.03);
   const links = await robot.links();
   const [left, right, carriage] = [translation(links.finger_left), translation(links.finger_right), translation(links.carriage)];
   assert.deepEqual([round6(left[1] - carriage[1]), round6(right[1] - carriage[1])], [0.04, -0.04]);
-  assert.equal((await robot.stats()).lastPoseWrites, 2, 'the master and its follower, nothing else');
+  assert.equal((await robot.stats()).lastPoseWrites, 2, 'the leader and its follower, nothing else');
+  assert.equal((await robot.handles()).grip_mirror.value, -0.03, 'the follower’s knob reads its own row');
 
   // Posing a joint far past the rest box never resizes the grid or the studio floor, and never
   // moves the camera: the arm swung straight up stands well above anything the rest pose reached.
@@ -407,7 +369,7 @@ test('a robot can enter Position with sidebar controls: knobs drag joints, the c
   await page.waitForFunction(() => window.__cadJointHandles().length === 0);
   assert.equal(await robot.jointField('shoulder').isVisible(), false);
   await robot.tool('Position').click();
-  await page.waitForFunction(() => window.__cadJointHandles().length === 4);
+  await page.waitForFunction(() => window.__cadJointHandles().length === 5);
   assert.equal(round6((await robot.handles()).shoulder.value), -40);
   assert.equal(await robot.jointField('shoulder').isVisible(), true);
 
@@ -504,8 +466,8 @@ test('Select picks a visual at once; a selection lives only under Select; Links 
   await page.mouse.move(...onScreen(spots.shoulder));
   await page.mouse.down(); await page.mouse.up();
   await robot.settle();
-  // A pick selects the visual under the pointer, named by its URDF `name`, and opens its link
-  // so the visual's row is on screen under it; the Reference is headed by that name.
+  // A pick selects the visual under the pointer, named by its URDF `name` (cadgen's label for it),
+  // and opens its link so the visual's row is on screen under it; the Reference is headed by that name.
   assert.deepEqual(await robot.pressedRows(), ['Select upper_arm_shell'], 'selected by the next frame');
   assert.deepEqual(await page.evaluate(() => (({ selectedLinks, selectedPartIds }) => [selectedLinks, selectedPartIds])(window.cadHarness.a.controller.readState())),
     [[], ['upper_arm:v1']]);
@@ -551,7 +513,7 @@ test('Select picks a visual at once; a selection lives only under Select; Links 
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedPartIds.sort(), ['head:v1/object/0', 'head:v1/object/1']);
 
   // What names something else can be followed: a parent link selects it, a mesh path opens it,
-  // by its absolute path beside the description.
+  // by the absolute path cadgen resolved for it beside the description.
   await pane.getByRole('button', { name: 'Select head', exact: true }).click();
   await reference.getByRole('button', { name: 'meshes/head.glb' }).click();
   assert.deepEqual(await page.evaluate(() => window.cadHarness.opened), ['/models/meshes/head.glb']);
@@ -623,7 +585,7 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   assert.equal(round6(translation(links.carriage)[2]), 0.35, 'and the robot on screen is in that pose');
 
   // A record written against another revision is not restored. (A new revision behind the mounted robot
-  // keeps its pose only while its joints and named poses are unchanged: `RobotTools.test.tsx`.)
+  // keeps its pose only while its controls and named poses are unchanged: `RobotTools.test.tsx`.)
   await page.evaluate(() => window.cadHarness.mounted(false));
   revision += 1;
   t.after(() => { revision = 1; });
@@ -635,6 +597,94 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   await robot.tool('Select').click();
   await pane.getByRole('button', { name: 'Hide upper_arm', exact: true }).waitFor();
   assert.equal(await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).count(), 0, 'and so do its hidden visuals');
+  assert.deepEqual(robot.errors, []);
+});
+
+test('preview draws the robot as it opens, and leaving it finds the tools view as it was: the pose, the hidden visual and the selection', async (t) => {
+  const robot = await open(t, 'arm.urdf');
+  const { page, pane } = robot;
+  const opening = await robot.links();
+  const away = async () => { const surface = await robot.surface(); await page.mouse.move(surface.x + surface.width - 90, surface.y + surface.height / 2); };
+  const enterPreview = async () => {
+    await pane.getByRole('button', { name: 'Preview', exact: true }).click();
+    await pane.getByRole('button', { name: 'Exit preview', exact: true }).waitFor();
+    await robot.settled();
+  };
+  const exitPreview = async () => {
+    await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
+    await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
+  };
+  // Preview orbits by default: Orbit off (the file's setting, kept for the next preview) holds its camera still.
+  await pane.getByRole('button', { name: 'Preview', exact: true }).click();
+  await pane.locator('[data-preview-corner]').getByRole('button', { name: 'Orbit', exact: true }).click();
+  await page.getByRole('menu', { name: 'Orbit', exact: true }).getByRole('menuitemcheckbox', { name: 'Orbit', exact: true }).press('Enter');
+  await page.keyboard.press('Escape');
+  await page.getByRole('menu', { name: 'Orbit', exact: true }).waitFor({ state: 'detached' });
+  await exitPreview();
+  // The robot as preview draws a file opened afresh.
+  await away();
+  await enterPreview();
+  const authored = (await robot.capture()).data;
+  await exitPreview();
+
+  // Work in the tools view: the shoulder turned, the base's visual hidden, the upper arm picked.
+  await robot.type('shoulder', 25);
+  await page.waitForFunction(() => window.__robotLinks().some(({ link }) => link === 'upper_arm'));
+  const posed = await robot.links();
+  assert.notDeepEqual(posed.upper_arm, opening.upper_arm, 'the shoulder turned the upper arm');
+  await robot.tool('Select').click();
+  await pane.getByRole('button', { name: 'Hide base', exact: true }).click();
+  await pane.getByRole('button', { name: 'Reveal base', exact: true }).waitFor();
+  await pane.getByRole('button', { name: 'Select upper_arm', exact: true }).click();
+  await robot.pressed(['Select upper_arm']);
+
+  // Preview draws none of it: the opening pose, every visual, nothing lit.
+  await away();
+  await enterPreview();
+  assert.deepEqual(await robot.links(), opening, 'preview poses the robot as it opens');
+  assert.ok((await robot.capture()).data.equals(authored), 'preview draws the robot as it opens');
+
+  // Leaving finds the tools view's work as it was left.
+  await exitPreview();
+  assert.deepEqual(await robot.links(), posed, 'the pose comes back');
+  await robot.pressed(['Select upper_arm'], 'the selection comes back');
+  assert.equal(await pane.getByRole('button', { name: 'Reveal base', exact: true }).count(), 1, 'the base is still hidden');
+  assert.deepEqual(robot.errors, []);
+});
+
+test('a four-bar linkage closes on screen: the crank cadgen derives follows the rocker through its curve, has no knob or slider of its own, and the Reference names its driver', async (t) => {
+  const robot = await open(t, 'linkage.urdf');
+  const { page, pane } = robot;
+  const linkage = JSON.parse(PAYLOADS['linkage.urdf']);
+  const fourBar = linkage.joints.find(joint => joint.name === 'input_joint').fourBar;
+  // The two pins, in the robot's space: the crank's at its length along its link, the rocker's at its.
+  // The linkage closes when the coupler between them spans exactly its own length, whatever the pose.
+  const closes = async (where) => {
+    const links = await robot.links();
+    const crank = through(links.crank, [fourBar.inputLength, 0, 0]), rocker = through(links.rocker, [fourBar.outputLength, 0, 0]);
+    const gap = Math.hypot(crank[0] - rocker[0], crank[1] - rocker[1], crank[2] - rocker[2]);
+    // Within what cadgen's sampling tolerance (0.01 degrees of the crank) allows at the pin.
+    assert.ok(Math.abs(gap - fourBar.couplerLength) < 2e-5, `${where}: the coupler spans ${gap} m, not ${fourBar.couplerLength}`);
+  };
+  await closes('as written');
+  await robot.openPosition();
+  await page.waitForFunction(() => window.__cadJointHandles?.().length > 0);
+  assert.deepEqual(Object.keys(await robot.handles()), ['output_joint'], 'one knob, the rocker; the crank has none');
+  assert.equal(await robot.jointField('input_joint').count(), 0, 'and no slider');
+  for (const driverDeg of [-28, -10, 15, 28]) {
+    await robot.type('output_joint', driverDeg);
+    await page.waitForFunction(wanted => window.__cadJointHandles().find(handle => handle.id === 'output_joint').value === wanted, driverDeg);
+    await closes(`the rocker at ${driverDeg} degrees`);
+  }
+  assert.equal((await robot.stats()).lastPoseWrites, 2, 'a step writes the rocker and the crank it drives');
+  // The Reference for the crank names its four-bar driver, not a mimic formula.
+  await robot.tool('Select').click();
+  await pane.getByRole('button', { name: 'Select crank', exact: true }).click();
+  const reference = pane.getByRole('region', { name: 'Reference details', exact: true });
+  await reference.getByText('Four-bar driver', { exact: true }).waitFor();
+  const said = await reference.innerText();
+  assert.match(said, /output_joint/);
+  assert.doesNotMatch(said, /Mimic/);
   assert.deepEqual(robot.errors, []);
 });
 
@@ -653,7 +703,7 @@ test('an SDF is the same robot with a section of its own; a snapshot depicts the
   const [linksTree, sdfBox] = await Promise.all([robot.linksPanel().boundingBox(), robot.section('SDF').boundingBox()]);
   assert.ok(sdfBox.y >= linksTree.y + linksTree.height - 1, 'SDF follows the link tree');
   const text = (await robot.section('SDF').innerText()).replace(/\s+/g, ' ');
-  for (const fact of ['Version 1.9', 'Document world', 'World lab', 'Frame mode native', 'Root link base', 'Model swing', 'Links 2', 'Joints 1', 'Lights 1', 'sun / directional']) assert.ok(text.includes(fact), `${fact} in: ${text}`);
+  for (const fact of ['Version 1.9', 'Document world', 'World lab', 'Root link base', 'Model swing', 'Links 2', 'Joints 1', 'Lights 1', 'sun / directional']) assert.ok(text.includes(fact), `${fact} in: ${text}`);
   // Its joint frame and its child link frame differ (the child sits at an offset): the knob still drives it.
   await robot.type('hinge', 40);
   const links = await robot.links();
@@ -682,19 +732,20 @@ test('an SDF is the same robot with a section of its own; a snapshot depicts the
   assert.deepEqual(robot.errors, []);
 });
 
-test('files that cannot be shown say why: an SRDF with no URDF beside it, and a robot whose link mesh is missing', async (t) => {
+test('files cadgen refuses say why, in its words: an SRDF with no URDF beside it, and a robot whose link mesh is missing', async (t) => {
   const lonely = await open(t, 'lonely.srdf', { panel: false });
   const alert = lonely.pane.getByText('No URDF beside this SRDF', { exact: true });
   await alert.waitFor();
   const said = (await lonely.pane.innerText()).replace(/\s+/g, ' ');
-  assert.match(said, /exactly one \.urdf file whose <robot name> is “nobody”/, 'it names what was looked for');
+  assert.match(said, /exactly one \.urdf file with the same <robot name>/, 'it says what was looked for');
+  assert.match(said, /no \.urdf in \/models declares <robot name='nobody'>/, 'and carries cadgen’s sentence: the folder, the name, what the folder holds');
   assert.match(said, /Put the robot's URDF next to this SRDF/);
   assert.equal(await lonely.pane.getByText('Reading model').count(), 0, 'it does not load forever');
   assert.deepEqual(lonely.errors, []);
 
   const gone = await open(t, 'gone.urdf', { panel: false });
   await gone.pane.getByText('Couldn’t load the model', { exact: true }).waitFor();
-  assert.match((await gone.pane.innerText()).replace(/\s+/g, ' '), /meshes\/absent\.stl: 404/);
+  assert.match((await gone.pane.innerText()).replace(/\s+/g, ' '), /missing mesh file: 'meshes\/absent\.stl'/);
   assert.deepEqual(gone.errors, []);
 });
 
@@ -702,7 +753,7 @@ test('a pose step costs the same on a long chain: one matrix, no component', asy
   const robot = await open(t, 'chain.urdf');
   const { page, pane } = robot;
   await robot.openPosition();
-  await page.waitForFunction(count => window.__cadJointHandles?.().length === count, CHAIN_LINKS - 1);
+  await page.waitForFunction(count => window.__cadJointHandles?.().length === count, CHAIN_JOINTS);
   await robot.settled();
   // What a step costs is counted, never timed: the matrices it writes and the renders it causes.
   // (Posing through React state and a re-placed part list rendered the renderer every step.)

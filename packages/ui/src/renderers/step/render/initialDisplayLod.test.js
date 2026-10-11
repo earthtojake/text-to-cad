@@ -2,71 +2,51 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  COARSE_SURF_DECODE_EXPANSION_ESTIMATE,
-  DEFAULT_SURF_DECODE_EXPANSION_ESTIMATE,
-  LARGE_ASSEMBLY_INITIAL_COARSE_COMPONENTS,
-  estimateInitialSurfDecodeBytes,
-  initialDisplayLodPlan,
+  initialDisplayLodFromProbe,
   probeInitialDisplayLod,
+  producedDisplayLodPlan,
 } from "./initialDisplayLod.js";
+import { TEST_TESSELLATION_LADDER, installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 const MIB = 1024 * 1024;
 
-function cachedProbes(standard, coarse) {
+function cachedProbes(standard) {
   const requested = [];
   return {
     requested,
-    probeEntries: async ([input], options) => {
-      const level = options ? 0 : 1;
-      requested.push(level);
-      const row = level ? standard : coarse;
-      return new Map(row ? [[input, row]] : []);
+    probeEntries: async ([input], tessellation) => {
+      requested.push(tessellation);
+      return new Map(standard ? [[input, standard]] : []);
     },
   };
 }
 
-test("warm assemblies choose standard before coarse without requiring a SURF URL", async () => {
+test("a stored standard mesh opens the component without a SURF URL, sized by its body", async () => {
   const standard = { surfaceObject: "exact", byteLength: MIB, decodedBytes: 3 * MIB };
-  const cache = cachedProbes(standard, { ...standard, decodedBytes: MIB });
+  const cache = cachedProbes(standard);
   const hit = await probeInitialDisplayLod({ surfaceInput: "input", maxInFlightBytes: 256 * MIB, ...cache });
   assert.equal(hit.plan.level, 1);
   assert.equal(hit.cacheProbe, standard);
   assert.equal(hit.plan.estimatedBytes, 4 * MIB);
-  assert.deepEqual(cache.requested, [1]);
+  assert.equal(hit.plan.fitsDecodeCap, true);
+  assert.deepEqual(cache.requested, [TEST_TESSELLATION_LADDER.levels[TEST_TESSELLATION_LADDER.defaultLevel]],
+    "the standard tier, and no other, is asked, by both its tolerances");
 });
 
-test("a missing, mismatched, or oversized standard entry can fall back to admitted coarse", async () => {
-  const coarse = { surfaceObject: "exact", byteLength: MIB, decodedBytes: 3 * MIB };
-  for (const standard of [null, { ...coarse, surfaceObject: "different" },
-    { ...coarse, decodedBytes: 256 * MIB }, { ...coarse, decodedBytes: NaN }]) {
-    const cache = cachedProbes(standard, coarse);
-    const hit = await probeInitialDisplayLod({ surfaceInput: "input", surfaceObject: "exact",
-      maxInFlightBytes: 256 * MIB, ...cache });
-    assert.equal(hit.plan.level, 0);
-    assert.equal(hit.cacheProbe, coarse);
-    assert.deepEqual(cache.requested, [1, 0]);
+test("a missing, mismatched, refused or unsized standard entry leaves the component cold", async () => {
+  const row = { object: "standard", surfaceObject: "exact", byteLength: MIB, decodedBytes: 3 * MIB };
+  for (const [standard, options] of [
+    [null, {}],
+    [{ ...row, surfaceObject: "different" }, {}],
+    [row, { rejectedCacheObjects: new Set(["standard"]) }],
+    [{ ...row, decodedBytes: NaN }, {}],
+  ]) {
+    assert.equal(await probeInitialDisplayLod({ surfaceInput: "input", surfaceObject: "exact",
+      maxInFlightBytes: 256 * MIB, ...cachedProbes(standard), ...options }), null);
   }
-});
-
-test("a standard body rejected after admission falls back to coarse metadata", async () => {
-  const standard = { object: "standard", surfaceObject: "exact", byteLength: MIB, decodedBytes: 3 * MIB };
-  const coarse = { object: "coarse", surfaceObject: "exact", byteLength: MIB, decodedBytes: MIB };
-  const cache = cachedProbes(standard, coarse);
-  const hit = await probeInitialDisplayLod({
-    surfaceInput: "input",
-    maxInFlightBytes: 256 * MIB,
-    rejectedCacheObjects: new Set(["standard"]),
-    ...cache,
-  });
-  assert.equal(hit.plan.level, 0);
-  assert.equal(hit.cacheProbe, coarse);
-  assert.deepEqual(cache.requested, [1, 0]);
-});
-
-test("unusable cache metadata leaves cold-load admission in charge", async () => {
-  const row = { surfaceObject: "exact", byteLength: MIB, decodedBytes: 256 * MIB };
-  assert.equal(await probeInitialDisplayLod({ surfaceInput: "input", maxInFlightBytes: 256 * MIB,
-    ...cachedProbes(row, row) }), null);
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(probeInitialDisplayLod({ surfaceInput: "input", maxInFlightBytes: 256 * MIB,
@@ -74,43 +54,11 @@ test("unusable cache metadata leaves cold-load admission in charge", async () =>
   { name: "AbortError" });
 });
 
-test("large assemblies start coarse while small and medium packages keep the default", () => {
-  assert.equal(initialDisplayLodPlan({ componentCount: 9, maxInFlightBytes: 256 * MIB }).level, 1);
-  const large = initialDisplayLodPlan({
-    componentCount: LARGE_ASSEMBLY_INITIAL_COARSE_COMPONENTS,
-    maxInFlightBytes: 256 * MIB,
-  });
-  assert.equal(large.level, 0);
-  assert.equal(large.reason, "large-assembly");
-  assert.equal(large.sourceExpansionRatio, COARSE_SURF_DECODE_EXPANSION_ESTIMATE);
-});
-
-test("any oversized leaf tries coarse only when its independent estimate fits", () => {
-  assert.equal(initialDisplayLodPlan({
-    componentCount: 9,
-    surfBytes: 1 * MIB,
-    maxInFlightBytes: 256 * MIB,
-  }).level, 1, "the other leaves in the same small assembly stay at the default");
-  const coarse = initialDisplayLodPlan({
-    componentCount: 9,
-    surfBytes: 5 * MIB,
-    maxInFlightBytes: 256 * MIB,
-  });
-  assert.equal(coarse.level, 0);
-  assert.equal(coarse.reason, "component-admission");
-  assert.equal(coarse.estimatedBytes, 160 * MIB);
-  assert.equal(coarse.fitsDecodeCap, true);
-
-  const refused = initialDisplayLodPlan({
-    componentCount: 9,
-    surfBytes: 9 * MIB,
-    maxInFlightBytes: 256 * MIB,
-  });
-  assert.equal(refused.level, 0);
-  assert.equal(refused.estimatedBytes, 288 * MIB);
-  assert.equal(refused.fitsDecodeCap, false);
-  assert.equal(
-    estimateInitialSurfDecodeBytes(5 * MIB, DEFAULT_SURF_DECODE_EXPANSION_ESTIMATE),
-    320 * MIB,
-  );
+test("a mesh too large to admit with the rest still opens at the standard level, to load alone", () => {
+  const huge = { surfaceObject: "exact", byteLength: MIB, decodedBytes: 300 * MIB };
+  const warm = initialDisplayLodFromProbe(huge, { surfaceObject: "exact", maxInFlightBytes: 256 * MIB });
+  assert.deepEqual(warm.plan, { level: 1, estimatedBytes: 301 * MIB, fitsDecodeCap: false, reason: "warm" });
+  assert.deepEqual(producedDisplayLodPlan(huge, { maxInFlightBytes: 256 * MIB }),
+    { level: 1, estimatedBytes: 301 * MIB, fitsDecodeCap: false, reason: "produced" });
+  assert.equal(producedDisplayLodPlan(null, { maxInFlightBytes: 256 * MIB }), null, "no row, no plan");
 });

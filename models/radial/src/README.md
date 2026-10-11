@@ -7,7 +7,7 @@ and a front crankcase window.
 
 | Script | Artifact | Description |
 |---|---|---|
-| radial.py | STEP/radial.step | Full engine assembly: the eighteen system models below, in occurrence order. It embeds `ANIMATION_JS` (from `lib/anim_js.py`) with a `running` clip (720°, seamless), an `explode` teardown, and `exploded-running` (the running cycle, partly exploded; see below). |
+| radial.py | STEP/radial.step | Full engine assembly: the eighteen system models below, in occurrence order. Its animation, `ANIMATION` from `lib/clips.py`, is baked to keyframes in the sidecar as it builds: a `running` clip (720°, seamless), an `explode` teardown, and `exploded-running` (the running cycle, partly exploded; see below). |
 | crankcase.py | STEP/crankcase.step | split power-section crankcase, cylinder pads, studs, main-bearing housings |
 | crankshaft.py | STEP/crankshaft.step | two-piece single-throw crankshaft, counterweights, main bearings, drive gears |
 | rods.py | STEP/rods.step | master rod + flange, 8 knuckle pins + retainers, crankpin bearing, 8 articulating rods |
@@ -44,8 +44,11 @@ and a front crankcase window.
 - `lib/geo.py`, `lib/castings.py`, `lib/fasteners.py` and `lib/palette.py` hold
   shared geometry, castings, fasteners and materials.
 - The museum section and window live in `lib/geo.py`.
-- `lib/explodedrun.py` is the layout of the `exploded-running` clip; `lib/animgen.py`
-  bakes it (`python -m lib.animgen`, then `tools/engine.py build`).
+- `lib/clips.py` is the animation: the label contract (which labels move, and
+  how) and the three clips. They read `kin.py`, `lib/explodedrun.py` (the layout
+  of `exploded-running`) and `lib/explode_plan.json` (the teardown that
+  `python -m lib.explodeplan` plans from the built engine, committed because the
+  build reads it). After changing any of them, rebuild `radial.py`.
 
 ## The `exploded-running` clip
 
@@ -94,20 +97,22 @@ the engine hangs partly exploded:
 - **`lib/gate.py`** is the interference gate, run from `src/` as
   `python -m lib.gate --static` or `python -m lib.gate --step 10`.
   - `--static` checks every leaf pair at rest.
-  - `--step 10` checks 720° in 10° steps against the viewer's own animation
-    runtime.
+  - `--step 10` checks 720° in 10° steps, with the `running` clip sampled as
+    the build samples it.
   - Known gap: overlaps shallower than about 0.6 mm, and some thin parts
     fully inside another body, can go undetected (see `REPORT.md`).
-- **`lib/animcheck.py`** checks that the JS animation matches `kin.py`, for
-  `running` and for `exploded-running` (kin.py composed with the layout's offsets,
-  and exactly its hidden set).
+- **`lib/animcheck.py`** checks that the clips match `kin.py` on the built engine,
+  for `running` and for `exploded-running` (kin.py composed with the layout's
+  offsets, and exactly its hidden set). `--synthetic` checks `running` without
+  a build.
 - **`python -m lib.gate --clip exploded-running`** gates that clip over 720° in
   10° steps. Every visible pair whose placement differs from rest is tested, and
   every pair that comes within about 2 mm goes to the exact boolean
   (`--exact-near`, the default), so the sampled test's shallow-overlap gap doesn't
   apply to the pairs it tests. Pairs still at their rest placement are the static
   gate's, and keep its gap.
-- **`lib/explodecheck.py`** checks the exploded-view teardown.
+- **`lib/explodecheck.py`** checks the exploded-view teardown: the `explode`
+  clip against the plan, then the plan's interference, floor and visibility.
 - **Hand-off notes** sit beside the source: `REPORT.md` (the final state,
   including known defects), `BUILDING.md` (the builder brief), `GAUNTLET.md`
   (the aesthetic review log) and `BUGS.md` (repo defects found).

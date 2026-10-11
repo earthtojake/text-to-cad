@@ -1,24 +1,18 @@
 import { readCadWorkerTicket } from "../../client/resources.js";
-// Surf component worker (design/surface-rendering.md R2).
+// Surf component worker.
 //
-// One request = one component URL and an explicit capability set. Ordinary
-// display asks only for render data; picking/measurement asks for selectors;
-// Refinement of active topology asks for both so triangle ranges stay aligned. A current
-// cache entry can satisfy render-only requests without fetching or parsing the
-// .surf at all. Tessellation is the cost this migration moved from the build
-// to the client; running misses here keeps the page's main thread responsive.
+// One request = one component's stored mesh (bytes the client thread read and
+// verified) and an explicit capability set. Ordinary display asks only for
+// render data, which the mesh alone carries; picking/measurement asks for
+// selectors, which also read the component's selector table (cadgen's, served
+// with its surface) and join it to the mesh; refinement of active topology
+// asks for both so triangle ranges stay aligned. Decoding, copying into
+// render-owned arrays and the join run here, off the page's main thread.
 
-import { parseSurf } from "./container.js";
-import { tessellateComponent } from "./tessellate.js";
 import { buildMeshDataFromSurf } from "./surfMeshData.js";
-import { buildSelectorBundleFromSurf } from "./surfSelectorBundle.js";
+import { joinSelectorTable, parseSelectorTable } from "./selectorTable.js";
 import { meshDataTransferList } from "../render/meshTransfer.js";
-import {
-  decodeComponentTessellation,
-  edgeClassesFromSurfIndex,
-  encodeComponentTessellation,
-  surfIndexFromCacheEntry,
-} from "./tessellationCache.js";
+import { decodeComponentTessellation, surfIndexFromCacheEntry } from "./tessellationCache.js";
 
 const activeControllers = new Map();
 
@@ -30,8 +24,6 @@ function bundleTransferList(bundle) {
 
 function requestedCapabilities(message) {
   const value = message?.capabilities;
-  // Backward compatibility for callers from an older built client. New
-  // callers always send the bounded protocol explicitly.
   if (!value || typeof value !== "object") {
     return { render: true, selectors: true };
   }
@@ -62,47 +54,21 @@ self.addEventListener("message", async (event) => {
     if (!capabilities.render && !capabilities.selectors) {
       throw new Error("Surf worker request has no capabilities");
     }
-    // A cached entry (bytes handed in by the client thread, which owns the
-    // shared-cache provider) skips tessellation. When its optional display
-    // header is complete, a render-only request also skips the .surf fetch and
-    // parse. A corrupt/version-drifted entry, or one missing the header fields,
-    // is an ordinary miss.
     const cacheIdentity = message.cacheIdentity || {};
-    const cached = message.cachedEntry ? decodeComponentTessellation(message.cachedEntry, {
+    const cached = decodeComponentTessellation(message.cachedEntry, {
       surfaceInput: cacheIdentity.surfaceInput,
       surfaceObject: cacheIdentity.surfaceObject,
-      tessellation: message.tessellation || {},
-    }) : null;
-    const cachedIndex = surfIndexFromCacheEntry(cached);
-    let index = cachedIndex;
-    let floats = null;
-    if (capabilities.selectors || !cached || (capabilities.render && !cachedIndex)) {
-      const buffer = await readCadWorkerTicket(message.resource, { signal: controller.signal });
-      ({ index, floats } = parseSurf(buffer));
+      tessellation: message.tessellation,
+    });
+    if (!cached) {
+      throw new Error("Surf worker request carries no readable mesh for this component");
     }
-    // Optional tolerance override (viewport LOD re-tessellates a component at
-    // a finer chord level from the same exact surfaces).
-    const component = cached
-      ? cached.component
-      : tessellateComponent(index, floats, message.tessellation || {});
-    const meshData = capabilities.render
-      ? buildMeshDataFromSurf(index, floats, { component })
-      : null;
-    const bundle = capabilities.selectors
-      ? buildSelectorBundleFromSurf(index, floats, { component })
-      : null;
-    // On a miss the client asked for the encoded entry back so it can write
-    // it into the shared cache. Encoded BEFORE the arrays transfer out below
-    // (transfer detaches their buffers).
-    const entryBytes = ((!cached && message.wantEntry) || (cached && !cachedIndex))
-      ? encodeComponentTessellation(component, {
-        surfaceInput: cacheIdentity.surfaceInput,
-        surfaceObject: cacheIdentity.surfaceObject,
-        tessellation: message.tessellation || {},
-        partColor: Array.isArray(index.partColor) ? index.partColor : null,
-        edgeClasses: edgeClassesFromSurfIndex(index),
-      })
-      : null;
+    const meshData = capabilities.render ? buildMeshDataFromSurf(surfIndexFromCacheEntry(cached), cached.component) : null;
+    let bundle = null;
+    if (capabilities.selectors) {
+      const buffer = await readCadWorkerTicket(message.resource, { signal: controller.signal });
+      bundle = joinSelectorTable(parseSelectorTable(buffer), cached.component);
+    }
     if (controller.signal.aborted) {
       return;
     }
@@ -112,12 +78,10 @@ self.addEventListener("message", async (event) => {
         ok: true,
         ...(meshData ? { meshData } : {}),
         ...(bundle ? { bundle } : {}),
-        ...(entryBytes ? { entryBytes } : {}),
       },
       [...new Set([
         ...(meshData ? meshDataTransferList(meshData) : []),
         ...bundleTransferList(bundle),
-        ...(entryBytes ? [entryBytes.buffer] : []),
       ])],
     );
   } catch (error) {

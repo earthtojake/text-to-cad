@@ -37,6 +37,7 @@ __all__ = [
     "cylindrical",
     "fastened",
     "couple",
+    "clip",
     "build123d",
     "srgb",
     "MateTarget",
@@ -70,6 +71,12 @@ def __getattr__(name: str):
         from cadgen import kinematics
 
         return getattr(kinematics, name)
+    if name == "clip":
+        # Animation clips for the animation= dict on @step, baked to keyframes
+        # when the model builds.
+        from cadgen.animation import clip
+
+        return clip
     if name == "build123d":
         # `from cadgen import build123d as bd` — the lazy transparent re-export.
         # Importing the submodule is cheap; the real build123d import happens on
@@ -127,6 +134,7 @@ if TYPE_CHECKING:
         linear_to_srgb as linear_to_srgb,
         srgb_to_linear as srgb_to_linear,
     )
+    from cadgen.animation import clip
     from cadgen.kinematics import couple, cylindrical, fastened, revolute, slider
     from cadgen.instances import compound_from_instances
     from cadgen.progress import report, track

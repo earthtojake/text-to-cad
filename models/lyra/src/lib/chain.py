@@ -2,8 +2,7 @@
 
 Stdlib-only (no build123d) so robot-description generators can import it
 cheaply. `lyra.py` consumes the same offsets and CAD pose angles, keeping
-the STEP assembly, the URDF tree, and the viewer animation sidecar in
-lockstep.
+the STEP assembly, the URDF tree, and the animation clips in lockstep.
 
 Design ledger:
 - Units: chain offsets are millimeters in each parent part's local frame;

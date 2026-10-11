@@ -116,7 +116,7 @@ print(json.dumps({
         self.assertEqual("part", pin["kind"])
         self.assertEqual("assembly", arm["kind"])
         for payload in (pin, arm):
-            self.assertEqual({"ok", "kind", "outcome", "document", "tree"}, set(payload))
+            self.assertEqual({"ok", "kind", "outcome", "document", "tree", "timings"}, set(payload))
 
     def test_linked_assembly_round_trips_its_occurrences(self) -> None:
         result = self._read("src/arm.step")

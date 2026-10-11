@@ -3,9 +3,9 @@
 The verb re-emits an existing STEP through cadgen's own pipeline — OCCT read ->
 content-keyed package -> the canonical XCAF writer — so OUT's bytes are
 deterministic whichever kernel wrote IN, and optionally ANNOTATES it with
-kinematics and animation that land in OUT's sidecar. That is the door for a
-document with no model script (design/pose-animation-split.md, CLI/doors
-follow-on).
+kinematics and materials that land in OUT's sidecar. That is the door for a
+document with no model script (packages/cadgen/README.md, law 7); animation is a
+model script's (``@step(animation=...)``).
 
 What is pinned here is the contract a caller depends on: OUT is required and
 never IN, the annotation resolves against real geometry, and freshness splits in
@@ -57,8 +57,6 @@ KINEMATICS = {
     ],
     "poses": {"open": {"swing": 45}},
 }
-
-ANIM_JS = "export const clips = { demo: { duration: 2, update(t, m) {} } };\n"
 
 
 class StepReemitTests(unittest.TestCase):
@@ -137,8 +135,10 @@ class StepReemitTests(unittest.TestCase):
         self.assertTrue(self.out.is_file())
         self.assertFalse(result.skipped)
 
+        from cadgen._internal.source_sidecar import SOURCE_SIDECAR_SCHEMA_VERSION
+
         sidecar = self._sidecar()
-        self.assertEqual(9, sidecar["schemaVersion"])
+        self.assertEqual(SOURCE_SIDECAR_SCHEMA_VERSION, sidecar["schemaVersion"])
         # Declarations only: no source tie of any kind in the file
         # beside the artifact. The freshness identity — sourceKind "step", the
         # INPUT's content hash — lives in the provenance RECORD.
@@ -211,14 +211,13 @@ class StepReemitTests(unittest.TestCase):
 
         materials = {"definitions": {"paint": {"baseColor": "#336699"}},
                      "assignments": [{"targets": ["#arm"], "material": "paint"}]}
-        self._build(kinematics=json.dumps(KINEMATICS), materials=materials, animation=ANIM_JS)
+        self._build(kinematics=json.dumps(KINEMATICS), materials=materials)
         before = self.out.read_bytes()
         materials["definitions"]["paint"]["baseColor"] = "#996633"
         with mock.patch("cadgen._internal.step_reemit._emit", side_effect=AssertionError("annotation edit emitted STEP")):
-            updated = self._build(kinematics=json.dumps(KINEMATICS), materials=materials, animation=ANIM_JS.replace("demo", "swing"))
+            updated = self._build(kinematics=json.dumps(KINEMATICS), materials=materials)
             self.assertTrue(updated.sidecar_only)
             self.assertEqual("#996633", self._sidecar()["appearance"]["materials"]["paint"]["baseColor"])
-            self.assertIn("swing", self._sidecar()["animation"]["source"])
             result = self._build()
         self.assertEqual(before, self.out.read_bytes())
         sidecar = source_sidecar_path(self.out).resolve()
@@ -327,25 +326,6 @@ class StepReemitTests(unittest.TestCase):
             }
         )
         self.assertEqual(from_json, self._sidecar()["kinematics"])
-
-    def test_animation_file_is_embedded_without_a_path_dependency(self) -> None:
-        module = self.root / "source.js"
-        module.write_text(ANIM_JS, encoding="utf-8")
-        self._build(animation=str(module))
-        self.assertEqual({"language": "javascript", "source": ANIM_JS}, self._sidecar()["animation"])
-        module.unlink()
-        self.assertEqual(ANIM_JS, self._sidecar()["animation"]["source"])
-
-    def test_an_animation_the_renderer_would_refuse_is_refused_before_out_is_written(self) -> None:
-        from cadgen.render import relative_to_cwd
-
-        with self.assertRaises(ValueError) as refused:
-            self._build(animation=ANIM_JS + "export const SPEED = 3;\n")
-        self.assertEqual(
-            f"{relative_to_cwd(self.out)} animation: unknown export SPEED — the renderer understands: clips",
-            str(refused.exception),
-        )
-        self.assertFalse(self.out.exists())
 
 
 if __name__ == "__main__":

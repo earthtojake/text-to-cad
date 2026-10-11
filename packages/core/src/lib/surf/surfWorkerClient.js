@@ -1,18 +1,14 @@
 // Pooled client for surfWorker.js.
 //
 // Unlike the single-worker GLB client this is a POOL: a large assembly has
-// hundreds of independent components and tessellation is pure CPU, so the
+// hundreds of independent components, and decoding each one's mesh into
+// render-owned arrays and building its selectors is pure CPU, so the
 // wall-clock win scales with cores. Requests round-robin across workers and
 // name the render/selectors capabilities they require. Returns null from
 // loadSurfComponentInWorker when Workers are unavailable (node, old browsers)
-// so callers can fall back to inline tessellation.
+// so callers can fall back to the inline path.
 
-import {
-  TessellationCacheProbeMissError,
-  tessellationOptionsCacheable,
-  decodeComponentTessellation,
-  surfIndexFromCacheEntry,
-} from "./tessellationCache.js";
+import { TessellationCacheProbeMissError } from "./tessellationCache.js";
 
 import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "../viewer/perfMarks.js";
 
@@ -214,7 +210,7 @@ function handleWorkerMessage(slot, event) {
   const message = event.data || {};
   const request = finishRequest(slot, message.id);
   if (!request) return;
-  // An ok:false reply can arrive after tessellation grew the isolate's heap.
+  // An ok:false reply can arrive after a decode grew the isolate's heap.
   // The worker remains reusable, so it owns that high-water estimate until its
   // exact slot is terminated. A stale reply has no request and cannot charge a
   // replacement slot.
@@ -225,10 +221,7 @@ function handleWorkerMessage(slot, event) {
   dispatchQueuedRequests();
   releaseDeferredPoolIfIdle(request.poolGeneration);
   if (message.ok) {
-    perfMeasure(PERF_MEASURE_NAMES.tessellate, request.startedAt, { cid: request.cid, cacheHit: request.cacheHit });
-    if (message.entryBytes && request.writeBack) {
-      request.writeBack(message.entryBytes); // fire-and-forget
-    }
+    perfMeasure(PERF_MEASURE_NAMES.tessellate, request.startedAt, { cid: request.cid });
     request.resolve({
       ...(message.meshData ? { meshData: message.meshData } : {}),
       ...(message.bundle ? { bundle: message.bundle } : {}),
@@ -398,24 +391,16 @@ export function loadSurfComponentInWorker(url, {
   }
   const id = nextRequestId;
   nextRequestId += 1;
-  // The shared tessellation cache lives on THIS thread's provider (a fetch
-  // against the host's /__tess_cache/ routes); the worker cannot reach it, so
-  // the entry bytes ride the request in (transferred, hit = tessellation
-  // skipped) and a miss rides back out as freshly encoded bytes to write
-  // back. Everything is best-effort: no provider, no exact surface identity,
-  // or debug options mean the message carries nothing extra.
+  // The mesh store lives on THIS thread's provider (a fetch against the host's
+  // /__tess_cache/ routes); the worker cannot reach it, so the entry's bytes
+  // ride the request in, transferred. cadgen produces every mesh: one the
+  // store does not hold is a probe miss, which the caller answers by asking
+  // the host for it.
   const surfaceInput = String(identity?.surfaceInput || "");
   const surfaceObject = String(identity?.surfaceObject || "");
-  const strictProbe = Boolean(identity?.tessellationProbe);
   // What a caller that reads a whole package's entries in batches hands in: the bytes it already
-  // read and verified for this probe (`tessellationEntry`), or its word that it probed this tier
-  // and found no entry (`tessellationProbed`). Either way this request reads nothing itself; a
-  // miss is still tessellated and written back.
+  // read and verified for this probe (`tessellationEntry`). Otherwise this request reads them.
   const readEntry = identity?.tessellationEntry instanceof Uint8Array ? identity.tessellationEntry : null;
-  const probedMiss = identity?.tessellationProbed === true && !strictProbe;
-  const cacheable = Boolean(surfaceInput && surfaceObject)
-    && tessellationCache?.tessellationCacheProviderRegistered()
-    && tessellationOptionsCacheable(tessellation || {});
   return new Promise((resolve, reject) => {
     const cleanup = () => {
       signal?.removeEventListener?.("abort", abort);
@@ -443,14 +428,10 @@ export function loadSurfComponentInWorker(url, {
       memoryEstimateBytes: normalizedMemoryEstimateBytes(memoryEstimateBytes),
       startedAt: perfStart(),
       cid: surfaceInput,
-      cacheHit: false,
       ready: false,
       slot: null,
       message: null,
       transfer: null,
-      writeBack: cacheable
-        ? (entryBytes) => { tessellationCache.writeBackEntryBytes(surfaceInput, tessellation || {}, entryBytes); }
-        : null,
     });
     signal?.addEventListener?.("abort", abort, { once: true });
     const fail = error => {
@@ -462,10 +443,9 @@ export function loadSurfComponentInWorker(url, {
     const post = (cachedEntry, resource, prepareResource = null) => {
       const request = pendingRequests.get(id);
       if (!request) {
-        return; // aborted while the cache lookup was in flight
+        return; // aborted while the mesh read was in flight
       }
       request.prepareResource = prepareResource;
-      request.cacheHit = Boolean(cachedEntry);
       request.message = {
         type: "loadSurf",
         id,
@@ -473,11 +453,10 @@ export function loadSurfComponentInWorker(url, {
         ...(resource ? { resource } : {}),
         capabilities,
         ...(tessellation ? { tessellation } : {}),
-        ...(cacheable ? { cacheIdentity: { surfaceInput, surfaceObject } } : {}),
-        ...(cachedEntry ? { cachedEntry } : {}),
-        ...(cacheable ? { wantEntry: !cachedEntry } : {}),
+        cacheIdentity: { surfaceInput, surfaceObject },
+        cachedEntry,
       };
-      request.transfer = cachedEntry && cachedEntry.buffer.byteLength === cachedEntry.byteLength
+      request.transfer = cachedEntry.buffer.byteLength === cachedEntry.byteLength
         ? [cachedEntry.buffer]
         : [];
       if (resource?.kind === "bytes") request.transfer.push(resource.bytes);
@@ -485,29 +464,24 @@ export function loadSurfComponentInWorker(url, {
       dispatchQueuedRequests();
     };
     const ready = cachedEntry => {
-      if (!resources) { post(cachedEntry, { kind: "url", url }); return; }
-      // Validate the display header before omitting an exact-resource ticket.
-      // Warm render-only cache hits retain their zero-surface-read path.
-      const completeDisplay = cachedEntry && !capabilities.selectors && surfIndexFromCacheEntry(decodeComponentTessellation(cachedEntry, {
-        surfaceInput, surfaceObject, tessellation: tessellation || {},
-      }));
-      if (completeDisplay) { post(cachedEntry); return; }
+      if (!cachedEntry) { fail(new TessellationCacheProbeMissError(identity?.tessellationProbe || null)); return; }
+      // Drawing needs only the mesh; selectors also read the SURF's topology tables.
+      if (!capabilities.selectors) { post(cachedEntry); return; }
       // Nothing names this component's SURF yet (a part that opened warm, refined before its surface
       // was resolved): fail as the inline path does, and the caller resolves one and asks again. A
       // ticket for "" read the page's own address, which in the CAD app is a tunnelled 404.
       if (!url) { fail(new Error("Exact SURF bytes are not ready for this component")); return; }
+      if (!resources) { post(cachedEntry, { kind: "url", url }); return; }
       post(cachedEntry, null, () => resources.workerTicket(url, { signal }));
     };
     if (readEntry) {
       ready(readEntry);
-    } else if (cacheable && !probedMiss) {
-      tessellationCache.getCachedEntryBytes(surfaceInput, tessellation || {}, {
+    } else if (tessellationCache) {
+      tessellationCache.getCachedEntryBytes(surfaceInput, tessellation, {
         signal,
         probe: identity?.tessellationProbe || null,
-        strictProbe,
+        strictProbe: true,
       }).then(ready, fail);
-    } else if (strictProbe) {
-      fail(new TessellationCacheProbeMissError(identity.tessellationProbe));
     } else {
       ready(null);
     }

@@ -133,6 +133,16 @@ def stopped(status: int | None) -> bool:
     return -status in {getattr(signal, name) for name in ("SIGTERM", "SIGINT", "SIGHUP") if hasattr(signal, name)}
 
 
+def _sweep_scratch() -> None:
+    """Remove what workers that are gone left in the temp folder; never fails the pool."""
+    try:
+        from cadgen._internal import temp_leftovers
+
+        temp_leftovers.sweep()
+    except Exception:  # noqa: BLE001 - scratch cleanup never fails the daemon
+        pass
+
+
 def describe_exit(status: int | None) -> str:
     """A worker's death in words: the signal that killed it, or its exit code."""
     if status is None:
@@ -794,7 +804,10 @@ class Pool:
                 if now - worker.last_used >= BORROWED_SURPLUS_IDLE_SECONDS:
                     self._drop_locked(worker)
 
-    def release(self, worker: Worker, *, healthy: bool = True) -> None:
+    def release(self, worker: Worker, *, healthy: bool = True, cancelled: bool = False) -> None:
+        """Take a worker back after a job. An unhealthy one is dropped, and counted a crash
+        unless its job was ``cancelled``: stopped because its caller left (or someone stopped
+        the worker), which ends a job by killing its worker as a matter of course."""
         with self._cv:
             borrowed = worker.extra and not worker.model
             worker.busy = False
@@ -802,9 +815,9 @@ class Pool:
             worker.jobs_served += 1
             self._stats["jobsServed"] += 1
             if not healthy or not worker.alive():
-                if not healthy:
+                if not healthy and not cancelled:
                     self._stats["crashes"] += 1
-                self._drop_locked(worker)
+                self._drop_locked(worker, sweep=True)
             elif worker.jobs_served >= recycle_after():
                 self._stats["recycles"] += 1
                 self._drop_locked(worker)
@@ -831,7 +844,11 @@ class Pool:
             self._cv.notify_all()
         self.ensure_spares()
 
-    def _drop_locked(self, worker: Worker) -> None:
+    def _drop_locked(self, worker: Worker, *, sweep: bool = False) -> None:
+        """Retire a worker on a thread of its own. One that died or was killed (``sweep``)
+        could not remove its scratch -- an import copy is a whole document -- and the sweep
+        a worker runs as it starts never sees a worker that dies after it, so once this one
+        is reaped its scratch is swept here (``temp_leftovers``)."""
         if worker in self._workers:
             self._workers.remove(worker)
         if worker not in self._retiring:
@@ -843,13 +860,15 @@ class Pool:
             finally:
                 with self._cv:
                     self._cv.notify_all()
+            if sweep:
+                _sweep_scratch()
 
-        threading.Thread(target=retire, daemon=True).start()
+        threading.Thread(target=retire, name="cadgen-worker-retire", daemon=True).start()
 
     def _reap_dead_locked(self) -> None:
         for worker in list(self._workers):
             if not worker.alive() and not worker.busy:
-                self._drop_locked(worker)
+                self._drop_locked(worker, sweep=True)
 
     def reap_dead(self) -> None:
         with self._cv:

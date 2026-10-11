@@ -8,13 +8,13 @@ from lib.bowden_guide import make_bowden_body
 from lib.finish import finish
 from lib.palette import cord_language,ASSEMBLY_MATERIALS
 from lib.neutral_routes import NEUTRAL_ROUTES
-from lib.embedded_animation import load_animation
+from lib.braided_presentation import braided_presentation
 
 
-ANIMATION_JS = load_animation(__file__, 'write_progress_presentation.py')
+ANIMATION = braided_presentation()
 
 
-@step(out='../STEP/hand_progress_review.step', materials=ASSEMBLY_MATERIALS, animation=ANIMATION_JS)
+@step(out='../STEP/hand_progress_review.step', materials=ASSEMBLY_MATERIALS, animation=ANIMATION)
 def hand_progress_review():
     bodies=integration_bodies(palm_baseline=False)
     for route,tendon in zip(NEUTRAL_ROUTES,TENDONS):

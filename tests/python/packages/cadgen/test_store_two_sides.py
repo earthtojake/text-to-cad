@@ -75,6 +75,7 @@ if __name__ == "__main__":
 '''
 
 ROBOT = '''
+import cadgen
 from cadgen import label_shape, step
 from cadgen import build123d as bd
 from arm import arm
@@ -85,13 +86,14 @@ KINEMATICS = {
                "axis": {"origin": [0, 0, 10], "dir": [0, 0, 1]}, "limits": [-90, 90]}],
     "poses": {"turned": {"spin": 30}},
 }
-ANIMATION = r"""export const clips = { lift: {
-    label: "Lift the post", duration: 4, loop: true,
-    update(t, m) { m.get("post").translate([0, 0, 6 * t]); }
-}};"""
 
 
-@step(out="robot.step", kinematics=KINEMATICS, animation=ANIMATION)
+def lift(t, m):
+    m.get("#post").translate((0, 0, 6 * t))
+
+
+@step(out="robot.step", kinematics=KINEMATICS,
+      animation={"lift": cadgen.clip(lift, duration=4, label="Lift the post")})
 def robot():
     base = label_shape(bd.Box(60, 60, 3), "base")
     front = bd.Pos(0, 20, 5) * arm()
@@ -366,7 +368,7 @@ class TwoSidesLaw(unittest.TestCase):
         self.assertEqual(0, snapshot.returncode, snapshot.stderr)
         glb = _cli(
             "glb", "build", document, str(out_dir / "clip.glb"),
-            "--animation", '{"clip": "lift", "fps": 10, "seconds": 1}',
+            "--animation", '{"clip": "lift", "seconds": 1}',
             cwd=cwd, cache=cache,
         )
         self.assertEqual(0, glb.returncode, glb.stderr)

@@ -13,6 +13,14 @@ const SHOW_AFTER_MS = 150;
 /** A newer revision of the file loading behind the one on screen: the view stays usable meanwhile. */
 export const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
 
+/** What loads behind the view, from the loading frame (`loadingProgress`): cadgen meshing parts its
+ * store lacked (a cold open, drawn as the parts arrive) says so, counted; anything else is the
+ * model updating. */
+export function modelUpdateStatus(progress) {
+  if (progress?.label !== "Meshing parts") return MODEL_UPDATE_STATUS;
+  return { pending: true, label: `Meshing parts${progress.counts ? ` ${progress.counts}` : ""}…` };
+}
+
 export function ViewUpdateStatus({ status, onRetry, className }) {
   const mobile = useViewerMobile();
   const [visible, setVisible] = useState(false);

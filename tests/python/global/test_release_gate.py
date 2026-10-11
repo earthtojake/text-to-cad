@@ -135,6 +135,16 @@ class PublishGate(unittest.TestCase):
                 self.assertEqual(evaluate(publish, {"test": result}, {"should_publish": "true", "tested": tested}), expected)
         self.assertFalse(evaluate(publish, {"test": "skipped"}, {"should_publish": "false", "tested": "true"}))
 
+    def test_the_release_bundles_the_viewer_and_the_cad_app_as_the_release(self):
+        # The bundle step names the version it releases in the variable the apps' build reads
+        # (packages/ui/scripts/build-id.mjs): their app menu then shows `v<VERSION>`, where every
+        # other build shows `v<VERSION>-dev.<commit>`.
+        helper = (REPO_ROOT / "packages/ui/scripts/build-id.mjs").read_text(encoding="utf-8")
+        variable = re.search(r'^export const RELEASE_ENV = "(\w+)";$', helper, re.M)[1]
+        step = JOBS["publish"].split("- name: Bundle production outputs\n", 1)[1].split("\n      - name: ", 1)[0]
+        self.assertIn(f"{variable}: ${{{{ needs.gate.outputs.version }}}}", step)
+        self.assertIn("run: scripts/bundle/bundle.sh --clean", step)
+
     def test_installers_get_the_version_only_once_pypi_serves_it(self):
         # The upload, then PyPI's index -- what uv resolves a pin through -- listing it, both in the
         # publish job, which the branches job needs. The docs deploy and the tag follow the branches.

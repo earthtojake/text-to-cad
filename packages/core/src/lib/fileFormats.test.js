@@ -51,9 +51,8 @@ test("meshAssetKeyForEntry chooses native mesh keys and STEP GLB sidecars", () =
 });
 
 test("every entry renders its own source format; nothing is package-baked", () => {
-  // A DXF's render asset is the .dxf itself — parsed and prism-meshed in the client
-  // (design/standalone-viewer.md Phase A) — and no kind is baked into a package any
-  // more, so the source format IS the asset format everywhere.
+  // A DXF's render asset is the .dxf itself — parsed and prism-meshed in the client — and no kind
+  // is baked into a package any more, so the source format IS the asset format everywhere.
   assert.equal(entrySourceFormat({ kind: "dxf" }), RENDER_FORMAT.DXF);
   assert.equal(entrySourceFormat({ kind: "part" }), RENDER_FORMAT.STEP);
   assert.equal(entrySourceFormat({ kind: "stl" }), RENDER_FORMAT.STL);

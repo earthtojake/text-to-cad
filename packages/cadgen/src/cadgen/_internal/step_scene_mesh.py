@@ -330,9 +330,9 @@ def adaptive_mesh_resolution_from_hints(hints: dict[str, Any]) -> AdaptiveMeshRe
     for edge rendering: ``_edge_visibility_classes_for_resolution`` turns
     profile + hints into the visibility classes the tree is built with, so a
     scene that lands on ``coarse-assembly`` renders feature edges only. It
-    decides nothing about tessellation — the one tessellator is JS
-    (``packages/core/src/lib/surf/tessellate.js``) and takes relative
-    tolerances of its own.
+    decides nothing about meshing — the one mesher is OCCT's
+    (``cadgen._internal.occt_mesh``), at the relative tolerances each request
+    names.
 
     The thresholds below are therefore a complexity ladder, not a quality
     ladder: each rung says "this much topology", and only the top two rungs

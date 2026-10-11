@@ -368,7 +368,8 @@ def _update(path: Path, change: Callable[[dict[str, Any]], dict[str, Any]]) -> d
 
 
 # What an environment says (``_environment``): forwarded with every build a client asks the daemon for
-# (``cadgen.daemon.client.FORWARDED_ENV_VARS``), so a client's no holds for its builds there too.
+# (the client's environment travels whole, ``cadgen.daemon.client.forwarded_env``), so a client's no
+# holds for its builds there too.
 ENVIRONMENT = ("DO_NOT_TRACK", "CADGEN_TELEMETRY")
 
 

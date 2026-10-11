@@ -28,7 +28,7 @@ own `src/README.md` catalog.
 
 **Each cad-project has the same shape**, the one the `$cad` skill's `project-layout.md` reference
 defines: authored code in `src/` (one `@step` or `@dxf` model per file, shared
-modules in `src/lib/`, and animation source embedded in owning `@step` declarations),
+modules in `src/lib/`, and animation clips declared on their owning `@step`),
 raw artifacts in format folders (`STEP/`, `DXF/`, `3MF/`, `GLB/`, `STL/`),
 committed inputs no script regenerates in `<FORMAT>/imported/`, scratch in
 `tmp/`, and a `.gitignore` that keeps the artifacts out of the repo. A fresh
@@ -69,7 +69,7 @@ For manual edge-case checks and debugging, use [tests/](tests/README.md). Automa
   one group per assembly: `src/<assembly>/` holds the root model plus every
   part model and helper that assembly owns, with artifacts in
   `STEP/<assembly>/` (meshes in `STL|3MF|GLB/<assembly>/`). Several carry typed
-  mates and animation source embedded in their owning `@step` declarations
+  mates and animation clips on their owning `@step` declarations
   (`planetary_gear_assembly`, `mars_rover_concept`).
 - [drawings/](drawings/src/README.md): 2D `@dxf` drawings as one cad-project,
   one script each, artifacts in `DXF/`.
@@ -85,9 +85,9 @@ Models that need a **folder of their own** rather than a single loose script.
 - [f1/](f1/src/README.md): open-wheel F1 car — a modular `lib/` build over one
   shared surface vocabulary, plus `f1_stage.appearance.json`, the authored
   presentation stage. Its DRS four-bar and rack-and-track-rod steering are
-  CLOSED loops, so both solves live in `f1.py`'s embedded `ANIMATION_JS` rather than in typed mates.
+  CLOSED loops, so both solves live in `f1.py`'s animation clips rather than in typed mates.
 - [f14d/](f14d/src/README.md): Grumman F-14D Super Tomcat — one lofted airframe
-  skin with ten systems grouped on top of it, a staged teardown embedded in
+  skin with ten systems grouped on top of it, a staged teardown clip in
   `f14d.py`, and a `render/` suite of presentation configs and review
   tooling.
 - [hypercar/](hypercar/src/README.md): mid-engine hypercar — modular `lib/`
@@ -104,7 +104,7 @@ Models that need a **folder of their own** rather than a single loose script.
 - [qdd_actuator/](qdd_actuator/src/README.md): quasi-direct-drive actuator —
   one virtual `drive` DOF gears the rotor, carrier, both ball cages and the
   three planets through the 4.5:1 planetary reduction, with the exploded
-  teardown embedded in `qdd_actuator.py`.
+  teardown among `qdd_actuator.py`'s clips.
 - [radial/](radial/src/README.md): nine-cylinder supercharged radial aircraft engine, as a
   museum restoration. Eighteen system models are linked by `src/radial.py`, with a
   master/articulating rod train, a 1/8-speed cam ring, a 3:2 planetary reduction and a
@@ -112,17 +112,13 @@ Models that need a **folder of their own** rather than a single loose script.
   `explode` clips. Its hand-off notes (`REPORT.md`, `GAUNTLET.md`, `BUILDING.md`,
   `BUGS.md`) sit beside the source.
 - [w16/](w16/src/README.md): quad-turbo 8.0 L W16, sectioned museum cutaway —
-  thirteen system models linked by `src/w16.py`, with `crank` and `explode`
-  clips from its embedded `ANIMATION_JS`. Its hand-off notes (`REPORT.md`,
+  thirteen system models linked by `src/w16.py`, with `crank`, `running_reveal`
+  and `explode` clips in `src/lib/animation.py`. Its hand-off notes (`REPORT.md`,
   `TODO.md`, `GAUNTLET.md`, `BUILDING.md`) sit beside the source.
 - [tendon_hand/](tendon_hand/README.md): tendon-driven research right hand —
-  24 joint DOF and 48 antagonistic tendon actuators, SOURCE ONLY (every STEP,
-  GLB, video and validation output is generated and ignored). Two models solve
-  their choreography rather than authoring it, so their `animation=` string is
-  read at build time from a generated, ignored `src/<model>_animation.js`
-  sibling; regenerate that sibling first — a missing one is a build error
-  naming its generator. `validation/` and `website/` carry its validation
-  programs and standalone HTML presentation.
+  24 joint DOF and 48 antagonistic tendon actuators, SOURCE ONLY (every STEP
+  and validation output is generated and ignored). `validation/` carries its
+  validation programs.
 
 ### SpaceX reconstruction package
 
@@ -166,7 +162,8 @@ either.
 A project's articulation is split three ways (see the `$cad` skill's
 `kinematics.md`): geometry parameters are the model function's signature,
 typed mates are pure data under the `@step` decorator's `kinematics=`, and
-choreography is JavaScript source embedded in Python and passed to `animation=`. The retired `.params.js`
+choreography is Python clips (`cadgen.clip`) passed to `animation=`, baked to
+keyframes in the sidecar when the model builds. The retired `.params.js`
 sidecars are gone from every package here.
 
 Some packages keep a `render/` subfolder holding presentation-theme JSON,

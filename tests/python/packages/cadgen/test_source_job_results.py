@@ -186,10 +186,11 @@ class SourceJobResults(unittest.TestCase):
         write_record(script, {"tree": newer, "outputs": {}})
         seen = []
 
-        def export(directory, jobs, **kwargs):
-            seen.append(json.loads((directory / "assembly.json").read_text(encoding="utf-8"))["tree"])
+        def export(source, jobs, **kwargs):
+            seen.append(source.tree)
             for job in jobs:
                 job.out.write_bytes(b"requested mesh result")
+            return {"ok": True, "files": [{"path": str(job.out), "format": job.fmt, "triangleCount": 12} for job in jobs]}
 
         spec = _entry_spec_from_source(source_from_path(script))
         with mock.patch("cadgen._internal.mesh_export.run_mesh_exporter", side_effect=export):

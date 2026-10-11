@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import ast
 import concurrent.futures
+import json
 import os
 import re
 import shutil
@@ -203,6 +204,10 @@ class DocumentedModelsBuild(unittest.TestCase):
         blocks = _Blocks()
         self.assertGreaterEqual(len(blocks.models), 6, "the docs should carry runnable examples")
         self.assertTrue(any("bracket_shape" in path for path, _ in blocks.libs), "the mirrored-pair factory is missing")
+        self.assertTrue(
+            any("animation=" in source for _, _, source in blocks.models),
+            "the animation example should be a complete model, built here rather than only parsed",
+        )
         for relative, source in blocks.libs:
             target = self.project / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -238,6 +243,10 @@ class DocumentedModelsBuild(unittest.TestCase):
                     output = (script_dir / out).resolve()
                     self.assertTrue(output.is_file(), f"{relative} declared {out} but did not write it")
                     self.assertGreater(output.stat().st_size, 0)
+                    if "animation=" in code_only:
+                        # Its clips ran once, in the build, and became keyframes beside it.
+                        sidecar = json.loads(output.with_name(output.name + ".json").read_text(encoding="utf-8"))
+                        self.assertTrue(sidecar["animation"]["clips"], f"{relative} declared clips its sidecar lacks")
                 second = second_runs[relative]
                 self.assertTrue(second.stdout.startswith("current "), f"{relative} was not a no-op on rerun:\n{second.stdout}")
 
@@ -274,55 +283,7 @@ class DocumentationTeachesTheContract(unittest.TestCase):
             for word in self.RETIRED:
                 self.assertNotIn(word, text, f"{path.name} still teaches {word!r}")
 
-
-class DocumentedEmbeddedAnimation(unittest.TestCase):
-    """The embedded animation module in the kinematics reference is valid."""
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        text = repo_path("skills/cad/references/kinematics.md").read_text(encoding="utf-8")
-        blocks = [block for block in _PYTHON_BLOCK.findall(text) if "ANIMATION = " in block]
-        assert blocks, "kinematics.md shows no embedded animation block"
-        module = ast.parse(blocks[0])
-        assignment = next(
-            node for node in module.body
-            if isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Name) and target.id == "ANIMATION" for target in node.targets)
-        )
-        cls.module_text = ast.literal_eval(assignment.value)
-
-    def test_the_documented_module_is_self_contained(self) -> None:
-        self.assertNotIn("import ", self.module_text)
-
-    def test_the_cli_preflight_reads_the_documented_clips(self) -> None:
-        from cadgen._internal.animation_source import declared_clip_ids
-
-        self.assertEqual(["demo"], declared_clip_ids(self.module_text))
-
-    def test_the_shared_loader_compiles_the_documented_module(self) -> None:
-        node = shutil.which("node")
-        if node is None:
-            self.skipTest("node is not installed")
-        loader = repo_path("packages/core/src/common/renderModule.js")
-        script = textwrap.dedent(
-            f"""
-            import {{ compileAnimationModule, importAnimationModule }} from {str(loader.as_uri())!r};
-            const text = process.argv[1];
-            const namespace = await importAnimationModule(text, {{ name: "arm.step animation" }});
-            const compiled = compileAnimationModule(namespace, {{ name: "arm.step animation" }});
-            console.log(JSON.stringify(Object.keys(compiled.clips)));
-            """
-        )
-        completed = subprocess.run(
-            [node, "--input-type=module", "-e", script, self.module_text],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertEqual('["demo"]', completed.stdout.strip())
-
-    def test_no_reference_teaches_the_retired_declaration(self) -> None:
+    def test_no_reference_teaches_a_companion_animation_file(self) -> None:
         for path in sorted(repo_path("skills/cad/references").glob("*.md")):
             text = path.read_text(encoding="utf-8")
             self.assertIsNone(

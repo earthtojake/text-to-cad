@@ -7,30 +7,19 @@ import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createRobotRenderer } from '../../../dist/renderers/robot/index.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
 import '../../../dist/renderers/robot/RobotRenderer.js';
+import { fixtureGlb, fixturePayload } from './__tests__/robotFixtures.js';
 
 // The robot renderer's tools and tool stack, mounted the way a host mounts it: the FileViewer over the
-// real robot registration, a real CAD client whose backend is a fetch, the real description loader and
-// the real robot scene graph (three.js objects need no WebGL). What is stood in for is the WebGL
-// viewport alone — `ShellViewport` is a box that hands the renderer's overlay its viewport — and the
-// two overlays that only draw into it: the Position knobs (present or not is the contract here, their
-// drawing is the browser suite's) and the pointer pick, whose tap is a real ray through the real scene.
+// real robot registration, a real CAD client whose backend is a fetch answering what cadgen answers
+// (`GET /__cad/robot`: the payload it resolved for the description, and the meshes that names), the
+// real robot loader and the real robot scene graph (three.js objects need no WebGL). What is stood in
+// for is the WebGL viewport alone — `ShellViewport` is a box that hands the renderer's overlay its
+// viewport — and the two overlays that only draw into it: the Position knobs (present or not is the
+// contract here, their drawing is the browser suite's) and the pointer pick, whose tap is a real ray
+// through the real scene.
 
-const box = (size: string, xyz: string) => `<visual><origin xyz="${xyz}"/><geometry><box size="${size}"/></geometry></visual>`;
-const limit = (lower: number, upper: number) => `<limit lower="${lower}" upper="${upper}" effort="1" velocity="1"/>`;
-const ARM_URDF = `<?xml version="1.0"?>
-<robot name="arm">
-  <link name="base_footprint"/>
-  <link name="base">${box('0.4 0.4 0.1', '0 0 0.05')}</link>
-  <link name="upper_arm">${box('0.5 0.08 0.08', '0.25 0 0')}</link>
-  <link name="carriage">${box('0.1 0.1 0.1', '0 0 0')}</link>
-  <link name="camera">${box('0.06 0.06 0.06', '0 0 0')}</link>
-  <joint name="footprint" type="fixed"><parent link="base_footprint"/><child link="base"/></joint>
-  <joint name="shoulder" type="revolute"><parent link="base"/><child link="upper_arm"/><origin xyz="0 0 0.2"/><axis xyz="0 1 0"/>${limit(-1.5708, 1.5708)}</joint>
-  <joint name="lift" type="prismatic"><parent link="base"/><child link="carriage"/><origin xyz="-0.15 0.15 0.15"/><axis xyz="0 0 1"/>${limit(0, 0.3)}</joint>
-  <joint name="camera_mount" type="fixed"><parent link="base"/><child link="camera"/><origin xyz="0.15 -0.15 0.13"/></joint>
-</robot>
-`;
 const FILE = '/models/arm.urdf';
+const payload = () => fixturePayload('arm.urdf');
 
 // ---- the WebGL stand-ins ------------------------------------------------------------------------
 const picks = vi.hoisted(() => ({ latest: null as null | { enabled: boolean; scene: any; onPick: (hit: unknown, modifiers: { multiSelect: boolean }) => void } }));
@@ -71,19 +60,22 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 async function openRobot() {
-  // The file as the catalog lists it now: a save is a new revision, under a new version of its URL.
-  const served = { revision: 1, urdf: ARM_URDF };
+  // The file as the catalog lists it now: a save is a new revision, under a new version of its URL,
+  // and cadgen's answer for it is the payload of that revision.
+  const served = { revision: 1, payload: payload() };
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
+    const url = new URL(String(input), 'http://viewer.test');
     if (url.pathname.endsWith('/__cad/catalog')) {
-      return json({ entries: [{ kind: 'urdf', file: FILE, url: `/arm.urdf?v=${served.revision}`,
-        hash: `one-arm-${served.revision}`, bytes: served.urdf.length }] });
+      return json({ entries: [{ kind: 'urdf', file: FILE, url: `/arm.urdf?v=${served.revision}`, hash: `one-arm-${served.revision}`, bytes: 1 }] });
     }
     if (url.pathname.endsWith('/__cad/server')) return json({ backend: 'cadgen' });
-    if (url.pathname.endsWith('/arm.urdf')) return new Response(served.urdf);
+    if (url.pathname.endsWith('/__cad/robot')) {
+      return url.searchParams.get('file') === FILE ? json(served.payload) : json({ error: `${url.searchParams.get('file')}: no such description` }, 404);
+    }
+    if (/\/(primitives|meshes)\/[^/]+\.glb$/.test(url.pathname)) return new Response(fixtureGlb(url.pathname), { headers: { 'content-type': 'model/gltf-binary' } });
     return new Response('', { status: 404 });
   });
   const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
@@ -93,7 +85,7 @@ async function openRobot() {
   const host = {
     files: {
       id: 'one',
-      stat: async (path: string) => ({ path, name: path.split('/').pop(), kind: 'file', size: ARM_URDF.length, extension: 'urdf' }),
+      stat: async (path: string) => ({ path, name: path.split('/').pop(), kind: 'file', size: 1, extension: 'urdf' }),
     },
     navigation: { openFile: noop },
     environment: { colorScheme: 'light' },
@@ -112,10 +104,10 @@ async function openRobot() {
   const tools = () => within(pane).getByRole('group', { name: 'Interaction tools' });
   const robot = {
     pane, client,
-    /** Save the file again, as `urdf`, and let the catalog say so: the robot on screen loads the new revision. */
-    async publish(urdf: string) {
+    /** Save the file again, as cadgen now resolves it, and let the catalog say so: the robot on screen loads the new revision. */
+    async publish(next: ReturnType<typeof payload>) {
       served.revision += 1;
-      served.urdf = urdf;
+      served.payload = next;
       await act(async () => { await client.refresh(); });
     },
     tool: (name: string) => within(tools()).getByRole('button', { name }),
@@ -142,6 +134,7 @@ async function openRobot() {
       const from = root.localToWorld(new THREE.Vector3(0.25, 0, 5));
       const onto = root.localToWorld(new THREE.Vector3(0.25, 0, 0.2));
       const hit = pick.scene.pick(new THREE.Ray(from, onto.sub(from).normalize()));
+      // Every visual is a component: the pick names the upper arm's visual, on its link.
       expect(hit).toMatchObject({ kind: 'component', linkName: 'upper_arm', componentId: 'upper_arm:v1' });
       act(() => pick.onPick(hit, { multiSelect: false }));
     },
@@ -261,7 +254,7 @@ it('on a phone robot Links starts closed, Select marked, until Select is pressed
   robot.client.dispose();
 });
 
-it('a new revision of the robot keeps its pose while its joints and named poses are the same, and opens at its opening pose when they changed', async () => {
+it('a new revision of the robot keeps its pose while its controls and named poses are the same, and opens at its opening pose when they changed', async () => {
   const robot = await openRobot();
   robot.open('Position');
   robot.type('shoulder', '25');
@@ -270,15 +263,22 @@ it('a new revision of the robot keeps its pose while its joints and named poses 
   const scene = () => picks.latest!.scene;
   const before = scene();
 
-  // Saved again with the same joints: the pose stays, and Position with it.
-  await robot.publish(ARM_URDF.replace('<robot name="arm">', '<robot name="arm"><!-- saved again -->'));
+  // Saved again with the same articulation (the upper arm grew): the pose stays, and Position with it.
+  const longer = payload();
+  longer.links.find((link: any) => link.name === 'upper_arm').visuals[0].size = [1, 0.08, 0.08];
+  await robot.publish(longer);
   await waitFor(() => expect(scene()).not.toBe(before));
   expect(robot.jointField('shoulder').value).toBe('25°');
   expect(robot.toolNames()).toEqual(['Select:false', 'Position:true']);
 
   // The shoulder's range changed: the robot opens at its opening pose, though 25° would still fit.
   const kept = scene();
-  await robot.publish(ARM_URDF.replace(limit(-1.5708, 1.5708), limit(-1, 1)));
+  const narrower = payload();
+  for (const row of [narrower.articulation.controls, narrower.articulation.handles].map((rows: any[]) => rows.find(row => row.id === 'shoulder'))) {
+    row.min = -57.3;
+    row.max = 57.3;
+  }
+  await robot.publish(narrower);
   await waitFor(() => expect(scene()).not.toBe(kept));
   expect(robot.jointField('shoulder').value).toBe('0°');
   robot.client.dispose();

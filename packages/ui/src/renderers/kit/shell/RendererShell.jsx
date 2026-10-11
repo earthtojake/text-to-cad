@@ -7,7 +7,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import ViewerAlertCard, { alertDismissible, useAlertDismissal } from "../status/ViewerAlertCard.jsx";
-import { MODEL_UPDATE_STATUS, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
+import { modelUpdateStatus, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { VIEWER_RENDER_PROFILE, renderProfileKeepsPixelRatio, sceneForRenderProfile } from "../viewport/renderProfile.js";
 import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
@@ -18,6 +18,7 @@ import PlaybackMenu, { OrbitMenu, RoutineMenu } from "../tools/PlaybackMenu.jsx"
 import FloatingToolBar from "../tools/FloatingToolBar.js";
 import ToolStack from "../tools/ToolStack.jsx";
 import { toolPanelClosed } from "../tools/toolStackLayout.js";
+import AnimationPanel from "../tools/playbar/AnimationPanel.jsx";
 import { ViewportAnimationBar, animationControlsHaveContent } from "../tools/playbar/ViewportAnimationBar.js";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
 import { ViewportTopRight } from "./ViewportTopRight.jsx";
@@ -54,7 +55,6 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  * @param {{ shell: ReturnType<typeof import("./useRendererShell.js").useRendererShell>,
  *   tools: import("../tools/FloatingToolBar.js").ViewportTool[],
  *   toolPanels?: import("react").ReactNode,
- *   playback?: any,
  *   references?: readonly import("@text-to-cad/core/prompt").PromptReference[],
  *   copySelection?: (() => unknown) | null,
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
@@ -72,9 +72,8 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   `toolPanels`: the tool stack's panels, top to bottom — each a `ToolPanel`
  *   (`kit/tools/ToolPanel.jsx`), shown or `hidden` by the renderer as its tools say: what
  *   the tool in hand shows (Select's tree and Reference, Position's joints), then the
- *   effects a person keeps. The stack is one column the viewer's height, gone in preview.
- *   `playback`: the playbar runtime, when the renderer hands the shell one of its own rather
- *   than through `useRendererShell`'s `animation`. Routines play in preview alone.
+ *   effects a person keeps. The stack is one column the viewer's height, gone in preview. The
+ *   shell's own tools' panels lead it: Draw's, and the Animation tool's.
  *   `references`: what is selected, in the prompt grammar — the references a Quick Edit attaches
  *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted in its header; the file itself always goes. A
  *   renderer that hands none has no Quick Edit: only a view whose picks and sketches a note can
@@ -101,7 +100,7 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   it. The frame focuses itself on such a press whatever the renderer does; this is for a renderer
  *   that also has something to put down when the person reaches for the model.
  */
-export default function RendererShell({ shell, tools, playback = null, toolPanels = null, references = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
+export default function RendererShell({ shell, tools, toolPanels = null, references = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null,
   frameProvider = null, onCanvasPointerDown = null }) {
   const frame = shell.frame;
@@ -109,11 +108,12 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   const { view, resolvedScene, viewerLoading, scene } = frame;
   // The one presentation state: every gate — the viewport's, the renderer's — reads it.
   const { previewing, setPreviewing } = shell;
-  const animation = playback || frame.animation;
+  const animation = frame.animation;
   const hasAnimation = animationControlsHaveContent(animation);
-  // Speed and Loop, once chosen in the playbar's Playback settings, are the file's: its routine
-  // plays with them, whatever it authored, until they are chosen again. Unset, the routine's own apply.
-  const { speed: chosenSpeed, loop: chosenLoop } = shell.playback;
+  // Speed and Loop, once chosen in the mode on screen — the Animation tool's, the file's, or preview's
+  // Playback settings, preview's alone — are what its routine plays with, whatever it authored, until
+  // they are chosen again. Unset, the routine's own apply.
+  const { speed: chosenSpeed, loop: chosenLoop } = shell.routinePlayback;
   const animationRef = useRef(animation);
   animationRef.current = animation;
   useEffect(() => {
@@ -122,11 +122,11 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
     if (chosenSpeed != null && Number(runtime.speed) !== chosenSpeed) runtime.onSpeedChange(chosenSpeed);
     if (chosenLoop != null && (runtime.loopEnabled !== false) !== chosenLoop) runtime.onLoopToggle(chosenLoop);
   }, [hasAnimation, animation?.speed, animation?.loopEnabled, animation?.activeClipId, chosenSpeed, chosenLoop]);
-  // What Playback settings change is chosen for the file and applied to its routine at once.
-  const playbackMenuRuntime = hasAnimation ? {
+  // What those settings change is chosen for the mode on screen and applied to its routine at once.
+  const playbackRuntime = hasAnimation ? {
     ...animation,
-    onSpeedChange: value => { shell.setPlayback({ speed: value }); animation.onSpeedChange(value); },
-    onLoopToggle: value => { shell.setPlayback({ loop: value }); animation.onLoopToggle(value); }
+    onSpeedChange: value => { shell.chooseRoutinePlayback({ speed: value }); animation.onSpeedChange(value); },
+    onLoopToggle: value => { shell.chooseRoutinePlayback({ loop: value }); animation.onLoopToggle(value); }
   } : null;
   // Preview orbits the model from the moment it starts, unless the file's Orbit says otherwise:
   // orbit on or off is the file's, kept from one preview to the next.
@@ -142,12 +142,10 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // tools view is drawn for working on the model, preview for looking at it.
   const renderProfile = previewing ? VIEWER_RENDER_PROFILE.PREVIEW : VIEWER_RENDER_PROFILE.TOOLS;
   const drawnScene = useMemo(() => sceneForRenderProfile(resolvedScene, renderProfile), [resolvedScene, renderProfile]);
-  // Preview is the one place routines play: entering it starts one when Autoplay is on, and
-  // leaving it puts the model back at rest (its Routine, Speed and Loop stay for the next time).
-  const enterPreview = () => {
-    setPreviewing(true);
-    if (hasAnimation && shell.autoplay && !animation.playing) animation.onPlayToggle();
-  };
+  // Preview is a state of its own (`useRendererShell`'s `setPreviewing`): it opens on the model as
+  // authored, its routine at rest and started only by Autoplay, as taking up the tool does, and
+  // leaving it gives the tools view back exactly as it was.
+  const enterPreview = () => setPreviewing(true);
   const leavePreview = () => setPreviewing(false);
   // Preview is fullscreen: the page around the view steps aside while it lasts.
   const onFullscreenChange = view.onFullscreenChange;
@@ -156,13 +154,17 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
     onFullscreenChange?.(true);
     return () => onFullscreenChange?.(false);
   }, [previewing, onFullscreenChange]);
+  // Once neither preview nor the Animation tool holds the routine, the model goes back to rest (its
+  // Routine, Speed and Loop stay for the next time). Leaving preview with the tool up is not that:
+  // the tool's routine comes back as preview found it.
   const releaseRef = useRef(null);
   releaseRef.current = animation?.onRelease || null;
-  const wasPreviewing = useRef(previewing);
+  const routineHeld = previewing || frame.animateToolActive;
+  const wasHeld = useRef(routineHeld);
   useEffect(() => {
-    if (wasPreviewing.current && !previewing) releaseRef.current?.();
-    wasPreviewing.current = previewing;
-  }, [previewing]);
+    if (wasHeld.current && !routineHeld) releaseRef.current?.();
+    wasHeld.current = routineHeld;
+  }, [routineHeld]);
   // Every tool's panel but Select's has an X that puts the tool down, back to Select (the default
   // tool, which cannot be put down). Select's tree has an X of its own that closes the tree alone:
   // the tool it belongs to then carries the strip's corner mark, and a press on that tool while it
@@ -178,8 +180,10 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
     return { ...tool, panelClosed: true, description: tool.description || `${tool.panel.label} closed`,
       onSelect: () => { if (tool.active) reopen(); tool.onSelect(); } };
   });
-  // The shell's own tool's panel leads the stack while its tool is up: Draw's tools, color and
-  // history. The renderer's follow.
+  // The shell's own tools' panels lead the stack while their tool is up: Draw's tools, color and
+  // history, or the Animation tool's routine, transport and settings, whose X puts it down, back to
+  // the default tool -- no X where Animation is the file's one tool, never put down. The
+  // renderer's follow.
   // Draw's controls, and once there is ink, Copy Drawing (the view with its ink) at their foot.
   const shellPanels = <>
     {frame.drawToolActive ? <ToolPanel id="drawing" label="Drawing controls" collapsible={false}
@@ -187,6 +191,9 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
         disabled={viewerLoading || !scene} onClick={frame.copyDrawing} /> : null}>
       <DrawingToolbar drawing={frame.drawing} layout="panel" className="p-1" />
     </ToolPanel> : null}
+    {frame.animateToolActive ? <AnimationPanel runtime={playbackRuntime} autoplay={shell.autoplay}
+      onAutoplayChange={shell.setAutoplay} onClose={frame.animateToolFixed ? null : shell.selectDefaultTool}
+      disabled={viewerLoading || !scene} /> : null}
   </>;
 
   const hasContent = Boolean(scene) && !viewerLoading;
@@ -286,9 +293,6 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                     preserveInteractionPixelRatio={frame.preserveInteractionPixelRatio || renderProfileKeepsPixelRatio(renderProfile)}
                     runtimeLifecycle={frame.runtimeLifecycle}
                   >{overlay}</ShellViewport>
-                  {/* The file as the alert names it (the catalog's absolute path), which Report Issue keeps out of its issue. */}
-                  {!previewing ? <ViewerAlertCard alert={frame.viewerAlert} hasContent={hasContent} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss}
-                    onReload={view.reload} file={frame.modelKey || view.file?.path} /> : null}
                 </div>
               </div>
 
@@ -316,7 +320,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 playbar={menu => hasAnimation ? <ViewportAnimationBar key={frame.modelKey} runtime={animation}
                   className="pointer-events-auto" disabled={viewerLoading || !scene}
                   leading={<RoutineMenu animation={animation} onOpenChange={menu("routines")} />}
-                  trailing={<PlaybackMenu animation={playbackMenuRuntime} onOpenChange={menu("playback")}
+                  trailing={<PlaybackMenu animation={playbackRuntime} onOpenChange={menu("playback")}
                     autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay} />} /> : null}>
 
               {/* The file explorer floats over this corner, above the tools, which stay drawn under it. */}
@@ -342,13 +346,18 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               {failed ? null : <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
                 style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
                 <ViewUpdateStatus status={frame.loading.updating && !frame.viewUpdate.status.error
-                  ? MODEL_UPDATE_STATUS : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry}
+                  ? modelUpdateStatus(frame.loading.progress) : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry}
                   className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
               </div>}
               <ViewerLoadingOverlay
                 loading={frame.presentationState?.file === frame.modelKey && frame.presentationState?.covering ? null : frame.loading}
                 operationKey={frame.modelKey}
               />
+              {/* The alert card, last: over the tools, the parts tree among them, which a warning the
+                  model survives keeps on screen. The file as the alert names it (the catalog's absolute
+                  path), which Report Issue keeps out of its issue. */}
+              {!previewing ? <ViewerAlertCard alert={frame.viewerAlert} hasContent={hasContent} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss}
+                onReload={view.reload} file={frame.modelKey || view.file?.path} /> : null}
             </div>
 
           </div>

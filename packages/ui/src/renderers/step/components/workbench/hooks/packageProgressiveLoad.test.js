@@ -1,4 +1,4 @@
-// Progressive publish of a component package (design/viewer-memory.md §6).
+// Progressive publish of a component package (packages/ui/docs/lod.md, section 4).
 // Fake components (no tessellation): the policy under test is batching,
 // ordering, staleness and release, not geometry.
 import assert from "node:assert/strict";
@@ -18,19 +18,17 @@ import {
   progressivePublishDue,
   publishMeshCostAccounting,
   meshStateIsComplete,
+  meshStateSettledShort,
   awaitingSameFileRevision,
   meshStateAfterCancelledLoad,
   replacingSameFileMesh,
   retainsPreviousStepMesh,
   shouldRetainCompleteSameFileMesh,
-  tolerantAnimationClip,
   createDecodeSizeEstimator,
   PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
   PROGRESSIVE_LOAD_UNMEASURED_SHARE
 } from "./packageProgressiveLoad.js";
 import { createViewerMemoryPolicy } from "../../../render/viewerMemoryPolicy.js";
-import { createAnimationFrame } from "@text-to-cad/core/common/animationRuntime.js";
-import * as THREE from "three";
 
 const IDENTITY_4X4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
@@ -121,6 +119,13 @@ test("policy constants: a batch publishes at either ceiling, and the ceilings do
   assert.deepEqual(progressiveLoadProgress(3, 12), {
     phase: "geometry",
     label: "Loading geometry",
+    done: 3,
+    total: 12,
+    determinate: true,
+  });
+  assert.deepEqual(progressiveLoadProgress(3, 12, undefined, { meshing: true }), {
+    phase: "meshing",
+    label: "Meshing parts",
     done: 3,
     total: 12,
     determinate: true,
@@ -559,6 +564,49 @@ test("a failed lane fences sibling publishes, wakes queued admission, and preser
   assert.equal(loader.retainedComponentCount(), 0);
 });
 
+// One component cadgen could not mesh is that component's failure (`componentFailed`): every other
+// component still loads, and the final publish carries them and names it. Any other failure still
+// fences every lane, and a package whose every component failed on its own has the first's error.
+test("a component's own failure leaves it out: the rest load, and the final publish names it", async () => {
+  const descriptor = makeDescriptor({ componentCount: 4, occurrenceCount: 4 });
+  const { loadComponent } = makeLoader(descriptor);
+  const own = (cid) => Object.assign(new Error(`component ${cid}: OCCT did not mesh 2 face(s)`), { cid });
+  const componentFailed = (error, cid) => error.cid === cid;
+  const publishes = [];
+  const settled = [];
+  const loader = createProgressivePackageLoader({
+    descriptor, concurrency: 2, loadComponent, componentFailed,
+    sizeHint: async (cid) => { if (cid === "c2") throw own(cid); return 1; },
+    onRetainedChange: ({ loaded, failed }) => settled.push(loaded + failed),
+    onPublish: (publish) => publishes.push(publish),
+  });
+  const result = await loader.run();
+  assert.deepEqual([result.loaded, result.total], [3, 4]);
+  assert.deepEqual(result.failures.map(({ cid, error }) => [cid, error.message]),
+    [["c2", "component c2: OCCT did not mesh 2 face(s)"]]);
+  const finals = publishes.filter((publish) => publish.final);
+  assert.equal(finals.length, 1);
+  assert.deepEqual(Object.keys(finals[0].componentMeshDataByCid).sort(), ["c0", "c1", "c3"]);
+  assert.deepEqual(finals[0].meshData.missingComponentIds, ["c2"]);
+  assert.deepEqual(finals[0].failures.map(({ cid }) => cid), ["c2"]);
+  assert.equal(settled.at(-1), 4, "a failed component counts as settled");
+
+  const fatal = new Error("surface request capacity reached");
+  const fenced = createProgressivePackageLoader({
+    descriptor, concurrency: 2, loadComponent, componentFailed, onPublish: () => {},
+    sizeHint: async (cid) => { if (cid === "c1") throw fatal; return 1; },
+  });
+  await assert.rejects(fenced.run(), (error) => error === fatal);
+
+  const part = makeDescriptor({ componentCount: 1, occurrenceCount: 1 });
+  const lone = createProgressivePackageLoader({
+    descriptor: part, loadComponent: makeLoader(part).loadComponent, componentFailed,
+    sizeHint: async (cid) => { throw own(cid); },
+    onPublish: () => assert.fail("nothing is published"),
+  });
+  await assert.rejects(lone.run(), /component c0: OCCT did not mesh 2 face\(s\)/);
+});
+
 test("cancellation fences a queued admission before an active slot releases", async () => {
   const descriptor = makeDescriptor({ componentCount: 5, occurrenceCount: 5 });
   const fourStarted = deferred();
@@ -727,53 +775,36 @@ test("window.__cadMeshCost updates on every publish and clears on cancel", async
   }
 });
 
-test("embedded animation attaches on the FIRST publish; absent labels are no-ops until they arrive; validation waits for the complete model", async () => {
+test("a published mesh state is the complete model only on the final publish", async () => {
   const descriptor = makeDescriptor({ componentCount: 9, occurrenceCount: 18 });
   const { loadComponent } = makeLoader(descriptor);
-  // A real clip over the real runtime handle: rotates every occurrence by label.
-  const clip = {
-    id: "wave", duration: 1, loop: true,
-    update(t, m) {
-      for (const occurrence of descriptor.occurrences) {
-        m.get(occurrence.name).rotate([0, 0, 1], 90 * t);
-      }
-    }
-  };
-  const runs = [];
-  const validations = [];
+  const complete = [];
   await createProgressivePackageLoader({
     descriptor,
     loadComponent,
     concurrency: 3,
     maxComponents: 4,
     onPublish: ({ meshData, final }) => {
-      const meshState = { file: "hand.step", meshData, assemblyInteractionReady: final };
-      const complete = meshStateIsComplete(meshState);
-      validations.push(complete);
-      // The workspace hands the viewer the strict clip for the complete model
-      // and the tolerant one while partial; the module is attached either way.
-      const playable = complete ? clip : tolerantAnimationClip(clip);
-      const frame = createAnimationFrame(THREE, meshData);
-      playable.update(0.5, frame.model);
-      runs.push({ bound: frame.matrices.size, present: meshData.parts.length });
+      complete.push(meshStateIsComplete({ file: "hand.step", meshData, assemblyInteractionReady: final }));
     }
   }).run();
-  assert.equal(runs.length, 3, "invoked on every publish, the first included");
-  // Every present occurrence is bound; absent ones were no-ops (no throw).
-  for (const run of runs) {
-    assert.equal(run.bound, run.present);
-  }
-  assert.ok(runs[0].bound > 0 && runs[0].bound < 18, "partial: some occurrences bound, the rest pending");
-  assert.equal(runs.at(-1).bound, 18, "late occurrences bound once they arrived");
-  assert.deepEqual(validations, [false, false, true], "clip validation gate: complete model only");
-  // The strict clip against a partial composition is the failure the wrapper prevents.
+  assert.deepEqual(complete, [false, false, true]);
   const partial = buildComposedPackageMeshData(descriptor, { c0: fakeComponent("c0") });
-  assert.throws(() => clip.update(0.5, createAnimationFrame(THREE, partial).model), /no occurrence labeled/);
+  assert.equal(meshStateIsComplete({ meshData: partial }), false, "a composition still missing components");
   assert.equal(meshStateIsComplete(null), false);
   assert.equal(meshStateIsComplete({ meshData: { parts: null }, assemblyInteractionReady: false }), false, "assembly preview");
   assert.equal(meshStateIsComplete({ meshData: { parts: [], missingComponentIds: ["c1"] } }), false);
   assert.equal(meshStateIsComplete({ meshData: { parts: [] } }), true, "non-package meshes carry no flag");
-  assert.equal(tolerantAnimationClip(null), null);
+});
+
+test("a load that ended without the parts cadgen could not mesh is short of them, not still arriving", () => {
+  const short = { meshData: { parts: [], missingComponentIds: ["c1"] }, assemblyInteractionReady: true,
+    assemblyFailedParts: ["accessory:case"] };
+  assert.equal(meshStateSettledShort(short), true);
+  assert.equal(meshStateSettledShort({ ...short, assemblyInteractionReady: false }), false, "components still arriving");
+  assert.equal(meshStateSettledShort({ ...short, assemblyFailedParts: [] }), false, "missing, but none failed");
+  assert.equal(meshStateSettledShort({ ...short, meshData: { parts: [] } }), false, "complete");
+  assert.equal(meshStateSettledShort(null), false);
 });
 
 test("byte-aware admission: decodes in flight stay under the byte budget, and under the count cap", async () => {

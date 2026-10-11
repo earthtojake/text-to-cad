@@ -42,33 +42,37 @@ import traceback
 
 # Same registry the supervisor validates against; imported rather than duplicated.
 from cadgen.daemon import telemetry
-from cadgen.daemon.client import FORWARDED_ENV_VARS
+from cadgen.daemon.client import INTERNAL_ENV_VARS
 from cadgen.daemon.server import _TOOL_IMPORTS, _evict_first_party_modules
 
 
 def _apply_request_env(request: dict) -> None:
-    """Apply the requesting CLIENT's environment for this job.
+    """Apply the requesting CLIENT's environment for this job: the one a cold run
+    of the same command sees.
 
     A worker inherits the environment of whichever build spawned the DAEMON, so
-    without this the first build's store became every later build's, across
-    projects. The store root is an explicit request field and wins; the
-    forwarded vars cover the rest of ``store.paths.store_root()``'s resolution
-    rule so the daemon adds no hidden second one. A var absent from the request
-    is DELETED — unset for the client means unset for the job — which also
-    clears a var a previous job's model code exported at import time.
+    without this a model reading ``os.environ`` saw that build's variables, and
+    the first build's store became every later build's, across projects. Every
+    name the client has is set; every name it lacks is DELETED -- unset for the
+    client means unset for the job -- which also clears a var a previous job's
+    model code exported. The names the daemon's machinery sets for itself
+    (``client.INTERNAL_ENV_VARS``) are left as they are. A request that carries
+    no environment -- a one-shot artifact worker, started with its caller's --
+    changes none of it. The store root is an explicit request field and wins.
 
     ``root_id`` names the build tree this job belongs to; a child this job
     submits inherits it through the environment so its events tag the same tree.
     """
     env = request.get("env")
-    if not isinstance(env, dict):
-        env = {}
-    for name in FORWARDED_ENV_VARS:
-        value = env.get(name)
-        if isinstance(value, str):
-            os.environ[name] = value
-        else:
+    if isinstance(env, dict):
+        for name in [name for name in os.environ if name not in env and name not in INTERNAL_ENV_VARS]:
             os.environ.pop(name, None)
+        for name, value in env.items():
+            if not isinstance(name, str) or not isinstance(value, str) or name in INTERNAL_ENV_VARS:
+                continue
+            if os.environ.get(name) != value:
+                with contextlib.suppress(ValueError):  # a name or value no environment can hold
+                    os.environ[name] = value
     store_root = request.get("store_root")
     if isinstance(store_root, str) and store_root:
         os.environ["CADGEN_CACHE_DIR"] = store_root
@@ -92,17 +96,24 @@ _EMIT_LOCK = threading.Lock()
 HEARTBEAT_INTERVAL_SECONDS = 10.0
 # The phase the running job last announced about itself; its heartbeat carries it.
 _PHASE: list[str | None] = [None]
+# The frame channel: a descriptor of its own on the pipe the pool reads, opened by
+# ``serve``. Not fd 1 itself, which a job may point elsewhere for a while -- a STEP read
+# sends the kernel's diagnostics to stderr by moving fd 1
+# (``step_scene_loader.kernel_messages_on_stderr``) -- and a frame written meanwhile, a
+# heartbeat, went to the daemon's log instead of the supervisor.
+_FRAMES: list = [None]
 
 
 def _emit(frame: dict) -> None:
-    """One JSON line on the real stdout. Never the redirected one."""
+    """One JSON line on the frame channel. Never the redirected stdout."""
     line = json.dumps(frame, separators=(",", ":")) + "\n"
     event = frame.get("event")
     if isinstance(event, dict) and event.get("phase") and event.get("job") == os.environ.get("CADGEN_JOB_ID"):
         _PHASE[0] = str(event["phase"])
     with _EMIT_LOCK:
-        sys.__stdout__.write(line)
-        sys.__stdout__.flush()
+        channel = _FRAMES[0] or sys.__stdout__
+        channel.write(line)
+        channel.flush()
 
 
 def _beat() -> None:
@@ -127,6 +138,12 @@ def _heartbeat():
     Joined before the job's exit frame is written, so no heartbeat ever follows
     ``exit`` or lands in the next job; a daemon thread, so it dies with the process.
     Not progress: nothing relays it to the client or folds it into the job ledger.
+
+    A beat nobody reads ends the worker. The frame channel's reader is the supervisor,
+    so it is gone (killed, or crashed), and with it everyone waiting on this job: its
+    client is already running the job again without the daemon, and a body that ran on
+    would only build the same model alongside that rerun. Between jobs, stdin's EOF does
+    the same. What the job leaves behind is swept by pid (``_internal.temp_leftovers``).
     """
     _PHASE[0] = None
     stop = threading.Event()
@@ -136,7 +153,7 @@ def _heartbeat():
             try:
                 _beat()
             except (OSError, ValueError):
-                return  # the frame channel is gone; stdin's EOF ends the worker
+                os._exit(1)  # the supervisor is gone: see above
 
     _beat()
     thread = threading.Thread(target=run, name="cadgen-worker-heartbeat", daemon=True)
@@ -359,6 +376,11 @@ def serve() -> int:
         if reconfigure is not None:
             with contextlib.suppress(OSError, ValueError):
                 reconfigure(encoding="utf-8", errors="backslashreplace")
+    # Frames go out on a descriptor of their own (``_FRAMES``), which nothing a job does
+    # to fd 1 can move: the same pipe, each frame flushed whole, no newline translation.
+    sys.stdout.flush()
+    _FRAMES[0] = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8",
+                           errors="backslashreplace", newline="\n")
     # Child-build events from this worker's jobs ride the frame channel; the
     # supervisor relays them to the requesting client verbatim.
     from cadgen.daemon import executors

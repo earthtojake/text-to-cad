@@ -7,8 +7,9 @@ import { chatReach, createChatPromptContext } from './prompt';
 import { createServer, type SyncReply, type SyncRequest, type ViewEvent } from './server';
 import { createViewSync, LOST_AFTER, NEWS_MS, SYNC_MS } from './sync';
 import {
-  createHttpTessellationCacheProvider, encodeComponentTessellation, tessellationPayloadFacts,
+  MESH_INDEX_SCHEMA, createHttpTessellationCacheProvider, tessellationPayloadFacts,
 } from '@text-to-cad/core/lib/surf/tessellationCache.js';
+import { encodeMeshFixture } from '@text-to-cad/core/lib/surf/testing.js';
 import { createTunnelClient, createTunnelFetch, decodeBase64, TUNNEL_ORIGIN, TUNNEL_REPLY_MAX_BYTES } from './tunnel';
 
 /** A host frame: records what the page posts and answers with `respond`. */
@@ -301,20 +302,18 @@ describe('the fetch tunnel', () => {
   it('verifies a tessellation read in parts as a whole one: put together it is the body, and a damaged part makes it a miss', async () => {
     const vertices = 200_000;
     const triangles = 50_000;
-    const bytes = encodeComponentTessellation({
+    const bytes = encodeMeshFixture({
       positions: new Float32Array(3 * vertices).map((_, index) => index % 97),
       normals: new Float32Array(3 * vertices).fill(1),
-      faceOrds: new Float32Array(vertices).fill(1),
       indices: new Uint32Array(3 * triangles).map((_, index) => index % vertices),
-      sideOrds: new Uint32Array(3 * triangles).fill(1),
       faceRanges: [{ ord: 1, indexStart: 0, indexCount: 3 * triangles }],
       edges: [],
       bounds: { min: [0, 0, 0], max: [96, 96, 96] },
       scale: 166,
-    }, { surfaceInput: '1'.repeat(64), surfaceObject: 'a'.repeat(64), edgeClasses: [] });
+    }, { surfaceInput: '1'.repeat(64), surfaceObject: 'a'.repeat(64) });
     expect(bytes.length).toBeGreaterThan(TUNNEL_REPLY_MAX_BYTES);
     const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(byte => byte.toString(16).padStart(2, '0')).join('');
-    const row = { schemaVersion: 1, object: digest, ...tessellationPayloadFacts(bytes) };
+    const row = { schemaVersion: MESH_INDEX_SCHEMA, object: digest, ...tessellationPayloadFacts(bytes) };
     const read = (parted: ReturnType<typeof servingInParts>) => createHttpTessellationCacheProvider({
       origin: TUNNEL_ORIGIN, fetch: createTunnelFetch(parted.server), maxBatchBytes: TUNNEL_REPLY_MAX_BYTES,
     }).getProbed(row, { maxBytes: row.byteLength });
@@ -451,5 +450,46 @@ describe('the frame\'s clipboard', () => {
       await copied;
       expect(events).toEqual(['item', 'write', 'File: /work/a.step']);
     } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('copies by the page\'s copy command where the host grants the frame no clipboard, and fails only when that fails too', async () => {
+    const details = ['File: /work/gear.step', 'Operation: loading geometry', 'Traceback (most recent call last):',
+      ...Array.from({ length: 40 }, (_, line) => `  File "/work/gear.py", line ${line + 1}, in build`), 'ValueError: no teeth'].join('\n');
+    // What the copy command would put on the clipboard: the selection in the focused field.
+    const copied: string[] = [];
+    const execCommand = vi.fn((command: string) => {
+      const field = document.activeElement as HTMLTextAreaElement;
+      copied.push(`${command}:${field.value.slice(field.selectionStart, field.selectionEnd)}`);
+      return true;
+    });
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand });
+    const button = document.body.appendChild(document.createElement('button'));
+    const refusing = { clipboard: { writeText: async () => { throw new DOMException('Write permission denied.', 'NotAllowedError'); } } };
+    try {
+      // Granted: the clipboard API, and nothing else.
+      const written: string[] = [];
+      vi.stubGlobal('navigator', { clipboard: { writeText: async (text: string) => { written.push(text); } } });
+      await frameClipboard.writeText(details);
+      expect([written, execCommand.mock.calls.length]).toEqual([[details], 0]);
+      // Refused, or no clipboard API at all: the copy command takes the whole text, and leaves the
+      // page as it was, its field gone and the focus back on the button pressed.
+      vi.stubGlobal('navigator', refusing);
+      button.focus();
+      await frameClipboard.writeText(details);
+      expect([copied, document.querySelector('textarea'), document.activeElement]).toEqual([[`copy:${details}`], null, button]);
+      vi.stubGlobal('navigator', {});
+      await frameClipboard.writeText('File: /work/a.step');
+      await frameClipboard.writeText(Promise.resolve('File: /work/b.step'));
+      expect(copied.slice(1)).toEqual(['copy:File: /work/a.step', 'copy:File: /work/b.step']);
+      // Both refused: the copy fails, with the clipboard's refusal where there was one.
+      execCommand.mockReturnValue(false);
+      await expect(frameClipboard.writeText('File: /work/c.step')).rejects.toThrow('Copying is not available here.');
+      vi.stubGlobal('navigator', refusing);
+      await expect(frameClipboard.writeText('File: /work/c.step')).rejects.toThrow('Write permission denied.');
+    } finally {
+      vi.unstubAllGlobals();
+      delete (document as { execCommand?: unknown }).execCommand;
+      button.remove();
+    }
   });
 });

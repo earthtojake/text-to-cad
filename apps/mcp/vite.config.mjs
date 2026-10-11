@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import remapping from '@jridgewell/remapping';
 import MagicString from 'magic-string';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { buildId } from '@text-to-cad/ui/build-id';
 import { stampDebugId } from '@text-to-cad/core/chunk-ids';
 import { packageSourceMaps } from '@text-to-cad/core/source-maps';
 import { drawingAssetFiles, localizeDrawingFontFallback } from '@text-to-cad/ui/drawing-assets';
@@ -187,7 +189,13 @@ function inlineDocument() {
   };
 }
 
+// Which build this is, for the version the app menu shows (src/App.tsx): none for the release's
+// own, this checkout's commit for any other (@text-to-cad/ui/build-id).
+const appRoot = fileURLToPath(new URL('.', import.meta.url));
+const { version } = JSON.parse(fs.readFileSync(new URL('package.json', import.meta.url), 'utf8'));
+
 export default defineConfig({
+  define: { __TEXT_TO_CAD_BUILD__: JSON.stringify(buildId({ version, cwd: appRoot })) },
   plugins: [packageSourceMaps(['@text-to-cad/core', '@text-to-cad/ui']), inlineWorkers(), inlineDrawingFonts(), react(), inlineDocument()],
   resolve: { dedupe: ['react', 'react-dom', 'three', 'lucide-react'] },
   build: {

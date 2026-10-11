@@ -13,6 +13,6 @@ off it; each planet's mate parent is the carrier, so its declared angle is the
 mesh-relative spin and the orbit rides for free. Poses: `rest`,
 `quarter_output`, `full_output`.
 
-Animation (`ANIMATION_JS` in `qdd_actuator.py`): `drive` (gear train running), `inspect`
-(the same cycle while the stack separates and returns), `teardown` (static
-full explosion).
+Animation (the `ANIMATION` clips in `qdd_actuator.py`, baked to keyframes in
+the sidecar at build): `drive` (gear train running), `inspect` (the same cycle
+while the stack separates and returns), `teardown` (static full explosion).

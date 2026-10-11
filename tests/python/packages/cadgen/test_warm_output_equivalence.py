@@ -96,9 +96,17 @@ def _run(argv: list[str], cwd: pathlib.Path, **env_extra) -> tuple[int, str]:
     output = re.sub(r"/private/var/folders/\S+", "<TMP>", output)
     output = re.sub(r"/(?:var|tmp)/\S*tmp\S+", "<TMP>", output)
     # The build tree's JSONL transitions carry wall-clock elapsed times and, warm, arrive
-    # relayed through the daemon; they narrate the build and are not its output.
-    output = "".join(line for line in output.splitlines(keepends=True) if not line.startswith('{"model":'))
+    # relayed through the daemon; they narrate the build and are not its output. So
+    # does each built model's time line (`[cadgen] built x.step in 1.2s: ...`), whose
+    # numbers are the clock's; the line itself must still be there, once per model.
+    output = "".join(
+        _TIME_LINE.sub(r"\1 <TIME>", line)
+        for line in output.splitlines(keepends=True) if not line.startswith('{"model":')
+    )
     return proc.returncode, output
+
+
+_TIME_LINE = re.compile(r"^(\[cadgen\] built \S+) in .*$", re.MULTILINE)
 
 
 # Fields that record WHEN a build ran rather than WHAT it produced. Two cold builds a
@@ -178,19 +186,25 @@ class _Daemon:
         # A pipe name is not a filesystem path, so a temp FILE is not a usable address on
         # Windows. Handing one over does not fail loudly either -- the daemon simply never
         # binds, every "warm" run is quietly cold, and the comparison stops meaning
-        # anything. served_a_job() is what catches that, and it caught exactly this.
+        # anything. served() is what catches that, and it caught exactly this.
         if os.name == "nt":
             self.address = rf"\\.\pipe\cadgen-warm-eq-{tmp.name}"
         else:
             self.address = str(tmp / "d.sock")
+        # Its own state directory too: on Windows the log is named after the daemon's
+        # identity, not its address, so in the shared default every daemon on the machine
+        # with that identity writes (and replaces) the one file this test reads.
+        self.state = tmp / "state"
         # Ask the client where it will put the log rather than guessing: on POSIX that is
         # a sibling of the socket, on Windows it cannot be.
-        self.log = daemon_client.log_path(self.address)
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_STATE_DIR": str(self.state)}):
+            self.log = daemon_client.log_path(self.address)
 
     def env(self) -> dict:
         return {
             "CADGEN_DAEMON": "1",
             "CADGEN_DAEMON_SOCKET": str(self.address),
+            "CADGEN_DAEMON_STATE_DIR": str(self.state),
             # Compare the outputs of four small concurrent fixtures under a
             # known, bounded budget. Host-sized defaults can legitimately
             # reject that concurrency; memory admission has its own tests.
@@ -208,13 +222,20 @@ class _Daemon:
         )
         return False
 
-    def served_a_job(self) -> bool:
-        """Proof the warm run was actually warm, so a silent cold fallback cannot pass.
+    def served(self, tree: pathlib.Path) -> bool:
+        """Whether this daemon completed a job for the model in ``tree``: a silent cold
+        fallback cannot pass.
 
-        Looks for a completed job (`gen [...] -> exit 0`), not just the daemon's startup
-        line: a daemon can be running while the client still fell back to cold.
+        Reads the completed-job line (`run ['<tree>/widget.py'] -> exit 0`), not the
+        daemon's startup line: a daemon can be running while the client still fell back
+        to cold. Every tree is a fresh temporary directory, so its name is the run's own.
         """
-        return self.log.is_file() and "-> exit" in self.log.read_text(encoding="utf-8", errors="replace")
+        if not self.log.is_file():
+            return False
+        return any(
+            "-> exit" in line and tree.name in line
+            for line in self.log.read_text(encoding="utf-8", errors="replace").splitlines()
+        )
 
 
 # The whole harness compares a WARM run against a cold one, so it needs a daemon to
@@ -223,6 +244,41 @@ class _Daemon:
 # os.name so that a platform which somehow has neither skips instead of failing, and so
 # that a silent cold fallback still shows up as a failure rather than a pass.
 _DAEMON_AVAILABLE = _daemon_available()
+
+# ONE daemon serves every warm run here, as one daemon serves every build of a working
+# session: each test's warm run is a job on it (`served` says it was), and the
+# module pays one daemon start and one warm-worker import, not one per test.
+_SHARED: dict = {}
+
+
+def setUpModule() -> None:
+    if _DAEMON_AVAILABLE:
+        root = pathlib.Path(tempfile.mkdtemp(prefix="tmp-warm-eq-sock-")).resolve()
+        _SHARED.update(root=root, daemon=_Daemon(root))
+
+
+def tearDownModule() -> None:
+    if "daemon" in _SHARED:
+        try:
+            _SHARED["daemon"].__exit__(None, None, None)
+        finally:
+            shutil.rmtree(_SHARED["root"], ignore_errors=True)
+
+
+class _WarmRun:
+    """Runs on the shared daemon, and the proof that the daemon served each of them."""
+
+    def __init__(self, case: unittest.TestCase, *trees: pathlib.Path):
+        self.case, self.daemon, self.trees = case, _SHARED["daemon"], trees
+
+    def __enter__(self):
+        return self.daemon
+
+    def __exit__(self, kind, *exc):
+        if kind is None:
+            for tree in self.trees:
+                self.case.assertTrue(self.daemon.served(tree), f"the warm run in {tree.name} fell back to cold")
+        return False
 
 
 @unittest.skipUnless(_DAEMON_AVAILABLE, "no daemon transport on this platform")
@@ -270,11 +326,10 @@ class WarmOutputEquivalence(unittest.TestCase):
         cold, cold_out = self._cold_part, self._cold_part_out
 
         tree = self._tree("widget.py", PART)
-        with _Daemon(tree) as daemon:
+        with _WarmRun(self, tree) as daemon:
             code, warm_out = _run(argv, tree, **daemon.env())
             self.assertEqual(code, 0, warm_out)
-            self.assertTrue(daemon.served_a_job(), "the warm run fell back to cold")
-            self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
+        self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
         self.assertEqual(warm_out, cold_out)
 
     def test_four_parallel_builds_through_one_daemon_all_match_cold(self):
@@ -283,17 +338,15 @@ class WarmOutputEquivalence(unittest.TestCase):
         cold = self._cold_part
 
         trees = [self._tree("widget.py", PART) for _ in range(4)]
-        shared = pathlib.Path(tempfile.mkdtemp(prefix="tmp-warm-eq-sock-")).resolve()
-        self.addCleanup(shutil.rmtree, shared, ignore_errors=True)
-        with _Daemon(shared) as daemon:
+        with _WarmRun(self, *trees) as daemon:
             with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
                 results = list(pool.map(lambda t: _run(argv, t, **daemon.env()), trees))
-            for index, (code, out) in enumerate(results):
-                with self.subTest(build=index):
-                    self.assertEqual(code, 0, out)
-            for index, tree in enumerate(trees):
-                with self.subTest(build=index):
-                    self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
+        for index, (code, out) in enumerate(results):
+            with self.subTest(build=index):
+                self.assertEqual(code, 0, out)
+        for index, tree in enumerate(trees):
+            with self.subTest(build=index):
+                self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
 
     def test_a_drawing_package_is_byte_identical_warm(self):
         """DXF is the format that USED to have a determinism hazard: ezdxf's emitted
@@ -304,11 +357,10 @@ class WarmOutputEquivalence(unittest.TestCase):
         cold, _ = self._cold("plate.py", DRAWING, argv)
         self.assertTrue(cold, "the cold DXF build produced nothing to compare")
         tree = self._tree("plate.py", DRAWING)
-        with _Daemon(tree) as daemon:
+        with _WarmRun(self, tree) as daemon:
             code, out = _run(argv, tree, **daemon.env())
             self.assertEqual(code, 0, out)
-            self.assertTrue(daemon.served_a_job(), "the warm DXF run fell back to cold")
-            self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
+        self.assertEqual(_manifest(tree, daemon_env=daemon.env()), cold)
 
     def test_a_failing_build_fails_the_same_way_warm(self):
         """Exit code and message are contract too, not just successful output."""
@@ -325,7 +377,7 @@ class WarmOutputEquivalence(unittest.TestCase):
         self.assertNotEqual(cold_code, 0)
 
         tree2 = self._tree("broken.py", broken)
-        with _Daemon(tree2) as daemon:
+        with _WarmRun(self, tree2) as daemon:
             warm_code, warm_out = _run(["broken.py"], tree2, **daemon.env())
         self.assertEqual(warm_code, cold_code)
         # Deliberately not asserting the message TEXT: cadgen masks a raising generator
@@ -334,6 +386,36 @@ class WarmOutputEquivalence(unittest.TestCase):
         # that whatever cold says, warm says exactly the same.
         self.assertEqual(warm_out, cold_out)
         self.assertIn("FAILED", warm_out)
+
+
+    def test_profile_reaches_the_process_that_runs_the_body_warm(self):
+        """``--profile`` is parsed where the user typed it and acted on by whichever
+        process runs the body: warm, that is the daemon's worker, and its report must
+        name the model's own slow function exactly as the cold run's does."""
+        slow = (
+            "from cadgen import build123d as bd\n"
+            "from cadgen import step\n"
+            "def plan_holes():\n"
+            "    total = 0\n"
+            "    for i in range(300_000):\n"
+            "        total += i * i\n"
+            "    return total\n"
+            "@step\n"
+            "def plate():\n"
+            "    plan_holes()\n"
+            "    return bd.Box(10, 10, 2)\n"
+            "if __name__ == '__main__':\n"
+            "    plate()\n"
+        )
+        row = re.compile(r"^\[cadgen\] +\S+ +1 call +plate\.py:3 plan_holes$", re.MULTILINE)
+        cold_code, cold_out = _run(["plate.py", "--profile"], self._tree("plate.py", slow), CADGEN_DAEMON="0")
+        self.assertEqual(cold_code, 0, cold_out)
+        self.assertRegex(cold_out, row)
+        tree = self._tree("plate.py", slow)
+        with _WarmRun(self, tree) as daemon:
+            warm_code, warm_out = _run(["plate.py", "--profile"], tree, **daemon.env())
+        self.assertEqual(warm_code, 0, warm_out)
+        self.assertRegex(warm_out, row)
 
 
 @unittest.skipUnless(_DAEMON_AVAILABLE, "no daemon transport on this platform")
@@ -351,14 +433,14 @@ class InputSurfaceEquivalence(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         from cadgen.cli import _DAEMON_TOOLS
 
-        with _Daemon(tmp) as daemon:
-            for command in sorted(_DAEMON_TOOLS):
-                argv = [*command.split(), "--help"]
-                with self.subTest(command=command):
-                    cold_code, cold_help = _run(argv, tmp)
-                    warm_code, warm_help = _run(argv, tmp, **daemon.env())
-                    self.assertEqual(cold_code, warm_code)
-                    self.assertEqual(warm_help, cold_help)
+        daemon = _SHARED["daemon"]
+        for command in sorted(_DAEMON_TOOLS):
+            argv = [*command.split(), "--help"]
+            with self.subTest(command=command):
+                cold_code, cold_help = _run(argv, tmp)
+                warm_code, warm_help = _run(argv, tmp, **daemon.env())
+                self.assertEqual(cold_code, warm_code)
+                self.assertEqual(warm_help, cold_help)
 
 
 if __name__ == "__main__":

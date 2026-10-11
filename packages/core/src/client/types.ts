@@ -13,9 +13,16 @@ export interface CadEntry {
   bytes?: number;
   [key: string]: unknown;
 }
+/** cadgen's display tessellation ladder (`cadgen.tessellation_policy`): what each LOD rung means. */
+export interface CadTessellationLadder {
+  levels: { chordTolerance: number; angleTolerance: number }[];
+  defaultLevel: number;
+}
 export interface CadServerInfo {
   autoReload?: boolean;
   identityToken?: string;
+  /** The display tessellation ladder the page draws STEP models by. */
+  tessellation?: CadTessellationLadder;
   /** The folder the server was started in, where a developer's relative `?file=` resolves. */
   start?: string;
   /** Whether this computer has a file chooser for the home's Open. */
@@ -91,6 +98,25 @@ export interface CadDrawingPayload {
   })[];
   [key: string]: unknown;
 }
+/**
+ * What `GET /__cad/robot` answers: a URDF, SDF or SRDF resolved by cadgen into the articulation
+ * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
+ * with its colour and the URL of the mesh it draws), and what the description says about its
+ * links and joints, as written. See `packages/cadgen/src/cadgen/robot_payload.py`.
+ */
+export interface CadRobotPayload {
+  schemaVersion: number;
+  kind: 'urdf' | 'sdf' | 'srdf';
+  name: string;
+  root: string;
+  articulation: Record<string, unknown>;
+  links: { name: string; placement: number[]; visuals: unknown[]; collisions: unknown[]; inertial: unknown }[];
+  joints: Record<string, unknown>[];
+  visuals: { id: string; link: string; label: string; placement: number[]; color: string; mesh: { format: string; url: string } }[];
+  srdf: Record<string, unknown> | null;
+  sdf: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
 /** Byte tickets own their buffer exclusively: workers may detach it. URL tickets are approved by the provider. */
 export type CadWorkerResourceTicket =
   | { kind: 'url'; url: string; headers?: Record<string, string>; cache?: RequestCache; maxBytes?: number }
@@ -105,7 +131,7 @@ export interface CadResourceProvider {
   readText(url: string, options?: CadRequestOptions): Promise<string>;
   readBytes(url: string, options?: CadResourceReadOptions): Promise<ArrayBuffer>;
   byteLength(url: string, options?: CadRequestOptions): Promise<number | null>;
-  resolveDependency(source: string, reference: string, options?: { kind?: 'relative' | 'package' | 'robot' }): string;
+  resolveDependency(source: string, reference: string, options?: { kind?: 'relative' | 'package' }): string;
   workerTicket(url: string, options?: CadResourceReadOptions): Promise<CadWorkerResourceTicket>;
 }
 export interface CadSurfaceProducer { scheme?: number; surfFormat?: number; producerKey?: string; [key: string]: unknown }
@@ -117,7 +143,11 @@ export interface CadRuntimeView {
   [key: string]: unknown;
 }
 export interface CadSurfaceComponentRequest { cid: string; surfaceInput: string; surfaceObject?: string }
-export interface CadSurfaceTicket { readonly surfaceInput: string; readonly surfaceObject: string; readonly surfUrl: string; readonly byteLength: number }
+/** One component's exact surface and, beside it, cadgen's selector table (the refs and facts the page joins to the mesh). */
+export interface CadSurfaceTicket {
+  readonly surfaceInput: string; readonly surfaceObject: string; readonly surfUrl: string; readonly byteLength: number;
+  readonly selectorsObject: string; readonly selectorsUrl: string; readonly selectorsByteLength: number;
+}
 export interface CadSurfaceRequest {
   tree: string; viewId: string; producer: CadSurfaceProducer;
   components: {cid: string; surfaceInput: string; expectedSurfaceObject?: string}[];
@@ -189,10 +219,21 @@ export interface CadWorkspaceService {
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
+  /** `GET /__cad/robot`: a robot description resolved for the page (`cadgen.robot_payload`). */
+  robot(file: string, options?: CadRequestOptions): Promise<CadRobotPayload>;
   readonly resources: CadResourceProvider;
-  /** `onReady` hears each component as soon as its row is ready, while the rest are still awaited. */
+  /**
+   * `onReady` hears each component as soon as its row is ready, while the rest are still awaited.
+   * `onFailed` hears each component cadgen could not derive or mesh, with its own error, and the
+   * request resolves with the rest; without it, a failed component fails the request.
+   * `tessellation` also has cadgen mesh each component at those tolerances.
+   */
   resolveSurfaceComponents(view: CadRuntimeView, requested: CadSurfaceComponentRequest[],
-    options?: CadRequestOptions & { onReady?: (cid: string, ticket: CadSurfaceTicket) => void }): Promise<Map<string, CadSurfaceTicket>>;
+    options?: CadRequestOptions & {
+      onReady?: (cid: string, ticket: CadSurfaceTicket) => void;
+      onFailed?: (cid: string, error: Error) => void;
+      tessellation?: { chordTolerance?: number; angleTolerance?: number };
+    }): Promise<Map<string, CadSurfaceTicket>>;
   observeEditingPreview(file: string, onUpdate: (preview: CadEditingPreview) => void, onError: (error: unknown) => void, options?: CadPreviewObserverOptions): () => void;
   createRenderSession(options?: { file?: string }): CadRenderSession;
   dispose(): void;

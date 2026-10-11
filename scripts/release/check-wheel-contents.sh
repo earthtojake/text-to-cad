@@ -3,12 +3,12 @@ set -euo pipefail
 
 # Assert the cadgen wheel actually contains its runtime assets.
 #
-# cadgen ships JavaScript it executes (Node builders, the snapshot browser bundle, the
-# CAD Viewer's built client), the native file tracer every build loads, and non-Python
-# data its server reads (collation.json).
+# cadgen ships JavaScript it executes (the snapshot browser bundle, the CAD Viewer's
+# built client), the native file tracer every build loads, and non-Python data its
+# server reads (collation.json).
 # Those arrive through `[tool.setuptools.package-data]`, which is exactly the kind of
 # declaration that fails QUIETLY: a glob that does not match nested files produces a
-# wheel that imports fine, passes every Python test, and then cannot build a DXF preview
+# wheel that imports fine, passes every Python test, and then cannot render a snapshot
 # -- or serve a Viewer -- on a user's machine. The repo has already been bitten by the
 # same shape of bug in JS bundling (an entry tree-shaken to a 20-byte shebang, exit
 # code 0).
@@ -36,8 +36,8 @@ if [ -z "$PYTHON_BIN" ]; then
   fi
 fi
 
-# Paths every wheel must carry. The Node builders are what cadgen spawns for DXF and mesh
-# export; the browser bundle is what the snapshot CLI loads in a page.
+# Paths every wheel must carry. The browser bundle is what the snapshot CLI loads in a
+# page.
 REQUIRED=(
   # The Python the wheel must actually contain. Asset globs were the whole list once,
   # back when cadgen was Python-plus-data; it now also carries the CLI parsers and the
@@ -73,11 +73,6 @@ REQUIRED=(
   # Doubles as a rename sentinel: step_artifacts.py became step_topology_artifact.py, so a
   # merge that resurrected the old name would ship a wheel missing this one.
   "cadgen/step_topology_artifact.py"
-  "cadgen/_internal/node_resolve_register.mjs"
-  "cadgen/_internal/node_resolve_hooks.mjs"
-  "cadgen/_runtime/node/mesh-export.mjs"
-  "cadgen/_runtime/node/package.json"
-  "cadgen/_runtime/node/THIRD_PARTY_LICENSES.txt"
   "cadgen/_runtime/browser/snapshot-render.js"
   "cadgen/_runtime/browser/render.html"
   "cadgen/_runtime/viewer/index.html"

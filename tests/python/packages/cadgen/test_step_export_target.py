@@ -3,8 +3,7 @@
 It takes a DOCUMENT and writes the meshes it was asked for from the tree behind the
 document's bytes. Pinned here against real geometry: what it refuses (a script, a
 missing file, a non-mesh format), what it writes, the effective tolerances it
-reports, native path semantics for an explicit OUT, and that the temporary view it
-hands the Node exporter is gone when the export is over -- written, or failed.
+reports, and native path semantics for an explicit OUT.
 """
 
 from __future__ import annotations
@@ -96,21 +95,6 @@ class StepExportTargetTests(unittest.TestCase):
         shutil.copyfile(self._seed_dir / "box.step", document)
         return document
 
-    @contextlib.contextmanager
-    def _recorded_views(self):
-        """Every temporary view directory the engine asked the store for."""
-        from cadgen.store import view as store_view
-
-        views: list[Path] = []
-        real_export_view = store_view.export_view
-
-        def recording(*args, **kwargs):
-            views.append(real_export_view(*args, **kwargs))
-            return views[-1]
-
-        with mock.patch.object(store_view, "export_view", side_effect=recording):
-            yield views
-
     def test_a_missing_document_is_refused_by_name(self) -> None:
         missing = self.temp_root / "does_not_exist.step"
         with self.assertRaises(FileNotFoundError) as cm:
@@ -155,7 +139,7 @@ class StepExportTargetTests(unittest.TestCase):
         for entry in payload["files"]:
             self._assert_export_file(Path(entry["path"]), entry["format"])
             # The result reports the EFFECTIVE pair: no tolerance was asked for, so
-            # these are the tessellator's defaults -- numbers, never null.
+            # these are the mesh defaults -- numbers, never null.
             self.assertEqual(1.5e-3, entry["meshTolerance"])
             self.assertEqual(0.35, entry["meshAngularTolerance"])
 
@@ -166,41 +150,6 @@ class StepExportTargetTests(unittest.TestCase):
         )
         self.assertEqual(5e-3, payload["files"][0]["meshTolerance"])
         self.assertEqual(0.35, payload["files"][0]["meshAngularTolerance"])
-
-    def test_the_temporary_view_is_removed_after_an_export(self) -> None:
-        # The Node exporter reads a temporary VIEW of the tree. It is removed when
-        # the export is done -- never at interpreter exit, which a recycled or
-        # killed daemon worker never reaches.
-        document = self._write_box_document()
-        with self._recorded_views() as views:
-            step_export_target.export_cad_target(document, [("stl", self.out_dir / "box.stl")])
-        self.assertEqual(1, len(views))
-        self.assertFalse(views[0].exists(), "the export left its view directory behind")
-        self._assert_export_file(self.out_dir / "box.stl", "stl")
-
-    def test_the_temporary_view_is_removed_when_the_ledger_skips_the_export(self) -> None:
-        document = self._write_box_document()
-        out = self.out_dir / "box.stl"
-        step_export_target.export_cad_target(document, [("stl", out)])
-        with self._recorded_views() as views:
-            payload = step_export_target.export_cad_target(document, [("stl", out)])
-        self.assertTrue(payload["files"][0]["skipped"])
-        self.assertTrue(views)
-        self.assertEqual([], [view for view in views if view.exists()])
-
-    def test_the_temporary_view_is_removed_when_the_export_raises(self) -> None:
-        document = self._write_box_document()
-
-        def exporter_fails(package_dir, *args, **kwargs):
-            self.assertTrue(Path(package_dir).is_dir(), "the view exists while the exporter runs")
-            raise RuntimeError("mesh export failed for stl: node fell over")
-
-        with self._recorded_views() as views, \
-                mock.patch.object(step_export_target, "run_mesh_exporter", side_effect=exporter_fails), \
-                self.assertRaisesRegex(RuntimeError, "node fell over"):
-            step_export_target.export_cad_target(document, [("stl", self.out_dir / "boom.stl")])
-        self.assertEqual(1, len(views))
-        self.assertFalse(views[0].exists(), "a failed export left its view directory behind")
 
     def test_explicit_out_takes_native_path_semantics(self) -> None:
         # An explicit OUT is a one-shot ad-hoc export, never persisted, so it
@@ -252,9 +201,10 @@ class StepExportTargetTests(unittest.TestCase):
 
     def test_an_out_with_the_wrong_suffix_is_refused_before_any_work(self) -> None:
         document = self._write_box_document()
-        with self._recorded_views() as views, self.assertRaisesRegex(ValueError, "stl OUT must end with .stl"):
+        with mock.patch.object(step_export_target, "_mesh_package",
+                               side_effect=AssertionError("the tree was read before OUT was checked")), \
+                self.assertRaisesRegex(ValueError, "stl OUT must end with .stl"):
             step_export_target.export_cad_target(document, [("stl", self.out_dir / "box.bin")])
-        self.assertEqual([], views)
 
     def test_a_relative_out_lands_in_the_process_cwd(self) -> None:
         # The live door-level pin for the rule above: the document is in one

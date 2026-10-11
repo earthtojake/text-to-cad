@@ -39,6 +39,11 @@ Design numbers not taken from a source are marked "(design)" in `src/lib/spec.py
 
 The animation's JS runtime matches kin.py to 3.5e-12 across all moving labels (animcheck PASS).
 
+**Update (2026-10-06):** the clips are now Python (`src/lib/clips.py`), baked to keyframes in the
+sidecar at build; no JavaScript is generated or shipped. On the rebuilt engine, animcheck matches
+kin.py to 6.3e-13 for `running` and `exploded-running` (PASS), and the `explode` clip equals the
+plan exactly.
+
 ## Validation (final geometry)
 
 - **Builds:** every build exited 0. The final assembly build took 68 s: 18 system checks, then the assembly in 32 s. After the fuel-line fix it took 25 s.

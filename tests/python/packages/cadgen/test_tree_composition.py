@@ -138,6 +138,22 @@ class Fixture(unittest.TestCase):
 
         return build_document_tree(load_step_scene_exact(step))[0]
 
+    def entry_named(self, tree_hash):
+        """The child's document tree as a cadgen from before the XCAF entry rule compiled it:
+        its leaf `a` named by its label's address."""
+        from cadgen.store.trees import get_tree, put_tree
+
+        tree = get_tree(self.documents[tree_hash])
+        occurrence = next(row for row in tree["occurrences"] if row["name"] == "a")
+        occurrence["name"] = "=>[0:1:1:3]"
+        pending = [tree["assembly"]["root"]]
+        while pending:
+            node = pending.pop()
+            if node["id"] == occurrence["id"]:
+                node["name"] = occurrence["name"]
+            pending.extend(node.get("children") or [])
+        return put_tree(tree)
+
 
 class ComposedTreeTest(Fixture):
     def test_composed_tree_is_the_parse_of_the_written_bytes(self):
@@ -174,6 +190,7 @@ class ComposedTreeTest(Fixture):
             "own geometry": (self.parent(extra=self.leaf("plate", bd.Solid.make_box(5, 5, 1), bd.Location((0, 0, -9)))), None),
             "missing document tree": (self.parent(), {self.a_hash: self.documents[self.a_hash]}),
             "incomplete document tree": (self.parent(), None),
+            "entry named document tree": (self.parent(), {**self.documents, self.a_hash: self.entry_named(self.a_hash)}),
         }
         for label, (shape, documents) in cases.items():
             with self.subTest(label):

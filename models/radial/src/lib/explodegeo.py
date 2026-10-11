@@ -68,7 +68,7 @@ def _doc_hash(step_file):
 def _build_cache(step_file, out):
     """Mesh + sample every prototype (run in a child process: frees OCC memory on exit)."""
     sys.path.insert(0, str(SRC))
-    from lib import animgen, gate
+    from lib import gate
     w = gate.World(step_file)
     leaves = [{"ref": lf["ref"], "label": lf["label"], "system": lf["system"], "proto": str(lf["proto"]),
                "L": lf["L"].tolist(), "kind": lf["kind"], "args": list(lf["args"]) if isinstance(lf["args"], tuple) else None}

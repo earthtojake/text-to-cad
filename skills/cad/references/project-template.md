@@ -1,13 +1,11 @@
 # Minimal project starters
 
-Choose the starter that fits the task. Create only the files it needs; rename
-parts and change dimensions for the design. Keep an existing project's layout.
-For a new project, use the location and conventions in [project layout](project-layout.md).
-Commands below run from the CAD project root.
+A single part and a small assembly, in the [project layout](project-layout.md)'s
+default structure. Commands below run from the CAD project root.
 
 ## One part
 
-Create `src/plate.py`:
+`src/plate.py`:
 
 ```python
 # src/plate.py
@@ -32,11 +30,9 @@ if __name__ == "__main__":
 
 ```bash
 python src/plate.py
-cadgen step snapshot STEP/plate.step tmp/plate.png
 ```
 
-Review the PNG and check the dimensions needed by the design. A second model
-run should report `current`. A one-off part can instead use a flat folder and
+A second run reports `current`. A one-off part can instead use a flat folder and
 `@step` with its default sibling output.
 
 ## An assembly
@@ -95,58 +91,22 @@ if __name__ == "__main__":
 ```bash
 python src/assembly.py
 cadgen store why src/assembly.py
-cadgen step snapshot STEP/assembly.step tmp/assembly.png
 ```
 
-This is a placement example; add the fastening features the actual design needs.
-Running the root builds its stale children. After a child changes, rerun the root.
-Placed children use `.moved()` or `Location * shape` to keep their geometry shared.
-For mating datums and joint relationships, see [positioning](positioning.md).
+Running the root builds its stale children; running a child alone leaves the
+root stale until the root runs. For mating datums and joint relationships, see
+[positioning](positioning.md).
 
-## Add capabilities only when needed
+## Adding capabilities
 
 | Need | Add |
 | --- | --- |
 | STL, 3MF or GLB output | A mesh decorator; a mesh-only model omits `@step`. See [exports](supported-exports.md). |
 | Shared factory or hole pattern | A plain helper under `src/lib/`, with `src/lib/__init__.py`. |
-| Left/right geometry | Mirror inline, or use separate models for independent outputs/reuse; see [mirroring and caching](step-generation.md#mirrored-geometry-and-reusable-models). |
-| Subassembly | A model that calls its child models; use folders as the project grows. |
+| Left/right geometry | Mirror inline, or separate models for independent outputs/reuse; see [mirroring and caching](step-generation.md#mirrored-geometry-and-reusable-models). |
+| Subassembly | A model that calls its child models. |
 | 2D drawing | A separate drawing model using `$dxf`. |
-| Vendor CAD | Preserve the source under the format's `imported/` folder; use `read_step` with an anchored path or a wrapper model. |
-| Durable requirement checks | `checks/` or the project's existing test directory; exploratory checks and images go in ignored `tmp/`. |
+| Vendor CAD | The source file under the format's `imported/` folder, read with `read_step` (an anchored path) or a wrapper model. |
 
-Only kinematics, intrinsic materials or animation require a STEP sidecar.
-Declaring a mesh alongside STEP does not create one.
-
-## Project bookkeeping
-
-Add a short `src/README.md` catalog for a multi-model project:
-
-```markdown
-# Models
-
-| Script | Output | Purpose |
-| --- | --- | --- |
-| plate.py | STEP/plate.step | Base plate |
-| standoff.py | STEP/standoff.step | Repeated spacer |
-| assembly.py | STEP/assembly.step | Plate with two spacers |
-
-Build the assembly with `python src/assembly.py` from the project root.
-```
-
-Follow the repository's version-control policy and the user's commit instructions.
-The [layout reference](project-layout.md#version-control) suggests defaults and
-ignore patterns for new projects. Create output folders and helpers only as needed.
-
-If the project uses Git LFS for imported sources, scope its `.gitattributes`
-entries to the relevant files or formats, for example:
-
-```gitattributes
-STEP/imported/** filter=lfs diff=lfs merge=lfs -text
-*.step.json text
-```
-
-Configure Git LFS before adding files covered by those rules. A file starting with
-`version https://git-lfs...` is a pointer: `git lfs checkout STEP/imported`
-restores objects already in the local cache; missing objects need fetching from
-the project's LFS remote before CAD tools can read them.
+Only kinematics, intrinsic materials or animation write a STEP sidecar;
+declaring a mesh alongside STEP does not create one.

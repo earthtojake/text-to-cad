@@ -1,4 +1,5 @@
 import { resolveCadEdgeSettings } from "../../common/cadInk.js";
+import { jointMotionMatrix, jointValues, normalizeControlValues } from "../../common/articulation.js";
 import {
   PART_HOVER_EMISSIVE_INTENSITY, PART_HOVER_HIGHLIGHT_BLEND, PART_SELECTED_EMISSIVE_INTENSITY,
   PART_SELECTED_HIGHLIGHT_BLEND, partHighlightSurfaceColor, syncPartOcclusionGhost
@@ -7,27 +8,32 @@ import { scheduleRuntimeRaycastBvh } from "../viewer/raycastBvh.js";
 import { REFERENCE_HOVER_COLOR } from "../viewer/referenceGeometry.js";
 import { createSurfaceLook } from "../viewer/surfaceLook.js";
 import { shapeSourceColor } from "../viewer/surfaceMaterials.js";
-import { jointMotionTransform, resolveUrdfJointValues } from "./kinematics.js";
 
-// A robot as a SCENE GRAPH. One Group per link, a link's meshes attached to it once,
-// and each joint as three nested frames of which a pose writes exactly one:
+// A robot as a SCENE GRAPH, played from the payload cadgen resolved (`cadgen.robot_payload`):
+// the articulation (joints in rest space with affine rows over the controls, and which link
+// each joint carries) and the visual list (each mesh at its rest placement). One node per
+// joint, nested under its parent joint's, whose matrix is the joint's own motion in rest
+// space; a link's meshes sit under the joint that carries the link, at their rest
+// placements, and a link no joint carries sits under the root:
 //
 //   robot
-//   └ link:<root>                 matrix = rootWorldTransform
-//      ├ mesh (per part)          matrix = the visual's origin and mesh scale
-//      └ joint:<name>             STATIC   parent link frame -> joint frame
-//         └ motion:<name>         THE ONLY MATRIX A POSE WRITES
-//            └ link:<child>       STATIC   an SDF joint's child offset, else identity
+//   ├ mesh (a root link's part)      matrix = the visual's rest placement
+//   └ joint:<id>                     THE ONLY MATRIX A POSE WRITES: D(axis, q) in rest space
+//      ├ mesh (a carried link's part) matrix = the visual's rest placement
+//      └ joint:<child id>            the child joint, carried
 //
-// So posing is k matrix writes (the joint and its mimic followers), and three's own
-// world-matrix pass carries them down the tree. No geometry, material or part list is
-// touched by a pose, and `motion:<name>.matrixWorld` IS the joint frame after its motion,
-// which is what the Pose handles hang on.
+// So posing is k matrix writes (the joints whose rows changed: a joint and its mimic
+// followers), and three's own world-matrix pass carries them down the tree: a joint node's
+// `matrixWorld` IS the joint's world delta (`articulation.jointDeltas`), which is what the
+// Position handles hang on. No geometry, material or part list is touched by a pose. The
+// scene decides nothing: the rows, the limits, the carries and the placements are the
+// payload's, and a control vector is normalized against the articulation as every player
+// normalizes one.
 //
-// No React and no DOM in here: the description and the loaded part list in, a scene
+// No React and no DOM in here: the payload and the loaded part list in, a scene
 // (`../viewer/sceneContract.js`) out, with the robot's own verbs beside the contract. The
 // ONE builder of a robot's scene: the viewer's robot renderer and the snapshot CLI's
-// headless stage both call it, and both pose it the one way it poses (`setJointValues`).
+// headless stage both call it, and both pose it the one way it poses (`setControlValues`).
 
 const HIGHLIGHT_RENDER_ORDER = 23;
 const POSE_EPSILON = 1e-9;
@@ -35,18 +41,11 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 const hex = value => (HEX_COLOR.test(String(value || "").trim()) ? String(value).trim() : "");
 const numeric = (values, stride) => Boolean(values) && typeof values.length === "number" && values.length > 0 && values.length % stride === 0;
 
-// Core transforms are ROW-major; three's `set` takes row-major arguments (`fromArray` does not).
+// Payload placements are ROW-major; three's `set` takes row-major arguments (`fromArray` does not).
 function place(object, transform) {
   if (Array.isArray(transform) && transform.length === 16) object.matrix.set(...transform);
   object.matrixAutoUpdate = false;
   object.matrixWorldNeedsUpdate = true;
-}
-
-function group(THREE, name, transform) {
-  const object = new THREE.Group();
-  object.name = name;
-  place(object, transform);
-  return object;
 }
 
 // One geometry per source mesh, shared by every visual that names it. The arrays are the
@@ -79,74 +78,47 @@ function boxOf(bounds) {
 
 /**
  * @param {typeof import("three")} THREE
- * @param {{ description: object, parts: object[] }} input  `description`: a parsed URDF or SDF (an SRDF's is its
- *   URDF's). `parts`: `buildRobotParts` — one per visual, or per named object of a visual's mesh.
- * @returns {import("../viewer/sceneContract.js").KitScene & object}  The contract, plus: `setJointValues(values)` (true when a
- *   matrix was written), `setHighlight({ hoveredLink, hoveredComponent, selectedLinks, selectedComponents })`,
- *   `setHiddenPartIds(ids)`, `linkCentre(name)`, `motionFrame(jointName)`, `linkFrames()`, `hasComponent(id)`,
+ * @param {{ robot: object, parts: object[] }} input  `robot`: the payload cadgen resolved (its `articulation`,
+ *   `links` and `visuals`). `parts`: `buildRobotParts` — one per visual, or per named object of a visual's mesh.
+ * @returns {import("../viewer/sceneContract.js").KitScene & object}  The contract, plus: `setControlValues(values)`
+ *   (true when a matrix was written), `setHighlight({ hoveredLink, hoveredComponent, selectedLinks, selectedComponents })`,
+ *   `setHiddenPartIds(ids)`, `jointRow(id)`, `motionFrame(jointId)`, `linkFrames()`, `linkCentre(name)`, `hasComponent(id)`,
  *   and `stats` (test seam: matrix writes per pose).
  */
-export function createRobotScene(THREE, { description, parts }) {
+export function createRobotScene(THREE, { robot, parts }) {
+  const articulation = robot?.articulation || null;
+  // Hidden visuals: out of the render, the pick and the highlight, their meshes kept for a reveal.
   let hiddenPartIds = new Set();
   const isVisible = record => !hiddenPartIds.has(record.mesh.userData.partId);
   const root = new THREE.Group();
   root.name = "robot";
   place(root, null);
-  const joints = (Array.isArray(description?.joints) ? description.joints : []).filter(joint => String(joint?.name || ""));
-  const links = new Map();
-  const motions = new Map();
-  const linkGroup = (name, transform) => {
-    const object = group(THREE, `link:${name}`, transform);
-    object.userData.linkName = name;
-    links.set(name, object);
-    return object;
-  };
 
-  // ---- the kinematic tree --------------------------------------------------------
-  const jointsByParent = new Map();
-  for (const joint of joints) {
-    const parent = String(joint.parentLink || "");
-    if (parent && String(joint.childLink || "")) jointsByParent.set(parent, [...(jointsByParent.get(parent) || []), joint]);
-  }
-  const rootLink = String(description?.rootLink || "");
-  // A joint's frame joins its parent link AFTER that link's own meshes (below), so the graph
-  // reads in tree order, root first: a link, what it draws, then the links it carries. That is
-  // the order `--mode list` lists a robot in.
-  const jointFrames = [];
-  if (rootLink) {
-    root.add(linkGroup(rootLink, description.rootWorldTransform));
-    // Iterative, first claim wins: the parsers validate, and a description that still
-    // holds a cycle or a second parent must never hang the builder.
-    for (const queue = [rootLink]; queue.length;) {
-      const parentName = queue.shift();
-      for (const joint of jointsByParent.get(parentName) || []) {
-        const childName = String(joint.childLink);
-        if (links.has(childName)) continue;
-        const frame = group(THREE, `joint:${joint.name}`, joint.preMotionTransform || joint.originTransform);
-        const motion = group(THREE, `motion:${joint.name}`, null);
-        motion.userData.jointName = joint.name;
-        motions.set(joint.name, { joint, object: motion, value: null, meshes: [] });
-        jointFrames.push([parentName, frame]);
-        frame.add(motion);
-        motion.add(linkGroup(childName, joint.postMotionTransform || null));
-        queue.push(childName);
-      }
+  // ---- the kinematic tree: one node per joint, parents first ----------------------------
+  const nodes = new Map();
+  const carrier = new Map();  // link name -> the joint node that carries it
+  for (const joint of Array.isArray(articulation?.joints) ? articulation.joints : []) {
+    if (!joint?.id || nodes.has(joint.id)) continue;
+    const node = new THREE.Group();
+    node.name = `joint:${joint.id}`;
+    node.userData.jointId = joint.id;
+    place(node, null);
+    nodes.set(joint.id, { joint, object: node, parent: nodes.get(joint.parent) || null, turn: 0, travel: 0, meshes: [] });
+    for (const link of Array.isArray(articulation?.carries?.[joint.id]) ? articulation.carries[joint.id] : []) {
+      carrier.set(String(link), nodes.get(joint.id));
     }
   }
+  const restPlacement = new Map((Array.isArray(robot?.links) ? robot.links : []).map(link => [String(link?.name || ""), link?.placement]));
 
-  // ---- link meshes, attached once ------------------------------------------------
+  // ---- link meshes, attached once, at their rest placements ----------------------------
   const geometries = new Map();
   const materials = [];
   const meshes = [];
   const meshesByLink = new Map();
   const recordByComponent = new Map();
-  const recordByMesh = new Map();
   for (const part of Array.isArray(parts) ? parts : []) {
-    const linkName = String(part?.linkName || "");
+    const linkName = String(part?.link || "");
     if (!linkName) continue;
-    // A link the tree never reached (no joint claims it) still shows, at the robot's origin.
-    if (!links.has(linkName)) root.add(linkGroup(linkName, null));
-    const owner = links.get(linkName);
     // Colour, in the order a robot description means it: the colour the description gives the
     // visual wins (as it does in the headless renderer); else the colours the mesh brought, per
     // vertex; else the named object's own; else the viewer's surface colour.
@@ -167,22 +139,27 @@ export function createRobotScene(THREE, { description, parts }) {
     mesh.userData.partId = mesh.name;
     // The part's display name, where a GLB keeps a node's authored one (a snapshot lists it).
     mesh.userData.name = String(part.name || "");
-    mesh.userData.linkName = String(part.linkName);
+    mesh.userData.linkName = linkName;
     if (part.componentName) mesh.userData.componentId = mesh.name;
     // Where "Color by part" deals this part its palette colour.
     if (Number.isInteger(part.fillIndex)) mesh.userData.cadFillIndex = part.fillIndex;
-    place(mesh, part.localTransform);
-    owner.add(mesh);
-    const record = { mesh, sourceBounds: boxOf(part.sourceBounds || part.bounds), box: null, dirty: true, ghostRecord: null };
+    place(mesh, part.placement);
+    const owner = carrier.get(linkName);
+    const holder = owner?.object || root;
+    holder.add(mesh);
+    const record = { mesh, holder, sourceBounds: boxOf(part.sourceBounds || part.bounds), box: null, dirty: true, ghostRecord: null };
     meshes.push(record);
-    recordByMesh.set(mesh, record);
     if (part.componentName) recordByComponent.set(mesh.name, record);
-    meshesByLink.set(mesh.userData.linkName, [...(meshesByLink.get(mesh.userData.linkName) || []), record]);
+    meshesByLink.set(linkName, [...(meshesByLink.get(linkName) || []), record]);
   }
-  for (const [parentName, frame] of jointFrames) links.get(parentName).add(frame);
-  // Every mesh a joint carries, so a pose marks exactly the boxes it moved.
-  for (const motion of motions.values()) {
-    motion.object.traverse((object) => { if (recordByMesh.has(object)) motion.meshes.push(recordByMesh.get(object)); });
+  // A joint's node joins its parent AFTER that parent's own meshes, so the graph reads in tree
+  // order, root first: a link, what it draws, then the links it carries. That is the order
+  // `--mode list` lists a robot in.
+  for (const node of nodes.values()) (node.parent?.object || root).add(node.object);
+  // Every mesh a joint carries, down its subtree, so a pose marks exactly the boxes it moved.
+  const recordByMesh = new Map(meshes.map(record => [record.mesh, record]));
+  for (const node of nodes.values()) {
+    node.object.traverse((object) => { const record = recordByMesh.get(object); if (record) node.meshes.push(record); });
   }
 
   // ---- bounds ----------------------------------------------------------------------
@@ -190,8 +167,7 @@ export function createRobotScene(THREE, { description, parts }) {
   const relative = new THREE.Matrix4();
   const rootInverse = new THREE.Matrix4();
   // A part's box where it is now, in the robot's own space: its source box's eight
-  // corners through its world matrix (the method the description solver uses, so
-  // framing numbers agree with it).
+  // corners through its world matrix.
   function refreshBoxes(records) {
     let inverted = false;
     for (const record of records) {
@@ -228,17 +204,18 @@ export function createRobotScene(THREE, { description, parts }) {
 
   // ---- pose ------------------------------------------------------------------------
   const stats = { poseWrites: 0, lastPoseWrites: 0 };
-  function setJointValues(values) {
-    const resolved = resolveUrdfJointValues(description, values || {});
+  function setControlValues(values) {
+    const rows = jointValues(articulation, normalizeControlValues(articulation, values));
     let written = 0;
-    for (const [name, motion] of motions) {
-      const value = resolved.get(name);
-      if (motion.value !== null && Math.abs(value - motion.value) <= POSE_EPSILON) continue;
-      motion.value = value;
-      if (motion.joint.type === "fixed") continue;
-      motion.object.matrix.set(...jointMotionTransform(motion.joint, value));
-      motion.object.matrixWorldNeedsUpdate = true;
-      for (const record of motion.meshes) record.dirty = true;
+    for (const [id, node] of nodes) {
+      const row = rows[id] || { turn: 0, travel: 0 };
+      if (Math.abs(row.turn - node.turn) <= POSE_EPSILON && Math.abs(row.travel - node.travel) <= POSE_EPSILON) continue;
+      node.turn = row.turn;
+      node.travel = row.travel;
+      if (node.joint.kind === "fixed" || !Array.isArray(node.joint.axis)) continue;
+      jointMotionMatrix(THREE, node.joint, row.turn, row.travel, node.object.matrix);
+      node.object.matrixWorldNeedsUpdate = true;
+      for (const record of node.meshes) record.dirty = true;
       written += 1;
     }
     stats.lastPoseWrites = written;
@@ -249,9 +226,8 @@ export function createRobotScene(THREE, { description, parts }) {
     }
     return written > 0;
   }
-  // The rest placement is every joint at its declared default, whatever pose the file
+  // The rest placement is the robot as written (every row at zero), whatever pose the file
   // opens in: it is what the camera frames and what sizes the ground.
-  setJointValues({});
   root.updateMatrixWorld(true);
   const restBounds = merged(meshes) || { min: [0, 0, 0], max: [0, 0, 0] };
   boundsCache = restBounds;
@@ -337,12 +313,12 @@ export function createRobotScene(THREE, { description, parts }) {
   // (until then, and for a mesh too large for one, the ray is tested the plain way).
   scheduleRuntimeRaycastBvh({ displayRecords: meshes }, { deferUntilRaycast: true });
 
+  const rootInverseFrame = () => { root.updateMatrixWorld(); return new THREE.Matrix4().copy(root.matrixWorld).invert(); };
   let disposed = false;
   return {
     object3D: root,
     get bounds() { return (boundsCache ||= merged(meshes.filter(isVisible)) || restBounds); },
     restBounds,
-    links,
     stats,
     partCount: meshes.length,
     // A robot authors no finish: Render is the studio's surface over the same colours.
@@ -352,23 +328,28 @@ export function createRobotScene(THREE, { description, parts }) {
       gradeVertexColors(next?.materialSettings);
       applyHighlight();
     },
-    setJointValues(values) { return disposed ? false : setJointValues(values); },
-    /** The value each joint is posed at now (mimic followers included). */
-    jointValue(name) { return motions.get(name)?.value ?? null; },
-    /** A joint's frame AFTER its motion, relative to the robot: `THREE.Matrix4`, or null for a joint off the tree. */
-    motionFrame(name) {
-      const motion = motions.get(name);
-      if (!motion) return null;
-      root.updateMatrixWorld();
-      return new THREE.Matrix4().copy(root.matrixWorld).invert().multiply(motion.object.matrixWorld);
+    /** Pose the robot at a control vector (every control the vector does not name at its opening value). */
+    setControlValues(values) { return disposed ? false : setControlValues(values); },
+    /** The row a joint is posed at now: `{ turn, travel }`, or null for a joint the articulation does not have. */
+    jointRow(id) { const node = nodes.get(id); return node ? { turn: node.turn, travel: node.travel } : null; },
+    /** A joint's world delta now (its frame after its motion, and its parents'), relative to the robot: `THREE.Matrix4`, or null. */
+    motionFrame(id) {
+      const node = nodes.get(id);
+      if (!node) return null;
+      return rootInverseFrame().multiply(node.object.matrixWorld);
     },
-    /** Every link's frame relative to the robot, row-major like the description solver's. */
+    /** Every link's frame relative to the robot, row-major: its carrying joint's delta over its rest placement. */
     linkFrames() {
-      root.updateMatrixWorld();
-      const inverse = new THREE.Matrix4().copy(root.matrixWorld).invert();
-      return new Map([...links].map(([name, object]) => [name, new THREE.Matrix4().multiplyMatrices(inverse, object.matrixWorld).transpose().toArray()]));
+      const inverse = rootInverseFrame();
+      return new Map([...restPlacement].map(([name, placement]) => {
+        const frame = new THREE.Matrix4();
+        if (Array.isArray(placement) && placement.length === 16) frame.set(...placement);
+        const node = carrier.get(name);
+        if (node) frame.premultiply(node.object.matrixWorld);
+        return [name, frame.premultiply(inverse).transpose().toArray()];
+      }));
     },
-    /** The centre of a link's geometry in the LINK's frame, or null for a frame-only link. */
+    /** The centre of a link's geometry in the ROBOT's rest space, or null for a frame-only link. */
     linkCentre(name) {
       const records = meshesByLink.get(name) || [];
       if (!records.length) return null;
@@ -385,26 +366,25 @@ export function createRobotScene(THREE, { description, parts }) {
       }
       return [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
     },
-    /** Hide visual meshes only: their link frames still carry and pose child links. */
+    hasComponent(id) { return recordByComponent.has(id); },
+    /** Hide visual meshes only: their joint nodes still carry and pose the links below them. */
     setHiddenPartIds(ids) {
       if (disposed) return;
       hiddenPartIds = new Set((Array.isArray(ids) ? ids : []).filter(id => recordByComponent.has(id)));
       for (const record of meshes) {
         if (!isVisible(record)) record.mesh.removeFromParent();
-        else if (!record.mesh.parent) links.get(record.mesh.userData.linkName).add(record.mesh);
+        else if (!record.mesh.parent) record.holder.add(record.mesh);
       }
       pickable = meshes.filter(isVisible).map(record => record.mesh);
       boundsCache = null;
       applyHighlight();
     },
-    hasComponent(id) { return recordByComponent.has(id); },
     setHighlight(next) {
       if (disposed) return;
       highlight = { hoveredLink: "", hoveredComponent: "", selectedLinks: [], selectedComponents: [], ...next };
       applyHighlight();
     },
-    // The first visible surface under the ray: a component is itself, anything else is its
-    // link, found by walking up the graph. No part table.
+    // The first visible surface under the ray: a component is itself, anything else is its link.
     pick(ray) {
       if (disposed) return null;
       root.updateMatrixWorld();
@@ -412,9 +392,7 @@ export function createRobotScene(THREE, { description, parts }) {
       const hit = raycaster.intersectObjects(pickable, false).find(candidate => candidate.object.visible);
       if (!hit) return null;
       const componentId = hit.object.userData.componentId || "";
-      let owner = hit.object;
-      while (owner && !(owner.isGroup && owner.userData.linkName)) owner = owner.parent;
-      const linkName = owner?.userData.linkName || "";
+      const linkName = hit.object.userData.linkName || "";
       return { id: componentId || `link:${linkName}`, kind: componentId ? "component" : "link", linkName, componentId, point: hit.point };
     },
     dispose() {

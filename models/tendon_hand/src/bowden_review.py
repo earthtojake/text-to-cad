@@ -5,7 +5,7 @@ from lib.bowden_guide import make_bowden_body
 
 
 @step(out='../STEP/bowden_review.step',
-      mesh_tolerance=.006,mesh_angular_tolerance=.035)
+      mesh_tolerance=.006,mesh_angular_tolerance=0.05)
 def bowden_review():
     children=[]
     for i,lane in enumerate(FOUR_LANES,1):

@@ -59,6 +59,11 @@ dependencies = [
   # import packages cadgen does not depend on -- and the drawing IS the PDF, so
   # neither is optional.
   "matplotlib",
+  # cadgen's meshes are numpy arrays end to end: the mesher packs OCCT's
+  # triangulation into GLB bodies, and the STL/3MF/GLB writers read them back
+  # (_internal/occt_mesh.py, _internal/mesh_formats.py). build123d requires
+  # numpy 2 already; cadgen names the same range because it imports numpy itself.
+  "numpy>=2,<3",
   "pillow",
   # Snapshots render in a headless browser that Playwright drives. A dependency of every
   # install, not an extra: the CAD plugin's server and every skill run one requirement,
@@ -84,9 +89,9 @@ where = ["src"]
 include = ["cadgen*"]
 
 [tool.setuptools.package-data]
-# _runtime holds everything cadgen executes that is not Python: the esbuilt Node
-# builders, the headless browser bundle the snapshot CLI drives, the CAD Viewer's
-# built client that `cadgen viewer` serves, and the file tracer every build loads
+# _runtime holds everything cadgen executes that is not Python: the headless browser
+# bundle the snapshot CLI drives, the CAD Viewer's built client that `cadgen viewer`
+# serves, the CAD app page `cadgen mcp` serves, and the file tracer every build loads
 # (one library per platform). It is data, not a subpackage (no __init__), and it is
 # found at call time by cadgen.assets and cadgen._internal.filetrace.
 # Verified by scripts/release/check-wheel-contents.sh.
@@ -94,6 +99,3 @@ cadgen = ["py.typed", "*.pyi", "_runtime/**/*"]
 # The viewer server's catalog ordering is ICU root collation, read from this table at
 # runtime; it ships beside the code that reads it.
 "cadgen.viewer" = ["collation.json"]
-# The Node builder bridge (cadgen/_internal/node_runtime.py) spawns node with
-# `--import node_resolve_register.mjs`; both .mjs files must ship with the package.
-"cadgen._internal" = ["*.mjs"]

@@ -294,6 +294,14 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         if (disposed) throw abortError();
       }
     },
+    robot(file, { signal } = {}) {
+      // A robot description resolved on the SERVER (cadgen.robot_payload): the articulation
+      // the page plays and the visuals it draws, each mesh by a URL this server answers.
+      // Derived data cached by the description's bytes, so a second request is one object
+      // read; a cold read validates, resolves frames and meshes primitives within the 10 s.
+      if (!file) return Promise.reject(new Error('Missing file'));
+      return request('/__cad/robot', { file, signal, timeoutMs: 10_000, operation: 'robot' });
+    },
     requestSurfaces(body, { signal } = {}) {
       return request('/__cad/surfaces', {
         body, signal, method: 'POST', operation: 'surfaces',
@@ -325,7 +333,6 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       const releases = [retainSurfWorkerPool(), retainGlbMeshWorker(), retainStlMeshWorker()];
       tessellationCache ??= createTessellationCache({
         provider: createHttpTessellationCacheProvider({ origin, headers: { 'x-cadgen-viewer': '1' }, fetch: fetchImpl, maxBatchBytes }),
-        writeBack: { deferMs: 1500, concurrency: 2 }
       });
       const cache = tessellationCache.createSession({ signal: controller.signal });
       let sessionDisposed = false;

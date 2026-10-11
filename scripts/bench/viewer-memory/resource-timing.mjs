@@ -30,7 +30,7 @@ export function collectViewerResourceTiming({ cutoffEpochMs } = {}) {
     let route, key;
     if (url.pathname === '/__tess_cache/batch') {
       route = 'tess-batch'; key = '';
-    } else if (url.pathname.startsWith('/__tess_cache/') && url.pathname.endsWith('.tess')) {
+    } else if (url.pathname.startsWith('/__tess_cache/') && url.pathname.endsWith('.glb')) {
       route = 'tess-entry'; key = url.pathname.slice('/__tess_cache/'.length);
     } else {
       const file = url.pathname === '/__cad/store' ? url.searchParams.get('file') : url.pathname;

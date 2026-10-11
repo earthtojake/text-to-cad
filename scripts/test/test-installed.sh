@@ -3,11 +3,11 @@
 # directory that is not this repo.
 #
 # Every other check in this repo runs against the source tree, where the repo root is on
-# sys.path and `packages/core/bin` exists. None of
-# that is true after `pip install cadgen`, so the failures this catches are exactly the
-# ones no other check can: an asset left out of package-data, a module that resolves only
-# because a sibling directory happened to be adjacent, a builder that still imports a bare
-# specifier. Those all pass locally and break for the person who installed it.
+# sys.path and the apps' builds sit beside the package. None of that is true after
+# `pip install cadgen`, so the failures this catches are exactly the ones no other check
+# can: an asset left out of package-data, a module that resolves only because a sibling
+# directory happened to be adjacent. Those all pass locally and break for the person who
+# installed it.
 #
 # The scratch venv reuses the repo venv's heavy dependencies (OCP, build123d) rather than
 # reinstalling half a gigabyte -- but the wheel's own cadgen must WIN over the repo's
@@ -117,9 +117,8 @@ PY
 step "Assets resolve to the packaged runtime"
 "$VENV/bin/python" - <<'PY' || exit 1
 import sys
-from cadgen.assets import browser_runtime_dir, node_builders_dir
+from cadgen.assets import browser_runtime_dir
 for label, resolved in (
-    ("node builders", node_builders_dir()),
     ("browser runtime", browser_runtime_dir()),
 ):
     if "site-packages" not in str(resolved):

@@ -20,11 +20,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import functools
 import json
 import mimetypes
 import os
 import re
-import struct
 import sys
 import time
 from collections.abc import Mapping
@@ -38,12 +38,14 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from cadgen.assets import require_browser_runtime
 from cadgen.coordination import PHASE_RENDER, resolve as resolve_progress
 from cadgen.results import SnapshotFile, SnapshotResult, SnapshotTimings
+from cadgen.section_drawing import SECTION_FRAMES
+from cadgen.tessellation_policy import TESSELLATION_FLOORS, tolerance_refusal
 from cadgen._internal.atomic_replace import write_bytes_atomic
 
 
 # `localhost` is a potentially trustworthy origin under the Secure Contexts
 # rules even over HTTP. The page is still entirely intercepted below; this
-# spelling gives its shared TESS provider the SubtleCrypto object required to
+# spelling gives its shared mesh provider the SubtleCrypto object required to
 # verify immutable cache bodies before use.
 SNAPSHOT_ORIGIN = "http://localhost"
 SNAPSHOT_RENDER_URL = f"{SNAPSHOT_ORIGIN}/render.html"
@@ -80,7 +82,7 @@ SUPPORTED_JOB_KEYS = frozenset(
         # angle, so it gets its own key rather than overloading one that means a sidecar.
         "jointValues",
         # One frozen frame of a STEP document's choreography: {"clip": name,
-        # "time": seconds}. The clips come from animation.source in the document sidecar;
+        # "time": seconds}. The clips are the keyframes in the document sidecar;
         # spelled the same as the --animation flag.
         # Layered over the kinematics pose exactly as the viewer layers its
         # Animation tab.
@@ -108,16 +110,6 @@ RETIRED_OUTPUT_SETTINGS_KEYS = {"paddingPercent": "padding"}
 OUTPUT_PADDING_RANGE = (0, 0.15)
 OUTPUT_RENDER_SCALE_RANGE = (1, 3)
 SUPPORTED_QUALITY_KEYS = frozenset({"tessellation"})
-# Floors for `quality.tessellation`. Chord tolerance is RELATIVE to each
-# component's bounding diagonal and angle tolerance is radians, so these are
-# ~100x finer than the tessellator's defaults (1.5e-3 / 0.35 rad) and past any
-# display need at any output size. Below them the page tessellates until the
-# renderer dies, and the caller sees a lost Playwright driver connection rather
-# than a rejected request — so the request is rejected here, before a browser
-# is launched. Mirrored as RENDER_TESSELLATION_FLOORS in
-# packages/core/src/common/source.js (that file validates the same job in
-# the page; the parity is tested).
-MIN_RENDER_TESSELLATION = {"chordTolerance": 1e-5, "angleTolerance": 5e-3}
 SUPPORTED_OUTPUT_KEYS = frozenset(
     {
         "path",
@@ -165,9 +157,8 @@ RETIRED_SIZE_PROFILES = {
 # photographic preset's 2x render scale this is the 16384 px renderbuffer limit.
 MAX_OUTPUT_DIMENSION = 8192
 SIMPLE_RENDER_WIDTH, SIMPLE_RENDER_HEIGHT = SIZE_PROFILES["simple"]
-# Where section mode cuts. Mirrored as SECTION_PLANES in
-# packages/core/src/common/renderMeshScene.js (the parity is tested).
-SECTION_PLANES = ("XY", "XZ", "YZ")
+# Where section mode cuts: the planes cadgen.section_drawing cuts and draws.
+SECTION_PLANES = tuple(SECTION_FRAMES)
 SECTION_KEYS = frozenset({"plane", "offset"})
 # What an output's extension may be, per mode. The extension decides the
 # encoding; nothing in a job does.
@@ -706,7 +697,7 @@ def validate_section(value: object) -> dict[str, object]:
 
     The plane is named by the two axes it contains; the offset moves it along its
     own normal (Z for XY, Y for XZ, X for YZ) in model units, and defaults to 0.
-    These are exactly the two fields the renderer reads.
+    These are exactly the two fields ``cadgen.section_drawing`` cuts with.
     """
     if not is_plain_object(value):
         raise SnapshotError(
@@ -1032,31 +1023,29 @@ def normalize_snapshot_job_packet(raw_payload: object) -> tuple[bool, list[objec
         return False, list(raw_payload["jobs"])
     return True, [raw_payload]
 def validate_render_tessellation(value: object) -> None:
-    """Refuse an unusable ``quality.tessellation`` here, where the caller still
-    gets a message. The page validates the same field (source.js) because it
-    also serves the viewer, but by then the cost of an absurd request is a dead
-    renderer and no explanation."""
+    """Refuse an unusable ``quality.tessellation`` here, the one place it is
+    checked, before anything is meshed or a browser launched: the page draws the
+    tolerances the resolved job names (``cadgen.tessellation_policy.snapshot_tessellation``),
+    each within the policy's bounds (``tolerance_refusal``)."""
     if value is None:
         return
     if not is_plain_object(value):
         raise SnapshotError("quality.tessellation must be an object of chordTolerance/angleTolerance")
-    unknown = sorted(set(value) - set(MIN_RENDER_TESSELLATION))
+    unknown = sorted(set(value) - set(TESSELLATION_FLOORS))
     if unknown:
         raise SnapshotError(
             f"quality.tessellation has unknown key(s): {', '.join(unknown)}; "
-            f"supported keys: {', '.join(sorted(MIN_RENDER_TESSELLATION))}"
+            f"supported keys: {', '.join(sorted(TESSELLATION_FLOORS))}"
         )
-    for key, floor in MIN_RENDER_TESSELLATION.items():
+    for key in TESSELLATION_FLOORS:
         if key not in value:
             continue
         raw = value[key]
         if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not isfinite(float(raw)) or float(raw) <= 0:
             raise SnapshotError(f"quality.tessellation.{key} must be a positive finite number")
-        if float(raw) < floor:
-            raise SnapshotError(
-                f"quality.tessellation.{key} must be at least {floor}; finer sampling "
-                "exhausts the renderer instead of improving the image"
-            )
+        refusal = tolerance_refusal(key, float(raw), name=f"quality.tessellation.{key}")
+        if refusal is not None:
+            raise SnapshotError(refusal)
 
 
 def normalize_common_job(
@@ -1381,25 +1370,24 @@ def route_file(pathname: str, prefix: str, root: Path) -> Path:
     if not path_is_inside_or_equal(file_path, root):
         raise RouteFileError(f"forbidden route path: {pathname}", status=403)
     return file_path
-# --- shared component-tessellation cache -------------------------------------------
+# --- the store's component meshes ---------------------------------------------
 #
-# The snapshot page resolves component tessellations through the SAME disk
-# cache the mesh-export CLI uses (immutable objects plus index/mesh; codec and
-# key scheme in packages/core/src/lib/surf/tessellationCache.js). The page
-# cannot touch the filesystem, so the host serves the cache: GET
-# /__tess_cache/<key>.tess is a read, POST is a best-effort write-back after
-# an in-page tessellation miss. CADGEN_MESH_CACHE=0 turns both directions
-# off. Python validates the shared TESS input identity, header and content hash;
-# metadata probes and exact-object reads enforce admission before body transfer.
+# The snapshot page draws the same stored meshes the viewer and the mesh
+# exports do (immutable objects plus index/mesh; codec and key scheme in
+# cadgen/store/meshes.py and packages/core/src/lib/surf/tessellationCache.js).
+# The page cannot touch the filesystem, so the host serves the store: a probe
+# names what exists, GET /__tess_cache/<key>.glb and the batch route read
+# exact objects, and POST /__tess_cache/produce has cadgen mesh, here, any
+# component the probe found missing. The page never tessellates.
 #
 # TRANSPORT: bulk bytes must NOT go through Playwright at all. CDP serializes
 # every fulfilled body as base64 over the devtools pipe at ~20 MB/s, which made
 # a warm moonwatch snapshot spend ~8s moving ~180 MB of surfs + cache entries.
 # Worse, INTERCEPTION alone costs the pipe in the other direction: a routed
 # request's body reaches the driver as escaped text in one protocol message, so
-# a 92 MB cache write-back exceeded Node's string limit and killed the renderer
-# (reported to the caller as a lost driver connection). A 307 to loopback
-# cannot save such a request — by then the body has already crossed.
+# a large body can exceed Node's string limit and kill the renderer (reported
+# to the caller as a lost driver connection). A 307 to loopback cannot save
+# such a request — by then the body has already crossed.
 #
 # So the renderer runs a loopback HTTP server and the page addresses it by its
 # ABSOLUTE origin for the cache (window.__cadgenSnapshotAssetOrigin, injected
@@ -1415,14 +1403,14 @@ def route_file(pathname: str, prefix: str, root: Path) -> Path:
 TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
 # The route's safe filename envelope. The store additionally requires the
 # current exact surface-input/algorithm/payload/binary64-tolerance key.
-TESS_CACHE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+_-]*\.tess$")
+TESS_CACHE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+_-]*\.glb$")
 
 
 def _tessellation_cache_key(pathname: str) -> str | None:
     name = str(pathname or "")[len(TESS_CACHE_ROUTE_PREFIX):]
     if not TESS_CACHE_NAME_PATTERN.fullmatch(name) or ".." in name:
         return None
-    return name[:-len(".tess")]
+    return name[:-len(".glb")]
 
 
 def read_tessellation_cache_entry(pathname: str, *, expected_object=None, max_bytes=None) -> bytes | None:
@@ -1433,7 +1421,6 @@ def read_tessellation_cache_entry(pathname: str, *, expected_object=None, max_by
     if key is None:
         return None
     try:
-        # A disabled cache (CADGEN_MESH_CACHE=0) answers None from the store itself.
         return read_tessellation_cache(
             key, expected_object=expected_object, max_bytes=max_bytes,
         )
@@ -1441,31 +1428,11 @@ def read_tessellation_cache_entry(pathname: str, *, expected_object=None, max_by
         return None
 
 
-def write_tessellation_cache_entry(pathname: str, body: bytes | None) -> bool:
-    """Best-effort write-back; False for an invalid or conflicting entry."""
-    return _write_tessellation_cache_entry_status(pathname, body) == 204
-
-
-def _write_tessellation_cache_entry_status(pathname: str, body: bytes | None) -> int:
-    key = _tessellation_cache_key(pathname)
-    if key is None:
-        return 403
-    if body:
-        from cadgen.store.meshes import MeshConflictError
-        from cadgen.store.tess_cache import write_tessellation_cache
-        try:
-            write_tessellation_cache(key, body)
-        except MeshConflictError:
-            return 409
-        except (ValueError, TypeError, KeyError, OverflowError, struct.error):
-            return 400
-    return 204
-
-
 # Probe small index facts, then request only admitted exact objects. The shared
-# TESB container stays unchanged; store.tess_cache owns both hosts' framing.
+# TESB container frames the bodies; store.tess_cache owns both hosts' framing.
 TESS_CACHE_BATCH_PATH = "/__tess_cache/batch"
 TESS_CACHE_PROBE_PATH = "/__tess_cache/probe"
+TESS_CACHE_PRODUCE_PATH = "/__tess_cache/produce"
 
 
 def read_tessellation_cache_batch(body: bytes | None) -> bytes | None:
@@ -1477,6 +1444,45 @@ def read_tessellation_cache_batch(body: bytes | None) -> bytes | None:
 
 RENDER_ASSET_ROUTE_PREFIX = "/__render_asset/"
 STORE_ASSET_ROUTE_PREFIX = "/__store_asset/"
+# A job's tube skins (``cadgen._internal.tube_skin_payload``), by content hash.
+TUBE_SKINS_ROUTE_PREFIX = "/__tube_skins/"
+_TUBE_SKINS_NAME = re.compile(r"^[0-9a-f]{64}\.glb$")
+# A robot's primitive meshes (``cadgen._internal.primitive_mesh``): store objects, by hash.
+ROBOT_MESH_ROUTE_PREFIX = "/__robot_mesh/"
+_ROBOT_MESH_NAME = re.compile(r"^[0-9a-f]{64}$")
+
+
+def robot_mesh_asset_url(digest: str) -> str:
+    """Where a snapshot page reads one of a robot's primitive meshes: the store object by hash."""
+    return f"{ROBOT_MESH_ROUTE_PREFIX}{digest}"
+
+
+@functools.lru_cache(maxsize=1)
+def _tube_skins_dir() -> Path:
+    """One directory per process for the tube skins its jobs resolved, removed at exit:
+    the page fetches them over the loopback asset server, which serves files."""
+    import atexit
+    import shutil
+    import tempfile
+
+    directory = Path(tempfile.mkdtemp(prefix="cadgen-tube-skins-"))
+    atexit.register(shutil.rmtree, directory, True)
+    return directory
+
+
+def tube_skins_asset_url(*, tree: str, document_hash: str, animation: object) -> str | None:
+    """Where a snapshot page reads a document's tube skins, written for it; None when
+    its animation bends no tube. Named by content, so jobs over one document share it."""
+    from cadgen._internal.tube_skin_payload import tube_skins_bytes
+
+    data = tube_skins_bytes(tree=tree, document_hash=document_hash, animation=animation)
+    if data is None:
+        return None
+    name = f"{sha256(data).hexdigest()}.glb"
+    path = _tube_skins_dir() / name
+    if not path.is_file():
+        write_bytes_atomic(path, data)
+    return f"{TUBE_SKINS_ROUTE_PREFIX}{name}"
 
 
 def _store_packages_root() -> Path:
@@ -1497,7 +1503,7 @@ class SnapshotAssetServer:
 
     Serves exactly two path families — ``/__render_asset/`` (files under the
     active render root, same containment rule as the CDP route for the page
-    itself) and ``/__tess_cache/`` (the shared tessellation cache) — to
+    itself) and ``/__tess_cache/`` (the store's component meshes) — to
     whatever origin the snapshot page runs as (CORS ``*``; the socket is
     loopback-only and serves only what the page may already read).
     ``root_provider`` is read per request so one server follows the renderer
@@ -1559,7 +1565,29 @@ class SnapshotAssetServer:
                     if body is None:
                         self._send(404, b"miss", "text/plain; charset=utf-8")
                         return
-                    self._send(200, body)
+                    self._send(200, body, "model/gltf-binary")
+                    return
+                if pathname.startswith(TUBE_SKINS_ROUTE_PREFIX):
+                    name = pathname[len(TUBE_SKINS_ROUTE_PREFIX):]
+                    file_path = _tube_skins_dir() / name
+                    if not _TUBE_SKINS_NAME.match(name) or not file_path.is_file():
+                        self._send(404, b"not found", "text/plain; charset=utf-8")
+                        return
+                    self._send(200, file_path.read_bytes(), "model/gltf-binary")
+                    return
+                if pathname.startswith(ROBOT_MESH_ROUTE_PREFIX):
+                    from cadgen.store.objects import read_verified_object
+
+                    name = pathname[len(ROBOT_MESH_ROUTE_PREFIX):]
+                    if not _ROBOT_MESH_NAME.match(name):
+                        self._send(404, b"not found", "text/plain; charset=utf-8")
+                        return
+                    try:
+                        body = read_verified_object(name)
+                    except (OSError, ValueError):
+                        self._send(404, b"not found", "text/plain; charset=utf-8")
+                        return
+                    self._send(200, body, "model/gltf-binary")
                     return
                 if pathname.startswith(STORE_ASSET_ROUTE_PREFIX):
                     try:
@@ -1604,8 +1632,11 @@ class SnapshotAssetServer:
                     self.close_connection = True
                     self._send(400)
                     return
-                maximum = TESS_CACHE_METADATA_MAX_BYTES if pathname in (TESS_CACHE_PROBE_PATH, TESS_CACHE_BATCH_PATH) else 256 * 1024 * 1024
-                if length > maximum:
+                if pathname not in (TESS_CACHE_PROBE_PATH, TESS_CACHE_BATCH_PATH, TESS_CACHE_PRODUCE_PATH):
+                    self.close_connection = True
+                    self._send(405, b"the store's meshes are read-only here", "text/plain; charset=utf-8")
+                    return
+                if length > TESS_CACHE_METADATA_MAX_BYTES:
                     self.close_connection = True
                     self._send(413, b"oversized cache request")
                     return
@@ -1626,7 +1657,17 @@ class SnapshotAssetServer:
                         return
                     self._send(200, batch)
                     return
-                self._send(_write_tessellation_cache_entry_status(pathname, body))
+                from cadgen.store.tess_cache import produce_tess_cache
+
+                try:
+                    result = produce_tess_cache(body)
+                except Exception as exc:  # noqa: BLE001 - the page reports why a mesh is missing
+                    self._send(500, f"cadgen could not mesh a component: {exc}".encode(), "text/plain; charset=utf-8")
+                    return
+                if result is None:
+                    self._send(400, b"bad tessellation produce request")
+                    return
+                self._send(200, json.dumps(result, separators=(",", ":")).encode(), "application/json")
 
         class Server(http.server.ThreadingHTTPServer):
             def server_bind(self) -> None:
@@ -2076,10 +2117,10 @@ def _browser_stage_timings(value: object) -> dict[str, object]:
     source_load = value.get("sourceLoad")
     if is_plain_object(source_load):
         measured = durations(source_load, (
-            "probeMs", "cacheReadMs", "cacheDecodeMs", "meshBuildMs", "surfaceReadMs",
-            "tessellateMs", "cacheWriteMs", "composeMs",
+            "probeMs", "produceMs", "cacheReadMs", "cacheDecodeMs", "meshBuildMs",
+            "meshReadMs", "composeMs",
         ))
-        for name in ("componentCount", "cacheBatchCount", "cacheHitCount", "cacheMissCount"):
+        for name in ("componentCount", "producedCount", "cacheBatchCount", "cacheHitCount", "cacheMissCount"):
             count = source_load.get(name)
             if type(count) is int and 0 <= count <= 2**53 - 1:
                 measured[name] = count
@@ -2099,6 +2140,78 @@ def _browser_stage_timings(value: object) -> dict[str, object]:
     if outputs:
         timings["outputs"] = outputs
     return timings
+
+
+def _python_outputs(job: Mapping[str, object]) -> tuple[list[dict[str, object]], dict[str, object] | None]:
+    """Split a job into the outputs Python writes itself and what is left for the page.
+
+    A section's SVG is written by cadgen (``cadgen.section_drawing``), so its
+    ``.svg`` outputs never reach a browser; the job that is left -- its PNGs, if it
+    has any -- is ``None`` when nothing does. Every other job goes to the page whole.
+    """
+    resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}
+    svg_path = resolved.get("sectionSvg")
+    if not svg_path:
+        return [], dict(job)
+    text = Path(str(svg_path)).read_text(encoding="utf-8")
+    written, drawn = [], []
+    for output in job.get("outputs") or []:
+        if str(output.get("path") or "").lower().endswith(".svg"):
+            written.append({"path": str(output["path"]), "mimeType": "image/svg+xml", "text": text})
+        else:
+            drawn.append(output)
+    page_resolved = {key: value for key, value in resolved.items() if key != "sectionSvg"}
+    return written, ({**job, "outputs": drawn, "resolved": page_resolved} if drawn else None)
+
+
+async def _render_job(renderer: "BatchSnapshotRenderer", job: Mapping[str, object]) -> dict[str, object]:
+    """One still job's result: what Python answered, merged with what the page drew.
+
+    A STEP list and a section's SVG are cadgen's alone; a job that needs nothing
+    drawn never reaches the renderer, so no browser starts for it.
+
+    Warnings cadgen raised while resolving the job (``resolved.warnings``) come
+    first; the outputs keep the order the job declared them in.
+    """
+    resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}
+    if isinstance(resolved.get("parts"), list):
+        # A STEP list is answered whole by cadgen (cadgen.snapshot_parts).
+        return {"ok": True, "mode": "list", "parts": list(resolved["parts"]),
+                "warnings": [str(warning) for warning in resolved.get("warnings") or []]}
+    written, page_job = _python_outputs(job)
+    if page_job is None:
+        result: dict[str, object] = {"ok": True, "mode": job.get("mode"), "outputs": [], "warnings": []}
+    else:
+        result = dict(await renderer.render(page_job))
+    if written:
+        by_path = {str(output.get("path")): output for output in [*written, *(result.get("outputs") or [])]}
+        result["outputs"] = [by_path[str(output.get("path"))] for output in job.get("outputs") or []
+                             if str(output.get("path")) in by_path]
+    warnings = [str(warning) for warning in resolved.get("warnings") or []]
+    if warnings:
+        result["warnings"] = [*warnings, *(result.get("warnings") or [])]
+    return result
+
+
+def _unmeshed_view_warnings(job: Mapping[str, object]) -> list[str]:
+    """A STEP view's warnings for the parts it drew without a face no mesher could cover
+    (``cadgen.snapshot_parts.unmeshed_warnings``): asked once the page has drawn, when
+    every mesh it drew is stored. A part the view hides is not one it drew."""
+    resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}
+    package = resolved.get("package")
+    if (str(resolved.get("kind") or "").lower() not in ("step", "stp") or not is_plain_object(package)
+            or not is_plain_object(package.get("descriptor")) or not is_plain_object(resolved.get("tessellation"))):
+        return []
+    from cadgen.assembly_lookup import assembly_occurrence_rows
+    from cadgen.snapshot_parts import filter_occurrences, unmeshed_warnings
+
+    selection = job.get("selection") if is_plain_object(job.get("selection")) else {}
+    descriptor = package["descriptor"]
+    try:
+        rows = filter_occurrences(assembly_occurrence_rows(descriptor, None), {"hide": selection.get("hide")})
+    except ValueError:
+        return []
+    return unmeshed_warnings(descriptor, rows, resolved["tessellation"], "the view does not draw {them}")
 
 
 async def render_resolved_job_packet(
@@ -2134,8 +2247,11 @@ async def render_resolved_job_packet(
                 report.phase(PHASE_RENDER, total=total, detail=str(job.get("input") or ""))
                 report.advance(index + 1)
             else:
-                result = await snapshot_renderer.render(job)
+                result = await _render_job(snapshot_renderer, job)
                 report.advance()
+            unmeshed = _unmeshed_view_warnings(job)
+            if unmeshed:
+                result = {**result, "warnings": [*(result.get("warnings") or []), *unmeshed]}
             # Keep resolution and measured browser work together under --debug.
             # The typed result otherwise intentionally drops browser internals.
             resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}

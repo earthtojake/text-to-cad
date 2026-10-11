@@ -12,8 +12,8 @@
 # this workflow with `full` when it finds no such run.
 #
 # Check names are the jobs' concerns: `core-js` tests packages/core, `web` tests
-# packages/ui and apps/web and drives the bundled viewer, `mcp` tests apps/mcp, `api` tests
-# apps/api. main requires Version Check, cadgen (Linux), cadgen (Windows), core-js, web,
+# packages/ui and apps/web, `mcp` tests apps/mcp, `api` tests apps/api, and `packaging`
+# builds what ships and runs it, the bundled viewer included. main requires Version Check, cadgen (Linux), cadgen (Windows), core-js, web,
 # skills, docs and packaging; not `mcp` or `api`.
 name: Test
 
@@ -239,15 +239,15 @@ jobs:
         run: scripts/test/test-js.sh --select core
 
 
-  # The client is platform-agnostic JS, so Linux only. The viewer steps serve the bundled
-  # client through the real backend and draw it in Playwright's Chromium, which is why a
-  # cadgen change runs them too, and why this job installs Python only for them.
+  # The client is platform-agnostic JS, so Linux only, and Node only: the bundled viewer,
+  # served through the real backend, is driven in `packaging`, which builds that bundle
+  # anyway (a second bundle here cost this job one to two minutes).
   web:
     name: web
     needs: changes
     if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -258,12 +258,10 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          # The launch smoke test drives Python Playwright's Chromium; the browser gates and
-          # the UI specs drive npm Playwright's.
-          python: ${{ needs.changes.outputs.web_viewer }}
-          playwright: ${{ needs.changes.outputs.web_viewer }}
-          npm: packages/core packages/ui apps/web apps/mcp
-          ui-browser: "true"
+          python: "false"
+          npm: packages/core packages/ui apps/web
+          # Only the UI's browser specs drive a browser; the client's tests are Node's.
+          ui-browser: ${{ needs.changes.outputs.web_ui }}
 
       - name: Run shared UI tests
         if: needs.changes.outputs.web_ui == 'true'
@@ -276,29 +274,6 @@ jobs:
       - name: Run the CAD Viewer client tests
         if: needs.changes.outputs.web_client == 'true'
         run: scripts/test/test-js.sh --select web
-
-      - name: Bundle production outputs
-        if: needs.changes.outputs.web_viewer == 'true'
-        run: scripts/bundle/bundle.sh
-
-      - name: Launch the bundled CAD Viewer through the backend
-        if: needs.changes.outputs.web_viewer == 'true'
-        run: scripts/test/test-viewer-launch.sh
-
-      - name: Exercise the bundled viewer in Chromium
-        if: needs.changes.outputs.web_viewer == 'true'
-        env:
-          VIEWER_TEST_DIAGNOSTICS_DIR: ${{ runner.temp }}/viewer-browser
-        run: scripts/test/test-viewer-browser.sh
-
-      - name: Upload failed viewer diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: viewer-browser-diagnostics
-          path: ${{ runner.temp }}/viewer-browser
-          if-no-files-found: ignore
-          retention-days: 3
 
   # The CAD app an agent host renders: its host adapter's units in jsdom, and the one-file
   # build it ships as (a build that would leave anything outside index.html fails).
@@ -448,8 +423,10 @@ jobs:
         run: scripts/test/test-docs.sh
 
   # The tree as it ships: the production bundle from clean, the published-tree contract,
-  # the wheel's package data, and the CLIs as a user gets them (pip-installed, outside
-  # this repo). Properties of the tree, not of an operating system, so Linux only.
+  # the wheel's package data, the CLIs as a user gets them (pip-installed, outside this
+  # repo), and -- when the change reaches it -- that bundle's viewer served through the real
+  # backend and drawn in Chromium. Properties of the tree, not of an operating system, so
+  # Linux only.
   packaging:
     name: packaging
     needs: changes
@@ -467,6 +444,9 @@ jobs:
         uses: ./.github/actions/setup-deps
         with:
           npm: packages/core packages/ui apps/web apps/mcp
+          # The launch smoke test drives Python Playwright's Chromium; the browser gates
+          # drive npm Playwright's.
+          ui-browser: ${{ needs.changes.outputs.web_viewer }}
 
       - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean
@@ -494,3 +474,24 @@ jobs:
           wheels=("$RUNNER_TEMP/cadgen-wheel-check/"*.whl)
           [ "${#wheels[@]}" -eq 1 ] || { echo "Expected one verified wheel" >&2; exit 1; }
           scripts/test/test-installed.sh --wheel "${wheels[0]}"
+
+      # The client the wheel ships, served by the backend from the bundle built above. After
+      # the wheel steps, so what they inspect is the tree as the bundle left it.
+      - name: Launch the bundled CAD Viewer through the backend
+        if: needs.changes.outputs.web_viewer == 'true'
+        run: scripts/test/test-viewer-launch.sh
+
+      - name: Exercise the bundled viewer in Chromium
+        if: needs.changes.outputs.web_viewer == 'true'
+        env:
+          VIEWER_TEST_DIAGNOSTICS_DIR: ${{ runner.temp }}/viewer-browser
+        run: scripts/test/test-viewer-browser.sh
+
+      - name: Upload failed viewer diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: viewer-browser-diagnostics
+          path: ${{ runner.temp }}/viewer-browser
+          if-no-files-found: ignore
+          retention-days: 3

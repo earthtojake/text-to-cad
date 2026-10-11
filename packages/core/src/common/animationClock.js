@@ -1,9 +1,10 @@
+import { isAnimationClip } from "./animationRuntime.js";
+
 // The animation TRANSPORT, shared by every client (viewer Animation tab,
 // the docs hero, any embed): which clip is active, where the clock
-// is, and how fast it runs. Choreography itself lives in the render module
-// embedded in the document sidecar, loaded by @text-to-cad/core/common/renderModule
-// and compiled by @text-to-cad/core/common/animationRuntime; this module owns only the
-// transport around it.
+// is, and how fast it runs. Choreography itself is the keyframes in the
+// document sidecar, loaded and interpolated by @text-to-cad/core/common/animationRuntime;
+// this module owns only the transport around it.
 //
 // Independence, restated in code: nothing here reads a step-module definition,
 // a DOF, or a pose preset. The Pose tab and the Animation tab share a model and
@@ -39,13 +40,14 @@ export function animationClipDuration(clip) {
   return Math.max(Number(clip?.duration) || 0, 0.001);
 }
 
-/** Compiled clips (an id -> clip record map) as an ordered list for the UI. */
+/** Loaded clips (an id -> clip record map) as a list in declared order, for the UI. */
 export function animationClipList(clips) {
   if (!clips || typeof clips !== "object") {
     return [];
   }
   return Object.values(clips)
-    .filter((clip) => clip && typeof clip.update === "function")
+    .filter(isAnimationClip)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .map((clip) => ({
       id: String(clip.id),
       label: String(clip.label || clip.id),
@@ -65,7 +67,7 @@ export function findAnimationClip(clips, clipId) {
     return null;
   }
   const clip = clips[id];
-  return clip && typeof clip.update === "function" ? clip : null;
+  return isAnimationClip(clip) ? clip : null;
 }
 
 /** The clip the transport opens on: a model's first declared clip. */
@@ -107,7 +109,7 @@ export function resolveAnimationFrame(clips, request) {
  * zero. Selecting a clip is not the same act as running one, so the gate and the
  * selection are separate fields — `enabled` says whether the clip drives the
  * model, `playing` only says whether the clock is moving. Called before the
- * clips compile (the file-switch reset), `clips` is absent and the selection is
+ * clips load (the file-switch reset), `clips` is absent and the selection is
  * empty until the load effect restores against the real ones.
  *
  * The gate opens with the model, which is a deliberate reversal of what the
@@ -143,12 +145,12 @@ export function buildDefaultAnimationState(clips) {
  *
  *   - NO selection recorded (`activeClipId: ""`). That is not a legacy
  *     sentinel — it is the state this module still returns before a model's
- *     clips compile, so the file-switch reset writes it and the debounced
+ *     clips load, so the file-switch reset writes it and the debounced
  *     session save can persist it. It says nothing about the gate, so the model
  *     opens exactly as it would with no stored session at all: first clip,
  *     gate as recorded (on, for a slice written before the gate existed).
  *   - A selection this model NO LONGER SHIPS (a renamed or deleted clip, with
- *     other clips still compiled). That selection died: fall back to the first
+ *     other clips still loaded). That selection died: fall back to the first
  *     clip with the gate OFF, so the picker stays legible without the model
  *     silently animating something the user never picked. */
 export function restoreAnimationState(stored, clips) {

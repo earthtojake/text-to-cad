@@ -88,8 +88,10 @@ function acceptedPackage(count = 1) {
   const client = Object.assign(fixtureClient, { requestSurfaces: vi.fn(async request => ({
     viewId: request.viewId, components: Object.fromEntries(request.components.map(({ cid, surfaceInput }) => {
       const surfaceObject = identities[cid].surfaceObject;
+      const table = digest(2000);
       return [cid, { state: 'ready', surfaceInput, surfaceObject, byteLength: 64,
-        url: `/__cad/store?tree=${request.tree}&surfaceInput=${surfaceInput}&object=${surfaceObject}` }];
+        url: `/__cad/store?tree=${request.tree}&surfaceInput=${surfaceInput}&object=${surfaceObject}`,
+        selectors: { object: table, byteLength: 64, url: `/__cad/store?tree=${request.tree}&surfaceInput=${surfaceInput}&object=${table}` } }];
     })),
   })) });
   expect(completedPackages.set(client, entry, context)).toBe(true);
@@ -215,7 +217,8 @@ it('resolves an unknown exact object before reuse and misses when that object ch
   const client = Object.assign(createCadClient({ origin: 'http://viewer.test' }), { requestSurfaces: vi.fn(async () => ({
     viewId: descriptor.viewId, components: { c: { state: 'ready', surfaceInput: digest(103),
       surfaceObject: object, byteLength: 64,
-      url: `/__cad/store?tree=${descriptor.tree}&surfaceInput=${digest(103)}&object=${object}` } },
+      url: `/__cad/store?tree=${descriptor.tree}&surfaceInput=${digest(103)}&object=${object}`,
+      selectors: { object: digest(2000), byteLength: 64, url: `/__cad/store?tree=${descriptor.tree}&surfaceInput=${digest(103)}&object=${digest(2000)}` } } },
   })) });
   const first = renderHook(() => useModelingRecognition(urls.a, true, { client }));
   await respond({ tree }, 0);

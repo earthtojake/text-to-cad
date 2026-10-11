@@ -1,3 +1,6 @@
+import math
+
+import cadgen
 from cadgen import build123d as bd, step, label_shape, srgb
 
 MATERIALS = {
@@ -15,10 +18,11 @@ KINEMATICS = {
                "axis": {"origin": [0,0,10], "dir": [0,0,1]}, "limits": [-80,80]}],
     "poses": {"open": {"swing": 45}},
 }
-ANIMATION = r"""export const clips = { demo: {
-    label: "Turn shaft", duration: 4, loop: true,
-    update(t, m) { m.get("shaft").translate([0,0,8*Math.sin(Math.PI*t/2)]); }
-}};"""
+def _lift_shaft(t, m):
+    m.get("#shaft").translate((0, 0, 8 * math.sin(math.pi * t / 2)))
+
+
+ANIMATION = {"demo": cadgen.clip(_lift_shaft, duration=4, label="Turn shaft")}
 
 @step(materials=MATERIALS, kinematics=KINEMATICS, animation=ANIMATION)
 def annotation_fixture():

@@ -1,4 +1,5 @@
 import { viewerOriginUrl } from "./origin.js";
+import { tessellationCacheKey, tessellationQuality, validateTessellationProbeRow } from "../lib/surf/tessellationCache.js";
 const DIGEST_RE = /^[0-9a-f]{64}$/;
 const INITIAL_POLL_MS = 80;
 const MAX_POLL_MS = 640;
@@ -44,7 +45,7 @@ async function guardedPost(path, body, { signal, client }) {
     : client.requestSurfaces(body, { signal });
 }
 
-function verifiedReadyRow(row, { tree, cid, surfaceInput, client }) {
+function verifiedReadyRow(row, { tree, cid, surfaceInput, client, tessellation }) {
   if (!row || row.state !== "ready" || row.surfaceInput !== surfaceInput) {
     throw new Error(`Surface response changed the immutable input for ${cid}`);
   }
@@ -60,11 +61,40 @@ function verifiedReadyRow(row, { tree, cid, surfaceInput, client }) {
       || parsed.searchParams.get("object") !== surfaceObject) {
     throw new Error(`Surface response has an invalid immutable URL for ${cid}`);
   }
+  // The component's selector table (cadgen's, derived with the surface): the same store route,
+  // bound to the same input, naming the table's object.
+  const selectors = row.selectors;
+  const selectorsObject = digest(selectors?.object, `selector table object for ${cid}`);
+  const selectorsByteLength = Number(selectors?.byteLength);
+  if (!Number.isSafeInteger(selectorsByteLength) || selectorsByteLength <= 0) {
+    throw new Error(`Surface response has an invalid selector table byte length for ${cid}`);
+  }
+  const selectorsParsed = new URL(String(selectors?.url || ""), "http://cad-viewer.local");
+  if (selectorsParsed.origin !== "http://cad-viewer.local" || selectorsParsed.pathname !== "/__cad/store"
+      || selectorsParsed.searchParams.get("tree") !== tree
+      || selectorsParsed.searchParams.get("surfaceInput") !== surfaceInput
+      || selectorsParsed.searchParams.get("object") !== selectorsObject) {
+    throw new Error(`Surface response has an invalid selector table URL for ${cid}`);
+  }
+  // A request that named a tessellation is ready only with that mesh stored: its row is the
+  // probe row a read of the mesh store would answer.
+  let mesh = null;
+  if (tessellation) {
+    mesh = validateTessellationProbeRow(row.mesh, {
+      tessellationInput: tessellationCacheKey(surfaceInput, tessellation), surfaceInput, surfaceObject,
+    });
+    if (!mesh) throw new Error(`Surface response has no valid mesh for ${cid}`);
+  }
+  const url = (location) => (client ? viewerOriginUrl(client.origin, `${location.pathname}${location.search}`) : `${location.pathname}${location.search}`);
   return Object.freeze({
     surfaceInput,
     surfaceObject,
-    surfUrl: client ? viewerOriginUrl(client.origin, `${parsed.pathname}${parsed.search}`) : `${parsed.pathname}${parsed.search}`,
+    surfUrl: url(parsed),
     byteLength,
+    selectorsObject,
+    selectorsUrl: url(selectorsParsed),
+    selectorsByteLength,
+    ...(mesh ? { mesh } : {}),
   });
 }
 
@@ -93,19 +123,33 @@ export class SurfaceResolutionError extends Error {
 }
 
 /**
- * Resolve exact SURF objects for one frozen runtime view. A fully warm TESS
+ * Resolve exact SURF objects for one frozen runtime view. A fully warm mesh
  * path does not call this function. The request never computes D or producer
  * identity in JavaScript; it forwards the backend-prepared opaque pins.
+ *
+ * `tessellation`, when given, also asks for every component's mesh at those
+ * tolerances (`{}` is the default pair): cadgen meshes what its store lacks,
+ * and each ticket carries the mesh's probe row (`mesh`), so its body is read
+ * next without another probe.
  *
  * `onReady(cid, ticket)`, when given, hears each component the moment its row is
  * ready, once, while the request goes on waiting for the rest of its components:
  * a caller that asked for many need not hold the first behind the last.
+ *
+ * `onFailed(cid, error)`, when given, hears each component cadgen could not derive
+ * or mesh, once, with its own error, and the request goes on for the rest: it
+ * resolves with the ready ones. Without it, a failed component fails the request,
+ * once every ready row of the response that names it has been announced.
+ *
+ * `onPending(cid)`, when given, hears a component cadgen is still deriving (its
+ * surface or mesh was not in the store), on every answer that says so: what a
+ * loading screen needs to say it is meshing rather than reading.
  */
-export async function resolveSurfaceComponents(descriptor, requested, { signal, client, onReady = null } = {}) {
+export async function resolveSurfaceComponents(descriptor, requested, { signal, client, onReady = null, onFailed = null, onPending = null, tessellation = undefined } = {}) {
   if (!client) throw new TypeError("Surface resolution requires a CAD workspace service");
   const list = Array.isArray(requested) ? requested : [];
   if (list.length <= SURFACE_REQUEST_MAX_COMPONENTS) {
-    return resolveSurfaceRequest(descriptor, list, { signal, client, onReady });
+    return resolveSurfaceRequest(descriptor, list, { signal, client, onReady, onFailed, onPending, tessellation });
   }
   // Every chunk is its own request (and subscriber job); one failing stops the others.
   const controller = new AbortController();
@@ -118,7 +162,7 @@ export async function resolveSurfaceComponents(descriptor, requested, { signal, 
       chunks.push(list.slice(start, start + SURFACE_REQUEST_MAX_COMPONENTS));
     }
     const results = await Promise.all(chunks.map((chunk) => (
-      resolveSurfaceRequest(descriptor, chunk, { signal: controller.signal, client, onReady }).catch((error) => {
+      resolveSurfaceRequest(descriptor, chunk, { signal: controller.signal, client, onReady, onFailed, onPending, tessellation }).catch((error) => {
         controller.abort();
         throw error;
       })
@@ -141,7 +185,7 @@ function subscriberToken(payload) {
   return String(rows.find((row) => row?.job)?.job || "");
 }
 
-async function resolveSurfaceRequest(descriptor, requested, { signal, client, onReady = null }) {
+async function resolveSurfaceRequest(descriptor, requested, { signal, client, onReady = null, onFailed = null, onPending = null, tessellation = undefined }) {
   const tree = digest(descriptor?.tree, "surface tree");
   const viewId = digest(descriptor?.viewId, "surface viewId");
   const producer = descriptor?.surfaceProducer;
@@ -157,7 +201,11 @@ async function resolveSurfaceRequest(descriptor, requested, { signal, client, on
     throw new TypeError("surface request must name at least one component");
   }
 
-  const base = { tree, viewId, producer, components };
+  // The pair the server keys the mesh by: both tolerances, as the request names them.
+  const quality = tessellation == null ? null : tessellationQuality(tessellation);
+  const meshTessellation = quality
+    ? { chordTolerance: quality.chordTolerance, angleTolerance: quality.angleTolerance } : null;
+  const base = { tree, viewId, producer, components, ...(meshTessellation ? { tessellation: meshTessellation } : {}) };
   let job = "";
   let cancelled = false;
   const cancel = () => {
@@ -169,6 +217,9 @@ async function resolveSurfaceRequest(descriptor, requested, { signal, client, on
   let delay = INITIAL_POLL_MS;
   const startedAt = Date.now();
   const announced = new Set();
+  // Each component settles on its own: one cadgen could not derive or mesh fails alone, with its
+  // own error, and stays failed for the rest of the request.
+  const failed = new Map();
   try {
     for (;;) {
       if (signal?.aborted) throw abortError();
@@ -199,23 +250,28 @@ async function resolveSurfaceRequest(descriptor, requested, { signal, client, on
       const ready = new Map();
       let pending = false;
       for (const request of components) {
+        if (failed.has(request.cid)) continue;
         const row = payload.components[request.cid];
         if (!row || row.surfaceInput !== request.surfaceInput) {
           throw new Error(`Surface response omitted ${request.cid}`);
         }
         if (row.state === "failed") {
-          throw new SurfaceResolutionError(String(row.error || `Surface derivation failed for ${request.cid}`), {
+          const error = new SurfaceResolutionError(String(row.error || `Surface derivation failed for ${request.cid}`), {
             code: String(row.code || ""), cid: request.cid,
           });
+          failed.set(request.cid, error);
+          onFailed?.(request.cid, error);
+          continue;
         }
         if (row.state === "pending") {
           const rowJob = String(row.job || job || "");
           if (!rowJob || (job && rowJob !== job)) throw new Error("Surface response has an invalid subscriber token");
           job = rowJob;
           pending = true;
+          onPending?.(request.cid);
           continue;
         }
-        const ticket = verifiedReadyRow(row, { tree, ...request, client });
+        const ticket = verifiedReadyRow(row, { tree, ...request, client, tessellation: meshTessellation });
         if (request.expectedSurfaceObject && ticket.surfaceObject !== request.expectedSurfaceObject) {
           throw new Error(`Surface response changed the pinned object for ${request.cid}`);
         }
@@ -225,6 +281,8 @@ async function resolveSurfaceRequest(descriptor, requested, { signal, client, on
           onReady(request.cid, ticket);
         }
       }
+      // A caller that hears no failures one by one is told of the first, as the request's.
+      if (failed.size && !onFailed) throw failed.values().next().value;
       if (!pending) return ready;
       await waitForPoll(delay, signal);
       // Doubling to 640 ms hears an ordinary derivation soon after it lands. One still pending after

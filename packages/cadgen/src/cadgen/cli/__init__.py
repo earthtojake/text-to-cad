@@ -39,7 +39,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # and the viewer compile on demand, so no skill documentation names it.
     "step build": (
         "cadgen.cli.step_build",
-        "re-emit a STEP as a new one; can add kinematics, materials, animation",
+        "re-emit a STEP as a new one; can add kinematics and materials",
     ),
     "step compile": ("cadgen.cli.step_compile", "make a STEP's tree current"),
     "step snapshot": ("cadgen.cli.step_snapshot", "render a STEP model to an image"),
@@ -109,8 +109,8 @@ def read_skill_pin(skill_path) -> str | None:
 # happen BEFORE the command's module is imported -- which is why it lives here in dispatch
 # rather than inside each command.
 #
-# Snapshot orchestration stays in the caller. Its document compilation and
-# missing surfaces already use the build pool; rendering needs no kernel.
+# Snapshot orchestration stays in the caller. Its document compilation, missing
+# surfaces and missing meshes use the build pool; rendering needs no kernel.
 #
 # ONE table: a tool's name is its command with the space dashed, and its module is
 # the command's own (`_COMMANDS`). The daemon derives what it may import from here

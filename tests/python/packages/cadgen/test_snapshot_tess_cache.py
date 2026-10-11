@@ -1,8 +1,9 @@
-"""The snapshot host's side of the shared component-tessellation cache.
+"""The snapshot host's side of the store's component meshes.
 
-The page and the export CLI share the immutable object/index store. Payloads
-are TESS v4 with exact input, surface and quality identity. Probes return small
-metadata before admitted body reads, and batch responses have a fixed byte cap.
+The page draws the meshes cadgen stores, the ones the viewer and mesh exports
+use: GLB bodies with exact input, surface and quality identity. Probes return small
+metadata before admitted body reads, batch responses have a fixed byte cap, and
+the host meshes on request what a probe found missing; the page never writes.
 """
 
 from __future__ import annotations
@@ -19,15 +20,17 @@ from unittest import mock
 from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
+from tests.python.support.inline_artifacts import inline_artifacts
 from tests.python.support.tessellation import tessellation_fixture
 from tests.python.support.tmp_root import generated_cad_directory
 
 FIXTURE = tessellation_fixture()
 PAYLOAD = base64.b64decode(FIXTURE["bytes"])
-NAME = FIXTURE["key"] + ".tess"
+NAME = FIXTURE["key"] + ".glb"
 ADMITTED = {"tessellationInput": FIXTURE["key"], "object": FIXTURE["facts"]["object"], "maxBytes": len(PAYLOAD)}
 ADMISSION_QUERY = f"?object={ADMITTED['object']}&maxBytes={ADMITTED['maxBytes']}"
 
+from cadgen.tessellation_policy import snapshot_tessellation  # noqa: E402
 from cadgen.snapshot_core import (  # noqa: E402
     BatchSnapshotRenderer,
     SnapshotError,
@@ -37,8 +40,8 @@ from cadgen.snapshot_core import (  # noqa: E402
     _write_http_body,
     read_tessellation_cache_batch,
     read_tessellation_cache_entry,
-    write_tessellation_cache_entry,
 )
+from cadgen.store import meshes  # noqa: E402
 from cadgen.assets import browser_runtime_dir  # noqa: E402
 # The TESB framing is the store's; the snapshot host only routes to it.
 from cadgen.store.tess_cache import TESS_CACHE_BATCH_MAGIC, TESS_CACHE_BATCH_VERSION  # noqa: E402
@@ -174,19 +177,43 @@ class SnapshotAssetServerTests(unittest.TestCase):
         status, _, _ = self.request("GET", "/__render_asset/inside.step")
         self.assertEqual(status, 404)
 
-    def test_tess_cache_round_trip_and_preflight(self) -> None:
+    def test_tess_cache_reads_and_preflight_and_no_writes(self) -> None:
         name = NAME
         status, _, _ = self.request("GET", f"{TESS_CACHE_ROUTE_PREFIX}{name}{ADMISSION_QUERY}")
         self.assertEqual(status, 404)
         status, _, _ = self.request("POST", f"{TESS_CACHE_ROUTE_PREFIX}{name}", PAYLOAD)
-        self.assertEqual(status, 204)
+        self.assertEqual(status, 405, "the page never writes a mesh")
+        self.assertIsNone(meshes.probe(FIXTURE["key"]))
+        meshes.write(FIXTURE["key"], PAYLOAD)
         status, body, _ = self.request("GET", f"{TESS_CACHE_ROUTE_PREFIX}{name}{ADMISSION_QUERY}")
         self.assertEqual((status, body), (200, PAYLOAD))
-        status, _, _ = self.request("POST", f"{TESS_CACHE_ROUTE_PREFIX}%2e%2e/escape.tess", b"x")
-        self.assertEqual(status, 403)
         status, _, headers = self.request("OPTIONS", f"{TESS_CACHE_ROUTE_PREFIX}{name}")
         self.assertEqual(status, 204)
         self.assertIn("POST", headers.get("access-control-allow-methods", ""))
+
+    def test_produce_route_meshes_a_derived_surface_and_reports_why_it_cannot(self) -> None:
+        import json
+
+        from build123d import Box
+        from cadgen.store import surfaces
+        from cadgen.store.build import build_tree_from_compound
+
+        tree, descriptor, _ = build_tree_from_compound(Box(4, 5, 6), root_name="block")
+        producer = surfaces.producer_identity()
+        surfaces.derive(tree, producer=producer)
+        [entry] = descriptor["components"].values()
+        key = meshes.tessellation_key(surfaces.surface_input(entry, producer))
+        produce = json.dumps({"tessellationInputs": [key]}).encode()
+        with inline_artifacts():
+            with mock.patch("cadgen.store.surfaces.produce_meshes", side_effect=ValueError("OCCT did not mesh 1 face(s)")):
+                status, body, _ = self.request("POST", "/__tess_cache/produce", produce)
+            self.assertEqual(status, 500)
+            self.assertIn(b"OCCT did not mesh 1 face(s)", body)
+            status, body, _ = self.request("POST", "/__tess_cache/produce", produce)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["entries"], {key: meshes.probe(key)})
+        status, _, _ = self.request("POST", "/__tess_cache/produce", b"not json")
+        self.assertEqual(status, 400)
 
     def test_unadmitted_reads_never_reach_the_cache(self) -> None:
         from urllib.parse import urlencode
@@ -228,9 +255,7 @@ class SnapshotAssetServerTests(unittest.TestCase):
     def test_batch_route_round_trip(self) -> None:
         import json
 
-        name = NAME
-        status, _, _ = self.request("POST", f"{TESS_CACHE_ROUTE_PREFIX}{name}", PAYLOAD)
-        self.assertEqual(status, 204)
+        meshes.write(FIXTURE["key"], PAYLOAD)
         body = json.dumps({"entries": [ADMITTED, {**ADMITTED, "object": "f" * 64}]}).encode()
         status, response, _ = self.request("POST", TESS_CACHE_BATCH_PATH, body)
         self.assertEqual(status, 200)
@@ -240,35 +265,31 @@ class SnapshotAssetServerTests(unittest.TestCase):
 
 
 class SnapshotBrowserTessCacheIntegrationTest(unittest.TestCase):
-    """The real snapshot page must adopt what its real HTTP provider writes."""
+    """The real snapshot page draws the meshes the build pool makes for its host."""
 
-    def test_cold_surface_write_is_a_warm_hit_after_the_surface_is_gone(self) -> None:
-        repo = Path(__file__).resolve().parents[4]
-        surface_bytes = (
-            repo / "packages/core/src/lib/surf/fixtures/cam_follower_roller.surf"
-        ).read_bytes()
-
+    def test_a_cold_render_has_the_build_pool_mesh_and_a_warm_one_reads_that_mesh(self) -> None:
         async def exercise(root: Path) -> None:
+            from build123d import Box, Cylinder
+            from cadgen.store import surfaces
+            from cadgen.store.build import build_tree_from_compound
+
+            tree, geometry, _ = build_tree_from_compound(Box(20, 20, 10) - Cylinder(4, 10), root_name="bored")
+            producer = surfaces.producer_identity()
+            [(cid, entry)] = geometry["components"].items()
+            [record] = surfaces.derive(tree, producer=producer).values()
             asset_root = root / "assets"
             asset_root.mkdir()
-            surface_path = asset_root / "roller.surf"
-            surface_path.write_bytes(surface_bytes)
-            surface_input = "d" * 64
-            surface_object = hashlib.sha256(surface_bytes).hexdigest()
             descriptor = {
                 "kind": "assembly-package",
-                "components": {"roller": {
-                    "surfaceInput": surface_input,
-                    "surfaceObject": surface_object,
-                }},
+                "components": {cid: {"surfaceInput": record["surfaceInput"], "surfaceObject": record["object"]}},
                 "occurrences": [{
-                    "id": "o1.1", "name": "roller", "component": "roller",
+                    "id": "o1.1", "name": "part", "component": cid,
                     "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
                 }],
                 "assembly": {"root": {
                     "id": "o1", "name": "fixture", "nodeType": "assembly",
                     "children": [{
-                        "id": "o1.1", "name": "roller", "nodeType": "part", "children": [],
+                        "id": "o1.1", "name": "part", "nodeType": "part", "children": [],
                     }],
                 }},
             }
@@ -277,18 +298,25 @@ class SnapshotBrowserTessCacheIntegrationTest(unittest.TestCase):
                 "resolved": {
                     "kind": "step",
                     "rootPath": str(asset_root),
+                    # The tolerances the page draws at are cadgen's, named in the job.
+                    "tessellation": snapshot_tessellation({}),
                     "package": {
                         "descriptor": descriptor,
-                        "componentUrls": {"roller": "/__render_asset/roller.surf"},
+                        # Nothing serves a surf here: the page draws only the stored mesh.
+                        "componentUrls": {cid: "/__render_asset/part.surf"},
                     },
                 },
                 "outputs": [{
                     "path": str(root / "out.png"), "width": 64, "height": 64, "camera": "iso",
                 }],
             }
+            mesh_index = root / "cache/index/mesh"
+            self.assertFalse(mesh_index.exists(), "deriving the surface meshed nothing")
             renderer = BatchSnapshotRenderer(browser_runtime_dir(None))
             try:
-                cold = await renderer.render(job)
+                with mock.patch("cadgen.store.surfaces.produce_meshes",
+                                side_effect=AssertionError("the host meshed in its own process")):
+                    cold = await renderer.render(job)
                 self.assertTrue(cold["ok"])
                 self.assertEqual(
                     {"secure": True, "subtle": True},
@@ -296,22 +324,21 @@ class SnapshotBrowserTessCacheIntegrationTest(unittest.TestCase):
                         "({secure: isSecureContext, subtle: !!globalThis.crypto?.subtle})"
                     ),
                 )
-                mesh_entries = list((root / "cache/index/mesh").iterdir())
-                self.assertEqual(len(mesh_entries), 1)
-                cached_index = mesh_entries[0].read_bytes()
-
-                # A warm success now proves the browser read the exact persisted
-                # TESS body: the only SURF URL the fallback could use is gone.
-                surface_path.unlink()
-                warm = await renderer.render(job)
+                mesh_entries = list(mesh_index.iterdir())
+                self.assertEqual(len(mesh_entries), 1, "the build pool meshed the one component the page asked for")
+                stored = mesh_entries[0].read_bytes()
+                with mock.patch("cadgen.daemon.artifacts.submit_artifact",
+                                side_effect=AssertionError("a stored mesh is asked for nothing")):
+                    warm = await renderer.render(job)
                 self.assertTrue(warm["ok"])
-                self.assertEqual(mesh_entries[0].read_bytes(), cached_index)
+                self.assertEqual([path.read_bytes() for path in mesh_index.iterdir()], [stored])
             finally:
                 await renderer.close()
 
         with generated_cad_directory(prefix="snapshot-browser-cache-") as temporary:
             root = Path(temporary).resolve()
-            with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(root / "cache")}):
+            # A one-shot build-pool worker meshes for the page, as it does wherever no daemon runs.
+            with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(root / "cache"), "CADGEN_DAEMON": "0"}):
                 asyncio.run(exercise(root))
 
 

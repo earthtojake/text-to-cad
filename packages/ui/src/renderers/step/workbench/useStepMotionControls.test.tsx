@@ -5,13 +5,16 @@ import { animationRenderFrame, buildDefaultAnimationState, findAnimationClip } f
 import { AnimationClockProvider, createAnimationClock } from '../../../../dist/renderers/step/workbench/animationClockStore.js';
 import { useStepMotionControls } from '../../../../dist/renderers/step/workbench/useStepMotionControls.js';
 
-const parameters = [
-  { id: 'hinge', type: 'number', defaultValue: 5, min: -90, max: 90 },
-  { id: 'slide', type: 'number', defaultValue: 2, min: 0, max: 100 },
-];
-const definition = { parameters, parameterMap: Object.fromEntries(parameters.map(p => [p.id, p])),
-  defaultParameterValues: { hinge: 5, slide: 2 }, manifest: { poses: { open: { hinge: 80 }, closed: { hinge: -20, slide: 7 } } } };
-const clips = { turn: { id: 'turn', duration: 4, loop: true, update() {} }, close: { id: 'close', duration: 2, loop: false, update() {} } };
+// The definition as the motion hook holds it: cadgen's articulation, two controls with rest values.
+const definition = { url: '/hinge.step.json', articulation: { schemaVersion: 2,
+  controls: [
+    { id: 'hinge', label: 'hinge', unit: 'deg', min: -90, max: 90, default: 5 },
+    { id: 'slide', label: 'slide', unit: 'mm', min: 0, max: 100, default: 2 },
+  ],
+  joints: [], carries: {}, handles: [],
+  poses: { open: { hinge: 80 }, closed: { hinge: -20, slide: 7 } }, opening: { hinge: 5, slide: 2 },
+}, defaultParameterValues: { hinge: 5, slide: 2 } };
+const clips = { turn: { id: 'turn', duration: 4, loop: true, tracks: [] }, close: { id: 'close', duration: 2, loop: false, tracks: [] } };
 let frames: Map<number, FrameRequestCallback>;
 beforeEach(() => {
   frames = new Map(); let id = 0;
@@ -42,7 +45,7 @@ function setup(initialClips: any = clips) {
   return { ...hook, clock };
 }
 
-// The transport preferences Animate's panel sets: not the defaults, so keeping them shows.
+// The transport preferences the Animation tool and preview set: not the defaults, so keeping them shows.
 const preferences = { activeClipId: 'close', speed: 2, loopEnabled: true };
 const pickPreferences = (result: any) => act(() => {
   result.current.handleAnimationClipSelect('close'); result.current.handleAnimationSpeedChange(2); result.current.handleAnimationLoopToggle(true);
@@ -66,7 +69,7 @@ it('a parameter edit stops live playback, keeps its transport preferences, reset
   expect(result.current.animation).toEqual({ ...preferences, enabled: true, playing: true, elapsedSec: 0 });
 });
 
-it('leaving Animate for another tool keeps the transport preferences too', () => {
+it('leaving Animation for another tool keeps the transport preferences too', () => {
   const { result, clock } = setup();
   pickPreferences(result);
   act(() => result.current.handleAnimationPlayToggle()); advance();
@@ -136,7 +139,7 @@ it.each(['playback', 'position'])('global motion reset clears %s and all pending
   act(() => stale.forEach(frame => frame(performance.now() + 500)));
   expect(result.current.values).toEqual(definition.defaultParameterValues);
   expect(result.current.pose).toBe(''); expect(result.current.frame).toBeNull();
-  // Reset is Position's: it puts the model at rest and stops the routine, and leaves Animate's
+  // Reset is Position's: it puts the model at rest and stops the routine, and leaves the routine's
   // transport preferences as the person set them.
   expect(result.current.animation).toEqual({ ...(state === 'playback' ? preferences : buildDefaultAnimationState(clips)),
     enabled: false, playing: false, elapsedSec: 0 });
@@ -197,7 +200,7 @@ it('a routine puts Position aside while it plays and gives it back when the pose
   expect(result.current.values, 'a routine plays from the model at rest').toEqual(definition.defaultParameterValues);
   act(() => { result.current.handleAnimationScrub(1); result.current.handleAnimationPlayToggle(); });
   act(() => result.current.releaseAnimation());
-  expect(result.current.values, 'leaving Animate restores what Position had set').toEqual({ hinge: 45, slide: 2 });
+  expect(result.current.values, 'leaving Animation restores what Position had set').toEqual({ hinge: 45, slide: 2 });
   expect(result.current.animation.enabled).toBe(false);
   // Handing the pose back by touching Position starts from Position's values too.
   act(() => result.current.handleAnimationPlayToggle());

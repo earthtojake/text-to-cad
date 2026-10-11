@@ -22,7 +22,7 @@
 | drivetrain_ancillaries.py | STEP/drivetrain_ancillaries.step | hardware bolted to the casing (linked by `drivetrain.py`) |
 | rear_structure.py | STEP/rear_structure.step | rear impact structure, pickup carriers, pylon pad, rear light (linked by `drivetrain.py`) |
 | rear_wing.py | STEP/rear_wing.step | `#o1.15` rear wing mainplane + endplates |
-| drs_flap.py | STEP/drs_flap.step | `#o1.16` DRS flap (rotates through `ANIMATION_JS` in `f1.py`) |
+| drs_flap.py | STEP/drs_flap.step | `#o1.16` DRS flap (rotates through the `ANIMATION` clips in `f1.py`) |
 | drs_actuator.py | STEP/drs_actuator.step | `#o1.17` DRS actuator four-bar |
 | beam_wing.py | STEP/beam_wing.step | `#o1.18` beam wing |
 | suspension_front.py | STEP/suspension_front.step | `#o1.19` front suspension |
@@ -49,16 +49,18 @@ four-bar and the material palette; `lib/surfaces.py` is the shared surface
 vocabulary (airfoil family, blade family, body lofts) every part module builds
 from, so the car has ONE surface language.
 
-OCCURRENCE ORDER IS FROZEN — `ANIMATION_JS` in `f1.py` addresses children as `#o1.N` in the
+OCCURRENCE ORDER IS FROZEN — the `ANIMATION` clips in `f1.py` address children as `#o1.N` in the
 order `assemble()` adds them — one sibling model per row. The table lives in `f1.py`'s docstring; do not
 reorder, insert or remove a child without updating both in the same change.
 
 No `kinematics=`: both of this car's mechanisms are CLOSED LOOPS (the DRS is a
 planar four-bar, the steering solves each wheel against a fixed-length track
 rod), and typed mates evaluate pure forward kinematics on a TREE. Both solves
-live in `f1.py`'s embedded `ANIMATION_JS`, which also owns the teardown. Clips:
-`showcase` (the loop-closed timeline: car opens, engine stands alone, engine
-opens, both reassemble), `drs`, `steering`, `teardown`, `engine`.
+live in `f1.py`'s `ANIMATION` clips, which also own the teardown; they read
+their hardpoints from `lib/spec.py` and are baked to keyframes in the car's
+sidecar when it builds. Clips: `showcase` (the loop-closed timeline: car opens,
+engine stands alone, engine opens, both reassemble), `drs`, `steering`,
+`teardown`, `engine`.
 
 `../f1_stage.appearance.json` is the presentation stage (authored config, not
 an artifact) — a cool key from high front-left, a hot rim from behind-right,

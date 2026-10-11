@@ -1,6 +1,5 @@
 """Export ledgers retain the document selection that supplied their geometry."""
 
-import contextlib
 import hashlib
 import json
 import os
@@ -13,65 +12,57 @@ from tests.python.support.tmp_root import generated_cad_directory
 
 
 class MeshDocumentSnapshotTests(unittest.TestCase):
-    def test_animation_source_is_pinned_before_mesh_preparation_and_ledgers_those_bytes(self):
+    def test_animation_keyframes_are_pinned_before_mesh_preparation_and_ledgers_those_bytes(self):
         from cadgen import step_export_target as door
         from cadgen._internal.mesh_animation import animation_variant_token, parse_animation_option
-        from cadgen._internal.mesh_export import mesh_variant_key
+        from cadgen._internal.mesh_export import MeshSource, mesh_variant_key
         from cadgen.store.records import document_mesh_sha, note_document_tree
 
-        with generated_cad_directory(prefix="animation-source-snapshot-") as directory:
+        with generated_cad_directory(prefix="animation-keyframes-snapshot-") as directory:
             root = Path(directory)
             document = root / "arm.step"
             document.write_bytes(b"selected document")
             document_hash = hashlib.sha256(document.read_bytes()).hexdigest()
             from cadgen._internal.source_sidecar import source_sidecar_path, write_source_sidecar
-            module = source_sidecar_path(document)
-            def write_animation(source):
-                write_source_sidecar(document, {"animation": {"language": "javascript", "source": source}})
-            before = "export const clips = { show: {duration: 1, update(t,m) {}} };"
-            after = before.replace("duration: 1", "duration: 2")
-            write_animation(before)
-            view = root / "view"
-            view.mkdir()
-            (view / "assembly.json").write_text(json.dumps({
-                "documentHash": document_hash, "components": {}, "occurrences": [],
-            }), encoding="utf-8")
+            sidecar = source_sidecar_path(document)
+
+            def baked(duration):
+                return {"clips": [{"id": "show", "label": "show", "duration": duration, "loop": True,
+                                   "tracks": [{"targets": ["o1"], "times": [0], "visible": [True]}]}]}
+
+            def write_animation(section):
+                write_source_sidecar(document, {"animation": section})
+
+            # What the sampler is handed: canonical JSON of the section, as captured.
+            before = json.dumps(baked(1), sort_keys=True, separators=(",", ":"))
+            write_animation(baked(1))
             out = root / "arm.glb"
             spec = SimpleNamespace(step_path=document, entry_path=document, color=None, source="imported")
-            captured_paths = []
 
-            @contextlib.contextmanager
             def prepare(*args, **kwargs):
-                # Stands in for the engine's OWNED view: this test's directory is its
-                # own, so nothing is removed on exit.
-                write_animation(after)
-                yield spec, view
+                # The model rebakes while the export prepares its meshes.
+                write_animation(baked(2))
+                return spec, MeshSource("tree-a", document_hash)
 
-            def node(argv, **kwargs):
-                captured = Path(argv[argv.index("--animation-source") + 1])
-                captured_paths.append(captured)
-                self.assertEqual(captured.name, module.name)
-                self.assertNotEqual(captured, module)
-                self.assertEqual(json.loads(module.read_text(encoding="utf-8"))["animation"]["source"], after)
-                source = captured.read_text(encoding="utf-8")
-                self.assertEqual(source, before)
-                # Stand in for the Node loader consuming this exact file.
-                out.write_bytes(source.encode("utf-8"))
-                return SimpleNamespace(returncode=0, stdout='{"ok":true}', stderr="")
+            def engine(source, jobs, *, animation_source, **kwargs):
+                self.assertEqual(json.loads(sidecar.read_text(encoding="utf-8"))["animation"], baked(2))
+                self.assertEqual(animation_source.data, before)
+                # Stand in for the sampler consuming exactly the captured keyframes.
+                out.write_bytes(animation_source.data.encode("utf-8"))
+                return {"ok": True, "files": [{"path": str(out), "format": "glb"}]}
 
             with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(root / "store")}), \
                     mock.patch.object(door, "_mesh_package", side_effect=prepare), \
-                    mock.patch("subprocess.run", side_effect=node) as builder:
+                    mock.patch.object(door, "run_mesh_exporter", side_effect=engine) as exporter:
                 note_document_tree(document_hash, "tree-a")
                 door.export_cad_target(document, [("glb", out)], animation="show")
                 request = parse_animation_option("show")
                 key = mesh_variant_key("glb", None, None, animation_key=animation_variant_token(request, before))
                 self.assertEqual(document_mesh_sha(document_hash, key), hashlib.sha256(before.encode()).hexdigest())
-                self.assertFalse(captured_paths[0].exists(), "private source must be cleaned after Node finishes")
-                # Restoring the selected source may reuse only its own output.
-                write_animation(before)
+                # Restoring the selected keyframes may reuse only their own output.
+                write_animation(baked(1))
                 door.export_cad_target(document, [("glb", out)], animation="show")
-                self.assertEqual(builder.call_count, 1)
+                self.assertEqual(exporter.call_count, 1)
                 self.assertEqual(out.read_text(encoding="utf-8"), before)
 
     def test_snapshot_uses_one_digest_for_its_tree_lookup(self):
@@ -84,8 +75,8 @@ class MeshDocumentSnapshotTests(unittest.TestCase):
         hashed.assert_called_once()
         lookup.assert_called_once_with("a" * 64)
 
-    def test_replaced_input_cannot_rekey_an_already_selected_export_view(self):
-        from cadgen._internal.mesh_export import MeshExportJob, mesh_variant_key
+    def test_replaced_input_cannot_rekey_an_already_selected_export(self):
+        from cadgen._internal.mesh_export import MeshExportJob, MeshSource, mesh_variant_key
         from cadgen.cli_logging import CliLogger
         from cadgen.step_export_target import _export_mesh_jobs
         from cadgen.store.records import document_mesh_sha, note_document_tree
@@ -96,11 +87,6 @@ class MeshDocumentSnapshotTests(unittest.TestCase):
             old_hash = hashlib.sha256(b"old document").hexdigest()
             document.write_bytes(b"replacement document")
             new_hash = hashlib.sha256(document.read_bytes()).hexdigest()
-            view = root / "view"
-            view.mkdir()
-            (view / "assembly.json").write_text(json.dumps({
-                "documentHash": old_hash, "tree": "tree-a", "components": {}, "occurrences": [],
-            }), encoding="utf-8")
             out = root / "model.glb"
             spec = SimpleNamespace(step_path=document, entry_path=document, color=None, source="imported")
             job = MeshExportJob("glb", out)
@@ -114,7 +100,8 @@ class MeshDocumentSnapshotTests(unittest.TestCase):
                     mock.patch("cadgen.step_export_target.run_mesh_exporter", side_effect=write_export):
                 note_document_tree(old_hash, "tree-a")
                 note_document_tree(new_hash, "tree-b")
-                written, _ = _export_mesh_jobs(spec, view, [job], logger=CliLogger("test", verbose=False))
+                written, _baked, _noted = _export_mesh_jobs(spec, MeshSource("tree-a", old_hash), [job],
+                                                            logger=CliLogger("test", verbose=False))
                 self.assertEqual(written, {out})
                 key = mesh_variant_key("glb", None, None)
                 self.assertEqual(document_mesh_sha(old_hash, key), hashlib.sha256(out.read_bytes()).hexdigest())

@@ -18,6 +18,20 @@ An input file is one the build read and did not write, that is not code --
 Python source is tracked by reach, a compiled library belongs to the
 environment -- and that lies outside the machine: the interpreter and its
 packages, cadgen itself, the store, and the folders the operating system owns.
+
+An environment variable the model's own code reads is an input too, with the
+value it read or its absence: ``os.environ[name]``, ``os.environ.get``,
+``os.getenv``, ``name in os.environ``. The reader is the frame that asked, past
+``os``'s own functions, and it must be the model's code: what cadgen, the
+standard library or an installed package reads for itself, or for the model, is
+not -- a library caches its configuration, so whether it reads during a build
+depends on the process, not the model. A copy of the whole environment
+(``dict(os.environ)``, ``os.environ.copy()``, its items) reads no one variable,
+and a variable the build set before it read it is its own.
+
+A program the model's code starts (``subprocess``, ``os.system``, the ``spawn``
+and ``exec`` families, by their audit events and by frame, as folder listings
+are) is noted: the files it reads are invisible here, so the build warns.
 """
 
 from __future__ import annotations
@@ -49,6 +63,9 @@ _TRACER: ctypes.CDLL | None = None
 _OPEN: list["Trace"] = []  # the captures in progress, outermost first
 _LOG: str | None = None  # the outermost capture's log
 _HOOKED = False
+# Per thread: how deep in ``paused()`` it is, a whole-environment copy in
+# progress (``_copying``), and an environment read being noted.
+_LOCAL = threading.local()
 
 
 def _library_name() -> str:
@@ -83,13 +100,20 @@ def _tracer() -> ctypes.CDLL:
 
 @dataclass
 class Trace:
-    """What one capture saw opened and listed."""
+    """What one capture saw opened, listed, read from the environment and started."""
 
     read: dict[str, set[tuple[int, int]]] = field(default_factory=dict)  # path -> {(size, mtime_ns)} at open
     updated: set[str] = field(default_factory=set)  # read paths opened to read and write
     written: set[str] = field(default_factory=set)
     listed: set[str] = field(default_factory=set)
     unnamed: int = 0  # files opened whose path the tracer could not write down
+    # Variable -> the value the model's own code first read, None when it was
+    # unset. An input, as a file it read is (cadgen.store.closure.build_closure).
+    environment: dict[str, str | None] = field(default_factory=dict)
+    # Variables the build set or removed: read after that, they are its own.
+    environment_set: set[str] = field(default_factory=set)
+    # The programs the model's code started, in order, each once.
+    programs: list[str] = field(default_factory=list)
 
     def _parse(self, log: bytes, *, own: str) -> None:
         for record in log.split(b"\0"):
@@ -190,11 +214,12 @@ def _machine_roots() -> tuple[Path, ...]:
 
 @contextlib.contextmanager
 def capture() -> Iterator[Trace]:
-    """Record what the code run inside opens and lists. Nests: an inner capture
-    sees its own stretch of the log, the outer one all of it."""
+    """Record what the code run inside opens, lists, reads from the environment
+    and starts. Nests: an inner capture sees its own stretch of the log, the
+    outer one all of it."""
     global _LOG
     tracer = _tracer()
-    _hook_listings()
+    _install_hooks()
     # Classify before the hook can fire: computing the roots imports sysconfig
     # data, whose own work would otherwise reach a half-built classifier.
     _environment_roots()
@@ -229,34 +254,53 @@ def capture() -> Iterator[Trace]:
 @contextlib.contextmanager
 def paused() -> Iterator[None]:
     """cadgen's own reading on this thread -- the gate hashing a child's files
-    and outputs -- unseen by the capture: a child is an input by its result."""
+    and outputs, importing a model file for its constants -- unseen by the
+    capture: a child is an input by its result. Nests."""
+    depth = getattr(_LOCAL, "paused", 0)
+    _LOCAL.paused = depth + 1
     tracer = _TRACER
-    if tracer is None:
-        yield
-        return
-    tracer.cadgen_filetrace_pause(1)
     try:
-        yield
+        if tracer is None:
+            yield
+        else:
+            tracer.cadgen_filetrace_pause(1)
+            try:
+                yield
+            finally:
+                tracer.cadgen_filetrace_pause(0)
     finally:
-        tracer.cadgen_filetrace_pause(0)
+        _LOCAL.paused = depth
 
 
-def _hook_listings() -> None:
-    """Install, once, the audit hook that hears every Python-level folder listing."""
+def _install_hooks() -> None:
+    """Install, once and for good, what hears the Python-level half of a build:
+    the audit hook (folder listings, programs started) and the environment's
+    read and write hooks. Outside a capture each costs one check."""
     global _HOOKED
     with _LOCK:
         if not _HOOKED:
-            sys.addaudithook(_listing_audit)
+            sys.addaudithook(_audit)
+            _hook_environment()
             _HOOKED = True
 
 
-def _listing_audit(event: str, args: tuple) -> None:
-    if not _OPEN or event not in ("os.listdir", "os.scandir"):
+_LISTINGS = frozenset({"os.listdir", "os.scandir"})
+_PROGRAMS = frozenset({"subprocess.Popen", "os.system", "os.posix_spawn", "os.spawn", "os.exec"})
+
+
+def _audit(event: str, args: tuple) -> None:
+    if not _OPEN or (event not in _LISTINGS and event not in _PROGRAMS):
         return
     try:
-        target = args[0] if args else None
-        if not _listed_by_model(sys._getframe(1)):
+        if getattr(_LOCAL, "paused", 0) or not _listed_by_model(sys._getframe(1)):
             return
+        if event in _PROGRAMS:
+            program = _program(event, args)
+            for trace in tuple(_OPEN):
+                if program and program not in trace.programs:
+                    trace.programs.append(program)
+            return
+        target = args[0] if args else None
         folder = _descriptor_path(target) if isinstance(target, int) else os.path.abspath(
             os.fsdecode(target if target is not None else "."))
         if folder is None:
@@ -265,6 +309,170 @@ def _listing_audit(event: str, args: tuple) -> None:
             trace.listed.add(folder)
     except Exception:  # noqa: BLE001 - an audit hook must never fail the call it observes
         pass
+
+
+# Programs that run the command they are handed (``shell=True``, ``os.system``):
+# the program named is that command's.
+_SHELLS = frozenset({"sh", "bash", "dash", "zsh", "cmd", "cmd.exe"})
+
+
+def _program(event: str, args: tuple) -> str | None:
+    """The program an audit event starts, by name: ``openscad``, not its path."""
+    if event == "os.system":
+        return _first_word(args[0])
+    if event == "subprocess.Popen":
+        executable, argv = args[0], args[1]
+        words = [os.fsdecode(word) for word in argv] if isinstance(argv, (list, tuple)) else None
+        if words is None:
+            # Windows hands the audit one command line.
+            line = os.fsdecode(argv)
+            name = _base(executable) if executable is not None else _first_word(line)
+            if name and name.lower() in _SHELLS:
+                _shell, _flag, command = line.partition(" /c ")
+                return _first_word(command.strip().strip('"')) or name
+            return name
+        if len(words) >= 3 and _base(words[0]).lower() in _SHELLS and words[1] in ("-c", "/c", "/C"):
+            return _first_word(words[2])
+        return _base(executable if executable is not None else (words[0] if words else ""))
+    # os.posix_spawn (path, argv, env), os.exec (path, args, env), os.spawn (mode, path, args, env)
+    return _base(args[1] if event == "os.spawn" else args[0])
+
+
+def _first_word(command: object) -> str | None:
+    import shlex
+
+    text = os.fsdecode(command) if isinstance(command, (str, bytes)) else ""
+    try:
+        words = shlex.split(text, posix=os.name != "nt")
+    except ValueError:
+        words = text.split()
+    return _base(words[0].strip('"')) if words else None
+
+
+def _base(path: object) -> str:
+    try:
+        return os.path.basename(os.fsdecode(path)) if path is not None else ""
+    except TypeError:
+        return ""
+
+
+def _hook_environment() -> None:
+    """Teach the environment mapping -- ``os.environ``'s class, ``os.environb``'s
+    too -- to report, while a capture is open, the variables code reads and the
+    ones the build sets. Outside a capture each method is the mapping's own."""
+    mapping = type(os.environ)
+    getitem, setitem, delitem = mapping.__getitem__, mapping.__setitem__, mapping.__delitem__
+    mapping_keys = mapping.keys
+
+    def __getitem__(self, key):
+        if not _OPEN:
+            return getitem(self, key)
+        try:
+            value = getitem(self, key)
+        except KeyError:
+            _environment_read(key, None, sys._getframe(1), subscript=True)
+            raise
+        _environment_read(key, value, sys._getframe(1), subscript=True)
+        return value
+
+    def get(self, key, default=None):
+        try:
+            value = getitem(self, key)
+        except KeyError:
+            if _OPEN:
+                _environment_read(key, None, sys._getframe(1))
+            return default
+        if _OPEN:
+            _environment_read(key, value, sys._getframe(1))
+        return value
+
+    def __contains__(self, key):
+        try:
+            value = getitem(self, key)
+        except KeyError:
+            if _OPEN:
+                _environment_read(key, None, sys._getframe(1))
+            return False
+        if _OPEN:
+            _environment_read(key, value, sys._getframe(1))
+        return True
+
+    def keys(self):
+        if _OPEN:
+            # dict(os.environ), {**os.environ}: the C code asks for the keys, then
+            # reads each one from the same caller, at the same instruction.
+            caller = sys._getframe(1)
+            _LOCAL.copying = (id(caller), caller.f_code, caller.f_lasti)
+        return mapping_keys(self)
+
+    def __setitem__(self, key, value):
+        setitem(self, key, value)
+        if _OPEN:
+            _environment_set(key)
+
+    def __delitem__(self, key):
+        delitem(self, key)
+        if _OPEN:
+            _environment_set(key)
+
+    mapping.__getitem__, mapping.get, mapping.__contains__ = __getitem__, get, __contains__
+    mapping.keys, mapping.__setitem__, mapping.__delitem__ = keys, __setitem__, __delitem__
+
+
+def _environment_read(key: object, value: object, caller, *, subscript: bool = False) -> None:
+    """Note a variable the model's own code read, with what it read: for every open
+    capture, the first read that came before the build set it."""
+    if getattr(_LOCAL, "reading", False) or getattr(_LOCAL, "paused", 0):
+        return
+    _LOCAL.reading = True
+    try:
+        if subscript and _copying(caller):
+            return  # one value of a copy of the whole environment: no one variable is read
+        if not _read_by_model(caller):
+            return
+        name = os.fsdecode(key) if isinstance(key, bytes) else key
+        if not isinstance(name, str):
+            return
+        read = os.fsdecode(value) if isinstance(value, bytes) else value
+        for trace in tuple(_OPEN):
+            if name not in trace.environment_set:
+                trace.environment.setdefault(name, read)
+    except Exception:  # noqa: BLE001 - noting a read must never fail it
+        pass
+    finally:
+        _LOCAL.reading = False
+
+
+def _copying(caller) -> bool:
+    """Whether ``caller``, at this instruction, asked the environment for its keys:
+    the read is one value of a copy of all of it."""
+    marker = getattr(_LOCAL, "copying", None)
+    return (marker is not None and marker[0] == id(caller) and marker[1] is caller.f_code
+            and marker[2] == caller.f_lasti)
+
+
+def _environment_set(key: object) -> None:
+    try:
+        name = os.fsdecode(key) if isinstance(key, bytes) else key
+        for trace in tuple(_OPEN):
+            trace.environment_set.add(str(name))
+    except Exception:  # noqa: BLE001 - noting a write must never fail it
+        pass
+
+
+@functools.lru_cache(maxsize=1)
+def _os_file() -> str:
+    """Where ``os``'s own functions run from (``<frozen os>`` in a frozen build)."""
+    return os.getenv.__code__.co_filename
+
+
+def _read_by_model(frame) -> bool:
+    """Whether the code that read a variable is the model's: the frame that asked,
+    past ``os``'s own functions (``os.getenv`` asks for its caller), is the
+    model's code -- not cadgen, the standard library or an installed package."""
+    while frame is not None and frame.f_code.co_filename == _os_file():
+        frame = frame.f_back
+    return frame is not None and _frame_kind(frame.f_code.co_filename) == "model"
 
 
 def _descriptor_path(fd: int) -> str | None:

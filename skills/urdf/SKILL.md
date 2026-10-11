@@ -41,8 +41,7 @@ validation don't replace this.
 
 - If your tools include `cad_show` (your host may prefix it), use it with the file's
   absolute path, and follow its description for when to call it again. `cad_view` reads
-  what the user selected; `cad_screenshot` shows you what they see. Neither is a review
-  of your own work.
+  what the user selected; `cad_screenshot` shows you what they see.
 - Otherwise run the CAD Viewer, from any folder:
 
   ```bash
@@ -98,11 +97,20 @@ the CAD Viewer shows.
 cadgen urdf snapshot path/to/robot.urdf review.png
 ```
 
-It accepts `.urdf` only. Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
-joints you do not name staying at their defaults, where the CAD Viewer opens the robot (the
-`"jointValues"` job field is the same thing in a packet). The snapshot draws the robot with the
-viewer's own scene, so it shows what the viewer shows, and a link mesh that cannot be loaded
-fails it rather than leaving the link out. Robots are authored in metres and are framed on the
+It accepts `.urdf` only. Pose the robot with `--joint-values` — `{joint: value}` JSON in degrees (metres for a
+prismatic joint), each naming a joint a person can drive, within its limits, or the request is
+refused before anything renders: a fixed joint, a `<mimic>` follower or a `<tcad:four_bar>`
+crank is refused by name, with the joint to set instead (a follower follows its leader, a crank
+its driver, so the refusal names the driven joint a chain of them ends at), and so is a
+leader value that would push a follower past the follower's own limits, or a four-bar driver
+outside the range the linkage was solved over (its limits). Joints you do not name stay at their defaults, where the CAD Viewer
+opens the robot (the `"jointValues"` job field is the same thing in a packet). The snapshot
+draws the robot with the viewer's own scene, so it shows what the viewer shows: cadgen
+resolves the description first, meshes a `box`, `cylinder` or `sphere` itself, and refuses by
+name a visual it cannot draw — a mesh that is not an STL, 3MF or GLB file beside the
+description (`.dae`, `.obj` and `.ply` files are not drawn; `package://` and remote URIs are
+not resolved) or a mesh file that is missing. A link mesh that cannot be loaded fails the
+snapshot rather than leaving the link out. Robots are authored in metres and are framed on the
 robot scene scale automatically.
 
 A normal snapshot uses the Solid preset and Light appearance; omitted groups inherit preset defaults.
@@ -115,7 +123,7 @@ mode. The display modes are `solid` and `render`: `edges`, `clip`, `exploded`, t
 describe a STEP model's CAD edges, parts and solids, and are refused by name here.
 
 Link meshes are resolved relative to the description, so they must be present: an
-unhydrated Git LFS pointer fails as "No link mesh loaded for robot". Run
+unhydrated Git LFS pointer is not a mesh and fails the snapshot. Run
 `git lfs checkout <mesh dir>` first.
 
 The grammar is `cadgen urdf snapshot TARGET [OUT] [flags]`, the same one every

@@ -1,5 +1,6 @@
 """Records: the mutable per-model entry in ``index/model/``.
 
+``index/model/<sha256(model ref)>-v<RECORD_SCHEMA_VERSION>`` (``record_key``).
 A record says what a model's build depended on and what it produced::
 
     {
@@ -22,7 +23,8 @@ source (a generated file is independent of its script).
 
 Two sides, two index kinds (STORE.md §2, the law):
 
-- ``index/document/<sha256(document BYTES)>`` → ``{"tree": …, "kind": …}``.
+- ``index/document/<sha256(document BYTES)>-v<DOCUMENT_SCHEMA_VERSION>``
+  (``document_key``) → ``{"tree": …, "kind": …}``.
   ARTIFACT → ARTIFACT. The only thing a reader (a door, the viewer, snapshot)
   consults to find the tree for a file: hash the bytes, look it up, read
   objects. Written whenever a tree is published for a document — by the
@@ -32,6 +34,12 @@ Two sides, two index kinds (STORE.md §2, the law):
 - ``index/output/<sha256(output PATH)>`` → ``{"model": …}``. CODE-SIDE
   dependency memory: which model wrote the file at this path. Read by
   ``store why`` and provenance — never by the viewer or a render path.
+
+Both schema versions are in the KEY: a cadgen reads and writes only its own
+version's record and document entry, and one of another version sharing the
+store keeps its own beside them, so neither recompiles what the other wrote nor
+rewrites the other's entry. Nothing reads another version's entry; the sweeper
+retires it once it is a week old (``gc``, STORE.md §8).
 """
 
 from __future__ import annotations
@@ -41,28 +49,49 @@ from typing import Any
 
 from cadgen.store.index import (
     iter_entries,
+    key_version,
     model_key,
     path_key,
     read_entry,
     remove_entry,
     resolve_model_ref,
     split_model_ref,
+    versioned_key,
     write_entry,
 )
 
 RECORD_KIND = "record"
-# Payload cutovers, not directory/name salts. Legacy mappings are misses.
+# A format change bumps it and lands on new keys (record_key); another version's
+# records are never read.
 # Schema 6 requires execution-time input hashes, including DXF.
 # Older records may claim current input bytes for geometry built before an edit,
 # or lack the import-time, absent-file and search-root entries a closure now
 # carries. Their next source run rebuilds; saved-document mappings and objects
 # stay valid.
 RECORD_SCHEMA_VERSION = 8
-DOCUMENT_SCHEMA_VERSION = 4
+# A format change bumps it and lands on new keys (document_key).
+# Schema 6: an XCAF label entry (`=>[0:1:1:2]`) reads as no name, and an
+# occurrence without one of its own never shows a shared product's name that is
+# another occurrence's label, so the same bytes compile to a tree that names
+# those occurrences differently. An older version's entry is never read and the
+# document compiles again; its components (and every surface, mesh and selector
+# table keyed by them) are unchanged.
+DOCUMENT_SCHEMA_VERSION = 6
+
+
+def record_key(model: Path | str) -> str:
+    """A model's record key: its identity's hash (``model_key``) under this
+    cadgen's record schema."""
+    return versioned_key(model_key(model), RECORD_SCHEMA_VERSION)
+
+
+def document_key(document_hash: str) -> str:
+    """The document entry key for these bytes under this cadgen's document schema."""
+    return versioned_key(document_hash, DOCUMENT_SCHEMA_VERSION)
 
 
 def read_record(model: Path | str) -> dict[str, Any] | None:
-    data = read_entry("model", model_key(model))
+    data = read_entry("model", record_key(model))
     if data is None:
         # A bare script path whose file is gone (or no longer parses) cannot name
         # its function: find the record by the script it recorded, when exactly one.
@@ -82,7 +111,9 @@ def records_for_script(script: Path | str) -> list[tuple[str, dict[str, Any]]]:
 
     resolved = _resolved(script)
     found: list[tuple[str, dict[str, Any]]] = []
-    for _key, entry_file in iter_entries("model"):
+    for key, entry_file in iter_entries("model"):
+        if key_version(key) != RECORD_SCHEMA_VERSION:
+            continue
         try:
             data = json.loads(entry_file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -101,11 +132,11 @@ def write_record(model: Path | str, payload: dict[str, Any]) -> None:
     body["model"] = ref
     body["script"] = str(script)
     body["function"] = function
-    write_entry("model", model_key(ref), body)
+    write_entry("model", record_key(ref), body)
 
 
 def remove_record(model: Path | str) -> None:
-    remove_entry("model", model_key(model))
+    remove_entry("model", record_key(model))
 
 
 def update_record(model: Path | str, **fields: Any) -> dict[str, Any] | None:
@@ -131,14 +162,14 @@ def note_document_tree(
     document_hash: str, tree: str, *, kind: str = "step",
     surface_producer: dict[str, Any] | None = None,
 ) -> None:
-    """``index/document/<sha256(bytes)>`` → the tree describing those bytes.
-    Artifact → artifact; idempotent; atomic. Keeps the entry's mesh ledger when
-    the tree is unchanged (those meshes were cut from this same tree)."""
+    """``index/document/<sha256(bytes)>-v<schema>`` → the tree describing those
+    bytes. Artifact → artifact; idempotent; atomic. Keeps the entry's mesh ledger
+    when the tree is unchanged (those meshes were cut from this same tree)."""
     digest = str(document_hash or "").strip()
     tree_hash = str(tree or "").strip()
     if not digest or not tree_hash:
         return
-    existing = read_entry("document", digest) or {}
+    existing = read_entry("document", document_key(digest)) or {}
     payload: dict[str, Any] = {"schemaVersion": DOCUMENT_SCHEMA_VERSION, "tree": tree_hash, "kind": str(kind or "step")}
     meshes = existing.get("meshes")
     if existing.get("schemaVersion") == DOCUMENT_SCHEMA_VERSION and isinstance(meshes, dict) and str(existing.get("tree") or "") == tree_hash:
@@ -154,7 +185,7 @@ def note_document_tree(
             payload["surfaceProducer"] = producer_fields(existing.get("surfaceProducer"))
         except (ValueError, TypeError):
             pass
-    write_entry("document", digest, payload)
+    write_entry("document", document_key(digest), payload)
 
 
 def document_entry_for_hash(document_hash: str) -> dict[str, Any] | None:
@@ -163,7 +194,7 @@ def document_entry_for_hash(document_hash: str) -> dict[str, Any] | None:
 
     if not is_object_hash(document_hash):
         return None
-    entry = read_entry("document", document_hash)
+    entry = read_entry("document", document_key(document_hash))
     if not entry or entry.get("schemaVersion") != DOCUMENT_SCHEMA_VERSION or not is_object_hash(entry.get("tree")):
         return None
     return entry
@@ -182,20 +213,20 @@ def note_document_mesh(document_hash: str, variant_key: str, sha256: str) -> Non
     digest = str(document_hash or "").strip()
     if not digest or not variant_key or not sha256:
         return
-    entry = read_entry("document", digest)
+    entry = read_entry("document", document_key(digest))
     if not entry or not entry.get("tree") or entry.get("schemaVersion") != DOCUMENT_SCHEMA_VERSION:
         return
     meshes = dict(entry.get("meshes") or {})
     meshes[str(variant_key)] = str(sha256)
     entry["meshes"] = meshes
-    write_entry("document", digest, entry)
+    write_entry("document", document_key(digest), entry)
 
 
 def document_mesh_sha(document_hash: str, variant_key: str) -> str | None:
     digest = str(document_hash or "").strip()
     if not digest:
         return None
-    entry = read_entry("document", digest) or {}
+    entry = read_entry("document", document_key(digest)) or {}
     if entry.get("schemaVersion") != DOCUMENT_SCHEMA_VERSION:
         return None
     meshes = entry.get("meshes") or {}

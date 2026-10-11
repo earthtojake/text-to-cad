@@ -1,4 +1,4 @@
-// React face of viewport LOD (design/unified-tessellation.md Phase 5).
+// React face of viewport LOD (packages/ui/docs/lod.md).
 //
 // Owns a lodScheduler for the current package: camera-settle events sample
 // the viewer (projection, viewport height, live distances to each unique
@@ -11,7 +11,8 @@ import { useCallback, useEffect, useRef } from "react";
 import { loadRenderSurfPayloadAtLevel, reclaimIdleSurfWorkers, releaseSurfWorkers, releaseRenderSurfLevel } from "@text-to-cad/core/lib/renderAssetClient.js";
 import { completedPackages, renderAssetCacheStatsWithPackages } from "./completedPackageCache.js";
 import { estimateMeshRenderCost } from "@text-to-cad/core/lib/render/meshCost.js";
-import { LOD_DEFAULT_LEVEL, lodTessellationForLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
+import { lodDefaultLevel, lodTessellationForLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
+import { isTessellationCacheProbeMissError } from "@text-to-cad/core/lib/surf/tessellationCache.js";
 import { normalizeSceneQuality, resolveSceneQuality, SCENE_QUALITY } from "@text-to-cad/core/common/sceneSettings.js";
 
 import { createLodScheduler } from "./lodScheduler.js";
@@ -57,7 +58,7 @@ function lodEnabled() {
 }
 
 export function viewportLodMinimumLevel(target = typeof window !== "undefined" ? window : null) {
-  return Number(target?.__CAD_VIEWER_MIN_LOD__ ?? LOD_DEFAULT_LEVEL);
+  return Number(target?.__CAD_VIEWER_MIN_LOD__ ?? lodDefaultLevel());
 }
 
 export function dispatchViewportLodStatus(status, target = typeof window !== "undefined" ? window : null,
@@ -212,22 +213,26 @@ export function useViewportLod({ sampleCamera, lodPackage, modelKey = "", applyC
           currentLevel: component.level,
           level,
         });
-        const load = () => {
+        const load = (mesh = null) => {
           const request = lodPayloadRequest(component, level);
-          return loadRenderSurfPayloadAtLevel(component.surfUrl, {
+          return loadRenderSurfPayloadAtLevel(component.selectorsUrl, {
             signal, tessellationCache, resources,
             tessellation: lodTessellationForLevel(level),
-            identity: component.identity,
+            identity: mesh ? { ...component.identity, tessellationProbe: mesh } : component.identity,
             selectors: selectorsRef.current?.(cid) === true,
             memoryEstimateBytes: workerTemporaryBytes,
           }).then(payload => ({ ...payload, lodRequest: request }));
         };
         return load().catch(async error => {
-          if (signal.aborted || component.surfUrl || typeof component.resolveSurface !== "function") throw error;
-          const resolved = await component.resolveSurface(signal);
+          // A level cadgen has not meshed yet, or selectors for a part that opened warm before its
+          // surface was named: the surface request names both and has cadgen mesh this level.
+          if (signal.aborted || typeof component.resolveSurface !== "function"
+              || (component.selectorsUrl && !isTessellationCacheProbeMissError(error))) throw error;
+          const resolved = await component.resolveSurface(signal, lodTessellationForLevel(level) || {});
           component.identity = resolved.identity;
           component.surfUrl = resolved.surfUrl;
-          return load();
+          component.selectorsUrl = resolved.selectorsUrl;
+          return load(resolved.mesh);
         }).finally(() => {
           syncSurfWorkerMemory();
         });

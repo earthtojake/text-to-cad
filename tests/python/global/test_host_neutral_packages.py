@@ -22,7 +22,6 @@ from tests.python.support.paths import repo_path
 
 SHARED_JS_ROOTS = (
     repo_path("packages/core/src"),
-    repo_path("packages/core/bin"),
     repo_path("packages/ui/src"),
     repo_path("packages/ui/scripts"),
 )

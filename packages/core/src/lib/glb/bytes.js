@@ -1,9 +1,8 @@
 /**
  * Byte primitives and the glTF binary container.
  *
- * Shared by the GLB writer and the mesh-format exporters so there is ONE copy. Works on
- * both Node (`Buffer`) and the browser (`Uint8Array`) -- the same module is imported by a
- * build-time Node builder and by client code.
+ * The GLB writer's (`writeGlb.js`). Works on both Node (`Buffer`) and the browser
+ * (`Uint8Array`).
  */
 
 const NativeBuffer = globalThis.Buffer;

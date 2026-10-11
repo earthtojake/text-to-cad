@@ -38,6 +38,7 @@ from cadgen.snapshot_video import (  # noqa: E402
     ffmpeg_video_commands,
     normalize_video_request,
     parse_video_option,
+    resolve_frame_plan,
     validate_video_output,
     video_container_for_path,
 )
@@ -128,6 +129,44 @@ class RequestShape(unittest.TestCase):
             with self.assertRaises(SnapshotError) as ctx:
                 parse_video_option("missing.json", cwd=cwd)
             self.assertIn("missing.json", str(ctx.exception))
+
+
+class FramePlan(unittest.TestCase):
+    """Which moments of the clip a video's frames show, resolved against the clip."""
+
+    LOOP = {"duration": 4.0, "loop": True}
+    ONCE = {"duration": 4.0, "loop": False}
+
+    def plan(self, clip, **request):
+        return resolve_frame_plan(normalize_video_request(request, where="video"), clip)
+
+    def test_a_span_defaults_to_the_clip_and_its_last_frame_is_one_interval_short(self):
+        plan = self.plan(self.LOOP, fps=30)
+        self.assertEqual((30, 4.0, 0.0, 120, []), (plan["fps"], plan["seconds"], plan["start"],
+                                                   len(plan["times"]), plan["warnings"]))
+        # At 4 s a looping clip is back where it started: rendering both ends stutters.
+        self.assertEqual((0.0, 119 / 30), (plan["times"][0], plan["times"][-1]))
+
+    def test_a_default_span_from_a_later_start_is_what_is_left_of_a_clip_that_stops(self):
+        self.assertEqual(4.0, self.plan(self.LOOP, fps=30, start=1.5)["seconds"])
+        plan = self.plan(self.ONCE, fps=30, start=1.5)
+        self.assertEqual((2.5, 75), (plan["seconds"], len(plan["times"])))
+        self.assertLess(plan["times"][-1], 4.0)
+        explicit = self.plan(self.LOOP, fps=12, seconds=1.5, start=2)
+        self.assertEqual((18, 2.0, 2 + 17 / 12), (len(explicit["times"]), explicit["times"][0], explicit["times"][17]))
+
+    def test_a_span_the_clip_cannot_answer_is_refused_or_said_out_loud(self):
+        for clip, start in ((self.LOOP, 30), (self.ONCE, 4)):
+            with self.assertRaisesRegex(SnapshotError, "past the end of a 4s clip"):
+                self.plan(clip, fps=30, start=start)
+        (warning,) = self.plan(self.ONCE, fps=30, seconds=6)["warnings"]
+        self.assertIn("same final pose", warning)
+        # Overrunning a looping clip is a second lap, which is the honest answer.
+        self.assertEqual([], self.plan(self.LOOP, fps=30, seconds=8)["warnings"])
+
+    def test_the_default_span_is_held_to_the_frame_ceiling_too(self):
+        with self.assertRaisesRegex(SnapshotError, "past the 7200-frame ceiling"):
+            resolve_frame_plan(normalize_video_request({"fps": 120}, where="video"), {"duration": 61.0, "loop": True})
 
 
 class OutputContainer(unittest.TestCase):

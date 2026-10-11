@@ -1,5 +1,5 @@
-// Progressive publish of a component package (design/viewer-memory.md §6,
-// lever C), split out of useCadAssets so it unit-tests in Node (the hook's
+// Progressive publish of a component package (packages/ui/docs/lod.md,
+// section 4), split out of useCadAssets so it unit-tests in Node (the hook's
 // other imports are Vite-resolved; same pattern as packageReferenceComposition.js).
 //
 // The hook used to fetch every component, compose once and publish once, so a
@@ -52,9 +52,9 @@ export const PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES = 256 * 1024 * 1024;
 // in flight until the first decode calibrates the estimate (below).
 export const PROGRESSIVE_LOAD_UNMEASURED_SHARE = 4;
 
-// Decoded-bytes estimator. A .surf is an exact surface and tessellation expands
-// it many-fold, so its fetched byte length (the HEAD content-length the hook
-// supplies as a hint) is scaled by the decoded/fetched ratio measured on the
+// Decoded-bytes estimator, for a component admitted without its stored mesh's
+// probe row (with one, admission charges exactly what the row says): a source
+// byte count hint is scaled by the decoded/source ratio measured on the
 // components already decoded; without a hint, the running mean decoded size;
 // before any decode, the unmeasured share of the budget.
 export function createDecodeSizeEstimator({
@@ -94,15 +94,17 @@ export function createDecodeSizeEstimator({
   };
 }
 
-export function progressiveLoadProgress(loaded, total, detail = undefined) {
+// `meshing`: cadgen is deriving parts the store did not hold (a cold open), which the
+// screen names as meshing; otherwise the parts are only being read.
+export function progressiveLoadProgress(loaded, total, detail = undefined, { meshing = false } = {}) {
   const normalizedTotal = Math.max(0, Math.floor(Number(total) || 0));
   const normalizedLoaded = Math.max(0, Math.min(
     normalizedTotal,
     Math.floor(Number(loaded) || 0),
   ));
   return {
-    phase: "geometry",
-    label: "Loading geometry",
+    phase: meshing ? "meshing" : "geometry",
+    label: meshing ? "Meshing parts" : "Loading geometry",
     done: normalizedLoaded,
     total: normalizedTotal,
     determinate: true,
@@ -111,10 +113,9 @@ export function progressiveLoadProgress(loaded, total, detail = undefined) {
 }
 
 // Whether a published mesh state is the COMPLETE model: the final publish
-// (assemblyInteractionReady true, every component composed). Embedded animation
-// attaches on the first publish and stays live across publishes; what waits for
-// the complete state is clip validation, which
-// reports every label the composition lacks — noise against a partial one.
+// (assemblyInteractionReady true, every component composed). Animation attaches
+// on the first publish and stays live across publishes: its tracks name
+// occurrence ids, so they drive whatever has arrived.
 export function meshStateIsComplete(meshState) {
   if (!meshState?.meshData) {
     return false;
@@ -124,6 +125,14 @@ export function meshStateIsComplete(meshState) {
   }
   const missing = meshState.meshData.missingComponentIds;
   return !(Array.isArray(missing) && missing.length > 0);
+}
+
+// A load that has ended without the components cadgen could not mesh: short of their parts for good,
+// not still arriving. The viewport warns of them (buildViewerMeshAlert) instead of reading
+// "Updating model…" over a model that will not change.
+export function meshStateSettledShort(meshState) {
+  return meshState?.assemblyInteractionReady === true && !meshStateIsComplete(meshState)
+    && (meshState?.assemblyFailedParts?.length || 0) > 0;
 }
 
 // A rewritten file whose next revision is not built yet: the entry has no mesh while its render
@@ -168,43 +177,8 @@ export function shouldRetainCompleteSameFileMesh(current, entry, targetMeshHash)
     meshStateIsComplete(current);
 }
 
-// A clip's model handle for a PARTIAL composition. The runtime's m.get() throws
-// on a label no part carries (a typo must never silently animate nothing) —
-// right for the complete model, wrong while occurrences are still arriving.
-// While partial, an absent label resolves to a chainable no-op handle so the
-// clip keeps driving the occurrences that ARE present; on the next publish that
-// carries the occurrence, the same lookup binds to it. The complete model uses
-// the strict clip again, so validation still catches real typos.
-const NOOP_ANIMATION_HANDLE = Object.freeze({
-  deformTube() { return this; },
-  rotate() { return this; },
-  translate() { return this; },
-  opacity() { return this; },
-  visible() { return this; }
-});
-
-function partialAnimationModel(model) {
-  return {
-    ...model,
-    get(target) {
-      try {
-        return model.get(target);
-      } catch {
-        return NOOP_ANIMATION_HANDLE;
-      }
-    }
-  };
-}
-
-export function tolerantAnimationClip(clip) {
-  if (!clip || typeof clip.update !== "function") {
-    return clip;
-  }
-  return { ...clip, update: (t, model) => clip.update(t, partialAnimationModel(model)) };
-}
-
-// Readable memory accounting for the headless harness (design/viewer-memory.md
-// §7), following the window.__cadModelPlacement / __CAD_VIEWER_LOD__ precedent:
+// Readable memory accounting for the headless harness, following the
+// window.__cadModelPlacement / __CAD_VIEWER_LOD__ precedent:
 // written on EVERY progressive publish, nulled on cancel, never React state.
 // Harmless without a window (Node tests).
 function meshCostAccounting({ meshData, componentMeshDataByCid, loaded, total, publishCount, final, meshRevision = "" }) {
@@ -330,6 +304,8 @@ export function orderComponentsForProgressiveLoad(descriptor) {
  *   isCurrent(),                       // false once the request is superseded or aborted
  *   sizeHint?(cid, component),         // -> Promise<number|{sourceBytes,cacheProbe}> before admission
  *   retryCacheProbeMiss?(error, probe),// true re-enters metadata + admission after a stale body
+ *   componentFailed?(error, cid),      // true: sizeHint's error is that component's alone (cadgen could
+ *                                      // not derive or mesh it); the rest load on without it
  *   maxInFlightBytes?,                 // estimated decoded bytes in flight (PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES)
  *   allowOversizedSingle?,             // one > maxInFlightBytes decode after reserveLoad accepts it
  *   sourceExpansionRatio?,             // conservative decoded/source estimate floor for this concrete tier
@@ -338,11 +314,11 @@ export function orderComponentsForProgressiveLoad(descriptor) {
  *   reserveLoad?({ cid, estimatedBytes }) -> { ok, token?, detail? },
  *   releaseLoad?(token), onMemoryLimitation?(detail),
  *   recoverMemoryPressure?(detail),    // one bounded reclaim attempt after admitted work drains
- *   onRetainedChange?({ loaded, total, retainedBytes }), // every unique component completion
+ *   onRetainedChange?({ loaded, failed, total, retainedBytes }), // every unique component completion
  *   swappedComponents?(),              // the live LOD working set (cid -> meshData) or null
- *   onPublish({ meshData, componentMeshDataByCid, loaded, total, final, composeMs, publishCount }),
+ *   onPublish({ meshData, componentMeshDataByCid, loaded, total, final, composeMs, publishCount, failures }),
  *   maxComponents?, maxBytes?
- * }).run() -> Promise<{ loaded, total, publishes }>
+ * }).run() -> Promise<{ loaded, total, publishes, failures }>
  *
  * Admission is count- AND byte-capped: a component starts decoding only when
  * fewer than `concurrency` are in flight and the estimated decoded bytes in
@@ -355,6 +331,11 @@ export function orderComponentsForProgressiveLoad(descriptor) {
  * LOD swap that lands mid-load is kept by the next batch rather than reverted
  * to its initially requested level. The final publish (`final: true`) carries every component and is
  * the same composition the single post-load publish produced.
+ *
+ * A component whose own failure `componentFailed` recognizes settles alone: every other component
+ * still loads, and the final publish carries the rest with `failures` ([{ cid, error }]) naming
+ * what is missing. Every other failure fences every lane, and only when every component failed on
+ * its own is the first failure the load's.
  */
 export function createProgressivePackageLoader({
   descriptor,
@@ -363,6 +344,7 @@ export function createProgressivePackageLoader({
   isCurrent = () => true,
   sizeHint = null,
   retryCacheProbeMiss = null,
+  componentFailed = null,
   maxInFlightBytes = PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
   allowOversizedSingle = false,
   sourceExpansionRatio = 0,
@@ -385,6 +367,8 @@ export function createProgressivePackageLoader({
   const total = componentEntries.length;
   const loadedByCid = {};
   let loaded = 0;
+  // The components that failed on their own ({ cid, error }): settled, and left out.
+  const failures = [];
   let pendingComponents = 0;
   let pendingBytes = 0;
   let publishes = 0;
@@ -393,7 +377,12 @@ export function createProgressivePackageLoader({
   let previousComposition = initialComposition;
 
   function notifyRetained() {
-    onRetainedChange?.({ loaded, total, retainedBytes });
+    onRetainedChange?.({ loaded, failed: failures.length, total, retainedBytes });
+  }
+
+  // Every component has loaded or failed on its own.
+  function settled() {
+    return loaded + failures.length === total;
   }
 
   function release() {
@@ -429,7 +418,8 @@ export function createProgressivePackageLoader({
     pendingBytes = 0;
     publishes += 1;
     publishedFinal = publishedFinal || final;
-    onPublish?.({ meshData, componentMeshDataByCid, loaded, total, final, composeMs, publishCount: publishes });
+    onPublish?.({ meshData, componentMeshDataByCid, loaded, total, final, composeMs, publishCount: publishes,
+      failures: [...failures] });
   }
 
   // Coarse and canonical tessellations have different expansion curves. Keep
@@ -579,7 +569,7 @@ export function createProgressivePackageLoader({
       loaded += 1;
       notifyRetained();
       pendingComponents += 1;
-      const final = loaded === total;
+      const final = settled();
       if (final || (publishIntermediate && progressivePublishDue(
         { pendingComponents, pendingBytes, publishCount: publishes },
         { firstComponents, firstBytes, maxComponents, maxBytes }
@@ -607,6 +597,14 @@ export function createProgressivePackageLoader({
             skipCacheProbes: cacheProbeMisses >= 2,
           });
         } catch (error) {
+          // One component cadgen could not derive or mesh is that component's failure: it settles
+          // alone, and every other component goes on loading (`run` publishes the final
+          // composition when a failure settles last).
+          if (componentFailed?.(error, cid) === true && active()) {
+            failures.push({ cid, error });
+            notifyRetained();
+            return;
+          }
           markFailed(error);
           throw error;
         }
@@ -664,7 +662,7 @@ export function createProgressivePackageLoader({
     notifyRetained();
     pendingComponents += 1;
     pendingBytes += decodedBytes;
-    const final = loaded === total;
+    const final = settled();
     if (final || (publishIntermediate && progressivePublishDue(
       { pendingComponents, pendingBytes, publishCount: publishes },
       { firstComponents, firstBytes, maxComponents, maxBytes }
@@ -698,7 +696,13 @@ export function createProgressivePackageLoader({
       if (!active()) {
         stop();
       }
+      // Every component failed on its own: there is nothing to draw, and the first one's error
+      // is the load's.
+      if (!loaded && failures.length) {
+        throw failures[0].error;
+      }
       if (!publishedFinal) {
+        // The last component to settle failed on its own: the rest are the final composition.
         // No components at all: compose anyway so the descriptor's own error
         // ("matched no renderable component GLBs") surfaces exactly as before.
         publish(true);
@@ -711,7 +715,7 @@ export function createProgressivePackageLoader({
       release();
       throw error;
     }
-    return { loaded, total, publishes };
+    return { loaded, total, publishes, failures: [...failures] };
   }
 
   return {

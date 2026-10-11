@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Ellipsis } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, Ellipsis } from "lucide-react";
 import { useState } from "react";
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
@@ -103,6 +103,8 @@ function FileName({ path, explorer }) {
     <PopoverTrigger asChild>
       <button type="button" className={cn(NAV_ITEM_CLASS, "min-w-0 shrink px-1 text-left")} data-file-name="">
         <span className="truncate">{name}</span>
+        {/* The name opens the explorer; the chevron says so. A plain name (no explorer) has none. */}
+        <ChevronDown className="ml-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
       </button>
     </PopoverTrigger>
     <PopoverContent align="start" sideOffset={8} data-file-explorer="" onOpenAutoFocus={focusFilter}

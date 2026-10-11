@@ -5,6 +5,10 @@ import { surfTessellationCacheKey } from "@text-to-cad/core/lib/renderAssetClien
 import { lodTessellationForLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 import { completedPackages, createCompletedPackageCache, renderAssetCacheStatsWithPackages } from "./completedPackageCache.js";
 import { renderMemoryAccounting } from "./renderMemoryAccounting.js";
+import { installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 const root = { resources: {cacheKey: () => "test-service"} };
 const matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
@@ -63,7 +67,7 @@ test("service generation, revision, source appearance and replacement runtime vi
   assert.equal(cache.get({ ...root, resources: {cacheKey: () => "other-service"} }, a.entry), null);
   assert.ok(cache.get({ ...root }, a.entry), "a replacement client for the same service may reopen a closed tab");
   for (const change of [{ hash: "new" }, { documentHash: "new" }, { appearanceHash: "new" },
-    { url: "http://cad.test/new/" }, { sourceSidecar: { appearance: { material: "new" } } }]) {
+    { url: "http://cad.test/new/" }, { display: { "o1.1": { materialId: "new" } } }]) {
     populate();
     assert.equal(cache.get(root, { ...a.entry, ...change }), null);
     assert.equal(cache.stats().entries, 0, "the obsolete revision is released");

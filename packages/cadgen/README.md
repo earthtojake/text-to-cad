@@ -54,8 +54,8 @@ renders.
 
 - Nothing a renderer reads references the source tree: the sidecar's
   kinematics are resolved numbers and labels, its appearance uses canonical
-  leaf occurrence IDs, and its animation is an embedded self-contained ES
-  module; a tree and its
+  leaf occurrence IDs, and its animation is keyframes over those IDs, sampled
+  from the model's clips when it built — data, never code; a tree and its
   components carry no path, script or record key
   ([`STORE.md`](STORE.md) §2, the two-sides law).
 - A door never refuses a document and never auto-rebuilds: whether a
@@ -72,7 +72,7 @@ this one:
 |---|---|---|
 | Build status: the viewer's feed says whether a build of a file is running or failed, never what it previews; the viewer shows the saved file | saved-artifact read-back; no reader reaches source, closure or a model record | [`STORE.md`](STORE.md) §9b |
 | Composition: what a decorated call returns, what a parent may consume before a child's save, and when an exact `Compound(children=[...])` keeps its children's pins | the link/component decision, declared-output completion, `isinstance(root, Compound)` | [`STORE.md`](STORE.md) §6, §9a |
-| Display surfaces: canonical trees pin encoded BREP and effective intrinsic face colors; SURF extraction is an artifact-only build-pool job under an attested producer | geometry completeness stays separate from display readiness — `read_step`, STEP re-emits and parent materialization never wait for SURF | [`STORE.md`](STORE.md) §2 |
+| Display surfaces and meshes: canonical trees pin encoded BREP and effective intrinsic face colors; SURF extraction and OCCT meshing are artifact-only build-pool jobs under an attested producer, and cadgen is the only mesher — every client draws the store's meshes | geometry completeness stays separate from display readiness — `read_step`, STEP re-emits and parent materialization never wait for SURF or a mesh | [`STORE.md`](STORE.md) §2 |
 | Tree composition: an all-link parent's saved-document tree composed from its children's document trees instead of parsed from the STEP it just wrote | `index/document` holds the cold compile of the written bytes, the same tree either way; every ineligible case parses | [`STORE.md`](STORE.md) §3 |
 | STEP splicing: the same parent's STEP written from its children's saved STEP files instead of exported through OCCT | the cold compile of the spliced file is the exported file's; every ineligible case exports | [`STORE.md`](STORE.md) §3 |
 
@@ -141,8 +141,9 @@ importable file.
 
 cadgen's writers are pure: the same shapes give the same bytes, in every
 format — STEP (canonicalized NAUO ids and presentation-style ordering), meshes
-(one deterministic tessellator), DXF (geometry-ordered emitter). The geometry
-kernel makes no such promise. Two runs of one model can differ in a last digit
+(the store's mesh of each component, serialized by one deterministic writer), DXF
+(geometry-ordered emitter). The geometry kernel, the mesher included, makes no
+such promise. Two runs of one model can differ in a last digit
 or in the order of the pieces a boolean returns, and cadgen neither hides that
 nor depends on it. Equal bytes mean reuse; different bytes cost a
 recomputation (a re-mesh, a parent recompose) and never a wrong answer. A
@@ -212,8 +213,8 @@ the script's folder declares it the standard Python way (`PYTHONPATH=src`).
 care, only the project's imports may.
 
 A script may declare several models, and builds the ones its `__main__` calls.
-Its flags (`--force`, `--json`, `--verbose`, the mesh tolerances) apply to every
-model it builds: no flag names, selects or configures one of them. A command
+Its flags (`--force`, `--json`, `--verbose`, `--profile`, the mesh tolerances)
+apply to every model it builds: no flag names, selects or configures one of them. A command
 that addresses one model, such as `cadgen store why`, names it
 `script.py::function`; a bare `script.py` names its sole model, and a file that
 declares several must be named. *Pressure-test*: put two models in one file and
@@ -243,8 +244,9 @@ path.
 
 ### 11–14. Runtime laws (shared with the bundled JavaScript runtime)
 
-Kinematics is pure data and choreography is pure JS, fully independent
-(11). Clients render from file + sidecar + the store's artifact side and never
+Kinematics and choreography are both pure data, fully independent: resolved
+mates, and keyframes the build samples from Python clips (11). Clients render
+from file + sidecar + the store's artifact side and never
 read source, a record, or trigger source builds (12). A build's status
 (STORE §9b) carries no geometry: clients render the saved file.
 Correctness never depends on a
@@ -255,10 +257,13 @@ model body), on a constant by its VALUE, on a helper by its REACH (the part of
 the helper the script and every file the build executed can run, closed
 statically; the whole file — or the whole closure — wherever the analysis
 cannot see), on a data file by its BYTES (every file the build opened,
-whoever opened it: STORE.md §5, every read is seen),
-and on every file whose appearance would change what an import finds
+whoever opened it: STORE.md §5, every read is seen), on an environment
+variable its own code reads by its VALUE (a daemon job runs in its caller's
+environment), and on every file whose appearance would change what an import
+finds, a module an import looked for and did not find included
 ([`STORE.md`](STORE.md) §3) — and a model must never `read_step` its own
-output (14). The bundled runtime
+output (14). What a program the model starts reads is no input; the build
+says so when it starts one. The bundled runtime
 under `_runtime/` is the JS half of these; the laws' JS statements live in that
 runtime. It is built
 when the wheel is packaged and travels only inside it: the source tree never
@@ -290,12 +295,13 @@ model. Intrinsic appearance participates in the authored tree identity so it
 inherits through pinned children, while component identities and STEP bytes
 remain unchanged.
 
-Because they cannot change geometry, literal `kinematics=`, `materials=` and
-`animation=` values can be refreshed onto a cached baseline without executing
-the model — a narrow fast path whose preconditions and fallbacks are
+Because they cannot change geometry, literal `kinematics=` and `materials=`
+values can be refreshed onto a cached baseline without executing the model — a
+narrow fast path whose preconditions and fallbacks are
 [`STORE.md`](STORE.md) §3 (the record's `unannotatedTree` and
 `geometryClosure`). It is an optimization the law permits, never a second
-way to build.
+way to build. `animation=` clips are code, never literals: an edited clip is an
+ordinary build, which bakes new keyframes and keeps the STEP's bytes.
 
 Two features were deleted for violating this: the kinematics bake point
 (`kinematics={..., "at": pose}`), which transformed the tree through its mates
@@ -314,10 +320,12 @@ beside the artifact — what a model declares about its own outputs, where a
 build came from, when it ran — belongs in the store record, never in a
 file next to the geometry.
 
-Schema 9 sidecars contain only `schemaVersion`, the saved STEP's `documentHash`,
+Schema 10 sidecars contain only `schemaVersion`, the saved STEP's `documentHash`,
 and optional `kinematics`, `appearance`, and `animation` sections. Appearance
 stores named material definitions plus canonical leaf occurrence assignments;
-animation stores a self-contained JavaScript ES module. Appearance is applied to an owned
+animation stores keyframes baked from the model's Python clips when it built —
+an ordered list of clips, each a set of tracks over canonical leaf occurrences —
+so the sidecar carries data, never code. Appearance is applied to an owned
 render/export descriptor, never to the byte-derived tree. Appearance-sensitive
 export variants include its digest, including the absence of overrides.
 The document digest binds those declarations to the artifact; it is
@@ -392,8 +400,23 @@ src/cadgen/
                          #   inside a body; a model's outputs are what they
                          #   declare — a mesh decorator alone is a model that
                          #   writes no STEP
+  articulation.py        # a model's kinematics resolved for a player:
+                         #   controls, joints as affine rows (plus a sampled
+                         #   curve where a joint follows its driver
+                         #   nonlinearly), carries, handles, poses; the
+                         #   reference evaluator
+  robot_payload.py       # a robot description (URDF, SDF, SRDF with its
+                         #   URDF) resolved for the page: the articulation
+                         #   above (a tcad:four_bar linkage closed here into
+                         #   a curve), the visuals in rest space (a box,
+                         #   cylinder, sphere or capsule meshed into the
+                         #   store), the facts a person reads back; refused
+                         #   at the door in the validators' words, joint
+                         #   values held to the articulation
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
+  animation.py           # animation clips (cadgen.clip) for @step's
+                         #   animation=, baked to sidecar keyframes at build
   step_scene.py          # read_step and read_scene
   assembly.py            # label utilities and softly deprecated AssemblyHelper
   results.py             # the typed Results every verb returns (stdlib-only)
@@ -413,7 +436,8 @@ src/cadgen/
   store/                 # the store (STORE.md): objects, index, records, trees,
                          #   closure, gate, materialize, publish, lazy, gc, view
   cli/                   # generated command shells, one per <format> <verb>
-  cli_tree.py            # the build tree on stderr / JSONL events
+  cli_tree.py            # the build tree on stderr / JSONL events, and each
+                         #   built model's time line (model code vs cadgen)
   daemon/                # the build pool: executors (daemon + transient),
                          #   broker (job slots, coalescing), pool (workers,
                          #   spares, extras), jobs (the ledger), server,
@@ -421,8 +445,13 @@ src/cadgen/
                          #   builds and how that goes, counted)
   _internal/             # the engine: generation pipeline, tree builder,
                          #   filetrace (every file a build opens),
-                         #   FK (kinematics_fk/resolve), mesh_export ledger,
+                         #   kinematics_resolve (mate axes to numbers),
+                         #   animation_bake
+                         #   (clips to keyframes), mesh_export (the mesh
+                         #   writers, a clip's GLB sampling, their ledger),
                          #   cli_from_function, doors (documents by bytes),
+                         #   build_timing (where a build's time went;
+                         #   --profile),
                          #   source_sidecar, step_assemble/step_reemit
   viewer/                # the CAD Viewer's server: launcher (main),
                          #   routes (http_app), files by absolute path
@@ -438,11 +467,11 @@ src/cadgen/
                          #   the viewer routes in-process (tunnel), roots,
                          #   the page (ui), and the CAD Viewer link for
                          #   a host that renders no MCP Apps (browser)
-  _runtime/              # BUILT JS (browser snapshot renderer, node
-                         #   builders, the viewer client, the MCP app page)
-                         #   and the native file tracer, one library per
-                         #   platform — produced when the wheel is packaged,
-                         #   never committed, never edited
+  _runtime/              # BUILT JS (browser snapshot renderer, the viewer
+                         #   client, the MCP app page) and the native file
+                         #   tracer, one library per platform — produced when
+                         #   the wheel is packaged, never committed, never
+                         #   edited
 ```
 
 Verbs by format: `step` compile · build · snapshot;

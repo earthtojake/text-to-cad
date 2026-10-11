@@ -3,29 +3,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildTangentFaceGraph } from './tangentFaceSelection.js';
 
-const face = (id, occurrence = 'o1') => ({ id, displaySelector: id, selectorType: 'face', occurrenceId: occurrence, shapeId: `${occurrence}.s1` });
-const edge = (id, faces, visibilityClass = 'tangent') => ({ id, selectorType: 'edge', pickData: { adjacentSelectors: faces, visibilityClass } });
+const face = (id, group, extra = {}) => ({ id, selectorType: 'face', occurrenceId: 'o1', shapeId: 'o1.s1', ...extra,
+  pickData: { tangentGroup: group } });
 
-test('follows tangent chains and cycles while stopping at sharp, boundary and unclassified edges', () => {
-  const references = ['a', 'b', 'c', 'd', 'e'].map(id => face(id));
-  const graph = buildTangentFaceGraph([...references,
-    edge('ab', ['a', 'b']), edge('bc', ['b', 'c']), edge('ca', ['c', 'a']),
-    edge('cd', ['c', 'd'], 'feature'), edge('ce', ['c', 'e'], null), edge('boundary', ['a']),
-  ]);
+test('faces of one tangent group select together; sharp-edged neighbours do not', () => {
+  const graph = buildTangentFaceGraph([face('a', 1), face('b', 1), face('c', 1), face('d', 2), face('e', 3),
+    { id: 'edge', selectorType: 'edge', pickData: { visibilityClass: 'tangent' } }]);
   assert.deepEqual(new Set(connectedReferenceIds(graph, 'a')), new Set(['a', 'b', 'c']));
   assert.deepEqual(connectedReferenceIds(graph, 'd'), ['d']);
   assert.deepEqual(connectedReferenceIds(graph, 'missing'), []);
 });
 
-test('does not cross occurrences, nonmanifold edges, or partially loaded adjacency', () => {
-  const graph = buildTangentFaceGraph([face('a'), face('b'), face('c'), face('other', 'o2'),
-    edge('nonmanifold', ['a', 'b', 'c']), edge('missing', ['a', 'unloaded']), edge('cross', ['a', 'other']),
-  ]);
+test('a group id is local to one part, occurrence and solid', () => {
+  const graph = buildTangentFaceGraph([face('a', 1), face('other occurrence', 1, { occurrenceId: 'o2' }),
+    face('other solid', 1, { shapeId: 'o1.s2' }), face('other part', 1, { partId: 'p2' }), face('no group', null)]);
   assert.deepEqual(connectedReferenceIds(graph, 'a'), ['a']);
-});
-
-
-test('ambiguous display selectors cannot connect to the wrong face', () => {
-  const graph=buildTangentFaceGraph([face('a'),face('b'),{...face('other'),displaySelector:'b'},edge('ab',['a','b'])]);
-  assert.deepEqual(connectedReferenceIds(graph,'a'),['a']);
 });

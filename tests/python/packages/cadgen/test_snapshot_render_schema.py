@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import inspect
-import re
 import tempfile
 import unittest
 from pathlib import Path
 
-from tests.python.support.paths import add_repo_path, repo_path
+from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
 from cadgen.snapshot_core import (  # noqa: E402
-    MIN_RENDER_TESSELLATION,
     DISPLAY_APPEARANCES,
     DISPLAY_GROUP_KEYS,
     DISPLAY_MODES,
@@ -25,6 +23,7 @@ from cadgen.snapshot_core import (  # noqa: E402
     normalize_common_job,
     validate_render_tessellation,
 )
+from cadgen.tessellation_policy import TESSELLATION_CEILINGS, TESSELLATION_FLOORS  # noqa: E402
 
 
 def normalize(**settings: object) -> dict[str, object]:
@@ -149,26 +148,21 @@ class RenderTessellationLimitsTest(unittest.TestCase):
         with self.assertRaises(SnapshotError):
             validate_render_tessellation([0.001])
 
-    def test_tolerances_below_the_floor_are_refused_here_not_in_the_browser(self):
+    def test_tolerances_outside_the_bounds_are_refused_here_not_in_the_browser(self):
         with self.assertRaises(SnapshotError) as caught:
             normalize(quality={"tessellation": {"chordTolerance": 1e-12}})
-        self.assertIn("at least 1e-05", str(caught.exception))
+        self.assertIn("quality.tessellation.chordTolerance 1e-12 is finer than cadgen meshes", str(caught.exception))
+        self.assertIn("at least 5e-05", str(caught.exception))
         with self.assertRaises(SnapshotError):
             normalize(quality={"tessellation": {"angleTolerance": 1e-6}})
-        # The floors themselves, and everything coarser, are legal requests.
-        validate_render_tessellation(dict(MIN_RENDER_TESSELLATION))
+        with self.assertRaises(SnapshotError) as caught:
+            normalize(quality={"tessellation": {"chordTolerance": 1e300}})
+        self.assertIn("at most 0.05", str(caught.exception))
+        # The bounds themselves, and everything between, are legal requests.
+        validate_render_tessellation(dict(TESSELLATION_FLOORS))
+        validate_render_tessellation(dict(TESSELLATION_CEILINGS))
         validate_render_tessellation({"chordTolerance": 0.0005, "angleTolerance": 0.10})
         validate_render_tessellation(None)
-
-    def test_the_floors_match_the_page_that_tessellates(self):
-        source = repo_path("packages/core/src/common/source.js").read_text(encoding="utf-8")
-        block = re.search(r"RENDER_TESSELLATION_FLOORS = Object\.freeze\(\{(.*?)\}\)", source, re.S)
-        self.assertIsNotNone(block, "source.js no longer declares RENDER_TESSELLATION_FLOORS")
-        declared = {
-            key: float(value)
-            for key, value in re.findall(r"(\w+):\s*([0-9.e-]+)", block.group(1))
-        }
-        self.assertEqual(declared, MIN_RENDER_TESSELLATION)
 
 
 if __name__ == "__main__":

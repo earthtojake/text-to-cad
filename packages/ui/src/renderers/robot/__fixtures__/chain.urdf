@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<robot name="chain">
+  <link name="l0"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l1"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l2"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l3"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l4"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l5"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l6"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l7"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l8"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l9"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l10"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l11"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l12"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l13"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l14"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l15"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l16"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l17"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l18"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l19"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l20"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l21"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l22"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l23"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l24"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l25"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l26"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l27"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l28"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <link name="l29"><visual><origin xyz="0.05 0 0"/><geometry><box size="0.1 0.04 0.04"/></geometry><material name="m0.50.50.551"><color rgba="0.5 0.5 0.55 1"/></material></visual></link>
+  <joint name="j0" type="revolute"><parent link="l0"/><child link="l1"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j1" type="revolute"><parent link="l1"/><child link="l2"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j2" type="revolute"><parent link="l2"/><child link="l3"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j3" type="revolute"><parent link="l3"/><child link="l4"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j4" type="revolute"><parent link="l4"/><child link="l5"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j5" type="revolute"><parent link="l5"/><child link="l6"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j6" type="revolute"><parent link="l6"/><child link="l7"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j7" type="revolute"><parent link="l7"/><child link="l8"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j8" type="revolute"><parent link="l8"/><child link="l9"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j9" type="revolute"><parent link="l9"/><child link="l10"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j10" type="revolute"><parent link="l10"/><child link="l11"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j11" type="revolute"><parent link="l11"/><child link="l12"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j12" type="revolute"><parent link="l12"/><child link="l13"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j13" type="revolute"><parent link="l13"/><child link="l14"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j14" type="revolute"><parent link="l14"/><child link="l15"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j15" type="revolute"><parent link="l15"/><child link="l16"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j16" type="revolute"><parent link="l16"/><child link="l17"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j17" type="revolute"><parent link="l17"/><child link="l18"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j18" type="revolute"><parent link="l18"/><child link="l19"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j19" type="revolute"><parent link="l19"/><child link="l20"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j20" type="revolute"><parent link="l20"/><child link="l21"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j21" type="revolute"><parent link="l21"/><child link="l22"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j22" type="revolute"><parent link="l22"/><child link="l23"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j23" type="revolute"><parent link="l23"/><child link="l24"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j24" type="revolute"><parent link="l24"/><child link="l25"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j25" type="revolute"><parent link="l25"/><child link="l26"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j26" type="revolute"><parent link="l26"/><child link="l27"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j27" type="revolute"><parent link="l27"/><child link="l28"/><origin xyz="0.1 0 0"/><axis xyz="0 1 0"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+  <joint name="j28" type="revolute"><parent link="l28"/><child link="l29"/><origin xyz="0.1 0 0"/><axis xyz="0 0 1"/><limit lower="-1" upper="1" effort="1" velocity="1"/></joint>
+</robot>

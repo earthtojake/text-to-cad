@@ -4,7 +4,7 @@ Quad-turbo 8.0 L W16, sectioned museum cutaway with working kinematics.
 
 | Script   | Artifact        | Description                                                            |
 |----------|-----------------|------------------------------------------------------------------------|
-| w16.py   | STEP/w16.step   | Full engine assembly: the thirteen system models below, linked in occurrence order; carries embedded `ANIMATION_JS` choreography |
+| w16.py   | STEP/w16.step   | Full engine assembly: the thirteen system models below, linked in occurrence order; declares the `crank`, `running_reveal` and `explode` clips (`lib/animation.py`), baked to keyframes in its sidecar |
 | block.py | STEP/block.step | `o1.1` block casting + main caps + shells + block fasteners |
 | crank.py | STEP/crank.step | `o1.2` crankshaft, damper, flywheel |
 | pistons.py | STEP/pistons.step | `o1.3` 16 x piston/rings/pin/circlips/rod/cap/bolts/shells |
@@ -53,6 +53,7 @@ rather than imported from `lib/spec.py`; change all fourteen together.
 |-------------------|------------------------------------------------------------------|
 | `spec.py`         | **Single source of truth**: every shared number and the frame     |
 | `kin.py`          | Pure kinematics: pistons/rods, valve lift, followers, lobe synthesis |
+| `animation.py`    | The engine's clips (`ANIMATION`), sampled from `kin.py` at build  |
 | `geo.py`          | Frames, prisms, section cutter                                    |
 | `palette.py`      | Material colours (sRGB hex via `cadgen.srgb`)                    |
 | `castings.py`     | Casting/machining vocabulary: draft, ribs, bosses, ladders        |
@@ -64,6 +65,7 @@ rather than imported from `lib/spec.py`; change all fourteen together.
 | `valvetrain.py`   | Valves, springs, retainers, collets, followers, HLAs              |
 | `cams.py`         | Camshafts with synthesised lobes, caps, cap bolts                 |
 | `collide.py`      | Kinematic collision gate: `cd src && python -m lib.collide`       |
+| `anim_check.py`   | The gate on the clips' own poses: `cd src && python -m lib.anim_check crank` |
 
 The section: bank-1 statics are cut for `x > SECTION_X` (cylinder 3's
 centreline), keeping the centre spine; moving parts are never cut.

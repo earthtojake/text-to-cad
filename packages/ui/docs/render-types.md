@@ -114,7 +114,7 @@ and never owns a package for one (`owns_dxf_path` always answers False).
 
 ## Standing gate
 
-The `web` CI job's `scripts/test/test-viewer-browser.sh` opens one fixture per load path
+The `packaging` CI job's `scripts/test/test-viewer-browser.sh` opens one fixture per load path
 (STEP, STL, DXF, URDF) through the real backend and the bundled viewer and asserts each
 draws something with no page errors: a blank-but-error-free viewport is the signature
 failure here (a shader that fails to compile, a gate that hides the geometry). It runs on

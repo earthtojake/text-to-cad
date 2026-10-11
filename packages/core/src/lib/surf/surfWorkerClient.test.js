@@ -1,5 +1,7 @@
-// Worker cache reuse requires the backend-prepared surface input and the exact
-// resolved surface object. URL spelling never participates in that identity.
+// The worker pool decodes stored meshes: a request carries the component's mesh
+// bytes in (read on this thread, by the backend-prepared surface input and the
+// exact resolved surface object; URL spelling never participates), or fails as a
+// probe miss for its caller to answer by asking the host for that mesh.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -9,19 +11,43 @@ import {
   releaseSurfWorkerPoolWhenIdle,
   surfWorkerMemoryStats,
 } from "./surfWorkerClient.js";
-import { createTessellationCache } from "./tessellationCache.js";
+import { createTessellationCache, isTessellationCacheProbeMissError } from "./tessellationCache.js";
+import { encodeMeshFixture, probeRowFor } from "./__tests__/meshFixtures.js";
+import { TEST_TESSELLATION_LADDER } from "./testing.js";
 
 let tessellationCache = createTessellationCache();
 function setTessellationCacheProvider(provider) {
   tessellationCache.dispose();
   tessellationCache = createTessellationCache({ provider });
 }
-const loadSurfComponentInWorker = (url, options = {}) => loadWorker(url, { tessellationCache, ...options });
 
 const CACHE_IDENTITY = {
   surfaceInput: "d".repeat(64),
   surfaceObject: "e".repeat(64),
 };
+// One stored triangle: what a pool test's request carries when the test is not about reading it.
+const ENTRY = encodeMeshFixture({
+  positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+  indices: new Uint32Array([0, 1, 2]),
+  faceRanges: [{ ord: 1, color: null, indexStart: 0, indexCount: 3 }], edges: [],
+  bounds: { min: [0, 0, 0], max: [1, 1, 0] }, scale: Math.SQRT2,
+}, CACHE_IDENTITY);
+const ROW = probeRowFor(ENTRY);
+// A provider whose probe answers when the test says so, with the stored row (or none).
+function waitingProvider() {
+  let answer;
+  const provider = {
+    probeMany: (keys) => new Promise((resolve) => { answer = (found) => resolve(keys.map(() => (found ? ROW : null))); }),
+    async getProbed() { return ENTRY.slice(); },
+  };
+  return { provider, answer: (found = true) => answer(found) };
+}
+// Every request names the rung it reads: the standard one of the ladder cadgen publishes.
+const STANDARD = TEST_TESSELLATION_LADDER.levels[TEST_TESSELLATION_LADDER.defaultLevel];
+const loadSurfComponentInWorker = (url, options = {}) => loadWorker(url, {
+  tessellationCache, tessellation: STANDARD, ...options,
+  identity: options.identity ?? { ...CACHE_IDENTITY, tessellationEntry: ENTRY.slice() },
+});
 
 test('worker leases preserve another renderer through abort and release after the last owner', async (t) => {
   const { retainSurfWorkerPool } = await import('./surfWorkerClient.js');
@@ -374,17 +400,14 @@ test("sequential refinement creates one isolate and concurrent ready work grows 
 test("reclaimIdleSurfWorkers returns idle capacity without disturbing active or queued requests", async (t) => {
   const created = [];
   const terminated = [];
-  let resolveCache;
   class FakeWorker {
     constructor() { this.listeners = {}; this.messages = []; created.push(this); }
     addEventListener(type, handler) { this.listeners[type] = handler; }
     postMessage(message) { this.messages.push(message); }
     terminate() { terminated.push(this); }
   }
-  setTessellationCacheProvider({
-    probeMany: () => new Promise((resolve) => { resolveCache = resolve; }),
-    async getProbed() { return null; },
-  });
+  const { provider, answer: resolveCache } = waitingProvider();
+  setTessellationCacheProvider(provider);
   t.after(() => setTessellationCacheProvider(null));
   const savedWorker = globalThis.Worker;
   globalThis.Worker = FakeWorker;
@@ -406,7 +429,7 @@ test("reclaimIdleSurfWorkers returns idle capacity without disturbing active or 
     });
     assert.equal(activeWorkers.some((worker) => terminated.includes(worker)), false);
 
-    resolveCache(null);
+    resolveCache();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(
       activeWorkers.some((worker) => worker.messages.some((message) => message.url.endsWith("cache-wait.surf"))),
@@ -450,17 +473,14 @@ test("reclaimIdleSurfWorkers returns idle capacity without disturbing active or 
 test("idle reclamation keeps one progress slot for requests waiting on cache reads", async (t) => {
   const created = [];
   const terminated = [];
-  let resolveCache;
   class FakeWorker {
     constructor() { this.listeners = {}; this.messages = []; created.push(this); }
     addEventListener(type, handler) { this.listeners[type] = handler; }
     postMessage(message) { this.messages.push(message); }
     terminate() { terminated.push(this); }
   }
-  setTessellationCacheProvider({
-    probeMany: () => new Promise((resolve) => { resolveCache = resolve; }),
-    async getProbed() { return null; },
-  });
+  const { provider, answer: resolveCache } = waitingProvider();
+  setTessellationCacheProvider(provider);
   t.after(() => setTessellationCacheProvider(null));
   const savedWorker = globalThis.Worker;
   globalThis.Worker = FakeWorker;
@@ -477,7 +497,7 @@ test("idle reclamation keeps one progress slot for requests waiting on cache rea
     });
     assert.equal(surfWorkerMemoryStats().residentEstimateBytes, 0, "a cache waiter has not used an isolate");
 
-    resolveCache(null);
+    resolveCache();
     await new Promise((resolve) => setTimeout(resolve, 0));
     const survivor = created.find((worker) =>
       !terminated.includes(worker) && worker.messages.some((message) => message.url.endsWith("cache-only.surf")));
@@ -652,7 +672,7 @@ test("aborting synchronous work replaces only its worker and preserves unrelated
   }
 });
 
-test("bytes a batched read already holds are posted without a read, and a tier already probed is not probed again", async (t) => {
+test("bytes a batched read already holds are posted without a read; otherwise the stored mesh is read, and a missing one is a probe miss", async (t) => {
   const created = [];
   class FakeWorker {
     constructor() { this.listeners = {}; this.messages = []; created.push(this); }
@@ -661,10 +681,10 @@ test("bytes a batched read already holds are posted without a read, and a tier a
     terminate() {}
   }
   const reads = [];
+  let stored = true;
   setTessellationCacheProvider({
-    async probeMany(keys) { reads.push("probe"); return keys.map(() => null); },
-    async getProbed() { reads.push("body"); return null; },
-    async put() {},
+    async probeMany(keys) { reads.push("probe"); return keys.map(() => (stored ? ROW : null)); },
+    async getProbed() { reads.push("body"); return ENTRY.slice(); },
   });
   t.after(() => setTessellationCacheProvider(null));
   const savedWorker = globalThis.Worker;
@@ -676,25 +696,27 @@ test("bytes a batched read already holds are posted without a read, and a tier a
     return { message, transfer };
   };
   try {
-    const entry = new Uint8Array([1, 2, 3, 4]);
+    const entry = ENTRY.slice();
     const held = loadSurfComponentInWorker("http://x/held.surf", { identity: { ...CACHE_IDENTITY, tessellationEntry: entry } });
     await new Promise((resolve) => setTimeout(resolve, 0));
     const posted = answer("http://x/held.surf");
     await held;
     assert.equal(posted.message.cachedEntry, entry);
     assert.deepEqual(posted.transfer, [entry.buffer], "its own buffer travels to the worker");
-    const probed = loadSurfComponentInWorker("http://x/probed.surf", { identity: { ...CACHE_IDENTITY, tessellationProbed: true } });
+    assert.deepEqual(reads, [], "a held body is not read again");
+
+    const unread = loadSurfComponentInWorker("http://x/unread.surf", { identity: CACHE_IDENTITY });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const miss = answer("http://x/probed.surf");
-    await probed;
-    assert.equal(miss.message.cachedEntry, undefined);
-    assert.equal(miss.message.wantEntry, true, "the miss still comes back to be written");
-    assert.deepEqual(reads, [], "neither request read the cache");
-    const unprobed = loadSurfComponentInWorker("http://x/unprobed.surf", { identity: CACHE_IDENTITY });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    answer("http://x/unprobed.surf");
-    await unprobed;
-    assert.deepEqual(reads, ["probe"], "one with neither probes as before");
+    const read = answer("http://x/unread.surf");
+    await unread;
+    assert.deepEqual(reads, ["probe", "body"], "one with no body probes and reads it");
+    assert.deepEqual(read.message.cachedEntry, ENTRY);
+
+    stored = false;
+    await assert.rejects(loadSurfComponentInWorker("http://x/missing.surf", { identity: CACHE_IDENTITY }),
+      isTessellationCacheProbeMissError, "a mesh the store does not hold is the caller's to ask for");
+    assert.equal(created.flatMap((worker) => worker.messages).some(({ message }) => message.url === "http://x/missing.surf"), false,
+      "nothing was posted for it");
   } finally {
     reclaimIdleSurfWorkers();
     globalThis.Worker = savedWorker;
@@ -709,12 +731,8 @@ test("a pending warm-cache lookup does not occupy a worker slot", async (t) => {
     postMessage(message) { this.messages.push(message); }
     terminate() {}
   }
-  let resolveCache;
-  setTessellationCacheProvider({
-    probeMany: () => new Promise((resolve) => { resolveCache = resolve; }),
-    async getProbed() { return null; },
-    async put() {},
-  });
+  const { provider, answer: resolveCache } = waitingProvider();
+  setTessellationCacheProvider(provider);
   t.after(() => setTessellationCacheProvider(null));
   const savedWorker = globalThis.Worker;
   globalThis.Worker = FakeWorker;
@@ -723,7 +741,7 @@ test("a pending warm-cache lookup does not occupy a worker slot", async (t) => {
       identity: CACHE_IDENTITY,
     });
     assert.equal(created.some((worker) => worker.messages.length > 0), false);
-    const ready = loadSurfComponentInWorker("http://x/not-content-addressed.surf");
+    const ready = loadSurfComponentInWorker("http://x/held.surf");
     const readyWorker = created.find((worker) => worker.messages.length > 0);
     assert.ok(readyWorker, "ready work dispatches while the cache lookup waits");
     const readyMessage = readyWorker.messages[0];
@@ -732,7 +750,7 @@ test("a pending warm-cache lookup does not occupy a worker slot", async (t) => {
     });
     assert.deepEqual((await ready).meshData.parts, ["ready"]);
 
-    resolveCache(new Map());
+    resolveCache();
     await new Promise((resolve) => setTimeout(resolve, 0));
     const cachedWorker = created.find((worker) =>
       worker.messages.some((message) => message.url.endsWith("cached.surf")));
@@ -916,11 +934,11 @@ test('custom resource transfers begin only when a worker slot is reserved', asyn
   await Promise.all(pending);
 });
 
-// A part that opened from the tessellation cache has no SURF URL until its surface is resolved, and
-// the viewport's refinement asks for its next level with that empty URL first, the cache being the
-// cheap way there. A miss used to hand the worker a ticket for "", which read the page's own
-// address: in the CAD app, a cad_http GET of its sandbox page, answered 404 (43 per hypercar open).
-test("a miss with no SURF URL fails as not ready, reading nothing", async (t) => {
+// A part that opened from its stored mesh has no SURF URL until its surface is resolved, and the
+// viewport's refinement asks for its selectors with that empty URL first. That used to hand the
+// worker a ticket for "", which read the page's own address: in the CAD app, a cad_http GET of its
+// sandbox page, answered 404 (43 per hypercar open).
+test("selectors with no SURF URL fail as not ready, fetching no ticket", async (t) => {
   const created = [];
   class FakeWorker {
     constructor() { this.messages = []; created.push(this); }
@@ -928,7 +946,7 @@ test("a miss with no SURF URL fails as not ready, reading nothing", async (t) =>
     postMessage(message) { this.messages.push(message); }
     terminate() {}
   }
-  setTessellationCacheProvider({ async probeMany(keys) { return keys.map(() => null); }, async getProbed() { return null; }, async put() {} });
+  setTessellationCacheProvider({ async probeMany(keys) { return keys.map(() => ROW); }, async getProbed() { return ENTRY.slice(); } });
   const savedWorker = globalThis.Worker;
   globalThis.Worker = FakeWorker;
   t.after(() => { reclaimIdleSurfWorkers(); globalThis.Worker = savedWorker; setTessellationCacheProvider(null); });

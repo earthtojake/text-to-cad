@@ -7,54 +7,55 @@ import {
 } from "../kit/inspector/FileSheet.js";
 import { KinematicsPoseRow, NO_PRESET_VALUE, DEFAULT_POSE_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 
-const JOINT_CONTROL_SYNC_EPSILON = 0.001;
-const JOINT_CONTROL_LOCAL_OVERRIDE_MS = 3500;
+const CONTROL_SYNC_EPSILON = 0.001;
+const CONTROL_LOCAL_OVERRIDE_MS = 3500;
+// A control with no limits (a continuous joint) spans one turn on its slider; a free slide spans a metre.
+const UNBOUNDED_SPAN = { deg: [-180, 180], m: [-1, 1] };
 
-function jointControlValuesClose(left, right) {
-  return Math.abs(Number(left) - Number(right)) <= JOINT_CONTROL_SYNC_EPSILON;
+function controlValuesClose(left, right) {
+  return Math.abs(Number(left) - Number(right)) <= CONTROL_SYNC_EPSILON;
 }
 
-function isAngularJoint(joint) {
-  const jointType = String(joint?.type || "").trim().toLowerCase();
-  return jointType === "continuous" || jointType === "revolute";
+function isAngular(control) {
+  return String(control?.unit || "").trim().toLowerCase() === "deg";
 }
 
-function jointUnitLabel(joint) {
-  return isAngularJoint(joint) ? "deg" : "m";
-}
-
-function formatJointValue(value, joint) {
-  const scale = isAngularJoint(joint) ? 10 : 10000;
+function formatControlValue(value, control) {
+  const scale = isAngular(control) ? 10 : 10000;
   const rounded = Math.round(Number(value) * scale) / scale;
   const safeValue = Number.isFinite(rounded) ? rounded : 0;
-  return isAngularJoint(joint) ? `${safeValue}\u00b0` : `${safeValue} m`;
+  return isAngular(control) ? `${safeValue}°` : `${safeValue} ${control?.unit || "m"}`;
 }
 
-function clampJointInputValue(valueDeg, minValueDeg, maxValueDeg, fallbackValueDeg) {
-  const numericValue = Number.isFinite(Number(valueDeg)) ? Number(valueDeg) : fallbackValueDeg;
-  return Math.min(Math.max(numericValue, minValueDeg), Math.max(minValueDeg, maxValueDeg));
+/** The slider's span: the control's declared limits, else one turn or one metre about zero
+ * (a null limit is no limit, and `Number(null)` is 0, so it is asked first). */
+function sliderSpan(control) {
+  const limit = value => (value == null ? Number.NaN : Number(value));
+  const min = limit(control?.min), max = limit(control?.max);
+  if (Number.isFinite(min) && Number.isFinite(max)) return [min, max];
+  return UNBOUNDED_SPAN[isAngular(control) ? "deg" : "m"];
+}
+
+function clampInputValue(value, min, max, fallback) {
+  const numericValue = Number.isFinite(Number(value)) ? Number(value) : fallback;
+  return Math.min(Math.max(numericValue, min), Math.max(min, max));
 }
 
 // A row keeps its own live value while it is being driven: it writes at most once per
 // animation frame, and after a local change it ignores the pose's value until the two
 // agree (or a few seconds pass), so a slider never fights the hand moving it.
-const JointRow = memo(function JointRow({
-  joint,
-  valueDeg,
-  onValueChange
-}) {
-  const jointName = String(joint?.name || "").trim();
-  const minValueDeg = Number.isFinite(Number(joint?.minValueDeg)) ? Number(joint.minValueDeg) : -180;
-  const maxValueDeg = Number.isFinite(Number(joint?.maxValueDeg)) ? Number(joint.maxValueDeg) : 180;
-  const safeValueDeg = clampJointInputValue(valueDeg, minValueDeg, maxValueDeg, 0);
-  const unitLabel = jointUnitLabel(joint);
-  const sliderStep = isAngularJoint(joint) ? 1 : 0.001;
+const ControlRow = memo(function ControlRow({ control, value, onValueChange }) {
+  const label = String(control?.label || control?.id || "").trim();
+  const [min, max] = sliderSpan(control);
+  const safeValue = clampInputValue(value, min, max, 0);
+  const unitLabel = isAngular(control) ? "deg" : String(control?.unit || "m");
+  const sliderStep = isAngular(control) ? 1 : 0.001;
   const pendingFrameRef = useRef(0);
-  const pendingValueRef = useRef(safeValueDeg);
-  const latestSafeValueRef = useRef(safeValueDeg);
+  const pendingValueRef = useRef(safeValue);
+  const latestSafeValueRef = useRef(safeValue);
   const localOverrideRef = useRef(false);
   const localOverrideTimeoutRef = useRef(0);
-  const [liveValueDeg, setLiveValueDeg] = useState(safeValueDeg);
+  const [liveValue, setLiveValue] = useState(safeValue);
 
   const clearLocalOverrideTimeout = () => {
     if (localOverrideTimeoutRef.current && typeof window !== "undefined") {
@@ -63,36 +64,34 @@ const JointRow = memo(function JointRow({
     localOverrideTimeoutRef.current = 0;
   };
 
-  const releaseLocalOverride = (nextValueDeg = latestSafeValueRef.current) => {
+  const releaseLocalOverride = (nextValue = latestSafeValueRef.current) => {
     clearLocalOverrideTimeout();
     localOverrideRef.current = false;
-    const normalizedValueDeg = clampJointInputValue(nextValueDeg, minValueDeg, maxValueDeg, latestSafeValueRef.current);
-    pendingValueRef.current = normalizedValueDeg;
-    setLiveValueDeg(normalizedValueDeg);
+    const normalized = clampInputValue(nextValue, min, max, latestSafeValueRef.current);
+    pendingValueRef.current = normalized;
+    setLiveValue(normalized);
   };
 
-  const holdLocalValueUntilParentSettles = (nextValueDeg) => {
-    pendingValueRef.current = nextValueDeg;
+  const holdLocalValueUntilParentSettles = (nextValue) => {
+    pendingValueRef.current = nextValue;
     localOverrideRef.current = true;
     clearLocalOverrideTimeout();
     if (typeof window !== "undefined") {
-      localOverrideTimeoutRef.current = window.setTimeout(() => {
-        releaseLocalOverride();
-      }, JOINT_CONTROL_LOCAL_OVERRIDE_MS);
+      localOverrideTimeoutRef.current = window.setTimeout(() => { releaseLocalOverride(); }, CONTROL_LOCAL_OVERRIDE_MS);
     }
   };
 
   useEffect(() => {
-    latestSafeValueRef.current = safeValueDeg;
+    latestSafeValueRef.current = safeValue;
     if (localOverrideRef.current) {
-      if (jointControlValuesClose(safeValueDeg, pendingValueRef.current)) {
-        releaseLocalOverride(safeValueDeg);
+      if (controlValuesClose(safeValue, pendingValueRef.current)) {
+        releaseLocalOverride(safeValue);
       }
       return;
     }
-    pendingValueRef.current = safeValueDeg;
-    setLiveValueDeg(safeValueDeg);
-  }, [safeValueDeg]);
+    pendingValueRef.current = safeValue;
+    setLiveValue(safeValue);
+  }, [safeValue]);
 
   useEffect(() => () => {
     if (pendingFrameRef.current && typeof cancelAnimationFrame === "function") {
@@ -101,10 +100,10 @@ const JointRow = memo(function JointRow({
     clearLocalOverrideTimeout();
   }, []);
 
-  const scheduleValueChange = (nextValueDeg) => {
-    pendingValueRef.current = nextValueDeg;
+  const scheduleValueChange = (nextValue) => {
+    pendingValueRef.current = nextValue;
     if (typeof requestAnimationFrame !== "function") {
-      onValueChange(joint, nextValueDeg);
+      onValueChange(control.id, nextValue);
       return;
     }
     if (pendingFrameRef.current) {
@@ -112,70 +111,62 @@ const JointRow = memo(function JointRow({
     }
     pendingFrameRef.current = requestAnimationFrame(() => {
       pendingFrameRef.current = 0;
-      onValueChange(joint, pendingValueRef.current);
+      onValueChange(control.id, pendingValueRef.current);
     });
   };
 
-  const commitValue = (nextValueDeg) => {
-    const normalizedValueDeg = clampJointInputValue(nextValueDeg, minValueDeg, maxValueDeg, liveValueDeg);
-    pendingValueRef.current = normalizedValueDeg;
+  const commitValue = (nextValue) => {
+    const normalized = clampInputValue(nextValue, min, max, liveValue);
+    pendingValueRef.current = normalized;
     if (pendingFrameRef.current && typeof cancelAnimationFrame === "function") {
       cancelAnimationFrame(pendingFrameRef.current);
       pendingFrameRef.current = 0;
     }
-    setLiveValueDeg(normalizedValueDeg);
-    holdLocalValueUntilParentSettles(normalizedValueDeg);
-    onValueChange(joint, normalizedValueDeg);
+    setLiveValue(normalized);
+    holdLocalValueUntilParentSettles(normalized);
+    onValueChange(control.id, normalized);
   };
 
   return (
     <FileSheetSliderField
-      label={jointName || "Joint"}
-      value={formatJointValue(liveValueDeg, joint)}
+      label={label || "Joint"}
+      value={formatControlValue(liveValue, control)}
       onValueCommit={(nextValue) => {
-        commitValue(parseFileSheetNumberInput(nextValue, {
-          fallback: liveValueDeg,
-          min: minValueDeg,
-          max: maxValueDeg
-        }));
+        commitValue(parseFileSheetNumberInput(nextValue, { fallback: liveValue, min, max }));
       }}
-      valueInputProps={{
-        ariaLabel: `${jointName || "Joint"} value in ${unitLabel}`
-      }}
+      valueInputProps={{ ariaLabel: `${label || "Joint"} value in ${unitLabel}` }}
     >
-        <TooltipHint content={`${formatJointValue(minValueDeg, joint)} to ${formatJointValue(maxValueDeg, joint)}`}>
+        <TooltipHint content={`${formatControlValue(min, control)} to ${formatControlValue(max, control)}`}>
           <Slider
             className={cn(FILE_SHEET_PRECISION_SLIDER_CLASSES, "min-w-0")}
-            min={minValueDeg}
-            max={maxValueDeg}
+            min={min}
+            max={max}
             step={sliderStep}
-            value={[liveValueDeg]}
+            value={[liveValue]}
             onValueChange={(nextValue) => {
-              const nextValueDeg = clampJointInputValue(nextValue?.[0], minValueDeg, maxValueDeg, liveValueDeg);
-              if (jointControlValuesClose(nextValueDeg, pendingValueRef.current)) {
+              const next = clampInputValue(nextValue?.[0], min, max, liveValue);
+              if (controlValuesClose(next, pendingValueRef.current)) {
                 return;
               }
-              setLiveValueDeg(nextValueDeg);
-              holdLocalValueUntilParentSettles(nextValueDeg);
-              scheduleValueChange(nextValueDeg);
+              setLiveValue(next);
+              holdLocalValueUntilParentSettles(next);
+              scheduleValueChange(next);
             }}
-            onValueCommit={(nextValue) => {
-              commitValue(nextValue?.[0]);
-            }}
-            thumbProps={{ "aria-label": jointName || "Joint value" }}
+            onValueCommit={(nextValue) => { commitValue(nextValue?.[0]); }}
+            thumbProps={{ "aria-label": label || "Joint value" }}
           />
         </TooltipHint>
     </FileSheetSliderField>
   );
 });
 
-// Each control subscribes to the ONE thing it draws (a joint's value, the named pose's
+// Each control subscribes to the ONE thing it draws (a control's value, the named pose's
 // id), so a pose step renders the row that moved and nothing else: not the section, not
 // its 26 other rows.
-function PoseJointRow({ pose, joint }) {
-  const read = () => pose.getSnapshot().values[joint.name] ?? joint.defaultValueDeg ?? 0;
-  const valueDeg = useSyncExternalStore(pose.subscribe, read, read);
-  return <JointRow joint={joint} valueDeg={valueDeg} onValueChange={pose.write} />;
+function PoseControlRow({ pose, control }) {
+  const read = () => pose.getSnapshot().values[control.id] ?? pose.defaults[control.id] ?? 0;
+  const value = useSyncExternalStore(pose.subscribe, read, read);
+  return <ControlRow control={control} value={value} onValueChange={pose.write} />;
 }
 
 function PoseGroupStateRow({ pose }) {
@@ -194,19 +185,19 @@ function PoseGroupStateRow({ pose }) {
 
 /**
  * A robot's Position panel (the tool stack's, while the Position tool is up): its named pose (an
- * SRDF's group states) when it has one, then a compact slider row per joint a person can drive —
+ * SRDF's group states) when it has one, then a compact slider row per control of the articulation —
  * one panel's rows, with no sections of their own. Reset is the panel heading's.
  *
  * @param {{ pose: ReturnType<typeof import("./poseStore.js").createPoseStore> }} props
  */
 export default function PositionControls({ pose }) {
-  if (!pose.joints.length) return <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>;
+  if (!pose.controls.length) return <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>;
   return (
     <div className="space-y-1.5 pb-1.5 pt-0.5">
-      {/* A named state is a way of SETTING the joints, so it leads them. A plain URDF
+      {/* A named state is a way of SETTING the controls, so it leads them. A plain URDF
           declares none and opens straight onto its values. */}
       <PoseGroupStateRow pose={pose} />
-      {pose.joints.map(joint => <PoseJointRow key={joint.name} pose={pose} joint={joint} />)}
+      {pose.controls.map(control => <PoseControlRow key={control.id} pose={pose} control={control} />)}
     </div>
   );
 }

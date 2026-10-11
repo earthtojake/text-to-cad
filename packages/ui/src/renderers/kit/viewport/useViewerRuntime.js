@@ -49,7 +49,7 @@ export function useViewerRuntime({
   cancelCameraTransition,
   clearKeyboardOrbitState,
   isTrackpadLikeWheelEvent,
-  isPinchWheelEvent,
+  orbitControlsBoostsPinch,
   WHEEL_PINCH_DELTA_BOOST,
   getKeyboardOrbitCommand,
   getKeyboardOrbitAxes,
@@ -704,12 +704,13 @@ export function useViewerRuntime({
         cancelCameraTransition(runtimeRef.current);
         controls.enableDamping = false;
         // Three input classes, three speeds. OrbitControls (r161+) normalizes the delta
-        // itself -- deltaMode to pixels, and ctrl+wheel multiplied by 10 because browsers
+        // itself -- deltaMode to pixels, and a pinch multiplied by 10 because browsers
         // report a trackpad PINCH as a tiny ctrl+wheel. That last boost is already applied
         // by the time zoomSpeed is used, so the pinch speed here is divided by it rather
         // than stacked on top; otherwise a pinch lands ten times hotter than a two-finger
-        // scroll of the same size.
-        controls.zoomSpeed = isPinchWheelEvent(event)
+        // scroll of the same size. Only what OrbitControls itself takes for a pinch is
+        // divided (`orbitControlsBoostsPinch`): its idea of the Control key can go stale.
+        controls.zoomSpeed = orbitControlsBoostsPinch(event, controls)
           ? getPinchZoomSpeed() / WHEEL_PINCH_DELTA_BOOST
           : (isTrackpadLikeWheelEvent(event) ? getPinchZoomSpeed() : ACCELERATED_WHEEL_ZOOM_SPEED);
         // This listener captures, so it runs before OrbitControls takes the step.

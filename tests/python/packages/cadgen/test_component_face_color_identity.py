@@ -126,7 +126,7 @@ class ComponentFaceColorIdentityTest(unittest.TestCase):
         from importlib import import_module
 
         from build123d import Compound, Location
-        from cadgen._internal import surface_extract
+        from cadgen._internal import surf_container
         from cadgen.store.build import build_tree_from_compound
 
         materialization = import_module("cadgen.store.materialize")
@@ -135,7 +135,7 @@ class ComponentFaceColorIdentityTest(unittest.TestCase):
         tree, _, _ = build_tree_from_compound(Compound(children=[red, blue, repeated]), root_name="colors")
         from cadgen._internal import component_package
         with mock.patch.object(component_package, "decode_geometry_component", wraps=component_package.decode_geometry_component) as decoded:
-            with mock.patch.object(surface_extract, "read_surf", wraps=surface_extract.read_surf) as surfaces:
+            with mock.patch.object(surf_container, "read_surf", wraps=surf_container.read_surf) as surfaces:
                 first = materialization.materialize(tree)
         self.assertEqual(decoded.call_count, 1)
         self.assertEqual(surfaces.call_count, 0)

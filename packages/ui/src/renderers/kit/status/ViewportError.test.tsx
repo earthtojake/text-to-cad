@@ -1,8 +1,8 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import ViewportError from './ViewportError.jsx';
-import ViewerAlertCard, { useAlertDismissal } from './ViewerAlertCard.jsx';
+import ViewerAlertCard, { COPIED_MS, useAlertDismissal } from './ViewerAlertCard.jsx';
 import { ViewerMobileContext } from '../../../file-viewer/responsive.js';
 import { viewerLinks } from '../../../file-viewer/navigation/links.js';
 import { ViewerHostContext } from '../../../host/context.js';
@@ -69,4 +69,52 @@ it('offers Retry, and beside it, where the host has a tracker, Report Issue: a n
   expect(body).toContain('- File: gear.step\n- CAD: 0.7.5\n- Platform: linux');
   expect(body).toContain('```\nFile: gear.step\n```');
   expect(body).not.toContain('/Users/ada');
+});
+
+it('copies the whole of Details, however far they scroll, from the icon in their corner, through the host\'s clipboard', async () => {
+  vi.useFakeTimers();
+  try {
+    const traceback = Array.from({ length: 60 }, (_, line) => `  File "/Users/ada/parts/gear.py", line ${line + 1}, in build`);
+    const details = ['File: /Users/ada/parts/gear.step', 'Operation: loading geometry', 'Traceback (most recent call last):', ...traceback,
+      'ValueError: the gear has no teeth'].join('\n');
+    const alert = { severity: 'error', title: 'Couldn’t prepare the model', message: 'The viewer couldn’t finish processing this model.',
+      recovery: 'Try again. If this continues, check the viewer’s terminal output.', details, reload: true };
+    const writeText = vi.fn(async (_text: string | Promise<string>) => {});
+    const host = testHost({ clipboard: { writeText, readText: async () => '', writeImage: async () => {} } });
+    render(<ViewerHostContext.Provider value={host}>
+      <ViewerAlertCard alert={alert} hasContent={false} onReload={() => {}} file="/Users/ada/parts/gear.step" />
+    </ViewerHostContext.Provider>);
+    // Inside Details, at the top-right corner of their box.
+    const disclosure = screen.getByText('Details').closest('details')!;
+    expect(disclosure.open).toBe(false);
+    fireEvent.click(screen.getByText('Details'));
+    expect(disclosure.open).toBe(true);
+    const copy = screen.getByRole('button', { name: 'Copy error details' });
+    expect(disclosure.contains(copy)).toBe(true);
+    expect(copy.closest('[data-alert-details]')?.querySelector('pre')?.textContent).toBe(details);
+
+    await act(async () => { fireEvent.click(copy); });
+    expect(writeText.mock.calls).toEqual([[details]]);
+    // A tick for a moment, then the icon again.
+    expect(screen.getByRole('button', { name: 'Error details copied' })).toBe(copy);
+    act(() => { vi.advanceTimersByTime(COPIED_MS); });
+    expect(screen.getByRole('button', { name: 'Copy error details' })).toBe(copy);
+    expect(screen.queryByRole('status')).toBeNull();
+
+    // A clipboard that refuses it is said, never silent; the icon stays, to try again.
+    writeText.mockRejectedValueOnce(new DOMException('Write permission denied.', 'NotAllowedError'));
+    await act(async () => { fireEvent.click(copy); });
+    expect(screen.getByRole('status').textContent).toBe('The details could not be copied. Select them above and copy them.');
+    expect(screen.getByRole('button', { name: 'Copy error details' })).toBe(copy);
+    await act(async () => { fireEvent.click(copy); });
+    expect(writeText).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole('status')).toBeNull();
+  } finally { vi.useRealTimers(); }
+});
+
+it('offers no copy where there is no clipboard to copy to', () => {
+  render(<ViewerAlertCard alert={{ severity: 'error', title: 'Broken', message: 'No model', details: 'File: gear.step' }} hasContent={false} onReload={() => {}} />);
+  fireEvent.click(screen.getByText('Details'));
+  expect(screen.getByText('File: gear.step')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Copy error details' })).toBeNull();
 });

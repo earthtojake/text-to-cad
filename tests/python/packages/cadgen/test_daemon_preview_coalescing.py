@@ -281,7 +281,7 @@ class CoalescedPreviewRequests(unittest.TestCase):
 
         self.assertFalse(worker.killed)
         self.assertEqual(consumer_conn.frames[-1], {"exit": 0})
-        worker_pool.release.assert_called_once_with(worker, healthy=True)
+        worker_pool.release.assert_called_once_with(worker, healthy=True, cancelled=False)
         self.assertEqual(self.broker.snapshot()["inflight"], 0)
 
     def test_disconnected_consumer_does_not_cancel_the_active_producer(self):
@@ -310,7 +310,7 @@ class CoalescedPreviewRequests(unittest.TestCase):
             producer.result(timeout=3)
 
         self.assertFalse(worker.killed)
-        worker_pool.release.assert_called_once_with(worker, healthy=True)
+        worker_pool.release.assert_called_once_with(worker, healthy=True, cancelled=False)
 
 
 if __name__ == "__main__":

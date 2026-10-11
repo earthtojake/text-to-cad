@@ -83,7 +83,7 @@ class _Tmp(unittest.TestCase):
         return reply["structuredContent"]["status"], json.loads(data) if data else None
 
     def consent(self, server: Server, share: bool | None = None) -> dict:
-        """The app menu's Share usage stats toggle: read, or the person's answer."""
+        """The app menu's Share anonymous usage data toggle: read, or the person's answer."""
         if share is None:
             return self.http(server, "GET", "/__cad/analytics")[1]
         return self.http(server, "POST", "/__cad/analytics", {"share": share})[1]

@@ -86,8 +86,8 @@ test("surface instances and packed deformation backing buffers are admitted", ()
   instance.setColorAt(0, new THREE.Color("white"));
   instance.setColorAt(1, new THREE.Color("white"));
   const packed = new ArrayBuffer(128);
-  records[0].tubeDeformationState = {
-    mapping: [new Uint8Array(packed, 16, 8)]
+  records[0].tubeSkinState = {
+    joints: [new Uint8Array(packed, 16, 8)]
   };
 
   const directTotals = renderMemoryAccounting({

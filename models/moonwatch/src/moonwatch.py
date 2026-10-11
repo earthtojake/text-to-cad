@@ -9,10 +9,12 @@ cased via the documented flip about X + MOVT_Z_OFFSET lift.
 Articulation is split the way cadgen splits it: typed mates in `KINEMATICS`
 below (the watch's real degrees of freedom — hands, going train, escapement,
 chronograph, crown, pushers — plus the gear ratios that tie them together),
-and choreography in the `ANIMATION_JS` literal below (exploded reveals, the sinusoidal
-balance swing and the escape wheel's per-beat snap, which are not linear
-gearings and so are not mates).
+and choreography in the `ANIMATION` clips below, baked to keyframes when the
+watch builds (exploded reveals, the sinusoidal balance swing and the escape
+wheel's per-beat snap, which are not linear gearings and so are not mates).
 """
+
+import math
 
 import bracelet
 import cadgen
@@ -197,494 +199,369 @@ KINEMATICS = {
 }
 
 
-ANIMATION_JS = r'''// Choreography for the moonwatch chronograph assembly.
-// Embedded into STEP/moonwatch.step.json by @step(animation=ANIMATION_JS).
-//
-// This is the half of the retired `moonwatch.params.js` sidecar that is NOT
-// kinematics: staged explodes, the sinusoidal balance swing and the escape
-// wheel's per-beat snap (neither is a linear gearing, so neither is a mate),
-// and the movement's lift-and-flip out of the case. The watch's real degrees
-// of freedom — hands, going train, escapement, chronograph, crown, pushers —
-// and the gear ratios between them live in `KINEMATICS` in moonwatch.py.
-// Animation is deliberately ignorant of mates, so these clips restate the
-// motion in a few lines of ratio math.
-//
-// Clips:
-//   running    — one seamless escapement loop, slow-motion macro pacing:
-//                4 balance oscillations, 8 beats. The escape wheel advances
-//                one half-tooth-pitch step per beat (8 x 12 deg = 96 deg =
-//                exactly 4 tooth pitches of the 15-tooth wheel, so the loop
-//                is seamless), the pallet fork snaps between banking
-//                positions at each beat, the fourth/third wheels creep
-//                spoke-symmetric increments, and the chronograph runs.
-//   reveal     — staged partial explode: the caseback stack fans downward,
-//                the movement ring drops clear, the box crystal and gasket
-//                lift off the dial, the bracelet straps slide apart, and the
-//                movement rises into the case mouth and flips bridge-side-up.
-//   showcase   — full explode timeline: the dial, bezel stack and crystal fan
-//                out to the sides, the caseback stack and bracelet spread
-//                away, then the movement rises straight up the middle, flips,
-//                and its own subassembly fans open in tiers. The second half
-//                mirrors the first, so the watch reassembles and the loop
-//                closes.
-//   grand_tour — reveal opens and dwells with the escapement running, then
-//                the movement's tiers fan open while the floating face stack
-//                lifts for headroom; everything mirrors closed again.
-//
-// Watch frame: +Z = dial. Movement parts sit at watch (x, -y) of their local
-// layout positions in lib/spec.py (the movement is cased dial-down via a
-// 180 deg flip about X). All run rotations are about watch +Z through each
-// wheel center; every target is emitted as ONE chain, rotations BEFORE the
-// summed translation, and successive handle calls PREMULTIPLY — so the
-// composition order matches the retired sidecar's
-// `effects.transform(ref, {transforms: [...]})` exactly.
+# ---------------------------------------------------------------------------
+# Animation — clips sampled to keyframes when the model builds
+# ---------------------------------------------------------------------------
+# The motion that is NOT kinematics: staged explodes, the sinusoidal balance
+# swing and the escape wheel's per-beat snap (neither is a linear gearing, so
+# neither is a mate), and the movement's lift-and-flip out of the case. Clips
+# know nothing of the mates, so they restate the motion in a few lines of
+# ratio math, about the same wheel centers the mates turn on.
+#
+#   running    — one seamless escapement loop, slow-motion macro pacing:
+#                4 balance oscillations, 8 beats. The escape wheel advances
+#                one half-tooth-pitch step per beat (8 x 12 deg = 96 deg =
+#                exactly 4 tooth pitches of the 15-tooth wheel, so the loop
+#                is seamless), the pallet fork snaps between banking
+#                positions at each beat, the fourth/third wheels creep
+#                spoke-symmetric increments, and the chronograph runs.
+#   reveal     — staged partial explode: the caseback stack fans downward,
+#                the movement ring drops clear, the box crystal and gasket
+#                lift off the dial, the bracelet straps slide apart, and the
+#                movement rises into the case mouth and flips bridge-side-up.
+#   showcase   — full explode timeline: the dial, bezel stack and crystal fan
+#                out to the sides, the caseback stack and bracelet spread
+#                away, then the movement rises straight up the middle, flips,
+#                and its own subassembly fans open in tiers. The second half
+#                mirrors the first, so the watch reassembles and the loop
+#                closes.
+#   grand_tour — reveal opens and dwells with the escapement running, then
+#                the movement's tiers fan open while the floating face stack
+#                lifts for headroom; everything mirrors closed again.
+#
+# All run rotations are about watch +Z through each wheel center. Every
+# target is emitted as ONE chain, rotations BEFORE the summed translation, and
+# successive handle calls PREMULTIPLY: a part turns about its rest pivot, then
+# translates, and the movement's flip and rise wrap everything inside it last.
 
-const Z_AXIS = [0, 0, 1];
+_X_AXIS = (1.0, 0.0, 0.0)
 
-// Movement layout positions (lib/spec.py, local) mapped to watch frame (x, -y).
-const BALANCE = [-0.4, 7.6, 0];
-const PALLET = [-4.9, 7.2, 0];
-const ESCAPE = [-7.6, 5.2, 0];
-const FOURTH = [-10.2, 0, 0];
-const THIRD = [-5.0, 2.6, 0];
-const CENTER = [0, 0, 0];
-const COUPLING = [5.6, 4.6, 0];
+# Escapement pacing, per run loop.
+_OSCILLATIONS = 4                                    # balance swings per loop
+_BEATS = _OSCILLATIONS * 2                           # escape steps per loop
+_BALANCE_AMPLITUDE_DEG = 75.0
+_ESCAPE_STEP_DEG = 360.0 / S.ESCAPE_WHEEL_TEETH / 2  # half a tooth pitch: 12 deg
+_PALLET_BANK_DEG = 8.0
+_STEP_FRACTION = 0.25                                # fraction of a beat spent mid-snap
 
-// Escapement pacing (per run loop).
-const OSCILLATIONS = 4; // balance swings per loop
-const BEATS = OSCILLATIONS * 2; // escape steps per loop
-const BALANCE_AMPLITUDE_DEG = 75;
-const ESCAPE_STEP_DEG = 12; // half a tooth pitch (360/15/2)
-const PALLET_BANK_DEG = 8;
-const STEP_FRACTION = 0.25; // fraction of a beat spent mid-snap
 
-function smooth(t) {
-  const x = Math.min(1, Math.max(0, t));
-  return x * x * (3 - 2 * x);
+def _smooth(t: float) -> float:
+    x = min(1.0, max(0.0, t))
+    return x * x * (3.0 - 2.0 * x)
+
+
+def _stage(t: float, a: float, b: float) -> float:
+    """Staged smoothstep: 0 before a, 1 after b."""
+    return _smooth((t - a) / (b - a))
+
+
+def _snap(fraction: float) -> float:
+    """Quick snap easing inside one beat: completes in _STEP_FRACTION of it."""
+    return _smooth(fraction / _STEP_FRACTION)
+
+
+# Parts and groups are targeted by label. The movement-base parts the showcase
+# tiers fan but nothing else names are targeted by occurrence id: the base is
+# the movement's first child, and the movement the watch's fourth.
+_MOVEMENT_BASE = "#o1.4.1"
+
+
+def _base(first: int, last: int) -> list[str]:
+    """Movement-base children first..last, by occurrence id."""
+    return [f"{_MOVEMENT_BASE}.{index}" for index in range(first, last + 1)]
+
+
+_BALANCE_GROUP = (
+    "#balance_wheel", "#balance_staff", "#impulse_jewel",
+    *(f"#timing_screw:{i}" for i in range(16)),
+)
+_PALLET_GROUP = ("#pallet_fork", "#pallet_stone:entry", "#pallet_stone:exit", "#pallet_arbor")
+
+# Staged reveal translations: (target, direction, distance, start, end). The
+# bezel stack and crystal lift clear first, then the dial floats up so the
+# face (hands running) and the movement (flipped bridge-side-up in the case
+# mouth, escapement beating) are BOTH visible, vertically separated.
+_REVEAL_MOVES = (
+    ("#caseback_o_ring", (0, 0, -1), 9.0, 0.0, 0.35),
+    ("#caseback_retaining_ring", (0, 0, -1), 13.0, 0.03, 0.38),
+    ("#caseback", (0, 0, -1), 18.0, 0.06, 0.42),
+    ("#caseback_sapphire", (0, 0, -1), 24.0, 0.09, 0.45),
+    ("#movement_ring", (0, 0, -1), 5.5, 0.0, 0.3),
+    ("#bezel_ring", (0, 0, 1), 34.0, 0.05, 0.45),
+    ("#case_polish:bezel", (0, 0, 1), 34.0, 0.05, 0.45),
+    ("#bezel_insert", (0, 0, 1), 37.0, 0.05, 0.45),
+    ("#tachymeter_scale", (0, 0, 1), 40.0, 0.05, 0.45),
+    ("#crystal", (0, 0, 1), 48.0, 0.05, 0.45),
+    ("#crystal_gasket", (0, 0, 1), 43.0, 0.05, 0.45),
+    ("#dial_and_hands", (0, 0, 1), 26.0, 0.25, 0.6),
+    ("#strap_12", (0, 1, 0), 9.0, 0.1, 0.5),
+    ("#strap_6", (0, -1, 0), 9.0, 0.1, 0.5),
+    ("#clasp", (0, -1, 0), 9.0, 0.1, 0.5),
+)
+
+# Reveal movement lift-and-flip: once the caseback stack is away and the dial
+# is rising, the movement climbs into the case mouth and turns
+# bridge-side-up so the beating escapement faces the same camera as the
+# floating dial.
+_REVEAL_RISE = 16.0
+
+
+def _reveal_stages(r: float) -> tuple[float, float]:
+    """(rise, flip) of the movement at reveal openness r."""
+    return _stage(r, 0.45, 0.85), _stage(r, 0.55, 0.92)
+
+
+# Grand tour timeline: reveal opens and dwells with the escapement running,
+# then the movement's tiers fan open showcase-style while the floating face
+# stack rises further to make room; everything mirrors closed again so the
+# loop is seamless.
+_TOUR_HEADROOM = 32.0  # extra face-stack lift while the tiers are open
+_TOUR_HEADROOM_TARGETS = (
+    "#dial_and_hands", "#crystal", "#crystal_gasket", "#bezel_ring",
+    "#case_polish:bezel", "#bezel_insert", "#tachymeter_scale",
+)
+
+
+def _tour_stages(t: float) -> tuple[float, float]:
+    """(r, f) at tour progress t: r is the reveal openness (a trapezoid, open
+    by 0.20 and closing from 0.83), f the gear-tier fan (open 0.45..0.55,
+    closed again by 0.83)."""
+    return (
+        min(_stage(t, 0.0, 0.2), _stage(1 - t, 0.0, 0.17)),
+        min(_stage(t, 0.45, 0.55), _stage(1 - t, 0.17, 0.25)),
+    )
+
+
+# --- showcase choreography ---------------------------------------------------
+# The dial, bezel stack and crystal clear out to the SIDES so the movement can
+# rise straight up the middle; the caseback stack and bracelet spread away.
+# Lateral offsets keep every disc's center at least (disc radius + movement
+# radius) from the rise corridor. Pushers sit at 2 and 4 o'clock and spread
+# out along their own axes.
+_P2, _P4 = (tuple(-c for c in _pusher_direction(angle)) for angle in S.PUSHER_ANGLES)
+
+# (target, offset at full lateral stage).
+_SHOWCASE_LATERALS = (
+    ("#dial_and_hands", (-40, 0, 12)),
+    ("#bezel_ring", (-48, 0, 14)),
+    ("#case_polish:bezel", (-48, 0, 14)),
+    ("#bezel_insert", (-52, 0, 16)),
+    ("#tachymeter_scale", (-56, 0, 18)),
+    ("#crystal", (40, 0, 12)),
+    ("#crystal_gasket", (35, 0, 9)),
+    ("#crown", (13, 0, 0)),
+    ("#crown_tube", (9, 0, 0)),
+    ("#crown_o_ring", (6, 0, 0)),
+    ("#pusher_cap:2oclock", (_P2[0] * 11, _P2[1] * 11, 0)),
+    ("#pusher_tube:2oclock", (_P2[0] * 8, _P2[1] * 8, 0)),
+    ("#pusher_spring:2oclock", (_P2[0] * 5.5, _P2[1] * 5.5, 0)),
+    ("#pusher_o_ring:2oclock", (_P2[0] * 3.5, _P2[1] * 3.5, 0)),
+    ("#pusher_cap:4oclock", (_P4[0] * 11, _P4[1] * 11, 0)),
+    ("#pusher_tube:4oclock", (_P4[0] * 8, _P4[1] * 8, 0)),
+    ("#pusher_spring:4oclock", (_P4[0] * 5.5, _P4[1] * 5.5, 0)),
+    ("#pusher_o_ring:4oclock", (_P4[0] * 3.5, _P4[1] * 3.5, 0)),
+)
+
+# (target, offset at full spread stage): the caseback stack and bracelet.
+_SHOWCASE_SPREADS = (
+    ("#movement_ring", (0, 0, -7)),
+    ("#caseback_o_ring", (0, 0, -12)),
+    ("#caseback_retaining_ring", (0, 0, -17)),
+    ("#caseback", (0, 0, -23)),
+    ("#caseback_sapphire", (0, 0, -30)),
+    ("#spring_bar:12", (0, 4, 0)),
+    ("#spring_bar:6", (0, -4, 0)),
+    ("#strap_12", (0, 14, 0)),
+    ("#strap_6", (0, -14, 0)),
+    ("#clasp", (0, -21, 0)),
+)
+
+# Movement subassembly tiers, (targets, pre-flip z offset; negative = bridge
+# side, so after the 180 deg flip these tiers stack UPWARD with the
+# chronograph works on top). Applied with the fan sub-stage, in the movement's
+# pre-parent frame so the group flip + rise carries them.
+_MOVEMENT_TIERS = (
+    (("#keyless_works",), 7.0),
+    ((*_base(14, 20), *_base(63, 67)), -5.0),   # going train + escapement
+    (_base(10, 13), -8.0),                      # barrel
+    (_base(68, 74), -11.5),                     # pallet bridge
+    ((*_base(34, 47), *_base(51, 53)), -15.5),  # train bridge
+    ((*_base(21, 33), *_base(48, 50)), -15.5),  # barrel bridge
+    (_base(54, 62), -19.0),                     # ratchet, crown wheel, click
+    (_base(75, 105), -24.0),                    # balance + cock + shock
+    (("#chronograph_works",), -30.0),
+)
+
+_MOVEMENT_RISE = 30.0
+_MOVEMENT_CENTER = (0.0, 0.0, 1.7)
+
+
+def _showcase_stages(s: float) -> tuple[float, float, float, float, float]:
+    """(lateral, spread, rise, flip, fan) at showcase progress s, keyed on
+    min(s, 1 - s) so the reassembly half mirrors the expansion half exactly
+    and the loop is seamless."""
+    u = min(s, 1 - s)
+    return (
+        _stage(u, 0.02, 0.17),
+        _stage(u, 0.05, 0.25),
+        _stage(u, 0.17, 0.34),
+        _stage(u, 0.3, 0.38),
+        _stage(u, 0.36, 0.42),
+    )
+
+
+# --- the one choreography routine -------------------------------------------
+def _choreograph(m, *, run: float = 0.0, reveal: float = 0.0, showcase: float = 0.0, tour: float = 0.0) -> None:
+    """Pose the watch on its four timelines: `reveal`, `showcase` and `tour`
+    run 0..1, and `run` counts escapement loops. Each clip below drives them."""
+    s = min(1.0, max(0.0, showcase))
+    tour_open, tour_fan = _tour_stages(min(1.0, max(0.0, tour)))
+    # The tour timeline reuses the reveal choreography for its open/close.
+    rv = max(reveal, tour_open)
+    # Three escapement loops per tour cycle: run + 2 * tour sweeps 0..3 when
+    # the grand tour drives both with the same progress, and is plain `run`
+    # whenever tour is 0. The count runs on rather than wrapping each loop: a
+    # clip is baked to keyframes, and a wheel snapped back a whole loop would
+    # spin backwards between two of them.
+    run = run + 2 * tour
+    lateral, spread, rise, flip, fan = _showcase_stages(s)
+
+    # Per-target accumulators: rotations happen first (about the original
+    # pivots), then one summed translation. Each target gets one m.get chain.
+    rotations: dict[str, list[tuple[tuple, float]]] = {}
+    offsets: dict[str, list[float]] = {}
+
+    def add_rot(target: str, pivot: tuple, deg: float) -> None:
+        rotations.setdefault(target, []).append((pivot, deg))
+
+    def add_move(target: str, vector: tuple, scale: float) -> None:
+        if not scale:
+            return
+        offset = offsets.setdefault(target, [0.0, 0.0, 0.0])
+        for axis in range(3):
+            offset[axis] += vector[axis] * scale
+
+    # --- reveal ---------------------------------------------------------------
+    for target, direction, distance, a, b in _REVEAL_MOVES:
+        add_move(target, direction, distance * _stage(rv, a, b))
+
+    # --- showcase -------------------------------------------------------------
+    if s > 0:
+        for target, vector in _SHOWCASE_LATERALS:
+            add_move(target, vector, lateral)
+        for target, vector in _SHOWCASE_SPREADS:
+            add_move(target, vector, spread)
+        for targets, dz in _MOVEMENT_TIERS:
+            for target in targets:
+                add_move(target, (0, 0, dz), fan)
+
+    # --- grand tour: fan the movement tiers in the reveal pose -----------------
+    if tour_fan > 0:
+        for targets, dz in _MOVEMENT_TIERS:
+            for target in targets:
+                add_move(target, (0, 0, dz), tour_fan)
+        for target in _TOUR_HEADROOM_TARGETS:
+            add_move(target, (0, 0, 1), _TOUR_HEADROOM * tour_fan)
+
+    # --- escapement -----------------------------------------------------------
+    beats = run * _BEATS
+    beat = math.floor(beats)
+    beat_fraction = beats - beat
+
+    # Balance: sinusoidal oscillation; beats land on its zero crossings.
+    balance_deg = _BALANCE_AMPLITUDE_DEG * math.sin(math.tau * _OSCILLATIONS * run)
+    for target in _BALANCE_GROUP:
+        add_rot(target, _W_BALANCE, balance_deg)
+
+    # Pallet fork: snaps between banking positions once per beat.
+    from_bank = _PALLET_BANK_DEG if beat % 2 == 0 else -_PALLET_BANK_DEG
+    pallet_deg = from_bank * (1 - 2 * _snap(beat_fraction))
+    for target in _PALLET_GROUP:
+        add_rot(target, _W_PALLET, pallet_deg)
+
+    # Escape wheel: one crisp half-tooth step per beat, released as the pallet
+    # snaps. 8 steps x 12 deg = 4 whole tooth pitches per loop.
+    escape_deg = _ESCAPE_STEP_DEG * (beat + _snap(beat_fraction))
+    for target in ("#escape_wheel", "#escape_pinion"):
+        add_rot(target, _W_ESCAPE, escape_deg)
+
+    # Going train creeps against the escape wheel: alternating directions,
+    # spoke-and-tooth-symmetric 144 deg per loop so the seam is invisible.
+    train_deg = 144 * run
+    for target in ("#fourth_wheel", "#fourth_pinion"):
+        add_rot(target, _W_FOURTH, -train_deg)
+    for target in ("#third_wheel", "#third_pinion"):
+        add_rot(target, _W_THIRD, train_deg)
+
+    # Small seconds hand rides the fourth-wheel arbor (clockwise from dial).
+    add_rot("#hand:sub_seconds", _W_FOURTH, -train_deg)
+
+    # Chronograph shown running: the center runner sweeps one full turn per loop
+    # (full revolutions are always seam-free), the coupling wheel counter-
+    # rotates, and the chrono seconds hand rides the runner arbor.
+    runner_deg = -360 * run
+    for target in (
+        "#chrono_runner_wheel", "#chrono_runner_heart_cam", "#chrono_runner_arbor",
+        "#hand:chrono_seconds", "#hand:chrono_cap",
+    ):
+        add_rot(target, _W_CENTER, runner_deg)
+    add_rot("#coupling_wheel", _W_COUPLING, 360 * run)
+
+    # --- emit ------------------------------------------------------------------
+    for target in dict.fromkeys([*rotations, *offsets]):
+        handle = m.get(target)
+        for pivot, deg in rotations.get(target, ()):
+            handle.rotate(_UP, deg, pivot)
+        if target in offsets:
+            handle.translate(offsets[target])
+
+    # Movement group: flip in place about its own center (child tiers and gear
+    # pivots compose in pre-parent space), then rise out of the case. Reveal and
+    # showcase both drive this; their contributions add (in practice one is
+    # active at a time).
+    reveal_rise, reveal_flip = _reveal_stages(rv)
+    movement_flip = min(1.0, flip + reveal_flip)
+    movement_rise = _MOVEMENT_RISE * rise + _REVEAL_RISE * reveal_rise
+    if movement_flip > 0 or movement_rise > 0:
+        m.get("#movement").rotate(_X_AXIS, 180 * movement_flip, _MOVEMENT_CENTER).translate((0, 0, movement_rise))
+
+
+def _running(t: float, m) -> None:
+    _choreograph(m, run=t / 6)
+
+
+def _reveal(t: float, m) -> None:
+    progress = t / 12
+    # Trapezoid timeline: open, hold with the face and escapement both running
+    # in view, then close — so the loop is seamless.
+    if progress < 0.35:
+        r = _smooth(progress / 0.35)
+    elif progress < 0.65:
+        r = 1.0
+    else:
+        r = _smooth((1 - progress) / 0.35)
+    _choreograph(m, reveal=r, run=progress)
+
+
+def _showcase(t: float, m) -> None:
+    progress = t / 12
+    _choreograph(m, showcase=progress, run=progress)
+
+
+def _grand_tour(t: float, m) -> None:
+    progress = t / 24
+    _choreograph(m, tour=progress, run=progress)
+
+
+ANIMATION = {
+    "running": cadgen.clip(_running, duration=6, label="Escapement running"),
+    "reveal": cadgen.clip(_reveal, duration=12, label="Reveal movement"),
+    "showcase": cadgen.clip(_showcase, duration=12, label="Showcase explode"),
+    "grand_tour": cadgen.clip(_grand_tour, duration=24, label="Grand tour"),
 }
 
-// Staged smoothstep: 0 before a, 1 after b.
-function stage(t, a, b) {
-  return smooth((t - a) / (b - a));
-}
 
-// Quick snap easing inside one beat: completes in STEP_FRACTION of the beat.
-function snap(fraction) {
-  return smooth(fraction / STEP_FRACTION);
-}
-
-// --- targets ----------------------------------------------------------------
-// Labels are canonical for RENDERED PARTS; a GROUP has to be named by its
-// occurrence id (labels here match rendered parts only). Verified against
-// STEP/moonwatch.step's assembly.json.
-const MOVEMENT_BASE = "#o1.4.1";
-
-const REF = {
-  // case parts that move during reveal / showcase
-  bezel_ring: "bezel_ring",
-  bezel_insert: "bezel_insert",
-  tachymeter_scale: "tachymeter_scale",
-  crystal: "crystal",
-  crystal_gasket: "crystal_gasket",
-  caseback: "caseback",
-  caseback_sapphire: "caseback_sapphire",
-  caseback_retaining_ring: "caseback_retaining_ring",
-  caseback_o_ring: "caseback_o_ring",
-  crown: "crown",
-  crown_tube: "crown_tube",
-  crown_o_ring: "crown_o_ring",
-  pusher_cap_2: "pusher_cap:2oclock",
-  pusher_tube_2: "pusher_tube:2oclock",
-  pusher_spring_2: "pusher_spring:2oclock",
-  pusher_o_ring_2: "pusher_o_ring:2oclock",
-  pusher_cap_4: "pusher_cap:4oclock",
-  pusher_tube_4: "pusher_tube:4oclock",
-  pusher_spring_4: "pusher_spring:4oclock",
-  pusher_o_ring_4: "pusher_o_ring:4oclock",
-  spring_bar_12: "spring_bar:12",
-  spring_bar_6: "spring_bar:6",
-  bezel_polish: "case_polish:bezel",
-  movement_ring: "movement_ring",
-  // groups: occurrence ids
-  dial_group: "#o1.2",
-  movement_group: "#o1.4",
-  keyless_group: "#o1.4.2",
-  chrono_group: "#o1.4.3",
-  strap_12: "#o1.3.1",
-  strap_6: "#o1.3.2",
-  clasp: "#o1.3.3",
-  // going train + escapement
-  center_wheel: "center_wheel",
-  center_pinion: "center_pinion",
-  third_wheel: "third_wheel",
-  third_pinion: "third_pinion",
-  fourth_wheel: "fourth_wheel",
-  fourth_pinion: "fourth_pinion",
-  escape_pinion: "escape_pinion",
-  escape_wheel: "escape_wheel",
-  pallet_fork: "pallet_fork",
-  pallet_stone_entry: "pallet_stone:entry",
-  pallet_stone_exit: "pallet_stone:exit",
-  pallet_arbor: "pallet_arbor",
-  balance_wheel: "balance_wheel",
-  balance_staff: "balance_staff",
-  impulse_jewel: "impulse_jewel",
-  // chronograph runner (the chrono is shown running)
-  chrono_runner_wheel: "chrono_runner_wheel",
-  chrono_runner_heart_cam: "chrono_runner_heart_cam",
-  chrono_runner_arbor: "chrono_runner_arbor",
-  coupling_wheel: "coupling_wheel",
-  // hands that ride animated arbors
-  chrono_seconds_hand: "hand:chrono_seconds",
-  chrono_hand_cap: "hand:chrono_cap",
-  sub_seconds_hand: "hand:sub_seconds",
-};
-
-// timing_screw:0..15 are movement-base children 76..91.
-for (let i = 0; i < 16; i += 1) REF[`timing_screw_${i}`] = `timing_screw:${i}`;
-
-// Movement-base parts the showcase tiers fan but nothing else names: address
-// them by occurrence id, exactly the child indices the retired sidecar used.
-function baseFeature(index) {
-  const id = `movt_base_${index}`;
-  if (!REF[id]) REF[id] = `${MOVEMENT_BASE}.${index}`;
-  return id;
-}
-
-function baseRange(from, to) {
-  const ids = [];
-  for (let i = from; i <= to; i += 1) ids.push(baseFeature(i));
-  return ids;
-}
-
-const BALANCE_GROUP = [
-  "balance_wheel",
-  "balance_staff",
-  "impulse_jewel",
-  ...Array.from({ length: 16 }, (_, i) => `timing_screw_${i}`),
-];
-
-const PALLET_GROUP = [
-  "pallet_fork",
-  "pallet_stone_entry",
-  "pallet_stone_exit",
-  "pallet_arbor",
-];
-
-// Staged reveal translations: [feature, direction, distance, start, end].
-// The bezel stack and crystal lift clear first, then the dial floats up so
-// the face (hands running) and the movement (flipped bridge-side-up in the
-// case mouth, escapement beating) are BOTH visible, vertically separated.
-const REVEAL_MOVES = [
-  ["caseback_o_ring", [0, 0, -1], 9.0, 0.0, 0.35],
-  ["caseback_retaining_ring", [0, 0, -1], 13.0, 0.03, 0.38],
-  ["caseback", [0, 0, -1], 18.0, 0.06, 0.42],
-  ["caseback_sapphire", [0, 0, -1], 24.0, 0.09, 0.45],
-  ["movement_ring", [0, 0, -1], 5.5, 0.0, 0.3],
-  ["bezel_ring", [0, 0, 1], 34.0, 0.05, 0.45],
-  ["bezel_polish", [0, 0, 1], 34.0, 0.05, 0.45],
-  ["bezel_insert", [0, 0, 1], 37.0, 0.05, 0.45],
-  ["tachymeter_scale", [0, 0, 1], 40.0, 0.05, 0.45],
-  ["crystal", [0, 0, 1], 48.0, 0.05, 0.45],
-  ["crystal_gasket", [0, 0, 1], 43.0, 0.05, 0.45],
-  ["dial_group", [0, 0, 1], 26.0, 0.25, 0.6],
-  ["strap_12", [0, 1, 0], 9.0, 0.1, 0.5],
-  ["strap_6", [0, -1, 0], 9.0, 0.1, 0.5],
-  ["clasp", [0, -1, 0], 9.0, 0.1, 0.5],
-];
-
-// Reveal movement lift-and-flip: once the caseback stack is away and the
-// dial is rising, the movement climbs into the case mouth and turns
-// bridge-side-up so the beating escapement faces the same camera as the
-// floating dial.
-const REVEAL_RISE = 16;
-function revealStages(r) {
-  return {
-    rise: stage(r, 0.45, 0.85),
-    flip: stage(r, 0.55, 0.92),
-  };
-}
-
-// Grand tour timeline: reveal opens and dwells with the escapement running,
-// then the movement's tiers fan open showcase-style while the floating face
-// stack rises further to make room; everything mirrors closed again so the
-// loop is seamless.
-//   r — reveal openness (trapezoid: open by 0.20, close from 0.83)
-//   f — gear-tier fan (open 0.45..0.55, closed again by 0.83)
-const TOUR_HEADROOM = 32; // extra face-stack lift while the tiers are open
-function tourStages(t) {
-  return {
-    r: Math.min(stage(t, 0.0, 0.2), stage(1 - t, 0.0, 0.17)),
-    f: Math.min(stage(t, 0.45, 0.55), stage(1 - t, 0.17, 0.25)),
-  };
-}
-
-// Face-stack features lifted for tier headroom during the tour fan.
-const TOUR_HEADROOM_FEATURES = [
-  "dial_group",
-  "crystal",
-  "crystal_gasket",
-  "bezel_ring",
-  "bezel_polish",
-  "bezel_insert",
-  "tachymeter_scale",
-];
-
-// --- showcase choreography ---------------------------------------------------
-// The dial, bezel stack and crystal clear out to the SIDES so the movement can
-// rise straight up the middle; the caseback stack and bracelet spread away.
-// Lateral offsets keep every disc's center at least (disc radius + movement
-// radius) from the rise corridor. Pushers sit at 2 and 4 o'clock.
-const P2 = [0.866, 0.5, 0];
-const P4 = [0.866, -0.5, 0];
-
-// [feature, absolute offset at t = 1] applied with the lateral sub-stage.
-const SHOWCASE_LATERALS = [
-  ["dial_group", [-40, 0, 12]],
-  ["bezel_ring", [-48, 0, 14]],
-  ["bezel_polish", [-48, 0, 14]],
-  ["bezel_insert", [-52, 0, 16]],
-  ["tachymeter_scale", [-56, 0, 18]],
-  ["crystal", [40, 0, 12]],
-  ["crystal_gasket", [35, 0, 9]],
-  ["crown", [13, 0, 0]],
-  ["crown_tube", [9, 0, 0]],
-  ["crown_o_ring", [6, 0, 0]],
-  ["pusher_cap_2", [P2[0] * 11, P2[1] * 11, 0]],
-  ["pusher_tube_2", [P2[0] * 8, P2[1] * 8, 0]],
-  ["pusher_spring_2", [P2[0] * 5.5, P2[1] * 5.5, 0]],
-  ["pusher_o_ring_2", [P2[0] * 3.5, P2[1] * 3.5, 0]],
-  ["pusher_cap_4", [P4[0] * 11, P4[1] * 11, 0]],
-  ["pusher_tube_4", [P4[0] * 8, P4[1] * 8, 0]],
-  ["pusher_spring_4", [P4[0] * 5.5, P4[1] * 5.5, 0]],
-  ["pusher_o_ring_4", [P4[0] * 3.5, P4[1] * 3.5, 0]],
-];
-
-// [feature, offset at t = 1] applied with the caseback/bracelet sub-stage.
-const SHOWCASE_SPREADS = [
-  ["movement_ring", [0, 0, -7]],
-  ["caseback_o_ring", [0, 0, -12]],
-  ["caseback_retaining_ring", [0, 0, -17]],
-  ["caseback", [0, 0, -23]],
-  ["caseback_sapphire", [0, 0, -30]],
-  ["spring_bar_12", [0, 4, 0]],
-  ["spring_bar_6", [0, -4, 0]],
-  ["strap_12", [0, 14, 0]],
-  ["strap_6", [0, -14, 0]],
-  ["clasp", [0, -21, 0]],
-];
-
-// Movement subassembly tiers (pre-flip z offsets; negative = bridge side, so
-// after the 180 deg flip these tiers stack UPWARD with the chronograph works
-// on top). Applied with the fan sub-stage, in the movement's pre-parent frame
-// so the group flip + rise carries them.
-const MOVEMENT_TIERS = [
-  { ids: ["keyless_group"], dz: 7 },
-  { ids: [...baseRange(14, 20), baseFeature(63), ...baseRange(64, 67)], dz: -5 },
-  { ids: baseRange(10, 13), dz: -8 }, // barrel
-  { ids: baseRange(68, 74), dz: -11.5 }, // pallet bridge
-  { ids: [...baseRange(34, 47), ...baseRange(51, 53)], dz: -15.5 }, // train bridge
-  { ids: [...baseRange(21, 33), ...baseRange(48, 50)], dz: -15.5 }, // barrel bridge
-  { ids: baseRange(54, 62), dz: -19 }, // ratchet, crown wheel, click
-  { ids: baseRange(75, 105), dz: -24 }, // balance + cock + shock
-  { ids: ["chrono_group"], dz: -30 },
-];
-
-const MOVEMENT_RISE = 30;
-const MOVEMENT_CENTER = [0, 0, 1.7];
-
-// Showcase timeline sub-stages, keyed on u = min(s, 1-s) so the reassembly
-// half mirrors the expansion half exactly and the loop is seamless.
-function showcaseStages(s) {
-  return {
-    lateral: stage(Math.min(s, 1 - s), 0.02, 0.17),
-    spread: stage(Math.min(s, 1 - s), 0.05, 0.25),
-    rise: stage(Math.min(s, 1 - s), 0.17, 0.34),
-    flip: stage(Math.min(s, 1 - s), 0.3, 0.38),
-    fan: stage(Math.min(s, 1 - s), 0.36, 0.42),
-  };
-}
-
-// --- the one choreography routine -------------------------------------------
-// `run`, `reveal`, `showcase` and `tour` are the four normalized timelines the
-// retired sidecar exposed as viewer sliders; each clip below drives them.
-function choreograph({ run = 0, reveal = 0, showcase = 0, tour = 0 }, m) {
-  const s = Math.min(1, Math.max(0, showcase));
-  const tr = tourStages(Math.min(1, Math.max(0, tour)));
-  // The tour timeline reuses the reveal choreography for its open/close.
-  const rv = Math.max(reveal, tr.r);
-  // Three escapement loops per tour cycle: (run + 2*tour) sweeps 0..3 when the
-  // grand tour clip drives both with the same progress, and reduces to plain
-  // `run` whenever tour is 0.
-  const effRun = (run + 2 * tour) % 1;
-  const st = showcaseStages(s);
-
-  // Per-feature accumulator: rotations happen first (about original pivots),
-  // then one summed translation. Each feature gets exactly one m.get() chain.
-  const rotations = new Map();
-  const offsets = new Map();
-  const addRot = (feature, pivot, deg) => {
-    const list = rotations.get(feature) || [];
-    list.push([pivot, deg]);
-    rotations.set(feature, list);
-  };
-  const addMove = (feature, vec, scale) => {
-    if (!scale) return;
-    const cur = offsets.get(feature) || [0, 0, 0];
-    offsets.set(feature, [
-      cur[0] + vec[0] * scale,
-      cur[1] + vec[1] * scale,
-      cur[2] + vec[2] * scale,
-    ]);
-  };
-
-  // --- reveal ---------------------------------------------------------------
-  for (const [feature, dir, dist, a, b] of REVEAL_MOVES) {
-    addMove(feature, dir, dist * stage(rv, a, b));
-  }
-
-  // --- showcase -------------------------------------------------------------
-  if (s > 0) {
-    for (const [feature, vec] of SHOWCASE_LATERALS) addMove(feature, vec, st.lateral);
-    for (const [feature, vec] of SHOWCASE_SPREADS) addMove(feature, vec, st.spread);
-    for (const tier of MOVEMENT_TIERS) {
-      for (const feature of tier.ids) addMove(feature, [0, 0, tier.dz], st.fan);
-    }
-  }
-
-  // --- grand tour: fan the movement tiers in the reveal pose -----------------
-  if (tr.f > 0) {
-    for (const tier of MOVEMENT_TIERS) {
-      for (const feature of tier.ids) addMove(feature, [0, 0, tier.dz], tr.f);
-    }
-    for (const feature of TOUR_HEADROOM_FEATURES) {
-      addMove(feature, [0, 0, 1], TOUR_HEADROOM * tr.f);
-    }
-  }
-
-  // --- escapement -----------------------------------------------------------
-  const beats = effRun * BEATS;
-  const beatIndex = Math.min(Math.floor(beats), BEATS - 1);
-  const beatFraction = beats - beatIndex;
-
-  // Balance: sinusoidal oscillation; beats land on its zero crossings.
-  const balanceDeg =
-    BALANCE_AMPLITUDE_DEG * Math.sin(2 * Math.PI * OSCILLATIONS * effRun);
-  for (const feature of BALANCE_GROUP) addRot(feature, BALANCE, balanceDeg);
-
-  // Pallet fork: snaps between banking positions once per beat.
-  const fromBank = beatIndex % 2 === 0 ? PALLET_BANK_DEG : -PALLET_BANK_DEG;
-  const palletDeg = fromBank * (1 - 2 * snap(beatFraction));
-  for (const feature of PALLET_GROUP) addRot(feature, PALLET, palletDeg);
-
-  // Escape wheel: one crisp half-tooth step per beat, released as the pallet
-  // snaps. 8 steps x 12 deg = 4 whole tooth pitches per loop.
-  const escapeDeg = ESCAPE_STEP_DEG * (beatIndex + snap(beatFraction));
-  for (const feature of ["escape_wheel", "escape_pinion"]) {
-    addRot(feature, ESCAPE, escapeDeg);
-  }
-
-  // Going train creeps against the escape wheel: alternating directions,
-  // spoke-and-tooth-symmetric 144 deg per loop so the seam is invisible.
-  const trainDeg = 144 * effRun;
-  for (const feature of ["fourth_wheel", "fourth_pinion"]) {
-    addRot(feature, FOURTH, -trainDeg);
-  }
-  for (const feature of ["third_wheel", "third_pinion"]) {
-    addRot(feature, THIRD, trainDeg);
-  }
-
-  // Small seconds hand rides the fourth-wheel arbor (clockwise from dial).
-  addRot("sub_seconds_hand", FOURTH, -trainDeg);
-
-  // Chronograph shown running: the center runner sweeps one full turn per loop
-  // (full revolutions are always seam-free), the coupling wheel counter-
-  // rotates, and the chrono seconds hand rides the runner arbor.
-  const runnerDeg = -360 * effRun;
-  for (const feature of [
-    "chrono_runner_wheel",
-    "chrono_runner_heart_cam",
-    "chrono_runner_arbor",
-    "chrono_seconds_hand",
-    "chrono_hand_cap",
-  ]) {
-    addRot(feature, CENTER, runnerDeg);
-  }
-  addRot("coupling_wheel", COUPLING, 360 * effRun);
-
-  // --- emit ------------------------------------------------------------------
-  const features = new Set([...rotations.keys(), ...offsets.keys()]);
-  for (const feature of features) {
-    const handle = m.get(REF[feature]);
-    for (const [pivot, deg] of rotations.get(feature) || []) {
-      handle.rotate(Z_AXIS, deg, pivot);
-    }
-    const translate = offsets.get(feature);
-    if (translate) handle.translate(translate);
-  }
-
-  // Movement group: flip in place about its own center (child tiers and gear
-  // pivots compose in pre-parent space), then rise out of the case. Reveal and
-  // showcase both drive this; their contributions add (in practice one is
-  // active at a time).
-  const revealStage = revealStages(rv);
-  const movementFlip = Math.min(1, st.flip + revealStage.flip);
-  const movementRise = MOVEMENT_RISE * st.rise + REVEAL_RISE * revealStage.rise;
-  if (movementFlip > 0 || movementRise > 0) {
-    m
-      .get(REF.movement_group)
-      .rotate([1, 0, 0], 180 * movementFlip, MOVEMENT_CENTER)
-      .translate([0, 0, movementRise]);
-  }
-}
-
-export const clips = {
-  running: {
-    label: "Escapement running",
-    duration: 6,
-    loop: true,
-    update(t, m) {
-      choreograph({ run: (t / 6) % 1 }, m);
-    },
-  },
-  reveal: {
-    label: "Reveal movement",
-    duration: 12,
-    loop: true,
-    update(t, m) {
-      const progress = (t / 12) % 1;
-      // Trapezoid timeline: open, hold with the face and escapement both
-      // running in view, then close — so the loop is seamless.
-      let r;
-      if (progress < 0.35) r = smooth(progress / 0.35);
-      else if (progress < 0.65) r = 1;
-      else r = smooth((1 - progress) / 0.35);
-      choreograph({ reveal: r, run: progress }, m);
-    },
-  },
-  showcase: {
-    label: "Showcase explode",
-    duration: 12,
-    loop: true,
-    update(t, m) {
-      const progress = (t / 12) % 1;
-      choreograph({ showcase: progress, run: progress }, m);
-    },
-  },
-  grand_tour: {
-    label: "Grand tour",
-    duration: 24,
-    loop: true,
-    update(t, m) {
-      const progress = (t / 24) % 1;
-      choreograph({ tour: progress, run: progress }, m);
-    },
-  },
-};
-'''
-
-
-@step(out="../STEP/moonwatch.step", kinematics=KINEMATICS, animation=ANIMATION_JS)
+@step(out="../STEP/moonwatch.step", kinematics=KINEMATICS, animation=ANIMATION)
 def moonwatch():
     children = []
 

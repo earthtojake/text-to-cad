@@ -10,7 +10,7 @@ from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact
 
 class StepArtifactsTests(unittest.TestCase):
     def test_a_target_resolves_to_its_document_and_never_to_a_script(self) -> None:
-        # DOCUMENTS-ONLY (design/pose-animation-split.md, CLI/doors follow-on):
+        # DOCUMENTS-ONLY (packages/cadgen/README.md, law 7):
         # the artifact resolver used to walk a target back to a `.py` generator
         # and re-run it, which is how a render could contain a build. That
         # layer is deleted — a spec is built from the document, full stop.

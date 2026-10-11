@@ -49,6 +49,34 @@ class SdfSourceTests(unittest.TestCase):
         self.assertEqual(("base_link",), source.links)
         self.assertEqual(0, len(source.joints))
 
+    def test_read_sdf_source_reads_nested_models_under_scoped_names(self) -> None:
+        source_path = self._write_sdf(
+            "nested",
+            """
+            <sdf version="1.9">
+              <model name="rig">
+                <link name="base" />
+                <model name="arm">
+                  <link name="upper" />
+                  <link name="lower" />
+                  <joint name="elbow" type="revolute"><parent>upper</parent><child>lower</child></joint>
+                  <model name="hand"><link name="palm" /></model>
+                </model>
+                <joint name="shoulder" type="revolute"><parent>base</parent><child>arm::upper</child></joint>
+              </model>
+            </sdf>
+            """,
+        )
+
+        source = read_sdf_source(source_path)
+
+        self.assertEqual(("rig",), source.model_names)
+        self.assertEqual(("base", "arm::upper", "arm::lower", "arm::hand::palm"), source.links)
+        self.assertEqual(
+            [("shoulder", "base", "arm::upper"), ("arm::elbow", "arm::upper", "arm::lower")],
+            [(joint.name, joint.parent_link, joint.child_link) for joint in source.joints],
+        )
+
     def test_parse_sdf_xml_validates_without_existing_output_file(self) -> None:
         output_path = self.temp_root / "generated" / "robot.sdf"
 

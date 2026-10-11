@@ -1,4 +1,4 @@
-// Viewport LOD scheduler (design/unified-tessellation.md Phase 5).
+// Viewport LOD scheduler (packages/ui/docs/lod.md).
 //
 // Non-React glue between camera samples and level-keyed re-tessellation. The
 // policy math lives in cadgen-js (lodPolicy.js — pure); this module owns TIME:
@@ -9,7 +9,7 @@
 // samples and receives level swaps through a callback.
 
 import {
-  LOD_CHORD_LEVELS,
+  lodChordLevels,
   nextLevel,
   normalizeLodLevel,
   projectedChordErrorPx,
@@ -67,7 +67,7 @@ export function createLodScheduler({
   onLimitation = null,
   onIdle = null,
   debounceMs = LOD_DEBOUNCE_MS,
-  levels = LOD_CHORD_LEVELS,
+  levels = lodChordLevels(),
   minimumLevel = 0,
   setTimeoutFn = (...args) => setTimeout(...args),
   clearTimeoutFn = (handle) => clearTimeout(handle),

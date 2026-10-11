@@ -155,12 +155,14 @@ function HarnessSurface({ view, data }) {
   // `panel*.harness` stands in for a file whose tool stack is full (below); it opens in Select.
   const withPanel = view.file.name.startsWith("panel");
   // `flat*.harness` stands in for a view that is not 3D, a drawing's: its renderer does not declare Preview.
-  const previewable = !view.file.name.startsWith("flat");
+  const previewable = data.previewable ?? !view.file.name.startsWith("flat");
   const shell = useRendererShell({
-    view, services: shellServices, resource, modelKey: view.file.path, revisionKey: "harness",
+    view, services: shellServices, resource, modelKey: data.modelKey ?? view.file.path, revisionKey: "harness",
     features: EDGELESS_VIEW_FEATURES, toolModes: withPanel ? PANEL_TOOL_MODES : HARNESS_TOOL_MODES, previewable, scene: stageScene ? scene : null,
     load: { busy: false, ...stageLoad },
     live, onCameraSettled, runtimeLifecycle,
+    // A test's stand-in animation runtime, when it brings one.
+    animation: data.animation ?? null,
     // A renderer whose references are its own vocabulary assembles its own snapshot.
     promptContext: ({ resource: shown, references, capture }) => createPromptContext([
       referencePart({ resource: { ...shown }, target: { kind: "whole-resource" } }, "source"),

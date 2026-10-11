@@ -25,9 +25,12 @@ export interface AttachmentStore {
  * `viewerLinks` (`@text-to-cad/ui/links`), which fills in the defaults.
  */
 export interface ViewerLinks {
-  /** The version this host runs, as the app menu shows it (`0.7.4`). */
+  /**
+   * The version this host runs, as the app menu shows it and a new issue names it: `0.7.4` for the
+   * release's own build, `0.7.4-dev.<build>` for a custom build of it (`viewerLinks`' `build`).
+   */
   version: string;
-  /** That version's release notes. */
+  /** The release notes of the release it is, or a custom build was built on. */
   release: string;
   x: string;
   github: string;

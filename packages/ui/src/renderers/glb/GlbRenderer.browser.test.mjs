@@ -95,7 +95,7 @@ const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first()
 const noTools = async (pane) => {
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'a static GLB has no tools, so no strip');
   assert.equal(await displayButton(pane).count(), 1, 'its Display settings are the navbar\'s button beside Preview');
-  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate']) {
+  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animation']) {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
   }
 };
@@ -302,18 +302,42 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   assert.deepEqual(errors, []);
 });
 
-test('an animated GLB opens at rest, plays in preview, and leaving preview puts it back at rest', async (t) => {
+test('an animated GLB opens at rest with its Animation panel up, plays there and in preview, and preview leaves the panel\'s routine as it was', async (t) => {
   // The file's preview settings as a previous session left them: Orbit off, so the preview
   // camera holds still and what moves in a capture is the model alone.
   const { page, pane, errors } = await open(t, 'animated.glb', { record: { version: 2, settings: {},
     files: { [JSON.stringify(['/models/animated.glb', 'glb'])]: { version: 2, playback: { orbit: false } } } } });
   await ready(pane);
-  assert.equal(await pane.getByRole('toolbar', { name: 'Animation playback' }).count(), 0);
-  assert.equal(await pane.getByRole('button', { name: 'Animate', exact: true }).count(), 0, 'no Animate tool');
+  // Animation is its one tool, up from the open: the panel at the top-left, with no strip to take it
+  // up from and no X to put it down.
+  const panel = pane.getByRole('region', { name: 'Animation controls', exact: true });
+  await panel.waitFor();
+  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'one tool needs no strip');
+  assert.equal(await panel.getByRole('button', { name: 'Close animation controls', exact: true }).count(), 0, 'and is never put down');
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   const toolsRest = await stillCapture(page);
+  const panelTime = () => page.evaluate(() => Number(document.querySelector(
+    '[data-testid="one"] [aria-label="Animation controls"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')));
+  // The panel plays the clip in the tools view, and its start is the rest pose.
+  await panel.getByRole('button', { name: 'Play animation', exact: true }).click();
+  await page.waitForFunction(() => Number(document.querySelector(
+    '[data-testid="one"] [aria-label="Animation controls"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')) > 0.25);
+  await panel.getByRole('button', { name: 'Pause animation', exact: true }).click();
+  assert.ok(differingPixels(toolsRest, await capture(page)) > 200, 'the panel moved the rider');
+  await panel.getByRole('slider', { name: 'Animation time', exact: true }).focus();
+  await page.keyboard.press('Home');
+  assert.equal(await panelTime(), 0);
+  await captureMatching(page, toolsRest, 'the clip at its start is the rest pose');
+  // The panel's routine left at its end: preview has a routine of its own, at rest.
+  await page.keyboard.press('End');
+  await page.waitForFunction(() => Number(document.querySelector(
+    '[data-testid="one"] [aria-label="Animation controls"] [role="slider"][aria-label="Animation time"]')?.getAttribute('aria-valuenow')) > 0.25);
+  const panelHeld = await panelTime();
+  const heldCapture = await stillCapture(page);
+  assert.ok(differingPixels(toolsRest, heldCapture) > 200, 'the panel holds the rider at the end of its clip');
 
   await pane.getByRole('button', { name: 'Preview', exact: true }).click();
+  await pane.getByRole('button', { name: 'Exit preview', exact: true }).waitFor();
   await pane.getByRole('button', { name: 'Play animation', exact: true }).waitFor();
   const rest = await stillCapture(page);
   // The playbar is simply there, and the file is at rest under it.
@@ -334,9 +358,14 @@ test('an animated GLB opens at rest, plays in preview, and leaving preview puts 
   const moved = await capture(page);
   assert.ok(differingPixels(rest, moved) > 200, 'the rider moved');
 
-  // Leaving preview puts the model back at rest, in the tools view's own camera.
+  // Leaving preview drops its routine and gives the panel's back as it was, in the tools view's own
+  // camera; the panel's start is the rest pose again.
   await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
   await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
+  assert.equal(await panelTime(), panelHeld, 'the panel holds its routine where it was before preview');
+  await captureMatching(page, heldCapture, 'and so does the model');
+  await panel.getByRole('slider', { name: 'Animation time', exact: true }).focus();
+  await page.keyboard.press('Home');
   await captureMatching(page, toolsRest, 'the tools view is at rest again');
 
   // In Render the studio's floor is sized from the rest placement: a playing clip never resizes it.
@@ -361,6 +390,64 @@ test('an animated GLB opens at rest, plays in preview, and leaving preview puts 
   // stable under the pointer.
   await orbit.press('Enter');
   await page.waitForFunction(start => window.__cadCamera().position.some((value, axis) => Math.abs(value - start[axis]) > 1e-6), held);
+  assert.deepEqual(errors, []);
+});
+
+test('an animated GLB\'s preview opens at the clip\'s own Speed and Loop and forgets what it chose, the panel keeping its own, and Orbit off stays off', async (t) => {
+  const { page, pane, errors } = await open(t, 'animated.glb', { record: { version: 2, settings: {},
+    files: { [JSON.stringify(['/models/animated.glb', 'glb'])]: { version: 2, playback: { orbit: false } } } } });
+  await ready(pane);
+  const panelSettings = pane.getByRole('region', { name: 'Animation controls', exact: true }).getByRole('button', { name: 'Animation settings' });
+  const previewSettings = pane.getByRole('toolbar', { name: 'Animation playback' }).getByRole('button', { name: 'Playback settings' });
+  const enter = async () => {
+    await pane.getByRole('button', { name: 'Preview', exact: true }).click();
+    await pane.getByRole('button', { name: 'Exit preview', exact: true }).waitFor();
+  };
+  const exit = async () => {
+    await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
+    await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
+  };
+  const settings = async (button, name) => {
+    await button.click();
+    const menu = page.getByRole('menu', { name, exact: true });
+    const read = [await menu.getByRole('menuitem', { name: /^Animation speed: / }).getAttribute('aria-label'),
+      await menu.getByRole('menuitemcheckbox', { name: 'Loop', exact: true }).getAttribute('aria-checked')];
+    await page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'detached' });
+    return read;
+  };
+  // A Speed chosen and Loop turned over, by keyboard (an item easing in never reads as stable under the pointer).
+  const choose = async (button, name, speed) => {
+    await button.click();
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitem', { name: /^Animation speed: / }).click();
+    await page.getByRole('menuitemradio', { name: `${speed}×`, exact: true }).press('Enter');
+    await page.getByRole('menu', { name, exact: true }).waitFor({ state: 'detached' });
+    await button.click();
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitemcheckbox', { name: 'Loop', exact: true }).press('Enter');
+    await page.keyboard.press('Escape');
+    await page.getByRole('menu', { name, exact: true }).waitFor({ state: 'detached' });
+  };
+  const orbitChecked = async () => {
+    await pane.locator('[data-preview-corner]').getByRole('button', { name: 'Orbit', exact: true }).click();
+    const menu = page.getByRole('menu', { name: 'Orbit', exact: true });
+    const checked = await menu.getByRole('menuitemcheckbox', { name: 'Orbit', exact: true }).getAttribute('aria-checked');
+    await page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'detached' });
+    return checked;
+  };
+  await choose(panelSettings, 'Animation settings', 2);
+  assert.deepEqual(await settings(panelSettings, 'Animation settings'), ['Animation speed: 2×', 'false']);
+  await enter();
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 1×', 'true'], 'preview opens at the clip\'s own');
+  assert.equal(await orbitChecked(), 'false', 'the file\'s Orbit, off');
+  await choose(previewSettings, 'Playback settings', 0.5);
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 0.5×', 'false']);
+  await exit();
+  assert.deepEqual(await settings(panelSettings, 'Animation settings'), ['Animation speed: 2×', 'false'], 'the panel keeps its own');
+  await enter();
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 1×', 'true'], 'and preview forgot its own');
+  assert.equal(await orbitChecked(), 'false', 'Orbit off stays off');
+  await exit();
   assert.deepEqual(errors, []);
 });
 

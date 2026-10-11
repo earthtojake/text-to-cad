@@ -5,7 +5,7 @@ from lib.phalanx import make_phalanx
 from lib.layout import FINGERS
 
 @step(out='../STEP/fingertip_pad_review.step',
-      mesh_tolerance=.001,mesh_angular_tolerance=.01)
+      mesh_tolerance=.001,mesh_angular_tolerance=0.05)
 def fingertip_pad_review():
     parts=[]
     variants=[(f.name,f.lengths[2],f.widths[2]) for f in FINGERS]+[('thumb',21.,13.)]

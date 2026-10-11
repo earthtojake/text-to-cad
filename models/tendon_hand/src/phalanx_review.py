@@ -3,7 +3,7 @@ from cadgen import build123d as bd, step
 from lib.phalanx import make_phalanx
 
 @step(out='../STEP/phalanx_review.step',
-      mesh_tolerance=.003,mesh_angular_tolerance=.012)
+      mesh_tolerance=.003,mesh_angular_tolerance=0.05)
 def phalanx_review():
     return bd.Compound(label='skeletal_phalanx_family',children=[
         make_phalanx(45,18,label='middle_proximal_frame'),

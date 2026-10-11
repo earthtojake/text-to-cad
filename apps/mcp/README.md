@@ -39,7 +39,9 @@ reference host `basic-host` does.
   showing that file, or the home. Agents name models by absolute path only, and
   nothing here branches on a surface's name but one: `surface: file` (below).
 - **A launch is enough to start.** It also carries what the server is — its
-  `protocol`, `version` and `platform` — and the home's carries its `recents`,
+  `protocol`, `version` and `platform`, and the display tessellation ladder the
+  page installs before it draws a STEP model (`tessellation`, cadgen's policy) —
+  and the home's carries its `recents`,
   so the page asks nothing before it draws. A launch from another build (a tab
   the host restored after an update, a past chat's card) says so: the page
   reads only its own protocol's.
@@ -181,8 +183,8 @@ reference host `basic-host` does.
   client asks for 32 MiB), every GET asks for its first 4 MiB as a byte range,
   and a longer body comes back a range at a time, which the tunnel puts together
   for the client. A part of a body that changed meanwhile (its `etag`) fails the
-  read, and the cache verifies a tessellation's digest of the whole as of any
-  body. The server refuses any reply still longer (502), and an agent's
+  read, and the mesh store's reader verifies a mesh's digest of the whole as of
+  any body. The server refuses any reply still longer (502), and an agent's
   screenshot longer than that, rather than send it. 4 MiB loads as fast as 8 MiB
   did. The server produces such a body once: each later part names it
   (`if-range: <etag>`) and is cut from the body the first part kept, never by
@@ -232,6 +234,7 @@ reference host `basic-host` does.
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` and the sketch's image block, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`), the catalog's revision and its build feeds |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
+| `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |
 
 `ModelView.tsx` is the page: the shared `CadViewer` (`@text-to-cad/ui/cad-viewer`,
 the one the web Viewer shows) showing the launch's model, with this host's ports — its
@@ -260,7 +263,9 @@ scripts/install/dev_install.py claude-desktop   # run it in Claude Desktop (then
 ```
 
 `scripts/test/test-js.sh --select mcp` is what CI runs: the tests, then the
-build. Every host `dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent
-Apps"). A checkout's `cadgen mcp` serves `apps/mcp/dist` when it exists
+build. A build names itself in the app menu (`vite.config.mjs`, through
+`@text-to-cad/ui/build-id`): the release's own build shows `v<VERSION>`, any other
+`v<VERSION>-dev.<commit>`, the commit of the checkout it was built from. Every host
+`dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cadgen mcp` serves `apps/mcp/dist` when it exists
 (`CADGEN_MCP_APP_DIR` overrides it); a wheel serves `cadgen/_runtime/mcp`,
 built by `scripts/bundle/bundle.sh`.

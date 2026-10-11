@@ -97,8 +97,8 @@ path, the rehearsal, and local/manual fallbacks.
 - `packages/core`: `@text-to-cad/core`, shared CAD/runtime/client code without React.
 - `packages/ui`: `@text-to-cad/ui`, the shared FileViewer, renderers, controls and styles.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
-  the skill CLI parsers, the CAD Viewer backend + client, and the Node/browser
-  runtimes it executes.
+  the skill CLI parsers, the CAD Viewer backend + client, and the browser
+  runtime it executes.
 - `apps/docs/`: documentation site.
 - `apps/api/`: `api.texttocad.dev`, its own Vercel project: cadgen's version feed (read from PyPI) and the CAD app's consented analytics.
 - `tests/`: root-owned test suites for skills, packages, viewer services, and
@@ -117,7 +117,7 @@ path, the rehearsal, and local/manual fallbacks.
   - `packages/cadgen/`: `STORE.md` (the store contract — sectioned, with a
     table of contents), `SNAPSHOTS.md` (snapshot `--debug` timings).
   - `packages/core/docs/`: `render-pipeline.md`, `resource-ownership.md`,
-    `tube-deformation.md`.
+    `tube-skins.md`.
   - `packages/ui/docs/`: `settings-ui.md` (BINDING for any settings control),
     `render-types.md`, `render-mode.md`, `lod.md`, `storage.md`, `backend.md`.
 - Ships-alone law: `packages/cadgen` (the built PyPI wheel) works in isolation
@@ -147,8 +147,8 @@ path, the rehearsal, and local/manual fallbacks.
   is a second daemon. Skills do not vendor it: a skill script is a thin entrypoint whose
   parser and behaviour live in `cadgen.cli`. Playwright is a cadgen dependency and
   the first snapshot fetches its headless browser, so no skill has a browser step. cadgen carries
-  the JavaScript it executes too (Node builders, the snapshot browser bundle,
-  the CAD Viewer client), so a skill ships no runtime of its own. Not every
+  the JavaScript it executes too (the snapshot browser bundle, the CAD Viewer
+  client), so a skill ships no runtime of its own. Not every
   skill needs cadgen (bambu-labs, dfam-check, dfm, gcode, sendcutsend,
   step-parts are cadgen-free); do not add the dependency to a skill that never invokes it.
 - Keep samples and manual CAD/robot-description validation artifacts under
@@ -177,10 +177,9 @@ path, the rehearsal, and local/manual fallbacks.
   interpreter; raising the declared minimum relaxes the check automatically.
 - Reserve `scripts/` for durable repo commands. Do not write temporary,
   one-off, or local-only helper scripts there; use `tmp/` or `/tmp` instead.
-- cadgen's packaged runtime (`_runtime/node`, `_runtime/browser`,
-  `_runtime/viewer`, and the file tracer every build loads, `_runtime/native`)
-  is BUILT, never committed: the whole directory is
-  gitignored and ships only inside the wheel. Build it with the one bundle
+- cadgen's packaged runtime (`_runtime/browser`, `_runtime/viewer`, and the
+  file tracer every build loads, `_runtime/native`) is BUILT, never committed:
+  the whole directory is gitignored and ships only inside the wheel. Build it with the one bundle
   entry point, `scripts/bundle/bundle.sh`; `bundle.sh --check` builds it and
   asserts every required output. Call `scripts/bundle/cadgen-runtime.sh`
   directly only when debugging one stage.

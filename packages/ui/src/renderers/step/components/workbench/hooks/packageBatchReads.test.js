@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createCadClient, SurfaceResolutionError } from "@text-to-cad/core/client";
 import { isTessellationCacheProbeMissError } from "@text-to-cad/core/lib/surf/tessellationCache.js";
 import { createSurfaceTicketBatches, createTessellationBodyBatches } from "./packageBatchReads.js";
 import { createInitialDisplayPlans } from "../../../render/initialDisplayLod.js";
+import { TEST_TESSELLATION_LADDER, installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 const KIB = 1024, MIB = 1024 * KIB;
 const cids = count => Array.from({ length: count }, (_, index) => `c${index}`);
@@ -188,28 +193,55 @@ test("a surface request that fails fails each of its components still waiting", 
   await assert.rejects(tickets.ticket("c12", {}), failure);
 });
 
-test("initial plans probe a chunk at a time, growing from eight to 256, and coarse only what standard did not admit", async () => {
+// One component cadgen could not mesh fails alone, with its own error: the components beside it in
+// its request, ready in the same response (before or after it), are answered.
+test("a component that failed in its request fails alone; the ready ones beside it are answered", async () => {
+  const hex = c => c.repeat(64);
+  const view = { tree: hex("a"), viewId: hex("b"), surfaceProducer: { scheme: 1 } };
+  const inputs = { c0: hex("1"), bad: hex("2"), c2: hex("3") };
+  const object = hex("e");
+  const ready = cid => ({ surfaceInput: inputs[cid], state: "ready", surfaceObject: object, byteLength: 10,
+    url: `/__cad/store?tree=${view.tree}&surfaceInput=${inputs[cid]}&object=${object}`,
+    selectors: { object: hex("5"), byteLength: 10, url: `/__cad/store?tree=${view.tree}&surfaceInput=${inputs[cid]}&object=${hex("5")}` } });
+  const client = createCadClient({ fetch: async () => new Response(JSON.stringify({ viewId: view.viewId, components: {
+    c0: ready("c0"),
+    bad: { surfaceInput: inputs.bad, state: "failed", error: "component bad: OCCT did not mesh 2 face(s)", code: "mesh" },
+    c2: ready("c2"),
+  } }), { headers: { "content-type": "application/json" } }) });
+  const order = ["bad", "c0", "c2"];
+  const tickets = createSurfaceTicketBatches({ order, alone: 0,
+    needs: cid => ({ surfaceInput: inputs[cid] }),
+    resolve: (requested, options) => client.resolveSurfaceComponents(view, requested, options) });
+  const [bad, c0, c2] = await Promise.allSettled(order.map(cid => tickets.ticket(cid, {})));
+  assert.equal(tickets.stats().requests, 1);
+  assert.equal(bad.status, "rejected");
+  assert.ok(bad.reason instanceof SurfaceResolutionError);
+  assert.deepEqual([bad.reason.cid, bad.reason.code, bad.reason.message], ["bad", "mesh", "component bad: OCCT did not mesh 2 face(s)"]);
+  assert.deepEqual([c0.status, c0.value?.surfaceObject, c2.status, c2.value?.surfaceObject],
+    ["fulfilled", object, "fulfilled", object]);
+  client.dispose();
+});
+
+test("initial plans probe the standard tier a chunk at a time, growing from eight to 256", async () => {
   const components = cids(747).map(cid => [cid, { surfaceInput: `input-${cid}` }]);
   const calls = [];
-  // Standard entries for the even components; coarse ones for every component.
+  // Standard entries for the even components; nothing for the odd ones, which are cold.
   const plans = createInitialDisplayPlans({ components, maxInFlightBytes: 256 * MIB,
     probeEntries: async (inputs, tessellation) => {
-      const level = tessellation ? 0 : 1;
-      calls.push([level, inputs.length]);
-      return new Map(inputs.filter(input => level === 0 || Number(input.slice(7)) % 2 === 0)
-        .map(input => [input, { object: `${level}-${input}`, surfaceObject: "s", byteLength: KIB, decodedBytes: KIB }]));
+      calls.push([tessellation, inputs.length]);
+      return new Map(inputs.filter(input => Number(input.slice(7)) % 2 === 0)
+        .map(input => [input, { object: `o-${input}`, surfaceObject: "s", byteLength: KIB, decodedBytes: KIB }]));
     } });
   assert.equal(plans.peek("c0"), undefined);
   assert.equal((await plans.plan("c0")).plan.level, 1);
-  assert.equal((await plans.plan("c1")).plan.level, 0);
+  assert.equal(await plans.plan("c1"), null, "a component the store has no standard mesh for is cold");
   for (const [cid] of components) await plans.plan(cid);
-  const sizes = level => calls.filter(([probed]) => probed === level).map(([, count]) => count);
-  assert.deepEqual(sizes(1), [8, 16, 32, 64, 128, 256, 243]);
-  assert.deepEqual(sizes(0), [4, 8, 16, 32, 64, 128, 121], "coarse is probed for what standard did not admit");
-  assert.equal(plans.peek("c3").cacheProbe.object, "0-input-c3");
-  assert.equal(plans.probed("input-c3", 1), null, "a tier asked and empty");
-  assert.equal(plans.probed("input-c3", 0).object, "0-input-c3");
-  assert.equal(plans.probed("input-c3", 2), undefined, "a tier never asked");
+  assert.deepEqual(calls.map(([, count]) => count), [8, 16, 32, 64, 128, 256, 243]);
+  const standard = TEST_TESSELLATION_LADDER.levels[TEST_TESSELLATION_LADDER.defaultLevel];
+  assert.ok(calls.every(([tessellation]) => JSON.stringify(tessellation) === JSON.stringify(standard)),
+    "no tier but the standard one is asked");
+  assert.equal(plans.peek("c2").cacheProbe.object, "o-input-c2");
+  assert.equal(plans.peek("c3"), null);
 });
 
 test("a load that is aborted, or over, asks nothing more ahead and leaves no component waiting", async () => {

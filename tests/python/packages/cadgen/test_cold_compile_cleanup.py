@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import hashlib
+import re
 import json
 import os
 from pathlib import Path
@@ -101,6 +102,32 @@ class ColdCompileCleanupTest(unittest.TestCase):
             self.assertTrue(result["ok"])
         finally:
             guard["enabled"] = False
+
+    def test_a_compile_tells_its_job_each_phase_and_counts_its_parts(self):
+        # A CAD Viewer waiting on a compile reads the daemon's job ledger: the phases
+        # must reach it as a model build's do, not stop at the terminal's line.
+        from cadgen.daemon import executors
+
+        document = self.document(nested=True)
+        events = []
+        executors.set_event_sink(events.append)
+        self.addCleanup(executors.set_event_sink, None)
+        self.assertTrue(self.compile(document)["ok"])
+        building = [event for event in events if event.get("state") == "building"]
+        self.assertTrue(building, "the compile reported nothing to its job")
+        self.assertEqual({os.path.realpath(event["model"]) for event in building}, {os.path.realpath(document)})
+        read = next(event for event in building if str(event.get("detail", "")).startswith("Reading "))
+        self.assertIn(document.name, read["detail"])
+        # Every phase says it is an import: the word a CAD Viewer's loading screen shows.
+        self.assertEqual(read["phase"], "Importing STEP")
+        collecting = [event for event in building if event.get("phase") == "Importing STEP: collecting parts"]
+        self.assertTrue(collecting and all(isinstance(event.get("total"), int) and event["total"] > 0 for event in collecting),
+                        "the parts are counted as they are collected")
+        # What a person reads: no component's hash, and no phase showing the last one's detail.
+        self.assertFalse([event for event in building if re.fullmatch(r"[0-9a-f]{16}", str(event.get("detail", "")))])
+        for before, after in zip(building, building[1:]):
+            if after.get("phase") != before.get("phase") and before.get("detail"):
+                self.assertNotEqual(after.get("detail"), before["detail"], f"{after.get('phase')} kept the detail")
 
     def test_raw_compile_matches_direct_canonical_objects_cold_warm_and_force(self):
         from cadgen._internal.step_scene_package import load_step_scene_exact

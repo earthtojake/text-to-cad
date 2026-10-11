@@ -34,7 +34,7 @@ the reverse.
 | `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: the perspective kept by a mounted view, the preview camera swap and its restore, the reset that Zoom to fit and the live `resetCamera` share, view-cube presets, which turn the camera and keep its zoom and target), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor` (a wheel step first moves the pivot's depth onto the surface under the cursor, and a perspective pan is scaled by that surface's depth, so Render pans and zooms what the cursor is on at Solid's rate), `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube). |
 | `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@text-to-cad/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the content of Display's dropdown (`DisplaySettingsSection`, `DisplayModeOptions`; `DisplayPopover` draws it). |
-| `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolModeMenu` (a tool's exclusive modes: one button in its panel's header row and its dropdown), `ToolPopover` (an ordinary dropdown from its button, on a `side` and `align`ed start or end: preview's menus, Orbit down from the preview corner and the playbar's two up from it), `ToolStack` (the bounded column under the strip, which scrolls only when what cannot give way still does not fit), `ToolPanel` (one panel of it: `fit` says how it gives way when the viewer is short, `resizable` makes it the person's to size by the grip in its bottom-right corner alone, moving only it, and a panel with a heading can fold to it; `closable` is the tree's, whose X — `ToolPanelClose`, in its filter row — closes it until a press on the tool it belongs to brings it back; `ToolPanelCollapse` is the chevron for a foldable panel whose first row is its content's; its `footer`, a `ToolPanelFooterButton`, is a full-row action under the body that never scrolls: the Reference's Copy, Drawing's Copy), `ResizeGrip` (the one resize grip of a box over the viewport, in a bottom corner: a resizable panel's at its bottom-right, Quick Edit's at its bottom-left), `toolStackLayout` (every panel's width, the resizable panels' sizes, the folded panels and the closed tree: defaults, bounds and their stored record), and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `PreviewChrome` (preview's controls and their visibility), `PlaybackMenu` (preview's menus: `OrbitMenu`, the corner's Orbit — on or off, and its speed; `RoutineMenu`, the playbar's Routines, a playlist at its left end with two or more routines; and the playbar's Playback settings at its right end — Speed, Loop, Autoplay), `preview/` (orbit preferences), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`, `playbackPreferences`: preview's settings, the file's — orbit and its speed, Autoplay, the routine's chosen Speed and Loop), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`), `quick-edit/` (`QuickEdit`, the note to the agent, and `quickEditPrompt`, the context it builds and the text it copies). Screenshot capture is `@text-to-cad/core/lib/viewer/screenshotCapture.js`. |
+| `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolModeMenu` (a tool's exclusive modes: one button in its panel's header row and its dropdown), `ToolPopover` (an ordinary dropdown from its button, on a `side` and `align`ed start or end: preview's menus, Orbit down from the preview corner and the playbar's two up from it), `ToolStack` (the bounded column under the strip, which scrolls only when what cannot give way still does not fit), `ToolPanel` (one panel of it: `fit` says how it gives way when the viewer is short, `resizable` makes it the person's to size by the grip in its bottom-right corner alone, moving only it, and a panel with a heading can fold to it; `closable` is the tree's, whose X — `ToolPanelClose`, in its filter row — closes it until a press on the tool it belongs to brings it back; `ToolPanelCollapse` is the chevron for a foldable panel whose first row is its content's; its `footer`, a `ToolPanelFooterButton`, is a full-row action under the body that never scrolls: the Reference's Copy, Drawing's Copy), `ResizeGrip` (the one resize grip of a box over the viewport, in a bottom corner: a resizable panel's at its bottom-right, Quick Edit's at its bottom-left), `toolStackLayout` (every panel's width, the resizable panels' sizes, the folded panels and the closed tree: defaults, bounds and their stored record), and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `PreviewChrome` (preview's controls and their visibility), `PlaybackMenu` (preview's menus: `OrbitMenu`, the corner's Orbit — on or off, and its speed; `RoutineMenu`, the playbar's Routines, a playlist at its left end with two or more routines; and the playbar's Playback settings at its right end — Speed, Loop, Autoplay), `preview/` (orbit preferences), `playbar/` (`ViewportAnimationBar`, `AnimationPanel` (the Animation tool's panel: its settings and X in its heading, the Routine row with several routines, the transport), `animationClock`, `usePlaybackFrames`, `playbackPreferences`: the file's playback settings — orbit and its speed, Autoplay, and the Animation tool's chosen Speed and Loop; preview's own Speed and Loop are the shell's, never stored), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`), `quick-edit/` (`QuickEdit`, the note to the agent, and `quickEditPrompt`, the context it builds and the text it copies). Screenshot capture is `@text-to-cad/core/lib/viewer/screenshotCapture.js`. |
 | `inspector/` | `FileSheet` and its row and section primitives, `modelTreeSearch` (`useTreeSearch`, the ranked flat search every tree shares), `VirtualRows` (a long tree's rows, windowed), `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the `Pose` row that heads every Position section, with its Reset). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
 | `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertCard` (the card over the viewport for every alert, and `useAlertDismissal`: a card put away, and its icon in the navbar that brings it back) and `reportIssue` (`alertIssueUrl`: its Report Issue's new issue), `ViewUpdateStatus`, `loadingState` (`viewerLoadingState`), `loadAlerts` (`failureAlert`, `noGeometryAlert`). |
 | `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
@@ -57,9 +57,10 @@ on the strip, and what it can be set to is its panel in the stack. Display is no
 its settings are a dropdown from its button at the navbar's right end, before Preview
 (`kit/shell/DisplayPopover.jsx`), a 3D view's alone. A renderer
 builds its own list from `shell.tools.own(...)`, adding `shell.tools.draw` where it offers
-Draw; STEP's is in `step/StepSurface.jsx`. There is no Animate tool: routines play in
-preview, whose playbar and its menus the shell draws for any file with
-routines. Preview is not a tool: it is a button beside Display, last in the navbar. Nor is Quick Edit: it is a STEP file's box at the top-right, there while something is picked or drawn. `createToolModes({ defaultMode, modes })`
+Draw and `shell.tools.animate` (null for a file with no routines) where it offers Animation,
+each declared in its `toolModes` as a mode that toggles; STEP's is in `step/StepSurface.jsx`.
+Routines play under Animation, whose panel the shell draws, and in preview, whose playbar and
+its menus the shell draws for any file with routines. Preview is not a tool: it is a button beside Display, last in the navbar. Nor is Quick Edit: it is a STEP file's box at the top-right, there while something is picked or drawn. `createToolModes({ defaultMode, modes })`
 answers what a press does (`next`), what a saved tab may record (`persisted`) and
 which tool a file opens in (`restore`); the STEP declaration is
 `CAD_TOOL_MODES` in `workbench/constants.js`. The playbar follows the clock on
@@ -131,9 +132,9 @@ not: the camera fit, the studio set up per output, and PNG encoding.
 
 Both hosts dress a scene the same way: the look from `resolveSceneSurfaceLook`, shadows
 while the lighting is on, `keepsAuthoredFinish` for Inspect's reflection environment, and
-the ground sized from `restBounds`. A robot opens at `robotOpeningPose`
-(`lib/urdf/motion.js`: every joint's default, then an SRDF's `home` state) and a
-snapshot's `--joint-values` go on top through the same joint matrices. What a snapshot
+the ground sized from `restBounds`. A robot opens at the opening of the articulation
+cadgen resolved for it (every control at rest, then an SRDF's `home` state) and a
+snapshot's `--joint-values` go on top through the same player (`common/articulation.js`). What a snapshot
 cannot express, it refuses rather than approximates: a GLB's clips are the viewer's
 playbar and have no snapshot flag. The pieces are pinned by `common/headlessScene.test.js`
 (core), `kit/view-settings/renderState.test.js` (one look from either route) and
@@ -148,8 +149,8 @@ calls one hook; the shell owns the rest.
 
 | module | what it is |
 | --- | --- |
-| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and the content of Display's dropdown (`shell.display`), tool modes (Draw is the only strip tool the shell itself owns; Display, Preview and preview's menus are the frame's; `toolModes` is omitted altogether by a renderer with no tools of its own), the tool stack's layout (a viewer preference: `services.preferences.toolStack` — the resizable panels' sizes, the folded panels, the closed tree — changed by one patch per gesture, `frame.changeToolStack`), prompt snapshots (the host's `captureRequest`), the clipboard screenshot (Draw's Copy), what Quick Edit takes from the view (its file, how a copied prompt spells a path, the view as a picture, the viewer's Escape), the one preview state (`shell.previewing` / `setPreviewing`, from `usePreviewState`) and preview's Autoplay (`shell.autoplay`, a viewer preference), alerts, shortcuts, and the live command surface. It owns no zoom control: the shell has none. |
-| `RendererShell.jsx` | The frame: viewport box, tool strip (the renderer's tools) at the top-left, the tool stack under the strip (`ToolStack`: the Drawing panel while Draw is up, with Copy at its foot once there is ink, then the renderer's `toolPanels`; the column stops above the cube, `VIEWPORT_STACK_BOTTOM`), Quick Edit at the top-right, the view cube in the bottom-left corner, a 3D view's controls portaled into the navbar's box for them (`view.navbarSlot`, `data-view-controls`: Display, the perspective box, whose dropdown is `DisplayPopover` over `frame.display` and opens down, then Preview, the full-screen icon of two diagonal arrows), preview's controls (`PreviewChrome`: at the view's top-right, on a row of the navbar's geometry, Orbit — `OrbitMenu` — then Display, the same `DisplayPopover`, then the way out, so Display and the way out land where Display and Preview sat; under the model, the playbar for a file with routines, its Routines at its left end and its Playback settings at its right, and nothing for a static one), preview as fullscreen (`onFullscreenChange`: the navbar steps aside), the render profile (`kit/viewport/renderProfile.js`: preview draws the scene one quality tier up, keeps its pixel ratio while orbiting and suspends the tool effects), stopping the routine (`animation.onRelease`) when preview ends, the loading overlay, the update status centred at the top of the viewport, and the alert card. While the model loads, and once a load has failed in a way the model did not survive (an alert that cannot be put away), it draws none of its controls and no update status: only the load, or the card saying why; in a compact host (`appearance.compact`), none at all: the model alone. Nothing sits at the bottom centre but preview's playbar, on the `--cad-viewport-bottom-center` line. It takes `references` (what is selected, in the prompt grammar: what Quick Edit attaches and counts) and `copySelection` (what ⌘C / Ctrl+C copies while the renderer's own tool is up and something is selected; null when nothing is). One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-cad-tool-stack`, `data-tool-panel`) for every renderer. `frameProvider` wraps the WHOLE frame in the renderer's own context — the tool stack as well as the viewport, because both read it — and `onCanvasPointerDown` is a press that landed on the model, for a renderer with something to put down when the person reaches for it. The frame focuses itself on such a press either way. |
+| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and the content of Display's dropdown (`shell.display`), tool modes (Draw and Animation are the strip tools the shell itself owns; Display, Preview and preview's menus are the frame's; `toolModes` is omitted altogether by a renderer with no tools of its own), the tool stack's layout (a viewer preference: `services.preferences.toolStack` — the resizable panels' sizes, the folded panels, the closed tree — changed by one patch per gesture, `frame.changeToolStack`), prompt snapshots (the host's `captureRequest`), the clipboard screenshot (Draw's Copy), what Quick Edit takes from the view (its file, how a copied prompt spells a path, the view as a picture, the viewer's Escape), the one preview state (`shell.previewing` / `setPreviewing`, from `usePreviewState`; every way in and out goes through `setPreviewing`, which saves the tools view's routine on the way in, starts preview's at rest — playing under Autoplay — and hands the saved one back on the way out) and preview's Autoplay (`shell.autoplay`, a viewer preference), alerts, shortcuts, and the live command surface. It owns no zoom control: the shell has none. |
+| `RendererShell.jsx` | The frame: viewport box, tool strip (the renderer's tools) at the top-left, the tool stack under the strip (`ToolStack`: the Drawing panel while Draw is up, with Copy at its foot once there is ink, or the Animation panel while Animation is (`AnimationPanel`), then the renderer's `toolPanels`; the column stops above the cube, `VIEWPORT_STACK_BOTTOM`), Quick Edit at the top-right, the view cube in the bottom-left corner, a 3D view's controls portaled into the navbar's box for them (`view.navbarSlot`, `data-view-controls`: Display, the perspective box, whose dropdown is `DisplayPopover` over `frame.display` and opens down, then Preview, the full-screen icon of two diagonal arrows), preview's controls (`PreviewChrome`: at the view's top-right, on a row of the navbar's geometry, Orbit — `OrbitMenu` — then Display, the same `DisplayPopover`, then the way out, so Display and the way out land where Display and Preview sat; under the model, the playbar for a file with routines, its Routines at its left end and its Playback settings at its right, and nothing for a static one), preview as fullscreen (`onFullscreenChange`: the navbar steps aside), the render profile (`kit/viewport/renderProfile.js`: preview draws the scene one quality tier up, keeps its pixel ratio while orbiting and suspends the tool effects), stopping the routine (`animation.onRelease`) once neither preview nor the Animation tool holds it, the loading overlay, the update status centred at the top of the viewport, and the alert card. While the model loads, and once a load has failed in a way the model did not survive (an alert that cannot be put away), it draws none of its controls and no update status: only the load, or the card saying why; in a compact host (`appearance.compact`), none at all: the model alone. Nothing sits at the bottom centre but preview's playbar, on the `--cad-viewport-bottom-center` line. It takes `references` (what is selected, in the prompt grammar: what Quick Edit attaches and counts) and `copySelection` (what ⌘C / Ctrl+C copies while the renderer's own tool is up and something is selected; null when nothing is). One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-cad-tool-stack`, `data-tool-panel`) for every renderer. `frameProvider` wraps the WHOLE frame in the renderer's own context — the tool stack as well as the viewport, because both read it — and `onCanvasPointerDown` is a press that landed on the model, for a renderer with something to put down when the person reaches for it. The frame focuses itself on such a press either way. |
 | `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube (bottom-left; not mounted in preview, `previewMode`, while the model loads, or when the shell says so, `viewCube`), frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }`), which is how a renderer mounts its own overlay or pointer pick. A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under one identity) calls `commitScene()` from its own effect: the viewport re-reads what it placed, fits the stage and the depth range and applies the framing rules THEN, because a child's effects run before the viewport's own adoption effect. The one thing a commit never does ahead of the viewport is FRAME under a camera that is about to change: when the same render also changed the lens, the projection or the viewing mode, the stage is adopted at once and the framing follows once the camera has been given those props (a stored camera applied under the old projection and then converted comes out about a sixth smaller). A scene is framed once, on its `restBounds`; a STEP package's is the box its `assembly.json` declares (`bbox`), final from the first publish. A scene that says `complete: false` (a package that declares no box) is framed on what has arrived and once more when it is whole, unless the camera on screen is by then the person's: one they dragged, wheeled, turned by keys or the cube, zoomed to a selection or set through `setCamera` during the current mount, or one a reload restored from the file's view. A rebuild of the open file never re-frames; only Zoom to fit does. A file opened again after the tab left it starts with fresh framing, since leaving it dropped its view. `preserveInteractionPixelRatio` keeps the idle pixel ratio while the camera moves (a scene drawn with hairlines, and preview's orbit: `renderProfileKeepsPixelRatio`), and `runtimeLifecycle` (`onRelease(runtime, { handoff })` while the WebGL renderer is still alive, `onContextLost()`, `onInitializationError(error)`) is for a renderer that hangs its own objects or in-flight work on the runtime. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe; a sync that finds the bounds (and every setting the fit reads) as they were refits nothing and keeps the shadow maps (`look/stageFollow.js`). What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera, its depth range included) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
 | `fileView.js` | The file's view `{ version, camera, display, playback, renderer }`, read forgivingly and written exactly: the camera (restored in place of the open-time fit; null fits), the Display settings, preview's settings, Orbit's and the playbar's (`tools/playbar/playbackPreferences.js`), and the renderer's own slices, each `{ signature, value }` and restored only under the signature the renderer declares now (`readFileView(raw, signatures)`); the camera, the display and the playback are always kept. The host keys it `[file path, renderer id]` in the tab store, which keeps it for the file on screen alone. Not in it: the tool in hand, a selection, measurements, ink, preview, a routine's time — every open starts those afresh. |
 | `liveBinding.ts` | `attachLiveBinding`: the live command surface. Base commands (`readState`, `setCamera`, `resetCamera`, `setDisplaySettings`, `setRenderMode`, `capture`) mean the same for every renderer; a renderer ADDS commands by name and DECLINES the known host commands (`HOST_LIVE_COMMANDS`) that make no sense for it with the sentence the caller reads. Binding fails when a renderer does neither. |
@@ -169,7 +170,7 @@ const shell = useRendererShell({
   previewable,          // true for a 3D view: it offers Preview; omitted (a 2D view): no Preview, and a request keeps the normal view
   scene,                // KitScene | null
   load,                 // { busy, updating?, progress?, alert? }: the renderer's document load
-  animation,            // playbar runtime with its own `clock` (and `onRelease`), or null: plays in preview alone
+  animation,            // playbar runtime with its own `clock` (and `onRelease`, `savePlayback`, `restorePlayback`), or null: plays in preview and under `tools.animate`
   live,                 // { commands?, declined?, state? }
   // optional: promptReferences, promptContext, escape, sceneScaleMode, preview, tool,
   //   viewSettings, viewerRef, onCameraSettled, onRuntimeAlert, presentationReport,
@@ -181,9 +182,11 @@ const shell = useRendererShell({
 shell.requestFrame();            // a frame that keeps the shadow maps: a highlight moves and reshapes no caster
 shell.syncSceneBounds();         // the scene moved its bounds (a pose): the stage follows, no render
 shell.scheduleStateSave();       // a slice changed: write the view soon, and on unmount
-shell.playback; shell.setPlayback(patch); // preview's settings, the file's: orbit and its speed, Autoplay, the routine's chosen Speed and Loop
-// The shell adds Display and Preview (a `previewable` view's, in the navbar), and preview's
-// corner (Orbit, Display, Exit preview) and playbar (Routines, the transport, Playback settings).
+shell.playback; shell.setPlayback(patch); // the file's: orbit and its speed, Autoplay, the tools view's chosen Speed and Loop
+shell.routinePlayback; shell.chooseRoutinePlayback(patch); // Speed and Loop in the mode on screen: preview's are its own, forgotten on exit
+// The shell adds Display and Preview (a `previewable` view's, in the navbar), preview's corner
+// (Orbit, Display, Exit preview) and playbar (Routines, the transport, Playback settings), and the
+// panels of its own tools (Draw's, Animation's).
 const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw].filter(Boolean); // [] for camera-only formats: no strip
 // toolPanels: the renderer's ToolPanels, shown or `hidden` by the tool they belong to
 return <RendererShell shell={shell} tools={tools} toolPanels={<>{selectPanels}{keptPanels}</>}
@@ -370,17 +373,21 @@ STEP renderer does not match `.glb`.
   flag, or the grey a STEP export stamps on uncoloured parts) takes the viewer's
   surface colour in Inspect.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
-- **Tools**: none. The renderer hands the shell no tools of its own (`tools={[]}`), so
-  there is no tool strip: a GLB picks nothing, so there is no Select, no filter menu,
-  no copy-references action and no viewport context menu.
-- **Animation** (`glb/useGlbAnimation.js`): clips play in preview alone, through the
-  playbar under the model and its menus (`RendererShell.jsx`).
-  The file OPENS AT REST — one `AnimationMixer` on the native scene, built by the
-  first play, scrub or clip choice and alive only while a routine owns the pose;
-  leaving preview calls the runtime's `onRelease`, which stops it and puts the model
-  back at rest, keeping the clip, speed and loop.
-- **Panels**: none, so a GLB opens with no panel open. Preview is the shell's, as for
-  every 3D file, with the Animation settings when the file has clips.
+- **Tools**: the Animation tool alone, for a file with clips (`glb/tools.js`'s
+  `GLB_TOOL_MODES`: the shell's `animate` as the default mode). The renderer hands the
+  shell no tools for a strip (`tools={[]}`), so there is no tool strip: one tool needs none,
+  and a GLB picks nothing, so there is no Select, no filter menu, no copy-references action
+  and no viewport context menu.
+- **Animation** (`glb/useGlbAnimation.js`): clips play under the Animation tool, up from the
+  open and never put down, and in preview, through the playbar under the model and its menus
+  (`RendererShell.jsx`). The file OPENS AT REST — one `AnimationMixer` on the native scene,
+  built by the first play, scrub or clip choice — unless its Autoplay is on, which plays it at
+  the open, as taking the tool up does. Preview's routine is its own: it opens at rest whatever
+  the tool's is doing, and leaving it gives the tool's routine back where it was
+  (`savePlayback`, `restorePlayback`).
+- **Panels**: the Animation panel at the top-left for a file with clips, with no X (its tool
+  is never put down); none for a static file, which opens with no panel open. Preview is the
+  shell's, as for every 3D file, with the Animation settings when the file has clips.
 - **Host commands**: the base live commands; `select` and `clearSelection` are
   declined with a sentence, and a `selectReference` host request is consumed and
   acknowledged without changing the view.
@@ -429,40 +436,52 @@ renderer does not match either.
 ## Robot renderer
 
 `createRobotRenderer` (`@text-to-cad/ui/renderers/robot`, id `robot`) shows a
-`.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, three parsers:
-an SRDF is its paired URDF with the SRDF's semantics on it (group states, end
-effectors, planning groups), an SDF a robot with one more section. Nothing below the
-loader asks which it is. The STEP renderer matches none of them.
+`.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, one payload: cadgen
+resolves the description (`GET /__cad/robot`, `cadgen.robot_payload`) into the
+articulation the page plays — the artifact a STEP model's kinematics resolve to, played
+by core's `common/articulation.js` — the visuals it draws (each mesh at its rest
+placement: a link's mesh file, or a box, cylinder, sphere or capsule cadgen meshed into
+its store) and the facts a person reads back. An SRDF is its paired URDF with the SRDF's
+semantics on it (group states as named poses, end effectors, planning groups), an SDF a
+robot with one more section (a model nested in its model is part of it, its links and
+joints named by scope: `arm::elbow`). The page parses nothing: a description cadgen refuses (its
+validators' findings, a mesh the page cannot draw, a `package://` or remote mesh, an SRDF
+with no single URDF beside it) is refused at the door, in cadgen's words. Nothing below
+the loader asks which format it was. The STEP renderer matches none of them.
 
-- **Scene** (core's `lib/urdf/robotScene.js`, no React, no DOM, which the snapshot CLI draws a robot with too): a scene GRAPH. One `Group`
-  per link, a link's meshes attached to it once, and each joint as three nested
-  frames: the static parent-to-joint frame, ONE motion group, then the child link
-  (at an SDF joint's static child offset, else identity). A pose writes the
-  motion matrices of the joints that changed (the joint and its mimic followers;
-  `jointMotionTransform`, values resolved by `resolveUrdfJointValues`, both in
-  core's `urdf/kinematics.js`) and nothing else: no geometry, no material, no
+- **Scene** (core's `lib/urdf/robotScene.js`, no React, no DOM, which the snapshot CLI draws a robot with too): a scene GRAPH
+  played from the payload. One node per joint of the articulation, nested under its
+  parent joint's, whose matrix is the joint's own motion in rest space
+  (`jointMotionMatrix`); a link's meshes sit under the joint that carries the link, at
+  their rest placements, and a link no joint carries under the root. A pose
+  (`setControlValues`) normalizes the control vector against the articulation as every
+  player does and writes the motion matrices of the joint rows that changed (a joint and
+  its mimic followers) and nothing else: no geometry, no material, no
   part list, no React state. Core transforms are row-major, so matrices are
-  written with `Matrix4.set`. Every link group is where the description solver
-  (`solveUrdfLinkWorldTransforms`) puts that link; the unit test holds the graph
-  to it for random poses. `bounds` follows the pose (only the moved subtree is
-  re-measured); `restBounds` is every joint at its declared default, whatever
-  pose the file opens in, and is what the camera frames and the ground is sized
-  from. Picking raycasts the link meshes (each geometry's BVH is built in idle
-  time once a ray reaches it, core's `raycastBvh.js`) and walks up to the link
-  group; a named object of a link's mesh is itself.
-- **Parts** (core's `lib/urdf/robotParts.js`): built once per load. One part per visual, or
-  per NAMED object of a visual's mesh (`head:v1/object/0`), with its link, local
-  transform, source mesh and palette place. Geometries wrap the loader's arrays
-  and are shared by visuals that name one mesh.
+  written with `Matrix4.set`. A joint node's world matrix IS the joint's delta
+  (`jointDeltas`), which the unit test holds the graph to for random poses. `bounds`
+  follows the pose (only the moved subtree is re-measured); `restBounds` is the robot as
+  written (every row at zero), whatever pose the file opens in, and is what the camera
+  frames and the ground is sized from. Picking raycasts the link meshes (each geometry's
+  BVH is built in idle time once a ray reaches it, core's `raycastBvh.js`) and reads the
+  mesh's link; a named object of a link's mesh is itself.
+- **Parts** (core's `lib/urdf/robotParts.js`): built once per load. One part per visual of
+  the payload, or per NAMED object of a visual's mesh (`head:v1/object/0`), with its link,
+  rest placement, source mesh and palette place. A primitive cadgen meshed carries no name
+  and is never an object. Geometries wrap the loader's arrays and are shared by visuals
+  that name one mesh.
 - **Loading** (`robot/useRobotDocument.js`, over core's `lib/urdf/loadRobot.js`, the loader
-  the snapshot CLI uses): `loadRenderUrdf`, `loadRenderSrdf` or `loadRenderSdf`, then every
-  distinct link mesh (`loadRenderMeshByUrl`, at most eight at a time). Progress reads "Loading URDF", "Loading meshes 3/13",
-  "Building robot". The robot is published once, whole. A missing link mesh fails
-  the load. A warm file is on screen on the first render; a new revision loads
-  behind the robot on screen and keeps the pose it was left in while its driven joints and
-  named poses are unchanged, and opens at its opening pose when they changed. An SRDF with no
-  URDF paired (the catalog pairs the ONE `.urdf` in the same folder whose
-  `<robot name>` matches) raises an alert that names what was looked for.
+  the snapshot CLI uses): `loadRenderRobot` (the payload, cached by the description's
+  revision), then every distinct mesh URL it names (`loadRenderMeshByUrl`, at most eight
+  at a time; a primitive is served from cadgen's store, `/__cad/robot?file=&mesh=<hash>`).
+  Progress reads "Loading URDF", "Loading meshes 3/13",
+  "Building robot". The robot is published once, whole. A mesh that cannot be fetched
+  fails the load. A warm file is on screen on the first render; a new revision loads
+  behind the robot on screen and keeps the pose it was left in while its controls and
+  named poses are unchanged (`poseLogic`), and opens at its opening pose when they
+  changed. An SRDF cadgen could not pair (the ONE `.urdf` in the same folder whose
+  `<robot name>` matches) raises an alert that says what was looked for, around cadgen's
+  sentence; any other refusal is the load alert, with cadgen's sentence as its reason.
 - **Look**: a robot authors no finish, so Solid wears the viewer's surface and
   Render the studio's. Colour, in order: the colour the description gives the
   visual; else the colours the mesh brought (per vertex, graded as a material
@@ -476,23 +495,26 @@ loader asks which it is. The STEP renderer matches none of them.
 - **Tools**, left to right: **Select** (the default), **Position** (only with
   movable joints; shown idle until the robot has loaded; it shows its Position panel),
   and nothing else: Display and Preview are the view's controls, in the navbar.
-- **Pose** (`robot/poseStore.js`): joint values live in a store outside React
-  (degrees; metres for a prismatic joint), with one write path. A write is clamped,
-  ignored under `URDF_JOINT_VALUE_EPSILON`, releases the tracked named pose and is
-  heard synchronously: the scene poses itself, the handle list is re-read from the
-  motion groups' world matrices (`robot/jointHandles.js`), one frame is requested,
-  and the stage follows once per frame (`shell.syncSceneBounds`). Only the control
+- **Pose** (`robot/poseStore.js`): the articulation's control values live in a store
+  outside React (degrees; metres for a prismatic joint; a mimic follower has no control,
+  its row follows its leader's), with one write path. A write is clamped to the control's
+  limits (a continuous joint has none), ignored under `JOINT_VALUE_EPSILON`, releases the
+  tracked named pose and is heard synchronously: the scene poses itself, the handle list
+  is re-read from the joint nodes' world matrices (`robot/jointHandles.js`: one knob per
+  moving joint row, a follower's included — its drag writes its leader through the row's
+  weight, `controlWriteForHandle`), one frame is requested, and the stage follows once per
+  frame (`shell.syncSceneBounds`). Only the control
   that shows the value that changed is subscribed to it, so a pose step renders one
   slider row and no other component. On `juno.urdf` (28 links) a knob step cost
   about 270 ms of script when a pose was React state and a re-placed part list; it
   costs about 3 ms with the Position panel hidden and about 6 ms with the joint sliders on
   screen (a development React build), which is what a frame costs. The opening pose is
-  every joint's default, then the SRDF group state(s) named `home` (core's
-  `robotOpeningPose`, which a snapshot opens the robot at too).
-- **Select**: a selection is any number of links or any number of named objects,
-  never both (`robot/useLinkSelection.js`; Shift in the viewport, Shift, Ctrl or Cmd
-  on a row add), and the Reference panel names several by what they are ("Links",
-  "Mesh objects") and lists them. It exists only while Select is the tool: a pick under
+  the articulation's (`opening`: every control at rest, then the SRDF group state(s)
+  named `home`, decided in cadgen, where a snapshot opens the robot too).
+- **Select**: a selection is any number of links or any number of visuals (or the named
+  objects of a visual's mesh), never both (`robot/useLinkSelection.js`; Shift in the
+  viewport, Shift, Ctrl or Cmd on a row add), and the Reference panel names several by
+  what they are ("Links", "Components") and lists them. It exists only while Select is the tool: a pick under
   another tool returns to Select first, and leaving Select clears it. A pick opens
   nothing: its Reference joins the stack under Links. Escape clears the selection. Hover and selection are drawn by the scene (`setHighlight`), with
   the highlight ink a STEP part wears; hover is not React state. A robot has no
@@ -504,14 +526,15 @@ loader asks which it is. The STEP renderer matches none of them.
   `PositionControls.jsx` is the Position panel's body — headed "Position" with Reset
   (`RobotRenderer.jsx`) — the `Pose` label and dropdown (only with SRDF group states:
   `Default`, the states and `Custom` for a hand-moved pose), then a compact slider row per
-  driven joint, its thumb named after the joint.
+  control of the articulation (a driven joint; never a fixed joint or a mimic follower),
+  its thumb named after the control.
 - **Host commands**: the base live commands; `clearSelection` clears the link
   selection; `select` is declined with a sentence (a robot description has no
   reference grammar), and a `selectReference` host request is consumed and
   acknowledged without changing the view. Live state adds `selectedLinks` and `selectedPartIds`.
 - **State**: the file's view under `[path, "robot"]`; its one slice is
-  `pose: { jointValues }`, written against the description's revision and restored
-  only under it. The tracked named pose, the selection and the tree's disclosure
+  `pose: { jointValues }` (the control values), written against the description's
+  revision and restored only under it. The tracked named pose, the selection and the tree's disclosure
   are not stored.
 - **Test seams** (read-only): `window.__cadJointHandles()` (knobs in CSS pixels,
   with values and drawn travel), `window.__robotLinks()` (every link group's frame)
@@ -602,7 +625,7 @@ A reload shows the same file, and restores it:
 | `camera` | The renderer's own: a scene's pose, lens and projection (a perspective snapshot, scoped to the model on read), restored in place of the open-time fit — null, or not a camera, fits; a drawing's plane transform. |
 | `display` | The Display settings, Clip and Explode included. |
 | `playback` | Preview's settings, Orbit's and the playbar's, every one of them (`kit/tools/playbar/playbackPreferences.js`): `orbit` on or off (on by default) and `orbitSpeed` (1), `autoplay` (off), and `speed` and `loop` once chosen — unset, the routine's authored values apply. Kept between leaving and re-entering preview, and across a reload of the tab; entering preview orbits only if the file's orbit is on. |
-| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. STEP (`workbench/stepViewSlices.js`): `tree` (expanded nodes, hidden parts, isolated assemblies) and `largeFile` against the geometry, `pose` against the sidecar. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. GLB, mesh: none. DXF: nothing beyond its camera. |
+| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. STEP (`workbench/stepViewSlices.js`): `tree` (expanded nodes, hidden parts, isolated assemblies) and `largeFile` against the geometry, `pose` against the build (a rebuild's articulation fits a stored pose to its own controls). Robot: `pose` (joint values) against the description's revision. GLB, mesh: none. DXF: nothing beyond its camera. |
 
 | Not kept | Every open starts it afresh |
 | --- | --- |
@@ -691,12 +714,10 @@ without a DOM dependency in core. Catalog requests retain the ten-second
 timeout and the same error text.
 
 Each prepared CAD document owns a render session with a cancellable view of its
-client's tessellation cache. The client owns the origin-bound provider and bounded
-deferred write queue. Disposing a session aborts its reads and
-rejects late worker writes; already admitted writes remain with the client
-through file switches. Disposing the client clears that queue and its provider
-requests. There is no page-wide mutable cache provider. HTTP storage still uses
-the shared Python cache and its original component-key codec.
+client's mesh-store reader. The client owns the origin-bound provider. Disposing
+a session aborts its reads; disposing the client aborts its provider requests.
+There is no page-wide mutable cache provider. The meshes are cadgen's own, in
+its store under its key scheme: the browser reads them and never writes one.
 
 On mount, immutable mesh and complete robot state are read synchronously from
 the existing bounded decoded caches. Reopening a warm file can therefore show
@@ -730,7 +751,7 @@ they are mutable state with one owner, the GLB renderer's mounted scene.
 
 Worker infrastructure is reference-counted across live render sessions. The
 last session releases workers and pending work. Playback clocks are separate
-per mounted renderer. Asset loads, sidecar loads and render-module loads have
+per mounted renderer. Asset loads and the routines' keyframe loads have
 their own abort signals; changing or closing a file cannot install a late
 result into the next file. A renderer release does not dispose a host's shared
 client while another pane still needs it.
@@ -819,7 +840,10 @@ The optional `@text-to-cad/ui/file-viewer/empty` entry exports `EmptyCadBackdrop
 - **Viewport**: the shell's own `ShellViewport`, mounted by `RendererShell`; STEP
   does not wrap it. The surface decides what it may show and pick just now (nothing
   under Position or in preview; no topology while a previous mesh is held over
-  an update) and hands the viewport menu, the selection's references and its copy to the shell, and it
+  an update). Everything of the person's work the layers draw — the Position pose, hidden
+  and isolated parts, picks, hover, Measure, Position's knobs — is one object of the layers'
+  props (`toolsWork`); preview hands them `openingWork` in its place, the model as it opens,
+  and changes none of the work, so leaving preview finds it exactly as it was and hands the viewport menu, the selection's references and its copy to the shell, and it
   keeps the two things only a STEP can answer, beside the kit viewport's handle: `sampleLodCamera` and `zoomToFitSelection` (the boxes of the selected
   references, from the selector runtime as posed, merged with the boxes of the
   selected parts, from the records on screen).
@@ -937,13 +961,17 @@ whose bounds intersect the active plane receive the two extra stencil passes;
 disabling clipping releases the fill and materials without disposing the model's
 geometry. Open/non-manifold meshes cannot guarantee a solid section fill.
 
-**Group faces.** Clicking a face selects its connected
-chain across edges classified as tangent by the loaded STEP topology; sharp,
-unknown, boundary and nonmanifold edges stop the chain. Selection never crosses
-occurrences or solid shapes. Shift-click adds a chain, or removes it if the whole
-chain is already selected. The resulting faces use the existing highlight and
-Copy Reference controls. An assembly part loads its topology on the first press, as
-with the Faces filter. This changes selection only, not CAD geometry.
+**Group faces and Group edges.** Clicking a face selects its tangent group and
+clicking an edge its chain: both are cadgen's, read off the component's selector
+table (`tangentGroup`, `chain`: faces joined across tangent-class edges, edges
+that continue one another at a shared vertex, each decided once from the exact
+BREP), and the page grows the pick to the rows of the same id in the same
+occurrence and solid. Sharp, unknown, boundary and nonmanifold edges stop a
+group; a corner stops a chain. Selection never crosses occurrences or solid
+shapes. Shift-click adds a group, or removes it if the whole group is already
+selected. The resulting faces use the existing highlight and Copy Reference
+controls. An assembly part loads its topology on the first press, as with the
+Faces filter. This changes selection only, not CAD geometry.
 
 Group edges uses tessellated edge endpoints within the same solid/occurrence and
 a shared face, with a 0.00001 model-unit endpoint tolerance. It follows corners
@@ -1148,14 +1176,16 @@ to Select first. No other tool ever sees a selection, so none needs a rule for o
 
 ### Position
 
-Position edits persist when switching tools or tabs, or closing the panel. A STEP
-rebuild keeps Position the tool while its sidecar is read again behind the kinematics in
+Position edits persist when switching tools or tabs, or closing the panel. A STEP's
+Position is over the articulation cadgen resolved from its sidecar's kinematics, inline on
+its catalog entry (`entry.articulation`, versioned by `poseUrl`); the page reads no sidecar.
+A rebuild keeps Position the tool while the new articulation arrives behind the one in
 hand (`workbench/useStepMotion.js`), and keeps the values, and the named pose they were
-chosen as, when the new sidecar's joint parameters and named poses are the ones in hand
-(`stepPoseLogic`, `workbench/stepModuleLoad.js`); when they changed, the pose starts at the
+chosen as, when the new articulation's controls and named poses are the ones in hand
+(`stepPoseLogic`, `workbench/poseLoad.js`); when they changed, the pose starts at the
 new defaults — the old values are never fitted onto other joints. A robot's new revision
 follows the same rule over its driven joints and named poses (`poseLogic`,
-`robot/poseStore.js`). Position goes only when the sidecar has nothing left to move. Reset
+`robot/poseStore.js`). Position goes only when the articulation has nothing left to move. Reset
 explicitly restores STEP defaults or the robot opening pose (including SRDF `home`).
 The Position tool controls joint handles and shows its panel.
 A routine playing in preview sets the Position values aside when it takes the pose and gives them
@@ -1165,8 +1195,8 @@ is [the design system's](settings-ui.md#position-and-references).
 The Position tool (lucide `Spline`; its tool id is `pose`) drags a model's joints
 by handles in the viewport. It exists where
 something can be driven: a robot (URDF, SRDF, SDF) with a revolute, continuous
-or prismatic joint that is not a mimic follower, and a STEP whose sidecar
-kinematics declare a revolute, slider or cylindrical mate. Robots and STEP files
+or prismatic joint that is not a mimic follower, and a STEP whose articulation
+has a turning or sliding joint row (a revolute, slider or cylindrical mate). Robots and STEP files
 open in Select: the tool in hand is never stored, and a reload brings back a
 robot's joint values with the rest of the file's view. It is absent in preview. While it is active the model picks nothing, hovers
 nothing and casts no model ray (`pickMode` NONE, as in preview); the camera
@@ -1177,15 +1207,16 @@ One handle system serves both formats. Two adapters turn a description and its
 CURRENT pose into one plain list, in model space: `{ id, label, kind, pivot,
 axis, toward, value, min, max, unit, onChange }` (`robot/jointHandles.js`, and
 the STEP renderer's `workbench/jointHandles.js`). A robot's joint
-frame is READ, not solved: it is the world matrix of the joint's motion group in
-the scene graph, which already sits before an SDF joint's static child offset; a
+frame is READ, not solved: it is the world matrix of the joint's node in the scene
+graph, the joint's delta as `jointDeltas` composes it; a
 STEP mate's world-at-rest axis is carried by the
 accumulated delta of its child, the composition `kinematicsDeltas` uses, so a
-handle rides a mate chain of any depth. A fixed joint, a fastened mate and a
-mimic follower have no handle. A STEP DOF that a coupling drives KEEPS its
-handle and writes through the coupling (`poseControlWrite`), as its slider does:
-a coupling has no axis to hang a handle on, and a gear train whose every member
-is geared would otherwise have none. The list is rebuilt from the pose on screen,
+handle rides a mate chain of any depth. A fixed joint and a fastened mate have no
+handle. A row a coupling drives KEEPS its handle and writes through the coupling,
+as its slider does (a STEP DOF through `poseControlWrite`, a robot's mimic follower
+through its leader's control, `controlWriteForHandle`): a coupling has no axis to
+hang a handle on, and a gear train whose every member is geared would otherwise
+have none. The list is rebuilt from the pose on screen,
 so sliders, presets, Reset and a handle further up the chain all carry the
 knobs along.
 
@@ -1241,54 +1272,72 @@ position in CSS pixels and its joint's value.
 Every pose write is a jump: a slider drag, a typed number, a Position knob, a named
 pose (a STEP sidecar's pose, an SRDF group state) and Reset all put the model
 where it IS from that frame on, for robots and STEP alike. There is no eased
-pose transition and no preference for one; motion over time is
-preview's. Each format has one write path (`write` in `robot/poseStore.js`;
+pose transition and no preference for one; motion over time is a
+routine's. Each format has one write path (`write` in `robot/poseStore.js`;
 `writeParameters` in `useStepMotionControls.js`).
 
-### Routines in preview
+### Routines: the Animation tool and preview
 
-There is no Animate tool: routines play in preview alone, the regular view being
-for editing and preview for watching. For a file with routines, the playbar under the
-model (`ViewportAnimationBar`) is the transport — Play/Pause and the live scrubber —
-between its two menus (`kit/tools/PlaybackMenu.jsx`, both opening up): **Routines** at its
-left end, a playlist of the routines with the one in hand checked (only with two or more
-routines), and **Playback settings** at its right, a cog with Speed (the presets, and an
-authored speed outside them), Loop and Autoplay. **Orbit** is the view's, not the routine's:
-the corner's, before Display. There is no Restart; the scrubber's start is the
+Routines play under the Animation tool and in preview. **Animation** is a shell tool, as
+Draw is (`shell.tools.animate`, `SHELL_TOOL.ANIMATE`; null for a file with no routines),
+which a renderer puts on its strip and declares in its `toolModes` as a mode that
+toggles; STEP's follows Position. A renderer whose one tool it is (a GLB's) declares it as
+its DEFAULT mode instead and puts nothing on the strip: the tool is up from the open, its
+panel has no X, and the open is when it is taken up. Its panel leads the stack (`kit/tools/playbar/AnimationPanel.jsx`,
+drawn by `RendererShell.jsx`), headed as Measure's is: "Animation", its settings
+(`ToolSettingsMenu`: Speed, Loop and Autoplay, the file's, kept in its view; Autoplay is the
+playbar's too, but its Speed and Loop are preview's own) and its X (`shell.selectDefaultTool`). Its body: with two or more routines, the
+Routine's dropdown; then play/pause and the scrubber (`AnimationTimeControl`, the
+playbar's). Taking it up plays only when the file's Autoplay is on. In preview, for a file
+with routines, the playbar under the model (`ViewportAnimationBar`) is the transport —
+Play/Pause and the live scrubber — between its two menus (`kit/tools/PlaybackMenu.jsx`, both
+opening up): **Routines** at its left end, a playlist of the routines with the one in hand
+checked (only with two or more routines), and **Playback settings** at its right, a cog with
+Speed (the presets, and an authored speed outside them), Loop and Autoplay. **Orbit** is the
+view's, not the routine's: the corner's, before Display. There is no Restart; the scrubber's start is the
 restart. Entering preview plays only when the file's Autoplay
 (`playback.autoplay` of its view, `kit/tools/playbar/playbackPreferences.js`, off by
 default) is on, and orbits only if its orbit is on (on by default), at its orbit speed;
-a Speed or a Loop chosen in Playback settings is the file's too, applied to its routine
-(`RendererShell.jsx`), while unset the routine's own apply. Every choice in those menus but
-the routine is kept between leaving and re-entering preview, and across a reload of the tab.
-Nothing under the pointer is pickable in preview.
+Orbit and Autoplay are kept between leaving and re-entering preview, and across a reload of
+the tab. Speed and Loop are each mode's own (`shell.routinePlayback`): the Animation tool's
+are the file's, applied to its routine (`RendererShell.jsx`) once chosen; preview opens at
+the routine's own (the runtime's `resetPlayback`), and a Speed or Loop chosen in its Playback
+settings plays there and is forgotten on the way out, the tools view's restored with its
+routine (`restorePlayback`).
+Nothing under the pointer is pickable in preview, or under Animation.
 
-A routine owns the model's pose only inside preview. Leaving it releases the clip —
-the shell calls the runtime's `onRelease` (a GLB's), and STEP's surface
+A routine owns the model's pose only in preview or under Animation. Once neither holds
+it — leaving preview with Animation down, or putting Animation down outside preview —
+the clip is released: the shell calls the runtime's `onRelease` (a GLB's), and STEP's surface
 `releaseAnimation` — stopped, rewound, the pose handed back to the Position controls,
 so selection, topology and the Position controls never meet an animated model. Of the
 playback only the transport preferences survive leaving — the routine, Speed and
 Loop, kept by a Position edit too (`activatePositionControls` in
 `useStepMotionControls.js`) for as long as the file is mounted: the next preview plays that
-routine from the start. An update of the model that leaves its routines as they were (the
-same `animationHash`) neither stops nor rewinds one that is playing: `useStepMotion` compiles
-routines per `animationKey`, never per catalog entry, and only a changed routine is compiled
-again, at rest. The routine and its time are not saved: a reloaded file starts
-at rest, with the Speed and Loop its Playback settings chose, if any, and a file opened
+routine from the start. Preview's routine is its own: `setPreviewing` (`useRendererShell`)
+saves the tools view's (`savePlayback`: the routine, its time, whether it plays) and releases
+it on the way in, and on the way out releases preview's and hands the saved one back
+(`restorePlayback`), so the Animation tool finds its routine where it was. An update of the model that leaves its routines as they were (the
+same `animationHash`) neither stops nor rewinds one that is playing: `useStepMotion` loads
+the routines' keyframes per `animationKey`, never per catalog entry, and only a changed routine
+is loaded again, at rest (a routine that bends a tube is keyed by its `tubeSkinsUrl` too,
+which names the document's bytes: the skins are bound to its meshes) — released, behind the routines in hand, which stay listed until the
+new ones land, so Animation stays up and the Routine chosen is kept while the model still has it. The routine and its time are not saved: a reloaded file starts
+at rest, with the Speed and Loop the Animation tool chose, if any, and a file opened
 again after the tab left it starts at the defaults. A routine that failed to
 load has no playbar to say so in; the viewport's card says
 `Animation unavailable`, and can be dismissed.
 
-Because preview picks nothing and ends at rest pose, pick-only state stands
-still while it lasts (`animateMode`, which is `previewing`, in `step/scene/useStepPose.js`): the transformed selector
+Because preview and Animation pick nothing and end at rest pose, pick-only state stands
+still while they last (`animateMode`, in `step/scene/useStepPose.js`): the transformed selector
 runtime is not rebuilt per posed frame (as React state it would rebuild pick
 groups, their BVH, the picking listeners and the highlight overlays every
 frame), pickable lists are one shared empty list, presses and releases cast no
 model ray, and part visual state is not reconciled while a routine plays. The
-pass that leaves preview re-runs once and rebuilds the pick state. Independent
-of preview, a routine's feature resolution is memoized per definition and parts
-array (`stepModule.js`), the clip-plane sync is skipped when no section is or
-was active, and the view cube is memoized.
+pass that leaves them re-runs once and rebuilds the pick state. Independent
+of preview, the pose names the occurrences each joint carries outright (cadgen's
+articulation resolves no names on the page), the clip-plane sync is skipped when
+no section is or was active, and the view cube is memoized.
 
 No component renders for a playing frame. The viewer's pose pass is one function
 with two callers: React runs it when something it reads changes (a scrub, a
@@ -1304,8 +1353,9 @@ the tick, the clock's adaptive pacing measures a frame's real cost, and only a
 run of frames that all overran slows it (`createAnimationFramePacer` in core's
 `common/animationClock.js`): a frame that misses one vsync publishes on, where
 pacing on it held the routine still for two or three frames and then moved it
-four or five. The clip resolves each `m.get` target once per occurrence table,
-not every frame (`animationRuntime.js`). A frame that
+four or five. A routine's targets resolve when its model builds: each keyframe
+track names its occurrence ids, so a frame resolves no names
+(`animationRuntime.js`). A frame that
 only moved parts skips material and instance-membership reconciliation: the
 effects pass reports whether a style, visibility or highlight changed
 (`applyStepModuleEffectsToRecords`), and moved instances sync their own matrix.
@@ -1456,8 +1506,9 @@ Links are the rows, carrying no icon; a child link sits under its parent link
 and shows the joint between them as muted text (`shoulder_pan · revolute`); the
 visual components (`robotComponents` in core's `lib/urdf/robotParts.js`) are leaves under that
 link, after its child links. Every visual contributes a component, including STL
-meshes and built-in primitives, named by its URDF `name` or, without one, by its
-geometry (`bucket.stl`, `box`). A mesh with named objects still splits into
+meshes and built-in primitives, named as the payload labels it (`visuals[].label`,
+minted by cadgen: the visual's URDF `name` or, without one, its geometry —
+`bucket.stl`, `box`). A mesh with named objects still splits into
 those objects; an unsliceable mesh stays whole as one selectable component. Every link appears once: a cycle, a second parent or a
 missing parent cannot hang the builder or drop a link, and orphans become
 roots. A root that is only a frame — no geometry, no mass, and one child
@@ -1490,40 +1541,47 @@ Escape clears it. A click acts at once, as a STEP's does; a
 robot has no double-click at all.
 
 Each link or component row has the Hide/Reveal eye of an assembly row
-(`settings-ui.md`), also in search results.
+(`settings-ui.md`; `robot/RobotVisibilityButton.jsx`), also in search results.
 A link hides its own visuals, leaving child links visible and all joints active.
 A partially hidden link hides its remaining visuals; a fully hidden one reveals
-all of them. Hidden geometry is excluded from rendering, picking and selection
-highlights. The scene retains its meshes for reveal without rebuilding them.
-Hidden component ids are saved with the file view against its revision; a live
-reload retains only ids still present.
+all of them (`robot/visibility.js`). Hidden geometry is excluded from rendering,
+picking, the bounds and selection highlights: the scene takes the ids
+(`setHiddenPartIds`) and keeps its meshes for a reveal without rebuilding them.
+Hidden component ids are the `visibility` slice of the file view, saved against the
+payload's revision beside the pose (`robot/useRobotVisibility.js`); a live reload
+retains only ids still present.
 
-The `tcad:four_bar` extension is a nonlinear mimic in core's URDF parser and
-kinematics solver. Its dependent joint has no Position slider or joint handle;
-the Reference panel names its four-bar driver instead of an affine mimic formula.
-The authoring contract specifies the namespace, geometry and range constraints.
+A URDF joint carrying `tcad:four_bar` (the urdf skill's authoring contract) is the
+crank of a planar four-bar linkage, derived from its driver joint. cadgen closes the
+linkage, not the page (`cadgen.robot_payload`): it checks the geometry when it resolves
+the description, refusing what cannot close in words, and samples the crank's angle
+over the driver's whole range from the closed form into a `curve` on the joint's
+articulation row, which the player (`core/common/articulation.js`) interpolates
+linearly, within the tolerance cadgen names. The crank is not a control: it has no
+Position slider or joint handle (its driver's moves it), and the Reference panel names
+its four-bar driver (the payload's `fourBar` fact) instead of a mimic formula. A
+snapshot's `--joint-values` refuses the crank by name, as it refuses a mimic follower.
 
 The Reference panel, headed by the link's name, reads back what the description says
-about the link, in sections: its SRDF planning groups (`srdfGroupNamesByLink`) and end effectors;
+about the link, in sections: its SRDF planning groups (the payload's `srdf.groupsByLink`) and end effectors;
 **Inertial** (mass, centre of mass in the link frame, and the six inertia terms
 laid out as the symmetric tensor); **Geometry** (each visual and collision as
 its mesh path or its primitive with dimensions, plus only what the description
 bothered to say: a scale that is not 1, an origin that is not zero, the visual's
 colour); the **Parent joint** (name, type, parent link, axis, lower/upper limits
 as written plus degrees, effort, velocity, mimic, origin); and the **Child
-joints**. `parseUrdf` keeps those facts as written (`joint.origin`,
-`joint.limit`, `link.inertial` with `origin` and `inertia`, `link.collisions`,
-`visual.description`) beside the transforms it renders from, leniently: a
-malformed inspection value is left out, never a load failure. An SDF model
-reports only what its parser records. A named object shows its link, colour,
+joints**. cadgen keeps those facts as the description wrote them, in the payload's
+`links` and `joints` (`joints[].origin`, `limit`, `mimic`; `links[].inertial` with
+`origin` and `inertia`, `visuals` and `collisions`, each mesh file with the host path
+cadgen resolved for it), beside the articulation it renders from. An SDF model
+reports only what cadgen records of it. A named object shows its link, colour,
 triangles and size.
 
 What names something else can be followed. A mesh path is a link that opens
-that file, by its absolute path, through the host's `onOpenFile`: the renderer resolves
-it against the opened file with the mesh loader's own `resolveLocalAssetFileRef` (an
-SRDF's URDF is always beside it). A `package://` reference has no path here and stays
-plain text, as is every mesh path in a view that shows its file alone (no `onOpenFile`: a
-host's file handler). A parent or child link name selects that link in the tree and the viewport.
+that file, by its absolute path, through the host's `onOpenFile`: the path cadgen
+resolved for it beside the description (an SRDF's URDF is always beside it). A
+`package://` reference has no path and stays plain text, as is every mesh path in a view
+that shows its file alone (no `onOpenFile`: a host's file handler). A parent or child link name selects that link in the tree and the viewport.
 There is no copy action and no Quick Edit: robot formats have no reference grammar to deliver.
 
 
@@ -1570,7 +1628,7 @@ Photographic lighting and stage code stay lazy; the lightweight grouped settings
 panel is always available. Authored materials are read-only, with no material
 override or undo state.
 
-The host-supplied render session owns its tessellation cache and worker leases.
+The host-supplied render session owns its mesh-store reader and worker leases.
 The file view's display slice is the sole view-settings authority; the camera is the
 mounted viewport's, saved with the view and restored in place of the fit. Surface derivation and preview requests
 use the file's injected service and abort when the consumer leaves. The Features

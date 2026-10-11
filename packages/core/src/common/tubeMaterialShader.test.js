@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { applyTubeBraidMaterial } from "./tubeBraidMaterial.js";
-import { TUBE_GPU_STAGE, TUBE_MATERIAL_VARYING, ensureTubeMaterialStage } from "./tubeMaterialShader.js";
+import { TUBE_SKIN_STAGE, TUBE_MATERIAL_VARYING, ensureTubeMaterialStage } from "./tubeMaterialShader.js";
 
 function compile(material) {
   const shader = {
@@ -35,11 +35,11 @@ test("the shared varying is declared above the stage code that reads it", () => 
   assertDeclaredBeforeUse(shader.fragmentShader, "fragment");
 });
 
-test("a producer stage anchored on the same include still leaves the varying declared first", () => {
+test("another stage anchored on the same include still leaves the varying declared first", () => {
   const material = new THREE.MeshStandardMaterial();
-  // Stands in for the GPU transport: a producer that anchors its own block on
-  // `#include <common>` in both stages, as the real one does.
-  ensureTubeMaterialStage(material, TUBE_GPU_STAGE, () => ({
+  // Stands in for the skin: a stage that anchors its own block on `#include <common>`
+  // in both stages, as the real one does.
+  ensureTubeMaterialStage(material, TUBE_SKIN_STAGE, () => ({
     uniforms: { cadFakeStage: { value: 1 } },
     apply(shader) {
       const block = `#include <common>\nfloat cadFakeRead() { return ${TUBE_MATERIAL_VARYING}.x; }`;
@@ -49,7 +49,7 @@ test("a producer stage anchored on the same include still leaves the varying dec
   }));
   applyTubeBraidMaterial(THREE, material, { pitch: 0.8, depth: 0.02, strands: 8 });
   const shader = compile(material);
-  assert.equal(shader.uniforms.cadFakeStage.value, 1, "the producer's uniforms reach the shader");
+  assert.equal(shader.uniforms.cadFakeStage.value, 1, "the stage's uniforms reach the shader");
   assertDeclaredBeforeUse(shader.vertexShader, "vertex");
   assertDeclaredBeforeUse(shader.fragmentShader, "fragment");
 });

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, afterEach, before, test } from 'node:test';
 import { PNG } from 'pngjs';
 import { parseCadRefToken } from '@text-to-cad/core/lib/cadRefs.js';
-import { serveStepHarness } from '../harness/stepScenario.mjs';
+import { loadStepFixture, serveStepHarness } from '../harness/stepScenario.mjs';
 import { TOOL_PANEL_REFERENCE_HEIGHT, TOOL_PANEL_WIDTH } from '../../../dist/renderers/kit/tools/toolStackLayout.js';
 
 // The STEP renderer end to end in a real browser, over the committed two-part
@@ -252,8 +252,8 @@ async function open(options = {}) {
 test('a STEP opens in Select with the tools its sidecar earns, its Features in the tool stack and Display and Preview in the navbar, and paints both authored colours', async () => {
   const view = await open();
   const { page, pane, errors } = view;
-  assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false'],
-    'Position because the sidecar bound; no Animate: its routine plays in preview. Display is a dropdown from the navbar, not a tool');
+  assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Animation:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false'],
+    'Position because the sidecar bound, Animation because it has a routine. Display is a dropdown from the navbar, not a tool');
   assert.deepEqual(await pane.locator('[data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     ['Display', 'Preview'], 'the view\'s controls at the navbar\'s right end: Display, then Preview');
   assert.equal(await view.displayPanel().count(), 0, 'Display is never where a file opens');
@@ -332,6 +332,48 @@ test('a STEP opens in Select with the tools its sidecar earns, its Features in t
   assert.deepEqual(errors, []);
 });
 
+test('a pick names its face or edge by the id cadgen minted in the selector table, and Group edges grows it to the table\'s chain', async () => {
+  const view = await open();
+  const { page, pane, at, errors } = view;
+  // The table the surface request served for the base, as cadgen stored it beside the surface:
+  // the ids a pick must answer with are its rows', joined to the mesh by ordinal, never the page's.
+  const fixture = await loadStepFixture();
+  const base = fixture.view.occurrences.find(occurrence => occurrence.name === 'base');
+  const table = JSON.parse(fixture.surfaces.get(fixture.view.components[base.component].surfaceInput).selectors.bytes.toString());
+  const rows = (name, columns) => table[name].map(row => Object.fromEntries(table.tables[columns].map((column, index) => [column, row[index]])));
+  const top = rows('faces', 'faceColumns').find(face => face.normal && face.normal[2] > 0.5);
+  const edges = rows('edges', 'edgeColumns');
+  const rim = edges.find(edge => edge.curveType === 'line' && edge.bbox.min[0] === 10 && edge.bbox.max[0] === 10
+    && edge.bbox.min[2] === 5 && edge.bbox.max[2] === 5);
+  assert.ok(top && rim, 'the base has a top face and a top rim edge along +X');
+  // A selected reference id ends in the selector the pick resolved to (`topology|<part>|<type>|<selector>`).
+  const selected = () => page.evaluate(() => window.cadHarness.a.controller.readState().selectedReferenceIds.map(id => id.split('|').pop()));
+  await pane.getByRole('button', { name: 'Expand base', exact: true }).click();
+  // The part's topology lands after the row opens, and a press before it lands picks the part:
+  // press until a face answers, then hold it to cadgen's id.
+  for (let attempt = 0; attempt < 50 && !(await selected()).some(id => /\.f\d+$/.test(id)); attempt += 1) {
+    await page.mouse.click(...at([6, 6, 5]));
+    await page.waitForTimeout(100);
+  }
+  assert.deepEqual(await selected(), [`${base.id}.${top.localId}`], 'the top face is the table\'s row, under its occurrence');
+  await page.mouse.click(...at([10, 6, 5]));
+  await page.waitForFunction(() => /\.e\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds[0] || ''));
+  assert.deepEqual(await selected(), [`${base.id}.${rim.localId}`], 'the rim edge is the table\'s row');
+  // Group edges: the pick grows to the edges of the table's chain, which for a box edge is itself
+  // alone (its ends each meet two edges at a right angle), however close the neighbours lie.
+  await page.evaluate(() => document.activeElement instanceof HTMLInputElement && document.activeElement.blur());
+  await pane.getByRole('button', { name: /^Select mode: / }).click();
+  await page.locator('[role=menu][aria-label="Select mode"]').getByRole('menuitemcheckbox', { name: 'Group edges', exact: true }).click();
+  // A checkbox item keeps its menu open for the next one; Escape puts it away.
+  await page.keyboard.press('Escape');
+  await page.locator('[role=menu]').waitFor({ state: 'detached' });
+  await page.mouse.click(...at([10, 6, 5]));
+  await page.waitForFunction(() => /\.e\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds[0] || ''));
+  const chain = edges.filter(edge => edge.chain === rim.chain).map(edge => `${base.id}.${edge.localId}`);
+  assert.deepEqual((await selected()).sort(), chain.sort(), 'the grown selection is the table\'s chain');
+  assert.deepEqual(errors, []);
+});
+
 test('Select picks parts and faces, a selection lives only under Select, and the Reference panel measures what is picked', async () => {
   const view = await open();
   const { page, pane, at, errors } = view;
@@ -360,7 +402,12 @@ test('Select picks parts and faces, a selection lives only under Select, and the
     };
   });
   await pane.getByRole('button', { name: 'Expand base', exact: true }).click();
-  await pane.getByRole('button', { name: 'Select Grouped faces', exact: true }).waitFor();
+  // The feature row can arrive before the faces it names, and under All a press before they land
+  // picks the part. The row's own press waits for them and selects what it groups, its seven faces
+  // and three edges; the viewport press then narrows that to one face.
+  await pane.getByRole('button', { name: 'Select Grouped faces', exact: true }).click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedReferenceIds
+    .filter(id => /\.f\d+$/.test(id)).length === 7);
   await page.mouse.click(...at([6, 6, 5]));
   await page.waitForFunction(() => { const ids = window.cadHarness.a.controller.readState().selectedReferenceIds;
     return ids.length === 1 && /\.f\d+$/.test(ids[0]); });
@@ -544,6 +591,28 @@ test('under Faces or Edges, one press on a part whose faces are not loaded loads
   assert.deepEqual(errors, []);
 });
 
+test('a revision that fails to build leaves the model before it on screen, and its tree, to work with', async () => {
+  const view = await open();
+  const { page, pane, errors } = view;
+  const parts = async () => (await view.rows()).filter(label => label.startsWith('Select '));
+  assert.deepEqual(await parts(), ['Select base', 'Select arm']);
+  await pane.getByRole('button', { name: 'Hide arm', exact: true }).click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().hiddenPartIds.join() === 'o1.2');
+  // The file saved again, broken: the card says so over the model the view still shows, and the
+  // tree lists that model's parts -- not the bare part a file with no build is listed as. (Their
+  // features and faces are its build's, which the broken file has none of.)
+  await view.fail();
+  await pane.getByRole('alert').waitFor();
+  assert.deepEqual(await parts(), ['Select base', 'Select arm']);
+  assert.deepEqual((await view.state()).hiddenPartIds, ['o1.2'], 'what was hidden stays hidden');
+  // Nothing is coming to replace it, so it is not held as a rebuild is: it is picked from, and the
+  // view does not read as loading.
+  await pane.getByRole('button', { name: 'Select base', exact: true }).click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.1');
+  assert.equal((await view.state()).loading, false);
+  assert.deepEqual(errors, []);
+});
+
 // What the one part menu offers, in order, ending in the framing group. That group is
 // the viewer's ONLY zoom control — the old Inspector's percentage readout and its menu are
 // gone — so it is here, on every tree row, and on the empty-space menu below. It cannot
@@ -605,7 +674,7 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   await page.keyboard.press('Escape');
   await page.getByRole('menu').waitFor({ state: 'detached' });
   await away();
-  for (const tool of ['Measure', 'Position', 'Draw']) {
+  for (const tool of ['Measure', 'Position', 'Animation', 'Draw']) {
     await view.tool(tool).click();
     // A menu opens in the render the press causes: two frames on, it would be there.
     await page.mouse.click(...at([6, 6, 5]), { button: 'right' });
@@ -635,7 +704,7 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   }
   // The tree is Select's: under another tool it is off screen, and Select brings it back to act
   // from — Isolate, which has no selection of its own to make.
-  assert.deepEqual(await view.tools(), ['Select:false', 'Position:false', 'Draw:true', 'Measure:false', 'Explode:false', 'Clip:false']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Position:false', 'Animation:false', 'Draw:true', 'Measure:false', 'Explode:false', 'Clip:false']);
   assert.equal(await pane.getByRole('button', { name: 'Select arm', exact: true }).isVisible(), false);
   await view.tool('Select').click();
   // A menu goes when the camera moves, and the last pan is still coasting: it opens at rest.
@@ -643,7 +712,7 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   await page.getByRole('menuitem', { name: 'Isolate', exact: true }).click();
   await page.getByRole('menu').waitFor({ state: 'detached' });
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().isolatedPartIds.join() === 'o1.2');
-  assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false']);
+  assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Animation:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false']);
   await page.keyboard.press('Escape');
   assert.deepEqual(errors, []);
 });
@@ -731,9 +800,10 @@ test('Position drives the mate and repaints, a named pose jumps, the Position kn
   const { page, pane, errors } = view;
   // The grid is only the Grid preset's by default; this compares its lines, so it is turned on.
   await view.display({ grid: { enabled: true } });
-  // A file with movable joints has Position straight after Select on the strip.
-  assert.deepEqual((await pane.getByRole('group', { name: 'Interaction tools' }).locator('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')))).slice(0, 3),
-    ['Select', 'Position', 'Draw']);
+  // A file with movable joints has Position straight after Select on the strip, and one with
+  // routines Animation after it.
+  assert.deepEqual((await pane.getByRole('group', { name: 'Interaction tools' }).locator('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')))).slice(0, 4),
+    ['Select', 'Position', 'Animation', 'Draw']);
   // Position shows its panel in the tool stack, in place of Select's, and enables the joint handles.
   await view.tool('Position').click();
   const panel = pane.getByRole('region', { name: 'Position controls', exact: true });
@@ -858,8 +928,7 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   await away();
   const toolsRest = await restingFrame(view);
   const restArm = (await translations(page))['o1.2'];
-  // The tools view carries nothing of the routine's: no Animate tool, no transport.
-  assert.equal(await view.tool('Animate').count(), 0);
+  // Under Select the tools view carries nothing of the routine's: no transport.
   assert.equal(await pane.locator('[data-animation-transport]').count(), 0);
   const boxes = names => Promise.all(names.map(name => pane.getByRole('button', { name, exact: true }).boundingBox()));
   const viewControls = await boxes(['Display', 'Preview']);
@@ -942,6 +1011,231 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
     assert.ok(actual.every((value, index) => Math.abs(value - expected[index]) < 1e-8), `the routine never moves the camera: ${key}`);
   }
   assert.deepEqual(playing.stage.studioGround, still.stage.studioGround, 'nor the studio floor');
+  await view.exitPreview();
+  assert.deepEqual(errors, []);
+});
+
+test('preview and the tools view are two states: preview draws the model as authored, and leaving it drops what was done there and gives the tools view back as it was', async () => {
+  const view = await open();
+  const { page, pane, errors } = view;
+  const away = () => page.mouse.move(view.box.x + view.box.width - 20, view.box.y + 100);
+  const arm = async () => (await translations(page))['o1.2'];
+  const armAt = expected => page.waitForFunction(at => JSON.stringify(Array.from(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix.slice(12, 15))) === JSON.stringify(at), expected)
+    .catch(() => {});
+  const restArm = await arm();
+  // The model as preview draws a file opened afresh: the picture every later preview draws too,
+  // whatever the tools view holds.
+  await away();
+  await view.enterPreview();
+  const authored = await restingFrame(view);
+  await view.exitPreview();
+
+  // Work in the tools view: the arm swung on Position, the base hidden, the arm picked, the model
+  // clipped, and a camera of the person's own.
+  await view.tool('Position').click();
+  const slider = page.getByLabel('hinge slider value', { exact: true });
+  await slider.fill('60');
+  await slider.press('Enter');
+  await page.waitForFunction(() => Math.abs(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[13]) > 1);
+  const posedArm = await arm();
+  await view.tool('Select').click();
+  await pane.getByRole('button', { name: 'Hide base', exact: true }).click();
+  await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
+  await view.display({ clip: { enabled: true, axis: 'z', offsets: { x: 1, y: 1, z: 0.5 }, invert: false } });
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({ ...window.cadHarness.a.controller.readState().camera, zoom: 1.4, target: [3, 4, 2] }));
+  await page.waitForFunction(() => {
+    const state = window.cadHarness.a.controller.readState();
+    return state.hiddenPartIds.join() === 'o1.1' && state.selectedPartIds.join() === 'o1.2' && state.display.clip?.enabled === true;
+  });
+  await restingCamera(page);
+  const work = await view.state();
+
+  // Preview draws none of it: the arm at rest, the base there, nothing picked or cut away.
+  await away();
+  await view.enterPreview();
+  await armAt(restArm);
+  assert.deepEqual(await arm(), restArm, 'preview poses the model at rest');
+  const shown = await frameWhen(view, shot => differing(authored, shot) === 0, 'drew the model as authored');
+  assert.ok(partBoxes(shown).base && partBoxes(shown).arm, 'both parts are drawn');
+
+  // What is done in preview is preview's: its routine played, its camera turned.
+  const bar = pane.getByRole('toolbar', { name: 'Animation playback' });
+  await bar.getByRole('button', { name: 'Play animation' }).click();
+  await page.waitForFunction(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[1] > 0.2);
+  const orbit = await page.evaluate(() => window.__cadCamera().position);
+  await page.mouse.move(view.box.x + view.box.width / 2, view.box.y + view.box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(view.box.x + view.box.width / 2 + 90, view.box.y + view.box.height / 2 + 20, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForFunction(previous => window.__cadCamera().position.some((value, index) => Math.abs(value - previous[index]) > 1e-3), orbit);
+
+  // Leaving drops it, and gives the tools view back as it was left: the pose, the hidden base, the
+  // pick, the clip and its camera.
+  await view.exitPreview();
+  await armAt(posedArm);
+  assert.deepEqual(await arm(), posedArm, 'the pose comes back');
+  const back = await view.state();
+  assert.deepEqual([back.hiddenPartIds, back.selectedPartIds, back.display.clip], [work.hiddenPartIds, work.selectedPartIds, work.display.clip]);
+  for (const key of ['position', 'target', 'up']) work.camera[key].forEach((value, index) => assert.ok(Math.abs(value - back.camera[key][index]) < 1e-6, `the tools view's camera comes back: ${key}`));
+  assert.equal(back.camera.zoom, work.camera.zoom);
+  await view.tool('Position').click();
+  assert.match(await slider.inputValue(), /^60(\.0+)?°$/);
+
+  // An isolated part is the tools view's too: preview draws the whole model, and leaving finds the part isolated.
+  await view.tool('Select').click();
+  await pane.getByRole('button', { name: 'Reveal base', exact: true }).click();
+  await pane.getByRole('button', { name: 'Select arm', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Isolate', exact: true }).click();
+  await page.getByRole('menu').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().isolatedPartIds.join() === 'o1.2');
+  await away();
+  await view.enterPreview();
+  await frameWhen(view, shot => differing(authored, shot) === 0, 'drew the whole model, as authored');
+  await view.exitPreview();
+  assert.deepEqual((await view.state()).isolatedPartIds, ['o1.2']);
+  assert.deepEqual(errors, []);
+});
+
+test('the Animation tool plays the routine in the tools view, preview leaves its routine as it was, and putting the tool down puts the model back at rest', async () => {
+  const view = await open();
+  const { page, pane, errors } = view;
+  const arm = () => page.evaluate(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix);
+  const restArm = (await translations(page))['o1.2'];
+  // Its panel leads the stack, headed as Measure's is: Animation, its settings and its X, over the
+  // transport, with no Routine row for the one routine.
+  await view.tool('Animation').click();
+  const panel = pane.getByRole('region', { name: 'Animation controls', exact: true });
+  assert.deepEqual(await view.stack(), ['Animation controls']);
+  assert.deepEqual(await panel.getByRole('heading').allInnerTexts(), ['Animation']);
+  assert.deepEqual(await panel.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Animation settings', 'Close animation controls', 'Play animation']);
+  assert.equal(await panel.getByRole('combobox', { name: 'Routine' }).count(), 0);
+  assert.equal(Math.round((await panel.boundingBox()).width), 164, 'one width, as every fixed panel');
+  // Its 24px row flush under the heading, the play glyph's ink on the title's line, the scrubber 8px
+  // in from the right and the row 4px off the foot (the panel's 1px border on top of each).
+  const play = panel.getByRole('button', { name: 'Play animation' });
+  const [panelBox, titleBox, glyphBox, playBox, trackBox] = await Promise.all([panel.boundingBox(), panel.getByRole('heading').boundingBox(),
+    play.locator('svg > *').first().boundingBox(), play.boundingBox(), panel.locator('[data-slot=slider-track]').boundingBox()]);
+  assert.ok(Math.abs(glyphBox.x - titleBox.x) <= 1, `the play glyph sits under the title: ${glyphBox.x - panelBox.x} vs ${titleBox.x - panelBox.x}`);
+  assert.deepEqual([playBox.y - panelBox.y, playBox.height, panelBox.x + panelBox.width - trackBox.x - trackBox.width,
+    panelBox.y + panelBox.height - playBox.y - playBox.height].map(Math.round), [29, 24, 9, 5]);
+  assert.deepEqual((await translations(page))['o1.2'], restArm, 'taken up, the model waits at rest: Autoplay is off');
+
+  await panel.getByRole('button', { name: 'Play animation' }).click();
+  await page.waitForFunction(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[1] > 0.2);
+  await panel.getByRole('button', { name: 'Pause animation' }).click();
+  await panel.getByRole('button', { name: 'Play animation' }).waitFor();
+  const paused = await translations(page);
+  // Preview's routine is its own: it opens at rest and waits (Autoplay is off), whatever the tool's is doing.
+  const bar = pane.getByRole('toolbar', { name: 'Animation playback' });
+  const atRest = () => page.waitForFunction(rest => JSON.stringify(Array.from(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix.slice(12, 15))) === JSON.stringify(rest), restArm)
+    .catch(() => {});
+  await view.enterPreview();
+  await bar.getByRole('button', { name: 'Play animation', exact: true }).waitFor();
+  await atRest();
+  assert.deepEqual((await translations(page))['o1.2'], restArm, 'preview opens on the model at rest');
+  // Leaving hands the tool's routine back where it was: paused mid-way...
+  await view.exitPreview();
+  await panel.getByRole('button', { name: 'Play animation' }).waitFor();
+  await page.waitForFunction(at => JSON.stringify(Array.from(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix.slice(12, 15))) === JSON.stringify(at), paused['o1.2'])
+    .catch(() => {});
+  assert.deepEqual(await translations(page), paused);
+  // ...or playing, once it plays.
+  await panel.getByRole('button', { name: 'Play animation' }).click();
+  await view.enterPreview();
+  await bar.getByRole('button', { name: 'Play animation', exact: true }).waitFor();
+  await atRest();
+  assert.deepEqual((await translations(page))['o1.2'], restArm, 'preview opens at rest while the tool plays');
+  await view.exitPreview();
+  await panel.getByRole('button', { name: 'Pause animation' }).waitFor();
+  const playing = (await arm())[1];
+  await page.waitForFunction(previous => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[1] !== previous, playing);
+
+  // A second press puts it down: the routine stops and the model is at rest, back in Select.
+  await view.tool('Animation').click();
+  assert.deepEqual(await view.stack(), ['Features']);
+  await page.waitForFunction(rest => JSON.stringify(Array.from(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix.slice(12, 15))) === JSON.stringify(rest), restArm)
+    .catch(() => {});
+  assert.deepEqual((await translations(page))['o1.2'], restArm);
+
+  // Autoplay, ticked in its settings, starts the routine whenever the tool is taken up.
+  await view.tool('Animation').click();
+  await panel.getByRole('button', { name: 'Animation settings' }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Autoplay', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('menu', { name: 'Animation settings' }).waitFor({ state: 'detached' });
+  // Its X puts it down as the second press does.
+  await panel.getByRole('button', { name: 'Close animation controls' }).click();
+  assert.deepEqual(await view.stack(), ['Features']);
+  await view.tool('Animation').click();
+  await panel.getByRole('button', { name: 'Pause animation' }).waitFor();
+  assert.deepEqual(errors, []);
+});
+
+test('preview\'s Speed and Loop are its own, forgotten on the way out, while Orbit is the file\'s in both', async () => {
+  const view = await open();
+  const { page, pane, errors } = view;
+  const toolSettings = pane.getByRole('region', { name: 'Animation controls', exact: true }).getByRole('button', { name: 'Animation settings' });
+  const previewSettings = pane.getByRole('toolbar', { name: 'Animation playback' }).getByRole('button', { name: 'Playback settings' });
+  // A menu's Speed and Loop, as it shows them.
+  const settings = async (button, name) => {
+    await button.click();
+    const menu = page.getByRole('menu', { name, exact: true });
+    const read = [await menu.getByRole('menuitem', { name: /^Animation speed: / }).getAttribute('aria-label'),
+      await menu.getByRole('menuitemcheckbox', { name: 'Loop', exact: true }).getAttribute('aria-checked')];
+    await page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'detached' });
+    return read;
+  };
+  // Chooses a Speed, and turns Loop over. By keyboard: a menu item still easing in under a loaded
+  // software renderer never reads as stable under the pointer.
+  const choose = async (button, name, speed) => {
+    await button.click();
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitem', { name: /^Animation speed: / }).click();
+    await page.getByRole('menuitemradio', { name: `${speed}×`, exact: true }).press('Enter');
+    await page.getByRole('menu', { name, exact: true }).waitFor({ state: 'detached' });
+    await button.click();
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitemcheckbox', { name: 'Loop', exact: true }).press('Enter');
+    await page.keyboard.press('Escape');
+    await page.getByRole('menu', { name, exact: true }).waitFor({ state: 'detached' });
+  };
+  // The tools view's own: the Animation tool at 2×, its routine not looping.
+  await view.tool('Animation').click();
+  assert.deepEqual(await settings(toolSettings, 'Animation settings'), ['Animation speed: 1×', 'true'], 'the routine\'s own Speed and Loop');
+  await choose(toolSettings, 'Animation settings', 2);
+  assert.deepEqual(await settings(toolSettings, 'Animation settings'), ['Animation speed: 2×', 'false']);
+
+  // Preview opens on the routine's own, never the tools view's; what is chosen there is preview's.
+  await view.enterPreview();
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 1×', 'true'], 'preview opens at the routine\'s own Speed and Loop');
+  await choose(previewSettings, 'Playback settings', 0.5);
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 0.5×', 'false']);
+  // Orbit is the file's: off (as this file's view was left) it stays off; on, it stays on.
+  const corner = pane.locator('[data-preview-corner]');
+  const orbit = () => page.getByRole('menu', { name: 'Orbit', exact: true }).getByRole('menuitemcheckbox', { name: 'Orbit', exact: true });
+  const orbitChecked = async () => {
+    await corner.getByRole('button', { name: 'Orbit', exact: true }).click();
+    const checked = await orbit().getAttribute('aria-checked');
+    await page.keyboard.press('Escape');
+    await page.getByRole('menu', { name: 'Orbit', exact: true }).waitFor({ state: 'detached' });
+    return checked;
+  };
+  assert.equal(await orbitChecked(), 'false');
+  await view.exitPreview();
+
+  // The tools view's settings are as it left them, and preview's are gone.
+  assert.deepEqual(await settings(toolSettings, 'Animation settings'), ['Animation speed: 2×', 'false'], 'preview never writes the tools view\'s');
+  await view.enterPreview();
+  assert.deepEqual(await settings(previewSettings, 'Playback settings'), ['Animation speed: 1×', 'true'], 'preview forgot its own');
+  assert.equal(await orbitChecked(), 'false', 'Orbit off stays off');
+  const still = await page.evaluate(() => window.__cadCamera().position);
+  await corner.getByRole('button', { name: 'Orbit', exact: true }).click();
+  await orbit().press('Enter');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(start => window.__cadCamera().position.some((value, axis) => Math.abs(value - start[axis]) > 1e-6), still);
+  await view.exitPreview();
+  await view.enterPreview();
+  assert.equal(await orbitChecked(), 'true', 'and on stays on');
   await view.exitPreview();
   assert.deepEqual(errors, []);
 });
@@ -1047,6 +1341,10 @@ test('a package that arrives in pieces is framed once, on the box it declares; a
   // BATCH ONE: eight arms, all at the origin, so what is placed is one arm's box whichever
   // eight of them got there first. The rest of the package is still downloading.
   await page.waitForFunction(() => window.__cadMeshCost?.loadedComponents === 8, null, { timeout: 60000 });
+  // ...as cadgen holds a part it is still meshing: pending, which holds no request open. A held
+  // response would take one of the browser's six connections to the host, the loader's lanes
+  // (up to eight) could fill them all, and an unheld component queued behind them would never land.
+  await staggered.idle();
   await page.waitForFunction(() => window.__cadStage?.()?.bounds);
   await restingCamera(page);
   const first = await read();

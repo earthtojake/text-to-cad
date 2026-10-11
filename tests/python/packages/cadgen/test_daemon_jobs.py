@@ -221,10 +221,10 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual("submitted", job["state"])
         self.assertEqual([str(Path(self.model).with_suffix(".step"))], job["outputs"])
         self.ledger.observe(self._event(
-            self.model, "building", phase="Meshing components", detail="finger linkage", done=3, total=9,
+            self.model, "building", phase="Storing parts", detail="finger linkage", done=3, total=9,
         ))
         listed = self.ledger.snapshot()[0]
-        self.assertEqual(("building", "Meshing components", 3, 9), (listed["state"], listed["phase"], listed["done"], listed["total"]))
+        self.assertEqual(("building", "Storing parts", 3, 9), (listed["state"], listed["phase"], listed["done"], listed["total"]))
         self.assertEqual("finger linkage", listed["detail"])
         self.ledger.observe(self._event(self.model, "done"))
         self.ledger.finish(job, 0)
@@ -248,6 +248,19 @@ class Lifecycle(unittest.TestCase):
         self.ledger.observe(self._event(self.model, "building", phase="generate"))
         self.ledger.finish(job, 1)
         self.assertEqual(("failed", 1), (self.ledger.snapshot()[0]["state"], self.ledger.snapshot()[0]["exit"]))
+
+    def test_a_job_whose_requester_left_is_cancelled_and_the_document_builds_again(self):
+        # The viewer that asked for a compile was closed mid-job: the daemon killed the
+        # worker. That is no verdict on the document, so a viewer opened next compiles it
+        # rather than reporting "the last compile of this document failed".
+        from cadgen.viewer.build_progress import build_progress_snapshot
+
+        document = str((Path(self.tmp.name) / "widget.step").resolve())
+        job = self.ledger.start(tool="step-compile", subject=document)
+        self.ledger.finish(job, 1, error="worker killed", cancelled=True)
+        listed = self.ledger.snapshot()[0]
+        self.assertEqual(("cancelled", None), (listed["state"], listed["error"]))
+        self.assertIsNone(build_progress_snapshot(document, jobs=self.ledger.snapshot()))
 
     def test_a_childs_announcement_lists_it_before_its_own_request_arrives(self):
         parent = str((Path(self.tmp.name) / "rig.py").resolve())

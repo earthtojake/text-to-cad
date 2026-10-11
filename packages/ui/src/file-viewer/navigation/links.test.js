@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEXT_TO_CAD_LINKS, issueUrl, releaseNotesUrl, releaseVersion } from "./links.js";
+import { TEXT_TO_CAD_LINKS, issueUrl, releaseNotesUrl, releaseVersion, viewerLinks } from "./links.js";
 
 const ISSUES = TEXT_TO_CAD_LINKS.issues;
 const read = (url) => new URL(url).searchParams;
@@ -35,4 +35,13 @@ test("a version is shown bare, its tag dressing stripped once, and its notes are
   assert.deepEqual(["v0.5.0", "0.4.28", "refs/tags/v0.5.0", " V0.5.0 ", "vnext"].map(releaseVersion), ["0.5.0", "0.4.28", "0.5.0", "0.5.0", "vnext"]);
   assert.equal(releaseNotesUrl("https://github.com/example/repo/", "v0.5.0"), "https://github.com/example/repo/releases/tag/v0.5.0");
   assert.equal(releaseNotesUrl("https://github.com/example/repo", ""), "");
+});
+
+test("the release's own build runs its version; a custom build runs it with its id, and keeps the release's notes", () => {
+  const notes = "https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.15";
+  const shown = (options) => { const links = viewerLinks(options); return [links.version, links.release]; };
+  assert.deepEqual(shown({ version: "v0.7.15" }), ["0.7.15", notes]);
+  assert.deepEqual(shown({ version: "0.7.15", build: "" }), ["0.7.15", notes]);
+  assert.deepEqual(shown({ version: "0.7.15", build: "b80844940" }), ["0.7.15-dev.b80844940", notes]);
+  assert.deepEqual(shown({ version: "0.7.15", build: "b80844940-dirty" }), ["0.7.15-dev.b80844940-dirty", notes]);
 });

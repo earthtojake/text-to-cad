@@ -218,9 +218,11 @@ class SrdfPairingTests(_Workspace):
 
     def test_the_pairing_is_by_robot_name_not_by_file_stem(self) -> None:
         self.write("robots/description.urdf", URDF)
-        self.write("robots/planning.srdf", "<robot name='arm'/>\n")
+        self.write("robots/planning.srdf", "<robot name='arm'><group name='all'><link name='base'/></group></robot>\n")
         packet = self.resolve({"input": "robots/planning.srdf", "outputs": [{"path": "o.png"}]})
-        self.assertIn("description.urdf", packet["jobs"][0]["resolved"]["urdfUrl"])
+        # The payload is the paired URDF's robot, with the SRDF's semantics on it.
+        robot = packet["jobs"][0]["resolved"]["robot"]
+        self.assertEqual(("srdf", "base", ["all"]), (robot["kind"], robot["root"], robot["srdf"]["groupsByLink"]["base"]))
 
     def test_no_match_names_what_was_looked_for_and_what_was_found(self) -> None:
         self.write("robots/other.urdf", "<robot name='crane'/>\n")
@@ -249,11 +251,18 @@ class SrdfPairingTests(_Workspace):
             "<joint name='elbow' type='revolute'><parent link='a'/><child link='b'/>"
             "<axis xyz='0 0 1'/><limit lower='-1' upper='1' effort='1' velocity='1'/></joint></robot>\n"
         ))
-        self.write("robots/planning.srdf", "<robot name='arm'/>\n")
+        self.write("robots/planning.srdf", "<robot name='arm'><group name='arm'><joint name='elbow'/></group></robot>\n")
         job = {"input": "robots/planning.srdf", "outputs": [{"path": "o.png"}]}
         self.resolve({**job, "jointValues": {"elbow": 10}})
         with self.assertRaisesRegex(SnapshotError, r"Unknown joint\(s\): elbw"):
             self.resolve({**job, "jointValues": {"elbw": 10}})
+
+    def test_an_srdf_the_validator_refuses_is_refused_at_the_door(self) -> None:
+        # One door validates: what `cadgen srdf validate` calls an error never reaches a browser.
+        self.write("robots/description.urdf", URDF)
+        self.write("robots/planning.srdf", "<robot name='arm'/>\n")
+        with self.assertRaisesRegex(SnapshotError, "SRDF must define at least one planning group"):
+            self.resolve({"input": "robots/planning.srdf", "outputs": [{"path": "o.png"}]})
 
 
 class SectionPlaneTests(_Workspace):
@@ -341,19 +350,6 @@ class SectionPlaneTests(_Workspace):
         # `format` was never reachable from Python and is not a key anywhere now.
         with self.assertRaisesRegex(SnapshotError, r"render output 0 has unknown key\(s\): format"):
             self.prepared(mode="section", outputs=[{"path": "cut.png", "format": "svg"}])
-
-    def test_the_planes_match_the_page_that_cuts(self) -> None:
-        source = repo_path("packages/core/src/common/renderMeshScene.js").read_text(encoding="utf-8")
-        declared = re.search(r"export const SECTION_PLANES = Object\.freeze\(\[(.*?)\]\)", source)
-        self.assertIsNotNone(declared, "renderMeshScene.js no longer declares SECTION_PLANES")
-        self.assertEqual(tuple(re.findall(r'"(\w+)"', declared.group(1))), snapshot_core.SECTION_PLANES)
-        # The page reads exactly the keys Python validates: nothing else of `section`.
-        read = set(re.findall(r"\bsection\??\.(\w+)", source)) - {"segmentCount"}
-        self.assertEqual(set(snapshot_core.SECTION_KEYS), read)
-
-
-class SizingTests(_Workspace):
-    """S6/S7: a size is one of the listed profiles or a ranged whole number of pixels."""
 
     def size(self, **job) -> tuple[int, int]:
         output = self.resolve(self.stl_job(**job))["jobs"][0]["outputs"][0]
@@ -622,6 +618,101 @@ class StepDebugReportsWhatWasResolved(unittest.TestCase):
         )
         self.assertEqual((resolved["documentHash"], resolved["tree"]), (entry["documentHash"], entry["tree"]))
         self.assertEqual((1, 1, False), (entry["componentCount"], entry["occurrenceCount"], entry["selectorIndex"]))
+
+
+ARM_URDF = (
+    "<robot name='arm'><link name='a'/><link name='b'/><link name='c'/><link name='d'/><link name='e'/>"
+    "<joint name='elbow' type='revolute'><parent link='a'/><child link='b'/><axis xyz='0 0 1'/>"
+    "<limit lower='-1' upper='1' effort='1' velocity='1'/></joint>"
+    "<joint name='slide' type='prismatic'><parent link='b'/><child link='c'/><axis xyz='1 0 0'/>"
+    "<limit lower='0' upper='0.1' effort='1' velocity='1'/></joint>"
+    "<joint name='wheel' type='continuous'><parent link='c'/><child link='d'/><axis xyz='0 0 1'/></joint>"
+    "<joint name='finger' type='revolute'><parent link='a'/><child link='e'/><axis xyz='0 0 1'/>"
+    "<limit lower='0' upper='0.5' effort='1' velocity='1'/><mimic joint='elbow'/></joint>"
+    "</robot>\n"
+)
+
+
+class PoseLimitTests(_Workspace):
+    """A pose value outside its DOF's limits is refused before a browser starts.
+
+    The page clamps an out-of-range value, so letting one through rendered a pose
+    the request did not ask for and exited 0.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from cadgen._internal.source_sidecar import write_source_sidecar
+        from cadgen.kinematics import couple, cylindrical, normalize_kinematics, revolute
+
+        self.step = self.write("hinge.step", "ISO-10303-21;\nEND-ISO-10303-21;\n")
+        block = normalize_kinematics({
+            "mates": [
+                revolute("swing", parent="#base", child="#flap",
+                         origin=(0, 0, 0), direction=(0, 0, 1), limits=(0, 120)),
+                cylindrical("crown", parent="#base", child="#crown", origin=(0, 0, 0),
+                            direction=(1, 0, 0), limits={"turn": (-90, 90), "travel": (0, 2)}),
+            ],
+            "couplings": [couple("wind", {"crown.turn": 90})],
+        }, where="test").block
+        write_source_sidecar(self.step, {"kinematics": block})
+
+    def prepare(self, job: dict) -> None:
+        snapshot_cli.prepare_render_job_packet({"outputs": [{"path": "o.png"}], **job}, cwd=self.root)
+
+    def test_step_kinematics_values_must_lie_within_each_dofs_limits(self) -> None:
+        self.prepare({"input": "hinge.step", "kinematics": {"swing": 120, "crown.travel": 0, "wind": 1}})
+        refused = [
+            ({"swing": 121}, r"kinematics\[swing\] = 121 deg is outside the limits \[0, 120\] deg of DOF 'swing'"),
+            ({"crown.travel": -0.5}, r"kinematics\[crown\.travel\] = -0\.5 mm is outside .*\[0, 2\] mm"),
+            ({"crown.turn": 91}, r"kinematics\[crown\.turn\] = 91 deg is outside .*\[-90, 90\] deg"),
+            # A coupling with no declared limits spans (0, 1).
+            ({"wind": 1.5}, r"kinematics\[wind\] = 1\.5 is outside the limits \[0, 1\] of DOF 'wind';"),
+            ({"swing": "90"}, r"kinematics\[swing\] must be a number"),
+        ]
+        for values, pattern in refused:
+            with self.subTest(values=values):
+                with self.assertRaisesRegex(SnapshotError, pattern):
+                    self.prepare({"input": "hinge.step", "kinematics": values})
+
+    def test_the_step_door_refuses_before_a_browser_starts(self) -> None:
+        with mock.patch.object(snapshot_core.BatchSnapshotRenderer, "start", side_effect=AssertionError("browser")):
+            code, said = run_door(step_door, [self.step, self.out, "--kinematics", '{"swing": 200}'])
+        self.assertEqual(1, code, said)
+        self.assertIn("pass a value within them", said)
+
+    def test_urdf_joint_values_must_lie_within_each_joints_limits(self) -> None:
+        self.write("arm.urdf", ARM_URDF)
+        job = {"input": "arm.urdf"}
+        # The limit itself passes though degrees are converted from radians; a continuous
+        # joint has no limits. A mimic follower is posed by its leader, so a value of its own
+        # is refused by name rather than accepted and ignored, and a leader value that puts
+        # the follower past the follower's own limits is refused too.
+        self.prepare({**job, "jointValues": {"elbow": 20, "slide": 0.1, "wheel": 720}})
+        refused = [
+            ({"elbow": 60}, r"jointValues\[elbow\] = 60 deg is outside the limits \[-57\.2958, 57\.2958\] deg of joint 'elbow'"),
+            ({"slide": 0.2}, r"jointValues\[slide\] = 0\.2 m is outside the limits \[0, 0\.1\] m of joint 'slide'"),
+            ({"finger": 5}, r"jointValues\[finger\]: joint 'finger' mimics 'elbow' \(finger = 1 × elbow\), so it is posed "
+                            r"by the value of 'elbow'; set jointValues\[elbow\] instead"),
+            ({"elbow": 40}, r"jointValues\[elbow\] = 40 deg puts joint 'finger', which mimics 'elbow', at 40 deg, "
+                            r"outside its limits \[0, 28\.6479\] deg"),
+            ({"elbow": -10}, r"puts joint 'finger', which mimics 'elbow', at -10 deg"),
+        ]
+        for values, pattern in refused:
+            with self.subTest(values=values):
+                with self.assertRaisesRegex(SnapshotError, pattern):
+                    self.prepare({**job, "jointValues": values})
+
+    def test_sdf_joint_values_must_lie_within_each_joints_limits(self) -> None:
+        self.write("arm.sdf", (
+            "<sdf version='1.9'><model name='arm'><link name='a'/><link name='b'/>"
+            "<joint name='elbow' type='revolute'><parent>a</parent><child>b</child>"
+            "<axis><xyz>0 0 1</xyz><limit><lower>0</lower><upper>1.5707963267948966</upper></limit></axis>"
+            "</joint></model></sdf>\n"
+        ))
+        self.prepare({"input": "arm.sdf", "jointValues": {"elbow": 90}})
+        with self.assertRaisesRegex(SnapshotError, r"jointValues\[elbow\] = 91 deg is outside .*\[0, 90\] deg"):
+            self.prepare({"input": "arm.sdf", "jointValues": {"elbow": 91}})
 
 
 if __name__ == "__main__":

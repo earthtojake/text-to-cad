@@ -102,15 +102,30 @@ export function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2;
 }
 
-// OrbitControls r161+ multiplies a ctrl+wheel deltaY by this before we ever see the effect
-// of zoomSpeed, because browsers report a trackpad pinch as a small ctrl+wheel. Callers divide
-// their pinch speed by it so the boost is applied once, not twice. Kept beside the predicate
-// that identifies those events so the two cannot drift apart.
+// OrbitControls r161+ multiplies a pinch's deltaY by this before we ever see the effect of
+// zoomSpeed, because browsers report a trackpad pinch as a small ctrl+wheel. Callers divide their
+// pinch speed by it so the boost is applied once, not twice -- for exactly the events it boosts
+// (`orbitControlsBoostsPinch`). Kept beside the predicates that identify those events so the
+// three cannot drift apart.
 export const WHEEL_PINCH_DELTA_BOOST = 10;
 
 /** A trackpad PINCH: every browser spells it ctrl+wheel, whatever the pointer type. */
 export function isPinchWheelEvent(event) {
   return Boolean(event?.ctrlKey);
+}
+
+/**
+ * Whether OrbitControls boosts this wheel event as a pinch (`WHEEL_PINCH_DELTA_BOOST`): a
+ * ctrl+wheel while, by its own record of the key (`_controlActive`, kept from Control's keydown
+ * and keyup on the canvas's root), Control is not held. A pinch's zoom speed divides that boost
+ * out, so the two must decide it alike. Its record goes stale when Control's keyup never reaches
+ * the page -- the key let go in another Space or Mission Control, or outside the CAD app's frame
+ * -- and it then boosts no ctrl+wheel at all: a pinch divided by the boost anyway zoomed a tenth
+ * as fast, until the controls were rebuilt. Read as it reads it, such a ctrl+wheel is a
+ * trackpad-like scroll to both, which zooms at the pinch's rate.
+ */
+export function orbitControlsBoostsPinch(event, controls) {
+  return isPinchWheelEvent(event) && controls?._controlActive !== true;
 }
 
 /**

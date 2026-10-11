@@ -40,8 +40,7 @@ validation don't replace this.
 
 - If your tools include `cad_show` (your host may prefix it), use it with the file's
   absolute path, and follow its description for when to call it again. `cad_view` reads
-  what the user selected; `cad_screenshot` shows you what they see. Neither is a review
-  of your own work.
+  what the user selected; `cad_screenshot` shows you what they see.
 - Otherwise run the CAD Viewer, from any folder:
 
   ```bash
@@ -107,12 +106,20 @@ the CAD Viewer shows.
 cadgen snapshot path/to/robot.srdf review.png
 ```
 
-Hand it the `.srdf`; it routes by suffix and renders the paired URDF's geometry — the same-folder `.urdf` whose `<robot name>` matches, exactly as `cadgen srdf validate` pairs them. No match, or more than one, is refused before anything renders, naming the robot name it looked for and the `.urdf` files it found. Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
-joints you do not name staying where the CAD Viewer opens the robot: each at its default, then
-this SRDF's `home` group state if it declares one (the `"jointValues"` job field is the same
-thing in a packet). The snapshot draws the robot with the viewer's own scene, so it shows what
-the viewer shows, and a link mesh that cannot be loaded fails it rather than leaving the link
-out. Robots are authored in metres and are framed on the robot scene scale automatically.
+Hand it the `.srdf`; it routes by suffix and renders the paired URDF's geometry — the same-folder `.urdf` whose `<robot name>` matches, exactly as `cadgen srdf validate` pairs them. No match, or more than one, is refused before anything renders, naming the robot name it looked for and the `.urdf` files it found; so is an SRDF the validator refuses (no planning group, a name the URDF does not have). Pose the robot with `--joint-values` — `{joint: value}` JSON in degrees (metres for a
+prismatic joint), each naming a joint a person can drive, within its limits, or the request is
+refused before anything renders: a fixed joint or a `<mimic>` follower is refused by name (a
+follower follows its leader, so the refusal names the driven joint its chain of leaders ends
+at, to set instead), and so is a leader value that would push a follower past the
+follower's own limits. Joints you do not name stay where the CAD Viewer opens the robot: each
+at its default, then this SRDF's `home` group state if it declares one (the `"jointValues"`
+job field is the same thing in a packet). The snapshot draws the robot with the viewer's own
+scene, so it shows what the viewer shows: cadgen resolves the URDF first, meshes a `box`,
+`cylinder` or `sphere` itself, and refuses by name a visual it cannot draw — a mesh that is
+not an STL, 3MF or GLB file beside the URDF (`.dae`, `.obj` and `.ply` files are not drawn;
+`package://` and remote URIs are not resolved) or a mesh file that is missing. A link mesh
+that cannot be loaded fails the snapshot rather than leaving the link out. Robots are
+authored in metres and are framed on the robot scene scale automatically.
 
 A normal snapshot uses the Solid preset and Light appearance; omitted groups inherit preset defaults.
 Pass `--display render` for the shared photographic scene. Inline display JSON and
@@ -124,7 +131,7 @@ mode. The display modes are `solid` and `render`: `edges`, `clip`, `exploded`, t
 describe a STEP model's CAD edges, parts and solids, and are refused by name here.
 
 Link meshes are resolved relative to the description, so they must be present: an
-unhydrated Git LFS pointer fails as "No link mesh loaded for robot". Run
+unhydrated Git LFS pointer is not a mesh and fails the snapshot. Run
 `git lfs checkout <mesh dir>` first.
 
 An SRDF's geometry comes from its paired URDF, so it has no snapshot door of its

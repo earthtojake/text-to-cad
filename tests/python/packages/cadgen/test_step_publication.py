@@ -76,7 +76,43 @@ class StepPublicationTests(unittest.TestCase):
         self.assertEqual(self.step.read_bytes(), before)
         self.assertEqual(self.sidecar.read_bytes(), annotation)
         self.assertEqual(read_record(f"{self.model}::part"), record)
-        self.assertEqual(list(self.root.glob(".part-*")), [], "private stages are cleaned")
+        self.assertEqual(list(self.root.glob(".cadgen-stage-*")), [], "private stages are cleaned")
+
+    def test_a_build_removes_the_stage_a_killed_build_left_and_names_its_own_by_owner(self) -> None:
+        # A build killed while it saves (its caller left, so the daemon ended its worker)
+        # leaves its staging folder, a full STEP copy, in the project. The next build there
+        # removes it; a live build's and another machine's stay.
+        import subprocess
+        import sys
+
+        from cadgen._internal import atomic_replace, temp_leftovers
+
+        exited = subprocess.Popen([sys.executable, "-c", "pass"])
+        exited.wait()
+        host = temp_leftovers._host()
+        other = "0" * 8 if host != "0" * 8 else "1" * 8
+        dead = self.root / f".cadgen-stage-p{exited.pid}-h{host}-part-ab12cd34"
+        live = self.root / f".cadgen-stage-p{os.getpid()}-h{host}-part-ef56gh78"
+        elsewhere = self.root / f".cadgen-stage-p{exited.pid}-h{other}-part-ab12cd34"
+        for stage in (dead, live, elsewhere):
+            stage.mkdir()
+            (stage / "part.step").write_text("ISO-10303-21;", encoding="utf-8")
+        own: list[str] = []
+        replace = atomic_replace.replace_atomic
+
+        def publish(temp_path, target_path):
+            staged = Path(temp_path).parent
+            if Path(target_path) == self.step and staged != self.root:
+                own.append(staged.name)
+            replace(temp_path, target_path)
+
+        with mock.patch.object(atomic_replace, "replace_atomic", publish):
+            self.assertEqual(self.build(10), 0, self.output)
+        self.assertFalse(dead.exists())
+        self.assertTrue(live.is_dir() and elsewhere.is_dir())
+        [stage] = own
+        self.assertTrue(stage.startswith(f".cadgen-stage-p{os.getpid()}-h{host}-part-"), stage)
+        self.assertFalse((self.root / stage).exists())
 
     def test_a_stale_build_skips_the_saved_tree_reuse_check(self) -> None:
         # The gate already called this build stale. The reuse check hashes the
@@ -136,9 +172,9 @@ class StepPublicationTests(unittest.TestCase):
             self.assertEqual(self.build(12), 0, self.output)
             self.assertLessEqual(step_reads(), 1, reads)
             reads.clear()
-            # A label edit keeps the document, and nothing reads it.
+            # An edit that draws the same document keeps it, and nothing reads it.
             self.model.write_text(self.model.read_text(encoding="utf-8").replace(
-                "    return bd.Box(SIZE, 8, 6)\n", "    box = bd.Box(SIZE, 8, 6)\n    box.label = 'renamed'\n    return box\n"),
+                "    return bd.Box(SIZE, 8, 6)\n", "    box = bd.Box(SIZE, 8, 6)\n    return box\n"),
                 encoding="utf-8")
             output = io.StringIO()
             with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):

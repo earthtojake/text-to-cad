@@ -98,6 +98,24 @@ class ConstructorTests(unittest.TestCase):
         self.assertEqual(mate.dof_ids(), ("lead.turn", "lead.travel"))
         with self.assertRaisesRegex(ValueError, "limits must be a dict over its sub-DOFs"):
             cylindrical("bad", parent="#a", child="#b", axis="#b.f1", limits=(0, 1))
+        # Like revolute and slider limits, a cylindrical mate's are required:
+        # every sub-DOF needs a range.
+        with self.assertRaisesRegex(ValueError, r"needs a \(lo, hi\) pair for every sub-DOF; missing \['travel'\]"):
+            cylindrical("half", parent="#a", child="#b", axis="#b.f1", limits={"turn": (0, 90)})
+
+    def test_a_pose_preset_stays_within_the_declared_limits(self) -> None:
+        mates = [
+            revolute("elbow", parent="#upper", child="#fore", axis="#fore.f1", limits=(0, 150)),
+            cylindrical("lead", parent="#housing", child="#screw", axis="#screw.f1",
+                        limits={"turn": (0, 3600), "travel": (0, 40)}),
+        ]
+        normalize_kinematics({"mates": mates, "poses": {"up": {"elbow": 150, "lead.travel": 40}}}, where="@step")
+        with self.assertRaisesRegex(
+            ValueError, r"poses\['up'\] value 160 deg is outside the limits \[0, 150\] deg of DOF 'elbow'"
+        ):
+            normalize_kinematics({"mates": mates, "poses": {"up": {"elbow": 160}}}, where="@step")
+        with self.assertRaisesRegex(ValueError, r"41 mm is outside the limits \[0, 40\] mm of DOF 'lead\.travel'"):
+            normalize_kinematics({"mates": mates, "poses": {"out": {"lead.travel": 41}}}, where="@step")
 
     def test_refs_axes_limits_and_defaults_are_validated(self) -> None:
         with self.assertRaisesRegex(ValueError, "parent must be an occurrence ref"):

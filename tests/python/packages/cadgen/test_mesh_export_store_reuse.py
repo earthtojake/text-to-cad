@@ -1,7 +1,7 @@
 """Mesh export resolves the STORE tree before touching anything else.
 
 The export fast path, exercised through the `cadgen stl|3mf|glb build` doors.
-Doors take DOCUMENTS (design/pose-animation-split.md, CLI/doors follow-on), so
+Doors take DOCUMENTS (packages/cadgen/README.md, law 7), so
 there are exactly two shapes to cover:
 
 * A generated document whose package is current exports straight from it — no

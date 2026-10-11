@@ -20,7 +20,6 @@ from pathlib import Path
 from tests.python.support.paths import repo_path
 
 CADGEN_JS_SRC = repo_path("packages/core/src")
-CADGEN_JS_BIN = repo_path("packages/core/bin")
 CADGEN_SRC = repo_path("packages/cadgen/src")
 
 _IMPORT_RE = re.compile(
@@ -51,7 +50,7 @@ def _import_specifiers(path: Path) -> list[str]:
 class CadgenJsIsFrameworkFree(unittest.TestCase):
     def test_no_react_and_no_app_imports(self) -> None:
         offenders: list[str] = []
-        for path in _js_files(CADGEN_JS_SRC, CADGEN_JS_BIN):
+        for path in _js_files(CADGEN_JS_SRC):
             for specifier in _import_specifiers(path):
                 lowered = specifier.lower()
                 if lowered == "react" or lowered.startswith("react/") or lowered.startswith("react-"):
@@ -89,7 +88,7 @@ class PackagesNeverImportApps(unittest.TestCase):
 
     def test_no_js_import_into_apps(self) -> None:
         offenders: list[str] = []
-        for path in _js_files(CADGEN_JS_SRC, CADGEN_JS_BIN):
+        for path in _js_files(CADGEN_JS_SRC):
             for specifier in _import_specifiers(path):
                 if specifier.replace("\\", "/").startswith(("../../apps", "../../../apps")):
                     offenders.append(f"{path}: {specifier}")

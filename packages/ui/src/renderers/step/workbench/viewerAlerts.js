@@ -3,7 +3,7 @@ import { failedStepArtifact, stepArtifactHasRenderableGlb, stepArtifactStatusMes
 import { fileKey } from "./entryPaths.js";
 import { failureAlert, isViewerServiceFailure, noGeometryAlert } from "../../kit/status/loadAlerts.js";
 
-export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = null, { partial = false } = {}) {
+export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = null, { partial = false, failedParts = [], unmeshedParts = [] } = {}) {
   const fileRef = fileKey(entry);
   if (!fileRef) {
     return null;
@@ -39,6 +39,10 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
     }
   }
 
+  if (loadError && hasMeshData && failedParts.length) {
+    return failedPartsAlert(fileRef, failedParts, loadError?.message || loadError);
+  }
+
   if (loadError) {
     const alert = failureAlert(fileRef, loadError?.message || loadError, loadError?.failure);
     return hasMeshData && !partial ? {
@@ -63,6 +67,10 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
       title: "Couldn’t update the model",
       message: `The latest update of “${fileRef}” produced no visible geometry. You’re still viewing the previous version.`
     };
+  }
+
+  if (!partial && unmeshedParts.length) {
+    return unmeshedPartsAlert(fileRef, unmeshedParts);
   }
 
   return null;
@@ -119,5 +127,37 @@ export function buildViewerEditAlert(editingState, hasGeometry = false) {
       : "The model could not be prepared for display.",
     reason: actualDetail,
     recovery: "Check the diagnostic in Details, correct the model, then run it again."
+  };
+}
+
+// Parts drawn without faces cadgen could not mesh: the model is whole but for those faces, so a
+// warning that names the parts, which the person can put away.
+function unmeshedPartsAlert(fileRef, parts) {
+  const quoted = parts.slice(0, 3).map(name => `“${name}”`);
+  const named = parts.length > 3 ? `${quoted.join(", ")} and ${parts.length - 3} more` : quoted.join(", ");
+  const summary = parts.length === 1 ? "A part is missing faces" : `${parts.length} parts are missing faces`;
+  return {
+    severity: "warning",
+    blocking: false,
+    summary,
+    title: summary,
+    message: `${named} ${parts.length === 1 ? "has" : "have"} faces that couldn’t be meshed, so they’re missing from the view. Everything else is shown.`,
+    details: `File: ${fileRef}\nParts: ${parts.join(", ")}`,
+  };
+}
+
+// Parts cadgen could not mesh are missing from a model drawn without them: a warning that names
+// them, which the person can put away, never the card of a model that did not load.
+function failedPartsAlert(fileRef, parts, error) {
+  const quoted = parts.slice(0, 3).map(name => `“${name}”`);
+  const named = parts.length > 3 ? `${quoted.join(", ")} and ${parts.length - 3} more` : quoted.join(", ");
+  const summary = parts.length === 1 ? "A part couldn’t be shown" : `${parts.length} parts couldn’t be shown`;
+  return {
+    severity: "warning",
+    blocking: false,
+    summary,
+    title: summary,
+    message: `${named} couldn’t be meshed, so ${parts.length === 1 ? "it’s" : "they’re"} missing from the view. Everything else is shown.`,
+    details: `File: ${fileRef}\nParts: ${parts.join(", ")}\n${String(error || "").trim()}`,
   };
 }

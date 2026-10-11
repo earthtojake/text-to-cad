@@ -1,0 +1,65 @@
+{
+  "carries": {
+    "hinge": [
+      "o1.2"
+    ]
+  },
+  "controls": [
+    {
+      "default": 0.0,
+      "id": "hinge",
+      "label": "hinge",
+      "max": 90.0,
+      "min": 0.0,
+      "unit": "deg"
+    }
+  ],
+  "handles": [
+    {
+      "control": "hinge",
+      "dof": "turn",
+      "id": "hinge",
+      "joint": "hinge",
+      "label": "hinge",
+      "max": 90.0,
+      "min": 0.0,
+      "unit": "deg",
+      "weight": 1.0
+    }
+  ],
+  "joints": [
+    {
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "id": "hinge",
+      "kind": "revolute",
+      "origin": [
+        10.0,
+        0.0,
+        0.0
+      ],
+      "parent": null,
+      "turn": {
+        "bias": 0.0,
+        "terms": [
+          [
+            "hinge",
+            1.0
+          ]
+        ]
+      }
+    }
+  ],
+  "opening": {
+    "hinge": 0.0
+  },
+  "poses": {
+    "open": {
+      "hinge": 90.0
+    }
+  },
+  "schemaVersion": 2
+}

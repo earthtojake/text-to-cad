@@ -8,10 +8,7 @@ picking the first renders the wrong wheel and looks like success.
 
 from __future__ import annotations
 
-import json
 import unittest
-
-from tests.python.support.paths import repo_path
 
 from cadgen.label_refs import (
     LabelResolutionError,
@@ -22,18 +19,82 @@ from cadgen.label_refs import (
 )
 
 
-FIXTURE_PATH = repo_path("packages", "core", "src", "lib", "cadRefs.parity.json")
+ALIAS_CASES = [
+    {
+        "why": "unique labels get a bare alias and no number",
+        "rows": [
+            {"id": "o1.1", "name": "eye_shank"},
+            {"id": "o1.2", "name": "pressure_tube"},
+        ],
+        "aliases": {"eye_shank": "o1.1", "pressure_tube": "o1.2"},
+        "ambiguous": {},
+    },
+    {
+        "why": "duplicates get numbered aliases in occurrence-tree order; the bare name is ambiguous",
+        "rows": [
+            {"id": "o1.3", "name": "cast_rim:5spoke"},
+            {"id": "o1.7", "name": "cast_rim:5spoke"},
+        ],
+        "aliases": {"cast_rim:5spoke_1": "o1.3", "cast_rim:5spoke_2": "o1.7"},
+        "ambiguous": {"cast_rim:5spoke": ["cast_rim:5spoke_1", "cast_rim:5spoke_2"]},
+    },
+    {
+        "why": "ordering is numeric per path segment, so o1.10 sorts AFTER o1.2",
+        "rows": [
+            {"id": "o1.10", "name": "bolt"},
+            {"id": "o1.2", "name": "bolt"},
+        ],
+        "aliases": {"bolt_1": "o1.2", "bolt_2": "o1.10"},
+        "ambiguous": {"bolt": ["bolt_1", "bolt_2"]},
+    },
+    {
+        "why": "a numbered alias never collides with a label an author actually wrote",
+        "rows": [
+            {"id": "o1.1", "name": "servo_end_mount"},
+            {"id": "o1.2", "name": "servo_end_mount"},
+            {"id": "o1.3", "name": "servo_end_mount_1"},
+        ],
+        "aliases": {"servo_end_mount_2": "o1.1", "servo_end_mount_3": "o1.2", "servo_end_mount_1": "o1.3"},
+        "ambiguous": {"servo_end_mount": ["servo_end_mount_2", "servo_end_mount_3"]},
+    },
+    {
+        "why": "names that cannot be labels are reachable numerically only",
+        "rows": [
+            {"id": "o1.1", "name": "o1.4"},
+            {"id": "o1.2", "name": "f12"},
+            {"id": "o1.3", "name": "m2"},
+            {"id": "o1.4", "name": "5spoke"},
+            {"id": "o1.5", "name": "has space"},
+            {"id": "o1.6", "name": "has.dot"},
+            {"id": "o1.7", "name": ""},
+        ],
+        "aliases": {},
+        "ambiguous": {},
+    },
+    {
+        "why": "group (non-leaf) rows are addressable too",
+        "rows": [
+            {"id": "o1.1", "name": "damper_body"},
+            {"id": "o1.1.1", "name": "pressure_tube"},
+        ],
+        "aliases": {"damper_body": "o1.1", "pressure_tube": "o1.1.1"},
+        "ambiguous": {},
+    },
+    {
+        "why": "a row may carry the render package's `occurrenceId` spelling instead of `id`",
+        "rows": [
+            {"occurrenceId": "o1.1", "name": "eye_shank"},
+            {"id": "o1.2", "name": "pressure_tube"},
+        ],
+        "aliases": {"eye_shank": "o1.1", "pressure_tube": "o1.2"},
+        "ambiguous": {},
+    },
+]
 
 
-def _alias_cases() -> list[dict]:
-    return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))["aliasCases"]
-
-
-class AliasFixtureParityTest(unittest.TestCase):
-    """The same alias cases the JS suite asserts, so both languages number identically."""
-
+class AliasCasesTest(unittest.TestCase):
     def test_every_alias_case_matches(self) -> None:
-        for case in _alias_cases():
+        for case in ALIAS_CASES:
             with self.subTest(why=case.get("why", "")):
                 built = build_label_aliases(case["rows"])
                 self.assertEqual(case["aliases"], built["aliases"])
@@ -169,6 +230,58 @@ class LabelRefLookupTest(unittest.TestCase):
         )
         self.assertEqual("#eye_shank", label_ref_for_occurrence(alias_map, "o1.1"))
         self.assertEqual("", label_ref_for_occurrence(alias_map, "o9.9"))
+
+
+
+class OneNameRuleTest(unittest.TestCase):
+    """Every API that takes a ``#name`` reads it one way: ``read_scene`` and snapshots,
+    clips (``m.get``), material assignments and mates. A name two nodes share is refused
+    in each with the same numbered aliases, and an alias names the same node in each.
+    Clips once moved every node of a shared name: a clip on a beam moved its whole arm."""
+
+    # A root group `arm` holding a base and a beam also labelled `arm`.
+    DESCRIPTOR = {
+        "occurrences": [{"id": "o1.1"}, {"id": "o1.2"}],
+        "assembly": {"root": {"id": "o1", "name": "arm", "children": [
+            {"id": "o1.1", "name": "base", "children": []},
+            {"id": "o1.2", "name": "arm", "children": []},
+        ]}},
+    }
+
+    def test_a_shared_name_is_refused_alike_and_its_aliases_name_one_node(self) -> None:
+        from cadgen._internal.animation_bake import animation_targets
+        from cadgen._internal.kinematics_resolve import _instance_tree_ids, _occurrence_id_for_ref
+        from cadgen._internal.source_sidecar import resolve_materials
+
+        aliases = build_label_aliases(
+            [{"id": "o1", "name": "arm"}, {"id": "o1.1", "name": "base"}, {"id": "o1.2", "name": "arm"}]
+        )
+        clips = animation_targets(self.DESCRIPTOR)
+        tree = _instance_tree_ids(self.DESCRIPTOR)
+
+        def material(target: str) -> dict:
+            declaration = {"definitions": {"x": {}}, "assignments": [{"targets": [target], "material": "x"}]}
+            return resolve_materials(self.DESCRIPTOR, declaration)
+
+        def mate(target: str) -> str:
+            return _occurrence_id_for_ref(target, what="child", mate="lift", source_ref="arm", tree=tree)
+
+        for api, call in {
+            "read_scene": lambda: resolve_label_selectors(["#arm"], aliases),
+            "clip": lambda: clips.resolve("#arm"),
+            "material": lambda: material("#arm"),
+            "mate": lambda: mate("#arm"),
+        }.items():
+            with self.subTest(api=api), self.assertRaises(ValueError) as caught:
+                call()
+            self.assertIn("label 'arm' matches 2 occurrences; use one of: #arm_1 (o1), #arm_2 (o1.2)",
+                          str(caught.exception))
+
+        self.assertEqual(["#o1.2"], resolve_label_selectors(["#arm_2"], aliases))
+        self.assertEqual(("o1.2",), clips.resolve("#arm_2"))
+        self.assertEqual(["o1.2"], list(material("#arm_2")["assignments"]))
+        self.assertEqual("o1.2", mate("#arm_2"))
+        self.assertEqual("o1.1", mate("#base"))
 
 
 if __name__ == "__main__":

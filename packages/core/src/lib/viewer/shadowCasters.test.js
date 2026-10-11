@@ -49,19 +49,19 @@ test("moving, hiding, or taking a record out of the shadow pass is a change", ()
 test("a tube bend counts only when it changed: re-bent, straightened, or not yet carried", () => {
   const records = [record("a"), record("b")];
   assert.equal(shadowCastersChanged(null, records), true, "nothing to compare against");
-  // What `applyRecordTubeDeformation` leaves: an active state and the spec it was bent to.
-  const spec = { pathSpec: [0, 1] };
+  // What `applyRecordTubeSkin` leaves: an active state and the pose it was bent to.
+  const spec = { index: 0, u: 0.5 };
   records[1].effectDeformation = spec;
-  records[1].tubeDeformationState = { active: true, lastSpec: spec };
+  records[1].tubeSkinState = { active: true, lastPose: spec };
   let before = captureShadowCasters(records);
-  // The same bend applied again (a hover re-ran the pose pass): the state keeps its spec.
-  records[1].effectDeformation = { pathSpec: [0, 1] };
+  // The same bend applied again (a hover re-ran the pose pass): the state keeps its pose.
+  records[1].effectDeformation = { index: 0, u: 0.5 };
   assert.equal(shadowCastersChanged(before, records), false);
-  // Bent to a new spec: the state takes it.
-  records[1].tubeDeformationState.lastSpec = records[1].effectDeformation = { pathSpec: [0, 2] };
+  // Bent to a new pose: the state takes it.
+  records[1].tubeSkinState.lastPose = records[1].effectDeformation = { index: 0, u: 0.75 };
   assert.equal(shadowCastersChanged(before, records), true);
   before = captureShadowCasters(records);
-  records[1].tubeDeformationState.active = false;
+  records[1].tubeSkinState.active = false;
   records[1].effectDeformation = null;
   assert.equal(shadowCastersChanged(before, records), true, "straightened back to rest");
   // A bend asked for that no active state carries cannot be vouched for: not before a pass...

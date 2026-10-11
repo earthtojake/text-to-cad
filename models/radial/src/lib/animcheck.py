@@ -1,27 +1,38 @@
-"""Prove the embedded animation IS lib/kin.py, and that its loop is seamless.
+"""Prove the animation clips (lib/clips.py) ARE lib/kin.py, and that their loops are seamless.
 
     cd src && python -m lib.animcheck [--file ../STEP/radial.step] [--step-deg 10] [--clip running|exploded-running|all]
-    cd src && python -m lib.animcheck --module ../tmp/kin/anim_js_synth.py --labels ../tmp/kin/labels_synth.json
+    cd src && python -m lib.animcheck --synthetic      # one label per contract group: `running` without a build
 
-(a) EQUIVALENCE. The viewer's own runtime (lib/anim_eval.mjs) evaluates the clip
-    at crank angles 0..720 (default 10 deg steps, 73 samples); for every label the
-    JS moved, the Python reference is pose_matrix(pose(theta)) . pose_matrix(pose(0))^-1
-    from kin.py. Every label the contract says moves must have a JS matrix, every
-    static label must have none, and the max |difference| must be < 1e-6 (matrix
-    entries, mm for translations). Springs: every Bezier control point of the
-    deformed path against kin.spring_path(theta), and the rest path against
-    kin.spring_path(0).
-(b) SEAMLESS LOOP. update(0) vs update(8 s) (theta 720, unwrapped): per group,
-    identical, or displaced by a rigid rotation that the part's symmetry must
-    absorb (listed with the angle, which is expected: e.g. cam ring 90 deg on 4
-    lobes, propeller 120 deg on 3 blades).
+A clip is evaluated the way the build samples it: through cadgen's own bake
+model and handle (cadgen._internal.animation_bake), over the BUILT document's
+names and occurrence ids (its tree in the store, found from the sidecar's
+documentHash), so a label resolves to exactly the leaves the keyframes move.
+
+(a) EQUIVALENCE. The clip at crank angles 0..720 (default 10 deg steps, 73
+    samples); for every label it moved, the Python reference is
+    pose_matrix(pose(theta)) . pose_matrix(pose(0))^-1 from kin.py. Every label
+    the contract says moves must have a matrix, every static label must have
+    none, and the max |difference| must be < 1e-6 (matrix entries, mm for
+    translations). Springs: every Bezier control point of the deformed path
+    against kin.spring_path(theta), and the rest path against
+    kin.spring_path(0); each path must join up and stay tangent-continuous
+    within the viewer's tube-runtime tolerances, or the viewer refuses it.
+(b) SEAMLESS LOOP. update(0) vs update(8 s) (theta 720): per group, identical,
+    or displaced by a rigid rotation that the part's symmetry must absorb
+    (listed with the angle, which is expected: e.g. cam ring 90 deg on 4 lobes,
+    propeller 120 deg on 3 blades).
 
 (c) exploded-running (checked by default with running): every label is T(its
     lib/explodedrun.py group offset) . (its running motion (a)); a spring's tube
     path is (a)'s and its matrix the pure offset; exactly the layout's hidden
     labels are hidden; the seam as (b).
 
-Exit 1 when (a) or (c) fails. `check(...)` is importable (the gate calls it).
+With a build it first reports the label contract: moving labels by kind, static
+prefixes, labels that look like moving parts but will not move, and labels more
+than one leaf carries.
+
+Exit 1 when (a) or (c) fails. `check(...)` and `sample(...)` are importable
+(the gate and lib/explodecheck.py call them).
 """
 
 from __future__ import annotations
@@ -29,17 +40,21 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import subprocess
 import sys
 from pathlib import Path
 
 import numpy as np
 
-from lib import animgen, kin
+from lib import clips, kin
 
-HERE = Path(__file__).resolve().parent
-EVAL = HERE / "anim_eval.mjs"
+ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT_STEP = ROOT / "STEP" / "radial.step"
 TOL = 1e-6
+# cadgen's tube engine (cadgen._internal.tube_deformation compile_tube_path)
+# refuses a path whose segments are further apart than this (mm) or whose
+# tangents meet at a dot product below 1 - TUBE_TANGENT.
+TUBE_GAP = 1e-5
+TUBE_TANGENT = 1e-7
 
 
 def python_pose(kind, args, theta):
@@ -86,33 +101,103 @@ def python_matrix(kind, args, theta):
     return M @ np.linalg.inv(M0)
 
 
-def js_eval(times, labels_json, module=None, raw=True, deg=False, clip="running"):
-    cmd = ["node", str(EVAL), clip, ",".join(repr(float(t)) for t in times),
-           str(labels_json)]
-    if raw:
-        cmd.append("--raw")
-    if deg:
-        cmd.append("--deg")
-    if module:
-        cmd.append(f"--module={module}")
-    out = subprocess.run(cmd, capture_output=True, text=True)
-    if out.returncode:
-        raise RuntimeError(f"anim_eval failed:\n{out.stderr}")
-    return json.loads(out.stdout)
+# ---------------------------------------------------------------------------
+# A clip, sampled as the build samples it
+# ---------------------------------------------------------------------------
+class Document:
+    """The names and occurrence ids a clip resolves against (`targets`, the
+    bake's own table) and the labels its leaves carry."""
+
+    def __init__(self, by_id, by_name):
+        from cadgen._internal.animation_bake import AnimationTargets
+        self.targets = AnimationTargets(by_id, by_name)
+        self.labels = sorted(name for name, nodes in by_name.items() if any(by_id.get(n) == [n] for n in nodes))
+        self.leaves = {label: self.targets.resolve(f"#{label}") for label in self.labels}
 
 
-def colmajor(m16):
-    return np.array(m16, dtype=float).reshape(4, 4).T
+def built_document(step_file):
+    """The built assembly as the build baked its clips: the WRITTEN document's tree."""
+    from cadgen._internal.source_sidecar import _descriptor_nodes
+    from cadgen.store.records import tree_for_document_hash
+    from cadgen.store.trees import flatten
+    sidecar = Path(f"{step_file}.json")
+    if not sidecar.exists():
+        raise SystemExit(f"[animcheck] {sidecar} does not exist: run `python tools/engine.py build` first")
+    tree = tree_for_document_hash(json.loads(sidecar.read_text())["documentHash"])
+    descriptor = flatten(tree) if tree else None
+    if descriptor is None:
+        raise SystemExit(f"[animcheck] the cadgen store has no tree for {Path(step_file).name}: rebuild it")
+    return Document(*_descriptor_nodes(descriptor))
 
 
-def _labels(labels_json):
-    data = json.loads(Path(labels_json).read_text())
-    return sorted({p["label"] for p in data["parts"]})
+def synthetic_document():
+    """One leaf per contract group instance: exercises every formula without geometry."""
+    labels = ["crank:shaft", "master:rod", "camring:ring", "camidler:gear", "propshaft:shaft", "prop:hub",
+              "impeller:wheel"]
+    labels += [f"artrod{k}:rod" for k in range(2, 10)]
+    labels += [f"piston{k}:piston" for k in range(1, 10)]
+    labels += [f"planet{j}:gear" for j in range(1, 7)]
+    labels += [f"blowergear{j}:gear" for j in range(1, 4)]
+    for k in range(1, 10):
+        for v in "IE":
+            labels += [f"tappet{k}{v}:body", f"tappet{k}{v}:roller", f"pushrod{k}{v}:rod", f"rocker{k}{v}:arm",
+                       f"valve{k}{v}:valve", f"spring{k}{v}:outer", f"spring{k}{v}:inner"]
+    labels += ["crankcase:case", "heads:head_1"]
+    return Document({f"s{i}": [f"s{i}"] for i in range(len(labels))},
+                    {label: [f"s{i}"] for i, label in enumerate(labels)})
 
 
-def _kinds(labels_json):
-    data = json.loads(Path(labels_json).read_text())
-    return {p["label"]: animgen.classify_leaf(p["label"], p.get("owner", p["label"])) for p in data["parts"]}
+class _Frame:
+    """One sample's effects per document leaf: what the bake's handle writes."""
+
+    def __init__(self):
+        self.transform, self.opacity, self.visible, self.tube = {}, {}, {}, {}
+
+
+def _matrix(t12):
+    """The bake's 12-tuple (rotation row-major, then translation) as a 4x4."""
+    return np.array([[t12[0], t12[1], t12[2], t12[9]], [t12[3], t12[4], t12[5], t12[10]],
+                     [t12[6], t12[7], t12[8], t12[11]], [0.0, 0.0, 0.0, 1.0]])
+
+
+def sample(clip, times, doc):
+    """The clip at each time (seconds, never wrapped), per label: [{"matrices": {label:
+    4x4}, "tubes": {label: tube spec}, "hidden": {labels}, "split": [labels whose leaves
+    moved differently]}], evaluated by the bake's own model and handle."""
+    from cadgen._internal.animation_bake import Model
+    update = clips.ANIMATION[clip].update
+    out = []
+    for t in times:
+        frame = _Frame()
+        update(t, Model(frame, doc.targets))
+        smp = {"matrices": {}, "tubes": {}, "hidden": set(), "split": []}
+        for label, leaves in doc.leaves.items():
+            first = leaves[0]
+            if any(frame.transform.get(i) != frame.transform.get(first) or frame.tube.get(i) != frame.tube.get(first)
+                   or frame.visible.get(i) != frame.visible.get(first) for i in leaves[1:]):
+                smp["split"].append(label)
+            if first in frame.transform:
+                smp["matrices"][label] = _matrix(frame.transform[first])
+            if first in frame.tube:
+                smp["tubes"][label] = frame.tube[first]
+            if frame.visible.get(first) is False:
+                smp["hidden"].add(label)
+        out.append(smp)
+    return out
+
+
+def _tube_breaks(path):
+    """Where a Bezier centreline does not join up or turns a corner (the viewer's tolerances)."""
+    out = []
+    segs = path["segments"]
+    for i in range(1, len(segs)):
+        a, b = np.array(segs[i - 1]["points"], dtype=float), np.array(segs[i]["points"], dtype=float)
+        gap = float(np.linalg.norm(a[3] - b[0]))
+        ta, tb = a[3] - a[2], b[1] - b[0]
+        dot = float(ta @ tb / (np.linalg.norm(ta) * np.linalg.norm(tb)))
+        if gap > TUBE_GAP or dot < 1 - TUBE_TANGENT:
+            out.append(f"segment {i}: gap {gap:.2e} mm, tangent dot {dot:.9f}")
+    return out
 
 
 def _translation(o):
@@ -121,36 +206,34 @@ def _translation(o):
     return T
 
 
-def check(labels_json, module=None, step_deg=10.0, verbose=True, thetas=None, clip="running"):
-    """Returns (ok, report dict, {theta: {label: 4x4}}) — the JS matrices by angle.
+def check(doc, step_deg=10.0, verbose=True, thetas=None, clip="running"):
+    """Returns (ok, report dict, {theta: {label: 4x4}}) — the clip's matrices by angle.
 
     clip "running": every moving label's matrix is kin's pose(theta) o pose(0)^-1 and no
     static label has one. clip "exploded-running" (lib/explodedrun.py): every label's matrix
     is T(its group offset) . (that running motion), the springs' tube paths are kin's, and
     exactly the layout's hidden labels are hidden. The report's "hidden" lists them."""
-    labels = _labels(labels_json)
-    kinds = _kinds(labels_json)
+    labels = doc.labels
+    kinds = {lab: clips.classify(lab) for lab in labels}
     xr = clip == "exploded-running"
     offs, hidden = ({}, set())
     if xr:
         from lib import explodedrun
-        offs, hidden = explodedrun.label_offsets(labels)
+        offs, hidden = explodedrun.label_offsets([lab for lab in labels if ":" in lab])
     if thetas is None:
         thetas = [i * step_deg for i in range(int(round(720 / step_deg)) + 1)]
-    data = js_eval(thetas, labels_json, module, raw=True, deg=True, clip=clip)
+    samples = sample(clip, [th / clips.DEG_PER_S for th in thetas], doc)
     worst = (0.0, None, None)
     worst_spring = (0.0, None, None)
     problems = []
     by_theta = {}
-    for theta, sample in zip(thetas, data["samples"]):
-        mats = sample["matrices"]
-        defs = sample["deformations"]
-        styles = sample.get("styles", {})
-        by_theta[theta] = {lab: colmajor(m) for lab, m in mats.items()}
-        shown_hidden = {lab for lab, st in styles.items() if st.get("visible") is False}
-        if shown_hidden != hidden:
-            problems.append(f"@ {theta}: hidden {len(shown_hidden)} labels, the layout hides {len(hidden)} "
-                            f"(e.g. {sorted(shown_hidden ^ hidden)[:3]})")
+    for theta, smp in zip(thetas, samples):
+        mats, tubes = smp["matrices"], smp["tubes"]
+        by_theta[theta] = mats
+        problems += [f"{lab} @ {theta}: its leaves move differently" for lab in smp["split"]]
+        if smp["hidden"] != hidden:
+            problems.append(f"@ {theta}: hidden {len(smp['hidden'])} labels, the layout hides {len(hidden)} "
+                            f"(e.g. {sorted(smp['hidden'] ^ hidden)[:3]})")
         for lab in labels:
             kind, args = kinds[lab]
             off = offs.get(lab, (0.0, 0.0, 0.0))
@@ -158,26 +241,27 @@ def check(labels_json, module=None, step_deg=10.0, verbose=True, thetas=None, cl
             if kind in ("static", "suspect") or (kind == "spring" and xr):
                 if not any(off):
                     if lab in mats:
-                        problems.append(f"{lab}: static (or unshifted) but the JS moves it")
+                        problems.append(f"{lab}: static (or unshifted) but the clip moves it")
                 elif lab not in mats:
-                    problems.append(f"{lab} @ {theta}: offset {off} but the JS has no matrix")
+                    problems.append(f"{lab} @ {theta}: offset {off} but the clip has no matrix")
                 else:
-                    d = float(np.max(np.abs(colmajor(mats[lab]) - T)))
+                    d = float(np.max(np.abs(mats[lab] - T)))
                     if d > worst[0]:
                         worst = (d, lab, theta)
                 if kind != "spring":
                     continue
             if kind == "spring":
-                if lab not in defs:
+                if lab not in tubes:
                     problems.append(f"{lab} @ {theta}: no tube deformation")
                     continue
                 k, v, which = args
                 for key, th in (("path", theta), ("rest", 0.0)):
                     ref = kin.spring_path(th, k, v, which)
-                    got = defs[lab][key]
+                    got = tubes[lab][key]
                     if len(got["segments"]) != len(ref["segments"]):
                         problems.append(f"{lab}: segment count {len(got['segments'])} != {len(ref['segments'])}")
                         continue
+                    problems += [f"{lab} @ {theta} {key}: {b}" for b in _tube_breaks(got)]
                     a = np.array([s["points"] for s in got["segments"]], dtype=float)
                     b = np.array([s["points"] for s in ref["segments"]], dtype=float)
                     d = float(np.max(np.abs(a - b)))
@@ -186,9 +270,9 @@ def check(labels_json, module=None, step_deg=10.0, verbose=True, thetas=None, cl
                         worst_spring = (d, lab, theta)
                 continue
             if lab not in mats:
-                problems.append(f"{lab} @ {theta}: moving ({kind}) but the JS has no matrix")
+                problems.append(f"{lab} @ {theta}: moving ({kind}) but the clip has no matrix")
                 continue
-            d = float(np.max(np.abs(colmajor(mats[lab]) - T @ python_matrix(kind, args, theta))))
+            d = float(np.max(np.abs(mats[lab] - T @ python_matrix(kind, args, theta))))
             if d > worst[0]:
                 worst = (d, lab, theta)
     ok = not problems and worst[0] < TOL and worst_spring[0] < TOL
@@ -226,25 +310,22 @@ def _rotation_of(M):
     return ang, ax, p
 
 
-def seam(labels_json, module=None, verbose=True, clip="running"):
-    labels = _labels(labels_json)
-    data = js_eval([0.0, 8.0], labels_json, module, raw=True, clip=clip)
-    s0, s1 = data["samples"]
+def seam(doc, verbose=True, clip="running"):
+    s0, s1 = sample(clip, [0.0, clips.CYCLE_S], doc)
     groups = {}
-    kinds = _kinds(labels_json)
-    for lab in labels:
-        kind, args = kinds[lab]
+    for lab in doc.labels:
+        kind, args = clips.classify(lab)
         if kind in ("static", "suspect"):
             continue
         prefix = lab.split(":", 1)[0]
         g = groups.setdefault(prefix, {"kind": kind, "diff": 0.0, "motion": None})
         if kind == "spring":
-            a = np.array([s["points"] for s in s0["deformations"][lab]["path"]["segments"]])
-            b = np.array([s["points"] for s in s1["deformations"][lab]["path"]["segments"]])
+            a = np.array([s["points"] for s in s0["tubes"][lab]["path"]["segments"]])
+            b = np.array([s["points"] for s in s1["tubes"][lab]["path"]["segments"]])
             g["diff"] = max(g["diff"], float(np.max(np.abs(a - b))))
             continue
-        M0 = colmajor(s0["matrices"].get(lab, np.eye(4).T.ravel()))
-        M1 = colmajor(s1["matrices"].get(lab, np.eye(4).T.ravel()))
+        M0 = s0["matrices"].get(lab, np.eye(4))
+        M1 = s1["matrices"].get(lab, np.eye(4))
         D = M1 @ np.linalg.inv(M0)
         diff = float(np.max(np.abs(D - np.eye(4))))
         g["diff"] = max(g["diff"], diff)
@@ -263,37 +344,60 @@ def seam(labels_json, module=None, verbose=True, clip="running"):
     identical = sorted(p for p, g in groups.items() if g["diff"] <= TOL)
     differ = {p: g["motion"] or f"differs by {g['diff']:.3g}" for p, g in groups.items() if g["diff"] > TOL}
     if verbose:
-        print(f"[animcheck] {clip}: SEAM t=0 vs t=8 s: {len(identical)} groups identical: {', '.join(identical)}")
+        print(f"[animcheck] {clip}: SEAM t=0 vs t={clips.CYCLE_S:g} s: {len(identical)} groups identical: "
+              f"{', '.join(identical)}")
         for p in sorted(differ):
             print(f"[animcheck]   {p}: {differ[p]}  (symmetry must absorb this)")
     return {"identical": identical, "symmetric": differ}
 
 
+def contract(doc):
+    """What the label contract makes of the build's labels (BUILDING.md)."""
+    moving, static, suspects = {}, {}, []
+    for lab in doc.labels:
+        kind, args = clips.classify(lab)
+        if kind == "static":
+            static[lab.split(":", 1)[0]] = static.get(lab.split(":", 1)[0], 0) + 1
+        elif kind == "suspect":
+            suspects.append((lab, args))
+        else:
+            kind = "valvetrain" if kind in ("tappet", "roller", "pushrod", "rocker", "valve", "spring") else kind
+            moving[kind] = moving.get(kind, 0) + 1
+    print(f"[animcheck] {len(doc.labels)} leaf labels; {sum(moving.values())} moving: "
+          + ", ".join(f"{k} {n}" for k, n in moving.items()))
+    print("[animcheck] static prefixes: " + ", ".join(f"{k} {n}" for k, n in sorted(static.items())))
+    for lab, why in suspects:
+        print(f"[animcheck] WARNING {lab!r}: {why} -> NOT animated", file=sys.stderr)
+    for lab, leaves in doc.leaves.items():
+        if len(leaves) > 1:
+            print(f"[animcheck] WARNING label {lab!r} is carried by {len(leaves)} leaves (labels must be unique; "
+                  "all copies move together)", file=sys.stderr)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--file", default=str(animgen.DEFAULT_STEP), help="built assembly whose labels are checked")
-    ap.add_argument("--labels", default=None, help="a label table instead of --file (e.g. animgen --synthetic's)")
-    ap.add_argument("--module", default=None, help="generated anim_js file (default lib/anim_js.py)")
+    ap.add_argument("--file", default=str(DEFAULT_STEP), help="built assembly whose clips are checked")
+    ap.add_argument("--synthetic", action="store_true", help="one label per contract group instead of a build "
+                                                            "(`running` only)")
     ap.add_argument("--step-deg", type=float, default=10.0)
     ap.add_argument("--clip", default="all", help="running, exploded-running, or all (both)")
     ap.add_argument("--json", default=None)
     a = ap.parse_args(argv)
-    if a.labels is None:           # the CURRENT build's labels, never a stale table
-        a.labels = str(animgen.ROOT / "tmp" / "kin" / f"animcheck_labels_{Path(a.file).stem}.json")
-        animgen.write_labels_json(animgen.scene_labels(Path(a.file)), Path(a.labels))
-    clips = ["running", "exploded-running"] if a.clip == "all" else [a.clip]
+    if a.synthetic:
+        doc, ids = synthetic_document(), ["running"]
+    else:
+        doc = built_document(a.file)
+        contract(doc)
+        ids = ["running", "exploded-running"] if a.clip == "all" else [a.clip]
     reps, all_ok = {}, True
-    for clip in clips:
-        ok, rep, _ = check(a.labels, a.module, a.step_deg, clip=clip)
-        if not ok and any("no matrix" in p or "no tube" in p for p in rep["problems"]):
-            print("[animcheck] the module is STALE for this build: run `python -m lib.animgen` then "
-                  "`python tools/engine.py build`")
-        rep["seam"] = seam(a.labels, a.module, clip=clip)
+    for clip in ids:
+        ok, rep, _ = check(doc, a.step_deg, clip=clip)
+        rep["seam"] = seam(doc, clip=clip)
         rep.pop("hidden", None)
         reps[clip] = rep
         all_ok = all_ok and ok
     if a.json:
-        Path(a.json).write_text(json.dumps(reps if len(reps) > 1 else reps[clips[0]], indent=1))
+        Path(a.json).write_text(json.dumps(reps if len(reps) > 1 else reps[ids[0]], indent=1))
     return 0 if all_ok else 1
 
 

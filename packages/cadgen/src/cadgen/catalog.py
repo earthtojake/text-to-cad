@@ -400,7 +400,7 @@ def result_snapshot_for(entry_path: Path) -> tuple[str, str] | None:
 def result_tree_for(entry_path: Path) -> str | None:
     """The tree behind a CAD artifact on disk, or None — found by the file's BYTES.
 
-    ``index/document/<sha256(bytes)>`` → tree (STORE.md §2, the law): a reader
+    ``index/document/<sha256(bytes)>-v<schema>`` → tree (STORE.md §2, the law): a reader
     never opens a record to find an artifact. The same file copied anywhere
     resolves to the same tree; a file the store has no tree for answers None
     (a door then compiles it: ``cadgen._internal.doors.document_tree``). The
@@ -428,8 +428,8 @@ def result_descriptor_for(entry_path: Path) -> dict | None:
 
 def result_view_dir(entry_path: Path) -> Path:
     """A view directory (assembly.json + components/, a per-process temporary directory) of the tree
-    behind a CAD artifact, for consumers that need files on disk — the Node
-    exporters, the selector-index composer, the snapshot page. When the artifact
+    behind a CAD artifact, for consumers that need files on disk — the
+    selector-index composer, the snapshot page. When the artifact
     has no current tree, a deterministic never-created path, so existence checks
     answer "no result" without special cases. The store itself holds no result
     directories (``cadgen.store.view``)."""

@@ -19,8 +19,8 @@ import {
 } from "./animationClock.js";
 
 const CLIPS = {
-  meshCycle: { id: "meshCycle", label: "Mesh cycle", duration: 6, loop: true, update() {} },
-  inspectExplode: { id: "inspectExplode", label: "Explode inspect", duration: 5, loop: true, update() {} }
+  meshCycle: { id: "meshCycle", label: "Mesh cycle", duration: 6, loop: true, tracks: [] },
+  inspectExplode: { id: "inspectExplode", label: "Explode inspect", duration: 5, loop: true, tracks: [] }
 };
 
 test("clips list in declaration order with their transport metadata", () => {
@@ -49,11 +49,11 @@ test("a model opens on its first declared clip, gated on and paused", () => {
   // from the select would set.
   assert.equal(
     buildDefaultAnimationState({
-      once: { id: "once", label: "Once", duration: 2, loop: false, update() {} }
+      once: { id: "once", label: "Once", duration: 2, loop: false, tracks: [] }
     }).loopEnabled,
     false
   );
-  // Called before the clips compile (the file-switch reset) there is nothing to
+  // Called before the clips load (the file-switch reset) there is nothing to
   // select yet, and the load effect restores against the real clips.
   assert.equal(buildDefaultAnimationState().activeClipId, "");
   assert.equal(findAnimationClip(CLIPS, ""), null);
@@ -73,7 +73,7 @@ test("the gate, not the selection, decides whether a clip drives the model", () 
     animationRenderFrame({ enabled: false, clip: CLIPS.meshCycle, elapsedSec: 2, playing: true }),
     null
   );
-  // A selection with no clip behind it (clips still compiling) draws nothing either.
+  // A selection with no clip behind it (clips still loading) draws nothing either.
   assert.equal(animationRenderFrame({ enabled: true, clip: null }), null);
 });
 
@@ -131,10 +131,10 @@ test("a restored session keeps the clock but never resumes playback", () => {
 
 test("a slice with no selection recorded opens the model normally", () => {
   // `activeClipId: ""` is NOT a dead clip and not a retired sentinel: it is what
-  // this module returns before a model's clips compile, so the file-switch reset
+  // this module returns before a model's clips load, so the file-switch reset
   // holds it and the debounced session save can persist it mid-load. Reading it
   // as "the user chose rest" gated a model's FIRST open off — clips that take
-  // longer than the save debounce to compile opened switched off, and the off
+  // longer than the save debounce to load opened switched off, and the off
   // was then persisted. It says nothing about the gate, so the model opens
   // exactly as it would with no session at all. A slice written before the gate
   // existed lands here too, and opens gated ON.
@@ -165,7 +165,7 @@ test("transport preferences survive a selection that does not resolve", () => {
     );
   }
   // With no clips at all there is nothing to call dead, so the gate is the
-  // slice's own and the real clips decide the selection once they compile.
+  // slice's own and the real clips decide the selection once they load.
   assert.equal(
     restoreAnimationState({ activeClipId: "meshCycle", enabled: true }, null).enabled,
     true
@@ -175,7 +175,7 @@ test("transport preferences survive a selection that does not resolve", () => {
 test("a restored clip carries its OWN loop preference, not the opening clip's", () => {
   const clips = {
     meshCycle: CLIPS.meshCycle,
-    once: { id: "once", label: "Once", duration: 2, loop: false, update() {} }
+    once: { id: "once", label: "Once", duration: 2, loop: false, tracks: [] }
   };
   // The slice names `once`, which declares loop: false. Falling back to the
   // FIRST clip's preference here would loop a clip authored not to.

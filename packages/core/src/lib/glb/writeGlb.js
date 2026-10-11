@@ -1,14 +1,11 @@
 /**
- * The one JS GLB writer.
+ * A small JS GLB writer, for the tests that need GLB bytes to load.
  *
- * Replaces `meshToGlb`, which emitted a single non-indexed f32 primitive at 72 B/triangle --
- * fine for a download, ruinous for a render artifact. This writer is a generic mesh
- * serializer with no format-specific behaviour.
- *
- * **It is PURE and LOCK-FREE.** Writing a render *package* is a different operation with a
- * different precondition -- it must hold the artifact's generation lock -- and lives in
- * `writeRenderPackage`. Conflating them would make every ordinary `export --glb`, which
- * holds no lock and has no run id, throw.
+ * Nothing the product ships comes out of here: cadgen writes every GLB export itself, in
+ * Python. The core and UI suites use this to build the files their loaders, scenes and
+ * renderers read -- a static part, an animated one, a meshopt-compressed one -- so it keeps
+ * exactly the shapes those fixtures need. It is a generic, pure mesh serializer with no
+ * format-specific behaviour.
  *
  * ## Presets
  *
@@ -35,9 +32,6 @@
  *                   occurrenceId?: string,     // extras.cadOccurrenceId, STEP convention
  *                   node?: string,             // group key: same key -> same node
  *                   indices?: Uint32Array,     // already-indexed input, passed through
- *                   targets?: [ {              // MORPH targets, indexed input only
- *                     positionDeltas,          //   Float32Array, RELATIVE to POSITION
- *                     normalDeltas? } ],        //   same length, RELATIVE to NORMAL
  *                   name?: string } ],
  *   name?: string, units?: string }
  * ```
@@ -57,12 +51,6 @@
  * `options.nodeTransforms` (a Map keyed by the same group keys) sets each node's own TRS
  * -- what the file shows when nothing is playing it. Both are export-preset only: the
  * render preset spends a node's TRS on dequantizing its one primitive.
- *
- * A channel may instead carry `{ weights: Float32Array, targetCount }`, which drives
- * the node's mesh's MORPH TARGETS: `targetCount` scalars per time, so the output
- * accessor holds `times.length * targetCount` of them. That is a different shape from
- * every TRS track (whose count is `values.length / stride`), which is why it gets its
- * own arm below rather than a fourth row in ANIMATION_PATHS.
  */
 
 import {
@@ -75,13 +63,6 @@ import {
   typedArrayBytes,
 } from "./bytes.js";
 
-// Final GLB bytes, independent of tessellation: v2 canonicalizes material RGB to
-// Float32; v3 took every unspecified `Math` function out of the serializer and
-// the morph bake (lib/surf/trig.js), which can move a normal or a morph-target
-// vertex by one float32 step. Mirrored by cadgen._internal.mesh_export for
-// final-output freshness.
-export const GLB_SERIALIZATION_VERSION = 3;
-
 const COMPONENT_FLOAT = 5126;
 const COMPONENT_SHORT = 5122;
 const COMPONENT_BYTE = 5120;
@@ -92,8 +73,7 @@ const TARGET_ELEMENT_ARRAY_BUFFER = 34963;
 const MODE_TRIANGLES = 4;
 
 // A primitive with at most this many vertices indexes in UNSIGNED_SHORT, halving index
-// bytes. Callers that care (the toolpath builder) assert no primitive exceeds it, so a
-// pathological file fails a budget test instead of silently shipping u32.
+// bytes.
 export const UNSIGNED_SHORT_VERTEX_LIMIT = 65535;
 
 const SHORT_MAX = 32767;
@@ -145,8 +125,6 @@ function faceNormal(positions, offset) {
   const nx = uy * vz - uz * vy;
   const ny = uz * vx - ux * vz;
   const nz = ux * vy - uy * vx;
-// Math.sqrt, not Math.hypot: exactly defined arithmetic only, so these
-// bytes do not depend on the engine (lib/surf/trig.js).
   const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
   return length > 1e-12 ? [nx / length, ny / length, nz / length] : [0, 0, 1];
 }
@@ -318,7 +296,7 @@ const ANIMATION_PATHS = [
  * a single time line instead of repeating it per occurrence, and the file says out loud
  * that they are the same schedule.
  */
-function buildAnimations(animations, { nodeIndexByKey, targetCountByKey, accessors, pushView }) {
+function buildAnimations(animations, { nodeIndexByKey, accessors, pushView }) {
   const out = [];
   for (const animation of Array.isArray(animations) ? animations : []) {
     const samplers = [];
@@ -356,36 +334,6 @@ function buildAnimations(animations, { nodeIndexByKey, targetCountByKey, accesso
         );
       }
       const input = timeAccessorFor(channel?.times || animation?.times);
-      if (channel?.weights) {
-        const times = channel?.times || animation?.times;
-        const declared = Number(channel.targetCount);
-        const actual = targetCountByKey.get(String(channel.node)) || 0;
-        // The channel says how many targets it drives and the MESH says how many it
-        // has; a mismatch is a file whose weights land on the wrong shapes, and the
-        // two numbers come from different halves of the export (the fit, and the
-        // primitives it produced), so they are worth comparing rather than assuming.
-        if (!Number.isInteger(declared) || declared < 1 || declared !== actual) {
-          throw new Error(
-            `writeGlb: weights channel on node ${JSON.stringify(channel.node)} declares `
-            + `${channel.targetCount} morph targets, but its mesh has ${actual}`
-          );
-        }
-        if (channel.weights.length !== times.length * declared) {
-          throw new Error(
-            `writeGlb: weights channel on node ${JSON.stringify(channel.node)} has `
-            + `${channel.weights.length} scalars for ${times.length} times x ${declared} targets`
-          );
-        }
-        accessors.push({
-          bufferView: pushView(typedArrayBytes(channel.weights)),
-          byteOffset: 0,
-          componentType: COMPONENT_FLOAT,
-          count: channel.weights.length,
-          type: "SCALAR",
-        });
-        samplers.push({ input, output: accessors.length - 1, interpolation: "LINEAR" });
-        channels.push({ sampler: samplers.length - 1, target: { node, path: "weights" } });
-      }
       for (const [path, stride, type] of ANIMATION_PATHS) {
         const values = channel?.[path];
         if (!values) {
@@ -547,31 +495,8 @@ export function writeGlb(mesh, options = {}) {
     if (!rawPositions.length) {
       continue;
     }
-    const morphTargets = Array.isArray(input?.targets) && input.targets.length
-      ? input.targets
-      : null;
-    if (morphTargets) {
-      // A weld keys on QUANTIZED position+normal and can merge two corners a morph
-      // target moves apart; the target arrays are 1:1 with the vertices they came
-      // from, and after a weld they would not be. Rather than police the tolerance,
-      // require the correspondence the caller already has: indexed input, passed
-      // through untouched.
-      if (!input?.indices) {
-        throw new Error(
-          "writeGlb: morph targets need already-indexed input — a weld can merge two "
-          + "vertices a target moves apart, and the deltas would then be 1:1 with nothing"
-        );
-      }
-      if (render) {
-        throw new Error(
-          "writeGlb: preset 'render' quantizes every attribute and carries no morph targets "
-          + "— use preset 'export' for a deforming file"
-        );
-      }
-    }
-    // ALREADY-INDEXED input passes straight through. The G-code mesher emits indexed
-    // ribbon geometry with its own groups; de-indexing it just to re-weld would cost a
-    // full pass and could only lose information.
+    // ALREADY-INDEXED input passes straight through: de-indexing it just to re-weld
+    // would cost a full pass and could only lose information.
     const welded = input?.indices
       ? {
         positions: rawPositions,
@@ -584,29 +509,8 @@ export function writeGlb(mesh, options = {}) {
     const vertexCount = welded.positions.length / 3;
     const bounds = boundsForPositions(welded.positions);
 
-    // Per-vertex COLOR_0, evaluated on the WELDED vertices: `colorAt` is a pure function of
-    // position+normal, so a welded vertex has one well-defined colour. Stored VEC4/USHORT
-    // normalized (natural 8-byte stride) in LINEAR space -- glTF's contract for COLOR_0 --
-    // via the same srgbToLinear the material path uses. When present, the material goes
-    // WHITE, because three multiplies material colour by vertex colour.
-    let colorArray = null;
-    if (typeof input?.colorAt === "function") {
-      colorArray = new Uint16Array(vertexCount * 4);
-      for (let v = 0; v < vertexCount; v += 1) {
-        const c = input.colorAt(
-          welded.positions[v * 3], welded.positions[v * 3 + 1], welded.positions[v * 3 + 2],
-          welded.normals[v * 3], welded.normals[v * 3 + 1], welded.normals[v * 3 + 2]
-        );
-        for (let k = 0; k < 3; k += 1) {
-          colorArray[v * 4 + k] = Math.round(srgbToLinear(clamp01(Number(c?.[k]) || 0)) * 65535);
-        }
-        colorArray[v * 4 + 3] = 65535;
-      }
-    }
-
     let positionView;
     let normalView;
-    let colorView = null;
     let positionAccessor;
     let normalAccessor;
     let nodeScale = null;
@@ -630,12 +534,6 @@ export function writeGlb(mesh, options = {}) {
         encoder.encodeVertexBuffer(normalBytes, vertexCount, 4),
         { count: vertexCount, stride: 4, mode: "ATTRIBUTES", target: TARGET_ARRAY_BUFFER }
       );
-      if (colorArray) {
-        colorView = pushCompressedView(
-          encoder.encodeVertexBuffer(typedArrayBytes(colorArray), vertexCount, 8),
-          { count: vertexCount, stride: 8, mode: "ATTRIBUTES", target: TARGET_ARRAY_BUFFER }
-        );
-      }
       nodeScale = quantized.scale;
       nodeTranslation = quantized.translation;
       positionAccessor = {
@@ -659,9 +557,6 @@ export function writeGlb(mesh, options = {}) {
     } else {
       positionView = pushView(typedArrayBytes(welded.positions), TARGET_ARRAY_BUFFER);
       normalView = pushView(typedArrayBytes(welded.normals), TARGET_ARRAY_BUFFER);
-      if (colorArray) {
-        colorView = pushView(typedArrayBytes(colorArray), TARGET_ARRAY_BUFFER);
-      }
       positionAccessor = {
         bufferView: positionView,
         byteOffset: 0,
@@ -708,18 +603,6 @@ export function writeGlb(mesh, options = {}) {
     const positionAccessorIndex = accessors.length - 1;
     accessors.push(normalAccessor);
     const normalAccessorIndex = accessors.length - 1;
-    let colorAccessorIndex = null;
-    if (colorArray) {
-      accessors.push({
-        bufferView: colorView,
-        byteOffset: 0,
-        componentType: COMPONENT_UNSIGNED_SHORT,
-        count: vertexCount,
-        type: "VEC4",
-        normalized: true,
-      });
-      colorAccessorIndex = accessors.length - 1;
-    }
     accessors.push({
       bufferView: indexView,
       byteOffset: 0,
@@ -729,97 +612,27 @@ export function writeGlb(mesh, options = {}) {
     });
     const indexAccessorIndex = accessors.length - 1;
 
-    // Morph targets: POSITION (and NORMAL) deltas RELATIVE to the base attributes
-    // above, one accessor pair per target. min/max are the DELTAS' bounds, which is
-    // what the spec asks of a target POSITION accessor and what a viewer uses to size
-    // the morphed bounding box.
-    const targetAccessors = morphTargets?.map((target, ordinal) => {
-      const positionDeltas = target?.positionDeltas;
-      if (!(positionDeltas instanceof Float32Array) || positionDeltas.length !== welded.positions.length) {
-        throw new Error(
-          `writeGlb: morph target ${ordinal} has ${positionDeltas?.length ?? "no"} position `
-          + `deltas for ${welded.positions.length / 3} vertices`
-        );
-      }
-      const deltaBounds = boundsForPositions(positionDeltas);
-      accessors.push({
-        bufferView: pushView(typedArrayBytes(positionDeltas), TARGET_ARRAY_BUFFER),
-        byteOffset: 0,
-        componentType: COMPONENT_FLOAT,
-        count: vertexCount,
-        type: "VEC3",
-        min: deltaBounds.min,
-        max: deltaBounds.max,
-      });
-      const entry = { POSITION: accessors.length - 1 };
-      const normalDeltas = target?.normalDeltas;
-      if (normalDeltas) {
-        if (!(normalDeltas instanceof Float32Array) || normalDeltas.length !== welded.positions.length) {
-          throw new Error(
-            `writeGlb: morph target ${ordinal} has ${normalDeltas.length} normal deltas for `
-            + `${welded.positions.length / 3} vertices`
-          );
-        }
-        accessors.push({
-          bufferView: pushView(typedArrayBytes(normalDeltas), TARGET_ARRAY_BUFFER),
-          byteOffset: 0,
-          componentType: COMPONENT_FLOAT,
-          count: vertexCount,
-          type: "VEC3",
-        });
-        entry.NORMAL = accessors.length - 1;
-      }
-      return entry;
-    }) || null;
-
     materials.push(
-      materialFor(
-        colorArray ? "#ffffff" : input?.color,
-        input?.materialName || input?.name,
-        input?.opacity ?? null,
-        // The finish is independent of where the colour came from: a per-vertex-coloured
-        // primitive whitens its baseColorFactor and keeps its authored metal.
-        input?.material ?? null
-      )
+      materialFor(input?.color, input?.materialName || input?.name, input?.opacity ?? null, input?.material ?? null)
     );
     const primitive = {
-      attributes: {
-        POSITION: positionAccessorIndex,
-        NORMAL: normalAccessorIndex,
-        ...(colorAccessorIndex === null ? {} : { COLOR_0: colorAccessorIndex }),
-      },
+      attributes: { POSITION: positionAccessorIndex, NORMAL: normalAccessorIndex },
       indices: indexAccessorIndex,
       material: materials.length - 1,
       mode: MODE_TRIANGLES,
-      ...(targetAccessors ? { targets: targetAccessors } : {}),
     };
     // An input with no `node` key gets a group of its own. The prefix is the
     // ESCAPE `\0`, never the byte: a raw control character makes this file binary
-    // to grep and ripgrep, and every later search of the writer that emits every
-    // GLB the product ships would silently find nothing. No occurrence id can
-    // contain it, so the key can never collide with a caller's.
+    // to grep and ripgrep, and every later search of it would silently find
+    // nothing. No occurrence id can contain it, so the key can never collide with
+    // a caller's.
     const groupKey = input?.node === undefined || input?.node === null
       ? `\0primitive:${groups.size}`
       : String(input.node);
     let group = groups.get(groupKey);
     if (!group) {
-      group = {
-        key: groupKey,
-        input,
-        primitives: [],
-        quantization: null,
-        targetCount: targetAccessors ? targetAccessors.length : 0,
-      };
+      group = { key: groupKey, input, primitives: [], quantization: null };
       groups.set(groupKey, group);
-    } else if (group.targetCount !== (targetAccessors ? targetAccessors.length : 0)) {
-      // `weights` is a MESH property, not a primitive one, so every primitive on one
-      // node has to agree about how many targets it has. Two colours of one tendon
-      // that disagree would put the file's weights on shapes half of it does not have.
-      throw new Error(
-        `writeGlb: node ${JSON.stringify(groupKey)} mixes primitives with `
-        + `${group.targetCount} and ${targetAccessors ? targetAccessors.length : 0} morph `
-        + "targets, and glTF weights are per MESH"
-      );
     } else if (render) {
       // Quantization puts the primitive's dequantizing scale/translation on the NODE, so
       // two primitives on one node would need two different node transforms. Refuse
@@ -836,16 +649,8 @@ export function writeGlb(mesh, options = {}) {
   }
 
   const nodeIndexByKey = new Map();
-  const targetCountByKey = new Map();
   for (const group of groups.values()) {
-    targetCountByKey.set(group.key, group.targetCount);
-    meshes.push({
-      primitives: group.primitives,
-      // The mesh's DEFAULT morph weights, all zero: the base attributes are the
-      // clip's opening pose, so a file nothing is playing shows the tube where the
-      // clip starts it, exactly as `rest` does for the rigid channels.
-      ...(group.targetCount ? { weights: new Array(group.targetCount).fill(0) } : {}),
-    });
+    meshes.push({ primitives: group.primitives });
     const node = {
       mesh: meshes.length - 1,
       name: sanitizeName(group.input?.name || name, name),
@@ -890,12 +695,7 @@ export function writeGlb(mesh, options = {}) {
     nodes.push(node);
   }
 
-  const gltfAnimations = buildAnimations(animations, {
-    nodeIndexByKey,
-    targetCountByKey,
-    accessors,
-    pushView,
-  });
+  const gltfAnimations = buildAnimations(animations, { nodeIndexByKey, accessors, pushView });
 
   // Both quantization extensions are REQUIRED for a render artifact: a loader without
   // them would misread the integers as world units, which is worse than refusing the

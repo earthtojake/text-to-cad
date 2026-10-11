@@ -16,12 +16,12 @@ import types
 import unittest
 from unittest import mock
 
-from cadgen.daemon import artifacts, broker, client, server, transport, worker
+from cadgen.daemon import artifacts, broker, client, executors, pool, server, transport, worker
 from cadgen.daemon.jobs import JobLedger
 from tests.python.support.tmp_root import generated_cad_directory
 
 
-PRODUCER = {"scheme": 19, "surfFormat": 2, "build123d": "0.10", "ocp": "7.9.3.1", "cadqueryOcp": "7.9.3.1.1"}
+PRODUCER = {"scheme": 20, "surfFormat": 3, "build123d": "0.10", "ocp": "7.9.3.1", "cadqueryOcp": "7.9.3.1.1"}
 
 
 def surface_request(**changes):
@@ -29,6 +29,12 @@ def surface_request(**changes):
                "producer": dict(PRODUCER), "expected_objects": {"d" * 64: "e" * 64}, "force": False}
     request.update(changes)
     return request
+
+
+def done(value):
+    future = concurrent.futures.Future()
+    future.set_result(value)
+    return future
 
 
 def noticing_log():
@@ -150,7 +156,8 @@ class ArtifactRequests(unittest.TestCase):
         self.assertEqual(normalized, surface_request())
         for change in ({"tree": "f" * 64}, {"cids": ["b" * 16]}, {"producer": {**PRODUCER, "ocp": "new"}},
                        {"producer": {**PRODUCER, "cadqueryOcp": "other"}}, {"force": True},
-                       {"expected_objects": {"d" * 64: "f" * 64}}, {"expected_objects": {"f" * 64: "e" * 64}}):
+                       {"expected_objects": {"d" * 64: "f" * 64}}, {"expected_objects": {"f" * 64: "e" * 64}},
+                       {"tessellations": [{"chordTolerance": 5e-4, "angleTolerance": 0.35}]}):
             with self.subTest(change=change):
                 self.assertNotEqual(key, artifacts.request_key(surface_request(**change)))
 
@@ -160,12 +167,141 @@ class ArtifactRequests(unittest.TestCase):
                    surface_request(cids=["B" * 16]), surface_request(cids=["b" * 16] * 2),
                    surface_request(force=1), surface_request(expected_objects={"short": "e" * 64}),
                    surface_request(producer={**PRODUCER, "ocp": "unknown"}),
-                   surface_request(producer={**PRODUCER, "scheme": True})]
+                   surface_request(producer={**PRODUCER, "scheme": True}),
+                   surface_request(tessellations=[{"chordTolerance": 5e-4}]),
+                   surface_request(tessellations=[{"chordTolerance": 1e-9, "angleTolerance": 0.35}])]
         with mock.patch.object(client, "run_artifact") as dispatch:
             for request in invalid:
                 with self.subTest(request=request), self.assertRaises(ValueError):
                     artifacts.submit_artifact(request)
             dispatch.assert_not_called()
+
+    def test_a_meshes_request_names_this_cadgens_mesh_keys_once_each_in_one_order(self):
+        from cadgen.store.meshes import TESSELLATOR_VERSION, tessellation_key
+
+        keys = [tessellation_key(digit * 64) for digit in "21"]
+        self.assertEqual(artifacts.normalize_request({"kind": "meshes", "keys": keys}),
+                         {"kind": "meshes", "keys": sorted(keys)})
+        self.assertEqual(artifacts.request_key({"kind": "meshes", "keys": keys}),
+                         artifacts.request_key({"kind": "meshes", "keys": keys[::-1]}), "an order splits no request")
+        older = keys[0].replace(f"-t{TESSELLATOR_VERSION}-", f"-t{TESSELLATOR_VERSION - 1}-")
+        crowd = [tessellation_key(f"{n:064x}") for n in range(artifacts.MESH_KEYS_MAX + 1)]
+        # Finer than any request may ask to have meshed: refused where it enters, as a
+        # surfaces request's tessellations are.
+        too_fine = [tessellation_key("3" * 64, 1e-6, 0.35), tessellation_key("3" * 64, 1.5e-3, 1e-3)]
+        for request in ({"kind": "meshes"}, {"kind": "meshes", "keys": []}, {"kind": "meshes", "keys": keys * 2},
+                        {"kind": "meshes", "keys": keys, "tree": "a" * 64}, {"kind": "meshes", "keys": [older]},
+                        {"kind": "meshes", "keys": ["../escape"]}, {"kind": "meshes", "keys": crowd},
+                        *({"kind": "meshes", "keys": [*keys, key]} for key in too_fine)):
+            with self.subTest(request=request), self.assertRaises(ValueError):
+                artifacts.normalize_request(request)
+
+    def test_a_sections_request_names_each_component_cut_once_in_one_canonical_order(self):
+        component = {"kind": "native", "codec": "bintools-v4", "brep": "b" * 64, "contentHash": "c" * 64,
+                     "faceColors": {}}
+        items = [{"component": component, "normal": [0, 0, 2], "offset": 4},
+                 {"component": component, "normal": [1, 0, 0], "offset": -1.5}]
+        normalized = artifacts.normalize_request({"kind": "sections", "items": items})
+        # The plane is the unit normal and the offset along it, as every key and cut uses it.
+        self.assertIn({"component": component, "normal": [0.0, 0.0, 1.0], "offset": 2.0}, normalized["items"])
+        self.assertEqual(artifacts.request_key({"kind": "sections", "items": items}),
+                         artifacts.request_key({"kind": "sections", "items": items[::-1]}), "an order splits no request")
+        crowd = [{"component": component, "normal": [0, 0, 1], "offset": n}
+                 for n in range(artifacts.SECTION_ITEMS_MAX + 1)]
+        for request in ({"kind": "sections"}, {"kind": "sections", "items": []},
+                        {"kind": "sections", "items": items * 2}, {"kind": "sections", "items": crowd},
+                        {"kind": "sections", "items": items, "tree": "a" * 64},
+                        {"kind": "sections", "items": [{**items[0], "normal": [0, 0, 0]}]},
+                        {"kind": "sections", "items": [{**items[0], "component": {**component, "script": "x.py"}}]},
+                        {"kind": "sections", "items": [{**items[0], "component": {**component, "brep": "../x"}}]}):
+            with self.subTest(request=request), self.assertRaises(ValueError):
+                artifacts.normalize_request(request)
+
+    def test_a_canonical_plane_is_its_own_canonical_form_so_a_worker_keys_the_request_the_client_did(self):
+        # The client keys its items canonical; the worker canonicalizes them again. Dividing a
+        # rounded normal by its length again moved a 1.5 m offset by 1e-9 a pass, so the keys
+        # split and every section through a rotated part failed. Over many placements -- turned,
+        # moved metres out, some scaled -- canonical(canonical(p)) is canonical(p), bit for bit.
+        import math
+        import random
+
+        from cadgen.section_drawing import SECTION_FRAMES, occurrence_plane
+        from cadgen.store.sections import canonical_plane
+
+        component = {"kind": "native", "codec": "bintools-v4", "brep": "b" * 64, "contentHash": "c" * 64,
+                     "faceColors": {}}
+        rng = random.Random(568)
+
+        def placement():
+            # A random rotation (a unit quaternion), scaled 1, 2 or 0.25, moved up to 5 m.
+            w, x, y, z = (rng.gauss(0, 1) for _ in range(4))
+            norm = math.sqrt(w * w + x * x + y * y + z * z)
+            w, x, y, z = w / norm, x / norm, y / norm, z / norm
+            rotation = [[1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+                        [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+                        [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]]
+            scale = rng.choice((1.0, 1.0, 1.0, 2.0, 0.25))
+            matrix = []
+            for row in range(3):
+                matrix += [scale * value for value in rotation[row]] + [rng.uniform(-5000, 5000)]
+            return matrix + [0.0, 0.0, 0.0, 1.0]
+
+        items = []
+        for _ in range(2000):
+            plane = rng.choice(sorted(SECTION_FRAMES))
+            normal, offset = occurrence_plane(placement(), SECTION_FRAMES[plane][0], rng.uniform(-3000, 3000))
+            unit, distance = canonical_plane(normal, offset)
+            self.assertEqual((unit, distance), canonical_plane(unit, distance), (normal, offset))
+            self.assertAlmostEqual(1.0, math.sqrt(sum(value * value for value in unit)), delta=1e-9)
+            items.append({"component": component, "normal": list(unit), "offset": distance})
+        for start in range(0, len(items), 250):
+            request = {"kind": "sections", "items": items[start:start + 250]}
+            payload = artifacts.result_frame(artifacts.normalize_request(request), {"keys": []})
+            self.assertEqual({"keys": []}, artifacts.validate_result(request, payload))
+
+    def test_work_is_dealt_one_job_per_cpu_slot_and_every_job_ends_before_a_failure_is_raised(self):
+        def jobs(count, *, warm, per_started_worker=32, cpus=4):
+            with mock.patch.object(executors, "use_daemon", return_value=warm is not None), \
+                    mock.patch.object(pool, "spare_count", return_value=warm or 0), \
+                    mock.patch.object(broker, "job_limit", return_value=cpus):
+                dealt = artifacts.deal(range(count), per_started_worker=per_started_worker)
+            self.assertEqual(sorted(item for job in dealt for item in job), list(range(count)), "each item once")
+            return [len(job) for job in dealt]
+
+        self.assertEqual(jobs(3, warm=2), [3], "a small model's work stays one job")
+        self.assertEqual(jobs(38, warm=2), [19, 19], "the warm workers share it")
+        self.assertEqual(jobs(100, warm=2), [34, 33, 33], "a job that starts a worker has 32 items to repay it")
+        self.assertEqual(jobs(256, warm=2), [64, 64, 64, 64], "no more jobs than CPU slots")
+        self.assertEqual(jobs(38, warm=None), [38], "without a daemon every job starts a worker")
+        self.assertEqual(jobs(200, warm=None, per_started_worker=96), [100, 100])
+        self.assertEqual(artifacts.deal([], per_started_worker=1), [])
+
+        release = threading.Event()
+        started, finished = [], []
+
+        def submit(request, *, store_root=None):
+            future = concurrent.futures.Future()
+            started.append(request["n"])
+
+            def run():
+                if request["n"] == 0:
+                    future.set_exception(artifacts.ArtifactJobError("the first job failed"))
+                    release.set()
+                    return
+                release.wait(3)
+                finished.append(request["n"])
+                future.set_result(request["n"])
+
+            threading.Thread(target=run).start()
+            return future
+
+        with mock.patch.object(artifacts, "submit_artifact", side_effect=submit), \
+                self.assertRaisesRegex(artifacts.ArtifactJobError, "the first job failed"):
+            artifacts.resolve_artifacts([{"n": n} for n in range(3)])
+        self.assertEqual(started, [0, 1, 2], "every job is started before any is awaited")
+        self.assertEqual(sorted(finished), [1, 2], "the failure waits for the others to finish")
+        with mock.patch.object(artifacts, "submit_artifact", side_effect=lambda request, **_: done(request["n"])):
+            self.assertEqual(artifacts.resolve_artifacts([{"n": n} for n in range(3)]), [0, 1, 2])
 
     def test_importing_artifact_client_supervisor_and_worker_is_kernel_free(self):
         script = """import sys
@@ -270,7 +406,7 @@ class ArtifactCoalescing(unittest.TestCase):
             owner.result(5)
             follower.result(5)
         pool.acquire.assert_called_once_with("", dependency=True, on_start=mock.ANY)
-        pool.release.assert_called_once_with(running, healthy=True)
+        pool.release.assert_called_once_with(running, healthy=True, cancelled=False)
         self.assertEqual(running.request["kind"], "artifact")
         self.assertEqual(running.request["argv"], [])
         self.assertEqual(first.frames[-1], {"exit": int(fail)})
@@ -318,7 +454,7 @@ class ArtifactCoalescing(unittest.TestCase):
             follower.result(5)
         self.assertFalse(running.killed)
         pool.acquire.assert_called_once_with("", dependency=False, on_start=mock.ANY)
-        pool.release.assert_called_once_with(running, healthy=True)
+        pool.release.assert_called_once_with(running, healthy=True, cancelled=False)
         self.assertEqual(late.frames[-1], {"exit": 0})
         self.assertEqual(sorted(job["state"] for job in ledger.snapshot()), ["done", "done"])
         self.assertEqual(registry.snapshot()["inflight"], 0)
@@ -367,7 +503,7 @@ class ArtifactCoalescing(unittest.TestCase):
             follower[0].result()
         self.assertEqual(running.answers, [True, True, False])
         self.assertFalse(running.killed)
-        pool.release.assert_called_once_with(running, healthy=True)
+        pool.release.assert_called_once_with(running, healthy=True, cancelled=False)
         self.assertEqual(registry.snapshot()["inflight"], 0)
 
     def test_a_model_build_whose_client_left_is_still_stopped(self):
@@ -390,7 +526,32 @@ class ArtifactCoalescing(unittest.TestCase):
             gone.disconnected.set()
             build.result(5)
         self.assertTrue(running.killed, "a stopped build kept running")
-        pool.release.assert_called_once_with(running, healthy=False)
+        pool.release.assert_called_once_with(running, healthy=False, cancelled=True)
+
+    def test_a_wrong_result_fails_the_job_its_client_is_still_waiting_on(self):
+        # A section whose plane was canonicalized twice came back keyed to other inputs. That is
+        # the job failing, with its reason, to a client still connected -- never a cancel, which
+        # reads as "ask again" and hid it, killing a warm worker per request.
+        class WrongWorker(ResultWorker):
+            def frames(inner, **kwargs):
+                yield {"artifactResult": artifacts.result_frame(surface_request(force=True), {})}
+                yield {"exit": 0}
+
+        registry, ledger, pool, running = broker.Broker(1), JobLedger(), mock.Mock(), WrongWorker()
+        pool.acquire.return_value = running
+        connection = Connection()
+        with mock.patch.object(server, "_BROKER", registry), mock.patch.object(server, "_JOBS", ledger), \
+             mock.patch.object(server, "_POOL", pool), mock.patch.object(server, "_log"):
+            server._handle_request(connection, {"tool": "artifact", "argv": [], "artifact": surface_request(),
+                                                "store_root": "/store"})
+        (job,) = ledger.snapshot()
+        self.assertEqual(job["state"], "failed")
+        self.assertIn("invalid artifact worker result", job["error"])
+        self.assertEqual(connection.frames[-1], {"exit": 1})
+        self.assertTrue(any("invalid artifact worker result" in str(frame.get("data", "")) for frame in connection.frames))
+        self.assertTrue(running.killed, "a worker that broke the protocol was reused")
+        pool.release.assert_called_once_with(running, healthy=False, cancelled=False)
+        self.assertEqual(registry.snapshot()["inflight"], 0)
 
     def test_admission_failure_finishes_coalescing_without_starting_work(self):
         registry, ledger, pool = broker.Broker(1), JobLedger(), mock.Mock()
@@ -587,6 +748,30 @@ class ArtifactLeases(unittest.TestCase):
         self.fake.derive.assert_called_once_with("a" * 64, ["b" * 16, "c" * 16], producer=PRODUCER,
                                                expected_objects={"d" * 64: "e" * 64}, force=False,
                                                keep_going=None)
+
+    def test_a_build_does_the_first_share_itself_and_deals_only_what_repays_a_started_worker(self):
+        dispatched = []
+
+        def dispatch(request, root):
+            dispatched.append((request, root))
+            return done({"components": []})
+
+        requests = [surface_request(), surface_request(cids=["f" * 16])]
+        with mock.patch.object(executors, "use_daemon", return_value=True), \
+                mock.patch.object(pool, "spare_count", return_value=2), \
+                mock.patch.object(broker, "job_limit", return_value=4), \
+                mock.patch.object(artifacts, "_dispatch", side_effect=dispatch), \
+                broker.held("build", required=True), artifacts.worker_context(self.root):
+            self.assertEqual([len(share) for share in artifacts.deal(range(40), per_started_worker=32)], [40],
+                             "work that repays no started worker stays in the build, though spares are warm")
+            self.assertEqual([len(share) for share in artifacts.deal(range(100), per_started_worker=32)],
+                             [34, 33, 33])
+            results = artifacts.resolve_artifacts(requests, store_root=self.root)
+        self.assertEqual(results, [{"components": ["b" * 16]}, {"components": []}])
+        self.fake.derive.assert_called_once()
+        self.assertEqual(self.fake.derive.call_args.args, ("a" * 64, ["b" * 16, "c" * 16]), "the first share, here")
+        self.assertEqual(dispatched, [(artifacts.normalize_request(requests[1]), self.root)], "the rest, to the pool")
+        self.assertEqual(self.settled()["peakRunning"], 1)
 
     def test_worker_source_isolation_and_failure_release_real_lease(self):
         readable = Path(self.root) / "unrelated.py"

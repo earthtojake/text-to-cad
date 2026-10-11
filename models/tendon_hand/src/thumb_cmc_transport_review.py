@@ -3,7 +3,7 @@ from cadgen import build123d as bd,step
 from lib.thumb_cmc_transport import thumb_cmc_packet
 from lib.bowden_guide import make_bowden_body
 
-@step(out='../STEP/thumb_cmc_transport_review.step',mesh_tolerance=.006,mesh_angular_tolerance=.035)
+@step(out='../STEP/thumb_cmc_transport_review.step',mesh_tolerance=.006,mesh_angular_tolerance=0.05)
 def thumb_cmc_transport_review():
     children=[]
     for row in thumb_cmc_packet():

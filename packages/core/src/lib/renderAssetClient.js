@@ -45,9 +45,7 @@ const threeMfCache = new Map();
 const selectorCache = new Map();
 const displayEdgeCache = new Map();
 const topologyIndexCache = new Map();
-const urdfCache = new Map();
-const srdfCache = new Map();
-const sdfCache = new Map();
+const robotCache = new Map();
 const GIT_LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1";
 const GIT_LFS_POINTER_SCAN_BYTES = 512;
 
@@ -301,10 +299,9 @@ export async function loadRenderSurf(url, {
   memoryEstimateBytes,
   tessellationCache,
 } = {}) {
-  // Exact-surface component artifact (design/surface-rendering.md): the
-  // worker builds only the display payload. A compatible shared-cache entry
-  // contains geometry, display edges, bounds and appearance, so this path can
-  // skip both selector construction and the .surf request.
+  // The worker builds only the display payload. A stored mesh carries
+  // geometry, display edges, bounds and appearance, so this path skips both
+  // the selector join and the selector table request.
   const cacheKey = surfTessellationCacheKey(url, tessellation, identity);
   const meshData = await loadCached(glbCache, cacheKey, async () => {
     return (await loadSurfPayload(url, {
@@ -611,13 +608,14 @@ export function peekRenderDisplayEdgeBundle(glbUrl, { resources } = {}) {
   return peekCached(displayEdgeCache, cadResourceCacheKey(resources, glbUrl));
 }
 
-// --- Exact-surface topology (design/surface-rendering.md R3) ---------------
+// --- Exact topology ----------------------------------------------------------
 //
-// The .surf carries the same topology the GLB's STEP_TOPOLOGY tables did.
+// cadgen's selector table carries the topology the GLB's STEP_TOPOLOGY tables
+// did, and the page joins it to the stored mesh (surf/selectorTable.js).
 // Worker requests declare whether they need render data, selectors, or both.
-// Initial display uses render only; selection and measurement synthesize the
-// selector bundle on demand. LOD requests both only for already-used topology;
-// later demand must use the displayed level's concrete tessellation key.
+// Initial display uses render only; selection and measurement join the table
+// on demand. LOD requests both only for already-used topology; later demand
+// must use the displayed level's concrete tessellation key.
 
 const surfPayloadCache = new Map();
 
@@ -702,7 +700,7 @@ function typedArrayBytesOf(value, seen, visited = new Set()) {
       return 0;
     }
     seen.add(value.buffer);
-    // A short view retains its whole backing allocation. TESS cache entries
+    // A short view retains its whole backing allocation. Stored mesh bodies
     // deliberately decode as disjoint zero-copy views over one packed buffer;
     // charging the first view's length and suppressing the rest understated
     // those entries by most of their actual retained bytes.
@@ -775,7 +773,7 @@ export function surfTessellationCacheKey(_url, tessellation, identity) {
   return resolvedTessellationIdentity(
     String(identity?.surfaceInput || ""),
     String(identity?.surfaceObject || ""),
-    tessellation || {},
+    tessellation,
   );
 }
 
@@ -818,65 +816,46 @@ function capabilityCacheKey(capabilities) {
 
 async function loadSurfPayloadInline(url, { signal, resources, tessellation, identity, capabilities, tessellationCache } = {}) {
   const [
-    { parseSurf },
     {
       decodeComponentTessellation,
       surfIndexFromCacheEntry,
       tessellationCacheKey,
     },
-    { tessellateComponent },
     { buildMeshDataFromSurf },
-    { buildSelectorBundleFromSurf },
+    { joinSelectorTable, parseSelectorTable },
   ] = await Promise.all([
-    import("./surf/container.js"),
     import("./surf/tessellationCache.js"),
-    import("./surf/tessellate.js"),
     import("./surf/surfMeshData.js"),
-    import("./surf/surfSelectorBundle.js"),
+    import("./surf/selectorTable.js"),
   ]);
   const surfaceInput = String(identity?.surfaceInput || "");
   const surfaceObject = String(identity?.surfaceObject || "");
+  const probe = identity?.tessellationProbe || null;
   // As the worker path takes them (`loadSurfComponentInWorker`): bytes a batched read already
-  // verified for this probe, or the caller's word that the tier was probed and holds nothing.
+  // verified for this probe, else this tier's entry read here. cadgen produces every mesh; one
+  // the store does not hold is a probe miss, which the caller answers by asking for it.
   const readEntry = identity?.tessellationEntry instanceof Uint8Array ? identity.tessellationEntry : null;
-  const strictProbe = Boolean(identity?.tessellationProbe);
-  if (!tessellationCache && strictProbe && !readEntry) throw new TessellationCacheProbeMissError(identity.tessellationProbe);
-  let cached = null;
-  if (readEntry) {
-    cached = decodeComponentTessellation(readEntry, {
+  const cached = readEntry
+    ? decodeComponentTessellation(readEntry, {
       surfaceInput, ...(surfaceObject ? { surfaceObject } : {}),
-      tessellationInput: tessellationCacheKey(surfaceInput, tessellation || {}), tessellation: tessellation || {},
+      tessellationInput: tessellationCacheKey(surfaceInput, tessellation), tessellation,
+    })
+    : await tessellationCache?.getCachedComponentEntry(surfaceInput, tessellation, {
+      signal, probe, strictProbe: true,
     });
-    if (!cached && strictProbe) throw new TessellationCacheProbeMissError(identity.tessellationProbe);
-  } else if (strictProbe || identity?.tessellationProbed !== true) {
-    cached = await tessellationCache?.getCachedComponentEntry(surfaceInput, tessellation || {}, {
-      signal,
-      probe: identity?.tessellationProbe || null,
-      strictProbe,
-    });
+  if (!cached) throw new TessellationCacheProbeMissError(probe);
+  const meshData = capabilities.render ? buildMeshDataFromSurf(surfIndexFromCacheEntry(cached), cached.component) : null;
+  // Drawing needs only the mesh; selectors also need the component's selector table
+  // (`url`: the one its surface request answered with), joined to this mesh.
+  if (!capabilities.selectors) {
+    return { meshData };
   }
-  const cachedIndex = surfIndexFromCacheEntry(cached);
-  // Render-only cache hits are complete without the exact-surface container.
-  // Selectors need its topology tables; incomplete older entries do too.
-  if (capabilities.render && !capabilities.selectors && cached && cachedIndex) {
-    return {
-      meshData: buildMeshDataFromSurf(cachedIndex, null, { component: cached.component }),
-    };
-  }
-  if (!url) throw new Error("Exact SURF bytes are not ready for this component");
+  if (!url) throw new Error("The selector table is not ready for this component");
   const buffer = await loadRenderArrayBuffer(url, { signal, resources });
-  assertNotGitLfsPointer(buffer, url, "SURF render asset");
-  const { index, floats } = parseSurf(buffer);
-  // Same shared-cache behavior as the worker path: a registered provider
-  // turns a content-addressed component into a cache hit (tessellation
-  // skipped) or a write-back; no provider tessellates exactly as before.
-  const component = cached?.component || tessellateComponent(index, floats, tessellation || {});
-  if (!cached || !cachedIndex) {
-    await tessellationCache?.writeBackComponentEntry(surfaceInput, surfaceObject, tessellation || {}, component, index);
-  }
+  assertNotGitLfsPointer(buffer, url, "selector table asset");
   return {
-    ...(capabilities.render ? { meshData: buildMeshDataFromSurf(index, floats, { component }) } : {}),
-    ...(capabilities.selectors ? { bundle: buildSelectorBundleFromSurf(index, floats, { component }) } : {}),
+    ...(meshData ? { meshData } : {}),
+    bundle: joinSelectorTable(parseSelectorTable(buffer), cached.component),
   };
 }
 
@@ -902,9 +881,9 @@ async function loadSurfPayload(url, {
       tessellationCache,
     });
     if (workerPayload) {
-      // Once a worker accepts the job, keep expensive tessellation off the UI
-      // thread even when that job fails. Propagate the failure; inline is only
-      // the compatibility path for environments where Workers never started.
+      // Once a worker accepts the job, keep decoding and selector building off
+      // the UI thread even when that job fails. Propagate the failure; inline
+      // is only the path for environments where Workers never started.
       return workerPayload;
     }
     return loadSurfPayloadInline(url, { signal, resources, tessellation, identity, capabilities, tessellationCache });
@@ -916,8 +895,10 @@ async function loadSurfPayload(url, {
 
 /**
  * Render data and, when requested, selectors for one concrete tessellation.
- * A render-only refinement passes selectors:false; the caller reconciles any
- * topology demanded during that load before publishing new triangles.
+ * `url` is the component's selector table (its surface ticket's `selectorsUrl`),
+ * read only with `selectors`. A render-only refinement passes selectors:false;
+ * the caller reconciles any topology demanded during that load before
+ * publishing new triangles.
  */
 export async function loadRenderSurfPayloadAtLevel(url, {
   signal,
@@ -939,7 +920,9 @@ export async function loadRenderSurfPayloadAtLevel(url, {
   });
 }
 
-export async function loadRenderSurfSelectorBundle(surfUrl, {
+/** The selector bundle of one component at one tessellation: cadgen's selector table
+ * (`selectorsUrl`, its surface ticket's) joined to the mesh at that level. */
+export async function loadRenderSurfSelectorBundle(selectorsUrl, {
   signal,
   resources,
   tessellation,
@@ -947,9 +930,9 @@ export async function loadRenderSurfSelectorBundle(surfUrl, {
   memoryEstimateBytes,
   tessellationCache,
 } = {}) {
-  const cacheKey = surfTessellationCacheKey(surfUrl, tessellation, identity);
+  const cacheKey = surfTessellationCacheKey(selectorsUrl, tessellation, identity);
   const bundle = await loadCached(selectorCache, cacheKey, async () => {
-    return (await loadSurfPayload(surfUrl, {
+    return (await loadSurfPayload(selectorsUrl, {
       signal,
       resources,
       tessellation,
@@ -964,71 +947,44 @@ export async function loadRenderSurfSelectorBundle(surfUrl, {
   return bundle;
 }
 
-function urdfCacheKey(url) {
-  return String(url || "");
-}
-
-export async function loadRenderUrdf(url, { signal, resources } = {}) {
-  const cacheKey = cadResourceCacheKey(resources, urdfCacheKey(url));
-  const payload = await loadCached(urdfCache, cacheKey, async () => {
-    const [xmlText, { parseUrdf }] = await Promise.all([
-      loadRenderText(url, { signal, resources }),
-      import("./urdf/parseUrdf.js"),
-    ]);
-    return parseUrdf(xmlText, { sourceUrl: url, resolveResource: resources ? (reference) => resources.resolveDependency(url, reference, { kind: "robot" }) : undefined });
+/**
+ * A robot as cadgen resolved it (`cadgen.robot_payload`, `GET /__cad/robot`): the articulation
+ * to play and the visuals to draw. Cached for the page by file and revision, as a description
+ * once was, so a warm reopen is whole on the first render; the page validates nothing of it but
+ * the schema it reads.
+ *
+ * @param {string} file  The description's absolute path, as the catalog names it.
+ * @param {{ client: { robot: Function }, revision?: string, signal?: AbortSignal }} options
+ */
+export async function loadRenderRobot(file, { client, revision = "", signal } = {}) {
+  const cacheKey = robotCacheKey(file, revision);
+  const payload = await loadCached(robotCache, cacheKey, async () => {
+    const robot = await client.robot(file, { signal });
+    if (robot?.schemaVersion !== ROBOT_PAYLOAD_SCHEMA_VERSION) {
+      throw new RobotSchemaError(robot?.schemaVersion);
+    }
+    return robot;
   }, { cachePending: !signal });
-  return finalizeCached(urdfCache, cacheKey, payload);
+  return finalizeCached(robotCache, cacheKey, payload);
 }
 
-export function peekRenderUrdf(url, { resources } = {}) {
-  return peekCached(urdfCache, cadResourceCacheKey(resources, urdfCacheKey(url)));
+export function peekRenderRobot(file, { revision = "" } = {}) {
+  return peekCached(robotCache, robotCacheKey(file, revision));
 }
 
-function srdfCacheKey(srdfUrl, urdfUrl = "") {
-  return [srdfUrl, urdfUrl].filter(Boolean).join("::");
+function robotCacheKey(file, revision) {
+  return `${String(file || "")}::${String(revision || "")}`;
 }
 
-export async function loadRenderSrdf(srdfUrl, { signal, resources, urdfUrl = "" } = {}) {
-  const cacheKey = cadResourceCacheKey(resources, srdfCacheKey(srdfUrl, urdfUrl));
-  const payload = await loadCached(srdfCache, cacheKey, async () => {
-    const [srdfText, urdfData, { parseSrdf, motionFromSrdf }] = await Promise.all([
-      loadRenderText(srdfUrl, { signal, resources }),
-      loadRenderUrdf(urdfUrl, { signal, resources }),
-      import("./urdf/parseSrdf.js"),
-    ]);
-    const srdfData = parseSrdf(srdfText, { sourceUrl: srdfUrl, urdfData });
-    return {
-      srdfData,
-      urdfData: {
-        ...urdfData,
-        motion: motionFromSrdf(srdfData),
-        srdf: srdfData
-      }
-    };
-  }, { cachePending: !signal });
-  return finalizeCached(srdfCache, cacheKey, payload);
-}
+/** The payload shape this build reads (`cadgen.robot_payload.ROBOT_PAYLOAD_SCHEMA_VERSION`). */
+export const ROBOT_PAYLOAD_SCHEMA_VERSION = 2;
 
-export function peekRenderSrdf(srdfUrl, { resources, urdfUrl = "" } = {}) {
-  return peekCached(srdfCache, cadResourceCacheKey(resources, srdfCacheKey(srdfUrl, urdfUrl)));
-}
-
-function sdfCacheKey(url) {
-  return String(url || "");
-}
-
-export async function loadRenderSdf(url, { signal, resources } = {}) {
-  const cacheKey = cadResourceCacheKey(resources, sdfCacheKey(url));
-  const payload = await loadCached(sdfCache, cacheKey, async () => {
-    const [xmlText, { parseSdf }] = await Promise.all([
-      loadRenderText(url, { signal, resources }),
-      import("./urdf/parseSdf.js"),
-    ]);
-    return parseSdf(xmlText, { sourceUrl: url, resolveResource: resources ? (reference) => resources.resolveDependency(url, reference, { kind: "robot" }) : undefined });
-  }, { cachePending: !signal });
-  return finalizeCached(sdfCache, cacheKey, payload);
-}
-
-export function peekRenderSdf(url, { resources } = {}) {
-  return peekCached(sdfCache, cadResourceCacheKey(resources, sdfCacheKey(url)));
+/** A payload from a cadgen that does not agree with this build about the shape. */
+export class RobotSchemaError extends Error {
+  constructor(received) {
+    super(`The viewer received a robot payload at schemaVersion ${JSON.stringify(received)}, but this `
+      + `build of the app reads version ${ROBOT_PAYLOAD_SCHEMA_VERSION}.`);
+    this.name = "RobotSchemaError";
+    this.received = received;
+  }
 }

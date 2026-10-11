@@ -4,11 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.python.support.cad_test_roots import IsolatedCadRoots
 from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from build123d import Box, Compound, Location  # noqa: E402
+from build123d import Box, Compound, Location, Solid  # noqa: E402
 
 from cadgen.step_export import build_build123d_step_scene  # noqa: E402
 from cadgen._internal.step_scene_loader import _normalize_label_name  # noqa: E402
@@ -58,6 +59,86 @@ class UnnamedLabelSceneTests(unittest.TestCase):
         self.assertEqual(_normalize_label_name(r"\X4\0001F680\X0\ mount"), "🚀 mount")
         self.assertEqual(_normalize_label_name("café Ã©"), "café Ã©")
         self.assertEqual(_normalize_label_name("bracket"), "bracket")
+
+
+class XcafLabelEntryTests(unittest.TestCase):
+    """Where a STEP gave a product or a usage no name, OCCT writes its label's address there.
+
+    cadgen reads that as no name, in one place (``_normalize_label_name``), so every reader of
+    the document -- its tree and view, ``read_scene``, the rows ``--mode list`` prints -- names
+    the part by what the STEP does call it, else by its occurrence id, never by the address.
+    """
+
+    def test_an_entry_is_no_name_and_a_name_holding_one_is_a_name(self) -> None:
+        for entry in ("0:1:1:2", "[0:1:1:2]", "=>[0:1:1:2]", "=> [ 0:1:1:12 ]", " =>[0:1:1:2] ", "0:1"):
+            self.assertIsNone(_normalize_label_name(entry), entry)
+        for name in ("bracket 0:1:1:2", "0:1:1:2 spare", "=>[0:1:1:2] cover", "gear 3:1", "M3:0.5"):
+            self.assertEqual(_normalize_label_name(name), name)
+
+    def test_a_single_part_document_reads_its_part_name_not_the_entry(self) -> None:
+        import json
+
+        from cadgen import read_scene
+        from cadgen._internal.doors import document_snapshot
+        from cadgen.assembly_lookup import assembly_occurrence_rows
+        from cadgen.step_export import export_build123d_step_file
+        from cadgen.store.index import write_entry
+        from cadgen.store.trees import get_tree, put_tree
+        from cadgen.store.view import view_dir_for
+
+        roots = IsolatedCadRoots(self, prefix="xcaf-label-entry-")
+        # A placed single part, as cadgen saves one: OCCT wraps it in a root product it names
+        # `=>[0:1:1:2]` and names the usage the same; the part's own product is `l_bracket`.
+        part = Location((1.0, 2.0, 3.0)) * Box(10, 8, 4)
+        part.label = "l_bracket"
+        path = roots.cad_root / "l_bracket.step"
+        export_build123d_step_file(part, path)
+        self.assertIn("PRODUCT('=>[0:1:1:2]'", path.read_text(encoding="utf-8"))
+        document, tree = document_snapshot(path)
+
+        # What a cadgen from before the entry rule left for these bytes -- a tree naming the root
+        # and the part `=>[0:1:1:2]` -- is a miss, never served: the bytes compile again.
+        stale = get_tree(tree)
+        stale["label"] = stale["assembly"]["root"]["name"] = "=>[0:1:1:2]"
+        stale["assembly"]["root"]["children"][0]["name"] = stale["occurrences"][0]["name"] = "=>[0:1:1:2]"
+        write_entry("document", document, {"schemaVersion": 4, "tree": put_tree(stale), "kind": "step"})
+        self.assertEqual((document, tree), document_snapshot(path))
+
+        view = view_dir_for(tree, document_hash=document)
+        descriptor = json.loads((view / "assembly.json").read_text(encoding="utf-8"))
+        root = descriptor["assembly"]["root"]
+        self.assertEqual([("o1", "o1"), ("o1.1", "l_bracket")],
+                         [(node["id"], node["name"]) for node in (root, *root["children"])])
+        self.assertEqual([("o1.1", "l_bracket")], [(row["id"], row["name"]) for row in descriptor["occurrences"]])
+        self.assertEqual([("o1.1", "l_bracket")],
+                         [(row["id"], row["name"]) for row in assembly_occurrence_rows(descriptor, None)])
+        scene = read_scene(path)
+        self.assertEqual("o1", scene.roots[0].label)
+        self.assertEqual(["l_bracket"], [leaf.label for leaf in scene.leaves()])
+
+    def test_an_unnamed_occurrence_never_shows_a_siblings_label(self) -> None:
+        from cadgen import read_scene
+        from cadgen.step_export import export_build123d_step_file
+
+        roots = IsolatedCadRoots(self, prefix="xcaf-borrowed-name-")
+        # Four occurrences of one shared product, which the writer names after the last
+        # occurrence's label: `motor`. Two labels read as no name -- an XCAF entry and a
+        # shape kind -- and those occurrences show their ids, not `motor`.
+        box = Box(4, 4, 4)
+        children = []
+        for index, label in enumerate(["=>[0:1:1:3]", "bracket", "SOLID", "motor"]):
+            child = Solid(box.wrapped.Moved(Location((6.0 * index, 0.0, 0.0)).wrapped))  # one TShape: one product
+            child.label = label
+            children.append(child)
+        path = roots.cad_root / "names.step"
+        export_build123d_step_file(Compound(children=children, label="names"), path)
+        self.assertEqual(2, path.read_text(encoding="utf-8").count("PRODUCT("))  # the root, and `motor`
+        self.assertIn("PRODUCT('motor'", path.read_text(encoding="utf-8"))
+
+        scene = read_scene(path)
+        self.assertEqual([("#o1.1", "o1.1"), ("#o1.2", "bracket"), ("#o1.3", "o1.3"), ("#o1.4", "motor")],
+                         [(leaf.ref, leaf.label) for leaf in scene.leaves()])
+        self.assertEqual("#o1.4", scene.resolve("#motor").ref)
 
 
 if __name__ == "__main__":

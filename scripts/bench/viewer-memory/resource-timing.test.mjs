@@ -24,18 +24,18 @@ function entry(name, changes = {}) {
 test('collects same-origin cache/SURF phases after grading without copying body or query data', () => {
   const ignoredBody = { expensive: true };
   const f = fixture([
-    entry('http://localhost:3267/__tess_cache/cid.L1.tess', { body: ignoredBody }),
+    entry('http://localhost:3267/__tess_cache/cid.L1.glb', { body: ignoredBody }),
     entry('http://localhost:3267/__tess_cache/batch'),
     entry('http://localhost:3267/__cad/store?file=%2Fprivate%2Ftree%2Fcomponents%2Fcid.surf&secret=x'),
     entry('http://localhost:3267/files/cid2.surf'),
-    entry('http://other-origin/__tess_cache/private.tess'), entry('http://localhost:3267/assets/main.js'),
+    entry('http://other-origin/__tess_cache/private.glb'), entry('http://localhost:3267/assets/main.js'),
     entry('http://localhost:3267/__cad/store?file=private.step'),
   ]);
   assert.equal(f.requestedSize(), 8192);
   const result = f.collect();
   assert.equal(result.installed, true); assert.equal(result.truncated, false);
   assert.deepEqual(result.entries.map(e => [e.route, e.key]), [
-    ['tess-entry', 'cid.L1.tess'], ['tess-batch', ''], ['surf', 'cid.surf'], ['surf', 'cid2.surf']]);
+    ['tess-entry', 'cid.L1.glb'], ['tess-batch', ''], ['surf', 'cid.surf'], ['surf', 'cid2.surf']]);
   assert.equal(result.entries[0].requestStart, 102); assert.equal(result.entries[0].responseStart, 130);
   assert.equal(result.entries[0].encodedBodySize, 1000);
   assert.equal(result.entries[0].body, undefined); assert.ok(!JSON.stringify(result).includes('secret'));
@@ -43,7 +43,7 @@ test('collects same-origin cache/SURF phases after grading without copying body 
 });
 
 test('preserves cache/opaque zeros, unsupported values and repeated URL requests without inventing methods', () => {
-  const url = 'http://localhost:3267/__tess_cache/cid.tess';
+  const url = 'http://localhost:3267/__tess_cache/cid.glb';
   const f = fixture([entry(url, { transferSize: 0, responseStart: 0, responseStatus: undefined }),
     entry(url, { encodedBodySize: 0, responseStatus: 404, secureConnectionStart: NaN })]);
   const result = f.collect();
@@ -54,8 +54,8 @@ test('preserves cache/opaque zeros, unsupported values and repeated URL requests
 });
 
 test('bounded buffer and output truncation are explicit; post-grade completions are excluded', () => {
-  const f = fixture([entry('/__tess_cache/a.tess'), entry('/__tess_cache/b.tess'),
-    entry('/__tess_cache/c.tess', { responseEnd: 251 })]);
+  const f = fixture([entry('/__tess_cache/a.glb'), entry('/__tess_cache/b.glb'),
+    entry('/__tess_cache/c.glb', { responseEnd: 251 })]);
   f.context.window.__cadResourceTimingProbe.maxReportedEntries = 1;
   let result = f.collect();
   assert.equal(result.entries.length, 1); assert.equal(result.matchingEntries, 2);

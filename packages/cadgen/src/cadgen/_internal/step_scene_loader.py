@@ -15,10 +15,12 @@ from OCP.IFSelect import IFSelect_RetDone
 from OCP.Quantity import Quantity_ColorRGBA
 from OCP.STEPCAFControl import STEPCAFControl_Reader
 from OCP.STEPControl import STEPControl_Reader
+from OCP.TCollection import TCollection_AsciiString
 from OCP.TCollection import TCollection_ExtendedString
 from OCP.TDF import TDF_ChildIterator
 from OCP.TDF import TDF_Label
 from OCP.TDF import TDF_LabelSequence
+from OCP.TDF import TDF_Tool
 from OCP.TDataStd import TDataStd_Name
 from OCP.TDocStd import TDocStd_Document
 from OCP.TopAbs import TopAbs_FACE
@@ -176,7 +178,20 @@ def _repair_utf8_mojibake(text: str) -> str:
     return repaired
 
 
+# An XCAF label entry: the document address OCCT writes where a STEP had no name
+# for a product or an occurrence -- `0:1:1:2`, or `=>[0:1:1:2]` for a reference
+# to another label. An address, not a name somebody gave.
+_XCAF_LABEL_ENTRY = re.compile(r"(?:=>\s*)?(?:\[\s*[0-9]+(?::[0-9]+)+\s*\]|[0-9]+(?::[0-9]+)+)")
+
+
 def _normalize_label_name(raw_name: object) -> str | None:
+    """What a STEP calls a product or an occurrence, or None where it gave no name.
+
+    The one rule for every name cadgen reads from a STEP: a blank, the
+    translator's default, a shape kind, digits alone and an XCAF label entry
+    are no name, and whoever shows the thing names it otherwise (its
+    occurrence id).
+    """
     if raw_name is None:
         return None
     text = _decode_step_unicode_escapes(str(raw_name))
@@ -189,7 +204,7 @@ def _normalize_label_name(raw_name: object) -> str | None:
         return None
     if lowered in {"assembly", "solid", "compound", "compsolid", "shell", "face", "wire", "edge", "vertex"}:
         return None
-    if text.isdigit():
+    if text.isdigit() or _XCAF_LABEL_ENTRY.fullmatch(text):
         return None
     return text
 
@@ -366,8 +381,13 @@ def _load_occurrence_tree_from_xcaf_doc(
         local_location = _shape_location(base_shape)
         current_location = _compose_locations(parent_location, local_location)
         children = _xcaf_children(shape_tool, label, resolved_label)
-        name = _label_name(label) or _label_name(resolved_label)
-        source_name = _label_name(resolved_label) or name
+        # An occurrence's own name, and its product's: one label for a shape no reference
+        # places. Which of them it shows is settled once every occurrence is read
+        # (_withhold_borrowed_product_names).
+        own = _label_name(label)
+        product = _label_name(resolved_label) if resolved_label is not label else own
+        name = own or product
+        source_name = product or name
         occurrence_color = (
             _color_from_label(color_tool, label)
             or _color_from_shape(color_tool, instance_shape)
@@ -400,7 +420,7 @@ def _load_occurrence_tree_from_xcaf_doc(
         ]
         if prototype_key is None and not child_nodes:
             return None
-        return OccurrenceNode(
+        node = OccurrenceNode(
             path=path,
             name=name,
             source_name=source_name,
@@ -411,7 +431,10 @@ def _load_occurrence_tree_from_xcaf_doc(
             location=current_location,
             children=child_nodes,
         )
+        usages.append((node, _label_entry(resolved_label), own is None))
+        return node
 
+    usages: list[tuple[OccurrenceNode, str, bool]] = []
     roots = [
         node
         for index in range(1, free_labels.Length() + 1)
@@ -419,7 +442,33 @@ def _load_occurrence_tree_from_xcaf_doc(
     ]
     if not roots:
         return None
+    _withhold_borrowed_product_names(usages)
     return roots, prototypes, prototype_names, prototype_colors, prototype_face_colors
+
+
+def _label_entry(label: object) -> str:
+    """A label's address in its document (``0:1:1:3``): which product a reference places."""
+    entry = TCollection_AsciiString()
+    TDF_Tool.Entry_s(label, entry)
+    return entry.ToCString()
+
+
+def _withhold_borrowed_product_names(usages: list[tuple[OccurrenceNode, str, bool]]) -> None:
+    """An occurrence with no name of its own shows its product's -- unless that name is
+    another occurrence's own label, which is how a writer names a product its occurrences
+    share (cadgen's after the last of them). Shown on the unnamed one, it would give two
+    parts one name, and ``#motor`` would mean either: that occurrence shows its id instead.
+
+    ``usages`` is every node with the address of the product it places and whether its
+    name is borrowed from that product."""
+    own_names: dict[str, set[str]] = {}
+    for node, product, borrowed in usages:
+        if not borrowed and node.name is not None:
+            own_names.setdefault(product, set()).add(node.name)
+    for node, product, borrowed in usages:
+        if borrowed and node.name in own_names.get(product, ()):
+            node.name = None
+            node.source_name = None
 
 
 def load_step_scene_from_xcaf_doc(

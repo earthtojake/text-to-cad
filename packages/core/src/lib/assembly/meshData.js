@@ -5,8 +5,7 @@
 // Encoding linear -> sRGB hex makes that round-trip land on the same linear albedo the baked
 // path shaded, so a flat override renders pixel-identically without baking per-occurrence vertices.
 import { linearRgbToHex } from "../color.js";
-import { mergeBounds } from "../urdf/kinematics.js";
-import { stepProductName } from "../step/productName.js";
+import { mergeBoundsList } from "../viewer/autoZoom.js";
 
 const IDENTITY_TRANSFORM = Object.freeze([
   1, 0, 0, 0,
@@ -445,6 +444,29 @@ function equalOccurrenceInput(left, right) {
 // Internal provenance seam for cadScene's zero-work exact-row branch. Object
 // identity alone is not proof because buildModel also accepts mutable public
 // mesh data; the current composed result must explicitly own this row.
+/**
+ * The tree's occurrences joined to what cadgen resolved their appearance to (a catalog
+ * entry's `display`: per assigned occurrence, its material id and name, finish, base colour
+ * and opacity). A join by id and nothing more: the page decides no precedence. The stored
+ * descriptor is never mutated; with nothing to join it is returned as it is.
+ */
+export function applyOccurrenceDisplay(descriptor, display) {
+  if (!descriptor || typeof descriptor !== "object" || !display || typeof display !== "object"
+      || !Object.keys(display).length) {
+    return descriptor;
+  }
+  return {
+    ...descriptor,
+    occurrences: (Array.isArray(descriptor.occurrences) ? descriptor.occurrences : []).map((occurrence) => {
+      const resolved = display[String(occurrence?.id || "")];
+      if (!resolved || typeof resolved !== "object") return occurrence;
+      const { baseColor: _unresolved, ...rest } = occurrence;
+      void _unresolved;
+      return { ...rest, ...resolved };
+    })
+  };
+}
+
 export function composedPackageOwnsPartRow(meshData, part) {
   return composedPackageInputs.get(meshData)?.parts?.has(part) === true;
 }
@@ -548,14 +570,14 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
     const overrideAlpha = Array.isArray(rawColor) && rawColor.length >= 4 && Number.isFinite(Number(rawColor[3]))
       ? Number(rawColor[3])
       : null;
-    const materialOpacity = overrideMaterial && Number.isFinite(Number(overrideMaterial.opacity))
-      ? Math.min(Math.max(Number(overrideMaterial.opacity), 0), 1)
-      : 1;
     const componentOpacity = Number(sourceParts[0]?.opacity);
     const sourceOpacity = overrideAlpha === null
       ? (Number.isFinite(componentOpacity) ? Math.min(Math.max(componentOpacity, 0), 1) : 1)
       : Math.min(Math.max(overrideAlpha, 0), 1);
-    const overrideOpacity = sourceOpacity * materialOpacity;
+    // An assigned occurrence's opacity is cadgen's: its STEP alpha times its material's,
+    // resolved once for every reader (`occurrence.opacity`). Any other draws its own alpha.
+    const resolvedOpacity = Number(occurrence?.opacity);
+    const overrideOpacity = Number.isFinite(resolvedOpacity) ? Math.min(Math.max(resolvedOpacity, 0), 1) : sourceOpacity;
     const sourceColor = (overrideColor && linearRgbToHex(overrideColor)) || sourceParts[0]?.color || null;
     const sourceVertices = componentMeshData?.vertices || new Float32Array(0);
     const sourceColors = componentMeshData?.colors || new Float32Array(0);
@@ -580,8 +602,7 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
     // only, keeps its occurrence but extends no camera bounds.
     const drawn = sourceVertices.length >= 3 && (componentMeshData?.indices?.length || 0) >= 3;
     const bounds = drawn ? boundsForTransformedBox(componentMeshData?.bounds, matrix) : null;
-    // An XCAF label entry (`=>[0:1:1:2]`) is no name: the occurrence then goes by its id.
-    const displayName = String(stepProductName(occurrence?.name) || occurrenceId || cid || meshPartId(sourceParts[0])).trim();
+    const displayName = String(occurrence?.name || occurrenceId || cid || meshPartId(sourceParts[0])).trim();
     const part = {
       id: occurrenceId || cid,
       occurrenceId: occurrenceId || cid,
@@ -642,7 +663,7 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
     assemblyRoot,
     bounds: assemblyRoot && assemblyRoot === previous?.assemblyRoot
       ? previous.bounds
-      : mergeBounds(parts.map((part) => part.bounds)),
+      : mergeBoundsList(parts.map((part) => part.bounds)) || { min: [0, 0, 0], max: [0, 0, 0] },
     declaredBounds: declaredPackageBounds(descriptor, previous?.declaredBounds),
     missingComponentIds,
     // Each occurrence is placed by its transform at render time over shared component
@@ -665,7 +686,7 @@ function enrichPackageAssemblyNode(node, partById, previous = null) {
     : previous?.children?.length === 0 ? previous.children : [];
   const nodeType = String(node?.nodeType || "").trim() || (children.length ? "subassembly" : "part");
   const id = String(node?.id || "").trim();
-  const name = String(stepProductName(node?.name) || stepProductName(node?.label) || id).trim();
+  const name = String(node?.name || node?.label || id).trim();
   const declaredLeafIds = Array.isArray(node?.leafPartIds)
     ? node.leafPartIds.map((leafId) => String(leafId || "").trim()).filter(Boolean)
     : [];
@@ -704,7 +725,7 @@ function enrichPackageAssemblyNode(node, partById, previous = null) {
     }
   } else {
     out.transform = [...IDENTITY_TRANSFORM];
-    out.bounds = mergeBounds(children.map((child) => child.bounds));
+    out.bounds = mergeBoundsList(children.map((child) => child.bounds)) || { min: [0, 0, 0], max: [0, 0, 0] };
   }
   return out;
 }

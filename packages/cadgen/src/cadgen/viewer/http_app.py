@@ -30,6 +30,8 @@ import sys
 import threading
 from pathlib import Path
 
+from cadgen.tessellation_policy import ladder_payload
+
 from . import reload as dev_reload
 from .backend import absolute_path, asset_path
 from .cadgen_ops import CadgenOps
@@ -39,7 +41,7 @@ from .scanner import CAD_CATALOG_SCHEMA_VERSION, SOURCE_EXTENSIONS, catalog_entr
 from .store_paths import virtual_store_asset
 from .tess_cache import (
     TESS_CACHE_METADATA_MAX_BYTES, parse_tess_cache_admission,
-    read_tess_cache_batch, read_tess_cache_entry, read_tess_cache_probe, write_tess_cache_entry,
+    read_tess_cache_batch, read_tess_cache_entry, read_tess_cache_probe,
 )
 
 __all__ = [
@@ -285,8 +287,9 @@ class CadApp:
         # the identity this instance announces is the identity of the code it is actually running.
         self.identity_token = identity if identity is not None else identity_token(self.dist_dir)
         # The single development predicate (reload.py). In an installed wheel
-        # this is False and the whole mechanism is absent: nothing is watched,
-        # no request is counted, and the browser never polls for a restart.
+        # this is False and the whole mechanism is absent: nothing is watched
+        # and no request is counted. The page still asks who its server is, at
+        # an installed cadence, to reload under another install on its port.
         self.auto_reload = dev_reload.running_from_source_checkout()
         self._request_lock = threading.Lock()
         self._busy_requests = 0
@@ -323,15 +326,18 @@ class CadApp:
             "app": "cad-viewer",
             # The start-time token, NOT identity_token() re-evaluated: a
             # resident answering a reuse probe must report the code it runs,
-            # not the code now on disk. It is also what the browser's
-            # development reload watcher compares against to notice that this
-            # server has become a NEW process on the same port.
+            # not the code now on disk. It is also what the browser's reload
+            # watcher compares against to notice that this server has become
+            # other code on the same port (a restarted checkout, an upgrade).
             "identityToken": self.identity_token,
             # Whether this server watches its own code and restarts itself.
-            # False in every installed wheel; the client polls only when true.
+            # False in every installed wheel; the client polls faster when true.
             "autoReload": self.auto_reload,
             # Which file manager Reveal opens: darwin, win32 or linux.
             "platform": sys.platform if sys.platform in ("darwin", "win32") else "linux",
+            # The display tessellation ladder the page draws STEP models by: cadgen's
+            # policy (cadgen.tessellation_policy), never written down in the page.
+            "tessellation": ladder_payload(),
             # Whose viewer this is: a launch reuses, replaces or stops only its own user's.
             "user": os_user(),
             # Where a developer's relative ?file= resolves, in the page. Not a boundary.
@@ -482,7 +488,7 @@ class CadApp:
             if self._rejected_by_host_check(request, response):
                 return
             if pathname.startswith(TESS_CACHE_ROUTE_PREFIX):
-                # Shared component-tessellation cache. Checked BEFORE the dist
+                # The store's component meshes. Checked BEFORE the dist
                 # fallthrough: this is an API family, not a page asset.
                 self._handle_tess_get(request, response)
                 return
@@ -511,6 +517,10 @@ class CadApp:
                     response.send_json(200, self.build_status(query.get("file") or "", after=query.get("after")))
                 elif pathname == "/__cad/drawing":
                     self._handle_drawing(request, response, query)
+                elif pathname == "/__cad/tube-skins":
+                    self._handle_tube_skins(request, response, query)
+                elif pathname == "/__cad/robot":
+                    self._handle_robot(request, response, query)
                 elif pathname == "/__cad/store":
                     self._handle_store_asset(request, response, query)
                 elif pathname == "/__cad/asset":
@@ -626,7 +636,8 @@ class CadApp:
                     # matches both.
                     self._handle_tess_batch(request, response)
                 elif pathname.startswith(TESS_CACHE_ROUTE_PREFIX):
-                    self._handle_tess_post(request, response)
+                    # cadgen writes every mesh: a client reads them.
+                    response.send_empty(405, [("allow", "GET")])
                 else:
                     response.send_empty(405, [("allow", "POST")])
             except Exception as error:  # noqa: BLE001
@@ -738,7 +749,7 @@ class CadApp:
     # --- usage stats (telemetry) --------------------------------------------
 
     def _consent(self, share=None) -> dict:
-        """The app menu's Share usage stats toggle: whether sharing is on and why, and, from the person's
+        """The app menu's Share anonymous usage data toggle: whether sharing is on and why, and, from the person's
         click, their answer, which changes it whenever. Nothing asks: telemetry is on by default once a
         ``cadgen`` command has said so (``cadgen/analytics.py``)."""
         from cadgen.analytics import PRIVACY_URL
@@ -839,6 +850,31 @@ class CadApp:
             return
         response.send_json(status, body)
 
+    def _handle_tube_skins(self, request, response, query):
+        """A document's bending tubes, bound as a view plays them (``tube_skins.py`` owns the
+        rules). Real work on a miss -- binding every tube a clip bends -- so it is counted, as
+        the drawing route is."""
+        from .tube_skins import tube_skins_response
+
+        status, body = tube_skins_response(query.get("file") or "", query.get("documentHash"),
+                                           query.get("chord"), query.get("angle"))
+        if isinstance(body, bytes):
+            response.send_bytes(status, body, "model/gltf-binary")
+            return
+        response.send_json(status, body)
+
+    def _handle_robot(self, request, response, query):
+        """A robot description resolved for the page, or one of the primitive meshes cadgen made for
+        it (``robots.py`` owns both rules). Real work on a miss -- the validators, the frame graph,
+        meshing a shape -- so it is counted, as the drawing route is."""
+        from .robots import robot_response
+
+        status, body, content_type = robot_response(query.get("file") or "", query.get("mesh"))
+        if isinstance(body, bytes):
+            response.send_bytes(status, body, content_type, RAW_FILE_HEADERS if content_type.startswith("model/") else ())
+            return
+        response.send_json(status, body)
+
     def _handle_asset(self, request, response, query):
         candidate = asset_path(query.get("file") or "")
         stat_result = None
@@ -869,10 +905,7 @@ class CadApp:
         if status != 200:
             response.send_empty(status)
             return
-        response.send_bytes(200, body, "application/octet-stream")
-
-    def _handle_tess_post(self, request, response):
-        response.send_empty(write_tess_cache_entry(request.path, request.body()))
+        response.send_bytes(200, body, "model/gltf-binary")
 
     def _handle_tess_probe(self, request, response):
         if int(request.headers.get("content-length") or 0) > TESS_CACHE_METADATA_MAX_BYTES:

@@ -4,7 +4,8 @@
  * host's own build configuration and its unit tests read the same defaults the navbar draws. A
  * newer release is not a link: cadgen says so, in the update card (`@text-to-cad/ui/update`).
  *
- * A host supplies the version it runs and hands `viewerLinks(...)` to its `ViewerHost.links`. It
+ * A host supplies the version it runs, and the id of its build where that is not the release's
+ * own (`@text-to-cad/ui/build-id`), and hands `viewerLinks(...)` to its `ViewerHost.links`. It
  * may point the links elsewhere (the web reads its build's environment), and say how a link is
  * followed (`open`, for a page in a frame that cannot open one itself). Nothing here fetches or
  * navigates.
@@ -91,9 +92,13 @@ function cut(text, length) {
 
 /**
  * The navbar's links for a host running `version`: the defaults, with whatever the host changes.
+ * A custom build of it (`build`, the id its Vite config names: `@text-to-cad/ui/build-id`) runs
+ * `0.7.15-dev.<build>`, which the app menu shows and a new issue names; its release notes are still
+ * those of the release it was built on.
  *
  * @param {object} options
  * @param {string} options.version The version this host runs.
+ * @param {string} [options.build] The id of a custom build of it; "" (the release's own build) for none.
  * @param {string} [options.x]
  * @param {string} [options.github]
  * @param {string} [options.discord]
@@ -101,11 +106,12 @@ function cut(text, length) {
  * @param {string} [options.release] This version's release notes; by default its tag on `github`.
  * @param {(url: string) => Promise<void>} [options.open]
  */
-export function viewerLinks({ version, x = TEXT_TO_CAD_LINKS.x, github = TEXT_TO_CAD_LINKS.github, discord = TEXT_TO_CAD_LINKS.discord,
+export function viewerLinks({ version, build = "", x = TEXT_TO_CAD_LINKS.x, github = TEXT_TO_CAD_LINKS.github, discord = TEXT_TO_CAD_LINKS.discord,
   issues = TEXT_TO_CAD_LINKS.issues, release, open } = {}) {
   const bare = releaseVersion(version);
+  const custom = String(build ?? "").trim();
   return {
-    version: bare, x, github, discord, issues,
+    version: bare && custom ? `${bare}-dev.${custom}` : bare, x, github, discord, issues,
     release: release || releaseNotesUrl(github, bare),
     ...(open ? { open } : {})
   };

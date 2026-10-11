@@ -89,12 +89,11 @@ class LoadedStepScene:
 class AdaptiveMeshResolution:
     """What the scene's topology says about how to RENDER it.
 
-    Not tessellation settings: there is one tessellator, it is JS, and it takes
-    its own relative tolerances. What survives here is the classification —
-    ``profile`` plus the ``hints`` it was computed from — because
-    ``_edge_visibility_classes_for_resolution`` turns the pair into the edge
-    classes a tree actually renders. The absolute deflection numbers this
-    once carried reached no mesher and are gone.
+    Not tessellation settings: cadgen's OCCT mesher (``occt_mesh``) takes its
+    own relative tolerances. This is the classification — ``profile`` plus the
+    ``hints`` it was computed from — which
+    ``_edge_visibility_classes_for_resolution`` turns into the edge classes a
+    tree renders.
     """
 
     profile: str

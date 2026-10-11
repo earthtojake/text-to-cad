@@ -51,6 +51,10 @@ export function chooseTopologyBatch(requestedIds, loadedIds, { budget = Infinity
 // "skipped" or "stale" (the session was cancelled). A batch is accepted when everything in it is
 // still wanted and it keeps every wanted part already published: publication only ever adds what
 // is wanted and drops what is not.
+//
+// A part whose topology could not be loaded is published as `failed`, never among the `ids`: it
+// settles the request it failed in, so the loop does not ask for it again and again, and the next
+// request (`request`) asks for it afresh.
 export function createTopologyRequestSession({
   loadBatch,
   isCurrent,
@@ -76,10 +80,25 @@ export function createTopologyRequestSession({
     lastStart: -Infinity,
     failed: false,
     batches: 0,
+    // Every `request` call: what a part's failure is current for.
+    requests: 0,
   };
-  const satisfied = () => Boolean(session.published && (session.published.whole || sameTopologyIds(session.published.ids, session.desired)));
+  // The parts that failed in the current request; none once a later request asks again.
+  const failedNow = () => new Set(session.published?.requests === session.requests ? session.published.failed || [] : []);
+  // What the loop asks for: every wanted part but those that failed in the current request.
+  const asking = () => {
+    const failed = failedNow();
+    return session.desired.filter((id) => !failed.has(id));
+  };
+  const satisfied = () => {
+    const published = session.published;
+    if (!published) return false;
+    if (published.whole) return true;
+    if (published.failed?.length && published.requests !== session.requests) return false;
+    return sameTopologyIds(published.ids, asking());
+  };
   const priorityIds = () => {
-    const done = new Set(session.published?.ids || []);
+    const done = new Set([...(session.published?.ids || []), ...failedNow()]);
     const waiting = session.desired.filter((id) => !done.has(id) && !session.bulkBatch?.has(id));
     return chooseTopologyBatch(waiting, [], { budget: priorityBudget, requestOrder: session.requestOrder });
   };
@@ -95,7 +114,7 @@ export function createTopologyRequestSession({
           continue;
         }
         session.lastStart = now();
-        const batch = chooseTopologyBatch(session.desired, session.published?.ids, { budget, requestOrder: session.requestOrder });
+        const batch = chooseTopologyBatch(asking(), session.published?.ids, { budget, requestOrder: session.requestOrder });
         session.bulkBatch = new Set(batch);
         const outcome = await loadBatch(batch);
         session.bulkBatch = null;
@@ -133,12 +152,17 @@ export function createTopologyRequestSession({
     if (!topologyIdsWithin(ids, session.desired)) return false;
     return !session.published || topologyIdsWithin(session.published.ids.filter((id) => wanted.has(id)), ids);
   };
-  session.publish = (ids, state, { whole = false } = {}) => {
-    session.published = { ids: [...ids], state, ...(whole ? { whole: true } : {}) };
+  session.publish = (ids, state, { whole = false, failed = [] } = {}) => {
+    // A failure stands for the rest of its request, beside those of the request's earlier batches.
+    const loaded = new Set(ids);
+    const failures = new Set([...failedNow(), ...failed].filter((id) => !loaded.has(id)));
+    session.published = { ids: [...ids], state, failed: [...failures], requests: session.requests,
+      ...(whole ? { whole: true } : {}) };
     session.batches += 1;
   };
   session.satisfied = satisfied;
   session.request = (ids) => {
+    session.requests += 1;
     const desired = new Set();
     for (const rawId of Array.isArray(ids) ? ids : []) {
       const id = String(rawId || "").trim();

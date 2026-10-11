@@ -85,6 +85,15 @@ def _build_parser(prog: str) -> argparse.ArgumentParser:
         action="store_true",
         help="Show detailed progress and timing on stderr, and a full traceback on failure.",
     )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help=(
+            "Rebuild this model with its own code profiled (cProfile) and print where "
+            "that time went on stderr. Its children are built or reused as usual and are "
+            "not profiled. Slows Python-call-heavy code."
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="One JSON result line on stdout.")
     return parser
 
@@ -172,9 +181,11 @@ def _run(args: argparse.Namespace, script: Path, prog: str) -> int:
 
             return generate_dxf_targets(
                 [target],
-                force=bool(args.force),
+                # A profile needs the body to run: --profile rebuilds a current model.
+                force=bool(args.force or args.profile),
                 verbose=bool(args.verbose),
                 json_output=bool(args.json),
+                profile=bool(args.profile),
             )
 
         from cadgen.generation import generate_step_targets
@@ -190,9 +201,11 @@ def _run(args: argparse.Namespace, script: Path, prog: str) -> int:
                 mesh_tolerance=args.mesh_tolerance,
                 mesh_angular_tolerance=args.mesh_angular_tolerance,
             ),
-            force=bool(args.force),
+            # A profile needs the body to run: --profile rebuilds a current model.
+            force=bool(args.force or args.profile),
             verbose=bool(args.verbose),
             json_output=bool(args.json),
+            profile=bool(args.profile),
         )
     except Exception as exc:  # noqa: BLE001 — the CLI boundary: report, do not traceback
         # The ONE failure envelope, shared with every generated door: under

@@ -170,7 +170,8 @@ function authoredGlbNameForObject(object) {
 /**
  * The coordinate space this GLB DECLARES, or "" when it declares none.
  *
- * `cadUpAxis` is written into node extras by `glb/writeGlb.js` (GLTFLoader copies extras
+ * `cadUpAxis` is written into node extras by cadgen's GLB writer and by the test writer
+ * `glb/writeGlb.js` (GLTFLoader copies extras
  * into `userData`), so a cadgen-written GLB says outright whether its positions are glTF
  * Y-up or already CAD Z-up. That replaces an inference that was not merely weak but FALSE:
  * the old test was "does any node carry a cadOccurrenceId", and both writer presets stamp

@@ -194,7 +194,7 @@ def parse_animation_option(raw_animation: object, raw_time: object = None) -> di
     Already an object when it came from a ``<format>.snapshot(animation={...})``
     call; from argv it is one string, told apart by shape the way ``--kinematics``
     is: text that opens with ``{`` is the inline JSON request, anything else is
-    the NAME of a clip the document's embedded animation source
+    the NAME of a clip the document's sidecar
     declares. ``--time`` is the
     second half of the same request — the moment, in seconds, defaulting to 0 —
     and is folded in here, so the job carries ONE field either way. Resolving
@@ -678,147 +678,6 @@ def normalize_render_job_selection(
     return normalized
 
 
-# The shapes the renderer can draw. Kept beside the door because "renderable" is a RENDERER
-# fact, not a validity one: `cadgen sdf validate` accepts every shape SDFormat defines.
-SDF_RENDERABLE_GEOMETRY = ("box", "cylinder", "mesh", "sphere")
-
-
-def unrenderable_sdf_geometry(input_path: Path) -> list[tuple[str, str]]:
-    """``(link, kind)`` for every VISUAL shape the renderer cannot draw.
-
-    A capsule, plane, ellipsoid, heightmap or polyline has no mesh in the renderer, so the
-    composer drops it and the model renders as EMPTY SPACE at exit 0. The browser parser
-    refuses these too — that is what the Viewer shows — but the door answers first so the
-    CLI fails before starting a browser, and says the same thing.
-
-    COLLISION geometry is deliberately not checked. It is never drawn, so an undrawable one
-    costs the picture nothing, and a ``<plane>`` ground collision is the single most common
-    shape in a real Gazebo world — refusing those would block loading and snapshotting every
-    one of them for no visual gain. The Viewer counts them in its SDF sheet instead; this
-    door has no non-blocking channel of its own (a snapshot's ``warnings`` come back from the
-    renderer, not from job resolution), so it passes over them in silence.
-
-    Returns [] when the file cannot be read: a description this cannot parse is left to the
-    renderer exactly as before, so the check never refuses more than it understands.
-    """
-    import xml.etree.ElementTree as ET
-
-    def local(tag: object) -> str:
-        return str(tag).rsplit("}", 1)[-1]
-
-    try:
-        root = ET.parse(input_path).getroot()
-    except Exception:
-        return []
-    found: list[tuple[str, str]] = []
-    for link in root.iter():
-        if local(link.tag) != "link":
-            continue
-        link_name = link.get("name") or "(unnamed)"
-        for container in link:
-            if local(container.tag) != "visual":
-                continue
-            geometry = next((c for c in container if local(c.tag) == "geometry"), None)
-            shapes = [local(c.tag) for c in geometry] if geometry is not None else []
-            kind = shapes[0] if shapes else "missing"
-            if kind not in SDF_RENDERABLE_GEOMETRY:
-                found.append((link_name, kind))
-    return found
-
-
-def _robot_name(description: Path) -> str | None:
-    """The root ``<robot name>`` of a URDF or SRDF, or None when it cannot be read."""
-    import xml.etree.ElementTree as ET
-
-    try:
-        for _event, element in ET.iterparse(str(description), events=("start",)):
-            if str(element.tag).rsplit("}", 1)[-1] != "robot":
-                return None
-            return str(element.attrib.get("name") or "").strip() or None
-    except (OSError, ET.ParseError):
-        return None
-    return None
-
-
-def paired_urdf_for_srdf(srdf_path: Path) -> Path:
-    """The URDF whose geometry an SRDF renders, or a refusal naming the search.
-
-    An SRDF carries planning semantics only. It pairs with the same-folder
-    ``.urdf`` whose ``<robot name>`` matches — the rule ``cadgen srdf validate``
-    and the Viewer use — and exactly one may match. Anything else used to reach
-    the browser with no URDF at all and come back as a stack trace.
-    """
-    from cadgen.srdf_validation import find_paired_urdf
-
-    folder = srdf_path.parent
-    robot_name = _robot_name(srdf_path)
-    rule = (
-        "An SRDF renders the geometry of the same-folder .urdf whose <robot name> "
-        "matches its own, and exactly one may match (check with `cadgen srdf validate`)."
-    )
-    if not robot_name:
-        raise SnapshotError(
-            f"{srdf_path.name} has no readable <robot name>, so its URDF cannot be found. {rule}"
-        )
-    paired, matches = find_paired_urdf(robot_name, folder)
-    if paired is not None:
-        return paired
-    if matches:
-        raise SnapshotError(
-            f"{srdf_path.name} is ambiguous: {len(matches)} .urdf files in {folder} declare "
-            f"<robot name={robot_name!r}> ({', '.join(match.name for match in matches)}). {rule}"
-        )
-    try:
-        candidates = sorted(path for path in folder.iterdir() if path.suffix.lower() == ".urdf" and path.is_file())
-    except OSError:
-        candidates = []
-    found = (
-        "; it holds " + ", ".join(
-            f"{candidate.name} (robot {(_robot_name(candidate) or 'unreadable')!r})"
-            for candidate in candidates[:6]
-        ) + (f" and {len(candidates) - 6} more" if len(candidates) > 6 else "")
-        if candidates
-        else "; it holds no .urdf files"
-    )
-    raise SnapshotError(
-        f"{srdf_path.name} has no paired URDF: no .urdf in {folder} declares "
-        f"<robot name={robot_name!r}>{found}. {rule}"
-    )
-
-
-def robot_joint_names(kind: str, description: Path) -> frozenset[str] | None:
-    """The joint names a pose request may name, or None when they cannot be read.
-
-    The browser is what ASSEMBLES a robot, so this module never had the joint list and a
-    misspelled `--joint-values` name was dropped in silence: the door reported success and
-    rendered the rest pose, which is the one failure a posed review cannot survive. The
-    STEP door already refuses an unknown DOF by name; robots now do the same.
-
-    ``description`` is the file that DECLARES the joints: the SDF or URDF itself, or an
-    SRDF's paired URDF. The answer is only ever used to REFUSE a name that is definitely
-    not in the description. A description this cannot parse returns None and renders
-    exactly as before, so the check can never make the door stricter about geometry than
-    the renderer that has to draw it.
-    """
-    try:
-        if kind == "sdf":
-            from cadgen.sdf_source import read_sdf_source
-
-            return frozenset(joint.name for joint in read_sdf_source(description).joints)
-        import warnings
-
-        from cadgen.urdf_source import read_urdf_source
-
-        # The reader doubles as the validator and advises about inertials, materials and
-        # the like. Those belong to `cadgen urdf validate`; a render that only needs the
-        # joint names must not start narrating them over the snapshot's own output.
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            return frozenset(joint.name for joint in read_urdf_source(description).joints)
-    except Exception:
-        return None
-
-
 def check_robot_render_job(
     job: dict[str, object],
     *,
@@ -829,9 +688,14 @@ def check_robot_render_job(
 ) -> dict[str, object]:
     """What a robot description (`.urdf` / `.srdf` / `.sdf`) cannot be asked for.
 
-    Everything here is decided from the request and the description's own XML, before
-    anything is cleared: the STEP-only options, undrawable SDF geometry, the SRDF's
-    pairing, and the joint names a pose may use."""
+    Everything here is decided from the request and the description, before anything is
+    cleared: the STEP-only options, and then the description itself resolved by cadgen
+    (``cadgen.robot_payload``: its validator's findings, a mesh or shape the page cannot
+    draw, an SRDF's pairing) and the joint values a pose may set, each held to its
+    control's limits -- a fixed joint and a mimic follower have no value of their own, and
+    a leader may not put its follower past the follower's limits."""
+    from cadgen.robot_payload import RobotReadError, read_robot_description, robot_control_values
+
     label = kind.upper()
     refuse_cad_model_requests(
         job,
@@ -841,48 +705,18 @@ def check_robot_render_job(
         tessellation_hint="a robot's link meshes are existing meshes",
         joints=True,
     )
-
-    if kind == "sdf":
-        unrenderable = unrenderable_sdf_geometry(input_path)
-        if unrenderable:
-            listed = "; ".join(
-                f"link {name} visual uses <{shape}>" if shape != "missing"
-                else f"link {name} visual has no <geometry>"
-                for name, shape in unrenderable[:4]
-            )
-            more = f" (and {len(unrenderable) - 4} more)" if len(unrenderable) > 4 else ""
-            raise SnapshotError(
-                f"{input_path.name} has visual geometry this renderer cannot draw: {listed}{more}. "
-                f"Supported: {', '.join(SDF_RENDERABLE_GEOMETRY)}. "
-                "Replace the shape or reference a mesh file — rendering it would silently "
-                "leave those links out of the picture."
-            )
-
-    # An SRDF carries semantics; its geometry and its joints are the paired URDF's.
-    urdf_path = paired_urdf_for_srdf(input_path) if kind == "srdf" else None
-
-    joint_values = job.get("jointValues")
-    if joint_values is not None and not is_plain_object(joint_values):
-        raise SnapshotError("jointValues must be an object of joint name to angle")
-    if joint_values:
-        for name, value in joint_values.items():
-            if not isinstance(value, (int, float)) or isinstance(value, bool):
-                raise SnapshotError(f"jointValues[{name}] must be a number (degrees)")
-        declared = robot_joint_names(kind, urdf_path or input_path)
-        if declared is not None:
-            unknown = sorted(str(name) for name in joint_values if str(name) not in declared)
-            if unknown:
-                raise SnapshotError(
-                    f"Unknown joint(s): {', '.join(unknown)}. "
-                    f"This {label} declares: {', '.join(sorted(declared)) or '(none)'}"
-                )
+    try:
+        payload = read_robot_description(input_path)
+        controls = robot_control_values(payload, job.get("jointValues"))
+    except RobotReadError as exc:
+        raise SnapshotError(str(exc)) from None
 
     # Robots are authored in METRES; the CAD profile assumes millimetres, and its floor,
     # grid and lighting radii are sized accordingly. Default the robot profile so a robot
     # frames like a robot without the caller having to know the unit convention.
     if not str(job.get("scale") or "").strip():
         job["scale"] = "urdf"
-    return {"urdf_path": urdf_path}
+    return {"robot": payload, "controls": controls}
 
 
 def resolve_robot_render_job(
@@ -891,16 +725,19 @@ def resolve_robot_render_job(
     kind: str,
     input_path: Path,
     root_path: Path,
-    urdf_path: Path | None = None,
+    robot: dict[str, object] | None = None,
+    controls: dict[str, float] | None = None,
     **_kind_context: object,
 ) -> dict[str, object]:
     """Resolve a robot description (`.urdf` / `.srdf` / `.sdf`).
 
-    The browser assembles the robot: the parser resolves each link mesh against the
-    description's own URL, so this hands over one asset URL and the pose, and the shared
-    mesh backend renders the result."""
-    # Link meshes are referenced relative to the description, so the folder this serves has
-    # to contain both: the description's own directory.
+    The page plays what cadgen resolved: ``resolved.robot`` is the payload with every
+    visual's mesh named by the URL the snapshot host answers for it (a link mesh file under
+    the render root, a primitive mesh by its store object), and ``resolved.controls`` the
+    full control vector the job's ``jointValues`` mean, validated at the door."""
+    from cadgen.robot_payload import locate_robot_payload
+    from cadgen.snapshot_core import robot_mesh_asset_url
+
     asset_url = asset_url_for_path(input_path, root_path)
     resolved: dict[str, object] = {
         "rootPath": str(root_path),
@@ -909,10 +746,11 @@ def resolve_robot_render_job(
         "kind": kind,
         "url": asset_url,
     }
-    if urdf_path is not None:
-        resolved["urdfUrl"] = asset_url_for_path(urdf_path, root_path)
-    if job.get("jointValues"):
-        resolved["jointValues"] = dict(job["jointValues"])
+    if robot is not None:
+        resolved["robot"] = locate_robot_payload(
+            robot, file_url=lambda path: asset_url_for_path(Path(path), root_path), object_url=robot_mesh_asset_url,
+        )
+        resolved["controls"] = dict(controls or {})
     if bool(job.get("debug")):
         resolved["debug"] = {"robotSource": {"kind": kind}}
     return {**job, "resolved": resolved}
@@ -1142,9 +980,8 @@ def check_step_pose_and_clip_names(
     """A pose NAME, every DOF id and the clip name, against what the model declares.
 
     A typo must fail as a clean CLI error naming what the model has, not as a
-    stack trace out of the browser runtime — which repeats these checks, with the
-    compiled clips in hand, as the backstop and the authority for a module that
-    builds its clips indirectly.
+    stack trace out of the browser runtime, which repeats these checks as the
+    backstop.
     """
     kinematics_block = sidecar.get("kinematics") if isinstance(sidecar.get("kinematics"), dict) else None
     preset = job.get("kinematics")
@@ -1162,7 +999,7 @@ def check_step_pose_and_clip_names(
                     )
                 )
         elif is_plain_object(preset):
-            from cadgen.kinematics import kinematics_dof_ids
+            from cadgen.kinematics import dof_value_outside_limits, kinematics_dof_ids
 
             dofs = set(kinematics_dof_ids(kinematics_block))
             unknown = sorted(str(key) for key in preset if str(key) not in dofs)
@@ -1171,6 +1008,14 @@ def check_step_pose_and_clip_names(
                     f"Unknown kinematics DOF(s): {', '.join(unknown)}. "
                     f"This model declares: {', '.join(sorted(dofs)) or '(none)'}"
                 )
+            # The page would clamp an out-of-range value and render a pose the
+            # request did not ask for, so the range is checked here.
+            for key, value in preset.items():
+                if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+                    raise SnapshotError(f"kinematics[{key}] must be a number, got {value!r}")
+                outside = dof_value_outside_limits(kinematics_block, str(key), float(value))
+                if outside:
+                    raise SnapshotError(f"kinematics[{key}] = {outside}; pass a value within them")
     elif has_kinematics_render_values(preset):
         raise SnapshotError(
             f"{input_name} declares no kinematics, so pose values have nothing to "
@@ -1181,23 +1026,11 @@ def check_step_pose_and_clip_names(
     if is_plain_object(animation_request):
         animation_block = sidecar.get("animation")
         if animation_block is None:
-            raise SnapshotError(
-                f"{input_name} has no animation in its sidecar. "
-                "Declare animation= on @step or pass --animation to cadgen step build."
-            )
-        from cadgen._internal.animation_source import declared_clip_ids
-
+            raise SnapshotError(f"{input_name} has no animation in its sidecar. Declare animation= on @step.")
         clip_name = str(animation_request["clip"])
-        declared_clips = declared_clip_ids(animation_block["source"])
-        if declared_clips is not None and clip_name not in declared_clips:
-            raise SnapshotError(
-                f"Unknown animation clip: {clip_name}. "
-                + (
-                    f"This model declares: {', '.join(declared_clips)}"
-                    if declared_clips
-                    else "This model declares no animation clips"
-                )
-            )
+        declared_clips = [clip["id"] for clip in animation_block["clips"]]
+        if clip_name not in declared_clips:
+            raise SnapshotError(f"Unknown animation clip: {clip_name}. This model declares: {', '.join(declared_clips)}")
 
 
 def resolve_step_render_job(
@@ -1240,6 +1073,8 @@ def resolve_step_render_job(
     if not package_dir.is_dir():
         raise SnapshotError(f"STEP/STP render input has no tree in the store: {package_dir}")
 
+    from cadgen.tessellation_policy import snapshot_tessellation
+
     resolved: dict[str, object] = {
         "rootPath": str(root_path),
         "inputPath": str(input_path),
@@ -1248,6 +1083,8 @@ def resolve_step_render_job(
         # The hash of the tree this job renders: the geometry's identity in the
         # result (cadgen.results.SnapshotFile.tree), never a directory.
         "tree": selected_tree,
+        # The tolerances its components are drawn at: cadgen's policy, never the page's.
+        "tessellation": snapshot_tessellation(job),
     }
     # tree (the canonical render artifact for every STEP model): inline
     # the assembly.json and pre-resolve one asset URL per unique component so the renderer
@@ -1258,6 +1095,46 @@ def resolve_step_render_job(
         raise SnapshotError(
             "STEP/STP render input changed while its topology was being resolved; retry the snapshot"
         )
+    if job["mode"] == "list":
+        # The parts are cadgen's facts: the rows every ref resolves against, the
+        # store's exact boxes and its stored meshes' counts (cadgen.snapshot_parts).
+        # Nothing is drawn, so no browser starts.
+        from cadgen.assembly_lookup import assembly_occurrence_rows
+        from cadgen.snapshot_parts import filter_occurrences, list_rows, unmeshed_warnings
+
+        try:
+            parts = list_rows(descriptor, package_dir, selection=normalized_selection,
+                              tessellation=resolved["tessellation"])
+            listed = filter_occurrences(assembly_occurrence_rows(descriptor, None), normalized_selection)
+        except ValueError as error:
+            raise SnapshotError(str(error)) from None
+        warnings = unmeshed_warnings(descriptor, listed, resolved["tessellation"],
+                                     "its triangle count leaves {them} out")
+        if warnings:
+            resolved["warnings"] = warnings
+        if debug_enabled:
+            resolved["debug"] = {"stepArtifact": step_artifact_debug}
+        resolved_job = {**job, "resolved": {**resolved, "parts": parts}}
+        if normalized_selection is not None:
+            resolved_job["selection"] = normalized_selection
+        return resolved_job
+    if job["mode"] == "section":
+        # The cut is cadgen's: exact, from each component's BREP, and drawn by the
+        # page as the 2D payload a DXF is (cadgen.section_drawing).
+        section = resolve_step_section(
+            job, descriptor=descriptor, package_dir=package_dir, selection=normalized_selection
+        )
+        if debug_enabled:
+            section["debug"] = {"stepArtifact": step_artifact_debug}
+        resolved_job = {**job, "resolved": {**resolved, **section}}
+        if normalized_selection is not None:
+            resolved_job["selection"] = normalized_selection
+        return resolved_job
+    from cadgen.snapshot_parts import has_surfaces
+
+    if not has_surfaces(descriptor, package_dir):
+        # A true answer, and one nobody would guess from a blank PNG.
+        resolved["warnings"] = ["this model has no surfaces to draw: it is empty, or only curves and points"]
     # This is the renderer's private descriptor loaded from the selected view,
     # never the immutable tree object.
     descriptor["documentHash"] = document_hash
@@ -1267,31 +1144,51 @@ def resolve_step_render_job(
         cid: asset_url_for_store_path(package_dir / str(entry.get("surf", "")))
         for cid, entry in (descriptor.get("components") or {}).items()
     }
-    resolved["package"] = {"descriptor": descriptor, "componentUrls": component_urls}
-    from cadgen._internal.source_sidecar import (
-        read_source_sidecar,
-        source_sidecar_path,
-        validate_appearance_targets,
-    )
+    from cadgen._internal.source_sidecar import apply_appearance, read_source_sidecar
 
     resolved["documentHash"] = document_hash
-    # Kinematics, animation and materials come from the same pinned annotation
-    # snapshot. The pose and clip names were checked when the job was prepared.
+    # What the sidecar means, resolved here and handed to the page as data it draws and
+    # plays: the appearance composed into the descriptor (every assigned occurrence carries
+    # its finish, base colour and opacity), the articulation of the kinematics with the
+    # control vector this job poses, and the baked animation section. The pose and clip
+    # names were checked when the job was prepared.
     sidecar = read_source_sidecar(input_path, document_hash=document_hash) or {}
     if sidecar.get("appearance") is not None:
-        # Validate canonical occurrence targets here for a clean CLI error;
-        # the browser repeats the same check before it composes its own copy.
-        validate_appearance_targets(descriptor, sidecar["appearance"])
-    if sidecar:
-        # The shared JS source resolver validates the same document binding and
-        # composes appearance into its private descriptor. Inline data avoids a
-        # second browser fetch and leaves the store descriptor untouched.
-        resolved["sourceSidecar"] = sidecar
-    if isinstance(sidecar.get("kinematics"), dict) and sidecar["kinematics"]:
-        # Typed mates are the articulation mechanism: --kinematics DOF values
-        # fold through the shared FK evaluator (@text-to-cad/core kinematicsModule),
-        # which reads the sidecar's kinematics section.
-        resolved["stepParameterUrl"] = asset_url_for_path(source_sidecar_path(input_path), root_path)
+        descriptor = apply_appearance(descriptor, sidecar["appearance"])
+    resolved["package"] = {"descriptor": descriptor, "componentUrls": component_urls}
+    animation = sidecar.get("animation")
+    if animation is not None:
+        resolved["animation"] = animation
+    animation_request = job.get("animation")
+    if is_plain_object(animation_request):
+        from cadgen._internal.source_sidecar import bends_a_tube
+        from cadgen.snapshot_core import tube_skins_asset_url
+
+        clip = [entry for entry in (animation or {}).get("clips") or [] if entry.get("id") == animation_request["clip"]]
+        # The page plays one clip: it is handed that clip alone, so another clip's tube is
+        # neither bound nor asked for.
+        animation = {**animation, "clips": clip}
+        resolved["animation"] = animation
+        if bends_a_tube(animation):
+            # The clip bends a tube: cadgen binds it, and the page only skins it.
+            resolved["tubeSkinsUrl"] = tube_skins_asset_url(
+                tree=selected_tree, document_hash=document_hash, animation=animation)
+        if job.get("video") is not None and clip:
+            from cadgen.snapshot_video import resolve_frame_plan
+
+            # Which moments of the clip the frames show: the page renders these.
+            resolved["framePlan"] = resolve_frame_plan(job["video"], clip[0])
+    from cadgen.articulation import articulation_control_values, step_articulation
+
+    try:
+        articulation = step_articulation(descriptor, sidecar.get("kinematics"))
+    except ValueError as exc:
+        raise SnapshotError(f"{input_path.name}: {exc}") from None
+    if articulation is not None:
+        # The page plays the articulation at this vector: every control, the ones the
+        # request named at their values and the rest at rest, validated at the door.
+        resolved["articulation"] = articulation
+        resolved["controls"] = articulation_control_values(articulation, job.get("kinematics"))
     if debug_enabled:
         resolved["debug"] = {"stepArtifact": step_artifact_debug}
 
@@ -1299,6 +1196,77 @@ def resolve_step_render_job(
     if normalized_selection is not None:
         resolved_job["selection"] = normalized_selection
     return resolved_job
+
+
+def _section_frame_size(job: Mapping[str, object]) -> tuple[int, int]:
+    """The output a section is framed for: its first PNG, else its first output."""
+    outputs = [output for output in job.get("outputs") or [] if is_plain_object(output)]
+    for output in outputs:
+        if str(output.get("path") or "").lower().endswith(".png"):
+            return int(output["width"]), int(output["height"])
+    first = outputs[0] if outputs else {}
+    return int(first.get("width") or 1200), int(first.get("height") or 900)
+
+
+def resolve_step_section(
+    job: Mapping[str, object],
+    *,
+    descriptor: Mapping[str, object],
+    package_dir: Path,
+    selection: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """What a STEP section job's ``resolved`` carries: the cut, drawn.
+
+    The drawing payload is a file the page fetches over the asset server (as a
+    DXF's is), its SVG a file the render loop copies to any ``.svg`` output, and
+    what the picture says -- the plane's label, where the cut sits across the
+    parts, a plane that misses -- rides beside it. Missing component cuts are
+    build-pool work (``cadgen.store.sections``), cached by component and plane.
+    """
+    from hashlib import sha256
+
+    from cadgen._internal.atomic_replace import write_bytes_atomic
+    from cadgen.assembly_lookup import assembly_occurrence_rows
+    from cadgen.drawing_payload import encode_drawing_payload
+    from cadgen.section_drawing import locator_fraction, section_drawing
+    from cadgen.snapshot_parts import filter_occurrences
+
+    try:
+        rows = filter_occurrences(assembly_occurrence_rows(descriptor, package_dir), selection)
+    except ValueError as error:
+        raise SnapshotError(str(error)) from None
+    request = job["section"]
+    display = job.get("display") if is_plain_object(job.get("display")) else {}
+    edges = display.get("edges") if is_plain_object(display.get("edges")) else {}
+    drawing = section_drawing(
+        descriptor,
+        rows,
+        plane=str(request["plane"]),
+        offset=float(request["offset"]),
+        size=_section_frame_size(job),
+        outline_color=str(edges["color"]) if edges.get("color") else None,
+    )
+    directory = _drawing_payload_dir()
+    data = encode_drawing_payload(drawing.payload)
+    payload_path = directory / f"{sha256(data).hexdigest()}.drawing.json"
+    if not payload_path.is_file():
+        write_bytes_atomic(payload_path, data)
+    svg = drawing.svg.encode("utf-8")
+    svg_path = directory / f"{sha256(svg).hexdigest()}.section.svg"
+    if not svg_path.is_file():
+        write_bytes_atomic(svg_path, svg)
+    output_settings = job.get("output") if is_plain_object(job.get("output")) else {}
+    return {
+        "rootPath": str(directory),
+        "drawingUrl": asset_url_for_path(payload_path, directory),
+        "sectionSvg": str(svg_path),
+        "section": {
+            "label": drawing.label,
+            "locator": locator_fraction(rows, str(request["plane"]), float(request["offset"])),
+            "title": f"SECTION {drawing.label}" if output_settings.get("viewLabels") is True else None,
+        },
+        "warnings": list(drawing.warnings),
+    }
 
 
 # A DXF is DRAWN, not staged: `cadgen dxf snapshot` paints the same
@@ -1429,9 +1397,22 @@ def resolve_drawing_render_job(
         "kind": kind,
         "drawingUrl": asset_url_for_path(payload_path, serve_root),
     }
+    if drawing_payload_is_empty(payload_path):
+        # A true answer, and one nobody would guess from a blank PNG.
+        resolved["warnings"] = ["this drawing has no geometry in its modelspace, so the image is empty"]
     if bool(job.get("debug")):
         resolved["debug"] = {"drawingSource": {"kind": kind, "payloadBytes": payload_path.stat().st_size}}
     return {**job, "resolved": resolved}
+
+
+def drawing_payload_is_empty(payload_path: Path) -> bool:
+    """Whether a payload file has nothing to draw (``bounds`` is null).
+
+    Read from the head of the file: the encoder writes ``schemaVersion``,
+    ``units`` and then ``bounds``, so a megabyte drawing is not parsed to learn it.
+    """
+    with open(payload_path, "rb") as handle:
+        return b'"bounds":null' in handle.read(4096)
 
 
 @functools.lru_cache(maxsize=1)

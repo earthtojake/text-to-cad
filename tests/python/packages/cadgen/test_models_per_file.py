@@ -105,6 +105,8 @@ class ModelsPerFile(unittest.TestCase):
         return completed.stdout + completed.stderr
 
     def test_two_models_in_one_file_are_two_records_and_two_outputs(self) -> None:
+        # One build of the file, read three ways: its records and outputs, `store why`
+        # (every model of the file, or one), and a top-level call of one of its models.
         out = self.run_py("family.py").stdout
         self.assertIn("built bracket_left.step", out)
         self.assertIn("built bracket_right.step", out)
@@ -117,10 +119,8 @@ class ModelsPerFile(unittest.TestCase):
             models,
             [f"{(self.src / 'family.py').resolve()}::bracket_left", f"{(self.src / 'family.py').resolve()}::bracket_right"],
         )
-        # That a rerun finds both current is what `store why` asserts, below.
 
-    def test_store_why_names_every_model_of_the_file_and_accepts_one(self) -> None:
-        self.run_py("family.py")
+        # `store why` names every model of the file, and accepts one; both are current.
         both = self.cli("store", "why", "family.py")
         self.assertIn("family.py::bracket_left", both)
         self.assertIn("family.py::bracket_right", both)
@@ -129,6 +129,12 @@ class ModelsPerFile(unittest.TestCase):
         self.assertIn("family.py::bracket_right", one)
         self.assertNotIn("bracket_left", one)
         self.assertEqual(one.count("verdict"), 1)
+
+        # A top-level call of a model of the file returns its geometry.
+        script = self.root / "read_it.py"
+        script.write_text(RETURNS % str(self.src), encoding="utf-8")
+        out = self.run_py(str(script), cwd=self.root).stdout.strip().splitlines()[-1]
+        self.assertEqual(out, "Compound 10.0 4.0 2.0")
 
     def test_a_parent_pins_only_the_model_it_called(self) -> None:
         self.run_py("pair.py")
@@ -160,13 +166,6 @@ class ModelsPerFile(unittest.TestCase):
         self.assertIn("built bracket_left.step", rerun)
         self.assertIn("built bracket_right.step", rerun)
 
-    def test_a_top_level_call_returns_the_geometry(self) -> None:
-        self.run_py("family.py")
-        script = self.root / "read_it.py"
-        script.write_text(RETURNS % str(self.src), encoding="utf-8")
-        out = self.run_py(str(script), cwd=self.root).stdout.strip().splitlines()[-1]
-        self.assertEqual(out, "Compound 10.0 4.0 2.0")
-
     def test_a_file_holding_one_model_is_named_by_its_path(self) -> None:
         single = self.src / "solo.py"
         single.write_text(
@@ -174,7 +173,7 @@ class ModelsPerFile(unittest.TestCase):
             "    return bd.Box(1, 2, 3)\n\n\nif __name__ == '__main__':\n    solo()\n",
             encoding="utf-8",
         )
-        out = self.run_py("solo.py", cwd=self.src)
+        out = self.run_py("solo.py", "--json", cwd=self.src)
         events = [json.loads(line) for line in out.stderr.splitlines() if line.startswith("{")]
         self.assertTrue(events)
         self.assertTrue(all(e["model"].endswith("solo.py") for e in events), events[0])

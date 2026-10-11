@@ -1,5 +1,4 @@
 import { STEP_MODEL_ROOT_ID, stepTreeNodeIsTopology, stepTreeNodeLeafPartIds, stepTreeNodeLabel } from '@text-to-cad/core/lib/step/stepTree.js';
-import { stepProductName } from '@text-to-cad/core/lib/step/productName.js';
 import { unique } from './modelingGeometry.js';
 
 const folders = {boss:'Bosses',pocket:'Pockets',hole:'Bores',cut:'Cuts',round:'Edge blends'};
@@ -115,7 +114,7 @@ export function presentModelingAssembly(descriptor,results,stepRoot=null) {
     const bodies=tree ? presentModelingTree(tree) : [];
     const operations=tree?.flatMap(n=>n.children||[]).filter(n=>n.kind!=='remainder') || [];
     const summary=!result?'':result.error?'Unavailable':!tree.length?'No faces':operations.length ? `${operations.length} ${operations.length===1?'feature':'features'}`:'Other geometry';
-    const node={id:`part:${o.id}`,kind:'part',label:stepProductName(o.name)||'Part',occurrenceId:o.id,faces:tree?.flatMap(n=>n.faces)||[],edges:[],summary,
+    const node={id:`part:${o.id}`,kind:'part',label:o.name||'Part',occurrenceId:o.id,faces:tree?.flatMap(n=>n.faces)||[],edges:[],summary,
       note:result?.error || (!tree?.length && result ? 'This component has no faces to inspect.' : undefined),
       children:(bodies.length===1 ? bodies[0].children?.length ? bodies[0].children : bodies : bodies).map(n=>scope(n,o.id)),featureCount:operations.length,
       recognitionPending:!result};
@@ -126,7 +125,7 @@ export function presentModelingAssembly(descriptor,results,stepRoot=null) {
     const o=occurrences.get(n.id);
     if(o)return part(o);
     const children=(n.children||[]).map(visit).filter(Boolean);
-    return children.length?{id:`assembly:${n.id}`,kind:'assembly',label:stepProductName(n.name)||'Assembly',faces:[],edges:[],children}:null;
+    return children.length?{id:`assembly:${n.id}`,kind:'assembly',label:n.name||'Assembly',faces:[],edges:[],children}:null;
   };
   if(stepRoot){
     const fromStep=n=>{

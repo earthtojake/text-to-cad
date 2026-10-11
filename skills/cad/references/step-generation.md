@@ -6,71 +6,31 @@ STEP/STP files.
 
 ## The model script is the tool
 
-Generation has no CLI. A model is a plain Python script whose `__main__` calls
-the decorated function; that call builds it:
+Generation has no CLI: running a model script builds it, and per-run flags ride
+its argv (`python bracket.py --force --json`). The default `.step` is the
+sibling `<stem>.step`; `@step(out="path/to/out.step")` (relative to the script)
+moves it. A model has one set of outputs, declared in its decorators; there is
+no per-run output override.
 
-```python
-from cadgen import build123d as bd
-from cadgen import step
-
-WIDTH = 10.0
-
-
-@step
-def bracket():
-    return bd.Box(WIDTH, 10, 10)
-
-
-if __name__ == "__main__":
-    bracket()
-```
-
-```bash
-python bracket.py                 # builds bracket.step (and the result tree in the store)
-python bracket.py --force --json  # per-run flags ride the script's argv
-```
-
-Every run updates the cached native geometry and writes the outputs declared
-by the model. Display data is derived on demand. Unchanged sources are a
-fast no-op. The default `.step` is the sibling `<stem>.step`; relocate it
-durably with `@step(out="path/to/out.step")` (relative to the script). There
-is no per-run output override: a model has one set of outputs, declared in its
-decorators, and the store's record of it is keyed by the script.
-
-Rules the decorator enforces:
-
-- **The decorator only declares.** Nothing runs at decoration or import time.
-  To build by running the file directly, end it with
-  `if __name__ == "__main__": <model>()`. Imported models build when called.
-- **A top-level call builds.** Calling the decorated name when no build is in
-  progress (`__main__`, a REPL) runs the pipeline; a failed build exits with
-  the pipeline's code. A conventional real-file `__main__` bare call such as
-  `plate()` finishes every output without loading its discarded geometry back
-  into that process. It takes no arguments.
+- **The decorator only declares.** Nothing runs at decoration or import time;
+  `if __name__ == "__main__": <model>()` is what builds a file run directly.
+- **A top-level call builds.** Calling the decorated name outside a build runs
+  the pipeline; a failed build exits nonzero.
 - **A call inside a build composes.** From another model's body the same name
-  returns the shape: the child is built if it is stale (writing ITS outputs
-  and record), otherwise loaded from the store, and either way its result is
-  linked into the parent's. Composition is ordinary Python; there is nothing
-  to cache by hand and no composition API.
-- **Use one decorated model per entrypoint file.** Match the script's stem in
-  its declared outputs: `plate.py` → `STEP/plate.step`, `STL/plate.stl`, etc.
-  Stack output decorators on that one function; put shared factories in helper
-  modules and independently exported configurations in separate entrypoints.
-  The model is addressed by its script path (`python plate.py`,
-  `cadgen store why plate.py`). This is the skill's project convention;
-  helpers and package `__init__.py` files are not model entrypoints.
-- **Calling a model from plain Python returns its geometry.** Outside a build,
+  returns the shape: the child is built if stale (writing its own outputs) or
+  loaded from the store, and its result is linked into the parent's. There is
+  nothing to cache by hand and no composition API.
+- **A model is addressed by its script path** (`python plate.py`,
+  `cadgen store why plate.py`), and every model in a file is stale when any
+  line of the file changes, so a file usually holds one model, with its output
+  decorators stacked on that one function. Helpers and package `__init__.py`
+  files are not model entrypoints.
+- **Calling a model from plain Python returns its geometry**: outside a build,
   `plate()` builds (or finds current) and returns the model's tree as a
-  `Compound` — what a parent composing it would get — so a script, a notebook
-  or a REPL can read bounds, faces or volumes straight off a model. Assign or
-  otherwise consume the call when using that return. Only a proven discarded
-  real-file `__main__` bare call skips this materialization; instrumented,
-  interactive and ambiguous calls keep returning geometry. A drawing returns
-  `None`.
-- **A model takes no parameters.** It is one configuration of one set of
-  outputs, so there is nothing for an argument to select; the decorator
-  refuses a parameter list. Parametric geometry is a plain factory the model
-  calls:
+  `Compound`, so a script or REPL can read bounds, faces or volumes off it. A
+  drawing returns `None`.
+- **A model takes no parameters**; the decorator refuses a parameter list.
+  Parametric geometry is a plain factory the model calls:
 
   ```python
   from __future__ import annotations   # keeps `-> bd.Shape` a string, not an import
@@ -92,89 +52,60 @@ Rules the decorator enforces:
       bracket()
   ```
 
-  A second configuration is a second model (`bracket_wide.py`), with its own
-  outputs — the way two part numbers are two parts. Values a model shares with
-  its drawing or its assembly live in module constants (`WIDTH = 40.0`) that
-  the siblings import.
-- **The return is a bare build123d `Shape` and nothing else** — a dict return
-  is refused. The return IS the geometry: a `Compound` placing children is
-  packaged as occurrences (linked where a child is another model's result), a
-  single solid as one component. `read_scene` exposes that saved occurrence
-  hierarchy; manufacturing intent is not inferred from it.
-- **Outputs are what the decorators declare.** `@step` writes the `.step`.
-  Mesh outputs are `@stl`/`@threemf`/`@glb` stacked on the model, tolerances
-  on the decorators (`supported-exports.md`). **A model may declare no STEP at
-  all**: `@stl`/`@threemf`/`@glb` with no `@step` is a full model — same tree,
-  record, build, no-op and composition — that writes its meshes and no
-  `.step`, no sidecar. STEP is one output kind, not a requirement.
+  A second configuration is a second model (`bracket_wide.py`) with its own
+  outputs. Values shared with a drawing or an assembly live in module constants
+  (`WIDTH = 40.0`) that the siblings import.
+- **The return is a bare build123d `Shape`**; a dict return is refused. A
+  `Compound` placing children is packaged as occurrences (linked where a child is
+  another model's result), a single solid as one component.
+- **Outputs are what the decorators declare**: `@step` writes the `.step`, and
+  `@stl`/`@threemf`/`@glb` write meshes ([mesh exports](supported-exports.md));
+  a model may declare meshes and no STEP.
 - Options on `@step`: `out=`, `mesh_tolerance=`, `mesh_angular_tolerance=`,
-  `kinematics=`, `materials=`, and `animation=` (`kinematics.md`). **No decorator argument changes the
-  geometry a model produces**: they decide where the files land, how they are
-  written, and what the sidecar declares. `animation=` is a self-contained
-  JavaScript ES module string embedded in that sidecar. `materials=` is
+  `kinematics=`, `materials=` and `animation=` ([kinematics](kinematics.md)). No
+  decorator argument changes the geometry a model produces. `materials=` is
   `{"definitions": {id: material}, "assignments": [{"targets": ["#label", "#group"], "material": id}]}`;
-  definitions remain available even when unassigned, and every target must
-  resolve exactly. See `build123d-modeling.md` for the material channels.
-  Everything a model declares about itself lives in its decorators, and a
-  child's intrinsic materials inherit through its pinned tree. Kinematics and
-  animation are document-scoped and never inherit into a parent.
+  every target must resolve exactly ([material channels](build123d-modeling.md#colour-and-finish)).
+  A child's materials inherit into its parents; kinematics and animation never do.
 
-**Imports:** use `from cadgen import build123d as bd`, a lazy re-export,
-so a current model can finish before loading the CAD kernel. Keep geometry,
-CAD file reads and `bd` attributes out of module-level constants/defaults.
-Use `from __future__ import annotations` for annotations such as `-> bd.Shape`.
-Raw `import build123d` works but pays the import cost on every rerun.
+**Imports:** `from cadgen import build123d as bd` is a lazy re-export, so a
+current model can finish before loading the CAD kernel. Geometry, CAD file reads
+or `bd` attributes in module-level constants or defaults load it anyway, as does
+an annotation such as `-> bd.Shape` without `from __future__ import annotations`.
+Raw `import build123d` pays the import cost on every rerun.
 
 **A model runs like `python script.py`.** Its folder is on `sys.path` for the
-whole build, plus your `PYTHONPATH` — cadgen adds nothing else and infers no
-project root — so an import inside the body, or inside a helper the body calls,
-resolves exactly like one at module top — and the file it loads is hashed when
-it executes, so it is in the closure either way. Prefer module-top imports for
-readability and so the static scan sees the graph up front; a lazy import is
-not an error.
+whole build, plus your `PYTHONPATH`; cadgen adds nothing else and infers no
+project root. An import inside the body resolves like one at module top, and
+the file it loads joins the closure either way.
 
 ## Generated vs imported STEP
 
-These two terms classify a STEP file by what its source is:
-
-- A **generated STEP file** has a model script as its source. The STEP is a
-  *derived output*; the script is what you edit and re-run.
-- An **imported STEP file** is its own source: authored or downloaded
-  elsewhere. There is nothing upstream to regenerate.
-
-A STEP model with `kinematics=`, `materials=`, or `animation=` writes a sidecar
-beside its output (`<name>.step.json`) containing the corresponding resolved
-sections, bound to the saved STEP's byte hash. A model with none writes no
-sidecar; its store record makes reruns no-op. Mesh declarations stay in that record.
-Compiling an imported STEP preserves any authored sidecar. The written STEP file
-itself carries NO cadgen metadata and no link back to source code, ever — a
-bare artifact copied anywhere is a plain importable file, and every door
-resolves it by its bytes, so a moved or copied document renders identically to
-its twin.
+A **generated** STEP has a model script as its source: edit and rerun the
+script. An **imported** STEP is its own source, authored or downloaded
+elsewhere. The written STEP carries no cadgen metadata and no link back to its
+source; every door resolves a document by its bytes, so a copied file renders
+like its original. A STEP model with `kinematics=`, `materials=` or `animation=`
+writes a sidecar (`<name>.step.json`) bound to the STEP's byte hash; compiling
+an imported STEP keeps any sidecar beside it.
 
 ## Composing on other parts: children and inputs
 
-A model that builds on another part wires it in one of two modes. Choose
-deliberately:
-
-- **A CHILD (the default)** — the other part is a model in this project:
-  import its function and call it. A child edit flows into the parent on the
-  parent's next rebuild; there are no exported bytes to keep in sync. Never
-  route a generated child through its exported `.step`.
-- **An INPUT** — the other part is a document, not source: a purchased or
-  downloaded part, or a generated part the user has EXPLICITLY asked to
-  decouple (export it once, then treat the export like any other document).
-  Read it with `cadgen.read_step`, below.
+- **A CHILD (the default)**: the other part is a model in this project; import
+  its function and call it. A child edit reaches the parent on the parent's next
+  rebuild. A generated child read back through its exported `.step` becomes an
+  input instead: nothing rebuilds it, and the parent copies it rather than
+  linking it.
+- **An INPUT**: the other part is a document (a purchased part, or a generated
+  part the user asked to decouple). Read it with `cadgen.read_step`, below.
 
 ### Children
 
-A child is just an import: model scripts are real modules, and
-`from widget import widget` binds the model with no build side effects.
-Calling `widget()` inside the parent's body builds the child when it is stale
-(writing the child's own outputs) or loads its result from the store, and
-returns the shape. What comes back is GEOMETRY only — tree, labels, colors,
-placements. A child's sidecar content (its mates, kinematics, animation) never
-rides up into the parent: declare what the assembly needs on the assembly.
+`from widget import widget` binds the model with no build side effects; calling
+`widget()` inside the parent's body builds or loads it and returns its shape.
+What comes back is geometry only (tree, labels, colours, placements): a child's
+mates, kinematics and animation never ride up, so declare what the assembly
+needs on the assembly.
 
 ```python
 from cadgen import build123d as bd
@@ -199,125 +130,83 @@ if __name__ == "__main__":
     link_arm()
 ```
 
-**Link or component.** Place a child's shape as it came back — `moved()`,
-`Pos/Rot/Location * child`, relabelled, recolored — and the parent's result
-LINKS to the child's tree (stored once, shared by every parent; two placements
-are two links to one tree). Modify it (a boolean, a mirror, extracting a
-sub-shape) and the parent owns that geometry as its own components; the
-dependency is tracked either way. **Never `located()`** for placement: it
-deep-copies the geometry, which makes it the parent's own component instead
-of a link (`positioning.md`). Put geometry changes that belong to the child in
-the child's file or its factory.
+**Link or component.** A child placed as it came back (`moved()`,
+`Pos/Rot/Location * child`, relabelled, recoloured) is a LINK to the child's tree,
+stored once and shared by every parent. A modified child (a boolean, a mirror, a
+sub-shape) becomes the parent's own components. `located()` replaces the
+placement and also makes a copy the parent owns. Each `moved()` copies the shape
+and all under it.
 
-Child calls submit work and return lazy shapes. Placements, labels and colours
-can be set before geometry is ready; geometry queries wait for the child.
-Independent children can build in parallel, subject to runtime admission.
-No scheduling code is needed in the model.
+Child calls return lazy shapes: placements, labels and colours can be set
+before the geometry is ready, geometry queries wait for it, and independent
+children build in parallel.
 
-**Dependency is pull.** A parent depends on each child by RESULT: its record
-pins the child's tree hash, so a child edit that yields identical geometry
-leaves the parent current, and an edit that does not reach a child skips that
-child's Python and kernel work entirely. **Rebuilding a child does not rebuild
-the assemblies that use it** — run the parent to pick up the change
-(`python src/robot.py` builds whatever is stale beneath it and links the
-rest). A parent finished against a child that changed during its build says so
-(`already stale: … rerun`).
+**Dependency is pull.** A parent's record pins each child's tree hash, so a
+child edit that yields identical geometry leaves the parent current. A parent
+that finished against a child changed during its build says it is already
+stale.
 
 ### What a rebuild tracks — models by result, constants by value, functions by reach
 
 What an importer TAKES from a model file decides how that file counts:
 
-- **`from widget import widget`** (the model function), called → tracked by
-  RESULT: the parent pins the child's tree, so an edit inside `widget()`'s body
-  rebuilds the parent only when the child's geometry changes. Importing
-  `widget.py` still runs its top level in the parent's process — its imports,
-  module-level code and any decorator argument that is not a literal — so an
-  edit there rebuilds the parent too (a literal such as `out="..."` does not).
-  Keep a model file's top level to imports, constants and definitions.
-- **`from widget import WIDTH`** (a module-level literal: a number, string,
-  bool, `None`, or tuples/lists/dicts of those) → tracked by VALUE: a
-  comment or body edit in `widget.py` leaves the importer current; only a
-  changed value rebuilds it. A value computed by module-level code is
-  import-time code: editing that expression rebuilds the importer too.
-- **Anything else** from a model file (a helper function, a `bd.` object, an
-  expression) → tracked by FILE: the whole file joins the importer's source
-  closure, and any edit to it rebuilds the importer. Shared helpers therefore
-  belong in `lib/` (a plain module, in the closure of every model that
-  reaches it — by the functions and constants the model can actually run, so
-  editing a helper no model calls rebuilds nothing), and shared constants may
-  live in a model file or in `lib/`.
+- **`from widget import widget`** (the model), called → tracked by RESULT: an
+  edit inside `widget()`'s body rebuilds the parent only when the child's
+  geometry changes. Importing `widget.py` still runs its top level in the
+  parent's process, so an edit to its imports, module-level code or a non-literal
+  decorator argument rebuilds the parent too.
+- **`from widget import WIDTH`** (a module-level literal: number, string, bool,
+  `None`, or tuples/lists/dicts of those) → tracked by VALUE: only a changed
+  value rebuilds the importer. A value computed at module level is import-time
+  code and is tracked as code.
+- **Anything else** from a model file (a helper, a `bd.` object, an expression)
+  → tracked by FILE: any edit to the file rebuilds the importer. Shared helpers
+  belong in `lib/`, a plain module tracked by reach: editing a helper no model
+  calls rebuilds nothing.
 
-Inputs join the closure too: every data file the build opens is hashed as a
-build input, whatever opens it (below). A new
-file that changes what an import finds — an `__init__.py` added to a folder, a
-package beside a module, a same-named module earlier on the path — also makes
-the model stale. Embedded `animation=` source and named
-`materials=` are decorator annotations. Imported values and helper calls
-remain ordinary source dependencies.
-
-Every decorator argument is ordinary Python, evaluated when the module is
-imported: `out=f"{FOLDER}/{NAME}.step"`, `mesh_tolerance=TOL` with `TOL` from
-`lib/`, a path built from a constant — all fine, and nothing is read off the
-source text. The values feeding them are tracked like any other input (a
-`lib/` helper by reach, a model-file constant by value), so changing the
-constant behind an `out=` makes the model stale. The module top must still stay
-kernel-free so checking the model's declarations stays cheap.
+Every data file the build opens is an input too (below). A new file that changes
+what an import finds (an `__init__.py`, a package beside a module, a same-named
+module earlier on the path) also makes the model stale. Decorator arguments are
+ordinary Python evaluated at import (`out=f"{FOLDER}/{NAME}.step"`, a tolerance
+from `lib/`), and the values feeding them are tracked like any other input.
 
 ### Splitting for rebuild speed
 
-cadgen never caches work inside a model: a model whose inputs changed runs
-from scratch, and one whose inputs did not is skipped whole. Rebuild speed
-therefore comes from how the project is split:
+cadgen never caches work inside a model: a model whose inputs changed runs from
+scratch, and one whose inputs did not is skipped whole.
 
-- Give a part its own model when it dominates its model's build time, takes
-  more than about 15 s, or is edited independently of its neighbours: a thin
-  entry file whose `@step` function calls a factory in `lib/`, placed by its
-  parent like any child. An edit then rebuilds that part and relinks the
-  parent; its siblings stay current, and stale children build in parallel. One
-  heavy casing or shell inside a model of many light parts is the case that
-  pays most: edits to the light parts stop paying for it.
-- Keep geometry in `lib/` factories. A model reruns only when code it reaches
-  changes, so an edit to one factory leaves the models that never call it
-  current.
-- One entry file per expensive model: every `@step` function in a file is
-  stale when any line of that file changes.
+- A part in its own model (a thin entry file whose `@step` function calls a
+  factory in `lib/`) rebuilds alone: its parent relinks, its siblings stay
+  current, and stale children build in parallel. One heavy casing among many
+  light parts gains most.
+- A model reruns only when code it reaches changes, so an edit to one `lib/`
+  factory leaves the models that never call it current.
 
-A part that builds in a second or two gains nothing from its own file; check
-timings with `--verbose` before splitting further.
+A part that builds in a second or two gains nothing from its own file; each
+model's time line (below) shows where a split pays.
 
 ### Annotation caching
 
 Annotation-only edits may reuse cached geometry; computed or imported
-annotations remain tracked dependencies and may require a rebuild.
+annotations remain tracked dependencies and may require a rebuild. Animation
+clips are code: editing one reruns the model, which rewrites the sidecar's
+keyframes and keeps the STEP's bytes.
 
 ### Models inside a package
 
-A model file may live inside a Python package (folders with `__init__.py`).
-cadgen runs it under its dotted name, so relative imports (`from .parts.washer
-import washer`) resolve whenever cadgen loads the model: as a child of another
-model, or when you run it as a module (`python -m pkg.stack`). Running the file
-by path (`python pkg/stack.py`) is Python's own limit, not cadgen's: Python
-executes it as `__main__` with no package, so a relative import fails before
-cadgen is involved; use `-m` or absolute imports for a file you run directly.
-`PYTHONPATH` still declares any import root beyond the script's own folder;
-cadgen adds nothing of its own.
+A model inside a Python package runs under its dotted name, so relative imports
+(`from .parts.washer import washer`) resolve when cadgen loads it as a child or
+when it runs as a module (`python -m pkg.stack`). Run by path
+(`python pkg/stack.py`), Python itself gives it no package and the relative
+import fails: use `-m` or absolute imports there.
 
 ### Mirrored geometry and reusable models
 
-Mirror geometry inline when it belongs to the current model. For example,
-`right = bd.mirror(left, about=bd.Plane.YZ)` needs no separate model file.
-In cadgen, reflection creates geometry rather than a rigid placement of the
-original child: a mirrored child becomes parent-owned components, while its
-source model remains a tracked dependency. The parent's complete result is
-still cached, and an unchanged parent remains a no-op.
-
-Use a separate model when the mirrored part needs independent outputs or reuse
-across assemblies or parent rebuilds. Its result can then be linked and placed
-like any other child. A separate model is also the unit of reuse: cadgen
-never caches work inside a model, so an unchanged model is skipped whole and
-a changed one runs whole (see [Splitting for rebuild speed](#splitting-for-rebuild-speed)).
-
-For independently exported left/right variants, a shared factory is one option:
+`right = bd.mirror(left, about=bd.Plane.YZ)` inline needs no separate model
+file. Reflection creates geometry rather than a placement, so a mirrored child
+becomes parent-owned components (its source model stays a tracked dependency).
+A separate model suits a mirrored part that needs its own outputs or reuse
+across assemblies; a shared factory serves both hands:
 
 ```python
 # src/lib/bracket_shape.py — the factory (plain module, no decorator)
@@ -363,15 +252,11 @@ if __name__ == "__main__":
     bracket_right()
 ```
 
-Choose between inline geometry and separate models from the outputs and reuse
-the project needs. Either can participate in the containing assembly's kinematics.
-
 ### Inputs: reading a STEP file the model does not generate
 
-Prefer `cadgen.read_step` to `build123d.import_step`: it returns the same
-native shape with the document's colours, and reads warm from the store when it
-already holds the file's tree. Either way the file is a build input: replacing
-the vendor STEP makes the model stale on its own, with no `--force`.
+`cadgen.read_step` returns the same native shape as `build123d.import_step`,
+with the document's colours, and reads warm from the store when it can. Either
+way the file is a build input: replacing it makes the model stale.
 
 ```python
 from pathlib import Path
@@ -387,9 +272,9 @@ def rig():
     ...
 ```
 
-An imported part is an INPUT, not a model: nothing links to it and it has no
-record. To make it first-class — so assemblies link to it, so it has its own
-outputs and declarations — wrap it in a model of its own:
+An imported part is an input, not a model: nothing links to it and it has no
+record. Wrapping it in a model of its own gives it outputs, declarations and
+links:
 
 ```python
 from pathlib import Path
@@ -408,151 +293,77 @@ if __name__ == "__main__":
     servo()
 ```
 
-**Never `read_step` your own output.** A model that reads the `.step` it is
-about to write is not a loop — it is a model whose input changes every time it
-runs, so the gate can never say "current", every build is a full rebuild, and
-the geometry depends on what the last run happened to leave on disk. Keep
-source documents where the model cannot write them — placement policy belongs
-to `project-layout.md` (`imported/`). Input path and output path being different
-files is the whole rule. If the geometry you want is something the project
-already builds, call that model instead of reading the artifact.
+`read_step` refuses a model's own output: an input that changes on every run
+never settles. If the project already builds the geometry, call that model.
 
 ### Inputs: a data file the model reads
 
-Every file the build opens is recorded as it reads it, whatever reads it: a
-JSON routing atlas through `json.load`, a CSV of tap sizes, a table through
-`np.load`, a BREP `bd.import_brep` opens in C++, a project font `bd.Text` loads. Edit
-`atlas.json` and the model is stale on its own; rewrite it with identical bytes
-and it stays current, because the input is the content and not the mtime. A
-folder the model globs is recorded too, so adding or removing a profile there
-rebuilds it. The model's own outputs in that folder do not count; another
-model's do, so a model that globs the folder its siblings build into reads stale
-once after their first build. Nothing is declared.
-
-Not inputs: a file the build writes, the model's own outputs, the Python
-environment, and system files (fonts, time zones). A program the model starts
-as a separate process reads files on its own, unseen: keep that step outside
-the model and read its result.
-
-For structuring multi-part projects (folder layout, shared `src/lib/` code,
-commit policy), read `project-layout.md` and `project-template.md`.
+Every file the build opens is recorded as it reads it, whatever opens it:
+`json.load`, `np.load`, a BREP `bd.import_brep` opens in C++, a font `bd.Text`
+loads. The input is the content, not the mtime, and a globbed folder is recorded
+too, so adding or removing a file there rebuilds the model. A model's own outputs
+do not count; another model's outputs in a globbed folder do. An environment
+variable the model's own code reads is an input by its value. Not inputs:
+installed packages, system files, and anything a program the model starts reads;
+the build warns when it starts one.
 
 ## Freshness: `cadgen store why`
 
 `cadgen store why <model>.py` explains whether the model is current and which
 sources, imported constants, child results, cached objects or declared outputs
-changed. It also accepts a generated STEP when the store knows its source.
-Exit status is 0 for current, 1 for stale; `--json` returns the verdict as data.
-
-```bash
-cadgen store why src/frame.py
-python src/frame.py                 # rebuild the parent after a child changes
-python src/frame.py --force         # force this model's body to run
-```
-
-The gate cannot track geometry selected by environment variables, the working
-directory, time or randomness. Put configurations in source/factory arguments;
-the files a model reads are tracked on their own. After a runtime fix, force affected models
-if their cached results still reflect the old behavior.
-
-## Generated assemblies
-
-An assembly is a model whose return places children (a `Compound` of parts
-or of other models' results); `read_scene` exposes the saved hierarchy.
-Edit the `.py` source to change an assembly; inspect or export its saved STEP
-to check what was actually written. Use native labels and choose transforms
-or native joints to express placement; see [positioning](positioning.md).
+changed; it also accepts a generated STEP. Exit status is 0 for current, 1 for
+stale; `--json` returns the verdict as data. A cadgen fix does not invalidate
+results cached before it: `--force` rebuilds a model whose cached result still
+reflects the old behaviour.
 
 ## Imported STEP/STP files
 
-An imported STEP/STP file needs no model script and no preparation step. Hand
-it straight to `read_scene`, `cadgen step snapshot`, or a mesh door:
-each compiles a tree from the file's bytes on first use (a job in the pool,
-shared with the CAD Viewer), and its part/assembly kind is inferred from the
-STEP product hierarchy.
-
-```bash
-python tmp/check_imported.py  # read_scene("path/to/imported.step")
-cadgen stl build path/to/imported.step meshes/imported.stl
-```
-
-To produce STL/3MF/native GLB files from an imported STEP, pass it to the
-matching format command. OUT is optional and defaults to a sibling with the
-requested extension; read [mesh exports](supported-exports.md).
+An imported STEP/STP needs no model script and no preparation: `read_scene`,
+`cadgen step snapshot` and the mesh `build` commands each compile its tree from
+the file's bytes on first use, inferring part or assembly from its product
+hierarchy.
 
 ### Re-emitting a foreign STEP as your own
 
-A STEP written by another kernel round-trips through cadgen with
-`cadgen step build IN OUT`: OCCT reads it, the tree is built, and the
-canonical writer emits it, so OUT's bytes are deterministic and identical on
-every run. The same command ANNOTATES a document that has no model script —
-`--kinematics` takes the whole space (`{mates, couplings, poses}`, the same
-vocabulary the decorator takes, as inline JSON or a `.json` path);
-`--materials` takes the named declaration as inline JSON or a `.json` path;
-and `--animation` takes a JavaScript module file or its source text. All
-three resolve into OUT's unified schema-9 sidecar.
-
-```bash
-cadgen step build vendor/hinge.step STEP/hinge.step \
-  --kinematics '{"mates": [{"name": "swing", "kind": "revolute",
-                            "parent": "#body", "child": "#lever",
-                            "axis": "#lever.f2", "limits": [0, 90]}],
-                 "poses": {"open": {"swing": 45}}}'
-```
-
-Re-running is a no-op; editing only these annotations refreshes the sidecar
-without re-emitting a byte. Vendor metadata (PMI, GD&T) does not survive the round trip.
-OUT's root is named after OUT: the root `PRODUCT` and the header's `FILE_NAME`
-take OUT's file stem (`STEP/hinge.step` → `hinge`), exactly as a model script's
-document is named after the file it writes — so the same input re-emitted to two
-paths yields two differently named documents. Names below the root are kept, so
-`#label` references to the parts keep resolving; do not address the root by the
-name IN carried.
-**Choose the door by how the model will evolve**: a shape you will keep changing
-belongs in a model script (a thin wrapper that reads the foreign STEP), while
-a one-shot canonicalization or annotation of a file you do not own is exactly
-what `step build` is for.
+`cadgen step build IN OUT` reads a STEP written by another kernel and emits it
+through cadgen's canonical writer, so OUT's bytes are deterministic; rerunning is
+a no-op. The same command annotates a document that has no model script with
+`--kinematics` and `--materials` ([kinematics](kinematics.md#annotating-a-step-you-did-not-generate));
+clips need a model script. Vendor metadata (PMI, GD&T) does not survive; names
+do, so `#label` references keep resolving. A shape that will keep changing suits
+a thin wrapper model that reads the foreign STEP instead.
 
 ## Optional-module assemblies
 
-A model that imports several part modules and SKIPS the ones that do not exist
-yet is a useful pattern for parallel work — the assembly stays renderable while
-individual parts are still being written. It has one sharp edge.
-
-The model's closure is computed from the modules it ACTUALLY IMPORTED at build
-time. A module that did not exist during the build was never in the closure,
-so its later appearance cannot make the model stale, and every door keeps
-reading the old document's tree — no error, no warning. Run the model script
-with `--force` after adding a previously absent part module.
-
-## After generation
-
-- Confirm the process succeeded and each declared output exists and is
-  non-empty (the stdout line names the document; `--json` adds the `tree`
-  hash).
-- Run the Python geometry checks selected for this design per
-  `inspection-and-validation.md`:
-
-```bash
-python tmp/check_model.py
-```
+A model that skips part modules that do not exist yet stays renderable while
+parts are written in parallel; a module that appears rebuilds it like an edit.
 
 ## Progress and runtime diagnostics
 
-The warm daemon is on by default. `cadgen daemon status` shows running and
-queued work. Jobs may wait for CPU or memory admission; concurrency and worker
-lifetimes are runtime details, specified in the installed package's `STORE.md`.
-For diagnosis, `CADGEN_DAEMON=0 python part.py` uses transient workers with the
-same geometry/output contract.
-
-Results go to stdout; progress and errors go to stderr. Model runs accept
-`--json` for machine-readable results and `--verbose` for timings/full tracebacks.
-A `--json` result names its `document` by absolute path, and a `--json` failure
-is one `{"ok": false, "error": "..."}` line on stdout with exit status 1 — the
-same envelope every `cadgen` command prints. `python part.py --help` lists the
-per-run flags. A script builds the models its `__main__` block calls; no flag
+The warm daemon is on by default; `cadgen daemon status` shows running and
+queued work, and `CADGEN_DAEMON=0 python part.py` builds with transient workers
+under the same contract. Results go to stdout, errors to stderr. Model runs
+accept `--json` (one result line; a failure is `{"ok": false, "error": "..."}`
+with exit status 1) and `--verbose` (full tracebacks); `python part.py --help`
+lists the flags. A script builds the models its `__main__` block calls; no flag
 selects one.
-For long model bodies, optional `report` and `track` calls expose progress:
+
+Every model a run builds, its children included, prints where its time went:
+
+```text
+[cadgen] built STEP/arm.step in 9m42s: model code 8m20s, cadgen 1m22s
+```
+
+Model code is the decorated function's call, less its waits for child builds;
+cadgen is loading the script, storing parts and writing outputs. A `--json`
+result carries the same numbers in `timings` (`null` for a current model). A
+model whose code took more than twice its last build's, and 30 s more, gets a
+warning. `python part.py --profile` rebuilds that model with its own code under
+cProfile and prints the project's functions by cumulative time and the busiest
+functions anywhere by own time, with `file:line`; OCCT calls count in the Python
+function that made them, children are not profiled, and cProfile slows the code
+2-10x, so read shares, not seconds. On a terminal, optional `report` and `track`
+calls label progress inside a long model body:
 
 ```python
 from cadgen import report, track
@@ -563,10 +374,8 @@ for rib in track(ribs, label=lambda r: r.name):
     ...
 ```
 
-Use one cache store for normal project work. A separate `CADGEN_CACHE_DIR`
-is useful for isolated tests, but two stores writing the same project outputs
-can cause repeated freshness misses. The store holds derived results only.
-Prefer a targeted `--force` or `cadgen store forget <model>.py` when diagnosing
-one stale result; `cadgen store gc` removes unreachable cache data. The store
-keeps itself under `CADGEN_STORE_MAX` (default 20 GB) by evicting its least
-recently written derived entries; `cadgen store info` shows its size.
+Two stores (a separate `CADGEN_CACHE_DIR`) writing the same project's outputs
+cause repeated freshness misses. `cadgen store forget <model>.py` drops one
+model's result, `cadgen store gc` removes unreachable data, and
+`cadgen store info` shows the store's size; it keeps itself under
+`CADGEN_STORE_MAX` (default 20 GB) by evicting least recently written entries.

@@ -214,8 +214,8 @@ def _first_party_from_source():
 @dataclass(frozen=True)
 class _DeclaredKinematics:
     """What the decorator declared for the build: kinematics, named materials,
-    and the embedded animation module. None of these declarations moves
-    geometry or changes STEP bytes."""
+    and the animation clips (baked at publication). None of these declarations
+    moves geometry or changes STEP bytes."""
 
     block: dict | None
     materials: dict | None = None
@@ -230,8 +230,8 @@ def _resolve_declared_kinematics(defn: object) -> _DeclaredKinematics:
     kinematics_def = getattr(defn, "kinematics", None)
     block = dict(kinematics_def.block) if kinematics_def is not None else None
     materials = copy.deepcopy(getattr(defn, "materials", None))
-    animation = copy.deepcopy(getattr(defn, "animation", None))
-    return _DeclaredKinematics(block=block, materials=materials, animation=animation)
+    clips = getattr(defn, "animation", None)
+    return _DeclaredKinematics(block=block, materials=materials, animation=dict(clips) if clips else None)
 
 
 def _normalize_step_payload(
@@ -365,6 +365,9 @@ def _write_drawing_record(
         "outputs": {str(written): {"sha256": hashlib.sha256(written.read_bytes()).hexdigest()}},
         "stepHash": "",
     }
+    from cadgen._internal.build_timing import record_fields
+
+    record.update(record_fields())
     decision = decide(model_path, ran_closure_hash=closure_hash, ran_files=closure_files,
                       ran_names=record["closure"]["names"], ran_shas=record["closure"]["shas"],
                       ran_wholes=record["closure"]["wholes"], ran_own=record["closure"]["own"])
@@ -558,11 +561,11 @@ def _run_script_generator_body(
         generator = getattr(module, entry_name, None)
         if not callable(generator):
             raise RuntimeError(f"{_display_path(spec.script_path)} does not define callable {entry_name}()")
-        # Bind the run as the ambient reporter for the generator's own code. This is
-        # the in-process twin of `run_node_builder`, which lets a Node child describe its
-        # work over a pipe: the entry function takes no arguments and so cannot be handed the run,
+        # Bind the run as the ambient reporter for the generator's own code: the entry
+        # function takes no arguments and so cannot be handed the run,
         # and without this the longest phase of most builds reports nothing at all. Silent
         # generators are unaffected -- nothing reads the binding unless they ask for it.
+        from cadgen._internal.build_timing import model_body
         from cadgen.authoring import building
         # The execution window includes imports during module initialization.
         # The loader already recorded the script's exact compiled source bytes;
@@ -572,19 +575,27 @@ def _run_script_generator_body(
             reporting_as(progress),
             building(spec.script_path, entry_name) as frame,
         ):
-            raw_payload = generator()
+            # The model's own code: what a build's time line calls "model code", and
+            # all that --profile profiles (cadgen._internal.build_timing).
+            with model_body(spec.script_path.parent):
+                raw_payload = generator()
 
     # A model's own outputs are never its inputs: reading one back reads the
     # previous run, so a read the trace saw is dropped here, and a folder its
     # code listed is hashed without them.
+    from cadgen._internal.build_timing import note_programs
     from cadgen.store.closure import build_closure
 
     own_outputs = _own_outputs(spec, model_format, entry_name)
     read_files, listed = trace.inputs(outputs=own_outputs)
+    # A program the model's code started reads files this trace never sees: the
+    # build's done event names it, and the root warns (cadgen.cli_tree).
+    note_programs(trace.programs)
     # The closure a record carries: the script + its static closure (stopping at
     # child models — a result edge is tracked by pin, not by file), every file
-    # that executed (hashed AT execution), and the data files and folders the run
-    # read, as it read them. Paths are relative to the GENERATOR's folder, never
+    # that executed (hashed AT execution), the data files and folders the run
+    # read, as it read them, and the environment variables its code read. Paths
+    # are relative to the GENERATOR's folder, never
     # the output's: `out=` routes the output anywhere, and basing the closure
     # there would hash the same source differently depending on where its
     # document is written. Every child the body called, with the tree it resolved
@@ -599,6 +610,7 @@ def _run_script_generator_body(
         outputs=own_outputs,
         children=[child for child, _tree in child_trees],
         sources=executed_hashes.sources,
+        environment=trace.environment,
     )
     source_closure = PythonSourceClosure(
         closure_hash=store_closure.hash,

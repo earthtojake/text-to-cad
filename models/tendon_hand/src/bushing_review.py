@@ -3,7 +3,7 @@ from cadgen import build123d as bd, step
 from lib.bushing import make_bushing
 
 @step(out="../STEP/bushing_review.step",
-      mesh_tolerance=.0008,mesh_angular_tolerance=.008)
+      mesh_tolerance=.0008,mesh_angular_tolerance=0.05)
 def bushing_review():
     return bd.Compound(label="polished_flanged_bushing_family",children=[
         bd.Pos(-10,0,0)*make_bushing(label="finger_eye_5mm_OD_2mm_shaft"),

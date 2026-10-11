@@ -1,41 +1,68 @@
-// THE component-tessellation cache interface (design/unified-tessellation.md
-// Phase 3): one key scheme, one codec, shared by every consumer that turns a
-// .surf into triangles — the export CLI (bin/mesh-export.mjs), the snapshot
-// browser runtime, and the viewer. A cache entry is one FULL
-// tessellateComponent result for one component at one tolerance pair, so a
-// snapshot warms the cache for an export and vice versa.
+// THE component-mesh store interface: one key scheme, one codec, shared by
+// every consumer that draws a component — the viewer, the snapshot page and
+// the docs hero. cadgen is the only producer: OCCT meshes each component's
+// exact BREP on the server (cadgen/_internal/occt_mesh.py) and stores one GLB
+// body per component and tolerance pair in the store's mesh index
+// (cadgen/store/meshes.py, the format's Python half). This module only reads.
 //
-// This module is BROWSER-PURE: codec and key only, no filesystem. Node
-// consumers pair it with tessellationCacheFs.mjs (the shared immutable
-// object/index store); browser consumers reach that store through the async
-// provider below (the snapshot page's provider round-trips bytes over its
-// Playwright-routed /__tess_cache/ origin, served by cadgen's snapshot host).
+// It is BROWSER-PURE: codec and key only, no filesystem. Browser consumers
+// reach the store through the async provider below, over the host's
+// /__tess_cache/ routes (the viewer server, or the snapshot page's
+// Playwright-routed origin served by cadgen's snapshot host).
 //
-// Entry layout (little-endian): "TESS" magic u32, version u32, headerLength
-// u32, JSON header padded with trailing spaces to a 4-byte boundary, then the
-// typed-array payload — positions f32, normals f32, faceOrds f32, indices
-// u32, sideOrds u32, then each display-edge polyline f32 in header order.
-// Every section is 4-byte-sized, so decode returns zero-copy views over the
-// source buffer.
+// A body is glTF 2.0 binary, in CAD units (millimetres, Z up). Its BIN chunk
+// holds, each section 4-byte aligned and present only when not empty: POSITION
+// and NORMAL (f32 xyz), the indices of the ONE triangle primitive (u16 for at
+// most 65,535 vertices, else u32), the face table (u32 rows: ord, indexStart,
+// indexCount, colour — 0 for none, else a palette row plus one), the edge table
+// (u32 rows: ord, pointStart, pointCount, class) and every edge's polyline (f32
+// xyz) back to back. Its JSON chunk is the canonical JSON for the values in
+// `extras.cadgen` (identity, bounds, scale, part colour, face colour palette)
+// and the counts: a node carrying the CAD -> glTF frame, one mesh, three
+// accessors, the buffer views and where each table is. A reader rebuilds that
+// JSON and requires it, then views every section in place.
 
-import { DEFAULT_OPTIONS, TESSELLATION_VERSION } from "./tessellate.js";
+// v6: glTF 2.0 binary replaced TESS v5. Non-v6 entries are misses.
+export const MESH_PAYLOAD_VERSION = 6;
+// The producer's revision, part of every key (cadgen/store/meshes.py
+// TESSELLATOR_VERSION). 10: OCCT BRepMesh on the exact BREP replaced the
+// browser's surface tessellator.
+export const TESSELLATION_VERSION = 10;
+export const MESH_INDEX_SCHEMA = 2;
+// The JSON chunk grows only with the face colour palette: cadgen/store/meshes.py
+// MAX_JSON_BYTES, the same number.
+export const MESH_MAX_JSON_BYTES = 64 * 1024 * 1024;
+// The edge table's class codes, in this order (cadgen/store/meshes.py EDGE_CLASSES).
+export const MESH_EDGE_CLASSES = Object.freeze([
+  "none", "feature", "tangent", "seam", "degenerate", "boundary", "nonManifold", "unknown",
+]);
+// Both tables are rows of four u32: (ord, start, count, reference).
+export const MESH_TABLE_COLUMNS = 4;
 
-export const TESS_CACHE_MAGIC = 0x53534554; // "TESS" little-endian
-// v4: v3's complete render payload plus the exact D/O/L/Q provenance binding.
-// A hit therefore proves its concrete render identity without requiring the
-// producing SURF object/index to remain present. Non-v4 entries are misses.
-export const TESS_CACHE_VERSION = 4;
-export const TESS_MESH_INDEX_SCHEMA = 1;
-export const TESS_MAX_INDEX_BYTES = 16 * 1024;
-export const TESS_MAX_HEADER_BYTES = 4 * 1024 * 1024;
-
+const GLB_MAGIC = 0x46546c67; // "glTF" little-endian
+const GLB_VERSION = 2;
+const JSON_CHUNK = 0x4e4f534a; // "JSON"
+const BIN_CHUNK = 0x004e4942; // "BIN\0"
+const UNSIGNED_SHORT_VERTEX_LIMIT = 65535;
+// Z-up millimetres as glTF's Y-up metres: -90 degrees about X, then 0.001.
+const NODE_ROTATION = Object.freeze([-Math.SQRT1_2, 0, 0, Math.SQRT1_2]);
+const NODE_SCALE = Object.freeze([0.001, 0.001, 0.001]);
+// `extras.cadgen`'s values, in the order cadgen writes them; the class names and the
+// table references follow them.
+const CAD_VALUES = Object.freeze([
+  "payloadVersion", "tessellatorVersion", "tessellationInput", "surfaceInput", "surfaceObject",
+  "quality", "bounds", "scale", "partColor", "faceColors",
+]);
+// The faces no mesher could cover, which the body leaves undrawn: a value only a body with one
+// has (cadgen/store/meshes.py `unmeshedFaces`), and a count only its record has.
+const UNMESHED = "unmeshedFaces";
+const UNMESHED_COUNT = "unmeshedFaceCount";
+const COUNT_FIELDS = Object.freeze(["vertexCount", "indexCount", "faceCount", "edgeCount", "edgePointCount"]);
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const QUALITY_FIELDS = new Set([
   "chordTolerance", "chordToleranceF64", "angleTolerance", "angleToleranceF64",
 ]);
-const EDGE_CLASSES = new Set([
-  "none", "feature", "tangent", "seam", "degenerate", "boundary", "nonManifold", "unknown",
-]);
+const JSON_TEXT = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 function requireDigest(value, label) {
   const digest = typeof value === "string" ? value : "";
@@ -45,40 +72,43 @@ function requireDigest(value, label) {
   return digest;
 }
 
+const HEX_BYTES = Array.from({ length: 256 }, (_, byte) => byte.toString(16).padStart(2, "0"));
+const FLOAT64 = new DataView(new ArrayBuffer(8));
+
 export function float64Hex(value) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new TypeError("tessellation tolerances must be positive finite binary64 values");
   }
-  const bytes = new Uint8Array(8);
-  new DataView(bytes.buffer).setFloat64(0, value, false);
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  FLOAT64.setFloat64(0, value, false);
+  let hex = "";
+  for (let index = 0; index < 8; index += 1) hex += HEX_BYTES[FLOAT64.getUint8(index)];
+  return hex;
 }
 
-// The tessellation options the KEY spells, and therefore the only ones a
-// caller may vary. Every other geometry option in DEFAULT_OPTIONS
-// (loopTolerance, maxRefineDepth, minLoopSegments) changes the triangles
-// without changing the key, so a run that overrides one would read back
-// another run's geometry under its own name. Refusing the key is the only
-// answer that cannot silently serve the wrong mesh; keying them instead would
-// fork the shared cache for options no caller has ever needed to set.
-const KEYED_TESSELLATION_OPTIONS = Object.freeze(["chordTolerance", "angleTolerance"]);
-const UNKEYED_TESSELLATION_OPTIONS = Object.freeze(
-  Object.keys(DEFAULT_OPTIONS).filter((name) => !KEYED_TESSELLATION_OPTIONS.includes(name)),
-);
+// The tolerances are the only options a request carries, and it names both: the
+// key spells both, and which pair a mesh is drawn at is cadgen's (a rung of the
+// ladder it published, or the tessellation a job names), never a number here. A
+// quality object read back from an entry (with its lossless f64 spellings) is
+// accepted as its own request; any other field is a caller asking for something
+// no mesh is keyed by, and is refused.
+const TESSELLATION_OPTIONS = new Set(["chordTolerance", "angleTolerance", "chordToleranceF64", "angleToleranceF64"]);
 
-export function tessellationQuality(options = {}) {
-  const unkeyed = UNKEYED_TESSELLATION_OPTIONS.filter((name) => (
-    Object.hasOwn(options, name) && options[name] !== DEFAULT_OPTIONS[name]
-  ));
-  if (unkeyed.length) {
+export function tessellationQuality(options) {
+  const unknown = Object.keys(options || {}).filter((name) => !TESSELLATION_OPTIONS.has(name));
+  if (unknown.length) {
     throw new TypeError(
-      `tessellation options are not part of the cache key: ${unkeyed.join(", ")}.`
-      + ` Keyed options: ${KEYED_TESSELLATION_OPTIONS.join(", ")}`,
+      `tessellation options are not part of the mesh key: ${unknown.join(", ")}.`
+      + " Keyed options: chordTolerance, angleTolerance",
     );
   }
-  const effective = { ...DEFAULT_OPTIONS, ...options };
-  const chordTolerance = effective.chordTolerance;
-  const angleTolerance = effective.angleTolerance;
+  const chordTolerance = options?.chordTolerance;
+  const angleTolerance = options?.angleTolerance;
+  if (chordTolerance === undefined || angleTolerance === undefined) {
+    throw new TypeError(
+      "a mesh request names both tolerances, chordTolerance and angleTolerance: a rung of cadgen's"
+      + ` ladder (lodTessellationForLevel) or the tessellation a job names; got ${JSON.stringify(options ?? null)}`,
+    );
+  }
   return Object.freeze({
     chordTolerance,
     chordToleranceF64: float64Hex(chordTolerance),
@@ -89,26 +119,23 @@ export function tessellationQuality(options = {}) {
 
 // L is available before SURF output bytes: D already binds geometry and the
 // frozen surface producer. Lossless f64 spelling prevents distinct accepted
-// tolerances from colliding. The v4 payload version is part of the key because
-// pre-v4 bytes cannot prove the full provenance contract.
-export function tessellationCacheKey(surfaceInput, options = {}) {
-  const digest = requireDigest(surfaceInput, "surfaceInput");
-  const quality = tessellationQuality(options);
-  return `${digest}-t${TESSELLATION_VERSION}-p${TESS_CACHE_VERSION}`
+// tolerances from colliding. The payload version is part of the key, so an
+// older body can never answer for this one.
+export function tessellationCacheKey(surfaceInput, options) {
+  return keyOf(requireDigest(surfaceInput, "surfaceInput"), tessellationQuality(options));
+}
+
+// The key of a checked digest at a normalized quality (`tessellationQuality`).
+function keyOf(digest, quality) {
+  return `${digest}-t${TESSELLATION_VERSION}-p${MESH_PAYLOAD_VERSION}`
     + `-l${quality.chordToleranceF64}-a${quality.angleToleranceF64}`;
 }
 
-// R is the concrete display/selector identity. A warm v4 TESS header carries
-// O, so R remains discoverable even after the SURF object and index are gone.
-export function resolvedTessellationIdentity(surfaceInput, surfaceObject, options = {}) {
+// R is the concrete display/selector identity. A body's extras carry O, so R
+// remains discoverable even after the SURF object and index are gone.
+export function resolvedTessellationIdentity(surfaceInput, surfaceObject, options) {
   const key = tessellationCacheKey(surfaceInput, options);
   return `${key}-s${requireDigest(surfaceObject, "surfaceObject")}`;
-}
-
-// Debug toggles change the geometry or bloat the result; those runs must
-// neither read nor write the shared cache.
-export function tessellationOptionsCacheable(options = {}) {
-  return !options.collectBoundaryDebug && !options.noSharedBoundaries && !options.noConformPass;
 }
 
 function align4(value) {
@@ -119,176 +146,147 @@ function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function finiteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 function finiteTuple(value, length) {
-  return Array.isArray(value) && value.length === length
-    && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
-}
-
-function validOrdinal(value) {
-  return Number.isSafeInteger(value) && value > 0;
-}
-
-function edgeClassMap(value) {
-  if (!Array.isArray(value)) return null;
-  const result = new Map();
-  for (const entry of value) {
-    if (!Array.isArray(entry) || entry.length !== 2
-      || !validOrdinal(entry[0]) || !EDGE_CLASSES.has(entry[1])
-      || result.has(entry[0])) return null;
-    result.set(entry[0], entry[1]);
-  }
-  return result;
-}
-
-function validRenderingMetadata(header) {
-  if (!isObject(header?.bounds)
-    || !finiteTuple(header.bounds.min, 3) || !finiteTuple(header.bounds.max, 3)
-    || header.bounds.min.some((value, index) => value > header.bounds.max[index])
-    || typeof header.scale !== "number" || !Number.isFinite(header.scale) || header.scale <= 0
-    || (header.partColor != null && !finiteTuple(header.partColor, 4))
-    || !Array.isArray(header.faceRanges) || !Array.isArray(header.edges)) return false;
-
-  const faceOrds = new Set();
-  let indexCursor = 0;
-  for (const range of header.faceRanges) {
-    if (!isObject(range) || !validOrdinal(range.ord) || faceOrds.has(range.ord)
-      || !validCount(range.indexStart) || !validCount(range.indexCount)
-      || range.indexStart % 3 !== 0 || range.indexCount % 3 !== 0
-      || range.indexStart !== indexCursor
-      || (range.color != null && !finiteTuple(range.color, 4))) return false;
-    faceOrds.add(range.ord);
-    indexCursor += range.indexCount;
-    if (!Number.isSafeInteger(indexCursor)) return false;
-  }
-  if (indexCursor !== header.indexCount) return false;
-
-  const classes = edgeClassMap(header.edgeClasses);
-  if (!classes) return false;
-  const edgeOrds = new Set();
-  for (const edge of header.edges) {
-    if (!isObject(edge) || !validOrdinal(edge.ord) || edgeOrds.has(edge.ord)
-      || !validCount(edge.count) || edge.count % 3 !== 0
-      || (edge.visibilityClass != null && !EDGE_CLASSES.has(edge.visibilityClass))
-      || !classes.has(edge.ord)
-      || (edge.visibilityClass != null && classes.get(edge.ord) !== edge.visibilityClass)) return false;
-    edgeOrds.add(edge.ord);
-  }
-  return true;
-}
-
-// `index.edges` -> the compact [ord, class] pairs the header stores. Callers
-// that hold the parsed surf index pass this so a later hit can skip the surf.
-export function edgeClassesFromSurfIndex(index) {
-  const edges = Array.isArray(index?.edges) ? index.edges : [];
-  return edges.map((edge) => [edge.ord, String(edge.class ?? "none")]);
-}
-
-export function encodeComponentTessellation(component, {
-  partColor = null,
-  edgeClasses = null,
-  surfaceInput,
-  surfaceObject,
-  tessellation = {},
-} = {}) {
-  const edges = Array.isArray(component.edges) ? component.edges : [];
-  if (!Array.isArray(component.faceRanges) || !Array.isArray(edgeClasses)) {
-    throw new TypeError("TESS v4 requires complete faceRanges and edgeClasses metadata");
-  }
-  const quality = tessellationQuality(tessellation);
-  const tessellationInput = tessellationCacheKey(surfaceInput, tessellation);
-  const surfaceDigest = requireDigest(surfaceObject, "surfaceObject");
-  const header = {
-    tessellationInput,
-    surfaceInput: requireDigest(surfaceInput, "surfaceInput"),
-    surfaceDigest,
-    quality,
-    tessellatorVersion: TESSELLATION_VERSION,
-    payloadVersion: TESS_CACHE_VERSION,
-    partColor: partColor ?? null,
-    edgeClasses,
-    faceRanges: component.faceRanges,
-    bounds: { min: [...component.bounds.min], max: [...component.bounds.max] },
-    scale: component.scale,
-    positionCount: component.positions.length,
-    normalCount: component.normals.length,
-    faceOrdCount: component.faceOrds.length,
-    indexCount: component.indices.length,
-    sideOrdCount: component.sideOrds.length,
-    edges: edges.map((edge) => ({
-      ord: edge.ord,
-      visibilityClass: edge.visibilityClass ?? null,
-      count: edge.polyline.length,
-    })),
-  };
-  if (!validRenderingMetadata(header)) {
-    throw new TypeError("TESS v4 requires valid complete rendering metadata");
-  }
-  const headerJson = JSON.stringify(header);
-  const headerBytes = new TextEncoder().encode(headerJson);
-  // Pad the header with spaces (valid JSON whitespace) so the payload starts
-  // 4-byte aligned and decode can hand out views instead of copies.
-  const headerLength = align4(headerBytes.length);
-  const payloadFloats =
-    component.positions.length +
-    component.normals.length +
-    component.faceOrds.length +
-    component.indices.length +
-    component.sideOrds.length +
-    edges.reduce((sum, edge) => sum + edge.polyline.length, 0);
-  const bytes = new Uint8Array(12 + headerLength + payloadFloats * 4);
-  const view = new DataView(bytes.buffer);
-  view.setUint32(0, TESS_CACHE_MAGIC, true);
-  view.setUint32(4, TESS_CACHE_VERSION, true);
-  view.setUint32(8, headerLength, true);
-  bytes.set(headerBytes, 12);
-  bytes.fill(0x20, 12 + headerBytes.length, 12 + headerLength);
-  let offset = 12 + headerLength;
-  const append = (array, Ctor) => {
-    new Ctor(bytes.buffer, offset, array.length).set(array);
-    offset += array.length * 4;
-  };
-  append(component.positions, Float32Array);
-  append(component.normals, Float32Array);
-  append(component.faceOrds, Float32Array);
-  append(component.indices, Uint32Array);
-  append(component.sideOrds, Uint32Array);
-  for (const edge of edges) append(edge.polyline, Float32Array);
-  return bytes;
+  return Array.isArray(value) && value.length === length && value.every(finiteNumber);
 }
 
 function validCount(value) {
   return Number.isSafeInteger(value) && value >= 0;
 }
 
-export function tessellationDecodedBytes({
-  headerBytes,
-  arrayBytes,
-  faceRangeCount,
-  edgeCount,
-  edgeClassCount,
-  edgeSegmentCount,
-}) {
-  const values = [headerBytes, arrayBytes, faceRangeCount, edgeCount, edgeClassCount, edgeSegmentCount];
-  if (!values.every(validCount) || headerBytes <= 0 || headerBytes > TESS_MAX_HEADER_BYTES
-    || headerBytes % 4 !== 0 || arrayBytes % 4 !== 0) {
+// JSON equality as cadgen decides it (meshes._same): numbers by value, objects by
+// their key sets, arrays element by element.
+function sameJson(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let index = 0; index < a.length; index += 1) {
+      if (!sameJson(a[index], b[index])) return false;
+    }
+    return true;
+  }
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const key of keys) {
+    if (!Object.hasOwn(b, key) || !sameJson(a[key], b[key])) return false;
+  }
+  return true;
+}
+
+/**
+ * What decoding a body costs beyond its bytes (cadgen/store/meshes.py decoded_bytes): the
+ * client's mesh data (positions, normals, u32 indices, the edges' points and segment pairs),
+ * never less than what `buildMeshDataFromSurf` builds, and an allowance per face and edge
+ * for the selector tables.
+ */
+export function tessellationDecodedBytes(counts) {
+  const values = COUNT_FIELDS.map((field) => counts?.[field]);
+  if (!values.every(validCount) || counts.edgePointCount < 2 * counts.edgeCount
+    || (counts.edgeCount === 0) !== (counts.edgePointCount === 0)) {
     throw new TypeError("invalid tessellation size facts");
   }
-  const decodedBytes = arrayBytes + 8 * edgeSegmentCount + 8 * headerBytes
-    + 256 * (faceRangeCount + edgeCount + edgeClassCount);
+  const decodedBytes = 24 * counts.vertexCount + 4 * counts.indexCount + 12 * counts.edgePointCount
+    + 8 * (counts.edgePointCount - counts.edgeCount) + 256 * (counts.faceCount + counts.edgeCount);
   if (!Number.isSafeInteger(decodedBytes)) {
     throw new TypeError("tessellation decoded size exceeds the safe integer range");
   }
   return decodedBytes;
 }
 
-function decodedIdentity(header, expected = {}) {
+function meshSections({ vertexCount, indexCount, faceCount, edgeCount, edgePointCount }) {
+  const sections = [];
+  if (vertexCount) {
+    const width = vertexCount <= UNSIGNED_SHORT_VERTEX_LIMIT ? 2 : 4;
+    sections.push(["POSITION", 12 * vertexCount, 34962], ["NORMAL", 12 * vertexCount, 34962],
+      ["indices", width * indexCount, 34963]);
+  }
+  if (faceCount) sections.push(["cadgen.faces", 4 * MESH_TABLE_COLUMNS * faceCount, null]);
+  if (edgeCount) {
+    sections.push(["cadgen.edges", 4 * MESH_TABLE_COLUMNS * edgeCount, null],
+      ["cadgen.edgePoints", 12 * edgePointCount, null]);
+  }
+  return sections;
+}
+
+/**
+ * The JSON chunk of a body whose `extras.cadgen` values (identity, bounds, scale, colours) and
+ * counts these are: what cadgen writes (cadgen/store/meshes.py canonical_gltf) and what a body
+ * must hold to be read.
+ */
+export function canonicalMeshGltf(cad, counts) {
+  const views = [];
+  const tables = {};
+  let offset = 0;
+  for (const [name, byteLength, target] of meshSections(counts)) {
+    const view = { buffer: 0, byteOffset: offset, byteLength };
+    if (target !== null) {
+      view.target = target;
+    } else {
+      view.name = name;
+      tables[name.slice("cadgen.".length)] = views.length;
+    }
+    views.push(view);
+    offset += align4(byteLength);
+  }
+  const extras = { ...cad, edgeClasses: [...MESH_EDGE_CLASSES] };
+  for (const [name, count] of [["faces", counts.faceCount], ["edges", counts.edgeCount], ["edgePoints", counts.edgePointCount]]) {
+    if (name in tables) extras[name] = { bufferView: tables[name], count };
+  }
+  const gltf = { asset: { version: "2.0", generator: "cadgen" }, extras: { cadgen: extras } };
+  if (counts.vertexCount) {
+    Object.assign(gltf, {
+      scene: 0,
+      scenes: [{ nodes: [0] }],
+      nodes: [{ mesh: 0, rotation: [...NODE_ROTATION], scale: [...NODE_SCALE] }],
+      meshes: [{ primitives: [{ attributes: { POSITION: 0, NORMAL: 1 }, indices: 2, mode: 4 }] }],
+      accessors: [
+        { bufferView: 0, componentType: 5126, count: counts.vertexCount, type: "VEC3",
+          min: [...cad.bounds.min], max: [...cad.bounds.max] },
+        { bufferView: 1, componentType: 5126, count: counts.vertexCount, type: "VEC3" },
+        { bufferView: 2, componentType: counts.vertexCount <= UNSIGNED_SHORT_VERTEX_LIMIT ? 5123 : 5125,
+          count: counts.indexCount, type: "SCALAR" },
+      ],
+    });
+  }
+  if (views.length) {
+    gltf.bufferViews = views;
+    gltf.buffers = [{ byteLength: offset }];
+  }
+  return gltf;
+}
+
+function validCad(cad) {
+  if (!isObject(cad)) return false;
+  const bounds = cad.bounds;
+  if (!isObject(bounds) || Object.keys(bounds).length !== 2
+    || !finiteTuple(bounds.min, 3) || !finiteTuple(bounds.max, 3)
+    || bounds.min.some((value, index) => value > bounds.max[index])) return false;
+  if (!finiteNumber(cad.scale) || cad.scale <= 0) return false;
+  if (cad.partColor != null && !finiteTuple(cad.partColor, 4)) return false;
+  if (Object.hasOwn(cad, UNMESHED)) {
+    const unmeshed = cad[UNMESHED];
+    if (!Array.isArray(unmeshed) || !unmeshed.length
+      || unmeshed.some((ord, index) => !Number.isSafeInteger(ord) || ord < 1 || (index && ord <= unmeshed[index - 1]))) {
+      return false;
+    }
+  }
+  return Array.isArray(cad.faceColors) && cad.faceColors.every((color) => finiteTuple(color, 4));
+}
+
+function decodedIdentity(cad, expected = {}) {
   try {
-    if (header?.tessellatorVersion !== TESSELLATION_VERSION
-      || header?.payloadVersion !== TESS_CACHE_VERSION) return null;
-    const surfaceInput = requireDigest(header.surfaceInput, "surfaceInput");
-    const surfaceObject = requireDigest(header.surfaceDigest, "surfaceDigest");
-    const quality = header.quality;
-    if (!quality || typeof quality !== "object" || Array.isArray(quality)
+    if (cad?.tessellatorVersion !== TESSELLATION_VERSION
+      || cad?.payloadVersion !== MESH_PAYLOAD_VERSION) return null;
+    const surfaceInput = requireDigest(cad.surfaceInput, "surfaceInput");
+    const surfaceObject = requireDigest(cad.surfaceObject, "surfaceObject");
+    const quality = cad.quality;
+    if (!isObject(quality)
       || Object.keys(quality).length !== QUALITY_FIELDS.size
       || Object.keys(quality).some((key) => !QUALITY_FIELDS.has(key))) return null;
     const normalized = tessellationQuality({
@@ -297,9 +295,9 @@ function decodedIdentity(header, expected = {}) {
     });
     if (quality.chordToleranceF64 !== normalized.chordToleranceF64
       || quality.angleToleranceF64 !== normalized.angleToleranceF64) return null;
-    const tessellationInput = tessellationCacheKey(surfaceInput, normalized);
-    if (header.tessellationInput !== tessellationInput) return null;
-    const renderIdentity = resolvedTessellationIdentity(surfaceInput, surfaceObject, normalized);
+    const tessellationInput = keyOf(surfaceInput, normalized);
+    if (cad.tessellationInput !== tessellationInput) return null;
+    const renderIdentity = `${tessellationInput}-s${surfaceObject}`;
 
     if (expected.surfaceInput !== undefined
       && requireDigest(expected.surfaceInput, "expected surfaceInput") !== surfaceInput) return null;
@@ -320,80 +318,146 @@ function decodedIdentity(header, expected = {}) {
       renderIdentity,
       quality: normalized,
       tessellatorVersion: TESSELLATION_VERSION,
-      payloadVersion: TESS_CACHE_VERSION,
+      payloadVersion: MESH_PAYLOAD_VERSION,
     });
   } catch {
     return null;
   }
 }
 
-function decodeEnvelope(bytes, expected = {}) {
-  if (!(bytes instanceof Uint8Array) || bytes.length < 12) return null;
+// A table reference's count: 0 when the table is absent, null when the reference is malformed.
+function tableCount(reference) {
+  if (reference === undefined || reference === null) return 0;
+  return isObject(reference) && Number.isSafeInteger(reference.count) && reference.count > 0
+    ? reference.count : null;
+}
+
+// The rows rise by ordinal and cover `total` from 0 in order; `valid(count, reference)` holds of
+// each row's count and reference.
+function validTable(table, total, valid) {
+  let previous = 0;
+  let cursor = 0;
+  for (let row = 0; row < table.length; row += MESH_TABLE_COLUMNS) {
+    const ord = table[row];
+    const count = table[row + 2];
+    if (ord <= previous || table[row + 1] !== cursor || !valid(count, table[row + 3])) return false;
+    previous = ord;
+    cursor += count;
+  }
+  return cursor === total;
+}
+
+// The validated body: its identity, counts and every section viewed in place (copied when the
+// bytes do not sit on a 4-byte boundary).
+function decodeBody(bytes, expected = {}) {
+  if (!(bytes instanceof Uint8Array) || bytes.length < 20) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint32(0, true) !== TESS_CACHE_MAGIC) return null;
-  if (view.getUint32(4, true) !== TESS_CACHE_VERSION) return null;
-  const headerLength = view.getUint32(8, true);
-  if (headerLength === 0 || headerLength > TESS_MAX_HEADER_BYTES
-    || headerLength % 4 !== 0 || 12 + headerLength > bytes.length) return null;
-  const header = JSON.parse(
-    new TextDecoder().decode(bytes.subarray(12, 12 + headerLength)),
-  );
-  const identity = decodedIdentity(header, expected);
-  if (!identity || !Array.isArray(header.edges)
-    || !Array.isArray(header.faceRanges) || !Array.isArray(header.edgeClasses)) return null;
-  const baseCounts = [
-    header.positionCount,
-    header.normalCount,
-    header.faceOrdCount,
-    header.indexCount,
-    header.sideOrdCount,
-  ];
-  const edgeCounts = header.edges.map((edge) => edge?.count);
-  const counts = [...baseCounts, ...edgeCounts];
-  if (!counts.every(validCount)
-    || header.positionCount % 3 !== 0
-    || header.normalCount !== header.positionCount
-    || header.faceOrdCount * 3 !== header.positionCount
-    || header.indexCount % 3 !== 0
-    || header.sideOrdCount !== header.indexCount
-    || edgeCounts.some((count) => count % 3 !== 0)
-    || !validRenderingMetadata(header)) return null;
-  const elementCount = counts.reduce((sum, count) => sum + count, 0);
-  if (!Number.isSafeInteger(elementCount) || elementCount > Number.MAX_SAFE_INTEGER / 4) return null;
-  const arrayBytes = elementCount * 4;
-  if (bytes.length !== 12 + headerLength + arrayBytes) return null;
-  const sizes = Object.freeze({
-    headerBytes: headerLength,
-    arrayBytes,
-    faceRangeCount: header.faceRanges.length,
-    edgeCount: header.edges.length,
-    edgeClassCount: header.edgeClasses.length,
-    edgeSegmentCount: edgeCounts.reduce((sum, count) => sum + Math.max(0, count / 3 - 1), 0),
-  });
-  const decodedBytes = tessellationDecodedBytes(sizes);
-  return { header, identity, sizes, decodedBytes };
+  if (view.getUint32(0, true) !== GLB_MAGIC || view.getUint32(4, true) !== GLB_VERSION
+    || view.getUint32(8, true) !== bytes.length || view.getUint32(16, true) !== JSON_CHUNK) return null;
+  const jsonLength = view.getUint32(12, true);
+  if (jsonLength === 0 || jsonLength > MESH_MAX_JSON_BYTES || jsonLength % 4 !== 0
+    || 20 + jsonLength > bytes.length) return null;
+  let binStart = 20 + jsonLength;
+  let binLength = 0;
+  if (binStart < bytes.length) {
+    if (binStart + 8 > bytes.length) return null;
+    binLength = view.getUint32(binStart, true);
+    if (view.getUint32(binStart + 4, true) !== BIN_CHUNK || binLength === 0 || binLength % 4 !== 0
+      || binStart + 8 + binLength !== bytes.length) return null;
+    binStart += 8;
+  }
+  const gltf = JSON.parse(JSON_TEXT.decode(bytes.subarray(20, 20 + jsonLength)));
+  const cad = isObject(gltf) && isObject(gltf.extras) ? gltf.extras.cadgen : null;
+  if (!validCad(cad)) return null;
+  const identity = decodedIdentity(cad, expected);
+  if (!identity) return null;
+  let vertexCount = 0;
+  let indexCount = 0;
+  if (gltf.accessors !== undefined) {
+    const accessors = gltf.accessors;
+    if (!Array.isArray(accessors) || accessors.length !== 3 || !accessors.every(isObject)
+      || !validCount(accessors[0].count) || !validCount(accessors[2].count)) return null;
+    vertexCount = accessors[0].count;
+    indexCount = accessors[2].count;
+    if (!vertexCount || !indexCount || indexCount % 3 !== 0) return null;
+  }
+  const counts = {
+    vertexCount,
+    indexCount,
+    faceCount: tableCount(cad.faces),
+    edgeCount: tableCount(cad.edges),
+    edgePointCount: tableCount(cad.edgePoints),
+  };
+  if (counts.faceCount === null || counts.edgeCount === null || counts.edgePointCount === null
+    || (counts.edgeCount === 0) !== (counts.edgePointCount === 0)) return null;
+  const values = {};
+  for (const name of CAD_VALUES) {
+    if (!Object.hasOwn(cad, name)) return null;
+    values[name] = cad[name];
+  }
+  if (Object.hasOwn(cad, UNMESHED)) values[UNMESHED] = cad[UNMESHED];
+  const canonical = canonicalMeshGltf(values, counts);
+  if (!sameJson(gltf, canonical) || binLength !== (canonical.buffers?.[0].byteLength ?? 0)) return null;
+
+  const views = canonical.bufferViews || [];
+  const viewOf = (name) => views[name === "POSITION" ? 0 : name === "NORMAL" ? 1 : name === "indices" ? 2
+    : views.findIndex((entry) => entry.name === name)];
+  const take = (name, Ctor) => {
+    const entry = viewOf(name);
+    const start = bytes.byteOffset + binStart + entry.byteOffset;
+    const length = entry.byteLength / Ctor.BYTES_PER_ELEMENT;
+    return start % 4 === 0
+      ? new Ctor(bytes.buffer, start, length)
+      : new Ctor(bytes.buffer.slice(start, start + entry.byteLength));
+  };
+  const IndexArray = vertexCount <= UNSIGNED_SHORT_VERTEX_LIMIT ? Uint16Array : Uint32Array;
+  const component = {
+    positions: vertexCount ? take("POSITION", Float32Array) : new Float32Array(0),
+    normals: vertexCount ? take("NORMAL", Float32Array) : new Float32Array(0),
+    indices: vertexCount ? take("indices", IndexArray) : new Uint32Array(0),
+    faceTable: counts.faceCount ? take("cadgen.faces", Uint32Array) : new Uint32Array(0),
+    edgeTable: counts.edgeCount ? take("cadgen.edges", Uint32Array) : new Uint32Array(0),
+    edgePoints: counts.edgeCount ? take("cadgen.edgePoints", Float32Array) : new Float32Array(0),
+    faceColors: cad.faceColors,
+    bounds: cad.bounds,
+    scale: cad.scale,
+    unmeshedFaces: Object.freeze([...(cad[UNMESHED] || [])]),
+  };
+  const palette = cad.faceColors.length;
+  if (!validTable(component.faceTable, indexCount, (count, color) => count % 3 === 0 && color <= palette)
+    || !validTable(component.edgeTable, counts.edgePointCount,
+      (count, edgeClass) => count >= 2 && edgeClass < MESH_EDGE_CLASSES.length)) return null;
+  if (component.unmeshedFaces.length) {
+    // Each one is a face of the table, and an empty one.
+    const empty = new Set();
+    for (let row = 0; row < component.faceTable.length; row += MESH_TABLE_COLUMNS) {
+      if (!component.faceTable[row + 2]) empty.add(component.faceTable[row]);
+    }
+    if (!component.unmeshedFaces.every((ord) => empty.has(ord))) return null;
+  }
+  return { component, partColor: cad.partColor ?? null, identity, counts };
 }
 
 export function tessellationPayloadFacts(bytes, expected = {}) {
   try {
-    const envelope = decodeEnvelope(bytes, expected);
-    if (!envelope) return null;
+    const body = decodeBody(bytes, expected);
+    if (!body) return null;
     const facts = Object.freeze({
       byteLength: bytes.byteLength,
-      decodedBytes: envelope.decodedBytes,
-      surfaceInput: envelope.identity.surfaceInput,
-      surfaceObject: envelope.identity.surfaceObject,
-      tessellationInput: envelope.identity.tessellationInput,
-      renderIdentity: envelope.identity.renderIdentity,
-      quality: envelope.identity.quality,
+      decodedBytes: tessellationDecodedBytes(body.counts),
+      surfaceInput: body.identity.surfaceInput,
+      surfaceObject: body.identity.surfaceObject,
+      tessellationInput: body.identity.tessellationInput,
+      renderIdentity: body.identity.renderIdentity,
+      quality: body.identity.quality,
       tessellatorVersion: TESSELLATION_VERSION,
-      payloadVersion: TESS_CACHE_VERSION,
-      ...envelope.sizes,
+      payloadVersion: MESH_PAYLOAD_VERSION,
+      ...body.counts,
+      ...(body.component.unmeshedFaces.length ? { [UNMESHED_COUNT]: body.component.unmeshedFaces.length } : {}),
     });
     for (const field of [
       "byteLength", "decodedBytes", "surfaceInput", "surfaceObject", "tessellationInput",
-      "renderIdentity", "tessellatorVersion", "payloadVersion", "headerBytes", "arrayBytes",
-      "faceRangeCount", "edgeCount", "edgeClassCount", "edgeSegmentCount",
+      "renderIdentity", "tessellatorVersion", "payloadVersion", ...COUNT_FIELDS, UNMESHED_COUNT,
     ]) {
       if (expected[field] !== undefined && expected[field] !== facts[field]) return null;
     }
@@ -406,17 +470,20 @@ export function tessellationPayloadFacts(bytes, expected = {}) {
 const MESH_RECORD_FIELDS = new Set([
   "schemaVersion", "object", "byteLength", "decodedBytes", "surfaceInput", "surfaceObject",
   "tessellationInput", "renderIdentity", "quality", "tessellatorVersion", "payloadVersion",
-  "headerBytes", "arrayBytes", "faceRangeCount", "edgeCount", "edgeClassCount", "edgeSegmentCount",
+  ...COUNT_FIELDS,
 ]);
 
 export function validateTessellationProbeRow(value, expected = {}) {
   try {
+    const unmeshed = Object.hasOwn(value || {}, UNMESHED_COUNT);
     if (!value || typeof value !== "object" || Array.isArray(value)
-      || Object.keys(value).length !== MESH_RECORD_FIELDS.size
-      || Object.keys(value).some((key) => !MESH_RECORD_FIELDS.has(key))) return null;
-    if (value.schemaVersion !== TESS_MESH_INDEX_SCHEMA
+      || Object.keys(value).length !== MESH_RECORD_FIELDS.size + (unmeshed ? 1 : 0)
+      || Object.keys(value).some((key) => !MESH_RECORD_FIELDS.has(key) && key !== UNMESHED_COUNT)) return null;
+    if (unmeshed && (!Number.isSafeInteger(value[UNMESHED_COUNT]) || value[UNMESHED_COUNT] < 1
+      || value[UNMESHED_COUNT] > value.faceCount)) return null;
+    if (value.schemaVersion !== MESH_INDEX_SCHEMA
       || value.tessellatorVersion !== TESSELLATION_VERSION
-      || value.payloadVersion !== TESS_CACHE_VERSION) return null;
+      || value.payloadVersion !== MESH_PAYLOAD_VERSION) return null;
     const surfaceInput = requireDigest(value.surfaceInput, "surfaceInput");
     const surfaceObject = requireDigest(value.surfaceObject, "surfaceObject");
     const object = requireDigest(value.object, "object");
@@ -426,26 +493,18 @@ export function validateTessellationProbeRow(value, expected = {}) {
     });
     if (value.quality?.chordToleranceF64 !== quality.chordToleranceF64
       || value.quality?.angleToleranceF64 !== quality.angleToleranceF64) return null;
-    const tessellationInput = tessellationCacheKey(surfaceInput, quality);
-    const renderIdentity = resolvedTessellationIdentity(surfaceInput, surfaceObject, quality);
+    const tessellationInput = keyOf(surfaceInput, quality);
+    const renderIdentity = `${tessellationInput}-s${surfaceObject}`;
     if (value.tessellationInput !== tessellationInput || value.renderIdentity !== renderIdentity) return null;
-    const sizeFields = {
-      headerBytes: value.headerBytes,
-      arrayBytes: value.arrayBytes,
-      faceRangeCount: value.faceRangeCount,
-      edgeCount: value.edgeCount,
-      edgeClassCount: value.edgeClassCount,
-      edgeSegmentCount: value.edgeSegmentCount,
-    };
-    if (!validCount(value.byteLength) || value.byteLength <= 0
-      || value.byteLength !== 12 + value.headerBytes + value.arrayBytes
-      || value.decodedBytes !== tessellationDecodedBytes(sizeFields)) return null;
+    const counts = Object.fromEntries(COUNT_FIELDS.map((field) => [field, value[field]]));
+    if (!validCount(value.byteLength) || value.byteLength < 20 || value.byteLength % 4 !== 0
+      || value.decodedBytes !== tessellationDecodedBytes(counts)) return null;
     if (expected.tessellationInput !== undefined && expected.tessellationInput !== tessellationInput) return null;
     if (expected.object !== undefined && expected.object !== object) return null;
     if (expected.surfaceInput !== undefined && expected.surfaceInput !== surfaceInput) return null;
     if (expected.surfaceObject !== undefined && expected.surfaceObject !== surfaceObject) return null;
     return Object.freeze({
-      schemaVersion: TESS_MESH_INDEX_SCHEMA,
+      schemaVersion: MESH_INDEX_SCHEMA,
       object,
       byteLength: value.byteLength,
       decodedBytes: value.decodedBytes,
@@ -455,81 +514,78 @@ export function validateTessellationProbeRow(value, expected = {}) {
       renderIdentity,
       quality,
       tessellatorVersion: TESSELLATION_VERSION,
-      payloadVersion: TESS_CACHE_VERSION,
-      ...sizeFields,
+      payloadVersion: MESH_PAYLOAD_VERSION,
+      ...counts,
+      ...(unmeshed ? { [UNMESHED_COUNT]: value[UNMESHED_COUNT] } : {}),
     });
   } catch {
     return null;
   }
 }
 
+/**
+ * One stored mesh, decoded: `component` holds its sections viewed in place -- `positions` and
+ * `normals` (f32 xyz), `indices` (u16 or u32), `faceTable` and `edgeTable` (u32 rows of
+ * MESH_TABLE_COLUMNS), `edgePoints` (f32 xyz) -- with its face colour palette, bounds and scale,
+ * and `unmeshedFaces`: the faces no mesher could cover, which it does not draw.
+ * `meshFaceRanges` and `meshEdgePolylines` read the tables as objects. Null for anything that is
+ * not a valid body bound to `expected`: a corrupt entry is a miss, never an error.
+ */
 export function decodeComponentTessellation(bytes, expected = {}) {
   try {
-    const envelope = decodeEnvelope(bytes, expected);
-    if (!envelope) return null;
-    const { header, identity } = envelope;
-    let offset = bytes.byteOffset + 12 + envelope.sizes.headerBytes;
-    // Zero-copy views are only sound on 4-byte-aligned offsets; a misaligned
-    // source buffer (e.g. a subarray) falls back to copying via slice.
-    const aligned = offset % 4 === 0;
-    const take = (count, Ctor) => {
-      const section = aligned
-        ? new Ctor(bytes.buffer, offset, count)
-        : new Ctor(bytes.buffer.slice(offset, offset + count * 4));
-      offset += count * 4;
-      return section;
-    };
-    const positions = take(header.positionCount, Float32Array);
-    const normals = take(header.normalCount, Float32Array);
-    const faceOrds = take(header.faceOrdCount, Float32Array);
-    const indices = take(header.indexCount, Uint32Array);
-    const sideOrds = take(header.sideOrdCount, Uint32Array);
-    const edges = header.edges.map((edge) => ({
-      ord: edge.ord,
-      visibilityClass: edge.visibilityClass,
-      polyline: take(edge.count, Float32Array),
-    }));
-    return {
-      component: {
-        positions,
-        normals,
-        faceOrds,
-        indices,
-        sideOrds,
-        faceRanges: header.faceRanges,
-        edges,
-        bounds: header.bounds,
-        scale: header.scale,
-      },
-      partColor: header.partColor ?? null,
-      edgeClasses: Array.isArray(header.edgeClasses) ? header.edgeClasses : null,
-      identity,
-    };
+    const body = decodeBody(bytes, expected);
+    return body ? { component: body.component, partColor: body.partColor, identity: body.identity } : null;
   } catch {
-    return null; // a corrupt entry is a miss, never an error
+    return null;
   }
 }
 
-// The minimal stand-in for a parsed surf index that render consumers
-// (buildMeshDataFromSurf) read on a cache hit: per-edge classes and the part
-// color. Null when the entry predates edgeClasses — the caller then needs the
-// real surf.
+/** A decoded component's faces: `[{ord, color, indexStart, indexCount}]`, a colour its palette row or null. */
+export function meshFaceRanges(component) {
+  const table = component.faceTable;
+  const ranges = [];
+  for (let row = 0; row < table.length; row += MESH_TABLE_COLUMNS) {
+    const color = table[row + 3];
+    ranges.push({
+      ord: table[row],
+      color: color ? component.faceColors[color - 1] : null,
+      indexStart: table[row + 1],
+      indexCount: table[row + 2],
+    });
+  }
+  return ranges;
+}
+
+/** A decoded component's edges: `[{ord, visibilityClass, polyline}]`, each polyline a view of its points. */
+export function meshEdgePolylines(component) {
+  const table = component.edgeTable;
+  const points = component.edgePoints;
+  const edges = [];
+  for (let row = 0; row < table.length; row += MESH_TABLE_COLUMNS) {
+    const start = table[row + 1] * 3;
+    edges.push({
+      ord: table[row],
+      visibilityClass: MESH_EDGE_CLASSES[table[row + 3]],
+      polyline: points.subarray(start, start + table[row + 2] * 3),
+    });
+  }
+  return edges;
+}
+
+// The stand-in for a parsed surf index that render consumers (buildMeshDataFromSurf) read:
+// the part colour, which every body carries, so drawing a component never needs its SURF.
 export function surfIndexFromCacheEntry(decoded) {
-  const classes = edgeClassMap(decoded?.edgeClasses);
-  if (!classes) return null;
-  return {
-    edges: [...classes].map(([ord, cls]) => ({ ord, class: cls })),
-    partColor: decoded.partColor ?? null,
-  };
+  return decoded?.component ? { partColor: decoded.partColor ?? null } : null;
 }
 
 // --- batch container ---------------------------------------------------------
 //
-// One round trip for N entries: "TESB" u32, version u32, count u32, then per
+// One round trip for N bodies: "TESB" u32, version u32, count u32, then per
 // entry u32 byteLength (0 = miss) + bytes padded to a 4-byte boundary so each
-// entry decodes zero-copy. Served by both cache hosts (the snapshot loopback
-// server and the viewer server) on POST <prefix>/batch with a JSON body of
-// entry file names; this module is the format's single home.
+// entry decodes zero-copy (a GLB body is a 4-byte multiple already). Served by
+// both cache hosts (the snapshot loopback server and the viewer server) on POST
+// <prefix>/batch with a JSON body naming the admitted objects; this module is
+// the format's single home.
 
 export const TESS_CACHE_BATCH_MAGIC = 0x42534554; // "TESB" little-endian
 export const TESS_CACHE_BATCH_VERSION = 1;
@@ -602,9 +658,9 @@ export function isTessellationCacheProbeMissError(error) {
   return error?.code === "TESS_CACHE_PROBE_MISS";
 }
 
-// A root connection or standalone job owns its provider and bounded write queue.
-// Views borrow cancellable sessions; no provider is installed into module state.
-export function createTessellationCache({ provider = null, writeBack = {} } = {}) {
+// A root connection or standalone job owns its provider. Views borrow
+// cancellable sessions; no provider is installed into module state.
+export function createTessellationCache({ provider = null } = {}) {
   let disposed = false;
   let cacheProvider = provider
     && typeof provider.probeMany === "function"
@@ -617,11 +673,10 @@ export function createTessellationCache({ provider = null, writeBack = {} } = {}
       : lifetime.signal,
   });
   function tessellationCacheProviderRegistered() { return !disposed && cacheProvider !== null; }
-  async function probeCachedTessellationEntries(surfaceInputs, options = {}, { signal } = {}) {
+  async function probeCachedTessellationEntries(surfaceInputs, options, { signal } = {}) {
     const hits = new Map();
     const provider = disposed ? null : cacheProvider;
-    if (!provider || !Array.isArray(surfaceInputs) || !surfaceInputs.length
-      || !tessellationOptionsCacheable(options)) return hits;
+    if (!provider || !Array.isArray(surfaceInputs) || !surfaceInputs.length) return hits;
     // The HTTP provider refuses oversized metadata requests. Split here so
     // assembly size never silently converts a complete warm cache into misses.
     for (let start = 0; start < surfaceInputs.length; start += TESS_PROBE_MAX_KEYS) {
@@ -641,13 +696,39 @@ export function createTessellationCache({ provider = null, writeBack = {} } = {}
     return hits;
   }
 
-  async function getCachedEntryBytes(surfaceInput, options = {}, {
+  // Ask the host to mesh what a probe found missing: cadgen produces it, stores
+  // it, and answers with its probe row, exactly as a probe would have. Only a
+  // host that can mesh offers this (`provider.produceMany`); elsewhere a
+  // missing mesh stays missing.
+  async function produceTessellationEntries(surfaceInputs, options, { signal } = {}) {
+    const hits = new Map();
+    const provider = disposed ? null : cacheProvider;
+    if (!provider || typeof provider.produceMany !== "function"
+      || !Array.isArray(surfaceInputs) || !surfaceInputs.length) return hits;
+    for (let start = 0; start < surfaceInputs.length; start += TESS_PROBE_MAX_KEYS) {
+      const inputs = surfaceInputs.slice(start, start + TESS_PROBE_MAX_KEYS);
+      const keys = inputs.map((surfaceInput) => tessellationCacheKey(surfaceInput, options));
+      const rows = await provider.produceMany(keys, { signal });
+      signal?.throwIfAborted();
+      if (!Array.isArray(rows) || rows.length !== keys.length) continue;
+      for (let index = 0; index < keys.length; index += 1) {
+        const row = validateTessellationProbeRow(rows[index], {
+          tessellationInput: keys[index],
+          surfaceInput: inputs[index],
+        });
+        if (row) hits.set(inputs[index], row);
+      }
+    }
+    return hits;
+  }
+
+  async function getCachedEntryBytes(surfaceInput, options, {
     signal,
     probe = null,
     strictProbe = false,
   } = {}) {
     const provider = disposed ? null : cacheProvider;
-    if (!provider || !tessellationOptionsCacheable(options)) {
+    if (!provider) {
       if (strictProbe) throw new TessellationCacheProbeMissError(probe);
       return null;
     }
@@ -691,7 +772,7 @@ export function createTessellationCache({ provider = null, writeBack = {} } = {}
     ));
   }
 
-  async function getCachedComponentEntry(surfaceInput, options = {}, request = {}) {
+  async function getCachedComponentEntry(surfaceInput, options, request = {}) {
     const bytes = await getCachedEntryBytes(surfaceInput, options, request);
     return decodeComponentTessellation(bytes, {
       surfaceInput,
@@ -699,134 +780,6 @@ export function createTessellationCache({ provider = null, writeBack = {} } = {}
       tessellationInput: tessellationCacheKey(surfaceInput, options),
       tessellation: options,
     });
-  }
-
-  let writeBackPolicy = { deferMs: 0, maxWaitMs: 0, concurrency: Infinity, maxPendingBytes: TESS_BATCH_MAX_BYTES };
-  const pendingWriteBacks = new Map();
-  let pendingWriteBackBytes = 0;
-  let activeWriteBackBytes = 0;
-  // The pending batch is written once the load has been quiet for `deferMs` (`writeBackTimer`,
-  // restarted by every entry) and no later than `maxWaitMs` after its first entry
-  // (`writeBackDeadline`, which no entry restarts).
-  let writeBackTimer = null;
-  let writeBackDeadline = null;
-  let writeBackDrain = null;
-
-  function configureTessellationCacheWriteBack({
-    deferMs = 0, maxWaitMs = TESS_WRITE_BACK_MAX_WAIT_MS, concurrency = Infinity, maxPendingBytes = TESS_BATCH_MAX_BYTES,
-  } = {}) {
-    const defer = Number.isFinite(deferMs) && deferMs > 0 ? deferMs : 0;
-    writeBackPolicy = {
-      deferMs: defer,
-      maxWaitMs: Math.max(defer, Number.isFinite(maxWaitMs) && maxWaitMs > 0 ? maxWaitMs : TESS_WRITE_BACK_MAX_WAIT_MS),
-      concurrency: Number.isFinite(concurrency) && concurrency >= 1 ? Math.floor(concurrency) : Infinity,
-      maxPendingBytes: Number.isSafeInteger(maxPendingBytes) && maxPendingBytes >= 0 ? maxPendingBytes : TESS_BATCH_MAX_BYTES,
-    };
-  }
-
-  function clearWriteBackTimers() {
-    if (writeBackTimer) clearTimeout(writeBackTimer);
-    if (writeBackDeadline) clearTimeout(writeBackDeadline);
-    writeBackTimer = null;
-    writeBackDeadline = null;
-  }
-
-  async function putEntry(key, bytes) {
-    const provider = disposed ? null : cacheProvider;
-    if (!provider || typeof provider.put !== "function") return;
-    try {
-      await provider.put(key, bytes, { signal: lifetime.signal });
-    } catch {
-      // best-effort write-back
-    }
-  }
-
-  async function drainWriteBacks() {
-    const limit = writeBackPolicy.concurrency;
-    // The timers were the pending batch's, and the batch is this drain's now.
-    clearWriteBackTimers();
-    const queue = [...pendingWriteBacks.entries()];
-    pendingWriteBacks.clear();
-    activeWriteBackBytes += pendingWriteBackBytes;
-    pendingWriteBackBytes = 0;
-    let next = 0;
-    const lane = async () => {
-      while (next < queue.length) {
-        const [key, bytes] = queue[next];
-        next += 1;
-        try {
-          await putEntry(key, bytes);
-        } finally {
-          activeWriteBackBytes -= bytes.byteLength;
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(queue.length, Number.isFinite(limit) ? limit : queue.length) }, lane));
-  }
-
-  /** Write every deferred entry now. Resolves when the drain (and any running one) is done. */
-  async function flushTessellationCacheWriteBacks() {
-    // One drain at a time, at the configured concurrency.
-    while (writeBackDrain) {
-      await writeBackDrain;
-    }
-    if (pendingWriteBacks.size) {
-      writeBackDrain = drainWriteBacks().finally(() => {
-        writeBackDrain = null;
-      });
-      await writeBackDrain;
-    }
-  }
-
-  function scheduleWriteBackDrain() {
-    if (writeBackTimer) {
-      clearTimeout(writeBackTimer);
-    }
-    writeBackTimer = setTimeout(() => {
-      writeBackTimer = null;
-      void flushTessellationCacheWriteBacks();
-    }, writeBackPolicy.deferMs);
-    // A long load restarts the quiet interval with every entry it tessellates: without a
-    // ceiling, its batch would wait for the whole load and fill up on the way.
-    writeBackDeadline ??= setTimeout(() => {
-      writeBackDeadline = null;
-      void flushTessellationCacheWriteBacks();
-    }, writeBackPolicy.maxWaitMs);
-  }
-
-
-  async function writeBackEntryBytes(surfaceInput, options, bytes) {
-    const provider = disposed ? null : cacheProvider;
-    if (!provider || typeof provider.put !== "function" || !tessellationOptionsCacheable(options)) return null;
-    const key = tessellationCacheKey(surfaceInput, options);
-    if (!tessellationPayloadFacts(bytes, { surfaceInput, tessellationInput: key, tessellation: options })) return null;
-    if (writeBackPolicy.deferMs > 0) {
-      const previousBytes = pendingWriteBacks.get(key)?.byteLength || 0;
-      const nextBytes = pendingWriteBackBytes + bytes.byteLength - previousBytes;
-      // Deferred writes are optional cache warming. Never retain an unbounded
-      // assembly of encoded bodies beside its render-owned arrays: a batch that
-      // reaches `maxPendingBytes` is written at once, and an entry is turned away
-      // only when the writer is still busy with the batch before it.
-      if (writeBackDrain && nextBytes > writeBackPolicy.maxPendingBytes) {
-        void flushTessellationCacheWriteBacks();
-        return null;
-      }
-      pendingWriteBacks.set(key, bytes);
-      pendingWriteBackBytes = nextBytes;
-      if (nextBytes >= writeBackPolicy.maxPendingBytes) void flushTessellationCacheWriteBacks();
-      else scheduleWriteBackDrain();
-      return null;
-    }
-    return putEntry(key, bytes);
-  }
-
-  async function writeBackComponentEntry(surfaceInput, surfaceObject, options, component, index) {
-    if (!cacheProvider || !surfaceInput || !surfaceObject || !tessellationOptionsCacheable(options)) return null;
-    return writeBackEntryBytes(surfaceInput, options, encodeComponentTessellation(component, {
-      surfaceInput, surfaceObject, tessellation: options,
-      partColor: Array.isArray(index?.partColor) ? index.partColor : null,
-      edgeClasses: edgeClassesFromSurfIndex(index),
-    }));
   }
 
   function createSession({ signal } = {}) {
@@ -845,52 +798,37 @@ export function createTessellationCache({ provider = null, writeBack = {} } = {}
         signal: request.signal ? AbortSignal.any([sessionSignal, request.signal]) : sessionSignal,
       });
     };
-    const write = (method, args) => active() ? cache[method](...args) : Promise.resolve(null);
     return {
       ...cache,
       tessellationCacheProviderRegistered: () => active() && cache.tessellationCacheProviderRegistered(),
       probeCachedTessellationEntries: (inputs, options, request) => read("probeCachedTessellationEntries", [inputs, options], request),
+      produceTessellationEntries: (inputs, options, request) => read("produceTessellationEntries", [inputs, options], request),
       getCachedEntryBytes: (input, options, request) => read("getCachedEntryBytes", [input, options], request),
       getCachedEntryBytesMany: (probes, request) => read("getCachedEntryBytesMany", [probes], request),
       getCachedComponentEntry: (input, options, request) => read("getCachedComponentEntry", [input, options], request),
-      configureTessellationCacheWriteBack: (options) => {
-        if (active()) cache.configureTessellationCacheWriteBack(options);
-      },
-      flushTessellationCacheWriteBacks: () => active() ? cache.flushTessellationCacheWriteBacks() : Promise.resolve(),
-      writeBackEntryBytes: (...args) => write("writeBackEntryBytes", args),
-      writeBackComponentEntry: (...args) => write("writeBackComponentEntry", args),
       createSession: ({ signal: childSignal } = {}) => createSession({
         signal: childSignal ? AbortSignal.any([sessionSignal, childSignal]) : sessionSignal,
       }),
-      // Writes admitted while this view was active belong to the root queue.
-      // Its cancellation must neither discard those bytes nor abort another view.
+      // Cancels this view's reads alone, never another view's.
       dispose: () => sessionLifetime.abort(),
     };
   }
 
-  configureTessellationCacheWriteBack(writeBack);
   const cache = {
     // What one batched read may ask for over this cache's provider (`tessBatchMaxBytes`).
     batchMaxBytes: tessBatchMaxBytes(cacheProvider?.maxBatchBytes),
     tessellationCacheProviderRegistered,
     probeCachedTessellationEntries: (inputs, options, request) => probeCachedTessellationEntries(inputs, options, requestOptions(request)),
+    produceTessellationEntries: (inputs, options, request) => produceTessellationEntries(inputs, options, requestOptions(request)),
     getCachedEntryBytes: (input, options, request) => getCachedEntryBytes(input, options, requestOptions(request)),
     getCachedEntryBytesMany: (probes, request) => getCachedEntryBytesMany(probes, requestOptions(request)),
     getCachedComponentEntry: (input, options, request) => getCachedComponentEntry(input, options, requestOptions(request)),
-    configureTessellationCacheWriteBack,
-    flushTessellationCacheWriteBacks,
-    writeBackEntryBytes,
-    writeBackComponentEntry,
     createSession,
-    memoryStats: () => ({ pendingWriteBackBytes, activeWriteBackBytes, writeBackBytes: pendingWriteBackBytes + activeWriteBackBytes }),
     dispose() {
       if (disposed) return;
       disposed = true;
       lifetime.abort();
       cacheProvider = null;
-      clearWriteBackTimers();
-      pendingWriteBacks.clear();
-      pendingWriteBackBytes = 0;
     },
   };
   return cache;
@@ -908,8 +846,6 @@ export function tessBatchMaxBytes(transportMaxBytes) {
   const ceiling = Number(transportMaxBytes);
   return Number.isSafeInteger(ceiling) && ceiling > 0 ? Math.min(ceiling, TESS_BATCH_MAX_BYTES) : TESS_BATCH_MAX_BYTES;
 }
-/** How long a deferred write-back waits after its batch's first entry, however busy the load. */
-export const TESS_WRITE_BACK_MAX_WAIT_MS = 2000;
 
 async function sha256Hex(bytes) {
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
@@ -959,9 +895,11 @@ export function originPrefix(origin) {
 
 export function createHttpTessellationCacheProvider({
   origin = "",
-  entryUrl = (key) => `${originPrefix(origin)}/__tess_cache/${encodeURIComponent(key)}.tess`,
+  entryUrl = (key) => `${originPrefix(origin)}/__tess_cache/${encodeURIComponent(key)}.glb`,
   probeUrl = `${originPrefix(origin)}/__tess_cache/probe`,
   batchUrl = `${originPrefix(origin)}/__tess_cache/batch`,
+  // Only a host that meshes on request serves this route (the snapshot host).
+  produceUrl = "",
   headers = {},
   fetch: fetchImpl = globalThis.fetch,
   signal: lifetimeSignal,
@@ -993,6 +931,24 @@ export function createHttpTessellationCacheProvider({
         return null;
       }
     },
+    ...(produceUrl ? {
+      async produceMany(keys, { signal } = {}) {
+        signal = scopedSignal(signal);
+        if (!Array.isArray(keys) || keys.length > TESS_PROBE_MAX_KEYS) return null;
+        const response = await fetchImpl(produceUrl, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ tessellationInputs: keys }),
+          signal,
+          cache: "no-store",
+        });
+        // cadgen could not mesh what was asked: that is the caller's error, with its reason.
+        if (!response.ok) throw new Error(await response.text() || `mesh request failed: HTTP ${response.status}`);
+        const payload = await response.json();
+        const entries = payload?.entries;
+        return keys.map((key) => validateTessellationProbeRow(entries?.[key], { tessellationInput: key }));
+      },
+    } : {}),
     async getProbed(value, { signal, maxBytes } = {}) {
       signal = scopedSignal(signal);
       const row = validateTessellationProbeRow(value);
@@ -1004,8 +960,8 @@ export function createHttpTessellationCacheProvider({
         });
         if (!response.ok) return null;
         const bytes = await boundedResponseBytes(response, limit);
-        if (!bytes || await sha256Hex(bytes) !== row.object
-          || !tessellationPayloadFacts(bytes, row)) return null;
+        // The content address binds the body to its row; the cache checks its facts.
+        if (!bytes || await sha256Hex(bytes) !== row.object) return null;
         return bytes;
       } catch (error) {
         if (abortError(error, signal)) throw error;
@@ -1036,23 +992,13 @@ export function createHttpTessellationCacheProvider({
         const entries = decodeTessellationCacheBatch(container);
         if (!entries || entries.length !== rows.length) return null;
         // Each entry is verified on its own: one the store no longer holds, or holds damaged, is a
-        // miss for that component alone, never for every other component in the batch.
+        // miss for that component alone, never for every other component in the batch. The
+        // content address binds an entry to its row; the cache checks its facts.
         const digests = await Promise.all(entries.map((entry) => (entry ? sha256Hex(entry) : null)));
-        return entries.map((entry, index) => (entry && digests[index] === rows[index].object
-          && tessellationPayloadFacts(entry, rows[index]) ? entry : null));
+        return entries.map((entry, index) => (entry && digests[index] === rows[index].object ? entry : null));
       } catch (error) {
         if (abortError(error, signal)) throw error;
         return null;
-      }
-    },
-    async put(key, bytes, { signal } = {}) {
-      signal = scopedSignal(signal);
-      try {
-        const response = await fetchImpl(entryUrl(key), { method: "POST", body: bytes, headers, signal });
-        return response.ok;
-      } catch (error) {
-        if (abortError(error, signal)) throw error;
-        return false;
       }
     },
   };

@@ -44,8 +44,6 @@ if __name__ == "__main__":
     hinge()
 """
 
-ANIM_JS = "export const clips = { demo: { duration: 2, update(t, m) {} } };\n"
-
 # The same hinge, but each side is a GROUP of two parts. Mating the groups is
 # what "a mate on a parent occurrence carries its whole instance subtree" means
 # in practice, and it is the shape every real assembly has.
@@ -148,11 +146,13 @@ class KinematicsBuildTests(unittest.TestCase):
         return script
 
     def test_kinematics_lands_in_the_sidecar(self) -> None:
+        from cadgen._internal.source_sidecar import SOURCE_SIDECAR_SCHEMA_VERSION
+
         script = self._write("hinge.py")
         self.assertEqual(0, self._build(script))
 
         sidecar = self._sidecar(script)
-        self.assertEqual(sidecar["schemaVersion"], 9)
+        self.assertEqual(sidecar["schemaVersion"], SOURCE_SIDECAR_SCHEMA_VERSION)
         # The sidecar file carries the branded suffix.
         self.assertTrue((self.root / "hinge.step.json").is_file())
 
@@ -166,8 +166,7 @@ class KinematicsBuildTests(unittest.TestCase):
         self.assertEqual(mate["axis"], {"origin": [0.0, 0.0, 6.0], "dir": [0.0, 0.0, 1.0]})
         self.assertEqual(block["poses"], {"open": {"swing": 45.0}})
 
-        # Choreography is not a sidecar section: the render module beside the
-        # document (hinge.step.js) is the viewer's, never the build's.
+        # A model that declares no clips carries no animation section.
         self.assertNotIn("animation", sidecar)
 
         # The descriptor stays STEP-pure: kinematics is sidecar-only.
@@ -255,7 +254,7 @@ class KinematicsBuildTests(unittest.TestCase):
         refused = AssertionError("mate ends need no component topology")
         with mock.patch("cadgen.store.view.export_view", side_effect=refused), \
                 mock.patch("cadgen.store.view.materialize_view_surfaces", side_effect=refused), \
-                mock.patch("cadgen.assembly_lookup._read_component_bundle", side_effect=refused):
+                mock.patch("cadgen.assembly_lookup._read_component_table", side_effect=refused):
             self.assertEqual(0, self._build(script))
         (mate,) = self._sidecar(script)["kinematics"]["mates"]
         self.assertEqual((mate["parentId"], mate["childId"]), ("o1.1", "o1.2"))

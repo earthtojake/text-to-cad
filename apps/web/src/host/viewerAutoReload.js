@@ -1,28 +1,34 @@
 /**
- * The browser half of the backend's development auto-reload.
+ * The browser half of "the server is no longer the one this page loaded from".
  *
- * A viewer served by an installed wheel never watches its own code, reports
- * `autoReload: false`, and none of this runs: the poll below starts only when
- * the server says it restarts itself, which it says only when cadgen is a
- * source checkout (see `cadgen/viewer/reload.py`).
+ * Every viewer server says who it is: `/__cad/server`'s `identityToken`, its
+ * cadgen version and a digest of the page it serves. Once that answer is not the
+ * one the page loaded against, the page reloads, which picks up the client that
+ * server serves -- and with it whatever its store speaks (a mesh format, a
+ * route). A page from before an upgrade cannot read the meshes of the server
+ * after it. Two kinds of server change under a page:
  *
- * When it IS a checkout, the backend re-executes itself on the SAME port the
- * moment its Python changes and the work in flight is done. That is invisible
- * from here except for two things: `/__cad/server` stops answering for a
- * fraction of a second, and when it answers again its `identityToken` is a new
- * value. Either one means "the server is no longer the process this page
- * loaded against", and the page reloads — which is also what picks up a
- * rebuilt client, since the page re-fetches everything.
+ * - A source checkout's backend re-executes itself on the SAME port the moment
+ *   its Python changes and the work in flight is done (`autoReload: true`, see
+ *   `cadgen/viewer/reload.py`): `/__cad/server` stops answering for a fraction of
+ *   a second, and answers again with a new token. It is asked every 2 s, and
+ *   every 0.4 s mid-restart.
+ * - An installed one is replaced by another version on its port, under a tab
+ *   left open across the upgrade. It is asked every 5 s (and, by the hook, the
+ *   moment the tab comes back into view): a token from another install reloads
+ *   the page, and the same install restarting does not.
  *
  * The decision is a pure function so the whole behaviour is testable without a
- * browser: `nextAutoReloadState` takes the state and one poll result and says
- * what to do and when to ask again.
+ * browser: `nextAutoReloadState` takes the state, one poll result and the
+ * cadence, and says what to do and when to ask again.
  */
 
 /** Steady-state poll while the server is the one this page loaded against. */
 export const VIEWER_WATCH_INTERVAL_MS = 2000;
 /** Faster poll while the server is mid-restart. */
 export const VIEWER_RELOADING_POLL_MS = 400;
+/** An installed server's poll, answered or not: it changes only when another version replaces it. */
+export const VIEWER_INSTALL_POLL_MS = 5000;
 
 export const AUTO_RELOAD_PHASE = Object.freeze({
   WATCHING: "watching",
@@ -32,17 +38,20 @@ export const AUTO_RELOAD_PHASE = Object.freeze({
 /**
  * @param {{phase: string, since: number}} state
  * @param {{ok: boolean, identityToken?: string}} poll
- * @param {{baseline: string, now: number}} context
+ * @param {{baseline: string, now: number, watchMs?: number, reloadingMs?: number}} context  The cadence:
+ *   a development backend's by default (`VIEWER_WATCH_INTERVAL_MS`, `VIEWER_RELOADING_POLL_MS`).
  * @returns {{phase: string, since: number, reload: boolean, delayMs: number}}
  */
-export function nextAutoReloadState(state, poll, { baseline, now }) {
+export function nextAutoReloadState(state, poll, {
+  baseline, now, watchMs = VIEWER_WATCH_INTERVAL_MS, reloadingMs = VIEWER_RELOADING_POLL_MS
+}) {
   const phase = state?.phase === AUTO_RELOAD_PHASE.RELOADING
     ? AUTO_RELOAD_PHASE.RELOADING
     : AUTO_RELOAD_PHASE.WATCHING;
   // Number.isFinite, not `||`: `since` is a timestamp and 0 is a real one.
   const since = Number.isFinite(state?.since) ? Number(state.since) : now;
-  const reloading = { phase: AUTO_RELOAD_PHASE.RELOADING, reload: false, delayMs: VIEWER_RELOADING_POLL_MS };
-  const watching = { phase: AUTO_RELOAD_PHASE.WATCHING, since: now, reload: false, delayMs: VIEWER_WATCH_INTERVAL_MS };
+  const reloading = { phase: AUTO_RELOAD_PHASE.RELOADING, reload: false, delayMs: reloadingMs };
+  const watching = { phase: AUTO_RELOAD_PHASE.WATCHING, since: now, reload: false, delayMs: watchMs };
 
   if (!poll?.ok) {
     // The port is closed for the moment it takes to exec and re-bind. This is
@@ -62,5 +71,5 @@ export function nextAutoReloadState(state, poll, { baseline, now }) {
     // restart. Drop the claim and go back to watching.
     return watching;
   }
-  return { phase, since, reload: false, delayMs: VIEWER_WATCH_INTERVAL_MS };
+  return { phase, since, reload: false, delayMs: watchMs };
 }

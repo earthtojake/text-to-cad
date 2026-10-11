@@ -9,9 +9,6 @@ from cadgen import step,read_step
 from lib.native_integration import integrated_native_bodies,overlay,rooted,ROOT
 from lib.assembly import compound
 from lib.palette import apply_palette,ASSEMBLY_MATERIALS
-from lib.embedded_animation import load_animation
-
-ANIMATION_JS = load_animation(__file__, 'write_showcase_presentation.py')
 
 def native_parts(path):
     from cadgen.step_scene import load_step_scene,scene_occurrence_shape
@@ -27,7 +24,7 @@ def native_parts(path):
         shape.label=name;parts[name]=shape
     return parts
 
-@step(out='../STEP/hand_mechanical_candidate_r13.step', materials=ASSEMBLY_MATERIALS, animation=ANIMATION_JS)
+@step(out='../STEP/hand_mechanical_candidate_r13.step', materials=ASSEMBLY_MATERIALS)
 def hand_mechanical_candidate_r13():
     bodies=integrated_native_bodies();folder=ROOT/'STEP';reports=ROOT/'validation'
     for family,filename in [('fingertip_pad','fingertip_pad_export_repair.step'),('fingernail','fingernail_export_repair_review.step')]:

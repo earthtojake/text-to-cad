@@ -95,9 +95,13 @@ def _cmd_info(as_json: bool) -> int:
         "output": "output entries (path -> model)",
         "component": "component entries",
         "surface": "surface entries",
+        "selector": "selector tables",
         "bounds": "bounding boxes and leaf layouts",
         "mesh": "mesh entries",
         "drawing": "drawing render payloads",
+        "skin": "tube skins (a document's bending tubes, bound)",
+        "section": "component sections (a BREP cut by a plane)",
+        "robot": "robot entries (a description -> its payload and primitive meshes)",
     }
     for kind, count in payload["index"].items():
         print(f"index/{kind:<10} {count} {labels[kind]}")
@@ -142,8 +146,14 @@ def _cmd_why(target: str, as_json: bool) -> int:
 def _closure_file_label(rel: str, names: dict, own: dict) -> str:
     """``lib/geo.py[plane, cyl_along]`` for a sliced file (its reached names,
     the first six), the bare path for a file tracked whole, ``lib/__init__.py
-    (must stay absent)`` for a file the imports rely on not existing, and
-    ``./ (listing, less part.step)`` for a listed folder, less its own outputs."""
+    (must stay absent)`` for a file the imports rely on not existing,
+    ``./ (listing, less part.step)`` for a listed folder, less its own outputs,
+    and ``SIZE (environment variable)`` for a variable the model reads."""
+    from cadgen.store.closure import environment_name
+
+    variable = environment_name(rel)
+    if variable is not None:
+        return f"{variable} (environment variable)"
     if rel.startswith("!"):
         return f"{rel[1:]} (must stay absent)"
     if rel.endswith("/"):
@@ -217,6 +227,7 @@ def _cmd_gc(dry_run: bool, grace_hours: float, max_size: str | None, as_json: bo
         "removed": report.removed,
         "removedBytes": report.removed_bytes,
         "retired": report.retired,
+        "obsolete": report.obsolete,
         "retiredBytes": report.retired_bytes,
         "bytesBefore": report.bytes_before,
         "bytesAfter": report.bytes_after,
@@ -236,6 +247,8 @@ def _cmd_gc(dry_run: bool, grace_hours: float, max_size: str | None, as_json: bo
     verb = "would remove" if dry_run else "removed"
     for kind, count in sorted(report.retired.items()):
         print(f"index/{kind} is retired: {verb} {count} entries, then the objects only they named")
+    for kind, count in sorted(report.obsolete.items()):
+        print(f"{kind} entries another version of cadgen wrote are obsolete: {verb} {count}, then the objects only they named")
     if max_size is not None:
         if report.cap is None:
             print("no cap (0): nothing is evicted")
@@ -289,7 +302,7 @@ def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
         help="retire old index kinds, mark and sweep unreachable objects; with --max-size, evict to a cap first",
         description=(
             "Removes the index kinds this cadgen no longer defines (index/op) and every object nothing reaches: "
-            "not a record's or a document's tree, not named by a mesh, surface, component, bounds or drawing "
+            "not a record's or a document's tree, not named by a mesh, surface, selector, component, bounds, drawing, skin or section "
             "entry, and not written or claimed within the grace window. --max-size first evicts those derived "
             "entries, least recently written first, until the store fits 80%% of the cap (the newest keep a "
             "fifth of the cap when records and documents leave less room); records, document entries and "

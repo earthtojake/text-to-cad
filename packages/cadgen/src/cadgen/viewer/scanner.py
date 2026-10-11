@@ -141,7 +141,7 @@ _HASH_CACHE_LIMIT = 4096
 _HASH_CACHE_LOCK = threading.Lock()
 
 # A STEP catalog row is derived from immutable geometry plus the document-bound
-# sidecar, including its optional embedded animation. Catalog
+# sidecar, including its optional animation keyframes. Catalog
 # refreshes still resolve the document digest to its current tree on every
 # read; only the expensive flattened-tree validation and annotation shaping is
 # reused when all of those inputs are unchanged. Misses build outside the lock;
@@ -403,39 +403,45 @@ def read_step_catalog_metadata(descriptor, source_path=None, *, document_hash=No
 
     ``assembly.json`` is the flattened tree (``result_descriptor``). ``None``, a
     non-dict, or a ``kind`` that is not ``assembly-package`` all answer ``{}``
-    — and that is what suppresses ``sourceUrl``/``poseUrl`` even when the
-    sidecar exists and declares kinematics.
+    — and that is what suppresses the articulation and its ``poseUrl`` even
+    when the sidecar exists and declares kinematics.
     """
     if not descriptor or not isinstance(descriptor, dict):
         return {}
     if descriptor.get("kind") != _STEP_PACKAGE_KIND:
         return {}
     # Everything SOURCE-derived rides the model-side sidecar
-    # (<name>.step.json); the store assembly.json is STEP-pure.
+    # (<name>.step.json); the store assembly.json is STEP-pure. The page never reads the
+    # sidecar: the row carries what it MEANS, resolved here -- the articulation of its
+    # kinematics, what its appearance resolves to per occurrence, its baked animation.
     #
     # A sidecar this build cannot read is no sidecar: the document renders with
     # no kinematics, no materials and no routine, and the viewer says nothing
     # about it. The migration is announced where it can be acted on -- the build
     # and the cad skill -- not beside a model that is on screen and correct.
     sidecar = None
+    display = None
+    articulation = None
     if source_path:
         from cadgen._internal.source_sidecar import (
             SidecarAppearanceError,
             SidecarBindingError,
             SidecarSchemaError,
-            validate_appearance_targets,
+            occurrence_display,
             read_source_sidecar,
         )
+        from cadgen.articulation import step_articulation
 
         try:
             sidecar = read_source_sidecar(source_path, document_hash=document_hash)
-            if isinstance(sidecar, dict) and sidecar.get("appearance") is not None:
-                validate_appearance_targets(descriptor, sidecar["appearance"])
-        except (SidecarAppearanceError, SidecarBindingError, SidecarSchemaError):
-            sidecar = None
+            if isinstance(sidecar, dict):
+                display = occurrence_display(descriptor, sidecar.get("appearance"))
+                articulation = step_articulation(descriptor, sidecar.get("kinematics"))
+        except (SidecarAppearanceError, SidecarBindingError, SidecarSchemaError, ValueError):
+            sidecar = display = articulation = None
     entry_kind = descriptor.get("entryKind")
-    kinematics = sidecar.get("kinematics") if isinstance(sidecar, dict) else None
     appearance = sidecar.get("appearance") if isinstance(sidecar, dict) else None
+    animation = sidecar.get("animation") if isinstance(sidecar, dict) else None
     result = {
         "topology": {
             "index": descriptor,
@@ -444,9 +450,10 @@ def read_step_catalog_metadata(descriptor, source_path=None, *, document_hash=No
         # Publish the validated artifact annotations with this geometry snapshot.
         # What produced the document is not a catalog fact.
         "hasSourceSidecar": sidecar is not None,
-        "sourceSidecar": sidecar,
-        "kinematics": kinematics if _is_js_object(kinematics) else None,
+        "articulation": articulation,
+        "animation": animation if isinstance(animation, dict) else None,
         "appearance": appearance if isinstance(appearance, dict) else None,
+        "display": display,
     }
     return result
 
@@ -521,9 +528,7 @@ def _build_step_entry(source_path, extension, *, document_hash, tree) -> dict:
         tree = None
     topology = metadata.get("topology")
     descriptor_body = json.dumps(descriptor) if metadata else ""
-    # An EMPTY `kinematics: {}` block still yields a poseUrl (JS truthiness);
-    # Python's `or` would drop it, so the test is `is not None`.
-    pose_block = metadata.get("kinematics")
+    articulation = metadata.get("articulation")
     entry = {
         "file": to_posix_path(source_path),
         "kind": step_kind_from_topology(topology),
@@ -536,17 +541,6 @@ def _build_step_entry(source_path, extension, *, document_hash, tree) -> dict:
         "documentHash": document_hash,
         "bytes": len(descriptor_body.encode("utf-8")),
     }
-    if metadata.get("hasSourceSidecar"):
-        # The model-side sidecar is mutable independently of the STEP bytes.
-        # Its URL therefore carries the ordinary asset version while the STEP
-        # tree URL remains content-addressed.
-        sidecar_asset = asset_for_path(source_sidecar_path(source_path))
-        if sidecar_asset:
-            entry["sourceUrl"] = sidecar_asset["url"]
-        # The URL is a mutable file route. Publish the exact validated snapshot
-        # read above so appearance and kinematics cannot observe a later write
-        # under the same path/version token.
-        entry["sourceSidecar"] = metadata["sourceSidecar"]
     appearance = metadata.get("appearance")
     if appearance is not None:
         from cadgen._internal.source_sidecar import appearance_digest
@@ -554,16 +548,29 @@ def _build_step_entry(source_path, extension, *, document_hash, tree) -> dict:
         # Appearance participates in the composed scene identity only. The
         # immutable STEP tree/hash and component tessellation keys stay pure.
         entry["appearanceHash"] = appearance_digest(appearance)
-    if pose_block is not None:
-        # Typed mates, the articulation mechanism the sidecar carries.
-        entry["poseUrl"] = entry.get("sourceUrl") or local_asset_url_for_path(
-            source_sidecar_path(source_path)
-        )
-    animation = (metadata.get("sourceSidecar") or {}).get("animation")
+        # What it resolves to, per assigned occurrence: the page joins it to the tree by id.
+        entry["display"] = metadata.get("display") or {}
+    if articulation is not None:
+        # The articulation of the typed mates, inline: exactly what the page plays. Its URL
+        # is the sidecar's mutable asset route, whose version token says when the
+        # articulation was written again (the sidecar changes apart from the STEP bytes,
+        # whose tree URL stays content-addressed).
+        sidecar_path = source_sidecar_path(source_path)
+        sidecar_asset = asset_for_path(sidecar_path) if metadata.get("hasSourceSidecar") else None
+        entry["articulation"] = articulation
+        entry["poseUrl"] = (sidecar_asset or {}).get("url") or local_asset_url_for_path(sidecar_path)
+    animation = metadata.get("animation")
     if animation is not None:
-        entry["animationHash"] = hashlib.sha256(
-            json.dumps(animation, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
+        from cadgen._internal.source_sidecar import animation_digest, bends_a_tube
+
+        # The baked keyframes, inline: the page plays them as they are.
+        entry["animation"] = animation
+        entry["animationHash"] = animation_digest(animation)
+        if tree and document_hash and bends_a_tube(animation):
+            # Where a view reads the bound skins its clips bend tubes with.
+            from .tube_skins import tube_skins_url
+
+            entry["tubeSkinsUrl"] = tube_skins_url(source_path, document_hash)
     return entry
 
 
@@ -577,8 +584,7 @@ def is_served_cad_asset(file_path) -> bool:
     The sidecar test matches the FULL pair of suffixes, never
     ``SOURCE_SIDECAR_SUFFIX`` alone — that is ``.json``, and serving every JSON
     file would hand out configs, secrets and anything else that happens to be
-    there. JavaScript files are not model assets; animation source is embedded in
-    the document-bound JSON sidecar.
+    there. Animation is keyframe data in the document-bound JSON sidecar.
     """
     text = str(file_path or "")
     if is_hidden_name(node_basename(text)):

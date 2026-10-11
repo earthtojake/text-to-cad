@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import unittest
@@ -168,7 +169,7 @@ class SavedAppearanceTest(unittest.TestCase):
                 {"materials": {"m": {"name": "M", "opacity": 0.5}}, "assignments": {"group": "m"}},
             )
 
-    def test_schema_nine_sidecars_bind_appearance_to_actual_step_bytes(self) -> None:
+    def test_schema_ten_sidecars_bind_appearance_to_actual_step_bytes(self) -> None:
         first = self.root / "first.step"
         second = self.root / "renamed.step"
         step_bytes = b"ISO-10303-21;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n"
@@ -182,7 +183,7 @@ class SavedAppearanceTest(unittest.TestCase):
         expected_hash = hashlib.sha256(step_bytes).hexdigest()
 
         self.assertEqual(SOURCE_SIDECAR_SCHEMA_VERSION, first_sidecar["schemaVersion"])
-        self.assertEqual(9, first_sidecar["schemaVersion"])
+        self.assertEqual(10, first_sidecar["schemaVersion"])
         self.assertEqual(expected_hash, first_sidecar["documentHash"])
         self.assertEqual(expected_hash, second_sidecar["documentHash"])
         self.assertEqual(ROUGH, first_sidecar["appearance"])
@@ -198,44 +199,41 @@ class SavedAppearanceTest(unittest.TestCase):
             write_source_sidecar(invalid, {"appearance": {"materials": {"m": {"name": "M", "opacity": False}}, "assignments": {"o1": "m"}}})
         self.assertFalse(source_sidecar_path(invalid).exists())
 
-    def test_model_records_cut_over_while_documents_remain_four(self) -> None:
-        current_tree = "c" * 64
+    def test_each_schema_version_reads_and_writes_only_its_own_record_and_document_entry(self) -> None:
+        """Two cadgens of different schemas sharing a store (a plugin pinned to one
+        release, a checkout on another) each keep their own entry: neither misses on
+        what the other wrote, nor rewrites it and drops its mesh ledger."""
         model = self.root / "model.step"
         model.write_bytes(b"model")
-        for schema in (4, 5, 6, 7):
-            with self.subTest(retired_schema=schema):
-                write_entry(
-                    "model",
-                    model_key(model),
-                    {"kind": "record", "schemaVersion": schema, "tree": "legacy-tree", "outputs": {}},
-                )
-                self.assertIsNone(read_record(model))
-
-        write_record(model, {"tree": current_tree, "outputs": {}})
-        current_record = read_record(model)
-        self.assertEqual(RECORD_SCHEMA_VERSION, current_record["schemaVersion"])
-        self.assertEqual(8, current_record["schemaVersion"])
-        self.assertEqual(current_tree, current_record["tree"])
-
         document_hash = "d" * 64
-        write_entry(
-            "document",
-            document_hash,
-            {"schemaVersion": 3, "tree": "legacy-tree", "kind": "step", "meshes": {"old": "mesh"}},
-        )
+        # What cadgen 0.7.19 left, at keys that name no schema (its record schema is
+        # this one's): never read here, never rewritten.
+        released = {"model": (model_key(model), {"kind": "record", "schemaVersion": RECORD_SCHEMA_VERSION,
+                                                 "tree": "a" * 64, "outputs": {}}),
+                    "document": (document_hash, {"schemaVersion": 4, "tree": "a" * 64, "kind": "step", "meshes": {"glb": "m"}})}
+        for kind, (key, entry) in released.items():
+            write_entry(kind, key, entry)
+        self.assertIsNone(read_record(model))
         self.assertIsNone(tree_for_document_hash(document_hash))
-        self.assertIsNone(document_mesh_sha(document_hash, "old"))
-        note_document_mesh(document_hash, "new", "ignored")
-        self.assertEqual(3, read_entry("document", document_hash)["schemaVersion"])
 
-        note_document_tree(document_hash, current_tree)
-        current_document = read_entry("document", document_hash)
-        self.assertEqual(DOCUMENT_SCHEMA_VERSION, current_document["schemaVersion"])
-        self.assertEqual(4, current_document["schemaVersion"])
-        self.assertEqual(current_tree, tree_for_document_hash(document_hash))
-        self.assertNotIn("meshes", current_document)
-        note_document_mesh(document_hash, "new", "current-mesh")
-        self.assertEqual("current-mesh", document_mesh_sha(document_hash, "new"))
+        other = mock.patch.multiple("cadgen.store.records", RECORD_SCHEMA_VERSION=RECORD_SCHEMA_VERSION - 1,
+                                    DOCUMENT_SCHEMA_VERSION=DOCUMENT_SCHEMA_VERSION - 1)
+        trees = {"other": "b" * 64, "this": "c" * 64}
+        for turn in ("other", "this", "other", "this"):
+            with self.subTest(turn=turn), (other if turn == "other" else contextlib.nullcontext()):
+                if read_record(model) is None:
+                    write_record(model, {"tree": trees[turn], "outputs": {}})
+                if tree_for_document_hash(document_hash) is None:
+                    note_document_tree(document_hash, trees[turn])
+                    note_document_mesh(document_hash, "glb", f"{turn} mesh")
+                self.assertEqual(trees[turn], read_record(model)["tree"])
+                self.assertEqual(trees[turn], tree_for_document_hash(document_hash))
+                self.assertEqual(f"{turn} mesh", document_mesh_sha(document_hash, "glb"))
+        key = model_key(model)
+        self.assertEqual(sorted([key, f"{key}-v{RECORD_SCHEMA_VERSION - 1}", f"{key}-v{RECORD_SCHEMA_VERSION}"]),
+                         sorted(path.name for path in (self.store / "index" / "model").iterdir()))
+        for kind, (key, entry) in released.items():
+            self.assertEqual(entry, read_entry(kind, key), f"the released cadgen's {kind} entry is untouched")
 
     def test_document_mesh_ledger_separates_finishes_and_no_appearance(self) -> None:
         document_hash = "a" * 64

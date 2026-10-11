@@ -23,6 +23,11 @@ defaults to perspective; other presets use orthographic projection. Opacity is
 0 for transparent and 1 for opaque, including partially transparent PNG
 backgrounds. Unknown keys and retired modes are refused.
 
+A STEP model with no surfaces -- empty, or only curves and points -- has nothing a
+view draws. Its snapshot is still written, with a warning that says the model has
+no surfaces, decided from the parts' SURF face counts before any browser starts
+(`snapshot_parts.has_surfaces`).
+
 `edges`, `clip`, `exploded`, the `xray`, `hidden-line` and `wireframe` presets and
 the `hidden` and `off` surface styles describe a CAD model: its topology edges,
 its parts and its solids. They apply to STEP/STP inputs only. A mesh or a robot
@@ -48,11 +53,20 @@ snapshot's own.
 - An STL is one object and a 3MF one per object (and per material within one),
   each in its colour. They author no finish: `solid` wears the viewer's surface and
   `render` the studio's.
-- A robot is drawn where the viewer opens it: every joint at its default, then an
-  SRDF's `home` group state, with the joints `--joint-values` names on top. A
-  colour the description gives a visual wins over the colours its link mesh
-  carries, and a link mesh that cannot be loaded fails the snapshot rather than
-  leaving the link out.
+- A robot is drawn where the viewer opens it: every control at rest, then an
+  SRDF's `home` group state, with the joints `--joint-values` names on top.
+  cadgen resolves the description first (`cadgen.robot_payload`: the articulation
+  the page plays, the visuals it draws) and refuses, by name, what the page
+  cannot draw: a validator finding; a mesh that is not an STL, 3MF or GLB file
+  beside the description (`package://` and remote URIs are not resolved); a
+  value for a fixed joint, a mimic follower (a follower follows its leader) or a
+  `tcad:four_bar` crank (a crank follows its driver, through the linkage cadgen
+  closes); a leader value that pushes a follower past the follower's own
+  limits, or a four-bar driver outside the range the linkage was solved over. A box,
+  cylinder, sphere or capsule is meshed by cadgen into its store. A colour the
+  description gives a visual wins over the colours its link mesh carries, and a
+  link mesh that cannot be loaded fails the snapshot rather than leaving the
+  link out.
 - The ground is sized from the rest placement, so a pose never rescales it; only
   the floor's height follows a posed robot down.
 - `--mode list` lists what the scene drew, one row per mesh: a `ref` naming it,
@@ -121,7 +135,49 @@ cadgen step snapshot part.step cut.svg --mode section --section XZ:12.5
 ```
 
 Those are the only two keys, a `section` outside section mode is refused, and a
-plane that misses the model returns an empty drawing with a warning.
+plane that cuts no material returns an empty drawing with a warning.
+
+The cut is exact. cadgen sections each part's BREP with the plane, in the part's
+own coordinates (`cadgen.store.sections`, a build-pool job cached by part and
+plane in the store's `section` index), so a cylinder cut across its axis is a
+circle of its true radius, never the chords of a tessellation. Only a part whose
+placed box reaches the plane is cut; the rest of a big assembly costs nothing. A section is the
+material the plane cuts, and only a solid has any: a solid's cut is the region
+of the plane inside it (a face of it lying in the plane included), a plane that
+only touches a solid (tangent to a torus's top) cuts nothing, a sheet body's cut
+is its curves, and a wire or edge is no part of a section even lying in the
+plane. `--focus` and `--hide` pick the parts that are cut. The cut is drawn as a
+2D drawing payload (`cadgen.section_drawing`): each part's solid material filled
+even-odd and hatched at 45 degrees, dash-dot centre lines through the cut's box,
+and every outline, a sheet's curves included, in the appearance's foreground
+(or `display.edges.color`). A `.png` is that payload painted by the snapshot
+page with the same drawing code a DXF is, with a cut locator in the corner and,
+with `--view-labels`, the plane's label; a `.svg` is written by cadgen itself, y
+up as drawn, and a job whose outputs are all `.svg` starts no browser. Both are
+drawn in model units from the model point the SVG's root names in
+`data-origin`: `0 0` unless the cut lies far from the origin (more than fifty
+times its own size), where a round point beside it keeps every coordinate
+within a renderer's 32-bit floats. The plane's label is always the model's.
+Section mode is for STEP/STP inputs; a mesh or a robot description has no
+solids to section.
+
+## Listing a STEP model's parts
+
+`--mode list` on a STEP/STP input is answered by cadgen from the tree and the
+store (`cadgen.snapshot_parts`) and starts no browser. Each row is one placed
+occurrence, in the tree's order: `ref` and `name` are the occurrence's id and
+name exactly as every selector resolves them
+(`cadgen.assembly_lookup.assembly_occurrence_rows`), `bounds` is the component's
+exact box placed by the occurrence's transform (rounded to 1e-3), and
+`triangleCount`/`vertexCount` are the stored display mesh's at the tessellation a
+view would draw (meshed in the build pool when the store has none). `--focus` and
+`--hide` narrow the rows the way they narrow a section.
+
+A part whose stored mesh leaves out a face no mesher could cover (its body's
+`unmeshedFaces`, [`STORE.md`](STORE.md) §3) is listed, counted and drawn without
+that face, never refused: the list and the view each add a warning naming the
+part's occurrences and the faces (`cadgen.snapshot_parts.unmeshed_warnings`,
+asked once the page has drawn).
 
 ## Sizes
 
@@ -149,7 +205,7 @@ Still view renders report these measured browser durations in milliseconds:
 
 | Field | Measured work |
 | --- | --- |
-| `loadSourceMs` | Source fetch, cached-mesh decoding or tessellation, and source composition |
+| `loadSourceMs` | Source fetch, stored-mesh reads and decoding, and source composition |
 | `preparePoseMs` | Requested animation loading/frame resolution and kinematics runtime preparation |
 | `buildModelMs` | Render context and model/display-record construction |
 | `prepareViewportMs` | Viewport, renderer and scene setup; this is not a draw |
@@ -157,13 +213,15 @@ Still view renders report these measured browser durations in milliseconds:
 | `captureMs` | Entire capture call, including readiness and all output stages below |
 
 Exact-surface packages also report `stageTimings.sourceLoad`. Counts distinguish
-`componentCount`, `cacheBatchCount`, `cacheHitCount` and `cacheMissCount`.
-Measured durations are `probeMs` (metadata), `cacheReadMs` (bounded body fetch
-and integrity validation), `cacheDecodeMs` (component views and metadata),
-`meshBuildMs` (owned render arrays), and `composeMs` (occurrence composition).
-Misses additionally measure `surfaceReadMs` (fetch and parse), `tessellateMs`
-and `cacheWriteMs`. Miss-stage times sum per-component intervals across the
-small concurrent pool, so they can overlap; absent stages are omitted.
+`componentCount`, `cacheBatchCount`, `cacheHitCount` and `cacheMissCount`, and
+`producedCount` when the page asked the host to mesh what its probe found
+missing. Measured durations are `probeMs` (metadata), `produceMs` (the build
+pool meshing the missing components, before the page reads them),
+`cacheReadMs` (bounded body fetch and integrity validation), `cacheDecodeMs`
+(component views and metadata), `meshBuildMs` (owned render arrays), and
+`composeMs` (occurrence composition). A static package's own mesh files measure
+`meshReadMs`; those times sum per-component intervals across a small concurrent
+pool, so they can overlap. Absent stages are omitted.
 
 `stageTimings.outputs` contains one measured entry per image, in output order,
 with its `path` and these durations:

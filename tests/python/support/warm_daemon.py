@@ -16,9 +16,10 @@ opting out of it, and creates the same private endpoint itself when a file is ru
 directly (``python -m unittest tests/...``) so a direct run can never reach -- or
 retire -- the developer's own daemon.
 
-Workers receive only the forwarded environment (cache dir, PYTHONPATH, ffmpeg, memo):
-a per-run override such as ``CADGEN_NODE`` is invisible to a warm worker, so a test
-that varies one of those per run must stay cold.
+A job runs in its caller's environment, less the names the daemon's machinery keeps
+for itself (``cadgen.daemon.client.INTERNAL_ENV_VARS``), so a per-run override reaches a
+warm worker as it reaches a cold run. A warm run that silently fell back to cold would
+pass any assertion about its output: :func:`served` says whether the daemon did the job.
 """
 
 from __future__ import annotations
@@ -95,6 +96,25 @@ def warm_entries() -> dict[str, str]:
     # the test's critical path instead of in the background) and nothing else got
     # faster: the runner had the headroom the spares were using.
     return entries
+
+
+def served(marker: str) -> bool:
+    """Whether this module's warm daemon finished a job whose command names ``marker``
+    (a test's own project folder): its log's completed-job line, ``run [...] -> exit``."""
+    from unittest import mock
+
+    from cadgen.daemon import client
+
+    entries = warm_entries()
+    address = entries.get("CADGEN_DAEMON_SOCKET") or os.environ["CADGEN_DAEMON_SOCKET"]
+    state = entries.get("CADGEN_DAEMON_STATE_DIR") or os.environ.get("CADGEN_DAEMON_STATE_DIR")
+    with mock.patch.dict(os.environ, {"CADGEN_DAEMON_STATE_DIR": state} if state else {}):
+        log = client.log_path(address)
+    try:
+        text = log.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return any("-> exit" in line and marker in line for line in text.splitlines())
 
 
 def warm_env(base: dict | None = None, **overrides: str) -> dict:

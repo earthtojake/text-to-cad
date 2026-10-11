@@ -92,8 +92,8 @@ def _read_json(file_path):
     return parsed if isinstance(parsed, dict) else None
 
 
-# A migration a project still owes -- a leftover ``<name>.step.js``, a sidecar
-# written to an older schema -- is announced by the BUILD and by the cad skill,
+# A migration a project still owes -- a sidecar written to an older schema --
+# is announced by the BUILD and by the cad skill,
 # where the words reach whoever can act on them and the next step is a command
 # to run. The viewer is not that place: it shows the document it is handed, and
 # what a stale neighbour costs (no kinematics, no materials, no routine) is
@@ -175,7 +175,7 @@ def _validate_step(step_path: str) -> dict:
             "descriptor": descriptor,
         }
     # result_descriptor captured the full required geometry closure. Optional
-    # SURF/TESS availability is a separate runtime capability and cannot make
+    # SURF/mesh availability is a separate runtime capability and cannot make
     # this document need another compile.
     return {"ok": True, "tree": tree, "descriptor": descriptor}
 

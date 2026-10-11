@@ -26,20 +26,18 @@ where those files ship, so these scripts are what produces them.
   metadata (which IS committed) rather than writing it. `--clean` removes the
   `_runtime` tree first. Called by `test.yml`, `release-publish.yml`,
   `check-builds.sh`, the pre-commit hook.
-- `cadgen-runtime.sh` — builds the five runtime stages: `--node` (esbuilt Node
-  builders), `--browser` (snapshot browser bundle), `--viewer` (vite build of
-  `apps/web`), `--mcp` (vite build of `apps/mcp`, one `index.html`), `--native`
-  (the file tracer, zig-compiled for every platform; `--native-host` builds this
-  machine's only). `--print-outputs` lists the three directories a bundle always
-  produces; `--check` skips the viewer and MCP stages, which need the apps'
-  `node_modules` and which nothing in a checkout reads. Called by `bundle.sh`,
-  `check-builds.sh`, `test/test-installed.sh`, and `test/common.sh` when a test
-  runner finds a stage it needs missing; pinned by
-  `tests/python/global/test_node_builder_bundles.py` and
-  `test_js_runtime_reproducibility.py`. Call it directly only to debug one stage.
-- `lib/node_builders.sh`, `lib/snapshot_runtime.sh` — sourced by
-  `cadgen-runtime.sh`; esbuild the Node builders and the browser bundle with
-  `three`/`meshoptimizer` pinned from `package-lock.json`.
+- `cadgen-runtime.sh` — builds the four runtime stages: `--browser` (snapshot
+  browser bundle), `--viewer` (vite build of `apps/web`), `--mcp` (vite build of
+  `apps/mcp`, one `index.html`), `--native` (the file tracer, zig-compiled for
+  every platform; `--native-host` builds this machine's only). `--print-outputs`
+  lists the two directories a bundle always produces; `--check` skips the viewer
+  and MCP stages, which need the apps' `node_modules` and which nothing in a
+  checkout reads. Called by `bundle.sh`, `check-builds.sh`,
+  `test/test-installed.sh`, and `test/common.sh` when a test runner finds a stage
+  it needs missing; pinned by `test_js_runtime_reproducibility.py`. Call it
+  directly only to debug one stage.
+- `lib/snapshot_runtime.sh` — sourced by `cadgen-runtime.sh`; esbuilds the browser
+  bundle with `three`/`meshoptimizer` pinned from `package-lock.json`.
 
 `test/` — test runners.
 
@@ -69,9 +67,9 @@ where those files ship, so these scripts are what produces them.
   running after 15 minutes is hung: it prints every thread's stack and fails.
 - `test-global.sh [PATH...]` — `tests/python/global`, the repo-wide policy
   suite, narrowed to PATHs as `test-python.sh` is. Like `test-python.sh`, it
-  builds the `--node` and `--browser` runtime stages and this machine's file
-  tracer first when they are absent: the suites read them and a fresh clone has
-  none. `PYTHON_TEST_RUNTIME=0` skips that build for a selection that reads none
+  builds the `--browser` runtime stage and this machine's file tracer first when
+  they are absent: the suites read them and a fresh clone has none.
+  `PYTHON_TEST_RUNTIME=0` skips that build for a selection that reads none
   of it (the skills job's light phase); a test that does read it then fails on the
   missing file.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, then the animated brand
@@ -117,7 +115,7 @@ where those files ship, so these scripts are what produces them.
   lockfile and `pyproject.toml` metadata, the cadgen pins) from `VERSION`. Called
   by `bump-version.sh`, `bundle.sh`, `test.yml` (Version Check), `release-publish.yml`.
 - `check-wheel-contents.sh` — builds the wheel and asserts the Python modules and
-  `_runtime/{node,browser,viewer}` are inside it, with bytes identical to the
+  `_runtime/{browser,viewer}` are inside it, with bytes identical to the
   bundled source. The only gate on package data, which fails quietly. Called by
   `test.yml` and `release-publish.yml`.
 - `plugin_zip.py --out PATH | --check` — builds the plugin ZIP OpenAI's plugin
@@ -208,7 +206,7 @@ manual; their `*.test.mjs` helper units run in `test-js.sh`.
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): `Version Check` always (canonical version, derived metadata, cadgen pins, the tracked tree's rules; on a pull request, what merging it releases); the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), `mcp`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
+| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): `Version Check` always (canonical version, derived metadata, cadgen pins, the tracked tree's rules; on a pull request, what merging it releases); the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), `mcp`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel, runs the installed-mode tests, and serves that bundle's viewer through the backend to the launch smoke test and the browser gates. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch (`bump` or `set_version`; `target`, `dry_run`) | Opens a release pull request of what the target already has: `bump-version.sh` on `release/X.Y.Z`, pushed and opened with `PREPARE_RELEASE_TOKEN` so its checks run. It never merges: merging the pull request releases it. `target=build-test` rehearses. |
 | `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload, a wait until PyPI's index lists the version, the plugin committed onto `latest` and `claude-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |

@@ -241,9 +241,9 @@ export function renderMemoryAccounting(runtime) {
       visitPick(root);
     }
   }
-  // Tube deformation retains a refined rest mesh/mapping beside the posed
-  // display geometry. Count typed arrays reachable from its private state that
-  // were not already attributed to a visible geometry.
+  // A bent tube retains its skin (cadgen's bound mesh, its joints and its edge
+  // lines) beside the posed display geometry. Count typed arrays reachable from
+  // its private state that were not already attributed to a visible geometry.
   const seenDeformationObjects = new Set();
   const visitDeformation = (value) => {
     if (!value || typeof value !== "object" || seenDeformationObjects.has(value)) return;
@@ -266,7 +266,7 @@ export function renderMemoryAccounting(runtime) {
     }
     for (const child of Object.values(value)) visitDeformation(child);
   };
-  for (const record of records) visitDeformation(record?.tubeDeformationState);
+  for (const record of records) visitDeformation(record?.tubeSkinState);
   totals.geometries = seenGeometries.size;
   totals.buffers = seenBuffers.size;
   totals.materials = seenMaterials.size;

@@ -40,8 +40,29 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 6,
      "surface": "file",
+     "tessellation": {
+      "defaultLevel": 1,
+      "levels": [
+       {
+        "angleTolerance": 1.4,
+        "chordTolerance": 0.002
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.0015
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.0005
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.00015
+       }
+      ]
+     },
      "version": "<version>"
     }
    }
@@ -60,9 +81,30 @@
      "page": "home",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 6,
      "recents": [],
      "surface": "sidebar",
+     "tessellation": {
+      "defaultLevel": 1,
+      "levels": [
+       {
+        "angleTolerance": 1.4,
+        "chordTolerance": 0.002
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.0015
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.0005
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.00015
+       }
+      ]
+     },
      "version": "<version>"
     }
    }
@@ -81,8 +123,29 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 6,
      "surface": "agent",
+     "tessellation": {
+      "defaultLevel": 1,
+      "levels": [
+       {
+        "angleTolerance": 1.4,
+        "chordTolerance": 0.002
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.0015
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.0005
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.00015
+       }
+      ]
+     },
      "version": "<version>"
     }
    }
@@ -121,8 +184,29 @@
      "page": "viewer",
      "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 5,
+     "protocol": 6,
      "surface": "tab",
+     "tessellation": {
+      "defaultLevel": 1,
+      "levels": [
+       {
+        "angleTolerance": 1.4,
+        "chordTolerance": 0.002
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.0015
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.0005
+       },
+       {
+        "angleTolerance": 0.35,
+        "chordTolerance": 0.00015
+       }
+      ]
+     },
      "version": "<version>"
     }
    }

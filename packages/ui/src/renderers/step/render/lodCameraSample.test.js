@@ -4,6 +4,10 @@ import * as THREE from "three";
 import { lodSceneMayMove, sampleLodCamera } from "./lodCameraSample.js";
 import { createLodScheduler } from "./lodScheduler.js";
 import { desiredLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
+import { installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 
 const bounds = (min, max) => ({ min, max });
 const cube = (x, y = 0, z = 0) => bounds([x - .5, y - .5, z - .5], [x + .5, y + .5, z + .5]);
@@ -88,7 +92,8 @@ test("missing, partial or invalid occurrence bounds use conservative summary fal
 test("any joint/module capability, including paused or disabled state, fails open", () => {
   assert.equal(lodSceneMayMove(), false);
   for (const capability of [{ kinematics: { parameterValues: {} } },
-    { kinematicsLoading: true }, { animation: { language: "javascript" } }, { exploded: true }]) {
+    { kinematicsLoading: true }, { animation: { clips: [{ id: "swing", label: "Swing", duration: 4, loop: true, tracks: [] }] } },
+    { exploded: true }]) {
     const f = fixture([["offscreen", cube(20)]]);
     const s = sample(f, { dynamicScene: lodSceneMayMove(capability) });
     assert.ok(Number.isFinite(s.distanceFor("offscreen")));
@@ -96,10 +101,10 @@ test("any joint/module capability, including paused or disabled state, fails ope
   }
 });
 
-test("animated, collapsing, CPU and GPU deformed records fail open even without capability metadata", () => {
+test("animated, collapsing and bent records fail open even without capability metadata", () => {
   for (const effect of [{ effectMatrix: new THREE.Matrix4().makeTranslation(30, 0, 0) },
     { explodedViewMatrix: new THREE.Matrix4().makeTranslation(30, 0, 0) },
-    { effectDeformation: {} }, { tubeDeformationState: { active: true } }, { tubeGpuState: { active: true } }]) {
+    { effectDeformation: {} }, { tubeSkinState: { active: true } }]) {
     const f = fixture([["posed", cube(20)], ["other", cube(-20)]]);
     Object.assign(f.runtime.displayRecords[0], effect);
     const s = sample(f);

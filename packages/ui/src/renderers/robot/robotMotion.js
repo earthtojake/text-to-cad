@@ -1,4 +1,6 @@
-import { jointValueMapsClose } from "@text-to-cad/core/lib/urdf/jointValues.js";
+// Two control values closer than this are the same value: below what a slider
+// shows, above what float arithmetic leaves behind.
+export const JOINT_VALUE_EPSILON = 0.001;
 
 const toFiniteNumber = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
 
@@ -13,6 +15,17 @@ export function cloneJointValueMap(values) {
   );
 }
 
+function sortedEntries(values) {
+  return Object.entries(cloneJointValueMap(values)).sort(([left], [right]) => left.localeCompare(right));
+}
+
+export function jointValueMapsClose(left, right, epsilon = JOINT_VALUE_EPSILON) {
+  const leftEntries = sortedEntries(left);
+  const rightEntries = sortedEntries(right);
+  if (leftEntries.length !== rightEntries.length) return false;
+  return leftEntries.every(([name, value], index) => name === rightEntries[index][0] && Math.abs(value - rightEntries[index][1]) <= epsilon);
+}
+
 export function jointValueSubsetClose(values, subset) {
   const targetValues = cloneJointValueMap(subset);
   const targetNames = Object.keys(targetValues);
@@ -23,6 +36,8 @@ export function jointValueSubsetClose(values, subset) {
   return jointValueMapsClose(currentValues, targetValues);
 }
 
+/** The named pose (`{ id, values }`) the controls are IN: the largest one whose controls match, with
+ * every other control at its default; null when none does. */
 export function findBestMatchingJointValueState(states, currentValues, defaultValues = {}) {
   const normalizedStates = Array.isArray(states) ? states : [];
   const normalizedCurrentValues = cloneJointValueMap(currentValues);
@@ -35,7 +50,7 @@ export function findBestMatchingJointValueState(states, currentValues, defaultVa
   let bestJointCount = 0;
 
   for (const state of normalizedStates) {
-    const stateValues = cloneJointValueMap(state?.jointValuesByName);
+    const stateValues = cloneJointValueMap(state?.values);
     const stateJointNames = Object.keys(stateValues);
     if (!stateJointNames.length || !jointValueSubsetClose(normalizedCurrentValues, stateValues)) {
       continue;

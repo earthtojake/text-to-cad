@@ -24,6 +24,6 @@ def refined_phalanges():
     repl=replacements();old=[s for s in base_bodies() if s.label in NAMES]
     assert len(old)==15
     return [repl.get(s.label,s) for s in old]
-@step(out='../STEP/phalanx_beauty_review.step',mesh_tolerance=.001,mesh_angular_tolerance=.018)
+@step(out='../STEP/phalanx_beauty_review.step',mesh_tolerance=.001,mesh_angular_tolerance=0.05)
 def phalanx_beauty_review():return bd.Compound(label='refined_phalanges_at_actual_assembled_datums',children=refined_phalanges())
 if __name__=='__main__':phalanx_beauty_review()

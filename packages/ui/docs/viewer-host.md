@@ -24,6 +24,12 @@ adapter can serve both apps, while desktop owns native runtime startup/recovery.
 See [workspace resources](../../core/docs/workspace-resources.md) for resource
 tickets and cache identity.
 
+A host installs cadgen's display tessellation ladder before a STEP model is drawn
+(`installTessellationLadder` from `@text-to-cad/core/lib/surf/lodPolicy.js`), from what its
+server says: the web viewer from its server info's `tessellation`, the CAD app from its
+launch's. The STEP renderer picks rungs of it from the camera and holds no tolerance of its
+own ([LOD](lod.md#1-where-a-model-starts)).
+
 Apps create services for the workspace lifetime. File tabs borrow them, while
 mounted renderers own scenes, document controllers and temporary resource leases.
 Unmounting one view releases its work without disposing another view's services
@@ -55,6 +61,7 @@ are for reading and maintaining the contracts.
 | `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the five CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@text-to-cad/ui/cad-viewer` |
 | `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`, `list` through `folder`, `search` through `search`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@text-to-cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the version, GitHub, Discord, where a new issue opens, the newest release and how to update, and how a link is followed), `issueUrl` (a new issue filled in — its title, labels and body — its address kept under `ISSUE_URL_MAX`) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@text-to-cad/ui/links` |
+| `buildId` (for an app's Vite config: which build this is, "" for the release's own, whose environment names its version in `TEXT_TO_CAD_RELEASE`, else the checkout's commit) | [Build id](../scripts/build-id.mjs) | `@text-to-cad/ui/build-id` |
 
 Start with the actual compositions: [web App](../../../apps/web/src/App.tsx) and the
 MCP app's [ModelView](../../../apps/mcp/src/ModelView.tsx), both one `CadViewer`.
@@ -85,12 +92,20 @@ Preview (a link or a host request, should either come to) takes it there: it kee
 the normal view. The CAD app's Full size, inline, is the host's display mode, not
 Preview: it shows the normal view, of any file. It is fullscreen
 (`onFullscreenChange`, below): the navbar, with everything in it (the app menu and the
-explorer too), steps aside while it lasts. It never uses the browser Fullscreen API. The shell saves the tools view's camera, fits a preview camera and restores
-the tools view's exact pose on exit; nothing of preview is persisted. Orbit
-starts by default, with its speed, unless the file's Orbit says otherwise: preview's
-settings are the file's view's `playback` — orbit on or off and its speed, Autoplay, the
-routine's chosen speed and loop — kept between previews and across a reload, and a
-file's routine plays on entry only when its Autoplay is on. The rules are in
+explorer too), steps aside while it lasts. It never uses the browser Fullscreen API.
+Preview and the tools view are two states: entering leaves the tools view's state as it
+is (the pose, the selection, hidden and isolated parts, Explode and Clip, measurements,
+the camera, the Animation tool's routine, the tool and its panels) and preview starts
+from the model as authored, with its own camera and its own routine at rest; leaving
+throws preview's state away and gives the tools view back exactly as it was. A renderer
+draws preview from its opening view instead of resetting its own state (`useRendererShell`'s
+`preview`), and the shell saves the tools view's camera and routine on the way in and
+restores them on the way out; nothing of preview is persisted. Orbit
+starts by default, with its speed, unless the file's Orbit says otherwise: the file's
+view's `playback` — orbit on or off and its speed, Autoplay, and the tools view's chosen
+speed and loop — is kept between previews and across a reload, and a file's routine
+plays on entry only when its Autoplay is on. Preview's own speed and loop start at the
+routine's every time and are never written there. The rules are in
 [settings-ui.md](settings-ui.md#camera-animation-and-preview).
 
 A renderer can publish `FileNavigationAction[]` through
@@ -337,8 +352,8 @@ at the defaults. In the CAD app there is one record per view: a view the host
 creates again (its frame re-created) starts afresh, since nothing names a view across its
 frames. A view is `{ camera, display, playback, renderer }` (`kit/shell/fileView.js`):
 the camera is restored in place of the open-time fit, the display settings with their
-Clip and Explode, preview's settings (Orbit on or off and its speed, Autoplay, the
-routine's chosen speed and loop), and the renderer's own slices each behind the
+Clip and Explode, the playback settings (Orbit on or off and its speed, Autoplay, and the
+Animation tool's chosen speed and loop — never preview's, which are forgotten on leaving it), and the renderer's own slices each behind the
 signature it was written against — a slice that no longer fits the file on screen is
 dropped, the camera, the display and the playback never. Not in it, and started afresh
 on every open: the tool in hand, the selection, measurements, ink, preview, a
@@ -352,7 +367,7 @@ debounced) and once more when it unmounts, and nothing after that; the store wri
 through synchronously, so what the tab last saw is what a reload restores. Nothing
 saves document content or promises an asynchronous operation will finish during page
 exit. Web owns pagehide
-(which unmounts the app), focus, visibility, history and development reload. Desktop
+(which unmounts the app), focus, visibility, history and reload under a new server. Desktop
 owns window/runtime lifecycle and IPC.
 
 The dependency checker enforces host boundaries, including worker source. The
@@ -399,7 +414,11 @@ which a press turns without closing the menu; then, where the host has a tracker
 `environment.platform` — it has no label: the project has none for feedback, and what is
 said may be a bug, a request or a question — then **GitHub** and **Discord**; and last, in
 gray, "v<version> · Made by @<handle>": the version links its release notes
-(`links.release`) and `MadeBy` the host's X account. The home has GitHub, which says the
+(`links.release`) and `MadeBy` the host's X account. The version is the release's own build's
+as it is (`v0.7.15`), and any other build's with its id (`v0.7.15-dev.b80844940`, the commit
+it was built from, `-dirty` with uncommitted changes): `viewerLinks({ version, build })`,
+where each app's Vite config names the build through `@text-to-cad/ui/build-id`, and a new
+issue names it the same way. The home has GitHub, which says the
 project is open source, Discord and X as icon links under its wordmark (`HomeLinks`), in
 that order.
 
@@ -416,7 +435,7 @@ menu follows. `displayActions`
 passes host-owned appearance controls into the Display section beside Projection
 via `RendererViewProps`. `appSettings` (`{ id, section, label, checked, disabled?, onCheckedChange }[]`,
 a `CadViewer` prop) are the host's own on/off settings: checkbox items of the app menu, in the
-order they come (Share usage stats, Quick edit, in both apps), the same in the
+order they come (Share anonymous usage data, Quick edit, in both apps), the same in the
 logo's menu and the home's; nothing of them reaches a renderer, and Display holds none. The
 host owns what each one does and where it is kept. `@text-to-cad/ui/features` is the
 feature switches, which both apps share: `useFeatures(features)` turns the host's call — `features()`
@@ -430,7 +449,7 @@ person's settings (`cadgen/features.py`), so it holds in every view, tab and app
 reloads — a page's own storage would not, the web Viewer's origin changing with its port.
 `@text-to-cad/ui/consent` is the usage stats toggle both apps share:
 `useAnalyticsConsent(consent)`, which turns the host's consent call into its `appSettings` row
-(Share usage stats). Nothing asks: cadgen's telemetry is on by default once a `cadgen` command
+(Share anonymous usage data). Nothing asks: cadgen's telemetry is on by default once a `cadgen` command
 has said so. The host supplies the call and where the answer is kept.
 `@text-to-cad/ui/update` is the update button both apps share, from cadgen's version check:
 `UpdateButton`, the blue button a host hands the viewer as its `update` (`CadViewerProps.update`,
@@ -475,6 +494,14 @@ path. Double-clicking a component or subassembly isolates it instead; only
 non-isolatable topology references use double-click copying. The host supplies
 `environment.platform` for the ⌘C / Ctrl+C hint; the web host derives that field
 from its browser environment.
+
+An alert card's Details have a copy icon in their box's top-right corner
+(`kit/status/ViewerAlertCard.jsx`): it copies the whole of them, however far they scroll,
+through `ClipboardPort.writeText`, and shows a tick for a moment. A host whose clipboard
+refuses the write gets a line saying so under the box, where the text stays to select; a
+view with no host clipboard gets no icon. Each host makes its port copy wherever it can: the
+web falls back to the page's copy command when the browser refuses the asynchronous
+clipboard, and so does the CAD app when its host grants its frame no clipboard.
 
 A copied reference names its file by its absolute path (`<path>#<selector>`), and so
 does a copied Quick Edit: every view spells a file the same way, so a reference pasted

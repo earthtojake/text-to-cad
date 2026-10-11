@@ -283,7 +283,8 @@ class BrowserDiagnostics(unittest.IsolatedAsyncioTestCase):
         stages = {
             "loadSourceMs": 10.5, "preparePoseMs": 0, "buildModelMs": 12,
             "prepareViewportMs": 9, "waitViewportMs": 3, "captureMs": 60,
-            "sourceLoad": {"probeMs": 2, "cacheReadMs": 6.5, "cacheHitCount": 513, "cacheMissCount": 0},
+            "sourceLoad": {"probeMs": 2, "produceMs": 640, "cacheReadMs": 6.5, "producedCount": 12,
+                           "cacheHitCount": 513, "cacheMissCount": 0},
             "outputs": [{"path": "/tmp/review.png", "updateModelMs": 4,
                          "frameCameraMs": 30, "drawSubmitMs": 5, "encodeImageMs": 18}],
         }

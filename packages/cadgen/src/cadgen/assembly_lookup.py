@@ -8,26 +8,27 @@ they disagreed about what an occurrence is:
   its placement. This is what ``snapshot --mode list`` enumerates and what the CAD Viewer hands
   the user when they click a part.
 * the flat selector index -- historically a ``topology.glb`` sidecar extracted from the COMPOSED
-  compound (now synthesized from the per-component ``.surf`` files). A compound has no instance
+  compound (now composed from the per-component selector tables). A compound has no instance
   tree, so it flattens to ONE occurrence (``o1``) holding every solid: 162 shapes, 13866 faces,
   in a single namespace ``o1.s1``/``o1.f19``.
 
 ``lookup.build_selector_index`` reads the second. So every ref the first hands out -- every ref a
 user can actually pick -- resolved to an error, and ``inspect refs --facts`` reported
-``occurrenceCount: 1`` for a 160-part assembly (issue 0b in tom-cad's FEEDBACK.md). The user's
+``occurrenceCount: 1`` for a 160-part assembly. The user's
 workaround was to re-identify each face by area and position in the owning part's own namespace,
 which is guesswork whenever a part appears at more than one occurrence.
 
-The fix needs no new data. Each occurrence names a component, and each ``components/<cid>.surf``
-already carries that part's own complete topology -- the yoke's component has its 66 faces sitting
-there unused. So this module ADDS the instance-tree occurrences to the flat index rather than
-replacing it: ``#o1.f19`` keeps resolving exactly as before, and ``#o1.12`` starts resolving.
+The fix needs no new data. Each occurrence names a component, and each
+``components/<cid>.selectors.json`` -- the component's selector table, derived beside its
+``.surf`` (``_internal/selector_table``) and the same table the CAD Viewer reads -- already
+carries that part's own complete topology. So this module ADDS the instance-tree occurrences
+to the flat index rather than replacing it: ``#o1.f19`` keeps resolving exactly as before, and
+``#o1.12`` starts resolving, to the entity the viewer shows under that ref.
 
 Coordinates are WORLD AT REST: occurrence transforms applied, parameter-sidecar poses not.
 That is the frame the viewer shows when the ref is picked and the frame ``snapshot --mode list``
 already reports its bounds in, so the two tools now agree. Reporting component-local coordinates
-instead would recreate the frame confusion that FEEDBACK.md P2 documents costing a wrong edit and
-a full revert.
+instead would recreate a frame confusion that has cost a wrong edit and a full revert.
 """
 
 from __future__ import annotations
@@ -145,8 +146,8 @@ def _transform_params(matrix: list[float], params: object) -> object:
 
     Leaving these in component-local coordinates while `center` and `bbox` are placed would be
     the worst of both: a cylinder whose centre is in the assembly and whose axis origin is in the
-    part, with nothing in the payload saying so. That is the frame mismatch FEEDBACK.md P2 charges
-    a wrong edit and a full revert to.
+    part, with nothing in the payload saying so: a frame mismatch that has cost a wrong edit and
+    a full revert.
     """
     if not isinstance(params, Mapping):
         return params
@@ -169,7 +170,7 @@ def _place_entity_row(matrix: list[float], row: Mapping[str, Any]) -> dict[str, 
     would publish a component-local coordinate in a row whose every other number is in assembly
     space, with nothing marking which is which -- and it would be the same object shared by every
     occurrence of that component, so the two identical spacers would report one position. The
-    frames must not mix silently; that is what FEEDBACK.md P2 cost a wrong edit and a revert.
+    frames must not mix silently; mixing them has cost a wrong edit and a revert.
     """
     placed = dict(row)
     for field in _POINT_FIELDS:
@@ -197,21 +198,22 @@ def _place_entity_row(matrix: list[float], row: Mapping[str, Any]) -> dict[str, 
     return placed
 
 
-def _read_component_bundle(package_dir: Path, component: str):
-    """A component's topology bundle, from its exact-surface artifact.
-    Pre-surf packages fail the schema gate and rebuild before ever reaching
-    here, so .surf is the only form."""
-    surf_path = package_dir / COMPONENTS_DIRNAME / f"{component}.surf"
-    if not surf_path.is_file():
+def _read_component_table(package_dir: Path, component: str) -> dict[str, Any] | None:
+    """A component's selector table, as the view carries it beside its ``.surf``
+    (``store.view``): the one table the page reads too, so a ref resolves here to
+    the entity it names there. None when the view holds none or it does not read."""
+    from cadgen._internal.selector_table import read_selector_table
+    from cadgen.store.view import SELECTOR_TABLE_SUFFIX
+
+    path = package_dir / COMPONENTS_DIRNAME / f"{component}{SELECTOR_TABLE_SUFFIX}"
+    try:
+        return read_selector_table(path.read_bytes())
+    except (OSError, ValueError):
         return None
-    from cadgen._internal.surf_tables import read_component_topology_bundle
-
-    return read_component_topology_bundle(surf_path)
 
 
-def _component_occurrence_bbox(bundle: object) -> object:
+def _component_occurrence_bbox(manifest: object) -> object:
     """The component's own root-occurrence bbox, in component-local coordinates."""
-    manifest = getattr(bundle, "manifest", None)
     if not isinstance(manifest, Mapping):
         return None
     columns = manifest.get("tables")
@@ -234,7 +236,7 @@ def assembly_occurrence_rows(
 
     Column names mirror the topology sidecar's ``occurrenceColumns`` so that consumers written
     against that table (``entry_summary``, ``reporting``) need no special case for assemblies.
-    With ``package_dir`` None no component's ``.surf`` is read and no row has a ``bbox``: the
+    With ``package_dir`` None no component's table is read and no row has a ``bbox``: the
     rows are the occurrence namespace alone, what a kinematics mate's ends resolve in.
     """
     rows = descriptor.get("occurrences")
@@ -255,8 +257,8 @@ def assembly_occurrence_rows(
             if component not in bbox_by_component:
                 # Deduped by content hash: tom_v2 has 160 occurrences over 65 components, and
                 # the whole set reads in well under a second.
-                bundle = _read_component_bundle(package_dir, component) if package_dir is not None else None
-                bbox_by_component[component] = _component_occurrence_bbox(bundle)
+                table = _read_component_table(package_dir, component) if package_dir is not None else None
+                bbox_by_component[component] = _component_occurrence_bbox(table)
             local_bbox = bbox_by_component[component]
         materialized.append(
             {
@@ -290,33 +292,25 @@ def _component_index(package_dir: Path, component: str, cache: dict[str, Any]) -
         return cache[component]
     from cadgen.lookup import build_selector_index
 
-    bundle = _read_component_bundle(package_dir, component)
-    manifest = getattr(bundle, "manifest", None)
-    built = None
-    if isinstance(manifest, Mapping):
-        built = build_selector_index(dict(manifest), buffers=getattr(bundle, "buffers", None))
+    table = _read_component_table(package_dir, component)
+    built = build_selector_index(table) if table is not None else None
     cache[component] = built
     return built
 
 
-def _entity_id(occurrence_id: str, local_id: object, kind: str, ordinal: object) -> str | None:
-    """``o1.f19`` inside a component becomes ``o1.12.f19`` in the assembly.
+def _entity_id(occurrence_id: str, row: Mapping[str, Any]) -> str | None:
+    """``o1.f19`` inside a component becomes ``o1.12.f19`` in the assembly: the
+    occurrence, a dot, and the row's own ``localId`` -- the one composition rule,
+    which the page applies to the same table. So an assembly ref keeps the number
+    the component's own namespace uses, which is what makes a translated ref
+    checkable by hand against the part file.
 
-    Prefers the row's own ordinal over re-parsing its id, so the assembly ref keeps the number
-    the component's own namespace uses -- which is what makes a translated ref checkable by hand
-    against the part file, the exact step users were doing manually.
-
-    None when neither an ordinal nor a suffix is available. Naming it ``o1.12.f`` instead would
-    be a selector that cannot be parsed AND that every unnamed row of that component would
-    share, so the first would silently stand in for the rest.
+    None for a row without a local id. Naming it ``o1.12.f`` instead would be a
+    selector that cannot be parsed AND that every unnamed row of that component
+    would share, so the first would silently stand in for the rest.
     """
-    if ordinal is not None:
-        try:
-            return f"{occurrence_id}.{kind}{int(ordinal)}"
-        except (TypeError, ValueError):
-            pass
-    _, _, suffix = str(local_id or "").rpartition(".")
-    return f"{occurrence_id}.{suffix}" if suffix else None
+    local_id = str(row.get("localId") or "").strip()
+    return f"{occurrence_id}.{local_id}" if local_id else None
 
 
 def _rebase(row: dict, field: str, offset: int) -> None:
@@ -328,14 +322,6 @@ def _rebase(row: dict, field: str, offset: int) -> None:
             row[field] = offset
 
 
-# Offsets into the component's OWN proxy buffers (mesh triangles, edge polylines, surface
-# half-edges). The merged index carries the flat assembly's buffers, not the component's, so a
-# start copied across points into unrelated data. Dropped rather than rebased: there is nothing
-# in this index for them to point AT. Absent raises a KeyError at the reader; stale silently
-# returns the wrong triangles.
-_BUFFER_START_FIELDS = ("triangleStart", "segmentStart", "surfaceHalfEdgeStart")
-
-
 def merge_assembly_entities(
     index: SelectorIndex,
     descriptor: Mapping[str, Any],
@@ -345,8 +331,8 @@ def merge_assembly_entities(
 
     This is what makes a ref picked in the viewer measurable: `#o1.12.f19` is face 19 of that
     occurrence's component, and until now only the flat whole-assembly namespace resolved, whose
-    numbering does not agree with the component's (FEEDBACK.md: "the assembly's f18 is the wall's
-    face; the part's f18 is a 17.085 mm2 cylinder").
+    numbering does not agree with the component's (the assembly's f18 can be a wall's face where
+    the part's f18 is a 17.085 mm2 cylinder).
 
     Every id and every RANGE is re-based as the tables concatenate. A component's rows index its
     own tables: a face's `edgeStart` points into that component's faceEdgeRows, a shape's
@@ -400,7 +386,7 @@ def merge_assembly_entities(
         # are written or `shapeId` keeps pointing at the flat namespace.
         shape_id_map: dict[str, str] = {}
         for row in component_index.shapes:
-            new_id = _entity_id(occurrence_id, row.get("id"), "s", row.get("ordinal"))
+            new_id = _entity_id(occurrence_id, row)
             if new_id is not None:
                 shape_id_map[str(row.get("id"))] = new_id
 
@@ -417,7 +403,7 @@ def merge_assembly_entities(
             shape_by_id.setdefault(str(placed["id"]), placed)
             added += 1
         for row in component_index.faces:
-            new_id = _entity_id(occurrence_id, row.get("id"), "f", row.get("ordinal"))
+            new_id = _entity_id(occurrence_id, row)
             if new_id is None:
                 continue
             placed = _place_entity_row(matrix, row)
@@ -426,13 +412,11 @@ def merge_assembly_entities(
             if placed.get("shapeId") is not None:
                 placed["shapeId"] = shape_id_map.get(str(placed["shapeId"]), placed["shapeId"])
             _rebase(placed, "edgeStart", face_edge_offset)
-            for field in _BUFFER_START_FIELDS:
-                placed.pop(field, None)
             faces.append(placed)
             face_by_id.setdefault(str(placed["id"]), placed)
             added += 1
         for row in component_index.edges:
-            new_id = _entity_id(occurrence_id, row.get("id"), "e", row.get("ordinal"))
+            new_id = _entity_id(occurrence_id, row)
             if new_id is None:
                 continue
             placed = _place_entity_row(matrix, row)
@@ -442,18 +426,18 @@ def merge_assembly_entities(
                 placed["shapeId"] = shape_id_map.get(str(placed["shapeId"]), placed["shapeId"])
             _rebase(placed, "faceStart", edge_face_offset)
             _rebase(placed, "vertexStart", edge_vertex_offset)
-            for field in _BUFFER_START_FIELDS:
-                placed.pop(field, None)
             edges.append(placed)
             edge_by_id.setdefault(str(placed["id"]), placed)
             added += 1
         for row in component_index.vertices:
-            new_id = _entity_id(occurrence_id, row.get("id"), "v", row.get("ordinal"))
+            new_id = _entity_id(occurrence_id, row)
             if new_id is None:
                 continue
             placed = _place_entity_row(matrix, row)
             placed["id"] = new_id
             placed["occurrenceId"] = occurrence_id
+            if placed.get("shapeId") is not None:
+                placed["shapeId"] = shape_id_map.get(str(placed["shapeId"]), placed["shapeId"])
             _rebase(placed, "edgeStart", vertex_edge_offset)
             vertices.append(placed)
             vertex_by_id.setdefault(str(placed["id"]), placed)

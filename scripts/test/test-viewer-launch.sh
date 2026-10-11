@@ -263,7 +263,7 @@ fi
 
 # Loading the page is load-bearing. Merely accepting the new compiled state
 # would let this smoke pass with a dead display path: a cold isolated store has
-# no SURF or TESS entries, so the bundled client must request exact surface
+# no SURF or mesh entries, so the bundled client must request exact surface
 # derivation, fetch the pinned SURF bytes, tessellate them, and clear its loading
 # overlay. CI installs Playwright's Chromium with requirements-dev.txt.
 "$PYTHON" - "http://$HOST:$PORT/?file=$smoke_ref" "$(cat "$REPO_ROOT/VERSION")" <<'PY'

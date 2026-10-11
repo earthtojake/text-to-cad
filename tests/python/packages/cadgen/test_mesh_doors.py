@@ -1,4 +1,5 @@
-"""The three mesh format doors: `cadgen stl|3mf|glb build` (design/format-doors.md).
+"""The three mesh format doors: `cadgen stl|3mf|glb build` (packages/cadgen/README.md,
+law 6).
 
 What a door owns is the mapping from argv to ONE engine call — the tessellation
 itself belongs to `cadgen._internal.mesh_export` and is tested against real
@@ -44,8 +45,8 @@ _WROTE_STL = {
             "format": "stl",
             "path": "/abs/sample.stl",
             "skipped": False,
-            # The engine reports the EFFECTIVE pair: the tessellator's defaults
-            # when the door was given none, never null.
+            # The engine reports the EFFECTIVE pair: the mesh defaults when the
+            # door was given none, never null.
             "meshTolerance": 1.5e-3,
             "meshAngularTolerance": 0.35,
         }
@@ -280,105 +281,27 @@ class DoorTolerances(unittest.TestCase):
             self.assertIn("at most 0.05", err.getvalue())
             self.assertIn("X/D", err.getvalue())
 
-    def test_the_bound_itself_is_accepted_and_the_angle_is_not_bounded_by_it(self):
-        from cadgen.metadata import MESH_TOLERANCE_MAX, normalize_mesh_numeric
-
-        self.assertEqual(MESH_TOLERANCE_MAX, normalize_mesh_numeric(MESH_TOLERANCE_MAX, field_name="mesh_tolerance"))
-        self.assertEqual(0.5, normalize_mesh_numeric(0.5, field_name="mesh_angular_tolerance"))
-        with self.assertRaisesRegex(ValueError, "RELATIVE"):
-            normalize_mesh_numeric(0.0501, field_name="mesh_tolerance")
+    def test_every_door_refuses_an_angle_outside_the_bounds_before_any_work(self):
+        # The old floor, 0.005 rad, meshed a sphere and a torus for over 47 minutes;
+        # 10 rad is no tolerance at all.
+        for value, bound in (("5e-3", "at least 0.05 radians"), ("10", "at most 1.5708 radians")):
+            for fmt, module, _ in DOORS:
+                err = io.StringIO()
+                with self.subTest(format=fmt, value=value), mock.patch(
+                    "cadgen._internal.doors.document_snapshot",
+                    side_effect=AssertionError("refused before the document is looked up"),
+                ), contextlib.redirect_stderr(err):
+                    self.assertEqual(1, module.main([str(self.document), "--mesh-angular-tolerance", value]))
+                self.assertIn(f"mesh_angular_tolerance {float(value):g}", err.getvalue())
+                self.assertIn(bound, err.getvalue())
 
     def test_a_decorator_argument_is_refused_by_the_same_rule(self):
         from cadgen import stl
 
         with self.assertRaisesRegex(TypeError, "@stl mesh_tolerance 2 is too large.*RELATIVE"):
             stl(mesh_tolerance=2.0)
-
-
-class ExporterFailures(unittest.TestCase):
-    """A failed Node exporter is diagnosable from the error alone."""
-
-    def _fail(self, *, returncode: int, stdout: str, stderr: str) -> str:
-        import tempfile
-        from types import SimpleNamespace
-
-        from cadgen._internal import mesh_export
-
-        with tempfile.TemporaryDirectory() as raw:
-            job = mesh_export.MeshExportJob("stl", Path(raw) / "never-written.stl")
-            proc = SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
-            with mock.patch("subprocess.run", return_value=proc), \
-                    mock.patch("cadgen._internal.node_runtime.cad_node_executable", return_value="node"), \
-                    mock.patch("cadgen._internal.node_runtime.node_builder_script", return_value="mesh-export.mjs"), \
-                    self.assertRaises(RuntimeError) as caught:
-                mesh_export.run_mesh_exporter(
-                    Path(raw), [job], name="part", default_color=None, logger=mock.MagicMock(),
-                )
-        return str(caught.exception)
-
-    def test_a_crash_with_no_result_carries_its_exit_status_and_stderr(self):
-        message = self._fail(returncode=134, stdout="", stderr="FATAL ERROR: heap out of memory\n at tessellate")
-        self.assertIn("mesh export failed for stl", message)
-        self.assertIn("printed no result", message)
-        self.assertIn("exit status 134", message)
-        self.assertIn("heap out of memory", message)
-
-    def test_a_reported_error_still_carries_the_exporters_stderr(self):
-        message = self._fail(
-            returncode=1, stdout='{"ok": false, "error": "component c1 has no surfaces"}',
-            stderr="warn: retrying component c1",
-        )
-        self.assertIn("component c1 has no surfaces", message)
-        self.assertIn("exit status 1", message)
-        self.assertIn("retrying component c1", message)
-
-    def test_a_claimed_success_that_wrote_nothing_is_named(self):
-        message = self._fail(returncode=0, stdout='{"ok": true}', stderr="")
-        self.assertIn("reported success but did not write never-written.stl", message)
-
-
-# Stands in for the Node exporter: writes each --out and reports in utf-8, the way Node
-# writes any pipe. "Ł" is C5 81, and 0x81 is unmapped in cp1252. The real report names
-# every output path, so a folder like "Рабочий стол" (с is D1 81) is all it takes.
-_UTF8_EXPORTER = """
-import sys
-from pathlib import Path
-
-argv = sys.argv[1:]
-for flag, value in zip(argv, argv[1:]):
-    if flag == "--out":
-        Path(value).write_bytes(b"solid\\n")
-sys.stderr.buffer.write("warn: tessellated Łódź\\n".encode("utf-8"))
-sys.stdout.buffer.write('{"ok": true, "files": [{"name": "Łódź"}]}\\n'.encode("utf-8"))
-"""
-
-
-class ExporterOutputEncoding(unittest.TestCase):
-    """The exporter's report is read as utf-8 whatever the locale says.
-
-    On Windows `text=True` alone decoded the ANSI code page, and a byte it could not
-    map killed subprocess's reader thread silently: stdout came back None and the
-    export crashed reading `None.splitlines()`. Pinning subprocess's default to cp1252
-    here makes any platform fail without the fix (POSIX as a UnicodeDecodeError).
-    `_text_encoding` is where subprocess makes that choice -- the locale's, or utf-8 in
-    UTF-8 mode -- so patching it holds whatever mode the test interpreter runs in."""
-
-    def test_a_non_ascii_report_survives_a_narrow_locale(self):
-        import tempfile
-
-        from cadgen._internal import mesh_export
-
-        with tempfile.TemporaryDirectory() as raw:
-            stub = Path(raw) / "mesh-export.py"
-            stub.write_text(_UTF8_EXPORTER, encoding="utf-8")
-            job = mesh_export.MeshExportJob("stl", Path(raw) / "part.stl")
-            with mock.patch("subprocess._text_encoding", return_value="cp1252"), \
-                    mock.patch("cadgen._internal.node_runtime.cad_node_executable", return_value=sys.executable), \
-                    mock.patch("cadgen._internal.node_runtime.node_builder_script", return_value=stub):
-                payload = mesh_export.run_mesh_exporter(
-                    Path(raw), [job], name="part", default_color=None, logger=mock.MagicMock(),
-                )
-        self.assertEqual({"ok": True, "files": [{"name": "Łódź"}]}, payload)
+        with self.assertRaisesRegex(TypeError, "@stl mesh_tolerance 1e-06 is finer than cadgen meshes"):
+            stl(mesh_tolerance=1e-6)
 
 
 class DoorImports(unittest.TestCase):

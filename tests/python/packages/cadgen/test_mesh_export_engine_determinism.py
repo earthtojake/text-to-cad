@@ -1,21 +1,16 @@
 """A document's mesh bytes do not depend on what warmed the store first.
 
-Law 5: same inputs, same bytes. Meshes are tessellated by ONE tessellator, but
-two engines run it — Node, for the export builders, and the snapshot browser,
-which posts what it rendered back into the same content-addressed mesh store.
-They share a cache key, so whichever arrives first decides what every later
-export of that document writes.
-
-That made `Math.sin`/`Math.cos` a determinism hazard: ECMA-262 specifies them to
-no accuracy, and the two engines disagree on a few percent of arguments. The
-symptom was tiny and easy to miss — a cylinder's seam normal came out as
--3.8e-16 from a cold store and 6.1e-17 (cos(pi/2)) after a snapshot, eight bytes
-in one GLB accessor, no visible difference — and it still broke content
-addressing and every freshness ledger built on it. `surf/trig.js` is the fix;
-this is the door-level proof.
+Law 5: same inputs, same bytes. Every mesh is OCCT's, derived once per component
+and tolerance into the store's content-addressed mesh entries, and three paths
+reach them: a build exporting its own declared mesh, which derives them in its
+own process (no build-pool job: its kernel and shapes are already loaded); a
+door's export, which derives them in build-pool jobs; and a snapshot, which
+derives the meshes it draws. They share a key, so whichever arrives first
+decides what every later export of that document reads -- and the bytes must
+not care which one that was.
 
 The fixture is a box, a CYLINDER and a second box: an analytic curved face is
-what carries the seam, and a box-only model would pass either way.
+what carries a seam, and a box-only model would pass either way.
 """
 
 from __future__ import annotations
@@ -36,10 +31,11 @@ REPO = Path(__file__).resolve().parents[4]
 PYTHON = sys.executable
 
 MODEL = textwrap.dedent("""\
-    from cadgen import step
+    from cadgen import step, stl
 
 
     @step
+    @stl
     def fixture():
         from build123d.geometry import Location
         from build123d.topology import Compound, Solid
@@ -60,6 +56,24 @@ MODEL = textwrap.dedent("""\
     """)
 
 DOOR_MODULES = {"glb": "glb_build", "3mf": "threemf_build", "stl": "stl_build"}
+
+# The model script's run, with every build-pool dispatch refused: the build's own
+# export must derive its surfaces and meshes in the build's process.
+BUILD_IN_PROCESS = textwrap.dedent("""\
+    import runpy
+    import sys
+
+    from cadgen.daemon import artifacts
+
+
+    def refuse(request, root):
+        raise AssertionError(f"the build's own export submitted a {request['kind']} job to the build pool")
+
+
+    artifacts._dispatch = refuse
+    sys.argv = ["fixture.py"]
+    runpy.run_path("fixture.py", run_name="__main__")
+    """)
 
 
 class MeshExportEngineDeterminismTest(unittest.TestCase):
@@ -86,6 +100,17 @@ class MeshExportEngineDeterminismTest(unittest.TestCase):
         self._run(["-c", f"from cadgen.cli.{module} import main; raise SystemExit(main())", *args],
                   cwd=cwd, store=store)
 
+    def _doors(self, *, cwd: Path, store: Path) -> None:
+        """Every door's export of the document, `out.<format>`, one after another in ONE
+        process, as a warm worker serves them: each reads the store the ones before it
+        filled, exactly as separate runs on that store would."""
+        calls = "".join(
+            f"code = __import__('cadgen.cli.{module}', fromlist=['main']).main(['fixture.step', 'out.{fmt}'])\n"
+            "if code:\n    raise SystemExit(code)\n"
+            for fmt, module in DOOR_MODULES.items()
+        )
+        self._run(["-c", calls], cwd=cwd, store=store)
+
     def _document(self, name: str) -> Path:
         """A fresh directory holding ONLY the written document (law 1)."""
         directory = self.root / name
@@ -95,37 +120,43 @@ class MeshExportEngineDeterminismTest(unittest.TestCase):
                 (directory / artifact.name).write_bytes(artifact.read_bytes())
         return directory
 
-    def test_meshes_are_the_same_bytes_cold_and_snapshot_warmed(self) -> None:
+    def test_meshes_are_the_same_bytes_built_cold_and_snapshot_warmed(self) -> None:
         build = self.root / "build"
         build.mkdir()
         self.source = build / "fixture.py"
         self.source.write_text(MODEL, encoding="utf-8")
-        self._run(["fixture.py"], cwd=build, store=self.root / "build-store")
+        self._run(["-c", BUILD_IN_PROCESS], cwd=build, store=self.root / "build-store")
         self.assertTrue((build / "fixture.step").is_file(), "the model script writes its STEP")
+        built = (build / "fixture.stl").read_bytes()
 
         cold_dir, warm_dir = self._document("cold"), self._document("warm")
         cold_store, warm_store = self.root / "store-cold", self.root / "store-warm"
 
         # The warm store renders the document FIRST, which fills the mesh store
-        # from the browser. Its exports then read those entries instead of
-        # tessellating in Node.
+        # for the snapshot. Its exports then read those entries instead of
+        # deriving their own.
         self._cli("step_snapshot", "fixture.step", "shot.png", "--width", "200", "--height", "150",
                   cwd=warm_dir, store=warm_store)
 
-        for fmt, module in DOOR_MODULES.items():
+        self._doors(cwd=cold_dir, store=cold_store)
+        self._doors(cwd=warm_dir, store=warm_store)
+        for fmt in DOOR_MODULES:
             with self.subTest(format=fmt):
                 out = f"out.{fmt}"
-                self._cli(module, "fixture.step", out, cwd=cold_dir, store=cold_store)
-                self._cli(module, "fixture.step", out, cwd=warm_dir, store=warm_store)
                 cold_bytes = (cold_dir / out).read_bytes()
                 warm_bytes = (warm_dir / out).read_bytes()
                 self.assertEqual(
                     cold_bytes, warm_bytes,
                     f"{fmt} exported {len(cold_bytes)} bytes from a cold store and "
                     f"{len(warm_bytes)} from a snapshot-warmed one, and they differ: the "
-                    "tessellation a document exports still depends on which engine "
-                    "reached the mesh store first (law 5)",
+                    "mesh a document exports depends on which path reached the store "
+                    "first (law 5)",
                 )
+        self.assertEqual(
+            built, (cold_dir / "out.stl").read_bytes(),
+            "the build's own STL, derived in its process, differs from a door's, derived "
+            "in build-pool jobs from an empty store (law 5)",
+        )
 
 
 if __name__ == "__main__":

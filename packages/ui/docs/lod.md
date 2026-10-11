@@ -17,7 +17,7 @@ display concern only.
 
 | § | Covers |
 |---|---|
-| [1](#1-where-a-model-starts) | Coarse-first admission, cached standard meshes |
+| [1](#1-where-a-model-starts) | The standard opening level, stored and produced meshes |
 | [2](#2-what-refinement-samples) | Camera sampling, offscreen components, hysteresis |
 | [3](#3-admission-and-memory-pressure) | Budgets, reservations, coarsening caps |
 | [4](#4-the-replacement-batch) | CID caps, the first-ready deadline, adoption receipts |
@@ -26,21 +26,39 @@ display concern only.
 
 ## 1. Where a model starts
 
-Assemblies with at least 64 unique components can start at a coarser display
-tessellation when standard meshes are not cached. Cached standard meshes are
-preferred immediately, subject to their probed decode size and admission. The
-tiers are probed a chunk of components at a time and the cached bodies read a
-batch at a time (`createInitialDisplayPlans`, `packageBatchReads.js`), the first
-of each the size of the first publish, so the first geometry waits on no more
-than it draws.
-Smaller assemblies start at the standard level, except that an individually
-oversized component may start coarse. A component above the concurrent decode
-cap runs alone only when the shared Viewer memory envelope can reserve its
-complete estimate.
+The rungs are cadgen's (`cadgen.tessellation_policy`): which levels exist, the
+chord and angle tolerances each means and which one a model opens at arrive with
+the server's description -- the CAD Viewer's server info, the CAD app's launch --
+and the host installs them before a STEP model is drawn
+(`installTessellationLadder`, `@text-to-cad/core/lib/surf/lodPolicy.js`). The
+viewport only picks a rung from its camera, with the hysteresis of §2; every mesh
+request and cache key names both tolerances of the rung it asks for, and one that
+names fewer is refused, never filled in (`tessellationQuality`,
+`@text-to-cad/core/lib/surf/tessellationCache.js`).
 
-Coarse geometry is a temporary preview: visible components automatically reach
-at least the standard level, preserving its angular smoothness even when
-projected chord error alone would permit a coarser mesh. Close inspection can
+Every mesh the viewer draws is cadgen's (OCCT's mesh of the exact BREP, stored
+by cadgen); the browser never tessellates. Every component opens at the
+standard level, whatever the size of its assembly
+(`renderers/step/render/initialDisplayLod.js`). The standard tier is probed a
+chunk of components at a time and the stored bodies read a batch at a time
+(`createInitialDisplayPlans`, `packageBatchReads.js`), the first of each the
+size of the first publish, so the first geometry waits on no more than it
+draws. A component the store holds no standard mesh for names the standard
+tier in the `/__cad/surfaces` request that derives its surface: cadgen meshes
+it in the same job, and the row carries the mesh's probe row, which the
+component then reads like a stored one. Both are sized by the stored body
+before their decode is admitted; one above the concurrent decode cap runs
+alone only when the shared Viewer memory envelope can reserve its complete
+estimate.
+
+There is no coarse opening tier. It earned its place when the browser
+tessellated: a coarse first pass painted a large assembly sooner. cadgen's
+standard meshes are light, and a cold component waits on its surface either
+way, so a coarse first mesh would only cost each component a second mesh job
+and the store a second entry. The coarse tier is memory pressure's (§3).
+
+Visible components stay at least at the standard level, preserving its angular
+smoothness even when projected chord error alone would permit a coarser mesh. Close inspection can
 request finer detail, and so does preview, which the STEP renderer draws one
 scene-quality tier up (`kit/viewport/renderProfile.js`) without changing the Display
 setting. The chrome does not report detail levels: the STEP renderer
@@ -75,7 +93,7 @@ comparisons ignore floating-point noise at a 1e-10 relative tolerance, measured
 against the last meaningful sample so accumulated movement still triggers work.
 Visibility, selection, quality changes and explicit retries remain meaningful.
 
-Scenes with joints, embedded animation, drawing poses or an active/collapsing
+Scenes with joints, animation clips, drawing poses or an active/collapsing
 exploded view keep conservative eligibility, including paused or disabled pose
 capabilities. Authored visibility and material flags are not LOD filters.
 
@@ -87,7 +105,7 @@ refinement until the camera or viewport changes, preventing upgrade/downgrade
 loops. Mesh-bound and clip-plane updates do not reset that cap. Pressure
 coarsening remains singleton.
 
-Admission can reclaim idle tessellation workers and retry while preserving
+Admission can reclaim idle decode workers and retry while preserving
 active consumers. Its ledger samples each live worker's own retained estimate
 before admission, so a large component does not inflate every worker's charge.
 Refinement reserves both replacement arrays and worker scratch space, and
@@ -98,8 +116,8 @@ backing allocation, including unused sections of packed buffers. GPU charges
 use uploaded view sizes; CPU-only edge inputs and picking allocations are
 accounted for separately.
 
-A component that cannot fit even at the coarse level reports a limitation and
-preserves the current view. **Estimates and sampled resource totals are a soft
+A component that cannot fit (at open, its standard mesh; under pressure, even
+the coarse level) reports a limitation and preserves the current view. **Estimates and sampled resource totals are a soft
 budget, not a hard browser RSS limit.**
 
 ## 4. The replacement batch
@@ -258,12 +276,20 @@ no alert: the model renders with no kinematics, no materials and no routine, and
 the migration is announced where it can be acted on — the build and the cad
 skill. Existing usable views remain visible during updates and failures.
 
-**Opening.** Opening shows one step line — **Finding file**, **Reading
-model**, **Loading geometry**, or **Preparing view** — with no headline above
-it; the loading mark itself says a model is opening. Counts measure
+**Opening.** Opening shows one step line — **Finding file**, **Importing
+model** (cadgen compiling a file its store does not hold: reading it, then its
+parts, counted), **Building model** (a model script running: every phase of its
+build), **Reading model** (reading a model the store holds), **Meshing parts**
+(cadgen deriving parts its store lacked: a cold open), **Loading geometry**
+(reading stored meshes), **Preparing view**, or **Opening model** for a wait
+with nothing more specific to say — with no headline above it; the loading mark itself says a
+model is opening. Once the first parts are drawn, a cold open's remaining
+meshing is the update line's "Meshing parts n/total…", not "Updating model…".
+Counts measure
 completed geometry items in the current stage, not assembly occurrences or an
 overall ETA; uncounted stages are indeterminate. Render initialization uses the
 same indicator against the destination backdrop until its first usable frame.
-Long waits show elapsed time; interrupted progress explains that the viewer is
-waiting for a response before offering recovery. Selection and edge preparation
+There is no elapsed-time clock: a long wait adds the step's detail line, and
+interrupted progress explains that the viewer is waiting for a response before
+offering recovery. Selection and edge preparation
 report beside their controls, not as whole-model loading.

@@ -89,7 +89,6 @@ def build(
     *,
     kinematics: str | dict | None = None,
     materials: str | dict | None = None,
-    animation: str | None = None,
     force: bool = False,
     verbose: bool = False,
 ) -> BuildResult:
@@ -103,8 +102,9 @@ def build(
     in a model script. Vendor metadata (PMI, GD&T) does not survive; a model
     that keeps evolving belongs in a script instead.
 
-    Re-running is a no-op. Editing only declared materials, animation or
-    kinematics refreshes OUT's sidecar without re-emitting STEP geometry.
+    Re-running is a no-op. Editing only declared materials or kinematics
+    refreshes OUT's sidecar without re-emitting STEP geometry. Animation is
+    declared by a model script (``@step(animation=...)``), not here.
 
     target: the STEP/STP document to read.
     out: the STEP/STP document to write. Required, and never TARGET itself.
@@ -113,15 +113,12 @@ def build(
         decorator takes.
     materials: named material definitions and component assignments, as inline
         JSON or a .json path, using the same vocabulary as @step materials=.
-    animation: a JavaScript file path or self-contained ES module source exporting
-        clips; embedded into OUT's JSON sidecar.
     force: re-emit even when the freshness gate says OUT is current.
     verbose: show detailed progress and timing on stderr.
     """
     from cadgen._internal.step_reemit import (
         load_kinematics_space,
         load_materials_config,
-        load_animation_source,
         reemit_step_document,
         resolve_output,
     )
@@ -135,7 +132,6 @@ def build(
         destination,
         kinematics_def=kinematics_def,
         materials=load_materials_config(materials, where=where),
-        animation=load_animation_source(animation, where=where, document=destination),
         force=force,
         logger=CliLogger(where, verbose=verbose),
     )

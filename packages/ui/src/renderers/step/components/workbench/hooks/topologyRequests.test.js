@@ -20,7 +20,8 @@ test("requested ids compare as sets", () => {
 });
 
 // A session whose batches the test finishes by hand: each loadBatch call waits until resolved,
-// then publishes what the session accepts, as the viewer's loader does.
+// then publishes what the session accepts, as the viewer's loader does (`failed`: the parts whose
+// topology could not be loaded).
 function harness({ budget = 64, priorityBudget = 8, published = null } = {}) {
   const calls = [];
   let current = true;
@@ -40,10 +41,11 @@ function harness({ budget = 64, priorityBudget = 8, published = null } = {}) {
     loadBatch: (ids) => new Promise((resolve, reject) => {
       calls.push({
         ids: [...ids],
-        finish() {
+        finish({ failed = [] } = {}) {
           if (!current) return resolve("stale");
           if (!session.accepts(ids)) return resolve("skipped");
-          session.publish(ids, { ids: [...ids].sort() });
+          const loaded = ids.filter((id) => !failed.includes(id));
+          session.publish(loaded, { ids: [...loaded].sort() }, { failed });
           resolve("published");
         },
         fail(error) { reject(error); }
@@ -146,4 +148,30 @@ test("topology carried into a new session is kept and extended", async () => {
   session.request(["a", "b"]);
   await flush();
   assert.deepEqual(calls[0].ids, ["a", "b"]);
+});
+
+// A part whose topology could not be loaded is never published: it settles the request it failed
+// in, so the loop does not ask for it again and again, and the next request asks for it afresh.
+test("a part whose topology failed is not published, and the next request asks for it again", async () => {
+  const { session, calls, events, flush } = harness();
+  session.request(["a", "b"]);
+  calls[0].finish({ failed: ["b"] }); await flush();
+  assert.deepEqual(session.published.ids, ["a"]);
+  assert.equal(calls.length, 1, "the failure settles its request");
+  assert.deepEqual(events, ["loading", ["settled", { ids: ["a"] }]]);
+  assert.equal(session.request(["a", "b"]).started, true);
+  assert.deepEqual(calls.at(-1).ids, ["a", "b"]);
+  calls.at(-1).finish(); await flush();
+  assert.deepEqual(session.published.ids, ["a", "b"]);
+  assert.equal(session.request(["a", "b"]).settled, true);
+
+  // More failures than one batch holds: each is asked for once per request, and the rest still load.
+  const wide = harness({ budget: 2 });
+  wide.session.request(["p1", "p2", "p3"]);
+  wide.calls[0].finish({ failed: wide.calls[0].ids }); await wide.flush();
+  assert.deepEqual(wide.calls.map((call) => call.ids), [["p3", "p2"], ["p1"]]);
+  wide.calls[1].finish(); await wide.flush();
+  assert.equal(wide.calls.length, 2);
+  assert.deepEqual(wide.session.published.ids, ["p1"]);
+  assert.deepEqual(wide.events.at(-1), ["settled", { ids: ["p1"] }]);
 });

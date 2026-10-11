@@ -60,9 +60,11 @@ function dimensions(entry) {
 }
 
 // One visual or collision: the file or the primitive, then only what the description
-// bothered to say (a zero origin and a unit scale are the defaults, not facts).
-function GeometryEntry({ entry, meshPath, onOpenFile }) {
-  const path = entry.filename ? meshPath?.(entry.filename) : "";
+// bothered to say (a zero origin and a unit scale are the defaults, not facts). A mesh file
+// opens by the host path cadgen resolved for it; a reference it could not resolve to one
+// (a package:// URI) is text.
+function GeometryEntry({ entry, onOpenFile }) {
+  const path = entry.filename ? entry.path : "";
   const detail = [
     entry.type !== "mesh" && dimensions(entry),
     entry.scale && !isUnit(entry.scale) && `scale ${vectorText(entry.scale)}`,
@@ -82,11 +84,11 @@ function GeometryEntry({ entry, meshPath, onOpenFile }) {
   </span>;
 }
 
-function GeometryRows({ label, entries, meshPath, onOpenFile }) {
+function GeometryRows({ label, entries, onOpenFile }) {
   if (!entries) return null;
   return <InfoRow label={label}>
     {entries.length
-      ? entries.map((entry, index) => <GeometryEntry key={`${entry.filename || entry.type}:${index}`} {...{ entry, meshPath, onOpenFile }}/>)
+      ? entries.map((entry, index) => <GeometryEntry key={`${entry.filename || entry.type}:${index}`} {...{ entry, onOpenFile }}/>)
       : <span className="text-muted-foreground">None</span>}
   </InfoRow>;
 }
@@ -126,7 +128,7 @@ function LimitRows({ joint }) {
   </>;
 }
 
-export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, hasLinkRow = () => true }) {
+export function RobotLinkDetails({ facts, onOpenFile, onSelectLink, hasLinkRow = () => true }) {
   const joint = facts.parentJoint;
   return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Link details">
     <InfoRow label="Type">{facts.isRoot ? "Root link" : "Link"}</InfoRow>
@@ -138,8 +140,8 @@ export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, ha
       <InertiaRows inertia={facts.inertia}/>
     </Section>}
     <Section label="Geometry">
-      <GeometryRows label="Visuals" entries={facts.visuals} {...{ meshPath, onOpenFile }}/>
-      <GeometryRows label="Collisions" entries={facts.collisions} {...{ meshPath, onOpenFile }}/>
+      <GeometryRows label="Visuals" entries={facts.visuals} onOpenFile={onOpenFile}/>
+      <GeometryRows label="Collisions" entries={facts.collisions} onOpenFile={onOpenFile}/>
     </Section>
     {joint && <Section label="Parent joint">
       <InfoRow label="Joint">{joint.name}</InfoRow>
@@ -147,8 +149,9 @@ export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, ha
       <InfoRow label="Parent">{/* A frame-only root has no row to go to; it is still named. */}<LinkName name={joint.parentLink} onSelect={onSelectLink} selectable={hasLinkRow(joint.parentLink)}/></InfoRow>
       {joint.axis && <InfoRow label="Axis"><CoordValue vector={joint.axis} digits={4}/></InfoRow>}
       <LimitRows joint={joint}/>
-      {joint.mimic && <InfoRow label={joint.mimic.kind === "fourBar" ? "Four-bar driver" : "Mimic"}><MonoValue>{joint.mimic.kind === "fourBar"
-        ? joint.mimic.joint : `${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}
+      {joint.mimic && <InfoRow label="Mimic"><MonoValue>{`${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}
+      {/* A four-bar's crank follows its driver through the linkage cadgen solved: no formula to show, only the driver. */}
+      {joint.fourBar && <InfoRow label="Four-bar driver"><MonoValue>{joint.fourBar.driver}</MonoValue></InfoRow>}
       {joint.origin && <>
         <InfoRow label="Origin xyz" title="Parent-frame position (m)"><CoordValue vector={joint.origin.xyz} digits={4}/></InfoRow>
         {!isZero(joint.origin.rpy) && <InfoRow label="Origin rpy" title="Roll, pitch, yaw (rad)"><MonoValue>{vectorText(joint.origin.rpy)}</MonoValue></InfoRow>}
@@ -166,7 +169,7 @@ function ComponentDetails({ component }) {
   const size = component.sizeMillimetres;
   return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Component details">
     <InfoRow label="Type">Mesh object</InfoRow>
-    <InfoRow label="Link">{component.linkName}</InfoRow>
+    <InfoRow label="Link">{component.link}</InfoRow>
     {/* A cadgen mesh export groups an object BY colour, so it tells two rows of one link apart. */}
     {component.color && <InfoRow label="Colour"><span className="inline-flex items-baseline gap-1.5">
       <span className="size-3 shrink-0 self-center rounded-sm border border-border/70" style={{ backgroundColor: component.color }} aria-hidden="true"/>
@@ -190,7 +193,7 @@ export default function RobotComponentDetails({ components, selectedIds }) {
   if (selected.length > 1) {
     const triangles = selected.reduce((total, component) => total + component.triangleCount, 0);
     return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Component details">
-      <InfoRow label="Links">{[...new Set(selected.map((component) => component.linkName))].join(", ")}</InfoRow>
+      <InfoRow label="Links">{[...new Set(selected.map((component) => component.link))].join(", ")}</InfoRow>
       <InfoRow label="Triangles"><MonoValue>{formatCount(triangles)}</MonoValue></InfoRow>
     </div>;
   }

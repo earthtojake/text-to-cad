@@ -54,7 +54,7 @@ class CompileFailed(RuntimeError):
 def document_snapshot(document: Path) -> tuple[str, str]:
     """The tree for THIS document's bytes — a door's one question (STORE.md §9).
 
-    Yes, the store has one — ``index/document/<sha256(bytes)>`` → tree (STORE.md
+    Yes, the store has one — ``index/document/<sha256(bytes)>-v<schema>`` → tree (STORE.md
     §2, the law: artifact → artifact; no record is opened) → it is used. Source
     changes are the model's record's business, never the door's: a document is
     never refused and no body ever runs here. No → a **compile job** in the pool

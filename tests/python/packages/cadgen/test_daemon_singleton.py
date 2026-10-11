@@ -9,6 +9,7 @@ daemon hands its lock over before it tells a client to restart.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -221,6 +222,169 @@ class RestartHandoverTest(unittest.TestCase):
                 self.assertFalse(stale.is_alive(), "the daemon told to restart did not exit")
                 if server._DAEMON_LOCK is not None:
                     server._DAEMON_LOCK.release()
+
+
+class OneTokenForOneCodeTest(unittest.TestCase):
+    """A checkout carried a stale editable install's metadata (0.7.15) in site-packages and
+    a wheel build's egg-info (0.7.19) under ``src``. The daemon, with ``src`` first on its
+    path, read one; a client without it read the other; every daemon retired on its first
+    request and the next computed the same token: a strict request respawned daemons until
+    it timed out. The token is the version declared beside the code, so the two read the
+    same files and agree."""
+
+    def _tree(self, *, checkout: bool) -> Path:
+        root = Path(tempfile.mkdtemp(prefix="cgv-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        if checkout:
+            (root / "pyproject.toml").write_text('[project]\nname = "cadgen"\nversion = "1.2.3"\n', encoding="utf-8")
+            site = root / "src"
+            (site / "cadgen.egg-info").mkdir(parents=True)
+            (site / "cadgen.egg-info" / "PKG-INFO").write_text("Name: cadgen\nVersion: 9.9.9\n", encoding="utf-8")
+        else:
+            site = root / "lib" / "site-packages"
+            (site / "cadgen-4.5.6.dist-info").mkdir(parents=True)
+        (site / "cadgen").mkdir(parents=True)
+        (site / "cadgen" / "__init__.py").write_text("", encoding="utf-8")
+        return site / "cadgen"
+
+    def test_the_version_is_the_one_declared_beside_the_code(self):
+        self.assertTrue(client.compute_version_token(self._tree(checkout=True)).startswith("1.2.3:"))
+        installed = self._tree(checkout=False)
+        self.assertTrue(client.compute_version_token(installed).startswith("4.5.6:"))
+        # An install that failed midway left an older version's metadata: the newest written
+        # names what is there, whatever the names sort as.
+        stale = installed.parent / "cadgen-4.5.10.dist-info"
+        stale.mkdir()
+        os.utime(stale, (1, 1))
+        self.assertTrue(client.compute_version_token(installed).startswith("4.5.6:"))
+
+
+@unittest.skipIf(os.name == "nt", "a pipe name has no path to outgrow")
+class DeepStateDirTest(unittest.TestCase):
+    """A state directory too deep for a Unix socket (``CADGEN_DAEMON_STATE_DIR``, a deep
+    ``TMPDIR``) left the daemon unable to bind, and every request with no cold path -- a
+    mesh export -- failed with "could not accept the request". Its socket now goes in a
+    short folder of this user's own; the key, the locks and the log stay where they were."""
+
+    def setUp(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cgd-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        self.tmp = tmp
+        self.deep = tmp / ("a-state-directory-too-deep-for-a-socket-" * 3)
+        self.enterContext(mock.patch.dict(os.environ, {"CADGEN_DAEMON_STATE_DIR": str(self.deep)}))
+        os.environ.pop("CADGEN_DAEMON_SOCKET", None)  # restored with the rest of the environment
+
+    def test_only_the_socket_moves_and_every_client_finds_the_same_one(self):
+        natural = self.deep / f"cadgen-daemon-v{transport.PROTOCOL}-id.sock"
+        self.assertFalse(transport._fits(natural), "the premise: this path cannot be bound")
+        address = transport.address_for("id")
+        self.assertEqual(Path(address).parent, transport.short_folder())
+        self.assertTrue(transport._fits(address))
+        self.assertEqual(transport.address_for("id"), address)
+        self.assertNotEqual(transport.address_for("other"), address)
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_STATE_DIR": str(self.deep / "elsewhere")}):
+            self.assertNotEqual(transport.address_for("id"), address)
+        self.assertEqual(transport._authkey_path(address).parent, self.deep)
+        self.assertEqual(client.log_path(address).parent, self.deep)
+        self.assertEqual(transport.daemon_lock(address).path.parent, self.deep)
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_STATE_DIR": str(self.tmp)}):
+            self.assertEqual(transport.address_for("id"), str(self.tmp / f"cadgen-daemon-v{transport.PROTOCOL}-id.sock"))
+            self.assertEqual(transport._authkey_path(transport.address_for("id")).parent, self.tmp)
+
+    def test_the_short_folder_is_used_only_when_it_is_this_users_alone(self):
+        import stat
+
+        short = self.tmp / "short"
+        self.enterContext(mock.patch.object(transport, "short_folder", lambda: short))
+        address = str(short / "d.sock")
+        transport.claim_folder(address, create=False)  # nothing there yet: no daemon, no error
+        self.assertFalse(short.exists())
+        transport.claim_folder(address, create=True)
+        self.assertEqual(stat.S_IMODE(short.stat().st_mode), 0o700)
+        short.chmod(0o755)
+        transport.claim_folder(address, create=False)
+        self.assertEqual(stat.S_IMODE(short.stat().st_mode), 0o700, "a folder of ours others can enter is closed")
+        short.rmdir()
+        # Another user's folder, as this user sees it: not a folder of its own. A file, or a
+        # link to a folder, is the same refusal without needing a second account.
+        (self.tmp / "real").mkdir()
+        for planted in ("file", "link"):
+            with self.subTest(planted=planted):
+                if planted == "file":
+                    short.write_text("", encoding="utf-8")
+                else:
+                    short.symlink_to(self.tmp / "real", target_is_directory=True)
+                for create in (False, True):
+                    with self.assertRaisesRegex(transport.AddressUnusable, "CADGEN_DAEMON_STATE_DIR"):
+                        transport.claim_folder(address, create=create)
+                short.unlink()
+
+    def test_every_door_says_why_when_no_daemon_can_listen(self):
+        short = self.tmp / "short"
+        short.write_text("", encoding="utf-8")  # planted where the socket's folder belongs
+        self.enterContext(mock.patch.object(transport, "short_folder", lambda: short))
+        self.enterContext(mock.patch.dict(os.environ, {"CADGEN_DAEMON_SOCKET": str(short / "d.sock")}))
+        self.enterContext(mock.patch.object(client, "_spawn_daemon", side_effect=AssertionError("spawned")))
+        payload = {"tool": "step-compile", "prog": "cadgen step compile", "argv": ["x.step"], "token": "t"}
+        chunks: list[str] = []
+        self.assertIsNone(client._run_with_retry(payload, on_stream=chunks.append, strict=True))
+        self.assertIn("is not a folder of this user's", "".join(chunks))
+        self.assertIn("CADGEN_DAEMON_STATE_DIR", "".join(chunks))
+        import io
+        from contextlib import redirect_stderr
+
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(client._run_with_retry(payload))
+        self.assertIn("CADGEN_DAEMON_STATE_DIR", err.getvalue())
+        self.assertIn("Running this in this process", err.getvalue())
+        self.assertIsNone(client.status())
+
+    def test_a_daemon_in_a_deep_state_dir_binds_its_short_address_and_serves(self):
+        address = client.daemon_address()
+        self.assertEqual(Path(address).parent, transport.short_folder())
+        listening, stopped = threading.Event(), threading.Event()
+
+        class _Pool:
+            def ensure_spares(self):
+                listening.set()
+
+            def unbind_idle(self):
+                pass
+
+            def snapshot(self):
+                return {"workers": []}
+
+            def shutdown(self):
+                stopped.set()
+
+        daemon = threading.Thread(target=server.serve, daemon=True)
+        with mock.patch.object(server, "_POOL", _Pool()), \
+                mock.patch.object(server, "_DAEMON_LOCK", None), \
+                mock.patch.object(server.signal, "signal"), \
+                mock.patch.object(server, "_log"):
+            daemon.start()
+            try:
+                self.assertTrue(listening.wait(30), "the daemon never bound")
+                status = client.status()
+                self.assertIsNotNone(status, "a client could not reach the daemon")
+                self.assertEqual(status["socket"], address)
+                self.assertTrue(transport.read_authkey(address))
+                self.assertTrue((self.deep / (Path(address).name + ".key")).is_file())
+            finally:
+                # A request from other code: the daemon retires, releasing its address.
+                with contextlib.suppress(OSError):
+                    channel = transport.connect(address, transport.read_authkey(address) or b"")
+                    try:
+                        channel.send(json.dumps({"token": "retire"}).encode("utf-8"))
+                        channel.recv(30.0)
+                    finally:
+                        channel.close()
+                daemon.join(30)
+                if server._DAEMON_LOCK is not None:
+                    server._DAEMON_LOCK.release()
+        self.assertFalse(daemon.is_alive())
+        self.assertFalse(Path(address).exists(), "the daemon left its socket behind")
 
 
 if __name__ == "__main__":

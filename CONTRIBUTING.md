@@ -106,8 +106,8 @@ dev install's server and skills at it (see [Test In Agent Apps](#test-in-agent-a
 
 `packages/cadgen/src/cadgen/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
-fresh clone therefore has no Node builders, no snapshot browser bundle, no
-Viewer client and no file tracer -- so it builds no model -- until
+fresh clone therefore has no snapshot browser bundle, no Viewer client and no
+file tracer -- so it builds no model -- until
 `scripts/bundle/bundle.sh` runs, and cadgen says so by name the first time it
 reaches for one. `scripts/test/test-python.sh` and `scripts/test/test-global.sh`
 build the stages they read if they are missing (the tracer for this machine
@@ -166,7 +166,10 @@ server and skills run it through `uvx --from <wheel>`: exactly what users get,
 each build its own installation. Install again to see a skill or page edit. A page that changed under a
 running app would change its URI, and hosts drop the frames already showing it,
 which is why each install serves its own copy. A running server keeps the
-Python it started with, so restart the app after a Python-only change.
+Python it started with, so restart the app after a Python-only change. The
+app menu of every view says which build it shows: any build but the release's
+own reads `v<VERSION>-dev.<commit>` (`-dirty` when the checkout had uncommitted
+changes), the commit of the checkout the Viewer or the CAD app was built from.
 `--uninstall` removes a host's install. Its server names its install channel
 `dev` (`CADGEN_INSTALL_CHANNEL`), and a checkout's editable cadgen counts as one
 too: neither is ever offered an update. To see the update button, run a server or
@@ -217,7 +220,7 @@ cache reuse, rendering, and process-lifecycle behavior.
 
 The UI's browser specs (`packages/ui/**/*.browser.test.mjs`) run as their own
 pass, `UI_BROWSER_TEST_CONCURRENCY` files at a time (4 by default; the CI
-`viewer` job sets 1, because Linux renders their WebGL in software and several
+`web` job sets 1, because Linux renders their WebGL in software and several
 at once saturate the runner). `CAD_TEST_SWIFTSHADER=1` makes a macOS run use that same
 software renderer, to reproduce a CI-only browser failure locally.
 
@@ -258,12 +261,12 @@ diff content: a comment in a module selects what the module's code would.
 | Version Check | every change | canonical version, derived metadata, cadgen pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
 | cadgen (Linux/Windows) | `packages/cadgen`, `scripts/bundle`, a cadgen test, prose a cadgen test reads | the cadgen package suite, CAD Viewer backend included; for a change confined to the Viewer's backend or the CAD app's server (`cadgen/viewer`, `cadgen/mcp` and the commands that start them), only the tests that name them or read all of cadgen; for a test file, that file |
 | core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it), the viewer-memory helpers | `@text-to-cad/core`'s units, the dependency and kit-boundary checks, the benchmark helper units |
-| web | `packages/ui`, `apps/web` and the files its Markdown links to, `packages/cadgen` and `scripts/bundle`, `tests/browser`, the viewer scripts | the UI's units and browser specs (ui changes only), the client's units, then the bundle, the launch smoke test and the format/camera gates through the real backend (anything the served client or the backend reads) |
+| web | `packages/ui`, `apps/web` and the files its Markdown links to | the UI's units and browser specs (ui changes only) and the client's units: Node and npm Playwright's Chromium, no Python |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's host-adapter units (jsdom) and its one-file build |
 | skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load cadgen or its runtime (`packages/cadgen`, `scripts/bundle`), the cad and dxf suites (the same, and each skill's documented examples), dfm and dfam-check (their skills) |
 | api | `apps/api`, `test-api.sh` | `npm --prefix apps/api test`: the version feed's and the telemetry receiver's tests (no install) |
 | docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (static asset contract, lint, Next build, icon verification) and the animated brand marks |
-| packaging | `packages/cadgen`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts | clean bundle, layout, wheel contents, installed CLI behavior |
+| packaging | `packages/cadgen`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
 `requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,
@@ -474,7 +477,7 @@ cache provider and worker lease.
 The standalone launcher is `cadgen viewer`: on port 3245, or the port `--port N`
 names, as any web server; on that port a viewer of the same code is reused and one
 of other code replaced. A source
-checkout can serve the local web build; `CADGEN_VIEWER_DIST`, `CADGEN_NODE_BUILDERS_DIR` and
+checkout can serve the local web build; `CADGEN_VIEWER_DIST` and
 `CADGEN_BROWSER_RUNTIME_DIR` are explicit asset overrides. A wheel resolves its
 own bundled assets without the repository. Run `scripts/bundle/bundle.sh` after
 editing build inputs to refresh all packaged outputs.
@@ -515,8 +518,8 @@ scripts/bundle/bundle.sh --check
 ```
 
 `--clean` removes old runtime outputs before building. `--check` builds and
-asserts required Node/browser outputs; wheel validation checks the complete
-packaged viewer too. Per-stage `cadgen-runtime.sh` flags are for debugging;
+asserts the required browser and file-tracer outputs; wheel validation checks the
+complete packaged viewer too. Per-stage `cadgen-runtime.sh` flags are for debugging;
 normal iteration goes through `bundle.sh`.
 
 ## Branch Layout
@@ -561,9 +564,9 @@ the jobs each change can break ([CI](#ci)); a push whose tree its pull request
 already tested runs nothing again, and the `packaging` job builds the runtime
 from clean with `scripts/bundle/bundle.sh --clean` and checks the layout and the
 wheel. `main` commits no generated runtime at all —
-cadgen's Node builders, its snapshot bundle and the Viewer client are built from
-`packages/core`, `packages/ui` and `apps/web` on demand, and ship only inside the
-wheel. What IS committed and therefore checked for freshness is the version
+cadgen's snapshot bundle and the Viewer client are built from `packages/core`,
+`packages/ui` and `apps/web` on demand, and ship only inside the wheel. What IS
+committed and therefore checked for freshness is the version
 metadata derived from `VERSION`, asserted by the separate `Version Check` job
 (`scripts/release/check-version.sh` and `sync-version.mjs --check`).
 
@@ -580,10 +583,10 @@ wrong.
 
 ### Build artifacts live in the wheel, never in git
 
-`main` is source. Everything cadgen executes that is not Python — the Node
-builders and the snapshot browser bundle under `cadgen/_runtime/node` and
-`_runtime/browser`, the CAD Viewer client under `_runtime/viewer`, and the file
-tracer every build loads under `_runtime/native` (one C file,
+`main` is source. Everything cadgen executes that is not Python — the snapshot
+browser bundle under `cadgen/_runtime/browser`, the CAD Viewer client under
+`_runtime/viewer`, and the file tracer every build loads under
+`_runtime/native` (one C file,
 `packages/cadgen/native/filetrace.c`, cross-compiled by zig for every platform
 into the one wheel; `ziglang` comes with `requirements-dev.txt`) — is
 gitignored and produced by `scripts/bundle/bundle.sh`. Nothing built is ever
@@ -691,12 +694,14 @@ green: that is the release. `Publish Release`, on the merge commit:
    (`cad-openai-plugin-<version>`). `scripts/release/plugin_branch.py --check`
    does the same for both copies of the plugin the install branches get. Then
    `bundle.sh --clean` — which is where cadgen's whole runtime comes into
-   existence, Node builders, snapshot bundle and Viewer client alike, because
-   the release commit carries none of it — `check-builds.sh`, the
-   wheel-contents check, `python -m build`, and an `unzip -l` assertion that
-   the wheel about to ship really holds `_runtime/node`, `_runtime/browser`,
-   `_runtime/viewer` and every `_runtime/native` tracer. The pages' source maps,
-   which the bundle builds and the wheel leaves out, are gathered too
+   existence, snapshot bundle and Viewer client alike, because the release
+   commit carries none of it; its `TEXT_TO_CAD_RELEASE` names the version, so
+   the Viewer and the CAD app show `v<VERSION>` where every other build shows
+   `v<VERSION>-dev.<commit>` (`@text-to-cad/ui/build-id`) — `check-builds.sh`,
+   the wheel-contents check, `python -m build`, and an `unzip -l` assertion that
+   the wheel about to ship really holds `_runtime/browser`, `_runtime/viewer`
+   and every `_runtime/native` tracer. The pages' source maps, which the bundle
+   builds and the wheel leaves out, are gathered too
    (`scripts/release/sourcemaps.py`): every chunk a crash on the CAD Viewer or
    the CAD app can name, by the debug id its build stamped on it, with its map
    -- a page whose maps PostHog could not use stops the release here.

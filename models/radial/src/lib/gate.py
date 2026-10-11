@@ -8,13 +8,11 @@
 Kinematic mode
   1. Reads the BUILT assembly (read_scene: every leaf with its label, shared
      prototype geometry and world placement).
-  2. Evaluates the animation with the viewer's own runtime (lib/anim_eval.mjs)
-     at every sampled crank angle and asserts it equals kin.py (lib/animcheck,
-     < 1e-6), so the gate checks the motion the viewer SHOWS. If lib/anim_js.py
-     is stale for this STEP (a moving label it never baked), the gate says so,
-     regenerates the module from this STEP's labels into tmp/kin/ and gates that
-     (rerun animgen + build to embed it).
-  3. At each angle every moving leaf is re-located by its JS matrix (a
+  2. Samples the `running` clip (lib/clips.py) at every crank angle as the build
+     samples it, on this STEP's own labels (lib/animcheck.sample), and asserts it
+     equals kin.py (lib/animcheck, < 1e-6), so the gate checks the motion the
+     keyframes are baked from.
+  3. At each angle every moving leaf is re-located by the clip's matrix (a
      TopLoc_Location on the shared prototype, never rebuilt); each deformed valve
      spring is rebuilt by sweeping its wire circle (kin.SPRINGS wire diameter)
      along kin.spring_path(theta), the centreline the viewer's tube deformation
@@ -30,8 +28,8 @@ Kinematic mode
      never clear.
   Results are memoised on the pair's RELATIVE placement.
 
-Clip mode (--clip exploded-running): the clip's matrices and hidden set from the
-viewer's runtime (checked against kin.py + lib/explodedrun.py first); EVERY
+Clip mode (--clip exploded-running): the clip's matrices and hidden set, sampled
+as in kinematic mode (checked against kin.py + lib/explodedrun.py first); EVERY
 visible leaf is placed (running motion + its constant offset), deformed springs
 are swept along kin.spring_path and offset. Every visible pair is tested except
 those whose relative placement is the rest one (same matrix on both, neither a
@@ -364,19 +362,41 @@ def _first_copy(P):
 # ---------------------------------------------------------------------------
 # The world
 # ---------------------------------------------------------------------------
+def leaf_records(scene):
+    """One dict per geometry leaf: ref, label, owner (the leaf's own label, or for an
+    unlabelled child of a nested compound the nearest '<group>:' ancestor label),
+    system (the assembly's second-level occurrence label)."""
+    out = []
+
+    def walk(o, owner, system, depth):
+        lab = o.label or ""
+        if ":" in lab:
+            owner = lab
+        if depth == 1:
+            system = lab
+        if o._node.prototype_key is not None:
+            out.append({"ref": o.ref, "label": lab, "owner": owner, "system": system or "?"})
+        for c in o.children:
+            walk(c, owner, system, depth + 1)
+
+    for r in scene.roots:
+        walk(r, "", "", 0)
+    return out
+
+
 class World:
     """Leaves of the built assembly; prototypes decode lazily (only candidates ever do)."""
 
     def __init__(self, step_file):
         from cadgen import read_scene
-        from lib import animgen
+        from lib import clips
         self.scene = read_scene(step_file)
         self._protos = self.scene._loaded.prototype_shapes
         occ = self.scene._occurrences
         self.leaves = []
-        for r in animgen.leaf_records(self.scene):
+        for r in leaf_records(self.scene):
             node = occ[r["ref"]]._node
-            kind, args = animgen.classify_leaf(r["label"], r["owner"])
+            kind, args = clips.classify_leaf(r["label"], r["owner"])
             self.leaves.append({
                 "ref": r["ref"], "system": r["system"], "proto": node.prototype_key,
                 "label": r["label"] if (":" in r["label"] or not r["owner"]) else f'{r["owner"]}/{r["label"]}',
@@ -1129,7 +1149,7 @@ def _xr_group_task(group):
 
 
 def _xr_task(task):
-    """exploded-running at one crank angle: every VISIBLE leaf placed by the viewer's matrix
+    """exploded-running at one crank angle: every VISIBLE leaf placed by the clip's matrix
     (running motion + constant offset). A pair is tested unless its relative placement is the
     rest one (both leaves carry the same matrix, neither a deformed spring: the static gate's
     case); hidden leaves are not in the picture and are skipped."""
@@ -1360,40 +1380,28 @@ def _swept_boxes(step_file, obbs, by_theta):
                 M = mats.get(lf["label"])
                 if M is not None:
                     boxes.append(_aabb_of_obb(_obb_world(ob[lf["proto"]], np.asarray(M) @ lf["L"])))
+            if len(boxes) == 1:     # the clip names parts by the document tree's labels, this by read_scene's
+                raise SystemExit(f"[gate] moving leaf {lf['label']!r} has no matrix from the clip: "
+                                 "read_scene and the document tree disagree on its label")
         b = np.array(boxes)
         out.append(np.concatenate([b[:, :3].min(axis=0), b[:, 3:].max(axis=0)]).tolist())
     return out
 
 
-def _animation_for(step_file, thetas, module):
-    """Equivalence-checked JS matrices for this STEP; regenerates the module if the baked one is stale."""
-    from lib import animcheck, animgen
-    pairs = animgen.scene_labels(Path(step_file))
-    labels_json = ROOT / "tmp" / "kin" / f"gate_labels_{Path(step_file).stem}.json"
-    animgen.write_labels_json(pairs, labels_json)
-    ok, rep, by_theta = animcheck.check(labels_json, module, thetas=thetas, verbose=False)
-    if not ok and rep["max_matrix_diff"] < animcheck.TOL and rep["max_spring_diff"] < animcheck.TOL:
-        stale = [p for p in rep["problems"] if "no matrix" in p or "no tube" in p or "JS moves it" in p]
-        if stale:
-            regen = ROOT / "tmp" / "kin" / f"anim_js_{Path(step_file).stem}.py"
-            groups, _ = animgen.group_labels(pairs)
-            regen.write_text(f"ANIMATION_JS = r'''{animgen.render_js(groups)}'''\n")
-            print(f"[gate] WARNING {module or 'lib/anim_js.py'} is STALE for {Path(step_file).name} "
-                  f"({len(stale)} problems, e.g. {stale[0]}); gating the module regenerated from this STEP's labels "
-                  f"({regen}). To embed it: `python -m lib.animgen && python tools/engine.py build`.", flush=True)
-            module = str(regen)
-            ok, rep, by_theta = animcheck.check(labels_json, module, thetas=thetas, verbose=False)
+def _animation_for(step_file, thetas):
+    """The `running` clip's matrices on this STEP's labels, checked equal to kin.py first."""
+    from lib import animcheck
+    ok, rep, by_theta = animcheck.check(animcheck.built_document(step_file), thetas=thetas, verbose=False)
     if not ok:
         raise SystemExit("[gate] the animation does not equal kin.py for this assembly: "
                          f"max diff {rep['max_matrix_diff']:.2e}; " + "; ".join(rep["problems"][:5]))
-    rep["module"] = module or "lib/anim_js.py"
     return rep, by_theta
 
 
-def run_kinematic(step_file, thetas, workers, module=None):
+def run_kinematic(step_file, thetas, workers):
     t0 = time.time()
-    rep, by_theta = _animation_for(step_file, thetas, module)
-    print(f"[gate] equivalence ({rep['module']}) JS == kin at {len(thetas)} angles, {rep['moving']} moving labels: "
+    rep, by_theta = _animation_for(step_file, thetas)
+    print(f"[gate] equivalence: running clip == kin at {len(thetas)} angles, {rep['moving']} moving labels: "
           f"max {rep['max_matrix_diff']:.2e} (springs {rep['max_spring_diff']:.2e}) ({time.time() - t0:.1f}s)",
           flush=True)
     t0 = time.time()
@@ -1424,21 +1432,19 @@ def run_kinematic(step_file, thetas, workers, module=None):
     return sorted(results, key=lambda r: r["theta"]), time.time() - t0, rep
 
 
-def run_clip(step_file, clip, thetas, workers, module=None, exact_near=True):
+def run_clip(step_file, clip, thetas, workers, exact_near=True):
     """Interference of an exploded clip (every leaf may move) over the sampled angles."""
-    from lib import animcheck, animgen, explodedrun
+    from lib import animcheck, explodedrun
     t0 = time.time()
-    pairs = animgen.scene_labels(Path(step_file))
-    labels_json = ROOT / "tmp" / "kin" / f"gate_labels_{Path(step_file).stem}.json"
-    animgen.write_labels_json(pairs, labels_json)
-    ok, rep, by_theta = animcheck.check(labels_json, module, thetas=thetas, verbose=False, clip=clip)
+    doc = animcheck.built_document(step_file)
+    ok, rep, by_theta = animcheck.check(doc, thetas=thetas, verbose=False, clip=clip)
     if not ok:
         raise SystemExit(f"[gate] {clip} does not equal kin.py + its layout: max diff {rep['max_matrix_diff']:.2e}; "
                          + "; ".join(rep["problems"][:5]))
     hidden = rep["hidden"]
-    groups = {lab: g for g, labs in explodedrun.layout([p[1] for p in pairs])[0].items() for lab in labs}
-    rep["module"] = module or "lib/anim_js.py"
-    print(f"[gate] {clip}: JS == kin.py + offsets at {len(thetas)} angles (max {rep['max_matrix_diff']:.2e}, "
+    groups = {lab: g for g, labs in explodedrun.layout([lab for lab in doc.labels if ":" in lab])[0].items()
+              for lab in labs}
+    print(f"[gate] {clip}: clip == kin.py + offsets at {len(thetas)} angles (max {rep['max_matrix_diff']:.2e}, "
           f"springs {rep['max_spring_diff']:.2e}); {len(hidden)} hidden labels skipped ({time.time() - t0:.1f}s)",
           flush=True)
     t0 = time.time()
@@ -1596,7 +1602,6 @@ def main(argv=None):
     ap.add_argument("--step", type=float, default=10.0, help="crank-angle step (deg) over 0..720")
     ap.add_argument("--angles", default=None, help="comma list of crank angles instead of the sweep")
     ap.add_argument("--workers", type=int, default=DEFAULT_WORKERS, help=f"process pool size (max {MAX_WORKERS})")
-    ap.add_argument("--module", default=None, help="generated animation (default lib/anim_js.py)")
     ap.add_argument("--static", action="store_true", help="static interference of every leaf pair instead")
     ap.add_argument("--clip", default=None, help="gate an exploded clip instead of `running` (exploded-running)")
     ap.add_argument("--no-exact-near", action="store_true",
@@ -1609,7 +1614,7 @@ def main(argv=None):
     if a.clip:
         thetas = ([float(x) for x in a.angles.split(",")] if a.angles
                   else [i * a.step for i in range(int(round(720 / a.step)) + 1)])
-        results, wall, rep = run_clip(a.file, a.clip, thetas, workers, a.module, not a.no_exact_near)
+        results, wall, rep = run_clip(a.file, a.clip, thetas, workers, not a.no_exact_near)
         ok = print_clip(results, wall, workers, a.clip, not a.no_exact_near)
         out = {"mode": a.clip, "ok": ok, "equivalence": rep, "results": results, "wall_s": wall}
     elif a.static:
@@ -1619,7 +1624,7 @@ def main(argv=None):
     else:
         thetas = ([float(x) for x in a.angles.split(",")] if a.angles
                   else [i * a.step for i in range(int(round(720 / a.step)) + 1)])
-        results, wall, rep = run_kinematic(a.file, thetas, workers, a.module)
+        results, wall, rep = run_kinematic(a.file, thetas, workers)
         ok = print_kinematic(results, wall, workers)
         out = {"mode": "kinematic", "ok": ok, "equivalence": rep, "results": results, "wall_s": wall}
     if a.json:

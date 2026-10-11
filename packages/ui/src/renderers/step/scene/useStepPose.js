@@ -1,9 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { resolveStepModuleFeatures } from "@text-to-cad/core/common/stepModule.js";
-import {
-  buildStepModuleContext, createStepModuleEffectsApi, resetStepModuleRecordEffects
-} from "@text-to-cad/core/common/stepModuleEffects.js";
+import { resetRecordEffects } from "@text-to-cad/core/common/recordEffects.js";
 import { applySceneState } from "@text-to-cad/core/common/applySceneState.js";
 import {
   explodedPickSelectorRuntime, resolveTopologyDisplayEdgeRuntimes, shouldRenderTopologyDisplayEdges
@@ -21,8 +18,8 @@ import { clearSceneGroup, updateTransformedRuntimeState } from "./useStepSceneSy
 const MODEL_OFFSET = new THREE.Vector3(0, 0, 0);
 
 /**
- * Pose and animation: the sidecar module's setup, and the ONE effects pass that puts the
- * model where its kinematics and its playing routine say it is.
+ * Pose and animation: the ONE effects pass that puts the model where its articulation and
+ * its playing routine say it is.
  *
  * The pass is one function with two callers. React runs it when anything it reads changes (a
  * scrub, a pose, a display setting, a new mesh); while a routine plays, the animation clock
@@ -53,82 +50,11 @@ export function useStepPose(layers) {
   } = policy;
   const { recordEdgesVisible } = layers.edges;
   const {
-    partVisualStateRef, clipSettingsRef, selectorRuntimeRef, staticSceneResetRef, viewerAlertChangeRef,
-    sceneEffectsAlertRef, lodCameraChangeRef, stepModuleCleanupRef
+    partVisualStateRef, clipSettingsRef, staticSceneResetRef, viewerAlertChangeRef,
+    sceneEffectsAlertRef, lodCameraChangeRef
   } = refs;
   // A STEP's linework comes from its B-rep topology.
   const shouldUseCadEdgeSource = true;
-
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    const definition = stepParameterRuntime?.definition || null;
-    const module = definition?.module || null;
-    const cleanups = [];
-    stepModuleCleanupRef.current = cleanups;
-    const runCleanups = () => {
-      while (cleanups.length) {
-        const cleanup = cleanups.pop();
-        try {
-          cleanup?.();
-        } catch (error) {
-          console.error("STEP parameter cleanup failed", error);
-        }
-      }
-    };
-
-    if (!runtime?.THREE || !definition || isLoading || !meshData) {
-      return runCleanups;
-    }
-
-    const features = resolveStepModuleFeatures(definition, {
-      meshData,
-      selectorRuntime: selectorRuntimeRef.current
-    });
-    const ctx = buildStepModuleContext({
-      runtime,
-      stepModuleRuntime: stepParameterRuntime,
-      features,
-      effects: createStepModuleEffectsApi(runtime.THREE, {
-        meshData,
-        features,
-        runtime,
-        effectsByPartId: new Map()
-      }),
-      cleanup: (cleanup) => {
-        if (typeof cleanup === "function") {
-          cleanups.push(cleanup);
-        }
-      }
-    });
-
-    try {
-      module?.setup?.(ctx);
-    } catch (error) {
-      viewerAlertChangeRef.current?.({
-        severity: "warning",
-        title: "STEP parameter setup failed",
-        message: error instanceof Error ? error.message : String(error)
-      });
-      console.error("STEP parameter setup failed", error);
-    }
-
-    return () => {
-      runCleanups();
-      try {
-        module?.dispose?.(ctx);
-      } catch (error) {
-        console.error("STEP parameter dispose failed", error);
-      }
-    };
-  }, [
-    viewerReadyTick,
-    isLoading,
-    meshData,
-    modelKey,
-    selectorRuntime,
-    stepParameterRuntime?.definition,
-    stepParameterRuntime?.sourceUrl
-  ]);
 
   // The frame function playback runs per clock tick, published by the pass below.
   const stepPoseFrameRef = useRef(null);
@@ -141,7 +67,7 @@ export function useStepPose(layers) {
       return;
     }
 
-    const definition = stepParameterRuntime?.definition || null;
+    const articulation = stepParameterRuntime?.articulation || null;
     const animationClip = stepAnimationRuntime?.clip || null;
     // Either system can be the only one present: a model may declare mates
     // without shipping clips, or ship clips without declaring a single mate.
@@ -156,7 +82,7 @@ export function useStepPose(layers) {
         viewerAlertChangeRef.current?.(null);
       }
     };
-    if ((!definition && !animationClip) || isLoading || !meshData) {
+    if ((!articulation && !animationClip) || isLoading || !meshData) {
       clearSceneEffectsAlert();
       updateTransformedRuntimeState(setTransformedSelectorRuntime, null);
       runtime.topologyDisplayEdgeTransformByRecord = explodedViewActive;
@@ -167,7 +93,7 @@ export function useStepPose(layers) {
         return;
       }
       const casters = captureShadowCasters(runtime.displayRecords);
-      resetStepModuleRecordEffects(runtime.displayRecords, THREE);
+      resetRecordEffects(runtime.displayRecords, THREE);
       for (const record of runtime.displayRecords) {
         applyDisplayRecordTransform(runtime.THREE, record, runtime.modelRadius || 1);
       }
@@ -201,8 +127,8 @@ export function useStepPose(layers) {
     }
 
     // ONE effects pass, shared with the headless twin (applySceneState):
-    // kinematics update, then the clip merged OVER it — the two systems meet
-    // in the effect records and nowhere else.
+    // the articulation played, then the clip merged OVER it — the two systems
+    // meet in the effect records and nowhere else.
     //
     // It is one function with two callers. React runs it when anything it reads
     // changes (a scrub, a pose, a display setting, a new mesh); while a routine
@@ -215,11 +141,10 @@ export function useStepPose(layers) {
       const sceneState = applySceneState(runtime.THREE, {
         runtime,
         meshData,
-        stepParameterRuntime,
+        pose: stepParameterRuntime,
         animation: animationClip
           ? { clip: animationClip, elapsedSec }
           : null,
-        selectorRuntime: selectorRuntimeRef.current,
         onTransformEffect: () => {
           transformDetected = true;
         },
@@ -238,11 +163,6 @@ export function useStepPose(layers) {
             message
           });
           console.error(title, error);
-        },
-        cleanup: (cleanup) => {
-          if (typeof cleanup === "function") {
-            stepModuleCleanupRef.current.push(cleanup);
-          }
         }
       });
       if (!passError) {

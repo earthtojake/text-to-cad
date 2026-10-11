@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createLodScheduler } from "./lodScheduler.js";
+import { installTestTessellationLadder } from "@text-to-cad/core/lib/surf/testing.js";
+
+// The ladder a cadgen server publishes, installed as a host installs it.
+installTestTessellationLadder();
 const flush = async () => { for (let i = 0; i < 150; i++) await Promise.resolve(); };
 function deferred() {
   let resolve, reject;

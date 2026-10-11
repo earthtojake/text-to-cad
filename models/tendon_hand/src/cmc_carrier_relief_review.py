@@ -26,7 +26,7 @@ def local_pieces(path,center):
     for seg in path:visit(seg)
     return out
 
-@step(out='../STEP/cmc_carrier_relief_review.step',mesh_tolerance=.001,mesh_angular_tolerance=.01,materials=CMC_MATERIALS)
+@step(out='../STEP/cmc_carrier_relief_review.step',mesh_tolerance=.001,mesh_angular_tolerance=0.05,materials=CMC_MATERIALS)
 def cmc_carrier_relief_review():
     source=next(b for b in frozen_bodies(False) if b.name=='thumb_cmc_carrier')
     row=next(r for r in json.loads((ROOT/'validation/secondary_hardware_diagnostic.json').read_text()) if r['body']==source.name)

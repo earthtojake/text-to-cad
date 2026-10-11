@@ -129,6 +129,22 @@ it('opens the app menu from the logo: Back to files where the host has a home, t
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path']);
 });
 
+it('ends the app menu with the version the host runs, a link to its release notes: the release as it is, a custom build with its id', async () => {
+  const user = userEvent.setup();
+  const footer = async (links: object) => {
+    open({ host: { ...host, links } });
+    await screen.findByText('shown');
+    await user.click(screen.getByRole('button', { name: 'Menu' }));
+    const version = document.querySelector('[data-app-menu] [data-menu-version]')!;
+    const shown = [document.querySelector('[data-app-menu] [data-menu-footer]')!.textContent, version.getAttribute('href')];
+    cleanup();
+    return shown;
+  };
+  const notes = 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.15';
+  expect(await footer(viewerLinks({ version: '0.7.15' }))).toEqual(['v0.7.15·Made by @earthtojake', notes]);
+  expect(await footer(viewerLinks({ version: '0.7.15', build: 'b80844940-dirty' }))).toEqual(['v0.7.15-dev.b80844940-dirty·Made by @earthtojake', notes]);
+});
+
 it('opens the explorer from the file\'s name where the host\'s files can be browsed, and a pick there is shown through the host', async () => {
   const user = userEvent.setup();
   const opened: string[] = [];

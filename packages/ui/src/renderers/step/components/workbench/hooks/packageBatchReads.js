@@ -184,9 +184,10 @@ export function createTessellationBodyBatches({
  * resolve go one to a request, as their lanes asked before, so the derivations the first geometry
  * waits on still run side by side; the rest go up to `maxComponents` to a request, with up to
  * `inFlight` requests out at once ahead of the lanes. A component's ticket is answered the moment
- * its own row is ready (`onReady`), not when its whole request is. A request that fails fails each
- * of its components still waiting, with its error. Once the load is over, aborted or failed
- * (`dispose`), nothing more is asked ahead: a derivation nobody will draw is not started.
+ * its own row is ready (`onReady`), not when its whole request is, and one cadgen could not derive
+ * or mesh fails alone, with its own error (`onFailed`). A request that fails fails each of its
+ * components still waiting, with its error. Once the load is over, aborted or failed (`dispose`),
+ * nothing more is asked ahead: a derivation nobody will draw is not started.
  */
 export function createSurfaceTicketBatches({
   order, needs, resolve, signal,
@@ -258,8 +259,14 @@ export function createSurfaceTicketBatches({
         entry.done = true;
         entry.resolve(ticket);
       };
+      const fail = (cid, error) => {
+        const entry = waiting.get(cid);
+        if (!entry || entry.done) return;
+        entry.done = true;
+        entry.reject(error);
+      };
       Promise.resolve()
-        .then(() => resolve(requested, { signal, onReady: answer }))
+        .then(() => resolve(requested, { signal, onReady: answer, onFailed: fail }))
         .then((tickets) => {
           for (const { cid } of requested) {
             const ticket = tickets?.get?.(cid);

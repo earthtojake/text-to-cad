@@ -1,5 +1,11 @@
+import { createToolModes } from "../kit/tools/toolModes.js";
+
 // A GLB picks nothing: a native glTF scene has no references, so it has no tool strip — orbit,
-// pan and zoom are the viewport's own, and its clips play in preview mode.
+// pan and zoom are the viewport's own. Its clips play under the Animation tool, its one tool,
+// and in preview. One tool needs no strip and is never put down: it is the default mode, up from
+// the open (the shell's `SHELL_TOOL.ANIMATE`), so a file with clips has the Animation panel at the
+// top-left from the start, with no X, and a static file has nothing there at all.
+export const GLB_TOOL_MODES = createToolModes({ defaultMode: "animate", modes: {} });
 
 /** What a host command that needs picking is told. A GLB shows the scene as authored; it has no references. */
 export const GLB_DECLINED_LIVE_COMMANDS = Object.freeze({

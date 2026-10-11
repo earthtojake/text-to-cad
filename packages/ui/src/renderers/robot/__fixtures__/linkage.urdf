@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!-- A crank-rocker four-bar: the ground runs 0.2 m along +x from the crank's pivot to the rocker's; the
+     rocker (0.08 m, the driver, +-0.5 rad about straight up) drives the crank (0.05 m) through a 0.2 m
+     coupler. The crank's joint carries tcad:four_bar, so cadgen derives it: at zero the crank points
+     87.4 degrees from the ground (the branch the coupler closes on), and its own limits hold the whole
+     derived range (-58.3 to 47.5 degrees). The joint origins turn each link's +x along the link at
+     zero, so a box along +x draws it where the linkage has it. -->
+<robot name="linkage" xmlns:tcad="https://text-to-cad.dev/urdf">
+  <link name="ground"><visual><origin xyz="0.1 0 -0.01"/><geometry><box size="0.26 0.02 0.01"/></geometry><material name="m0.30.30.351"><color rgba="0.3 0.3 0.35 1"/></material></visual></link>
+  <link name="rocker"><visual name="rocker_arm"><origin xyz="0.04 0 0"/><geometry><box size="0.08 0.015 0.01"/></geometry><material name="m0.90.50.11"><color rgba="0.9 0.5 0.1 1"/></material></visual></link>
+  <link name="crank"><visual><origin xyz="0.025 0 0"/><geometry><box size="0.05 0.015 0.01"/></geometry><material name="m0.10.40.91"><color rgba="0.1 0.4 0.9 1"/></material></visual></link>
+  <joint name="output_joint" type="revolute"><parent link="ground"/><child link="rocker"/><origin xyz="0.2 0 0" rpy="0 0 1.5707963267948966"/><axis xyz="0 0 1"/><limit lower="-0.5" upper="0.5" effort="1" velocity="1"/></joint>
+  <joint name="input_joint" type="revolute"><parent link="ground"/><child link="crank"/><origin xyz="0 0 0" rpy="0 0 1.5253680280265103"/><axis xyz="0 0 1"/><limit lower="-1.5" upper="1.5" effort="1" velocity="1"/>
+    <tcad:four_bar driver="output_joint" input_length="0.05" ground_length="0.2" output_length="0.08" coupler_length="0.2" input_zero="1.5253680280265103" output_zero="1.5707963267948966"/>
+  </joint>
+</robot>

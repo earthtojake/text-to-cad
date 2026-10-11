@@ -10,8 +10,8 @@ pinned a ten-minute F-14 ``generate`` phase at exactly 0% and then jumped it str
 
 What a phase can honestly say is one of two things:
 
-* a real FRACTION -- ``done``/``total`` -- when the work list is known. Meshing components
-  builds its work list in full before the first mesh runs, so it reports ``312/1127``.
+* a real FRACTION -- ``done``/``total`` -- when the work list is known. Storing parts
+  knows every part before it stores the first, so it reports ``312/1127``.
 * a LABEL -- the name of the sub-unit in flight ("airframe") -- when it is not. A generator
   walking an assembly's systems knows what it is working on even when it cannot say how
   much is left, and the leaf walk that packages a compound knows which leaf it is on.
@@ -45,7 +45,7 @@ PHASE_ORDER = (PHASE_GENERATE, PHASE_PACKAGE, PHASE_COMPONENTS, PHASE_FINALIZE)
 PHASE_LABELS = {
     PHASE_GENERATE: "Building geometry",
     PHASE_PACKAGE: "Collecting parts",
-    PHASE_COMPONENTS: "Meshing components",
+    PHASE_COMPONENTS: "Storing parts",
     PHASE_FINALIZE: "Writing outputs",
     PHASE_DONE: "Done",
 }

@@ -1,6 +1,6 @@
 """The exploded view, planned from the built assembly.
 
-    cd src && python -m lib.explodeplan [--recompute]     # plan -> tmp/kin/explode_plan.json
+    cd src && python -m lib.explodeplan [--recompute]     # plan -> lib/explode_plan.json
 
 Everything moves by TRANSLATION from the theta = 0 rest pose. The plan is built
 in four passes:
@@ -26,8 +26,13 @@ in four passes:
    blocked by its host (a nut under a fin) moves only as far as it is free,
    then rides along.
 
-The timeline and travel distances (layout) are STAGES below. lib/animgen.py
-turns the plan into the `explode` clip; lib/explodecheck.py verifies it.
+The timeline and travel distances (layout) are STAGES below. The plan is
+COMMITTED (lib/explode_plan.json, one unit per line): the `explode` clip
+(lib/clips.py) reads it when radial.py builds, so rerun this and then rebuild
+when the geometry changes. lib/explodecheck.py verifies it. The copy committed
+when the clips moved from generated JavaScript to Python was recovered from the
+last generated clip, which kept each unit's leaves, moves and host but not the
+planner's sequence, notes, stages or travels.
 """
 
 from __future__ import annotations
@@ -47,7 +52,7 @@ import numpy as np
 SRC = Path(__file__).resolve().parent.parent
 ROOT = SRC.parent
 STEP_FILE = ROOT / "STEP" / "radial.step"
-OUT = ROOT / "tmp" / "kin" / "explode_plan.json"
+OUT = Path(__file__).resolve().parent / "explode_plan.json"
 
 FIRING = (1, 3, 5, 7, 9, 2, 4, 6, 8)
 F, R = (0.0, -1.0, 0.0), (0.0, 1.0, 0.0)
@@ -815,7 +820,7 @@ def place(pl, seq, travel_min, extra=None, skip=None, step=20.0):
 
 
 # ---------------------------------------------------------------------------
-# Evaluation (the JS re-implements exactly this)
+# Evaluation (the `explode` clip, lib/clips.py, re-implements exactly this without numpy)
 # ---------------------------------------------------------------------------
 def ease(x):
     x = min(1.0, max(0.0, x))
@@ -919,6 +924,22 @@ def changed_leaves(g, old_npz):
     return out
 
 
+def write_plan(plan, path=OUT):
+    """The plan as committed: each unit, sequence entry and note on a line of its
+    own (units by name), so a replan diffs unit by unit."""
+    parts = []
+    for key, value in plan.items():
+        if isinstance(value, dict):
+            body = ",\n".join(f"  {json.dumps(k)}: {json.dumps(v)}" for k, v in sorted(value.items()))
+            parts.append(f"{json.dumps(key)}: {{\n{body}\n}}")
+        elif isinstance(value, list):
+            body = ",\n".join(f"  {json.dumps(v)}" for v in value)
+            parts.append(f"{json.dumps(key)}: [\n{body}\n]")
+        else:
+            parts.append(f"{json.dumps(key)}: {json.dumps(value)}")
+    Path(path).write_text("{\n" + ",\n".join(parts) + "\n}\n")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--blocking", default="part,fastener", help="compute the blocking cache for these unit kinds")
@@ -943,7 +964,7 @@ def main(argv=None):
         return 0
     from lib import explodelayout
     plan = explodelayout.build(pl, block)
-    OUT.write_text(json.dumps(plan))
+    write_plan(plan)
     print(f"[explodeplan] wrote {OUT}")
     return 0
 

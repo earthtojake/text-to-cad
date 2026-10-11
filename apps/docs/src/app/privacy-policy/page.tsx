@@ -205,7 +205,7 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             To turn telemetry off, run <code>uvx cadgen telemetry off</code>, use{" "}
-            <strong>Share usage stats</strong> in the menu of the CAD app or the CAD viewer (the logo
+            <strong>Share anonymous usage data</strong> in the menu of the CAD app or the CAD viewer (the logo
             at the top left, over any open model), or ask your agent to turn off CAD telemetry.
             Turning it off deletes the install ID on your computer and asks our server to delete
             everything stored under it. Turning it on again starts a new install ID, so nothing links

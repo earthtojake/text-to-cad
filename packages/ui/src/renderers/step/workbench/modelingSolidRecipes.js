@@ -55,7 +55,9 @@ function ruledLoft(fs, edges, floats) {
   const patches = [];
   for (const f of ruled) {
     const s = f.surface;
-    if (s.kind !== 'nurbs' || s.degU !== 1 || s.degV !== 1 || s.nu !== 2 || s.nv !== 2 || s.weights || s.periodicU || s.periodicV) return null;
+    // A bilinear patch carries its four corners; a rational one (`rational`, or a
+    // version-2 surface's `weights`) is no ruled section.
+    if (s.kind !== 'nurbs' || s.degU !== 1 || s.degV !== 1 || s.nu !== 2 || s.nv !== 2 || s.rational || s.weights || s.periodicU || s.periodicV || !s.poles) return null;
     const [offset,count] = s.poles;
     if (count !== 12 || offset+count > floats.length) return null;
     // SURF control points are float32. Decimal snapping proposes a recipe only;

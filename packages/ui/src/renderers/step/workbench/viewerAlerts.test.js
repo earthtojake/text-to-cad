@@ -193,6 +193,38 @@ test("edit worker failures are distinct from invalid-model failures", () => {
   assert.equal(invalid.reason, "Fillet radius is too large");
 });
 
+test("parts cadgen could not mesh are a warning over the rest of the model, naming them", () => {
+  const error = "component 07f3b327472c9bec: OCCT did not mesh 1 face(s) of the component: f224";
+  const alert = buildViewerMeshAlert(step, true, error, null, { partial: true, failedParts: ["accessory:case"] });
+  assert.equal(alert.severity, "warning");
+  assert.equal(alert.blocking, false);
+  assert.equal(alert.title, "A part couldn’t be shown");
+  assert.match(alert.message, /“accessory:case” couldn’t be meshed, so it’s missing from the view\. Everything else is shown\./);
+  assert.match(alert.details, /Parts: accessory:case/);
+  assert.match(alert.details, /OCCT did not mesh 1 face/);
+  const many = buildViewerMeshAlert(step, true, error, null, { partial: true, failedParts: ["a", "b", "c", "d", "e"] });
+  assert.equal(many.title, "5 parts couldn’t be shown");
+  assert.match(many.message, /^“a”, “b”, “c” and 2 more couldn’t be meshed, so they’re missing/);
+  // With nothing drawn it is still the card of a model that did not load.
+  const nothing = buildViewerMeshAlert(step, false, error, null, { partial: true, failedParts: ["accessory:case"] });
+  assert.equal(nothing.severity, "error");
+  assert.notEqual(nothing.blocking, false);
+});
+
+test("parts drawn without faces cadgen could not mesh are a warning over the whole model, naming them", () => {
+  const alert = buildViewerMeshAlert(step, true, "", null, { unmeshedParts: ["wing"] });
+  assert.equal(alert.severity, "warning");
+  assert.equal(alert.blocking, false);
+  assert.equal(alert.title, "A part is missing faces");
+  assert.equal(alert.message, "“wing” has faces that couldn’t be meshed, so they’re missing from the view. Everything else is shown.");
+  assert.match(alert.details, /Parts: wing/);
+  const many = buildViewerMeshAlert(step, true, "", null, { unmeshedParts: ["a", "b", "c", "d"] });
+  assert.equal(many.title, "4 parts are missing faces");
+  assert.match(many.message, /^“a”, “b”, “c” and 1 more have faces that couldn’t be meshed/);
+  // Said of the model once it is all there, never over one still arriving.
+  assert.equal(buildViewerMeshAlert(step, true, "", null, { partial: true, unmeshedParts: ["wing"] }), null);
+});
+
 test("progressive geometry is valid while loading but cannot mask a failed first load", () => {
   assert.equal(buildViewerMeshAlert(step, true, "", null, { partial: true }), null);
   const failed = buildViewerMeshAlert(step, true, "Decode failed", null, { partial: true });

@@ -2,7 +2,7 @@ from cadgen import build123d as bd,step
 from lib.yaw_guide_mounts import make_yaw_reaction_mounts
 from lib.universal_carrier import make_universal_carrier
 from lib.pulley import make_pulley
-@step(out='../STEP/yaw_guide_macro_review.step',mesh_tolerance=.0005,mesh_angular_tolerance=.01)
+@step(out='../STEP/yaw_guide_macro_review.step',mesh_tolerance=.0005,mesh_angular_tolerance=0.05)
 def yaw_guide_macro_review():
  parts=make_yaw_reaction_mounts(18,'index_mcp');parts.append(make_universal_carrier(phalanx_width=18,label='index_mcp_actual_carrier'))
  for sign in(-1,1):

@@ -8,8 +8,8 @@ test('cache probe counts unsettled bytes and releases successful and failed writ
   const calls = [];
   const window = { fetch: (...args) => new Promise((resolve, reject) => calls.push({ args, resolve, reject })) };
   vm.runInNewContext(`(${installCacheWriteProbe.toString()})()`, { window });
-  const first = window.fetch('/__tess_cache/a.tess', { method: 'POST', body: new Uint8Array(32) });
-  const second = window.fetch('/__tess_cache/b.tess', { method: 'POST', body: new Uint8Array(48) });
+  const first = window.fetch('/__tess_cache/a.glb', { method: 'POST', body: new Uint8Array(32) });
+  const second = window.fetch('/__tess_cache/b.glb', { method: 'POST', body: new Uint8Array(48) });
   assert.equal(window.__cadCacheWriteProbe.activeBytes, 80);
   calls[0].resolve({ ok: true });
   await first;

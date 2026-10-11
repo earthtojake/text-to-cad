@@ -184,7 +184,7 @@ def refresh_annotations(spec, *, verdict=None) -> str | None:
     from cadgen.store.trees import get_tree, put_tree, flatten, tree_complete
     from cadgen.catalog import artifact_file_hash
     from cadgen._internal.source_sidecar import (
-        normalize_materials, normalize_animation, resolve_materials, remap_appearance,
+        normalize_materials, resolve_materials, remap_appearance,
         write_source_sidecar, source_sidecar_path,
     )
 
@@ -236,14 +236,12 @@ def refresh_annotations(spec, *, verdict=None) -> str | None:
     material_declaration = (copy.deepcopy(record.get('materials')) if raw_materials is _COMPUTED
                             else normalize_materials(raw_materials, where='materials='))
     raw_animation = parts[1]['animation']
-    animation = (copy.deepcopy(record.get('animation')) if raw_animation is _COMPUTED
-                 else normalize_animation(raw_animation, where='animation='))
-    if animation is not None:
-        # The decorator checked the module it imported; this is the text read now.
-        from cadgen._internal.animation_source import check_animation_exports
-        from cadgen.render import relative_to_cwd
-
-        check_animation_exports(animation['source'], name=f'{relative_to_cwd(script)}::{entry_name} animation')
+    if raw_animation is not None and raw_animation is not _COMPUTED:
+        return None  # a literal is never clips: the ordinary build says why
+    # Clips are functions, so their declaration and everything it calls stay in
+    # the geometry fingerprint, which matched above: the recorded keyframes are
+    # the ones this source bakes.
+    animation = copy.deepcopy(record.get('animation')) if raw_animation is _COMPUTED else None
     raw_kinematics = parts[1]['kinematics']
     kinematics_is_document = raw_kinematics is _COMPUTED
     try:

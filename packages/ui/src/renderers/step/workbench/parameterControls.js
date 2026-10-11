@@ -1,7 +1,9 @@
 import {
-  normalizeParameterValue,
-  normalizeParameterValues
-} from "@text-to-cad/core/common/parameters.js";
+  articulationControl,
+  articulationControls,
+  clampControlValue,
+  normalizeControlValues
+} from "@text-to-cad/core/common/articulation.js";
 
 const DEFAULT_NUMBER_CONTROL_STEP = 0.01;
 const MIN_NUMBER_CONTROL_STEP = 0.000001;
@@ -14,11 +16,6 @@ function isObject(value) {
 function toFiniteNumber(value, fallback = 0) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : fallback;
-}
-
-function positiveNumber(value) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0;
 }
 
 function compactNumber(value) {
@@ -45,10 +42,11 @@ function parseJsonText(text, label = "parameters") {
   }
 }
 
-export function resolveParameterNumberControlStep(parameter) {
-  const declaredStep = positiveNumber(parameter?.step);
-  const min = toFiniteNumber(parameter?.min, 0);
-  const max = toFiniteNumber(parameter?.max, min);
+// A slider's step from its range: about a thousand steps across it, never coarser than a
+// hundredth, so a control over a few degrees and one over thousands both drag finely.
+export function resolveParameterNumberControlStep(control) {
+  const min = toFiniteNumber(control?.min, 0);
+  const max = toFiniteNumber(control?.max, min);
   const range = Math.abs(max - min);
   const rangeStep = range > 0
     ? Math.max(
@@ -56,23 +54,21 @@ export function resolveParameterNumberControlStep(parameter) {
         MIN_NUMBER_CONTROL_STEP
       )
     : DEFAULT_NUMBER_CONTROL_STEP;
-  return compactNumber(declaredStep > 0 ? Math.min(declaredStep, rangeStep) : rangeStep);
+  return compactNumber(rangeStep);
 }
 
 export function buildParameterValuesCopyText(definition, values = {}) {
-  const parameters = Array.isArray(definition?.parameters) ? definition.parameters : [];
-  if (!parameters.length) {
+  const articulation = definition?.articulation || null;
+  const controls = articulationControls(articulation);
+  if (!controls.length) {
     return "{}";
   }
-  const normalizedValues = normalizeParameterValues(definition, values);
-  const orderedValues = Object.fromEntries(
-    parameters.map((parameter) => [parameter.id, normalizedValues[parameter.id]])
-  );
-  return JSON.stringify(orderedValues, null, 2);
+  const normalizedValues = normalizeControlValues(articulation, values);
+  return JSON.stringify(Object.fromEntries(controls.map((control) => [control.id, normalizedValues[control.id]])), null, 2);
 }
 
 export function parseParameterValuesPasteText(definition, text, { label = "parameters", unknownLabel = "parameter" } = {}) {
-  const parameterMap = isObject(definition?.parameterMap) ? definition.parameterMap : {};
+  const articulation = definition?.articulation || null;
   const parsed = parseJsonText(text, label);
   const rawValues = isObject(parsed?.values) ? parsed.values : parsed;
   if (!isObject(rawValues)) {
@@ -86,12 +82,12 @@ export function parseParameterValuesPasteText(definition, text, { label = "param
     if (!id) {
       continue;
     }
-    const parameter = parameterMap[id];
-    if (!parameter) {
+    const control = articulationControl(articulation, id);
+    if (!control) {
       unknownIds.push(id);
       continue;
     }
-    values[id] = normalizeParameterValue(parameter, rawValue);
+    values[id] = clampControlValue(control, rawValue);
   }
 
   if (unknownIds.length) {

@@ -1,4 +1,4 @@
-// Viewport LOD policy (design/unified-tessellation.md Phase 5).
+// Viewport LOD policy (packages/ui/docs/lod.md, section 2).
 //
 // Pure math, no three.js, no DOM: given a camera sample and a component's
 // bounds, decide which chord-tolerance level the component SHOULD render at,
@@ -6,32 +6,76 @@
 // thrashes the tessellator. The scheduler (viewer-side) owns time — debounce,
 // in-flight limits, cancellation — this module owns only the geometry.
 
-// Effective tessellation ladder, ordered coarse -> fine. L1 is the canonical
-// viewer default and therefore keeps the existing empty-options cache key.
-// L0 loosens BOTH geometric criteria; changing chord alone is not reliably
-// cheaper for trimmed surfaces. Every non-default rung is explicit so a mesh
-// key describes the bytes it actually requested.
-export const LOD_DEFAULT_LEVEL = 1;
-export const LOD_TESSELLATION_LEVELS = Object.freeze([
-  Object.freeze({ chordTolerance: 2e-3, angleTolerance: 1.4 }),
-  Object.freeze({ chordTolerance: 1.5e-3, angleTolerance: 0.35 }),
-  Object.freeze({ chordTolerance: 5e-4, angleTolerance: 0.35 }),
-  Object.freeze({ chordTolerance: 1.5e-4, angleTolerance: 0.35 }),
-]);
-export const LOD_CHORD_LEVELS = Object.freeze(
-  LOD_TESSELLATION_LEVELS.map((level) => level.chordTolerance),
-);
+// The tessellation ladder is cadgen's (cadgen.tessellation_policy): which rungs exist,
+// coarse to fine, what chord (RELATIVE to a component's bounding diagonal) and angle
+// (radians) tolerances each means, and which one every model opens at. It arrives with
+// the server's description -- the CAD Viewer's server info, the CAD app's launch -- and
+// the host installs it once, before a STEP model is drawn. This module only picks a
+// rung from the camera; it holds no tolerance of its own.
+let installed = null;
 
-export function normalizeLodLevel(level) {
-  const numeric = Number(level);
-  if (!Number.isFinite(numeric)) return LOD_DEFAULT_LEVEL;
-  return Math.max(0, Math.min(LOD_TESSELLATION_LEVELS.length - 1, Math.trunc(numeric)));
+function finitePositive(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
+/**
+ * Install the ladder cadgen published: `{ levels: [{chordTolerance, angleTolerance}], defaultLevel }`.
+ * Installing the same ladder again is a no-op; a different one replaces it.
+ */
+export function installTessellationLadder(published) {
+  const levels = Array.isArray(published?.levels) ? published.levels : null;
+  const defaultLevel = published?.defaultLevel;
+  if (!levels?.length || !levels.every((level) => finitePositive(level?.chordTolerance) && finitePositive(level?.angleTolerance))
+      || !Number.isInteger(defaultLevel) || defaultLevel < 0 || defaultLevel >= levels.length) {
+    throw new Error(
+      "cadgen's tessellation ladder is { levels: [{ chordTolerance, angleTolerance }, ...], defaultLevel }; "
+      + `received ${JSON.stringify(published)}. Update cadgen and the app together.`
+    );
+  }
+  const frozen = Object.freeze(levels.map(({ chordTolerance, angleTolerance }) => Object.freeze({ chordTolerance, angleTolerance })));
+  installed = Object.freeze({
+    levels: frozen,
+    chordLevels: Object.freeze(frozen.map((level) => level.chordTolerance)),
+    defaultLevel,
+  });
+  return installed;
+}
+
+function ladder() {
+  if (!installed) {
+    throw new Error(
+      "The tessellation ladder is cadgen's: the host installs it (installTessellationLadder) from the "
+      + "server's description before a STEP model is drawn."
+    );
+  }
+  return installed;
+}
+
+/** The rung every model opens at. */
+export function lodDefaultLevel() {
+  return ladder().defaultLevel;
+}
+
+/** Every rung's tolerances, coarse to fine. */
+export function lodTessellationLevels() {
+  return ladder().levels;
+}
+
+/** Every rung's chord tolerance, coarse to fine: what the camera's projected error is measured in. */
+export function lodChordLevels() {
+  return ladder().chordLevels;
+}
+
+export function normalizeLodLevel(level) {
+  const { levels, defaultLevel } = ladder();
+  const numeric = Number(level);
+  if (!Number.isFinite(numeric)) return defaultLevel;
+  return Math.max(0, Math.min(levels.length - 1, Math.trunc(numeric)));
+}
+
+/** A rung's tolerances, both named: what a mesh request and its cache key say. */
 export function lodTessellationForLevel(level) {
-  const normalized = normalizeLodLevel(level);
-  if (normalized === LOD_DEFAULT_LEVEL) return undefined;
-  return { ...LOD_TESSELLATION_LEVELS[normalized] };
+  return { ...ladder().levels[normalizeLodLevel(level)] };
 }
 
 // The band: a component upgrades when its current level projects worse than
@@ -82,7 +126,7 @@ export function projectedChordErrorPx({
 }
 
 /** The coarsest level whose projected error meets the target. */
-export function desiredLevel(sample, levels = LOD_CHORD_LEVELS, targetPx = LOD_TARGET_PX) {
+export function desiredLevel(sample, levels = lodChordLevels(), targetPx = LOD_TARGET_PX) {
   for (let level = 0; level < levels.length; level += 1) {
     const errorPx = projectedChordErrorPx({ ...sample, chordRel: levels[level] });
     if (errorPx <= targetPx) {
@@ -97,7 +141,7 @@ export function desiredLevel(sample, levels = LOD_CHORD_LEVELS, targetPx = LOD_T
  * Moves at most one level per call. Pressure coarsening uses this step;
  * settledLevel folds repeated steps for an unchanged camera sample.
  */
-export function nextLevel(sample, currentLevel, levels = LOD_CHORD_LEVELS) {
+export function nextLevel(sample, currentLevel, levels = lodChordLevels()) {
   const current = Math.max(0, Math.min(levels.length - 1, currentLevel | 0));
   const currentErrorPx = projectedChordErrorPx({ ...sample, chordRel: levels[current] });
   if (currentErrorPx > LOD_UPGRADE_PX && current < levels.length - 1) {
@@ -118,7 +162,7 @@ export function nextLevel(sample, currentLevel, levels = LOD_CHORD_LEVELS) {
  * .6 and cannot reverse above 1.25. There are at most N-1 moves. Keep nextLevel
  * as the authority so threshold arithmetic and starting-rung history agree.
  */
-export function settledLevel(sample, currentLevel, levels = LOD_CHORD_LEVELS) {
+export function settledLevel(sample, currentLevel, levels = lodChordLevels()) {
   let level = Math.max(0, Math.min(levels.length - 1, currentLevel | 0));
   for (let check = 0; check < Math.max(1, levels.length); check += 1) {
     const next = nextLevel(sample, level, levels);
@@ -134,7 +178,7 @@ export function settledLevel(sample, currentLevel, levels = LOD_CHORD_LEVELS) {
  * { cid, currentLevel, sample } -> [{ cid, level, errorPx }] for entries whose
  * next level differs from the current one.
  */
-export function planLodWork(entries, levels = LOD_CHORD_LEVELS) {
+export function planLodWork(entries, levels = lodChordLevels()) {
   const plan = [];
   for (const { cid, currentLevel, sample } of entries) {
     const level = nextLevel(sample, currentLevel, levels);

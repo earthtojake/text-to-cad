@@ -1,5 +1,7 @@
 /**
- * The Components tab's tree: a robot description's kinematic tree, as plain data.
+ * The Components tab's tree: a robot's kinematic tree, as plain data, from the payload
+ * cadgen resolved (`cadgen.robot_payload`: its `links` and `joints` as the description
+ * writes them, and its `root`).
  *
  * Links are the nodes. A child link sits under its parent link through the joint
  * that connects them, and carries that joint (the row's secondary text). Named
@@ -7,9 +9,9 @@
  * them. Nodes use the Model tree's `{ id, kind, label, children }` shape so the
  * shared tree search reads them unchanged.
  *
- * The parsers reject malformed descriptions, but this is a view of whatever model
- * it is handed: a cycle, a missing parent or a second parent must neither hang
- * nor lose a link, so every link appears exactly once and orphans become roots.
+ * cadgen rejects a malformed description, but this is a view of whatever payload it is
+ * handed: a cycle, a missing parent or a second parent must neither hang nor lose a
+ * link, so every link appears exactly once and orphans become roots.
  */
 
 const text = value => String(value ?? "").trim();
@@ -24,14 +26,14 @@ export function robotJointSummary(joint) {
 }
 
 /**
- * @param {{ rootLink?: string, links?: object[], joints?: object[] } | null} description A parsed URDF/SDF model.
- * @param {{ components?: object[], parts?: { id: string, linkName: string }[] }} [geometry]
+ * @param {{ root?: string, links?: object[], joints?: object[] } | null} robot The payload.
+ * @param {{ components?: object[], parts?: { id: string, link: string }[] }} [geometry]
  *   `components` are `robotComponents(meshData)`; `parts` are the mesh parts, which map a link to its viewport geometry.
  * @returns {{ roots: object[], nodesById: Map<string, object>, parentById: Map<string, string> }}
  */
-export function buildRobotTree(description, { components = [], parts = [] } = {}) {
-  const links = Array.isArray(description?.links) ? description.links : [];
-  const joints = Array.isArray(description?.joints) ? description.joints : [];
+export function buildRobotTree(robot, { components = [], parts = [] } = {}) {
+  const links = Array.isArray(robot?.links) ? robot.links : [];
+  const joints = Array.isArray(robot?.joints) ? robot.joints : [];
   const linkByName = new Map();
   for (const link of links) {
     const name = text(link?.name);
@@ -39,7 +41,7 @@ export function buildRobotTree(description, { components = [], parts = [] } = {}
   }
   // A joint may name a link the description never declares. It is still a link of this robot.
   for (const joint of joints) {
-    for (const name of [text(joint?.parentLink), text(joint?.childLink)]) {
+    for (const name of [text(joint?.parent), text(joint?.child)]) {
       if (name && !linkByName.has(name)) linkByName.set(name, { name, undeclared: true });
     }
   }
@@ -48,7 +50,7 @@ export function buildRobotTree(description, { components = [], parts = [] } = {}
   const parentJointByChild = new Map();
   const childJointsByParent = new Map();
   for (const joint of joints) {
-    const parent = text(joint?.parentLink), child = text(joint?.childLink);
+    const parent = text(joint?.parent), child = text(joint?.child);
     if (!parent || !child || parent === child || parentJointByChild.has(child)) continue;
     parentJointByChild.set(child, joint);
     childJointsByParent.set(parent, [...(childJointsByParent.get(parent) || []), joint]);
@@ -56,13 +58,13 @@ export function buildRobotTree(description, { components = [], parts = [] } = {}
 
   const componentsByLink = new Map();
   for (const component of components) {
-    const linkName = text(component?.linkName);
+    const linkName = text(component?.link);
     if (!linkName || !linkByName.has(linkName)) continue;
     componentsByLink.set(linkName, [...(componentsByLink.get(linkName) || []), component]);
   }
   const partIdsByLink = new Map();
   for (const part of parts) {
-    const linkName = text(part?.linkName), id = text(part?.id);
+    const linkName = text(part?.link), id = text(part?.id);
     if (!linkName || !id) continue;
     partIdsByLink.set(linkName, [...(partIdsByLink.get(linkName) || []), id]);
   }
@@ -92,7 +94,7 @@ export function buildRobotTree(description, { components = [], parts = [] } = {}
       const node = pending.pop();
       const childLinks = [];
       for (const joint of childJointsByParent.get(node.linkName) || []) {
-        const childName = text(joint.childLink);
+        const childName = text(joint.child);
         if (placed.has(childName)) continue;
         placed.add(childName);
         const child = linkNode(childName, joint);
@@ -114,7 +116,7 @@ export function buildRobotTree(description, { components = [], parts = [] } = {}
     return root;
   };
 
-  const declaredRoot = text(description?.rootLink);
+  const declaredRoot = text(robot?.root);
   const names = [...linkByName.keys()];
   const roots = [];
   const rootNames = names.filter(name => !parentJointByChild.has(name));
@@ -167,56 +169,55 @@ const finite = value => (Number.isFinite(value) ? value : null);
 const origin = value => (value && numbers(value.xyz) && numbers(value.rpy) ? value : null);
 
 /**
- * What the description says about one link, for the details pane. Only facts the
- * parsed model carries are returned: an SDF model, for one, records no mass.
+ * What the description says about one link, for the details pane: the payload's link facts
+ * (inertial, visuals and collisions as written, with the host path of a mesh file), its
+ * parent joint with limits, origin and mimic, its child joints, and the SRDF's groups and
+ * end effectors on it. Only facts the payload carries are returned: an SDF model, for one,
+ * records no mass.
  */
-export function robotLinkFacts(description, linkName, { groupNamesByLink = null } = {}) {
+export function robotLinkFacts(robot, linkName) {
   const name = text(linkName);
-  const link = (Array.isArray(description?.links) ? description.links : []).find(candidate => text(candidate?.name) === name) || null;
-  const joints = Array.isArray(description?.joints) ? description.joints : [];
-  const parentJoint = joints.find(joint => text(joint?.childLink) === name) || null;
-  // A visual carries what it says under `description` (beside what rendering uses); a
-  // collision IS its description. A model that records neither still names its geometry.
-  const geometry = entries => (Array.isArray(entries) ? entries : []).map(entry => {
-    const said = entry?.description || entry;
-    const primitive = entry?.primitive || null;
-    return {
-      name: text(said?.name),
-      type: text(said?.type) || (primitive ? text(primitive.type) : entry?.meshUrl ? "mesh" : "unknown"),
-      filename: text(said?.filename) || (entry?.meshUrl ? text(entry.label) : ""),
-      scale: numbers(said?.scale),
-      size: numbers(said?.size ?? primitive?.size),
-      radius: finite(said?.radius ?? primitive?.radius),
-      length: finite(said?.length ?? primitive?.length),
-      origin: origin(said?.origin),
-      color: text(entry?.color),
-      materialName: text(said?.materialName),
-    };
-  });
+  const link = (Array.isArray(robot?.links) ? robot.links : []).find(candidate => text(candidate?.name) === name) || null;
+  const joints = Array.isArray(robot?.joints) ? robot.joints : [];
+  const parentJoint = joints.find(joint => text(joint?.child) === name) || null;
+  const geometry = entries => (Array.isArray(entries) ? entries : []).map(entry => ({
+    name: text(entry?.name),
+    type: text(entry?.type) || "unknown",
+    filename: text(entry?.filename),
+    path: text(entry?.path),
+    scale: numbers(entry?.scale),
+    size: numbers(entry?.size),
+    radius: finite(entry?.radius),
+    length: finite(entry?.length),
+    origin: origin(entry?.origin),
+    color: text(entry?.color),
+    materialName: text(entry?.materialName),
+  }));
   const inertial = link?.inertial || null;
-  const endEffectors = (Array.isArray(description?.srdf?.endEffectors) ? description.srdf.endEffectors : [])
+  const endEffectors = (Array.isArray(robot?.srdf?.endEffectors) ? robot.srdf.endEffectors : [])
     .filter(endEffector => text(endEffector?.parentLink) === name || text(endEffector?.link) === name)
     .map(endEffector => text(endEffector.name)).filter(Boolean);
+  const groups = robot?.srdf?.groupsByLink?.[name];
   return {
     name,
     isRoot: !parentJoint,
     parentJoint: parentJoint ? {
-      name: text(parentJoint.name), type: text(parentJoint.type), parentLink: text(parentJoint.parentLink),
-      // A fixed joint has no axis; the parser's placeholder is not something the description says.
-      axis: text(parentJoint.type) === "fixed" ? null : numbers(parentJoint.axis),
+      name: text(parentJoint.name), type: text(parentJoint.type), parentLink: text(parentJoint.parent),
+      axis: numbers(parentJoint.axis),
       limit: parentJoint.limit && Object.keys(parentJoint.limit).length ? parentJoint.limit : null,
       origin: origin(parentJoint.origin),
       mimic: parentJoint.mimic || null,
+      fourBar: parentJoint.fourBar || null,
     } : null,
-    childJoints: joints.filter(joint => text(joint?.parentLink) === name)
-      .map(joint => ({ name: text(joint.name), type: text(joint.type), childLink: text(joint.childLink) })),
+    childJoints: joints.filter(joint => text(joint?.parent) === name)
+      .map(joint => ({ name: text(joint.name), type: text(joint.type), childLink: text(joint.child) })),
     mass: finite(inertial?.mass),
     centerOfMass: origin(inertial?.origin),
     inertia: inertial?.inertia || null,
     visuals: geometry(link?.visuals),
     // `null` when the model does not record collisions at all, `[]` when the link declares none.
     collisions: Array.isArray(link?.collisions) ? geometry(link.collisions) : null,
-    groups: groupNamesByLink?.get?.(name) || [],
+    groups: Array.isArray(groups) ? groups.map(text).filter(Boolean) : [],
     endEffectors,
   };
 }

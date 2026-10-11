@@ -1,10 +1,9 @@
 """Views of a tree for consumers that speak the view layout (assembly.json + components/).
 
-Two consumers cannot read objects by hash directly: the Node builders (the
-mesh exporter takes ``--package-dir``) and the browser (the viewer/snapshot
-client resolves ``assembly.json`` and ``components/<cid>.surf`` RELATIVE to a
-package URL). Neither gets a directory in the store — the store has no result
-directories. They get a **view**:
+The browser cannot read objects by hash directly: the viewer/snapshot client
+resolves ``assembly.json`` and ``components/<cid>.surf`` RELATIVE to a package
+URL. Nothing gets a directory in the store — the store has no result
+directories. A consumer of that layout gets a **view**:
 
 - :func:`export_view` writes the flattened tree (assembly.json) plus every component it
   references into a TEMPORARY directory outside the store (copies; the
@@ -30,6 +29,8 @@ from cadgen.store.trees import capture_tree
 
 DESCRIPTOR_NAME = "assembly.json"
 COMPONENT_DIRNAME = "components"
+# A component's selector table in a view: `components/<cid>.selectors.json`.
+SELECTOR_TABLE_SUFFIX = ".selectors.json"
 
 
 def _select_producer(tree_hash: str, producer: dict | None, document_hash: str | None) -> dict:
@@ -83,7 +84,8 @@ def descriptor_for_view(
 
 
 def ready_surface_records(tree_hash: str, producer: dict, cids: list[str] | None = None) -> dict:
-    """Available verified SURF derivations; a miss does no native work."""
+    """Available verified SURF derivations, each with its stored selector table
+    (``{cid: {"surface": record, "selectors": record}}``); a miss does no native work."""
     from cadgen.store import surfaces
 
     descriptor, _ = capture_tree(tree_hash, retain_payloads=False)
@@ -92,9 +94,11 @@ def ready_surface_records(tree_hash: str, producer: dict, cids: list[str] | None
         raise ValueError("surface request names an unpinned component")
     result = {}
     for cid in selected:
-        record = surfaces.lookup(descriptor["components"][cid], producer)
-        if record is not None:
-            result[cid] = record
+        entry = descriptor["components"][cid]
+        record = surfaces.lookup(entry, producer)
+        table = surfaces.selector_record(entry, producer) if record is not None else None
+        if record is not None and table is not None and table["surfaceObject"] == record["object"]:
+            result[cid] = {"surface": record, "selectors": table}
     return result
 
 
@@ -102,8 +106,10 @@ def materialize_view_surfaces(descriptor: dict, cids: list[str] | None = None) -
     """Complete an owned static/export view via artifact-only pooled derivation.
 
     ``cids`` limits the work to those components: only they are derived when
-    absent, and only they gain a ``surf``. The rest of the view is unchanged."""
-    from cadgen.daemon.artifacts import ArtifactJobError, resolve_artifact
+    absent, and only they gain a ``surf``. The rest of the view is unchanged.
+    The absent ones are dealt across the build pool (``artifacts.deal``)."""
+    from cadgen.daemon.artifacts import (
+        SURFACES_PER_STARTED_WORKER, ArtifactJobError, deal, resolve_artifact, resolve_artifacts)
     from cadgen.store import surfaces
 
     tree = descriptor["tree"]
@@ -113,7 +119,8 @@ def materialize_view_surfaces(descriptor: dict, cids: list[str] | None = None) -
     missing = [cid for cid in wanted if cid not in records]
     if missing:
         try:
-            resolve_artifact({"kind": "surfaces", "tree": tree, "cids": missing, "producer": producer})
+            resolve_artifacts([{"kind": "surfaces", "tree": tree, "cids": dealt, "producer": producer}
+                               for dealt in deal(missing, per_started_worker=SURFACES_PER_STARTED_WORKER)])
         except ArtifactJobError as error:
             if not surfaces.producer_unavailable(error):
                 raise
@@ -135,10 +142,12 @@ def materialize_view_surfaces(descriptor: dict, cids: list[str] | None = None) -
     for cid in wanted:
         entry = descriptor["components"][cid]
         record = records.get(cid)
-        if record is None or record["surfaceInput"] != entry["surfaceInput"]:
+        if record is None or record["surface"]["surfaceInput"] != entry["surfaceInput"]:
             raise FileNotFoundError("surface derivation disappeared before view publication")
-        entry["surfaceObject"] = record["object"]
+        entry["surfaceObject"] = record["surface"]["object"]
         entry["surf"] = f"{COMPONENT_DIRNAME}/{cid}.surf"
+        entry["selectorObject"] = record["selectors"]["object"]
+        entry["selectors"] = f"{COMPONENT_DIRNAME}/{cid}{SELECTOR_TABLE_SUFFIX}"
     return descriptor
 
 
@@ -148,18 +157,22 @@ def materialize_view_surfaces(descriptor: dict, cids: list[str] | None = None) -
 # per component of an assembly through here, and flattening a 600-occurrence
 # tree costs ~11 ms of CPU each time: 485 requests for one 483-component
 def component_object_for_ref(ref: str, descriptor: dict[str, Any] | None = None) -> tuple[str, str] | None:
-    """``components/<cid>.surf`` -> (object hash, suffix) through ``assembly.json``
-    (a view's assembly.json); a bare object hash in place of the cid also resolves.
-    None when nothing matches."""
+    """``components/<cid>.surf`` (or ``.selectors.json``) -> (object hash, suffix)
+    through ``assembly.json`` (a view's assembly.json); a bare object hash in place
+    of the cid also resolves. None when nothing matches."""
     name = str(ref or "").replace("\\", "/").rsplit("/", 1)[-1]
-    if "." not in name:
+    if name.endswith(SELECTOR_TABLE_SUFFIX):
+        stem, suffix = name[: -len(SELECTOR_TABLE_SUFFIX)], "selectors"
+    elif "." in name:
+        stem, suffix = name.rsplit(".", 1)
+    else:
         return None
-    stem, suffix = name.rsplit(".", 1)
-    if suffix not in ("surf", "brep", "glb"):
+    if suffix not in ("surf", "brep", "glb", "selectors"):
         return None
     if descriptor is not None:
         entry = (descriptor.get("components") or {}).get(stem) or {}
-        digest = str(entry.get("surfaceObject" if suffix == "surf" else f"{suffix}Object") or "")
+        field = {"surf": "surfaceObject", "selectors": "selectorObject"}.get(suffix, f"{suffix}Object")
+        digest = str(entry.get(field) or "")
         if is_object_hash(digest):
             return digest, suffix
     if is_object_hash(stem):
@@ -215,8 +228,8 @@ def _cleanup_views() -> None:
 
 def view_dir_for(tree_hash: str, *, producer: dict | None = None, document_hash: str | None = None) -> Path:
     """A view (assembly.json + components/) of ``tree_hash``, built once per process and
-    removed at exit. The adapter for consumers that need a DIRECTORY (the Node
-    exporters, the selector-index composer, the snapshot page)."""
+    removed at exit. The adapter for consumers that need a DIRECTORY (the
+    selector-index composer, the snapshot page)."""
     global _VIEW_CLEANUP_REGISTERED
     descriptor = descriptor_for_view(tree_hash, producer=producer, document_hash=document_hash)
     if descriptor is None:
@@ -272,10 +285,10 @@ def _write_view(descriptor: dict, root: Path, cids: list[str] | None = None) -> 
     components = descriptor.get("components") or {}
     for cid in (components if cids is None else dict.fromkeys(cids)):
         entry = components[cid]
-        for key in ("surf", "brep"):
-            digest = str(entry.get("surfaceObject" if key == "surf" else f"{key}Object") or "")
+        for suffix, field in ((".surf", "surfaceObject"), (".brep", "brepObject"), (SELECTOR_TABLE_SUFFIX, "selectorObject")):
+            digest = str(entry.get(field) or "")
             if digest:
-                target = comp_dir / f"{cid}.{key}"
+                target = comp_dir / f"{cid}{suffix}"
                 # The file is an owned view, not the CAS object. Always replace
                 # it from verified bytes when publishing a new descriptor.
                 target.write_bytes(read_verified_object(digest))

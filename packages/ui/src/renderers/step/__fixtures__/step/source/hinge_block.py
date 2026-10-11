@@ -5,6 +5,8 @@ feature and the topology a cylindrical face), one revolute mate, one named pose
 and one routine.
 """
 
+import math
+
 import cadgen
 from cadgen import build123d as bd
 from cadgen import srgb, step
@@ -23,19 +25,12 @@ KINEMATICS = {
     "poses": {"open": {"hinge": 90}},
 }
 
-ANIMATION = r"""
-export const clips = {
-  swing: {
-    label: "Swing",
-    duration: 4,
-    loop: true,
-    update(t, m) {
-      const angle = 45 * (1 - Math.cos((2 * Math.PI * t) / 4));
-      m.get("arm").rotate([0, 0, 1], angle, [10, 0, 0]);
-    },
-  },
-};
-"""
+def swing(t, m):
+    angle = 45 * (1 - math.cos(2 * math.pi * t / 4))
+    m.get("#arm").rotate((0, 0, 1), angle, (10, 0, 0))
+
+
+ANIMATION = {"swing": cadgen.clip(swing, duration=4, label="Swing")}
 
 
 @step(out="../STEP/hinge_block.step", kinematics=KINEMATICS, animation=ANIMATION)

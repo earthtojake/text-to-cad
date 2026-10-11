@@ -82,7 +82,10 @@ __all__ = [
 # checks it before drawing) and in the cache key (an old shape is not served
 # from the store after an upgrade). 2: text is a `text` primitive and the
 # payload lists its `fonts`, where 1 outlined every glyph into `filled-paths`.
-DRAWING_PAYLOAD_SCHEMA_VERSION = 2
+# 3: a primitive may carry its own `opacity`, and a stroke its own screen
+# `width` (CSS pixels), which a STEP section's drawing uses
+# (cadgen.section_drawing); a DXF's never does.
+DRAWING_PAYLOAD_SCHEMA_VERSION = 3
 
 # The layout foreground handed to ezdxf, and therefore the exact colour every
 # default-pen primitive comes back wearing. Not in the ACI palette; see the

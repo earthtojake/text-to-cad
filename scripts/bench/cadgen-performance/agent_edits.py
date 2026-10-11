@@ -138,7 +138,7 @@ def main() -> int:
     parser.add_argument("--cadgen-src", default=str(REPO / "packages/cadgen/src"),
                         help="cadgen source root put on PYTHONPATH (default: this checkout)")
     parser.add_argument("--python", default=sys.executable)
-    parser.add_argument("--node-bin", help="Directory prepended to PATH (Node 22 for the mesh builders)")
+    parser.add_argument("--node-bin", help="Directory prepended to PATH (Node 22, for a checkout whose cadgen still exports meshes through Node)")
     parser.add_argument("--timeout", type=float, default=3600.0, help="Seconds before a run counts as failed")
     parser.add_argument("--max-load", type=float,
                         help="Before each run, wait (up to 30 min) for the one-minute load average to drop below this")

@@ -1,13 +1,14 @@
-// LOD policy math (design/unified-tessellation.md Phase 5): projected chord
+// LOD policy math (packages/ui/docs/lod.md, section 2): projected chord
 // error picks levels, the enter/exit band prevents thrash, and work ranks
 // worst-error-first.
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  LOD_CHORD_LEVELS,
-  LOD_DEFAULT_LEVEL,
-  LOD_TESSELLATION_LEVELS,
+  installTessellationLadder,
+  lodChordLevels,
+  lodDefaultLevel,
+  lodTessellationLevels,
   desiredLevel,
   lodTessellationForLevel,
   nextLevel,
@@ -17,16 +18,24 @@ import {
   projectedChordErrorPx,
   settledLevel,
 } from "./lodPolicy.js";
+import { TEST_TESSELLATION_LADDER, installTestTessellationLadder } from "./testing.js";
 
-test("LOD tiers make coarse inputs explicit while preserving the default cache request", () => {
-  assert.equal(LOD_DEFAULT_LEVEL, 1);
-  assert.deepEqual(lodTessellationForLevel(0), { chordTolerance: 2e-3, angleTolerance: 1.4 });
-  assert.equal(lodTessellationForLevel(LOD_DEFAULT_LEVEL), undefined);
-  assert.deepEqual(lodTessellationForLevel(2), { chordTolerance: 5e-4, angleTolerance: 0.35 });
-  assert.deepEqual(LOD_CHORD_LEVELS, LOD_TESSELLATION_LEVELS.map((level) => level.chordTolerance));
-  assert.equal(normalizeLodLevel(undefined), LOD_DEFAULT_LEVEL);
+test("the ladder is cadgen's: nothing is drawn until the host installs the one its server published", () => {
+  assert.throws(() => lodDefaultLevel(), /installTessellationLadder/);
+  for (const bad of [null, { levels: [] }, { levels: [{ chordTolerance: 1 }], defaultLevel: 0 },
+    { levels: TEST_TESSELLATION_LADDER.levels, defaultLevel: 9 }]) {
+    assert.throws(() => installTessellationLadder(bad), /cadgen's tessellation ladder is/);
+  }
+  installTestTessellationLadder();
+  const { levels, defaultLevel } = TEST_TESSELLATION_LADDER;
+  assert.equal(lodDefaultLevel(), defaultLevel);
+  // Every rung names both tolerances, the standard one included: a request says what it asks for.
+  levels.forEach((level, index) => assert.deepEqual(lodTessellationForLevel(index), level));
+  assert.deepEqual(lodChordLevels(), levels.map((level) => level.chordTolerance));
+  assert.deepEqual(lodTessellationLevels(), levels);
+  assert.equal(normalizeLodLevel(undefined), defaultLevel);
   assert.equal(normalizeLodLevel(-10), 0);
-  assert.equal(normalizeLodLevel(99), LOD_TESSELLATION_LEVELS.length - 1);
+  assert.equal(normalizeLodLevel(99), levels.length - 1);
 });
 
 // A 100mm-diagonal part in a 1000px-tall, 45deg viewport.
@@ -52,17 +61,17 @@ test("desiredLevel climbs as the camera approaches, capped at the finest rung", 
   assert.equal(desiredLevel(sample(2000)), 0, "far away: default is enough");
   const nearLevel = desiredLevel(sample(120));
   assert.ok(nearLevel >= 1, `near: expected finer than default, got L${nearLevel}`);
-  assert.equal(desiredLevel(sample(50.0001)), LOD_CHORD_LEVELS.length - 1, "at the surface: finest");
+  assert.equal(desiredLevel(sample(50.0001)), lodChordLevels().length - 1, "at the surface: finest");
 });
 
 test("camera at or inside the bounds demands the finest level, never NaN/Infinity", () => {
   for (const distance of [50, 10, 0]) {
     const errorPx = projectedChordErrorPx({
       ...sample(distance),
-      chordRel: LOD_CHORD_LEVELS[0],
+      chordRel: lodChordLevels()[0],
     });
     assert.ok(Number.isFinite(errorPx) && errorPx > 0, `d=${distance}: ${errorPx}`);
-    assert.equal(desiredLevel(sample(distance)), LOD_CHORD_LEVELS.length - 1);
+    assert.equal(desiredLevel(sample(distance)), lodChordLevels().length - 1);
   }
 });
 
@@ -72,7 +81,7 @@ test("hysteresis: the upgrade and downgrade boundaries do not meet", () => {
   // direction — the no-thrash zone exists.
   let bandDistance = null;
   for (let d = 60; d < 3000; d += 1) {
-    const l0Error = projectedChordErrorPx({ ...sample(d), chordRel: LOD_CHORD_LEVELS[0] });
+    const l0Error = projectedChordErrorPx({ ...sample(d), chordRel: lodChordLevels()[0] });
     if (l0Error < 1.25 && l0Error > 0.6) {
       bandDistance = d;
       break;
@@ -96,7 +105,7 @@ test("nextLevel moves one rung at a time and re-evaluation converges", () => {
     level = next;
     seen.push(level);
   }
-  assert.equal(level, LOD_CHORD_LEVELS.length - 1, `climbed ${JSON.stringify(seen)}`);
+  assert.equal(level, lodChordLevels().length - 1, `climbed ${JSON.stringify(seen)}`);
   // And zooming back out walks it down again.
   const far = sample(5000);
   assert.equal(nextLevel(far, level), level - 1);
@@ -136,7 +145,7 @@ test("settledLevel matches repeated existing steps over perspective, orthographi
       for (const viewportHeightPx of [0, 300, 500, 625, 1000, 3000]) {
         for (const current of [-10, 0, 1, 2, 3, 20, undefined, NaN, Infinity]) {
           const input = { camera, diagonal, cameraDistance, viewportHeightPx };
-          let expected = Math.max(0, Math.min(LOD_CHORD_LEVELS.length - 1, current | 0));
+          let expected = Math.max(0, Math.min(lodChordLevels().length - 1, current | 0));
           const visited = new Set();
           while (true) {
             assert.ok(!visited.has(expected), "existing policy must not cycle");

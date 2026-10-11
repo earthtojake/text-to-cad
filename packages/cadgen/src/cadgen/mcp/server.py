@@ -66,9 +66,10 @@ NAME = "cad"
 TITLE = "CAD"
 # The launch/view protocol between this server and its page: a launch names a model by its absolute
 # path (`page: viewer`) or the home (`page: home`, its recents with it), and carries what the page
-# needs to start on it alone (the server's version and platform); a view makes one call a second
-# (`cad_sync`) and reaches the viewer's routes through `cad_http`, by absolute path.
-PROTOCOL = 5
+# needs to start on it alone (the server's version and platform, and the display tessellation
+# ladder); a view makes one call a second (`cad_sync`) and reaches the viewer's routes through
+# `cad_http`, by absolute path.
+PROTOCOL = 6
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(SOURCE_EXTENSIONS)
@@ -162,13 +163,16 @@ _TELEMETRY_TOOL = {
 
 def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
     """A launch with what the page needs to start on it alone: this server's version and platform,
-    whether this computer has a file chooser for the home's Open, and the update notice as the
-    server last read it (``cadgen/updates.py``; a launch never waits on the feed)."""
+    the display tessellation ladder (``cadgen.tessellation_policy``), whether this computer has a
+    file chooser for the home's Open, and the update notice as the server last read it
+    (``cadgen/updates.py``; a launch never waits on the feed)."""
     from cadgen import __version__, updates
     from cadgen._internal.picker import available
+    from cadgen.tessellation_policy import ladder_payload
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
+    launch["tessellation"] = ladder_payload()
     launch["pick"] = available()
     launch["notice"] = updates.notice()
     updates.refresh()  # a server can run for days: a feed that is due is read in the background, for the next launch

@@ -38,7 +38,7 @@ MODEL = textwrap.dedent("""\
     @step(out="../STEP/widget.step")
     @stl(out="../STL/widget.stl")
     @glb
-    @threemf(out="../3MF/widget.3mf", mesh_tolerance=5e-3)
+    @threemf(out="../3MF/widget.3mf", mesh_tolerance=5e-4)
     def widget():
         body = bd.Box(SIZE, SIZE / 2, 3)
         body -= bd.Pos(0, 0, 0) * bd.Cylinder(2, 10)
@@ -77,7 +77,7 @@ class MeshExportMetadataTest(unittest.TestCase):
             self.assertEqual(set(declared), {"stl", "glb", "3mf"})
             self.assertEqual(declared["stl"].out, "../STL/widget.stl")
             self.assertIsNone(declared["glb"].out)
-            self.assertEqual(declared["3mf"].mesh_tolerance, 5e-3)
+            self.assertEqual(declared["3mf"].mesh_tolerance, 5e-4)
 
     def test_a_mesh_decorator_alone_declares_a_model_with_no_step_output(self) -> None:
         # No @step at all: still a model (format "step" -- the same tree and
@@ -263,26 +263,26 @@ class MeshExportProductionTest(unittest.TestCase):
         )
 
         # --force re-exports past the ledger but does NOT rebuild the model:
-        # the bytes are the same because the geometry is.
+        # the bytes are the same because the geometry is. And a door writes ONLY
+        # its own format: nothing here touches the .step or the sibling
+        # declarations of the other two formats.
         sibling_path = self.project / "STEP" / "widget.stl"
         before = sibling_path.read_bytes()
+        glb_before = (self.project / "STEP" / "widget.glb").read_bytes()
+        step_before = (self.project / "STEP" / "widget.step").read_bytes()
         forced = self._run("-c", door, "STEP/widget.step", "--force", "--verbose")
         self.assertIn("wrote STL", forced.stdout)
         self.assertNotIn("run step model", forced.stderr)
         self.assertEqual(before, sibling_path.read_bytes())
-
-        # A door writes ONLY its own format: nothing here touches the .step or
-        # the sibling declarations of the other two formats.
-        glb_before = (self.project / "STEP" / "widget.glb").read_bytes()
-        step_before = (self.project / "STEP" / "widget.step").read_bytes()
-        self._run("-c", door, "STEP/widget.step", "--force")
         self.assertEqual(glb_before, (self.project / "STEP" / "widget.glb").read_bytes())
         self.assertEqual(step_before, (self.project / "STEP" / "widget.step").read_bytes())
 
     def test_a_run_level_tolerance_overrides_every_declaration_for_that_run_only(self) -> None:
         # ONE precedence rule: run-level flag > declaration > @step > default. The
-        # 3MF DECLARES mesh_tolerance=5e-3 and the flag used to be ignored for it
-        # while applying to its unflagged neighbours.
+        # 3MF DECLARES mesh_tolerance=5e-4 and the flag used to be ignored for it
+        # while applying to its unflagged neighbours. (5e-4 is fine enough that the
+        # chord, not the mesher's angular limit, decides the hole, so the flag's
+        # coarser chord cuts a different mesh.)
         meshes = {
             "STL": self.project / "STL" / "widget.stl",
             "GLB": self.project / "STEP" / "widget.glb",
@@ -315,19 +315,22 @@ class MeshExportProductionTest(unittest.TestCase):
     def test_a_declared_export_the_exporter_could_not_write_leaves_the_model_stale(self) -> None:
         # Regression: a build whose mesh export FAILED still published a record
         # listing only the STEP and its sidecar, so the next gate said "current"
-        # and the declared STL was missing forever (seen on a checkout with no
-        # node_modules). Every declared output is listed from the first publish,
-        # sha-less until written, and an unwritten one reads as stale.
+        # and the declared STL was missing forever. Every declared output is listed
+        # from the first publish, sha-less until written, and an unwritten one reads
+        # as stale. A FILE where the STL's folder should be fails the export after
+        # the STEP is saved.
         import json
 
-        broken = dict(self.env, CADGEN_NODE=str(self.project / "no-such-node"))
+        blocked = self.project / "STL"
+        blocked.write_text("not a folder", encoding="utf-8")
         failed = subprocess.run(
-            [PYTHON, "src/widget.py"], cwd=str(self.project), env=broken,
+            [PYTHON, "src/widget.py"], cwd=str(self.project), env=self.env,
             capture_output=True, text=True, timeout=600,
         )
         self.assertNotEqual(failed.returncode, 0, failed.stdout + failed.stderr)
         self.assertTrue((self.project / "STEP" / "widget.step").is_file())
         self.assertFalse((self.project / "STL" / "widget.stl").exists())
+        blocked.unlink()
 
         why = subprocess.run(
             [PYTHON, "-m", "cadgen.cli", "store", "why", "src/widget.py", "--json"],
@@ -340,7 +343,7 @@ class MeshExportProductionTest(unittest.TestCase):
         unwritten = {Path(o["path"]).name: o["why"] for o in clause5["outputs"] if o["stale"]}
         self.assertEqual(unwritten, {"widget.stl": "never written", "widget.glb": "never written", "widget.3mf": "never written"})
 
-        # With the exporter back, the gate's verdict drives the run: the meshes are written.
+        # With the folder back, the gate's verdict drives the run: the meshes are written.
         healed = self._run("src/widget.py")
         self.assertIn("wrote STL", healed.stderr)
         for rel in ("STL/widget.stl", "STEP/widget.glb", "3MF/widget.3mf"):

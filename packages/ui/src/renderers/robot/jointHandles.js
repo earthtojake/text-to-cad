@@ -1,5 +1,7 @@
-import { clampJointValueDeg } from "@text-to-cad/core/lib/urdf/kinematics.js";
-import { armOffset, normalize, wrapTurn } from "../kit/tools/pose/jointHandleMath.js";
+import {
+  articulationHandles, controlWriteForHandle, handleRowValue
+} from "@text-to-cad/core/common/articulation.js";
+import { armOffset, normalize, subtract, wrapTurn } from "../kit/tools/pose/jointHandleMath.js";
 
 // What the Position tool can take hold of on a robot, as the kit's plain handle list
 // (`kit/tools/pose`), in the robot's own space:
@@ -7,78 +9,88 @@ import { armOffset, normalize, wrapTurn } from "../kit/tools/pose/jointHandleMat
 //   { id, label, kind: "revolute" | "continuous" | "prismatic", pivot, axis, toward,
 //     value, min, max, unit, onChange(value) }
 //
-// A joint's frame AFTER its motion is its motion group's world matrix, so there is
-// nothing to solve here: the pivot is that frame's origin, the axis is the joint's axis
-// carried by it, and a turning joint's arm points at the child link's geometry (through
-// an SDF joint's static child offset), or along a perpendicular fixed in the child's
-// frame when that geometry is centred on the axis (a wheel, a roll joint).
+// The articulation cadgen resolved says what there is to hold and what a drag writes
+// (`handles`: one per moving joint row; a mimic follower's writes its leader, and the
+// player solves the write, `controlWriteForHandle`). This file only places each one: a
+// joint's axis is written in rest space, and its node's world matrix in the scene — the
+// joint's delta (its parents' motion, then its own) — carries pivot, axis and arm to where
+// the joint now is. A turning joint's arm points at the carried link's geometry, or along
+// a perpendicular fixed in the joint's frame when that geometry is centred on the axis (a
+// wheel, a roll joint). Nothing is solved here.
 
-const HANDLE_KINDS = new Set(["revolute", "continuous", "prismatic"]);
+// A null limit is no limit (a continuous joint): `Number(null)` is 0, so it is asked first.
+const isLimit = (value) => value != null && Number.isFinite(Number(value));
 
-/** The joints of a description a person can drive by a knob: turning or sliding, and not a mimic follower. */
-export function robotPosableJoints(description) {
-  return (Array.isArray(description?.joints) ? description.joints : [])
-    .filter(joint => HANDLE_KINDS.has(String(joint?.type || "")) && !joint?.mimic && String(joint?.name || ""));
+/** The handles of a robot's articulation: one per moving joint row, with the kit's kind. */
+export function robotPosableHandles(robot) {
+  const articulation = robot?.articulation || null;
+  const joints = new Map((articulation?.joints || []).map((joint) => [joint.id, joint]));
+  return articulationHandles(articulation)
+    .filter((handle) => (handle.dof === "turn" || handle.dof === "travel") && joints.get(handle.joint)?.axis && joints.get(handle.joint)?.origin)
+    .map((handle) => {
+      const limited = isLimit(handle.min) && isLimit(handle.max);
+      return { ...handle, node: joints.get(handle.joint), kind: handle.dof === "travel" ? "prismatic" : limited ? "revolute" : "continuous", limited };
+    });
 }
 
 /**
- * The per-joint constants of the handle list: everything that does not change with the
- * pose, computed once per scene.
+ * The per-handle constants of the list: everything that does not change with the pose,
+ * computed once per scene.
  *
  * @param {typeof import("three")} THREE
- * @param {object} description
+ * @param {object} robot  The payload.
  * @param {ReturnType<typeof import("@text-to-cad/core/lib/urdf/robotScene.js").createRobotScene>} scene
  */
-export function prepareRobotJointHandles(THREE, description, scene) {
+export function prepareRobotJointHandles(THREE, robot, scene) {
+  const articulation = robot?.articulation || null;
   const prepared = [];
-  for (const joint of robotPosableJoints(description)) {
-    const axis = normalize(Array.isArray(joint.axis) ? joint.axis.map(Number) : []);
-    if (!axis || !scene.motionFrame(joint.name)) continue;
-    const childCentre = scene.linkCentre(String(joint.childLink || ""));
-    // The child's centre seen from the joint frame: an SDF child link sits at a static offset from it.
-    const centre = childCentre && joint.postMotionTransform
-      ? new THREE.Vector3(...childCentre).applyMatrix4(new THREE.Matrix4().set(...joint.postMotionTransform)).toArray()
-      : childCentre;
-    const prismatic = joint.type === "prismatic";
-    const limited = joint.type !== "continuous";
+  for (const handle of robotPosableHandles(robot)) {
+    const axis = normalize(handle.node.axis.map(Number));
+    const origin = handle.node.origin.map(Number);
+    if (!axis || origin.length !== 3 || !scene.motionFrame(handle.joint)) continue;
+    // The carried link's centre, in rest space, seen from the joint's origin.
+    const centre = (articulation?.carries?.[handle.joint] || []).map((link) => scene.linkCentre(link)).find(Boolean) || null;
+    const prismatic = handle.kind === "prismatic";
     prepared.push({
-      joint, axis, prismatic, limited,
-      arm: prismatic ? null : armOffset(axis, centre),
-      min: limited && Number.isFinite(Number(joint.minValueDeg)) ? Number(joint.minValueDeg) : null,
-      max: limited && Number.isFinite(Number(joint.maxValueDeg)) ? Number(joint.maxValueDeg) : null
+      articulation, handle, axis, origin, prismatic,
+      arm: prismatic ? null : armOffset(axis, centre ? subtract(centre, origin) : null),
+      min: handle.limited ? Number(handle.min) : null,
+      max: handle.limited ? Number(handle.max) : null
     });
   }
   return prepared;
 }
 
 /**
- * The handle list for the pose ON SCREEN: read from the scene's matrices, so whatever
+ * The handle list for the pose ON SCREEN: read from the scene's joint matrices, so whatever
  * moved the robot (a slider, a named pose, Reset, a knob further up the chain) moved these.
  *
  * @param {typeof import("three")} THREE
  * @param {ReturnType<typeof prepareRobotJointHandles>} prepared
  * @param {ReturnType<typeof import("@text-to-cad/core/lib/urdf/robotScene.js").createRobotScene>} scene
- * @param {Record<string, number>} values  The pose store's values.
- * @param {(joint: object, value: number) => void} onJointValueChange  The pose store's one write path.
+ * @param {Record<string, number>} values  The pose store's control values.
+ * @param {(id: string, value: number) => void} onControlChange  The pose store's one write path.
  */
-export function robotJointHandles(THREE, prepared, scene, values, onJointValueChange) {
+export function robotJointHandles(THREE, prepared, scene, values, onControlChange) {
   const point = new THREE.Vector3();
-  return prepared.map(({ joint, axis, prismatic, limited, arm, min, max }) => {
-    const frame = scene.motionFrame(joint.name);
-    const pivot = point.set(0, 0, 0).applyMatrix4(frame).toArray();
+  return prepared.map(({ articulation, handle, axis, origin, prismatic, arm, min, max }) => {
+    const delta = scene.motionFrame(handle.joint);
     return {
-      id: joint.name,
-      label: joint.name,
-      kind: joint.type,
-      pivot,
-      axis: normalize(point.set(...axis).transformDirection(frame).toArray()),
-      toward: prismatic ? null : point.set(...arm).applyMatrix4(frame).toArray(),
-      // As the solver reads it, so the label agrees with the pose on screen.
-      value: clampJointValueDeg(joint, values?.[joint.name]),
+      id: handle.id,
+      label: handle.label || handle.id,
+      kind: handle.kind,
+      pivot: point.set(...origin).applyMatrix4(delta).toArray(),
+      axis: normalize(point.set(...axis).transformDirection(delta).toArray()),
+      toward: prismatic ? null : point.set(origin[0] + arm[0], origin[1] + arm[1], origin[2] + arm[2]).applyMatrix4(delta).toArray(),
+      // The row's value at the pose, as the player reads it, so the label agrees with the pose on screen.
+      value: handleRowValue(articulation, handle, values),
       min, max,
-      unit: prismatic ? "m" : "deg",
+      unit: String(handle.unit || (prismatic ? "m" : "deg")),
       // A continuous joint's drag winds freely and is stored as one turn, which is what its slider spans.
-      onChange: value => onJointValueChange(joint, limited ? value : wrapTurn(value))
+      onChange: (value) => {
+        const write = controlWriteForHandle(articulation, handle, values, handle.limited ? value : wrapTurn(value));
+        if (write) onControlChange(write.id, write.value);
+      }
     };
   });
 }

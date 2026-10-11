@@ -53,8 +53,7 @@ validation don't replace this.
 
 - If your tools include `cad_show` (your host may prefix it), use it with the file's
   absolute path, and follow its description for when to call it again. `cad_view` reads
-  what the user selected; `cad_screenshot` shows you what they see. Neither is a review
-  of your own work.
+  what the user selected; `cad_screenshot` shows you what they see.
 - Otherwise run the CAD Viewer, from any folder:
 
   ```bash
@@ -131,12 +130,23 @@ the CAD Viewer shows.
 cadgen sdf snapshot path/to/robot.sdf review.png
 ```
 
-It accepts `.sdf` only (a format door, same `TARGET [OUT]` grammar as the rest). Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
-joints you do not name staying at their defaults, where the CAD Viewer opens the robot (the
-`"jointValues"` job field is the same thing in a packet). The snapshot draws the robot with the
-viewer's own scene, so it shows what the viewer shows, and a link mesh that cannot be loaded
-fails it rather than leaving the link out. Robots are authored in metres and are framed on the
-robot scene scale automatically.
+It accepts `.sdf` only (a format door, same `TARGET [OUT]` grammar as the rest). Pose the robot with `--joint-values` — `{joint: value}` JSON in degrees (metres for a
+prismatic joint), each naming a joint a person can drive, within its limits (a `revolute`
+joint with no `<limit>` has none), or the request is refused before anything renders: a
+fixed joint or a mimic follower is refused by name (a follower follows its leader), and so is
+a leader value that would push a follower past the follower's own limits. Joints you do not
+name stay at their defaults, where the CAD Viewer opens the robot (the `"jointValues"` job
+field is the same thing in a packet). The snapshot draws the robot with the viewer's own
+scene, so it shows what the viewer shows: cadgen resolves the description first — the frame
+graph (`relative_to`, `attached_to`) into every link's rest placement, a model nested in the
+model included, its links and joints named by scope (`arm::elbow`, the name `--joint-values`
+takes) — meshes a `box`,
+`cylinder`, `sphere` or `capsule` itself, and refuses by name a visual it cannot draw: a
+`plane`, `heightmap`, `polyline` or `ellipsoid`, a mesh `<uri>` that is not an STL, 3MF or
+GLB file beside the description (`model://`, `package://` and remote URIs are not resolved)
+or a mesh file that is missing. A link mesh that cannot be loaded fails the snapshot rather
+than leaving the link out. Robots are authored in metres and are framed on the robot scene
+scale automatically.
 
 A normal snapshot uses the Solid preset and Light appearance; omitted groups inherit preset defaults.
 Pass `--display render` for the shared photographic scene. Inline display JSON and
@@ -148,7 +158,7 @@ mode. The display modes are `solid` and `render`: `edges`, `clip`, `exploded`, t
 describe a STEP model's CAD edges, parts and solids, and are refused by name here.
 
 Link meshes are resolved relative to the description, so they must be present: an
-unhydrated Git LFS pointer fails as "No link mesh loaded for robot". Run
+unhydrated Git LFS pointer is not a mesh and fails the snapshot. Run
 `git lfs checkout <mesh dir>` first.
 
 The grammar is `cadgen sdf snapshot TARGET [OUT] [flags]`, the same one every

@@ -733,7 +733,20 @@ def _ascii_v3_bytes(shape: Any) -> bytes:
     )
     return stream.getvalue()
 
-def _decode_brep(codec: str, payload: bytes) -> Any:
+class NativeShape:
+    """A decoded component as the build pool's kernel work reads it: the bare
+    ``TopoDS_Shape`` and its face colours. Surfaces, selector tables, meshes and
+    sections read only those, and a build123d wrapper would cost a worker that
+    starts for one job most of its start: importing build123d."""
+
+    __slots__ = ("wrapped", "cad_face_ordinal_colors")
+
+    def __init__(self, wrapped: Any) -> None:
+        self.wrapped = wrapped
+        self.cad_face_ordinal_colors: dict = {}
+
+
+def _decode_brep(codec: str, payload: bytes, *, native: bool = False) -> Any:
     if codec not in _BREP_HEADERS:
         raise ValueError(f"unsupported BREP codec: {codec}")
     if not isinstance(payload, bytes) or not payload.startswith(_BREP_HEADERS[codec]):
@@ -754,7 +767,7 @@ def _decode_brep(codec: str, payload: bytes) -> Any:
         raise RuntimeError("BREP payload deserialized to a null shape")
     if shape.ShapeType() == TopAbs_VERTEX:
         shape = TopoDS.Vertex_s(shape)
-    return _build123d_shape_from_topods(shape)
+    return NativeShape(shape) if native else _build123d_shape_from_topods(shape)
 
 def _encode_brep(shape: Any) -> dict[str, Any]:
 
@@ -863,13 +876,14 @@ def prepare_published_component(shape: Any, *, face_colors: object = None) -> di
     return prepare_geometry_component(shape, face_colors=face_colors)
 
 
-def decode_geometry_component(entry: dict[str, Any], payload: bytes) -> Any:
-    """Privately reconstruct one verified geometry input, without surface reads."""
+def decode_geometry_component(entry: dict[str, Any], payload: bytes, *, native: bool = False) -> Any:
+    """Privately reconstruct one verified geometry input, without surface reads.
+    ``native`` returns a :class:`NativeShape` rather than a build123d shape."""
     validate_geometry_component(entry, payload)
     if entry["kind"] == "eager-only":
         raise NativeUnavailable("eager-only component has no admitted native representation")
     try:
-        shape = _decode_brep(entry["codec"], payload)
+        shape = _decode_brep(entry["codec"], payload, native=native)
         colors = effective_face_colors(shape, entry["faceColors"])
     except MemoryError:
         raise
@@ -882,6 +896,26 @@ def decode_geometry_component(entry: dict[str, Any], payload: bytes) -> Any:
         raise ValueError("intrinsic recipe names an absent native face")
     shape.cad_face_ordinal_colors = colors
     return shape
+
+
+def decode_display_shape(entry: dict[str, Any], payload: bytes, *, native: bool = False) -> Any:
+    """A private shape to mesh for display (``cadgen._internal.occt_mesh``).
+
+    A native component is :func:`decode_geometry_component`. An eager-only
+    component's bytes failed the exact round-trip fence, so they never stand in
+    for its geometry -- but they decode, with the same topology and ordinals as
+    the eager surface taken from the live shape, and a display mesh tolerates
+    the known point-parameter loss the fence exists for.
+    """
+    if entry["kind"] != "eager-only":
+        return decode_geometry_component(entry, payload, native=native)
+    validate_geometry_component(entry, payload)
+    try:
+        return _decode_brep(entry["codec"], payload, native=native)
+    except MemoryError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"unreadable {entry['codec']} geometry payload") from exc
 
 
 def validate_geometry_component(entry: Any, payload: bytes, *, cid: str | None = None) -> None:

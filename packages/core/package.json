@@ -50,7 +50,6 @@
   },
   "files": [
     "dist",
-    "bin",
     "scripts/chunk-ids.mjs",
     "scripts/source-maps.mjs",
     "docs",

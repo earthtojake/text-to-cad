@@ -21,7 +21,10 @@ stored exactly as returned.
 from __future__ import annotations
 
 import copy
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
+
+if TYPE_CHECKING:
+    from cadgen.label_refs import TreeNames
 
 
 def _fail(message: str) -> ValueError:
@@ -88,10 +91,14 @@ def _lookup(index, selector_text: str):
 
 def _axis_from_ref(index, ref: str, *, mate: str, source_ref: str) -> dict[str, list[float]]:
     from cadgen.analysis import positioning_facts_for_row
+    from cadgen.lookup import label_resolution_error
 
     selector = ref.lstrip("#")
     resolved = _lookup(index, selector)
     if resolved is None:
+        reason = label_resolution_error(selector, index)
+        if reason is not None:
+            raise _fail(f"{source_ref} mate {mate!r}: axis ref {ref!r}: {reason}")
         raise _fail(
             f"{source_ref} mate {mate!r}: axis ref {ref!r} does not resolve — "
             "use `read_scene(path).leaves()` and `occurrence.entities(kind)` to list saved selectors and labels"
@@ -116,15 +123,18 @@ def _axis_from_ref(index, ref: str, *, mate: str, source_ref: str) -> dict[str, 
     return {"origin": [float(v) for v in origin], "dir": [float(v) for v in direction]}
 
 
-def _instance_tree_ids(descriptor: Mapping[str, Any]) -> tuple[dict[str, str], dict[str, list[str]]]:
+def _instance_tree_ids(descriptor: Mapping[str, Any]) -> tuple[dict[str, str], TreeNames]:
     """The INSTANCE TREE's node ids and names — subassemblies included.
 
     The flat selector index holds LEAF occurrences only, but mates target the
     instance-tree namespace: a mate on a group occurrence is how "rigid groups
     are free", and ``_subtree_ids`` already carries a group's whole subtree. So
     group nodes have to be resolvable, and ``assembly.json["assembly"]["root"]``
-    is where they live.
+    is where they live. A name resolves as every ``#name`` does
+    (:class:`cadgen.label_refs.TreeNames`).
     """
+    from cadgen.label_refs import TreeNames
+
     by_id: dict[str, str] = {}
     by_name: dict[str, list[str]] = {}
     root = (descriptor.get("assembly") or {}).get("root") if isinstance(descriptor.get("assembly"), Mapping) else None
@@ -140,28 +150,24 @@ def _instance_tree_ids(descriptor: Mapping[str, Any]) -> tuple[dict[str, str], d
             if name:
                 by_name.setdefault(name, []).append(node_id)
         stack.extend(node.get("children") or [])
-    return by_id, by_name
+    return by_id, TreeNames(by_name)
 
 
 def _occurrence_id_for_ref(
-    index, ref: str, *, what: str, mate: str, source_ref: str, tree: tuple[dict[str, str], dict[str, list[str]]]
+    ref: str, *, what: str, mate: str, source_ref: str, tree: tuple[dict[str, str], TreeNames]
 ) -> str:
+    from cadgen.label_refs import LabelResolutionError
+
     selector = ref.lstrip("#")
-    resolved = _lookup(index, selector)
-    if resolved is not None and resolved[0] == "occurrence":
-        return str(resolved[1].get("id") or "")
-    by_id, by_name = tree
+    by_id, names = tree
     if selector in by_id:
         return by_id[selector]
-    candidates = by_name.get(selector) or []
-    if len(candidates) == 1:
-        return candidates[0]
-    if len(candidates) > 1:
-        raise _fail(
-            f"{source_ref} mate {mate!r}: {what} {ref!r} names {len(candidates)} occurrences "
-            f"({', '.join(candidates)}) — mate one of them by occurrence id, or give the "
-            "groups distinct labels"
-        )
+    try:
+        node_id = names.resolve(selector)
+    except LabelResolutionError as error:
+        raise _fail(f"{source_ref} mate {mate!r}: {what} {ref!r}: {error}") from None
+    if node_id is not None:
+        return node_id
     raise _fail(
         f"{source_ref} mate {mate!r}: {what} {ref!r} does not name an occurrence — "
         "label the part or subassembly in the model (cadgen.label_shape, or a "
@@ -230,12 +236,13 @@ def resolve_kinematics_block(
     descriptor = flatten(tree_hash)
     if not isinstance(descriptor, dict):
         raise _fail(f"{source_ref}: tree {tree_hash} is missing from the store")
-    index = _occurrence_index(descriptor)
     tree = _instance_tree_ids(descriptor)
     resolved = copy.deepcopy(dict(block))
     occurrence_ids: dict[str, str] = {}
     axis_refs = [str((mate.get("axis") or {})["ref"]) for mate in resolved.get("mates", [])
                  if mate.get("kind") != "fastened" and "ref" in (mate.get("axis") or {})]
+    # Only an axis ref reads the selector index.
+    index = _occurrence_index(descriptor) if axis_refs else None
     entities = None
     for mate in resolved.get("mates", []):
         name = str(mate.get("name"))
@@ -243,7 +250,7 @@ def resolve_kinematics_block(
             ref = str(mate.get(key))
             if ref not in occurrence_ids:
                 occurrence_ids[ref] = _occurrence_id_for_ref(
-                    index, ref, what=what, mate=name, source_ref=source_ref, tree=tree
+                    ref, what=what, mate=name, source_ref=source_ref, tree=tree
                 )
             # The resolved instance-tree id rides the sidecar beside the
             # authored label, for the same reason axes ride it as numbers: the

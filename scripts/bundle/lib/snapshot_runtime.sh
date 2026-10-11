@@ -14,7 +14,7 @@ SNAPSHOT_RUNTIME_ESBUILD_VERSION="${CAD_SNAPSHOT_ESBUILD_VERSION:-0.27.7}"
 
 # three and meshoptimizer are read from package-lock.json, the one
 # place their exact versions are already pinned, so a dependency bump cannot silently change
-# what ships without also changing the lockfile. This matches node_builders.sh.
+# what ships without also changing the lockfile.
 # Resolved lazily: BUNDLE_REPO_ROOT is set before the first call, not necessarily before
 # sourcing.
 snapshot_runtime_locked_version() {

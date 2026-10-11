@@ -163,8 +163,13 @@ class TabServerTest(_Session):
     def test_an_agent_names_a_model_by_its_absolute_path_and_a_tab_reopens_on_it(self) -> None:
         opened = self.launch("cad_open", {"path": self.bracket})
         self.assertEqual({key: opened[key] for key in ("protocol", "page", "model", "surface")},
-                         {"protocol": 5, "page": "viewer", "model": self.bracket, "surface": "agent"})
-        self.assertEqual(sorted(opened), ["model", "notice", "page", "pick", "platform", "protocol", "surface", "version"])
+                         {"protocol": 6, "page": "viewer", "model": self.bracket, "surface": "agent"})
+        self.assertEqual(sorted(opened), ["model", "notice", "page", "pick", "platform", "protocol", "surface",
+                                          "tessellation", "version"])
+        # The display tessellation ladder the page draws STEP models by: cadgen's, carried by the launch.
+        from cadgen.tessellation_policy import ladder_payload
+
+        self.assertEqual(opened["tessellation"], ladder_payload())
         # The thread's tab reopens on what the thread last opened.
         self.assertEqual(self.launch("cad_tab")["model"], self.bracket)
         refused = self.call("cad_open", {"path": "parts/bracket.stl"})
@@ -257,7 +262,7 @@ class TabServerTest(_Session):
         png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + bytes(64)).decode("ascii")
         [entry] = self.http("POST", "/__cad/recents", {"action": "thumbnail", "path": self.bracket, "png": png})[1]["recents"]
         self.assertEqual(self.http("GET", f"/__cad/thumbnail?name={entry['thumbnail']}"), (200, base64.b64decode(png)))
-        # The home's Open, and the person's answer on the app menu's Share usage stats: the CAD app's own.
+        # The home's Open, and the person's answer on the app menu's Share anonymous usage data: the CAD app's own.
         with mock.patch.object(FilePicker, "choose", return_value=self.loose):
             self.assertEqual(self.http("POST", "/__cad/pick", {}), (200, {"path": self.loose.replace(os.sep, "/")}))
         with mock.patch.object(self.server.analytics, "choose", return_value={}) as answered:
@@ -628,10 +633,10 @@ class TunnelBoundTest(_Session):
         body = base64.b64decode(fixture["bytes"])
         digest = fixture["facts"]["object"]
         with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.tmp / "store")}):
-            from cadgen.store.tess_cache import write_tessellation_cache
+            from cadgen.store import meshes
 
-            write_tessellation_cache(fixture["key"], body)
-            whole, sizes, etags = self.read(f"http://cad.invalid/__tess_cache/{fixture['key']}.tess?object={digest}&maxBytes={len(body)}", part=256)
+            meshes.write(fixture["key"], body)
+            whole, sizes, etags = self.read(f"http://cad.invalid/__tess_cache/{fixture['key']}.glb?object={digest}&maxBytes={len(body)}", part=256)
         self.assertEqual((whole, etags), (body, {f'"{digest}"'}))
         self.assertGreaterEqual(len(sizes), 3)
 
@@ -677,7 +682,7 @@ class TunnelBodyTest(unittest.TestCase):
         self.assertEqual(int(reply["headers"]["content-length"]), len(written))
         self.assertLess(len(reply["body"]), len(base64.b64encode(written)) // 4)
         for path, method, body in (("/__cad/preview", "GET", b'{"state":"idle"}'),
-                                   ("/__tess_cache/a.tess", "GET", binary), ("/__cad/catalog", "HEAD", b"")):
+                                   ("/__tess_cache/a.glb", "GET", binary), ("/__cad/catalog", "HEAD", b"")):
             reply = call(path, method)
             self.assertNotIn("encoding", reply)
             self.assertEqual(base64.b64decode(reply["body"]), body)

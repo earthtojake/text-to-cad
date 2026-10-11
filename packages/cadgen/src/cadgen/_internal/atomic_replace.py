@@ -148,7 +148,8 @@ def temp_suffix() -> str:
 
 
 STAGE_PREFIX = ".cadgen-stage-"
-"""The name a build's STEP staging folder starts with. The folder sits beside the output."""
+"""The name a build's STEP staging folder starts with. The folder sits beside the output; its
+owner follows (``temp_leftovers.stage_prefix``), so a build can remove a killed one's."""
 
 _TEMP_NAME = re.compile(r"\.\d+\.[0-9a-f]{8}\.tmp$")
 

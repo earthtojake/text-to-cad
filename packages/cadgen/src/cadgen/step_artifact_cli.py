@@ -22,8 +22,9 @@ from cadgen._internal.generation import (
     EntrySpec,
     _generate_part_outputs,
     _manifest_records_edge_visibility_classes,
+    _tree_progress_sink,
 )
-from cadgen.coordination import PHASE_GENERATE, STEP_PACKAGE, artifact_build
+from cadgen.coordination import PHASE_GENERATE, STEP_IMPORT, artifact_build
 from cadgen._internal.doors import STEP_SUFFIXES
 from cadgen.catalog import build_scope
 from cadgen.render import relative_to_cwd
@@ -145,6 +146,15 @@ def _current_artifact_for_spec(spec: EntrySpec) -> _ImportedArtifactSnapshot | N
     )
 
 
+def _megabytes(path: Path) -> str:
+    """A document's size as a person reads it: ``168 MB``, ``240 KB``."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return "size unknown"
+    return f"{size / 1e6:.0f} MB" if size >= 1e6 else f"{max(1, round(size / 1e3))} KB"
+
+
 def build_step_artifact(
     *,
     repo_root: Path,
@@ -185,11 +195,14 @@ def build_step_artifact(
     with cli_progress_line(
         spec.source_ref, logger=logger, fallback="Building..."
     ) as progress_sink, artifact_build(
-        STEP_PACKAGE,
+        STEP_IMPORT,
         scope,
         is_current=lambda: _current_artifact_for_spec(spec) is not None,
         force=force,
-        sink=progress_sink,
+        # The phases reach the daemon's job ledger as a model build's do, so a CAD
+        # Viewer waiting on this compile shows the read and each part counted, not a
+        # bare "submitted" for the whole minute a large document takes.
+        sink=_tree_progress_sink(spec, progress_sink),
     ) as progress:
         if progress.skipped:
             artifact = _current_artifact_for_spec(spec)
@@ -204,7 +217,9 @@ def build_step_artifact(
         with broker.held(spec.source_ref):
             # _generate_part_outputs reports this phase itself when it does the loading;
             # here the scene is preloaded, so the parse would otherwise go unreported.
-            progress.phase(PHASE_GENERATE)
+            # OCCT's reader reports no fraction of its own, so the read names the file
+            # and its size: about half a large document's compile happens here.
+            progress.phase(PHASE_GENERATE, detail=f"Reading {step_path.name} ({_megabytes(step_path)})")
             with logger.timed(f"load STEP {relative_to_cwd(step_path)}"):
                 scene = load_step_scene_exact(step_path)
             result = _generate_part_outputs(

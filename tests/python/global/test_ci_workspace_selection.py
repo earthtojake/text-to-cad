@@ -245,7 +245,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for(f"{SKILLS}/cad/__init__.py")["skills_tests"], [f"{SKILLS}/cad"])
 
     def test_cadgen_runs_its_suites_its_hosts_and_the_wheel(self):
-        self.assertEqual(jobs_for("packages/cadgen/src/cadgen/step.py"), GATED - {"core-js", "mcp", "api", "docs"})
+        self.assertEqual(jobs_for("packages/cadgen/src/cadgen/step.py"), GATED - {"core-js", "web", "mcp", "api", "docs"})
         chosen = tests_for("packages/cadgen/src/cadgen/step.py")
         self.assertEqual(chosen["cadgen_tests"], [CADGEN])
         self.assertEqual(chosen["skills_tests"], [f"{SKILLS}/cad", f"{SKILLS}/dxf"])
@@ -261,7 +261,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertIn(f"{CADGEN}/test_atomic_replace.py", viewer["cadgen_tests"])  # reads every source
         self.assertEqual(viewer["skills_tests"], [])
         self.assertEqual(jobs_for("packages/cadgen/src/cadgen/viewer/scanner.py"),
-                         {"cadgen-linux", "cadgen-windows", "web", "skills", "packaging"})
+                         {"cadgen-linux", "cadgen-windows", "skills", "packaging"})
+        # ...and drives the bundled viewer, which packaging builds.
+        self.assertEqual(route("packages/cadgen/src/cadgen/viewer/scanner.py")["web_viewer"], "true")
         mcp = tests_for("packages/cadgen/src/cadgen/mcp/server.py")
         self.assertIn(f"{CADGEN}/mcp/test_server.py", mcp["cadgen_tests"])
         self.assertNotIn(f"{CADGEN}/viewer/test_launcher.py", mcp["cadgen_tests"])
@@ -279,6 +281,9 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                          [f"{SKILLS}/dxf/test_snapshot_render.py"])
         self.assertEqual(tests_for("packages/ui/src/renderers/dxf/DxfRenderer.js")["skills_tests"],
                          [f"{SKILLS}/dxf/test_drawing_checks.py"])
+        # ...and the robot payload suite holds the robot renderer's browser fixtures (cadgen's payloads) current.
+        self.assertEqual(tests_for("packages/ui/src/renderers/robot/__fixtures__/arm.urdf")["cadgen_tests"],
+                         [f"{CADGEN}/test_robot_payload.py"])
 
     def test_each_app_runs_its_own_job(self):
         self.assertEqual(jobs_for("apps/web/src/main.tsx"), {"web", "skills", "packaging"})
@@ -296,7 +301,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_scripts_run_what_runs_them(self):
         cases = {
-            "scripts/test/test-viewer-launch.sh": {"web", "skills"},
+            "scripts/test/test-viewer-launch.sh": {"packaging", "skills"},
+            "tests/browser/viewer-e2e.mjs": {"packaging", "skills"},
             "scripts/test/test-installed.sh": {"packaging", "skills"},
             "scripts/test/test-docs.sh": {"docs", "skills"},
             "scripts/test/test-api.sh": {"api", "skills"},
@@ -306,7 +312,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "scripts/test/test-python.sh": {"cadgen-linux", "cadgen-windows", "skills"},
             "scripts/release/sync-version.mjs": {"packaging", "skills"},
             "scripts/github-workflows/check-builds.sh": {"packaging", "skills"},
-            "scripts/bundle/bundle.sh": GATED - {"core-js", "mcp", "api", "docs"},
+            "scripts/bundle/bundle.sh": GATED - {"core-js", "web", "mcp", "api", "docs"},
             "scripts/brand/generate-logos.mjs": {"docs", "skills"},
             "scripts/bench/viewer-memory/helpers.mjs": {"core-js", "skills"},
         }

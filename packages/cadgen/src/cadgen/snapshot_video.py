@@ -48,9 +48,9 @@ MAX_VIDEO_FPS = 120
 # caller writing milliseconds -- schedule 90,000 frames, each rendered, carried
 # base64 across the driver pipe, and written full-size into a temp directory
 # before ffmpeg sees one of them. 7200 frames is four minutes of review at 30
-# fps and tens of gigabytes of frames at the default size. The page enforces
-# the same ceiling (framePlan FRAME_PLAN_MAX_FRAMES), because it is where the
-# clip-duration default for `seconds` is resolved.
+# fps and tens of gigabytes of frames at the default size. A span the caller
+# named is held to it here; the default span, once the clip says what it is
+# (:func:`resolve_frame_plan`).
 MAX_VIDEO_FRAMES = 7200
 
 # The OUT extension picks the container -- there is no `format` key, because the
@@ -100,10 +100,7 @@ def normalize_video_request(value: object, *, where: str) -> dict[str, object]:
     Both spellings land here -- the flag's JSON and a job packet's field -- so
     one validator holds the shape. ``seconds`` stays ``None`` when the caller
     named none: the default is what is LEFT of the clip from ``start``, which
-    only the page can work out (the choreography is JavaScript, and so is the
-    duration and the loop flag it declares), so the page resolves it and reports
-    the frame count back. Everything the page resolves is bounded there too --
-    the frame ceiling below can only be applied here to a span the caller named.
+    :func:`resolve_frame_plan` works out once the sidecar's clip is read.
     """
     if not is_plain_object(value):
         raise SnapshotError(
@@ -162,6 +159,49 @@ def normalize_video_request(value: object, *, where: str) -> dict[str, object]:
         "quality": quality,
         "loop": raw_loop,
     }
+
+
+def _seconds(value: float) -> str:
+    return f"{round(value, 3):g}s"
+
+
+def resolve_frame_plan(video: dict[str, object], clip: dict[str, object], *, label: str = "video") -> dict[str, object]:
+    """The frames of a video over one clip: ``{fps, seconds, start, times, warnings}``,
+    ``times`` the moment of the clip each frame shows. The page renders exactly these.
+
+    ``seconds`` defaults to the span the clip still HAS from ``start`` -- a whole
+    cycle of a looping clip, what is left of one that stops -- and the count is
+    ``seconds * fps`` rounded, so the last frame sits one interval BEFORE ``start +
+    seconds``: a looping clip then loops without showing its first pose twice.
+    Every time is measured against the clip, because a time past its end has an
+    answer (a clamp, a wrap) that is a wrong video: a start at or past the end is
+    refused, and an explicit overrun of a clip that stops is said out loud.
+    """
+    fps = int(video["fps"])
+    start = float(video.get("start") or 0.0)
+    duration = float(clip["duration"])
+    looping = clip.get("loop") is not False
+    if start >= duration:
+        raise SnapshotError(
+            f"{label} start {_seconds(start)} is at or past the end of a {_seconds(duration)} clip: "
+            "every frame would be the same one"
+        )
+    seconds = video.get("seconds")
+    seconds = (duration if looping else duration - start) if seconds is None else float(seconds)
+    count = max(1, math.floor(seconds * fps + 0.5))
+    if count > MAX_VIDEO_FRAMES:
+        raise SnapshotError(
+            f"{label} {_seconds(seconds)} at {fps} fps schedules {count} frames, past the "
+            f"{MAX_VIDEO_FRAMES}-frame ceiling"
+        )
+    warnings = []
+    if not looping and start + seconds - duration > 1e-9:
+        warnings.append(
+            f"{label} covers {_seconds(start)}..{_seconds(start + seconds)} of a {_seconds(duration)} clip "
+            "that does not loop: every frame past its end is the same final pose"
+        )
+    return {"fps": fps, "seconds": seconds, "start": start,
+            "times": [start + index / fps for index in range(count)], "warnings": warnings}
 
 
 def _finite_number(value: object, *, where: str, field: str) -> float:

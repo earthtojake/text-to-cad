@@ -22,12 +22,12 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
     core_js                       core-js
-    web  web_ui  web_client  web_viewer
+    web  web_ui  web_client
     mcp
     api
     skills  light_policy  light_tests  skills_policy  skills_tests  skills_runtime
     docs
-    packaging
+    packaging  web_viewer         packaging, and its steps that drive the bundled viewer
     full
     record                        the artifact name recording what this run tests
 
@@ -100,9 +100,8 @@ NOTHING = select()
 # phase runs with nothing installed, so one that is not fails there until it is listed here
 # with a rule for what it reads.
 HEAVY_POLICY = {
-    "test_cache_root_sync.py",              # cadgen's cache paths against core's tessellation cache
+    "test_cache_root_sync.py",              # cadgen's mesh keys against core's tessellation cache
     "test_cli_stream_contract.py",          # cadgen CLIs, run
-    "test_node_builder_bundles.py",         # the emitted Node builders (scripts/bundle)
     "test_sidecar_and_package_layering.py",  # cadgen's import layering, imported
     "test_snapshot_viewer_theme_parity.py",  # cadgen's snapshot against core's view settings
     "test_viewer_renders_emitted_dxf.py",   # a DXF cadgen emits, through the kernel
@@ -250,11 +249,15 @@ RULES: tuple[Rule, ...] = (
     # that has it.
     Rule(("apps/docs/src/**",), select(flags=["core_js"])),
     # The DXF suite renders ui's DXF fixture, and holds every JS file in packages/ to having
-    # no second layer-intent table; cadgen's suite globs packages/ for vendored node runtimes.
+    # no second layer-intent table.
     Rule(("packages/ui/src/renderers/dxf/__fixtures__/**",), select(skills=[f"{SKILL_SUITES}/dxf/test_snapshot_render.py"])),
+    # The STEP browser fixture's articulation is cadgen's: the articulation suite asserts it is current.
+    Rule(("packages/ui/src/renderers/step/__fixtures__/step/**",), select(cadgen=[f"{CADGEN_SUITE}/test_articulation.py"])),
+    # The robot renderer's browser fixtures are the payloads cadgen resolves for its descriptions:
+    # the payload suite asserts they are current.
+    Rule(("packages/ui/src/renderers/robot/__fixtures__/**",), select(cadgen=[f"{CADGEN_SUITE}/test_robot_payload.py"])),
     Rule(("packages/ui/**/*.js",), select(skills=[f"{SKILL_SUITES}/dxf/test_drawing_checks.py"])),
-    Rule(("packages/ui/**/node_runtime.py",), select(cadgen=[f"{CADGEN_SUITE}/test_node_resolve_bootstrap.py"])),
-    Rule(("tests/browser/**", "tests/fixtures/cad/**"), select(flags=["web_viewer"])),
+    Rule(("tests/browser/**", "tests/fixtures/cad/**"), select(flags=["web_viewer", "packaging"])),
 
     # Tests: a test file runs itself.
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
@@ -270,9 +273,6 @@ RULES: tuple[Rule, ...] = (
     Rule(("skills/dxf/**",), select(skills=[f"{SKILL_SUITES}/dxf/test_documented_commands.py"])),
     Rule(("skills/dfam-check/**",), select(skills=[f"{SKILL_SUITES}/dfam-check"])),
     Rule(("skills/dfm/**",), select(skills=[f"{SKILL_SUITES}/dfm"])),
-    # Files that must never appear here: the test that refuses one runs when one does.
-    Rule(("skills/**/node_runtime.py",), select(cadgen=[f"{CADGEN_SUITE}/test_node_resolve_bootstrap.py"])),
-    Rule(("skills/*/scripts/packages/**",), policy("test_node_builder_bundles.py")),
 
     # The test runners and the gates each one feeds.
     Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
@@ -280,7 +280,8 @@ RULES: tuple[Rule, ...] = (
     Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
     Rule(("scripts/test/test-api.sh",), select(flags=["api"])),
     Rule(("scripts/test/test-docs.sh", "scripts/brand/**"), select(flags=["docs"])),
-    Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"), select(flags=["web_viewer"])),
+    Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"),
+         select(flags=["web_viewer", "packaging"])),
     Rule(("scripts/test/test-installed.sh",), select(flags=["packaging"])),
     Rule(("scripts/test/test.sh",), NOTHING),  # chains the runners for a local run; CI calls them itself
     Rule(("scripts/bench/viewer-memory/**",), select(flags=["core_js"])),
@@ -310,9 +311,7 @@ RULES: tuple[Rule, ...] = (
 
 
 # Rules for files that must not exist: they match nothing until someone adds one.
-ABSENT_ON_PURPOSE = frozenset({
-    "skills/**/node_runtime.py", "skills/*/scripts/packages/**", "packages/ui/**/node_runtime.py",
-})
+ABSENT_ON_PURPOSE: frozenset[str] = frozenset()
 
 
 def compile_glob(pattern: str) -> re.Pattern[str]:
@@ -403,7 +402,7 @@ def outputs(chosen: Select, *, changed: bool = True) -> dict[str, str]:
     result.update({
         "cadgen": bool(cadgen),
         "cadgen_tests": " ".join(cadgen),
-        "web": result["web_ui"] or result["web_client"] or result["web_viewer"],
+        "web": result["web_ui"] or result["web_client"],
         "skills": changed,
         "light_policy": " ".join(light_policy()) if changed else "",
         "light_tests": " ".join(LIGHT_SKILL_TESTS) if changed else "",

@@ -1,37 +1,39 @@
 """B-rep surface extraction: the `.surf` component artifact.
 
-A `.surf` describes one component's EXACT geometry for client-side GPU
-tessellation: per-face parametric surfaces (analytic where possible, NURBS
-via GeomConvert otherwise), trim loops as ordered pcurves in (u,v) space,
-and per-edge 3D curves with precomputed visibility classes. Face and edge
-ordinals follow the same ``TopExp.MapShapes_s`` order the selector system
-has always used, so refs (``#o1.2.f5``) keep their meaning.
+A `.surf` describes one component's exact topology for the clients that select,
+measure and recognize it: per-face analytic surfaces (a bilinear B-spline patch
+also keeps its four corners), each face's loops as ordered edge references, the
+analytic curve of every edge, and the selector-table metadata -- surface and
+curve types, parameters, exact metrics from GProps/BndLib, edge classes and
+solid membership. Face and edge ordinals follow the ``TopExp.MapShapes_s``
+order the selector system has always used, so refs (``#o1.2.f5``) keep their
+meaning, and the component's mesh (``occt_mesh``) is grouped by the same
+ordinals.
+
+Nothing here tessellates, and nothing reads a `.surf` to tessellate: meshes
+are cadgen's, made by OCCT from the exact BREP. So a `.surf` carries no
+tessellation inputs -- no trim curves in parameter space, no control nets, no
+basis curves of swept surfaces.
 
 Container layout (GLB-style, little-endian):
 
     magic  b"SURF" | version u32 | json_len u32 | json bytes | f32 bin
 
-All float arrays live in one f32 binary chunk; the JSON index references
-them as ``[offset_in_floats, count]`` pairs.
-
-Extraction is READING, not computing: no tessellation happens here, which
-is the entire point — display cost leaves the build path.
+The f32 binary chunk holds the bilinear patches' corners; the JSON index
+references them as ``[offset_in_floats, count]`` pairs.
 """
 
 from __future__ import annotations
 
 import json
-import math
 import struct
 from typing import Any
 
+from cadgen._internal.surf_container import SURF_MAGIC
 from OCP.BRep import BRep_Tool
 from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
 from OCP.BRepTools import BRepTools, BRepTools_WireExplorer
 from OCP.GeomAbs import GeomAbs_CurveType, GeomAbs_SurfaceType
-from OCP.GeomConvert import GeomConvert
-from OCP.Geom import Geom_RectangularTrimmedSurface
-from OCP.Geom2dConvert import Geom2dConvert
 from OCP.TopAbs import (
     TopAbs_EDGE,
     TopAbs_FACE,
@@ -45,10 +47,16 @@ from OCP.TopTools import (
 )
 from OCP.TopoDS import TopoDS
 
-SURF_MAGIC = b"SURF"
 # 2: shape membership, selector-table metadata (surfaceType/curveType/
 #    params/continuity/dihedral/flags), edge faceOrds.
-SURF_VERSION = 2
+# 3: no tessellation inputs. Loops are edge references, a B-spline surface
+#    carries its degrees and pole counts (a bilinear patch its four corners),
+#    a swept surface its axis or direction, a general curve its range.
+SURF_VERSION = 3
+# A store may still hold version-2 surfaces an older build pinned (an
+# eager-only component's surface is part of its geometry identity); version 3
+# only removed fields, so every reader reads both.
+SURF_VERSIONS_READ = (2, 3)
 
 
 def _enum_name_geomabs(value) -> str:
@@ -145,94 +153,6 @@ def _edge_metrics(edge) -> dict[str, Any]:
     return metrics
 
 
-class Unextractable(Exception):
-    """This shape cannot be represented as a .surf (caller falls through)."""
-
-
-def _assert_surface_covers_face(payload, u0, u1, v0, v1, bin_out) -> None:
-    """A serialized NURBS payload must COVER the face's UV range: evaluating
-    a clamped B-spline outside its knots EXTRAPOLATES, which renders as
-    flying geometry (the silent failure mode this guard makes loud).
-    Analytic/swept kinds evaluate everywhere by construction."""
-    if payload.get("kind") != "nurbs":
-        return
-    knots_u = bin_out.values
-    ku_off, ku_len = payload["knotsU"]
-    kv_off, kv_len = payload["knotsV"]
-    # SetNotPeriodic can retain extension knots outside the active spline
-    # domain. The client evaluates over [knots[degree], knots[poleCount]],
-    # not the first/last stored knots.
-    first_u, last_u = knots_u[ku_off + payload["degU"]], knots_u[ku_off + payload["nu"]]
-    first_v, last_v = knots_u[kv_off + payload["degV"]], knots_u[kv_off + payload["nv"]]
-    eps_u = max(abs(u1 - u0), 1.0) * 1e-6
-    eps_v = max(abs(v1 - v0), 1.0) * 1e-6
-    if (u0 < first_u - eps_u or u1 > last_u + eps_u
-            or v0 < first_v - eps_v or v1 > last_v + eps_v):
-        raise Unextractable(
-            f"surface domain [{first_u}, {last_u}]x[{first_v}, {last_v}] does "
-            f"not cover face UV [{u0}, {u1}]x[{v0}, {v1}] — evaluation would "
-            "extrapolate")
-
-
-def _translate_knots_to_window(
-    nurbs, period: float, w0: float, eps: float,
-    first_knot: float, nb_knots, knot, set_knot,
-) -> None:
-    """Shift a clamped copy's knots by whole PERIODS so its span starts at
-    the period containing ``w0`` (the face window's low edge).
-
-    Translating every knot by the same constant re-parameterizes without
-    moving geometry — and because the ORIGINAL surface is periodic, the
-    copy evaluated in the shifted frame gives exactly the points the face's
-    pcurves address there. A no-op for aperiodic directions (period 0) and
-    for faces already inside the span."""
-    if not period:
-        return
-    shift = math.floor((w0 - first_knot) / period + eps)
-    if not shift:
-        return
-    _shift_knots(shift * period, nb_knots, knot, set_knot)
-
-
-def _shift_knots(delta: float, nb_knots, knot, set_knot) -> None:
-    """Translate every knot by ``delta``, keeping the sequence monotonic at
-    every intermediate step: walk from the end for a positive shift, from
-    the start for a negative one."""
-    count = nb_knots()
-    order = range(count, 0, -1) if delta > 0 else range(1, count + 1)
-    for index in order:
-        set_knot(index, knot(index) + delta)
-
-
-def _reframe_knots_to_window(nurbs, surface, u0: float, u1: float, v0: float, v1: float) -> None:
-    """Move a converted B-spline's knots back into the FACE's UV frame.
-
-    ``Geom_RectangularTrimmedSurface`` on a PERIODIC basis does not trim where
-    it is asked: it adjusts the requested window into the basis period
-    (``ElCLib::AdjustPeriodic``), so a face whose window straddles the clamped
-    seam — a STEP round trip re-anchors pcurves there (moonwatch: face u in
-    [-9.36, 14.65] on a 24.78-periodic surface came back trimmed over
-    [15.42, 39.42]) — converts to a B-spline whose knots sit a whole number of
-    periods from the face's own bounds. Evaluating that at the face's
-    parameters would extrapolate, and the coverage guard rightly refuses.
-    The surface is periodic, so translating the knots by those periods
-    changes nothing but the frame; the nearest whole period is the one."""
-    for periodic, period_of, w0, w1, first_knot, nb_knots, knot, set_knot in (
-        (surface.IsUPeriodic(), surface.UPeriod, u0, u1,
-         nurbs.Bounds()[0], nurbs.NbUKnots, nurbs.UKnot, nurbs.SetUKnot),
-        (surface.IsVPeriodic(), surface.VPeriod, v0, v1,
-         nurbs.Bounds()[2], nurbs.NbVKnots, nurbs.VKnot, nurbs.SetVKnot),
-    ):
-        if not periodic:
-            continue
-        period = period_of()
-        if not period:
-            continue
-        shift = round((w0 - first_knot) / period)
-        if shift:
-            _shift_knots(shift * period, nb_knots, knot, set_knot)
-
-
 class _Bin:
     """The single f32 buffer; append() returns [offset, count] refs."""
 
@@ -262,45 +182,6 @@ def _frame(ax3) -> dict[str, list[float]]:
     }
 
 
-def _nurbs_surface_payload(surface, bin_out: _Bin) -> dict[str, Any]:
-    """Serialize a Geom_BSplineSurface completely (poles, weights, knots
-    with multiplicities flattened, degrees, periodicity)."""
-    nu, nv = surface.NbUPoles(), surface.NbVPoles()
-    poles: list[float] = []
-    weights: list[float] = []
-    rational = surface.IsURational() or surface.IsVRational()
-    for i in range(1, nu + 1):
-        for j in range(1, nv + 1):
-            pole = surface.Pole(i, j)
-            poles.extend((pole.X(), pole.Y(), pole.Z()))
-            if rational:
-                weights.append(surface.Weight(i, j))
-
-    def flat_knots(count_fn, knot_fn, mult_fn) -> list[float]:
-        flat: list[float] = []
-        for k in range(1, count_fn() + 1):
-            flat.extend([knot_fn(k)] * mult_fn(k))
-        return flat
-
-    payload = {
-        "kind": "nurbs",
-        "degU": surface.UDegree(),
-        "degV": surface.VDegree(),
-        "nu": nu,
-        "nv": nv,
-        "periodicU": bool(surface.IsUPeriodic()),
-        "periodicV": bool(surface.IsVPeriodic()),
-        "poles": bin_out.append(poles),
-        "knotsU": bin_out.append(
-            flat_knots(surface.NbUKnots, surface.UKnot, surface.UMultiplicity)),
-        "knotsV": bin_out.append(
-            flat_knots(surface.NbVKnots, surface.VKnot, surface.VMultiplicity)),
-    }
-    if rational:
-        payload["weights"] = bin_out.append(weights)
-    return payload
-
-
 def _clamped_uv_bounds(face, surface) -> tuple[float, float, float, float]:
     """Face UV bounds clamped into the surface's own parametric range.
 
@@ -323,6 +204,9 @@ def _clamped_uv_bounds(face, surface) -> tuple[float, float, float, float]:
 
 
 def _surface_payload(face, bin_out: _Bin) -> dict[str, Any]:
+    """The face's surface: analytic frames exactly, a swept surface by its axis
+    or direction, a B-spline by its degrees and pole counts (the corners of a
+    bilinear patch, which feature recognition reads as a ruled loft's section)."""
     adaptor = BRepAdaptor_Surface(face)
     kind = adaptor.GetType()
     if kind == GeomAbs_SurfaceType.GeomAbs_Plane:
@@ -344,265 +228,51 @@ def _surface_payload(face, bin_out: _Bin) -> dict[str, Any]:
         torus = adaptor.Torus()
         return {"kind": "torus", "majorRadius": torus.MajorRadius(),
                 "minorRadius": torus.MinorRadius(), **_frame(torus.Position())}
-    # PARAMETRIZATION IS PART OF THE CONTRACT: pcurves live in the original
-    # surface's (u, v), so any serialization must evaluate identically at the
-    # same parameters — SurfaceToBSplineSurface does NOT (a rational-quadratic
-    # circle cannot carry angle parametrization, so revolved/extruded-arc
-    # surfaces come back reparametrized and every trim lands wrong).
     if kind == GeomAbs_SurfaceType.GeomAbs_SurfaceOfRevolution:
-        # Value(u, v) = basis(v) rotated by u around the axis.
         axis = adaptor.AxeOfRevolution()
-        basis = _basis_curve_payload(adaptor.BasisCurve(), bin_out)
-        return {
-            "kind": "revolution",
-            "origin": _xyz(axis.Location()),
-            "dir": _xyz(axis.Direction()),
-            "profile": basis,
-        }
+        return {"kind": "revolution", "origin": _xyz(axis.Location()), "dir": _xyz(axis.Direction())}
     if kind == GeomAbs_SurfaceType.GeomAbs_SurfaceOfExtrusion:
-        # Value(u, v) = basis(u) + v * direction.
-        basis = _basis_curve_payload(adaptor.BasisCurve(), bin_out)
-        return {
-            "kind": "extrusion",
-            "dir": _xyz(adaptor.Direction()),
-            "profile": basis,
-        }
+        return {"kind": "extrusion", "dir": _xyz(adaptor.Direction())}
     surface = BRep_Tool.Surface_s(face)
-    if surface is None:
-        raise Unextractable("face with no surface")
-    if kind in (GeomAbs_SurfaceType.GeomAbs_BSplineSurface,
-                GeomAbs_SurfaceType.GeomAbs_BezierSurface):
-        # Native NURBS: serialize DIRECTLY when the underlying surface is
-        # already a B-spline (a COPY, clamped if periodic — exact and
-        # parametrization-preserving). Vendor STEPs carry B-splines whose
-        # trim-then-convert round trip can throw (NCollection range errors);
-        # there is nothing to convert in the first place.
-        from OCP.Geom import Geom_BSplineSurface, Geom_RectangularTrimmedSurface as _Trim
+    if surface is not None and kind in (GeomAbs_SurfaceType.GeomAbs_BSplineSurface,
+                                        GeomAbs_SurfaceType.GeomAbs_BezierSurface):
+        from OCP.Geom import Geom_RectangularTrimmedSurface
 
-        native = surface
-        if isinstance(native, _Trim):
-            native = native.BasisSurface()
-        if isinstance(native, Geom_BSplineSurface):
-            period_u = native.UPeriod() if native.IsUPeriodic() else 0.0
-            period_v = native.VPeriod() if native.IsVPeriodic() else 0.0
-            nurbs = native.Copy()
-            if nurbs.IsUPeriodic():
-                nurbs.SetUNotPeriodic()
-            if nurbs.IsVPeriodic():
-                nurbs.SetVNotPeriodic()
-            # Direct copy is valid only when the face addresses parameters
-            # inside the (clamped) domain. A face on a PERIODIC surface may
-            # sit a WHOLE number of periods away from the clamped span
-            # (booleans re-anchor pcurves; f1 engine cover: face u exactly
-            # one period past the basis knots). The surface is identical
-            # there, so translate the copy's knots by those periods —
-            # surface, face uv, and pcurves stay in ONE parameter frame,
-            # which is the contract (:func:`_assert_surface_covers_face`).
-            # A window that still does not fit ONE clamped span (u range
-            # past one turn) goes through the trimmed conversion below
-            # instead — segmenting a B-spline preserves parametrization, so
-            # nothing is lost, while a clamped copy would EXTRAPOLATE
-            # outside its knots (moonwatch bezel: face u in [28.5, 66.1]
-            # over a ~41-period surface).
-            u0, u1, v0, v1 = BRepTools.UVBounds_s(face)
-            eps_u = max(abs(u1 - u0), 1.0) * 1e-6
-            eps_v = max(abs(v1 - v0), 1.0) * 1e-6
-            _translate_knots_to_window(
-                nurbs, period_u, u0, eps_u,
-                nurbs.Bounds()[0], nurbs.NbUKnots, nurbs.UKnot, nurbs.SetUKnot)
-            _translate_knots_to_window(
-                nurbs, period_v, v0, eps_v,
-                nurbs.Bounds()[2], nurbs.NbVKnots, nurbs.VKnot, nurbs.SetVKnot)
-            if (
-                u0 >= nurbs.Bounds()[0] - eps_u
-                and u1 <= nurbs.Bounds()[1] + eps_u
-                and v0 >= nurbs.Bounds()[2] - eps_v
-                and v1 <= nurbs.Bounds()[3] + eps_v
-            ):
-                return _nurbs_surface_payload(nurbs, bin_out)
-        try:
-            u0, u1, v0, v1 = _clamped_uv_bounds(face, surface)
-            bounded = Geom_RectangularTrimmedSurface(surface, u0, u1, v0, v1)
-            nurbs = GeomConvert.SurfaceToBSplineSurface_s(bounded)
-            if nurbs.IsUPeriodic():
-                nurbs.SetUNotPeriodic()
-            if nurbs.IsVPeriodic():
-                nurbs.SetVNotPeriodic()
-            _reframe_knots_to_window(nurbs, surface, u0, u1, v0, v1)
-        except Exception as exc:
-            raise Unextractable(f"NURBS conversion failed: {exc}") from exc
-        return _nurbs_surface_payload(nurbs, bin_out)
-    # Exotic kinds (offset surfaces, ...): parametrization-preserving
-    # least-squares approximation.
-    try:
-        from OCP.GeomAbs import GeomAbs_C1
-        from OCP.GeomConvert import GeomConvert_ApproxSurface
-
-        u0, u1, v0, v1 = _clamped_uv_bounds(face, surface)
-        bounded = Geom_RectangularTrimmedSurface(surface, u0, u1, v0, v1)
-        approx = GeomConvert_ApproxSurface(
-            bounded, 1e-4, GeomAbs_C1, GeomAbs_C1, 14, 14, 100, 0)
-        if not approx.IsDone():
-            raise Unextractable("surface approximation did not converge")
-        nurbs = approx.Surface()
-        if nurbs.IsUPeriodic():
-            nurbs.SetUNotPeriodic()
-        if nurbs.IsVPeriodic():
-            nurbs.SetVNotPeriodic()
-        _reframe_knots_to_window(nurbs, surface, u0, u1, v0, v1)
-    except Unextractable:
-        raise
-    except Exception as exc:
-        raise Unextractable(f"surface approximation failed: {exc}") from exc
-    return _nurbs_surface_payload(nurbs, bin_out)
+        if isinstance(surface, Geom_RectangularTrimmedSurface):
+            surface = surface.BasisSurface()
+        return _nurbs_summary(surface, bin_out)
+    # Offset and other surfaces: their type is the face's surfaceType.
+    return {"kind": "freeform"}
 
 
-def _basis_curve_payload(basis_adaptor, bin_out: _Bin) -> dict[str, Any]:
-    """Serialize a swept surface's basis curve in the edge-curve schema
-    (line/circle/ellipse/bspline), preserving its parametrization: analytic
-    kinds carry it inherently; general curves convert through
-    CurveToBSplineCurve which keeps parameters for non-periodic input and is
-    clamped (parametrization-preserving) otherwise."""
-    kind = basis_adaptor.GetType()
-    first = basis_adaptor.FirstParameter()
-    last = basis_adaptor.LastParameter()
-    if kind == GeomAbs_CurveType.GeomAbs_Line:
-        line = basis_adaptor.Line()
-        return {"kind": "line", "origin": _xyz(line.Location()),
-                "dir": _xyz(line.Direction()), "range": [first, last]}
-    if kind == GeomAbs_CurveType.GeomAbs_Circle:
-        circle = basis_adaptor.Circle()
-        return {"kind": "circle", "radius": circle.Radius(),
-                **_frame(circle.Position()), "range": [first, last]}
-    if kind == GeomAbs_CurveType.GeomAbs_Ellipse:
-        ellipse = basis_adaptor.Ellipse()
-        return {"kind": "ellipse", "majorRadius": ellipse.MajorRadius(),
-                "minorRadius": ellipse.MinorRadius(),
-                **_frame(ellipse.Position()), "range": [first, last]}
-    if kind == GeomAbs_CurveType.GeomAbs_BSplineCurve:
-        bspline = basis_adaptor.BSpline()
-        period = None
-        if bspline.IsPeriodic():
-            # A swept face's parameter range may CROSS the closed profile's
-            # period (bracelet-link outlines do); the client wraps into the
-            # clamped domain using this period. Clamp a COPY — the adaptor
-            # hands back the model's own curve handle, and SetNotPeriodic on
-            # it would silently rewrite the shape being extracted.
-            period = bspline.Period()
-            bspline = bspline.Copy()
-            bspline.SetNotPeriodic()
-        return _bspline_curve3_payload(bspline, bin_out, period=period)
-    if kind == GeomAbs_CurveType.GeomAbs_BezierCurve:
-        # Exact and parametrization-preserving.
-        try:
-            bspline = GeomConvert.CurveToBSplineCurve_s(basis_adaptor.Bezier())
-        except Exception as exc:
-            raise Unextractable(f"basis bezier conversion failed: {exc}") from exc
-        return _bspline_curve3_payload(bspline, bin_out)
-    # Anything else (offset curves, ...): parametrization-preserving
-    # approximation of the adaptor's underlying curve.
-    try:
-        from OCP.GeomAbs import GeomAbs_C1
-        from OCP.Geom import Geom_TrimmedCurve
-        from OCP.GeomConvert import GeomConvert_ApproxCurve
-
-        curve = basis_adaptor.Curve()
-        approx = GeomConvert_ApproxCurve(
-            Geom_TrimmedCurve(curve, first, last), 1e-5, GeomAbs_C1, 32, 14)
-        if not approx.IsDone():
-            raise Unextractable("basis curve approximation did not converge")
-        bspline = approx.Curve()
-        if bspline.IsPeriodic():
-            bspline.SetNotPeriodic()
-    except Unextractable:
-        raise
-    except Exception as exc:
-        raise Unextractable(f"basis curve conversion failed: {exc}") from exc
-    return _bspline_curve3_payload(bspline, bin_out)
-
-
-def _bspline_curve3_payload(bspline, bin_out: _Bin, *, period=None) -> dict[str, Any]:
-    poles: list[float] = []
-    weights: list[float] = []
-    rational = bspline.IsRational()
-    for i in range(1, bspline.NbPoles() + 1):
-        pole = bspline.Pole(i)
-        poles.extend((pole.X(), pole.Y(), pole.Z()))
-        if rational:
-            weights.append(bspline.Weight(i))
-    flat: list[float] = []
-    for k in range(1, bspline.NbKnots() + 1):
-        flat.extend([bspline.Knot(k)] * bspline.Multiplicity(k))
-    payload = {
-        "kind": "bspline",
-        "deg": bspline.Degree(),
-        "n": bspline.NbPoles(),
-        "periodic": bool(bspline.IsPeriodic()),
-        "poles": bin_out.append(poles),
-        "knots": bin_out.append(flat),
-        "range": [bspline.FirstParameter(), bspline.LastParameter()],
+def _nurbs_summary(surface, bin_out: _Bin) -> dict[str, Any]:
+    """A B-spline or Bezier surface's degrees, pole counts and periodicity, and
+    the four corners of a bilinear patch (degree 1 by 1, 2 by 2 poles,
+    polynomial, open), in u-major order."""
+    nu, nv = surface.NbUPoles(), surface.NbVPoles()
+    periodic_u = bool(getattr(surface, "IsUPeriodic", lambda: False)())
+    periodic_v = bool(getattr(surface, "IsVPeriodic", lambda: False)())
+    rational = bool(surface.IsURational() or surface.IsVRational())
+    payload: dict[str, Any] = {
+        "kind": "nurbs",
+        "degU": surface.UDegree(),
+        "degV": surface.VDegree(),
+        "nu": nu,
+        "nv": nv,
+        "periodicU": periodic_u,
+        "periodicV": periodic_v,
     }
-    if period is not None:
-        # Clamped from a CLOSED profile: sweep faces may address parameters
-        # past the period; the client wraps into the clamped domain.
-        payload["period"] = float(period)
     if rational:
-        payload["weights"] = bin_out.append(weights)
+        payload["rational"] = True
+    elif (payload["degU"], payload["degV"], nu, nv) == (1, 1, 2, 2) and not (periodic_u or periodic_v):
+        payload["poles"] = bin_out.append(
+            coordinate for i in (1, 2) for j in (1, 2) for coordinate in _xyz(surface.Pole(i, j)))
     return payload
 
 
-def _curve2d_payload(edge, face, bin_out: _Bin) -> dict[str, Any]:
-    curve = BRep_Tool.CurveOnSurface_s(edge, face, 0.0, 0.0)
-    if curve is None:
-        raise Unextractable("edge with no pcurve on its face")
-    first, last = BRep_Tool.Range_s(edge, face)
-    # Convert every pcurve to a 2D BSpline: one evaluator client-side, and
-    # Geom2dConvert handles lines/arcs exactly (degree 1 / rational degree 2).
-    # Trim first — unbounded curves (lines) refuse direct conversion.
-    try:
-        from OCP.Geom2d import Geom2d_TrimmedCurve
-
-        bspline = Geom2dConvert.CurveToBSplineCurve_s(
-            Geom2d_TrimmedCurve(curve, first, last))
-        if bspline.IsPeriodic():
-            bspline.SetNotPeriodic()
-    except Exception as exc:
-        raise Unextractable(f"pcurve conversion failed: {exc}") from exc
-    poles: list[float] = []
-    weights: list[float] = []
-    rational = bspline.IsRational()
-    for i in range(1, bspline.NbPoles() + 1):
-        pole = bspline.Pole(i)
-        poles.extend((pole.X(), pole.Y()))
-        if rational:
-            weights.append(bspline.Weight(i))
-    flat: list[float] = []
-    for k in range(1, bspline.NbKnots() + 1):
-        flat.extend([bspline.Knot(k)] * bspline.Multiplicity(k))
-    payload = {
-        "deg": bspline.Degree(),
-        "n": bspline.NbPoles(),
-        "periodic": bool(bspline.IsPeriodic()),
-        "poles": bin_out.append(poles),
-        "knots": bin_out.append(flat),
-        # The CONVERTED curve's own domain, not the edge range: trimming a
-        # periodic pcurve near/past the period normalizes the parameter into
-        # the principal interval, and evaluating the stored knots at the
-        # original edge parameters extrapolates wildly off the trim.
-        "range": [bspline.FirstParameter(), bspline.LastParameter()],
-    }
-    if rational:
-        payload["weights"] = bin_out.append(weights)
-    span = flat[-1] - flat[0] or 1.0
-    if (payload["range"][0] < flat[0] - 1e-6 * span
-            or payload["range"][1] > flat[-1] + 1e-6 * span):
-        raise Unextractable(
-            f"pcurve range {payload['range']} escapes knot domain "
-            f"[{flat[0]}, {flat[-1]}] — evaluation would extrapolate")
-    return payload
-
-
-def _curve3d_payload(edge, bin_out: _Bin) -> dict[str, Any] | None:
+def _curve3d_payload(edge) -> dict[str, Any] | None:
+    """The edge's curve: lines, circles and ellipses exactly, any other curve
+    by its kind and parameter range."""
     if BRep_Tool.Degenerated_s(edge):
         return None
     adaptor = BRepAdaptor_Curve(edge)
@@ -621,42 +291,7 @@ def _curve3d_payload(edge, bin_out: _Bin) -> dict[str, Any] | None:
         return {"kind": "ellipse", "majorRadius": ellipse.MajorRadius(),
                 "minorRadius": ellipse.MinorRadius(),
                 **_frame(ellipse.Position()), "range": [first, last]}
-    # General curve: sample-free exact NURBS conversion.
-    curve = BRep_Tool.Curve_s(edge, 0.0, 0.0)
-    if curve is None:
-        return None
-    try:
-        from OCP.Geom import Geom_TrimmedCurve
-
-        bspline = GeomConvert.CurveToBSplineCurve_s(
-            Geom_TrimmedCurve(curve, first, last))
-        if bspline.IsPeriodic():
-            bspline.SetNotPeriodic()
-    except Exception:
-        return None
-    poles: list[float] = []
-    weights: list[float] = []
-    rational = bspline.IsRational()
-    for i in range(1, bspline.NbPoles() + 1):
-        pole = bspline.Pole(i)
-        poles.extend((pole.X(), pole.Y(), pole.Z()))
-        if rational:
-            weights.append(bspline.Weight(i))
-    flat: list[float] = []
-    for k in range(1, bspline.NbKnots() + 1):
-        flat.extend([bspline.Knot(k)] * bspline.Multiplicity(k))
-    payload = {
-        "kind": "bspline",
-        "deg": bspline.Degree(),
-        "n": bspline.NbPoles(),
-        "periodic": bool(bspline.IsPeriodic()),
-        "poles": bin_out.append(poles),
-        "knots": bin_out.append(flat),
-        "range": [bspline.FirstParameter(), bspline.LastParameter()],
-    }
-    if rational:
-        payload["weights"] = bin_out.append(weights)
-    return payload
+    return {"kind": "bspline", "range": [first, last]}
 
 
 def _classify_surf_edge(edge, faces: list) -> dict[str, Any]:
@@ -827,7 +462,6 @@ def extract_surface_component(
             "surface": _surface_payload(face, bin_out),
             "loops": [],
         }
-        _assert_surface_covers_face(entry["surface"], u0, u1, v0, v1, bin_out)
         if entry["surface"].get("kind") == "plane":
             sign = -1.0 if entry["reversed"] else 1.0
             entry["normal"] = [sign * c for c in entry["surface"]["zdir"]]
@@ -845,11 +479,10 @@ def extract_surface_component(
             walker = BRepTools_WireExplorer(wire, face)
             while walker.More():
                 edge = walker.Current()
-                pcurve = _curve2d_payload(edge, face, bin_out)
-                pcurve["edgeOrd"] = edge_ord_by_hash.get(_shape_hash(edge), 0)
-                pcurve["reversed"] = (
-                    edge.Orientation() == TopAbs_Orientation.TopAbs_REVERSED)
-                loop.append(pcurve)
+                loop.append({
+                    "edgeOrd": edge_ord_by_hash.get(_shape_hash(edge), 0),
+                    "reversed": edge.Orientation() == TopAbs_Orientation.TopAbs_REVERSED,
+                })
                 walker.Next()
             if loop:
                 entry["loops"].append(loop)
@@ -907,7 +540,7 @@ def extract_surface_component(
             "curveType": _enum_name_geomabs(curve_adaptor.GetType()),
             "faceOrds": deduped_ords,
             **_edge_metrics(edge),
-            "curve": _curve3d_payload(edge, bin_out),
+            "curve": _curve3d_payload(edge),
         }
         params = _selector_curve_params(curve_adaptor)
         if params:
@@ -929,14 +562,6 @@ def extract_surface_component(
         + json_bytes
         + payload
     )
-
-
-def read_surf(data: bytes) -> tuple[dict, memoryview]:
-    if data[:4] != SURF_MAGIC:
-        raise ValueError("not a SURF container")
-    version, json_len = struct.unpack_from("<II", data, 4)
-    index = json.loads(data[12:12 + json_len].decode("utf-8"))
-    return index, memoryview(data)[12 + json_len:]
 
 
 def _shape_hash(shape) -> int:

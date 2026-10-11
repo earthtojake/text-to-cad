@@ -61,9 +61,7 @@ const SCENE_QUALITY_PRESETS = Object.freeze([
     id: SCENE_QUALITY.INTERACTIVE,
     label: "Interactive",
     targetPixelError: 1.25,
-    minimumLodLevel: 1,
     idlePixelRatioCap: 1.5,
-    snapshotLodLevel: 1,
     renderScale: 1,
     shadowMapSize: 2048,
     environmentMapSize: 256
@@ -72,9 +70,7 @@ const SCENE_QUALITY_PRESETS = Object.freeze([
     id: SCENE_QUALITY.STANDARD,
     label: "Standard",
     targetPixelError: 1,
-    minimumLodLevel: 1,
     idlePixelRatioCap: 2,
-    snapshotLodLevel: 1,
     renderScale: 1,
     shadowMapSize: 2048,
     environmentMapSize: 256
@@ -83,9 +79,7 @@ const SCENE_QUALITY_PRESETS = Object.freeze([
     id: SCENE_QUALITY.HIGH,
     label: "High",
     targetPixelError: 0.25,
-    minimumLodLevel: 1,
     idlePixelRatioCap: 2,
-    snapshotLodLevel: 3,
     renderScale: 2,
     shadowMapSize: 4096,
     environmentMapSize: 512

@@ -1,40 +1,23 @@
-// Endpoint matching is scoped to the same solid/occurrence and a shared face.
-// At a branch, continue only along one reciprocal, smoothly aligned edge.
+// An edge's chain is cadgen's to decide (the selector table's `chain`: edges that continue one
+// another at a shared vertex of one solid, from the exact BREP). Edges of one placed component
+// with the same chain id are one chain; a chain never crosses a part, an occurrence or a solid,
+// and an edge without a chain (a degenerate one) stands alone.
 export function buildEdgeChainGraph(references) {
   const edges = [...new Map(references.filter(ref => ref.selectorType === 'edge').map(ref => [ref.id, ref])).values()];
   const graph = new Map(edges.map(edge => [edge.id, new Set()]));
-  const buckets = new Map(), ends = [];
-  const tolerance = 1e-5;
-  const key = (scope, cell) => JSON.stringify([scope, ...cell]);
+  const chains = new Map();
   for (const edge of edges) {
-    const endpoints = edge.pickData?.chainEndpoints;
-    if (endpoints?.length !== 2) continue;
-    const scope = [edge.partId || '', edge.occurrenceId || '', edge.shapeId || ''];
-    for (const endpoint of endpoints) {
-      if (![endpoint.point, endpoint.direction].every(v => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite))) continue;
-      const end = { ...endpoint, edge, scope, cell: endpoint.point.map(v => Math.floor(v / tolerance)) };
-      const bucket = key(scope, end.cell);
-      if (!buckets.has(bucket)) buckets.set(bucket, []);
-      buckets.get(bucket).push(end); ends.push(end);
-    }
+    const chain = edge.pickData?.chain;
+    if (!Number.isInteger(chain)) continue;
+    const key = JSON.stringify([edge.partId || '', edge.occurrenceId || '', edge.shapeId || '', chain]);
+    if (!chains.has(key)) chains.set(key, []);
+    chains.get(key).push(edge);
   }
-  const choices = new Map();
-  for (const end of ends) {
-    const candidates = [];
-    for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) {
-      for (const other of buckets.get(key(end.scope, [end.cell[0]+x,end.cell[1]+y,end.cell[2]+z])) || []) {
-        if (other.edge.id === end.edge.id || Math.hypot(...end.point.map((v,i) => v-other.point[i])) > tolerance) continue;
-        if (!end.edge.pickData.adjacentSelectors?.some(face => other.edge.pickData.adjacentSelectors?.includes(face))) continue;
-        candidates.push(other);
-      }
+  for (const members of chains.values()) {
+    for (let index = 1; index < members.length; index += 1) {
+      graph.get(members[0].id).add(members[index].id);
+      graph.get(members[index].id).add(members[0].id);
     }
-    const aligned = candidates.length > 1 ? candidates.filter(other => end.direction.reduce((sum,v,i) => sum+v*other.direction[i],0) < -Math.cos(Math.PI/60)) : candidates;
-    if (aligned.length === 1) choices.set(end, aligned[0]);
-  }
-  for (const [end, other] of choices) {
-    if (choices.get(other) !== end) continue;
-    graph.get(end.edge.id).add(other.edge.id);
-    graph.get(other.edge.id).add(end.edge.id);
   }
   return graph;
 }

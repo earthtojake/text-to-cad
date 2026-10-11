@@ -198,7 +198,7 @@ class TreeReflectsWrittenStep(unittest.TestCase):
         from cadgen.catalog import result_descriptor_for
         from cadgen.store.objects import object_path
         from cadgen.store.surfaces import derive
-        from cadgen._internal.surface_extract import read_surf
+        from cadgen._internal.surf_container import read_surf
 
         with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.store)}):
             descriptor = result_descriptor_for(step_path)

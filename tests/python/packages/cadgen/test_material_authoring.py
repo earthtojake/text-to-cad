@@ -1,4 +1,4 @@
-"""Named material authoring, inheritance, and schema-9 artifact binding."""
+"""Named material authoring, inheritance, and the sidecar's binding to STEP bytes."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ from tests.python.support.tmp_root import generated_cad_directory
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal.source_sidecar import (  # noqa: E402
+    SOURCE_SIDECAR_SCHEMA_VERSION,
     SidecarAppearanceError,
     apply_appearance,
-    normalize_animation,
     normalize_materials,
     read_source_sidecar,
     resolve_materials,
@@ -61,12 +61,16 @@ def model():
         self.assertNotEqual(parts[0], edited_parts[0])
         self.assertEqual(parts[1], edited_parts[1])
 
-    def test_step_declaration_carries_materials_and_animation_without_running_model(self) -> None:
+    def test_step_declaration_carries_materials_and_clips_without_running_model(self) -> None:
+        import cadgen
         from cadgen import step
+
+        def spin(t, m):
+            raise AssertionError("a clip runs when its model builds, never when it is declared")
 
         @step(
             materials={"definitions": {"paint": {"baseColor": "#112233"}}, "assignments": []},
-            animation="export const clips = {};",
+            animation={"spin": cadgen.clip(spin, duration=2)},
         )
         def declared_material_model():
             return None
@@ -74,7 +78,8 @@ def model():
         definition = declared_material_model.__cadgen_model__
         self.assertEqual("paint", definition.materials["definitions"]["paint"]["name"])
         self.assertEqual([], definition.materials["assignments"])
-        self.assertEqual("javascript", definition.animation["language"])
+        self.assertEqual(["spin"], list(definition.animation))
+        self.assertEqual(2.0, definition.animation["spin"].duration)
 
     def test_declaration_is_closed_owned_and_strict(self) -> None:
         source = {
@@ -146,7 +151,7 @@ def model():
                 "assignments": [{"targets": ["#missing"], "material": "x"}],
             })
 
-    def test_schema_nine_binds_named_appearance_and_animation_to_step_bytes(self) -> None:
+    def test_the_sidecar_binds_named_appearance_and_baked_animation_to_step_bytes(self) -> None:
         roots = IsolatedCadRoots(self, prefix="material-sidecar-")
         temp = roots.temporary_cad_directory(prefix="material-sidecar-")
         self.addCleanup(temp.cleanup)
@@ -156,10 +161,11 @@ def model():
             "materials": {"paint": {"name": "Blue paint", "baseColor": "#204080"}},
             "assignments": {"o1": "paint"},
         }
-        animation = normalize_animation("export const clips = {};", where="@step animation=")
+        animation = {"clips": [{"id": "blink", "label": "Blink", "duration": 2, "loop": True,
+                                "tracks": [{"targets": ["o1"], "times": [0, 1], "visible": [True, False]}]}]}
         write_source_sidecar(step, {"appearance": appearance, "animation": animation})
         payload = read_source_sidecar(step)
-        self.assertEqual(9, payload["schemaVersion"])
+        self.assertEqual(SOURCE_SIDECAR_SCHEMA_VERSION, payload["schemaVersion"])
         self.assertEqual(hashlib.sha256(step.read_bytes()).hexdigest(), payload["documentHash"])
         self.assertEqual(appearance, payload["appearance"])
         self.assertEqual(animation, payload["animation"])
@@ -239,12 +245,15 @@ from cadgen import label_shape, step
 def _computed_kinematics():
     return {"mates": [cadgen.fastened("fixed", parent="#anchor", child="#body")]}
 
+def rise(t, m):
+    m.get("#body").translate((0, 0, t))
+
 @step(
     materials={
         "definitions": {"paint": {"name": "Blue paint", "baseColor": "#112233", "roughness": .3}},
         "assignments": [{"targets": ["#body"], "material": "paint"}],
     },
-    animation="export const clips = {};",
+    animation={"rise": cadgen.clip(rise, duration=1)},
     kinematics=_computed_kinematics(),
 )
 def colored():
@@ -266,7 +275,8 @@ if __name__ == "__main__":
             [str(script)], step_options=StepImportOptions(), force=True, verbose=False
         ))
         sidecar = read_source_sidecar(script.with_suffix(".step"))
-        self.assertEqual("javascript", sidecar["animation"]["language"])
+        animation_before = sidecar["animation"]
+        self.assertEqual(["rise"], [clip["id"] for clip in animation_before["clips"]])
         self.assertEqual("fixed", sidecar["kinematics"]["mates"][0]["name"])
         kinematics_before = sidecar["kinematics"]
         self.assertEqual("Blue paint", next(iter(sidecar["appearance"]["materials"].values()))["name"])
@@ -277,7 +287,7 @@ if __name__ == "__main__":
         self.assertTrue(record["documentOccurrenceMap"])
         self.assertTrue(record["documentNodeMap"])
         self.assertEqual("Blue paint", record["materials"]["definitions"]["paint"]["name"])
-        self.assertEqual("javascript", record["animation"]["language"])
+        self.assertEqual(animation_before, record["animation"])
         self.assertEqual(kinematics_before, record["kinematics"])
 
         step_before = script.with_suffix(".step").read_bytes()
@@ -286,14 +296,13 @@ if __name__ == "__main__":
         edited = script.read_text(encoding="utf-8").replace(
             "\"baseColor\": \"#112233\", \"roughness\": .3",
             "\"baseColor\": \"#445566\", \"roughness\": .7",
-        ).replace(
-            "export const clips = {};",
-            "export const clips = { refreshed: {} };",
         )
         script.write_text(edited, encoding="utf-8")
         from unittest import mock
-        with mock.patch(
-            "cadgen._internal.generation.run_script_generator",
+
+        from cadgen._internal import generation
+        with mock.patch.object(
+            generation, "run_script_generator",
             side_effect=AssertionError("annotation-only refresh ran model geometry"),
         ):
             self.assertEqual(0, generate_step_targets(
@@ -307,8 +316,23 @@ if __name__ == "__main__":
         material = next(iter(refreshed_sidecar["appearance"]["materials"].values()))
         self.assertEqual("#445566", material["baseColor"])
         self.assertEqual(0.7, material["roughness"])
-        self.assertIn("refreshed", refreshed_sidecar["animation"]["source"])
+        # The refresh rewrites the sidecar from the record: the keyframes it holds.
+        self.assertEqual(animation_before, refreshed_sidecar["animation"])
         self.assertEqual(kinematics_before, refreshed_sidecar["kinematics"])
+
+        # A clip is a function, never a literal: editing one is editing the model,
+        # which runs (and rebakes) rather than refreshing.
+        script.write_text(edited.replace("(0, 0, t)", "(0, 0, 2 * t)"), encoding="utf-8")
+        with mock.patch.object(
+            generation, "run_script_generator", wraps=generation.run_script_generator
+        ) as ran:
+            self.assertEqual(0, generate_step_targets(
+                [str(script)], step_options=StepImportOptions(), force=False, verbose=False
+            ))
+        self.assertEqual(1, ran.call_count)
+        rebaked = read_source_sidecar(script.with_suffix(".step"))["animation"]
+        self.assertNotEqual(animation_before, rebaked)
+        self.assertEqual(rebaked, read_record(model_ref(script, "colored"))["animation"])
 
 
 if __name__ == "__main__":

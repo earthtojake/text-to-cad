@@ -13,21 +13,16 @@ is behind the script that wrote it is that model's record's question, answered
 by ``cadgen store why`` and never by an export (README law 1; law 7: scripts are
 programs, ``python <model>.py`` is their one door).
 
-Meshes tessellate from the tree behind the document's BYTES, which already
-holds the exact surf geometry the exporter consumes — no generator run, no STEP
-load, no extraction. A document the store has no tree for is COMPILED from those
-bytes (a job in the build pool), which is also the one cache effect this module
-has. One Node invocation serializes every requested format from one tessellation,
-so all formats come from identical geometry, and nothing is written beside the
-model but the files that were asked for.
+Meshes are cut from the tree behind the document's BYTES — the store's mesh of
+each component, derived in the build pool where it is missing — with no generator
+run and no STEP load. A document the store has no tree for is COMPILED from those
+bytes (a job in the build pool). One engine call serializes every requested
+format from the same stored meshes, so all formats come from identical geometry,
+and nothing is written beside the model but the files that were asked for.
 """
 
 from __future__ import annotations
 
-import contextlib
-import json
-import shutil
-from collections.abc import Iterator
 from pathlib import Path
 
 from cadgen.cli_logging import CliLogger
@@ -38,15 +33,13 @@ from cadgen._internal.mesh_export import (
     MESH_EXPORT_FORMATS,
     MESH_FORMAT_SUFFIX,
     MeshExportJob,
+    MeshSource,
     document_mesh_current,
     record_document_mesh,
     run_mesh_exporter,
 )
-from cadgen._internal.tessellation import (
-    TESSELLATOR_ANGLE_TOLERANCE,
-    TESSELLATOR_CHORD_TOLERANCE,
-)
 from cadgen.metadata import normalize_mesh_numeric
+from cadgen.store.meshes import DEFAULT_ANGLE, DEFAULT_CHORD
 from cadgen.step_artifact_cli import _build_entry_spec
 
 # :data:`MESH_EXPORT_FORMATS` (cadgen._internal.mesh_export) is what
@@ -72,8 +65,8 @@ def _color_hex(color) -> str | None:
     usable color.
 
     A build123d ``Color`` / OCCT ``Quantity_Color`` is linear; the hex this
-    feeds to ``--default-color`` is sRGB (the mesh exporter decodes it back to a
-    linear glTF ``baseColorFactor``, and 3MF's ``displaycolor`` is spec'd sRGB).
+    feeds the exporter as its default colour is sRGB (the GLB writer decodes it
+    back to a linear ``baseColorFactor``, and 3MF's ``displaycolor`` is spec'd sRGB).
     """
     try:
         red, green, blue = (_linear_channel_to_srgb_byte(float(c)) for c in tuple(color)[:3])
@@ -82,61 +75,34 @@ def _color_hex(color) -> str | None:
     return f"#{red:02x}{green:02x}{blue:02x}"
 
 
-@contextlib.contextmanager
-def _view_for_tree(tree_hash: str, *, document_hash: str) -> Iterator[Path]:
-    """A view directory (assembly.json + components/) of a tree for the Node
-    exporter — the store holds no result directories. The view is OWNED by this
-    context and removed when it closes, whether the export wrote, skipped or
-    raised. Never ``atexit``: doors run in daemon pool workers, which the pool
-    recycles and kills without running exit handlers, so every export used to
-    leave one ``cadgen-view-*`` directory behind in the temp dir."""
-    from cadgen.store.view import export_view
+def _mesh_package(repo_root: Path, step_path: Path) -> "tuple[EntrySpec, MeshSource]":
+    """What a mesh export cuts its meshes from: ``(spec, source)``.
 
-    view_dir = export_view(tree_hash, document_hash=document_hash)
-    try:
-        # This is an owned, temporary export input, not a persistent tree. Carry
-        # the exact document selection with its view; a later path read may name
-        # a different revision and must not rekey this geometry's export ledger.
-        manifest_path = view_dir / "assembly.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["documentHash"] = document_hash
-        manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
-        yield view_dir
-    finally:
-        shutil.rmtree(view_dir, ignore_errors=True)
-
-
-@contextlib.contextmanager
-def _mesh_package(repo_root: Path, step_path: Path) -> "Iterator[tuple[EntrySpec, Path]]":
-    """What a mesh export tessellates from: ``(spec, view_dir)``, the view removed
-    on exit (:func:`_view_for_tree`).
-
-    The DOCUMENT's bytes select a tree, and that tree already holds the exact
-    surf geometry the exporter consumes — no generator run, no STEP load, no
-    extraction. A miss is a compile of those bytes (a job in the pool:
-    ``cadgen._internal.doors.document_snapshot``, the one door operation that is
-    one), never a script run: content-hash keying cannot go stale, so there is
-    nothing for source to settle here."""
+    The DOCUMENT's bytes select a tree, and that tree's components are what the
+    store meshes -- no generator run, no STEP load. A miss is a compile of those
+    bytes (a job in the pool: ``cadgen._internal.doors.document_snapshot``, the one
+    door operation that is one), never a script run: content-hash keying cannot go
+    stale, so there is nothing for source to settle here. The selected document
+    rides with its tree: a later read of the path may name another revision, and
+    must not rekey this geometry's export ledger."""
     from cadgen._internal.doors import document_snapshot
 
     spec = _build_entry_spec(repo_root, step_path)
     document_hash, tree = document_snapshot(step_path)
-    with _view_for_tree(tree, document_hash=document_hash) as view_dir:
-        yield spec, view_dir
+    return spec, MeshSource(tree, document_hash)
 
 
 def _export_mesh_jobs(
     spec: EntrySpec,
-    package_dir: Path,
+    source: MeshSource,
     jobs: "list[MeshExportJob]",
     *,
     logger: CliLogger,
     force: bool = False,
     animation_source: AnimationSnapshot | None = None,
-) -> "tuple[frozenset[Path], dict[Path, dict]]":
-    """Export every requested mesh job from ONE view of the document's tree.
-    OCCT meshes nothing (the GLB is Y-up glTF for external tools:
-    (x, y, z) -> (x, z, -y), mm -> m).
+) -> "tuple[frozenset[Path], dict[Path, dict], dict[Path, list[str]]]":
+    """Export every requested mesh job from the document's tree, in one engine call
+    (the GLB is Y-up glTF for external tools: (x, y, z) -> (x, z, -y), mm -> m).
 
     Jobs are gated and recorded in the ARTIFACT-side mesh ledger — the document's
     own index entry, keyed by its bytes, never by which script wrote it (STORE.md
@@ -150,10 +116,9 @@ def _export_mesh_jobs(
     each of them -- the clip and the sample count of an animated GLB, which is
     derived (a clip states its own duration) and therefore worth reporting back
     the way a video reports its frame count."""
-    manifest = json.loads((package_dir / "assembly.json").read_text(encoding="utf-8"))
-    document_hash = str(manifest.get("documentHash") or "")
+    document_hash = str(source.document_hash or "")
     if len(document_hash) != 64 or any(c not in "0123456789abcdef" for c in document_hash):
-        raise RuntimeError("mesh export view is missing its selected STEP document digest")
+        raise RuntimeError("mesh export source is missing its selected STEP document digest")
     from cadgen._internal.source_sidecar import appearance_digest, read_source_sidecar
 
     if animation_source is not None:
@@ -170,10 +135,10 @@ def _export_mesh_jobs(
             fmt=job.fmt,
             mesh_tolerance=job.mesh_tolerance,
             mesh_angular_tolerance=job.mesh_angular_tolerance,
-            # An animated GLB is a function of the clip and the render module as
+            # An animated GLB is a function of the clip and its keyframes as
             # well as the bytes, so it is its own variant: a static file at the
-            # same path can never satisfy it, and an edited animation source
-            # makes the ledgered one a miss.
+            # same path can never satisfy it, and a rebaked animation makes the
+            # ledgered one a miss.
             animation_key=job.animation_key,
             appearance_key=appearance_key,
         )
@@ -183,20 +148,20 @@ def _export_mesh_jobs(
         if force or not document_mesh_current(job.out, document_hash=document_hash, **_variant(job))
     ]
     if not pending:
-        return frozenset(), {}
+        return frozenset(), {}, {}
     for job in pending:
         job.out.parent.mkdir(parents=True, exist_ok=True)
     payload = run_mesh_exporter(
-        package_dir, pending, name=spec.step_path.stem, default_color=_color_hex(spec.color),
+        source, pending, name=spec.step_path.stem, default_color=_color_hex(spec.color),
         logger=logger, animation_source=animation_source, appearance=appearance,
     )
     for job in pending:
         record_document_mesh(job.out, document_hash=document_hash, **_variant(job))
-    return frozenset(job.out for job in pending), _baked_animations(payload)
+    return frozenset(job.out for job in pending), _baked_animations(payload), _file_warnings(payload)
 
 
 def _baked_animations(payload: dict) -> "dict[Path, dict]":
-    """The builder's per-output ``animation`` block, keyed by the path it wrote.
+    """The engine's per-output ``animation`` block, keyed by the path it wrote.
 
     Only an animated GLB has one. It arrives WHOLE, warnings included: what the
     sampling could not carry is the caller's answer, not a log line, and
@@ -210,38 +175,40 @@ def _baked_animations(payload: dict) -> "dict[Path, dict]":
     return baked
 
 
+def _file_warnings(payload: dict) -> "dict[Path, list[str]]":
+    """Each written file's own warnings, keyed by its path: the faces no mesher could
+    cover, which the file leaves open (``mesh_export.run_mesh_exporter``)."""
+    return {Path(str(entry["path"])): [str(text) for text in entry["warnings"]]
+            for entry in payload.get("files") or [] if entry.get("warnings")}
+
+
 def _ledgered_animation(job: "MeshExportJob") -> "dict | None":
     """What a SKIPPED animated GLB carries, read off the request that wrote it.
 
-    A job the ledger satisfied was never sampled, so the builder's summary does
+    A job the ledger satisfied was never rewritten, so the engine's summary does
     not exist — but the file at that path is the one this request produced, and
     reporting ``None`` for it would say "static export" (what a null animation
     means, results.MeshExportFile) about a file with a clip baked into it. The
-    sample and moving counts stay absent because nothing on this side knows
-    them; the clip and the schedule are the request's own."""
+    counts stay absent because nothing on this side knows them; the clip and
+    the span are the request's own."""
     if job.animation is None:
         return None
     return {
         "clip": job.animation.get("clip"),
-        "fps": job.animation.get("fps"),
-        "samples": None,
         "seconds": job.animation.get("seconds"),
         "start": job.animation.get("start"),
-        "channels": None,
+        "pivots": None,
+        "skins": None,
+        "joints": None,
     }
 
 
 def _bakes_effects_static(job: "MeshExportJob") -> bool:
-    """Whether this request told the sampler to FREEZE something — the only case
-    where a skipped export has warnings it is not repeating.
-
-    ``drop`` bakes an effect's value at start; ``deform: "rest"`` ships a moving
-    tube at its rest shape. Both leave named occurrences standing still in a file
-    that otherwise moves. ``deform: "morph"`` freezes nothing — it bakes the
-    deformation as morph targets, which is why it exists — and ``refuse`` never
-    produced a file at all."""
-    request = job.animation or {}
-    return bool(request.get("drop")) or request.get("deform") == "rest"
+    """Whether this request told the export to FREEZE something -- the only case
+    where a skipped export has warnings it is not repeating: ``drop`` bakes an
+    effect's value at start, leaving named occurrences standing still in a file that
+    otherwise moves."""
+    return bool((job.animation or {}).get("drop"))
 
 
 def _resolve_export_output(fmt: str, raw: str | Path | None, *, document: Path) -> Path:
@@ -280,17 +247,17 @@ def export_cad_target(
 
     The shared engine entry behind the per-format doors (``cadgen.stl.build`` and
     friends). Geometry comes from the document's store tree — no generator
-    run, no source, no extraction — and one Node invocation serializes every requested
-    format from one tessellation, so all formats come from identical geometry.
+    run, no source — and one engine call serializes every requested format from
+    the same stored meshes, so all formats come from identical geometry.
     ``outputs`` pairs a format name with an explicit output path, or ``None`` for the
     sibling default beside the document. ``force`` re-exports past the ledger. Nothing here moves geometry: a mesh is the
     document's tree, tessellated — with ONE exception, ``animation``, which does
     not move it either: it writes the clip the document's sidecar animation declares
     into the GLB as glTF node animation, so a reader moves the geometry itself.
 
-    Writes no ``.step`` and no beside-source artifacts; a document missing its render
-    package compiles one into the SHARED store (content keyed — the same package every
-    later view or export of those bytes reuses). Each returned file carries whether the
+    Writes no ``.step`` and no beside-source artifacts; a document missing its tree
+    or its meshes has them derived into the SHARED store (content keyed — the same
+    ones every later view or export of those bytes reuses). Each returned file carries whether the
     ledger had already satisfied it and the effective tolerance pair it was written
     at."""
     if logger is None:
@@ -330,11 +297,11 @@ def export_cad_target(
 
     step_path = document_target(target, suffixes=STEP_SUFFIXES)
 
-    # The clip name and embedded animation source are resolved BEFORE any tessellation:
+    # The clip name and the sidecar's keyframes are resolved BEFORE any tessellation:
     # a typo must fail as a clean CLI error naming the clips the model has, not
-    # after a minute of meshing. The token it returns is what keeps an edited
-    # animation source from being served out of the ledger. Carry the
-    # same captured text to Node so edits during preparation cannot rekey it.
+    # after a minute of meshing. The token it returns is what keeps a rebaked
+    # animation from being served out of the ledger. The sampler gets the same
+    # captured keyframes, so edits during preparation cannot rekey it.
     animation_source: AnimationSnapshot | None = None
     animation_request: dict[str, object] | None = None
     animation_key: str | None = None
@@ -349,7 +316,7 @@ def export_cad_target(
     for fmt, raw in outputs:
         # A door writes the mesh it was asked for: the sibling default beside the
         # document or the explicit OUT, at the requested tolerance or the
-        # tessellator's default. Model output declarations are not read, and
+        # store's mesh default. Model output declarations are not read, and
         # nothing is looked up in a sidecar but the document's own appearance.
         out = _resolve_export_output(fmt, raw, document=step_path)
         if out in seen:
@@ -366,16 +333,17 @@ def export_cad_target(
             )
         )
 
-    with _mesh_package(repo_root, step_path) as (spec, package_dir):
-        written, baked = _export_mesh_jobs(
-            spec, package_dir, resolved, logger=logger, force=force,
-            animation_source=animation_source,
-        )
+    spec, source = _mesh_package(repo_root, step_path)
+    written, baked, noted = _export_mesh_jobs(
+        spec, source, resolved, logger=logger, force=force,
+        animation_source=animation_source,
+    )
     files = []
     warnings: list[str] = []
     for job in resolved:
         skipped = job.out not in written
         summary = baked.get(job.out)
+        warnings.extend(noted.get(job.out, ()))
         if summary is not None:
             # The warnings ride OUT of the per-file block and into the run's own,
             # so one place answers "what did this export not carry" whether the
@@ -386,7 +354,7 @@ def export_cad_target(
             if summary is not None and _bakes_effects_static(job):
                 warnings.append(
                     f"{job.out.name} is current for clip {summary['clip']}: a skipped export "
-                    "re-samples nothing, so the occurrences its drop/deform froze are not "
+                    "rewrites nothing, so the occurrences its drop froze are not "
                     "named again — re-run with --force to hear them"
                 )
         files.append(
@@ -394,17 +362,13 @@ def export_cad_target(
                 "format": job.fmt,
                 "path": str(job.out),
                 "skipped": skipped,
-                # The EFFECTIVE pair: an omitted tolerance is the tessellator's
+                # The EFFECTIVE pair: an omitted tolerance is the store's mesh
                 # default, and the result says which number that was. (The ledger
                 # keeps keying an omitted tolerance as "default", so a changed
                 # default re-exports rather than reading as current.)
-                "meshTolerance": (
-                    job.mesh_tolerance if job.mesh_tolerance is not None else TESSELLATOR_CHORD_TOLERANCE
-                ),
+                "meshTolerance": job.mesh_tolerance if job.mesh_tolerance is not None else DEFAULT_CHORD,
                 "meshAngularTolerance": (
-                    job.mesh_angular_tolerance
-                    if job.mesh_angular_tolerance is not None
-                    else TESSELLATOR_ANGLE_TOLERANCE
+                    job.mesh_angular_tolerance if job.mesh_angular_tolerance is not None else DEFAULT_ANGLE
                 ),
                 "animation": summary,
             }

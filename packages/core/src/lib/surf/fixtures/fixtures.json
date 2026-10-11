@@ -1,0 +1,78 @@
+{
+  "cam_follower_roller": {
+    "edges": 14,
+    "faces": 8,
+    "meshes": {
+      "0": {
+        "angleTolerance": 1.4,
+        "byteLength": 42596,
+        "chordTolerance": 0.002
+      },
+      "1": {
+        "angleTolerance": 0.35,
+        "byteLength": 85184,
+        "chordTolerance": 0.0015
+      }
+    },
+    "selectorsByteLength": 9056,
+    "surfaceInput": "9fc4601477c829cf5fc58726516e611e0faf59768b8af023a35fa6738d38aff9",
+    "surfaceObject": "0aabc0bd2e54cadebe1e3f60158d46e632d55ea28052e82a4a46661047a31811"
+  },
+  "mixed": {
+    "edges": 32,
+    "faces": 15,
+    "meshes": {
+      "0": {
+        "angleTolerance": 1.4,
+        "byteLength": 17696,
+        "chordTolerance": 0.002
+      },
+      "1": {
+        "angleTolerance": 0.35,
+        "byteLength": 29904,
+        "chordTolerance": 0.0015
+      }
+    },
+    "selectorsByteLength": 17123,
+    "surfaceInput": "93be8b4655848b09033ef6127725bfd5560431c8ef97fec555b0b832ba51ac5c",
+    "surfaceObject": "4a27ad3f2b2b943d3a3e2c8af691329d474d9a78bdccf225786d49bee0a99229"
+  },
+  "slot": {
+    "edges": 12,
+    "faces": 6,
+    "meshes": {
+      "0": {
+        "angleTolerance": 1.4,
+        "byteLength": 6800,
+        "chordTolerance": 0.002
+      },
+      "1": {
+        "angleTolerance": 0.35,
+        "byteLength": 7956,
+        "chordTolerance": 0.0015
+      }
+    },
+    "selectorsByteLength": 7511,
+    "surfaceInput": "fc24a805a292984192dffa104177be6615e95f1174759494a36d117bd4f90fc3",
+    "surfaceObject": "0d5a535de3c0ae11afd2dc28dc36822d6333e303be87896bf58cba79be0d7bc6"
+  },
+  "sun_gear": {
+    "edges": 291,
+    "faces": 99,
+    "meshes": {
+      "0": {
+        "angleTolerance": 1.4,
+        "byteLength": 33912,
+        "chordTolerance": 0.002
+      },
+      "1": {
+        "angleTolerance": 0.35,
+        "byteLength": 36508,
+        "chordTolerance": 0.0015
+      }
+    },
+    "selectorsByteLength": 186947,
+    "surfaceInput": "95b4d6080acc67ef83bcc96120a1c7e1e23d321d8f7585fa2d95533dc4d1f857",
+    "surfaceObject": "3bd978281de9205de4063303d84176cec0ec9dde36c83c069c14a53d80a14ab2"
+  }
+}
