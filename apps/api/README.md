@@ -101,8 +101,10 @@ it arrives.
   `cadgen/build123d.py` `__getattr__` or `cadgen/color.py` `_parse_hex` with the
   person's code above it (a model asking for a build123d name that does not exist, or
   a colour that is not a string); a `WorkerDied` with status `-15`, `-2` or `-1` (a
-  worker stopped by SIGTERM, SIGINT or SIGHUP); and a `RecursionError` with `<user>`
-  among its frames (the person's code is in the cycle). Only `exception` rows are ever
+  worker stopped by SIGTERM, SIGINT or SIGHUP); a `RecursionError` with `<user>`
+  among its frames (the person's code is in the cycle); and an `AbortError` at a `page`
+  (a cancellation the page or the browser asked for, `crashOf` in core's `client/crash.js`).
+  Only `exception` rows are ever
   dropped, and dropping one is not a refusal: the batch is answered `204` and its other
   rows are stored. Each batch that had any logs one `console.info` line counting them
   by name: `telemetry dropped page_left 4, worker_stopped 1 (schema 3, cadgen 0.7.17)`.

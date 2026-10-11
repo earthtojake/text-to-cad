@@ -48,15 +48,22 @@ function functionOf(name) {
   return FUNCTION.test(bare) ? bare : '<?>';
 }
 
+// A cancellation: what an AbortController's `abort()` makes, and what the browser rejects a page's fetches
+// with as it leaves. The page or the browser asked for it, so wherever it surfaces -- a rejection nobody
+// waited on, a view unmounting mid-request -- it is never a crash.
+const CANCELLED = 'AbortError';
+
 /**
  * @param {unknown} error
  * @param {{ handled?: boolean, fileOf?: (url: string) => string }} [options]
- * @returns {import('./types.js').CadPageCrash | null} `null` for what is no error (a value thrown).
+ * @returns {import('./types.js').CadPageCrash | null} `null` for what is no error (a value thrown) or a
+ * cancellation (an `AbortError`).
  */
 export function crashOf(error, { handled = false, fileOf = scriptFileOf } = {}) {
   const stack = /** @type {{ stack?: unknown }} */ (error ?? {}).stack;
   if (typeof stack !== 'string') return null;
   const name = /** @type {{ name?: unknown }} */ (error).name;
+  if (name === CANCELLED) return null;
   const lines = stack.split('\n');
   // Chromium's stack opens with the message, which may span lines and look like anything: only its
   // `at` lines are frames. Other engines' stacks are frames alone.
