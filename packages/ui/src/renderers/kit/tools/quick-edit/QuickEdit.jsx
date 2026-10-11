@@ -6,6 +6,7 @@ import { cn } from "@text-to-cad/ui/utils";
 import { promptReferenceIds } from "@text-to-cad/core/prompt";
 import { usePromptDestination, useViewerHost } from "../../../../host/context.js";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
+import { capturePointer } from "../../../../lib/pointerCapture.js";
 import ResizeGrip from "../ResizeGrip.jsx";
 import { TOOL_PANEL_BUTTON_CLASS } from "../ToolPanel.jsx";
 import { copiedQuickEdit, createQuickEditContext, quickEditSelection, sketchName } from "./quickEditPrompt.js";
@@ -209,7 +210,7 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
     event.preventDefault();
     const handle = event.currentTarget;
     const start = { x: event.clientX, y: event.clientY, width: section.offsetWidth, height: note.offsetHeight };
-    handle.setPointerCapture?.(event.pointerId);
+    capturePointer(handle, event.pointerId);
     let next = null, frame = 0;
     const draw = () => {
       frame = 0;

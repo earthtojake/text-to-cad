@@ -3,6 +3,7 @@ import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@text-to-cad/ui/utils";
 import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
+import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import ResizeGrip from "./ResizeGrip.jsx";
 import { ToolStackContext } from "./ToolStack.jsx";
 import { TOOL_PANEL_WIDTH, clampToolPanelHeight, clampToolPanelWidth } from "./toolStackLayout.js";
@@ -170,7 +171,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
     if (event.button !== 0) return;
     event.preventDefault();
     drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, from: drawn(), next: null };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    capturePointer(event.currentTarget, event.pointerId);
   };
   const moveDrag = event => {
     const current = drag.current;
@@ -185,7 +186,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
     const current = drag.current;
     if (!current || current.pointerId !== event.pointerId) return;
     drag.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    releasePointer(event.currentTarget, event.pointerId);
     settle(current.next || {});
   };
   // Arrows nudge by 16px, Left/Right the width and Up/Down the cap; Home and End take both to

@@ -26,6 +26,7 @@ import {
   zoomTransform
 } from "@text-to-cad/core/lib/drawing2d/index.js";
 import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "../kit/viewport/pixelRatio.js";
+import { capturePointer, releasePointer } from "../../lib/pointerCapture.js";
 import { readDrawingThemeColors } from "./themeColors.js";
 
 /** Wheel notches to zoom factor. A notch is ~100 px of delta on most mice. */
@@ -236,7 +237,7 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       // Primary press only: a secondary or middle press belongs to whatever the
       // host puts on them, not to panning.
       if (event.pointerType === "mouse" && event.button !== 0) return;
-      canvas.setPointerCapture?.(event.pointerId);
+      capturePointer(canvas, event.pointerId);
       pointers.set(event.pointerId, local(event));
       if (pointers.size === 2) measurePinch();
       if (pointers.size === 1) setDragging(true);
@@ -263,7 +264,7 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
     };
     const onPointerUp = (event) => {
       if (!pointers.delete(event.pointerId)) return;
-      canvas.releasePointerCapture?.(event.pointerId);
+      releasePointer(canvas, event.pointerId);
       if (pointers.size === 2) measurePinch();
       if (pointers.size === 0) setDragging(false);
     };

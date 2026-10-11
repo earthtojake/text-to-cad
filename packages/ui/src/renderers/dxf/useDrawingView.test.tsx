@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useDrawingView } from '../../../dist/renderers/dxf/useDrawingView.js';
 
@@ -30,4 +30,42 @@ it('paints after a StrictMode remount: the pending-frame handle does not outlive
   frames.splice(0).forEach(frame => frame());
 
   expect(fillRect).toHaveBeenCalledWith(0, 0, 320, 200);
+});
+
+function DraggableSurface() {
+  const view = useDrawingView({ drawing: null, colorScheme: 'dark', onViewMoved: () => {} });
+  return <div ref={view.containerRef} data-dragging={String(view.dragging)}><canvas ref={view.canvasRef} /></div>;
+}
+
+it('a press whose pointer can no longer be captured still drags, and nothing escapes the handler', () => {
+  // A pointer lifted before its pointerdown handler runs (or a synthetic event's id) is no longer
+  // active, and the browser answers setPointerCapture -- and releasePointerCapture -- with NotFoundError.
+  vi.stubGlobal('requestAnimationFrame', () => 1);
+  vi.stubGlobal('cancelAnimationFrame', () => {});
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+  const gone = () => { throw new DOMException('No active pointer with the given id is found.', 'NotFoundError'); };
+  const prototype = HTMLCanvasElement.prototype as unknown as Record<string, unknown>;
+  Object.assign(prototype, { setPointerCapture: gone, releasePointerCapture: gone, hasPointerCapture: () => true });
+  const escaped = vi.fn((event: Event) => event.preventDefault());
+  window.addEventListener('error', escaped);
+
+  const { container } = render(<DraggableSurface />);
+  const canvas = container.querySelector('canvas')!;
+  const dragging = () => container.firstElementChild!.getAttribute('data-dragging');
+  const press = (type: string) => {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.assign(event, { pointerId: 7, pointerType: 'touch', button: 0, clientX: 4, clientY: 4 });
+    act(() => { canvas.dispatchEvent(event); });
+  };
+  try {
+    press('pointerdown');
+    expect(dragging()).toBe('true');
+    press('pointerup');
+    expect(dragging()).toBe('false');
+    expect(escaped).not.toHaveBeenCalled();
+  } finally {
+    window.removeEventListener('error', escaped);
+    for (const name of ['setPointerCapture', 'releasePointerCapture', 'hasPointerCapture']) delete prototype[name];
+  }
 });

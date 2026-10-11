@@ -9,6 +9,7 @@ import {
   jointHandleAt
 } from "./jointHandleCanvas.js";
 import { add, advanceJointDrag, arcPoints, beginJointDrag, handleArmDirection, scale } from "./jointHandleMath.js";
+import { capturePointer, releasePointer } from "../../../../lib/pointerCapture.js";
 
 // Above this many handles a model at rest shows knobs only: two dozen arms and
 // travel arcs over one model read as a hedgehog, not as controls.
@@ -192,7 +193,7 @@ export function useJointHandles({ handles = null, handlesRef: ownerHandlesRef = 
       flush();
       const live = runtimeRef.current;
       if (live?.controls) live.controls.enabled = drag.controlsWereEnabled;
-      if (host.hasPointerCapture?.(drag.pointerId)) host.releasePointerCapture(drag.pointerId);
+      releasePointer(host, drag.pointerId);
       drag = null;
       setHover(hoverId);
     };
@@ -209,7 +210,7 @@ export function useJointHandles({ handles = null, handlesRef: ownerHandlesRef = 
       const controls = runtimeRef.current.controls;
       drag = { id: hit.id, pointerId: event.pointerId, grab, value: grab.value, pending: false, controlsWereEnabled: controls?.enabled !== false };
       if (controls) controls.enabled = false;
-      host.setPointerCapture?.(event.pointerId);
+      capturePointer(host, event.pointerId);
       setHover(hit.id);
     };
     const handlePointerMove = (event) => {
