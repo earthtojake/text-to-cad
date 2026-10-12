@@ -5,16 +5,19 @@ import json
 import shutil
 import types
 import unittest
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import get_type_hints
 from unittest import mock
 
 from cadgen._internal import generation as cad_generation
 # Spec discovery lives in generation_spec; the generation module drives it.
-from cadgen._internal.generation_spec import list_entry_specs, selected_entry_specs
+from cadgen._internal.generation_spec import _cli_progress_line, list_entry_specs, selected_entry_specs
 from cadgen import catalog as cad_catalog
 from cadgen._internal import source_hash as cad_source_hash
 from cadgen.catalog import StepImportOptions
+from cadgen.coordination import ProgressEvent
 from cadgen._internal.glb_topology import read_step_topology_manifest_from_glb
 from cadgen._internal.glb_topology import STEP_TOPOLOGY_SCHEMA_VERSION
 from cadgen._internal.step_scene import LoadedStepScene, OccurrenceNode, SelectorBundle
@@ -93,6 +96,12 @@ class CadGenerationTests(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.temp_root, ignore_errors=True)
         self._tempdir.cleanup()
+
+    def test_progress_callback_annotation_resolves(self) -> None:
+        self.assertEqual(
+            get_type_hints(_cli_progress_line)["return"],
+            contextlib.AbstractContextManager[Callable[[ProgressEvent], None] | None],
+        )
 
     def _cad_ref(self, name: str) -> str:
         return f"{self.relative_dir}/{name}"

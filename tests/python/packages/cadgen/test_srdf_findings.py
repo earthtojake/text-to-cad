@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import io
 from pathlib import Path
+from typing import get_type_hints
 import unittest
 from unittest import mock
 
@@ -19,6 +20,8 @@ from tests.python.support.tmp_root import RetryingTemporaryDirectory
 add_repo_path("skills/srdf/scripts")
 
 from cadgen import srdf
+from cadgen.srdf_source import SrdfSource
+from cadgen.srdf_validation import validate_srdf_against_urdf
 
 URDF = """\
 <robot name="edge">
@@ -211,6 +214,9 @@ class SrdfFindingsTests(unittest.TestCase):
                 else:
                     self.assertIn(expected_code, warning_codes, f"{name}: warnings were {warning_codes}")
                     self.assertFalse(error_codes, f"{name}: unexpected errors {error_codes}")
+
+    def test_validation_source_annotation_resolves(self) -> None:
+        self.assertIs(get_type_hints(validate_srdf_against_urdf)["srdf_source"], SrdfSource)
 
     def test_clean_pair_has_no_findings(self) -> None:
         srdf_text = _srdf(

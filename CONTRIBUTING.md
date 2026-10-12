@@ -239,6 +239,19 @@ run the case once.
 `scripts/test/test-python.sh --print-weights` prints what the slow files cost,
 the first thing to read when a run is slow.
 
+With the development environment active, check cadgen's Python sources with:
+
+```sh
+python -m pyrefly check --config packages/cadgen/pyproject.toml
+```
+
+Pyrefly is pinned in `requirements-dev.txt`. The package's `[tool.pyrefly]`
+configuration uses the [basic preset](https://pyrefly.org/en/docs/configuration/#preset-basic)
+over `packages/cadgen/src`. It checks a limited set of diagnostics, including
+undefined names in annotations, and skips unannotated function bodies and broader
+argument and assignment checks. Tests, scripts and skill helpers are outside this
+check's scope. Both cadgen CI jobs run it before the package suite
+
 ### CI
 
 `test.yml` runs one job per concern, and a change runs only what can break.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+import contextlib
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from dataclasses import replace
 from pathlib import Path
@@ -20,6 +21,7 @@ from cadgen.catalog import normalize_cad_ref
 from cadgen.catalog import normalize_source_ref
 from cadgen.cli_logging import CliLogger
 from cadgen.cli_progress import cli_progress_line
+from cadgen.coordination import ProgressEvent
 from cadgen.metadata import GeneratorMetadata
 from cadgen.render import relative_to_cwd
 

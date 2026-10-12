@@ -25,6 +25,7 @@ scipy
 # Repo tests only.
 networkx
 lxml
+pyrefly==1.3.2
 pytest
 trimesh
 # The daemon's workers start in an environment uv creates, as uvx runs cadgen

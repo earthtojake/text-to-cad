@@ -16,7 +16,7 @@ from pathlib import Path
 
 from cadgen.findings import FindingsReport
 from cadgen.xml_common import display_path
-from cadgen.srdf_source import SrdfPlanningGroup
+from cadgen.srdf_source import SrdfPlanningGroup, SrdfSource
 
 URDF_SUFFIX = ".urdf"
 MANUAL_PAIR_WARNING_THRESHOLD = 25

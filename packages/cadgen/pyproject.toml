@@ -79,6 +79,11 @@ Issues = "https://github.com/earthtojake/text-to-cad/issues"
 [project.scripts]
 cadgen = "cadgen.cli:main"
 
+[tool.pyrefly]
+preset = "basic"
+project-includes = ["src"]
+search-path = ["src"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["cadgen*"]

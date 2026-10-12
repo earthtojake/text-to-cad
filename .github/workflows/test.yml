@@ -171,6 +171,9 @@ jobs:
         with:
           npm: packages/core
 
+      - name: Check cadgen types (basic)
+        run: python -m pyrefly check --config packages/cadgen/pyproject.toml --output-format full-text-with-github
+
       - name: Run the cadgen package suite
         env:
           TESTS: ${{ needs.changes.outputs.cadgen_tests }}
@@ -204,6 +207,9 @@ jobs:
         uses: ./.github/actions/setup-deps
         with:
           npm: packages/core
+
+      - name: Check cadgen types (basic)
+        run: python -m pyrefly check --config packages/cadgen/pyproject.toml --output-format full-text-with-github
 
       # --keep-going: report every failing suite in one round trip rather than one per
       # run; the Linux job keeps the fail-fast default.
