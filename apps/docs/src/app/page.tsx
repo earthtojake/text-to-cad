@@ -175,7 +175,19 @@ function Install({ item }: { item: (typeof installs)[number] }) {
         <h3 className="text-base font-semibold text-foreground">
           <TitleLink anchor={item.id}>{item.agent}</TitleLink>
         </h3>
-        {item.note ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.note}</p> : null}
+        {item.note ? (
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {item.note}
+            {item.noteLink ? (
+              <>
+                {" "}
+                <a href={item.noteLink.href} className="text-foreground underline underline-offset-4">
+                  {item.noteLink.text}
+                </a>
+              </>
+            ) : null}
+          </p>
+        ) : null}
       </div>
       {item.listing ? (
         <>
