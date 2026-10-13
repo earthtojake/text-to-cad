@@ -9,6 +9,7 @@
 // semantics; what is drawn is the URDF it is paired with, with the SRDF's semantics on it.
 
 import {
+  isAbortError,
   loadRenderSdf,
   loadRenderSrdf,
   loadRenderUrdf,
@@ -52,15 +53,35 @@ export function peekRobotMeshes(urls, { resources } = {}) {
   return meshes.every(Boolean) ? meshes : null;
 }
 
+/** The first visual that names `url`, as its description wrote it: `link “base” mesh “meshes/base.stl”`. */
+function meshNamedBy(description, url) {
+  for (const link of Array.isArray(description?.links) ? description.links : []) {
+    for (const visual of Array.isArray(link?.visuals) ? link.visuals : []) {
+      if (String(visual?.meshUrl || "").trim() === url) {
+        return `Link “${link.name}” mesh “${visual.filename || url}”`;
+      }
+    }
+  }
+  return `Mesh ${url}`;
+}
+
+/** A mesh's failure, saying which link's mesh it is: the server's reason alone ("No file at …")
+ * did not say which `<mesh>` to fix. Cancellation passes through as it came. */
+function meshFailure(error, description, url, signal) {
+  if (signal?.aborted || isAbortError(error)) return error;
+  return Object.assign(new Error(`${meshNamedBy(description, url)}: ${error?.message || error}`, { cause: error }),
+    { status: error?.status, url: error?.url || url, alert: error?.alert });
+}
+
 /**
  * Every link mesh, in `urls` order. A mesh that fails to load fails the robot: a robot
  * drawn without one of its links is a plausible wrong picture, in the viewer and in a
- * snapshot alike.
+ * snapshot alike. Its error names the link and the mesh as the description wrote it.
  *
  * @param {string[]} urls  `robotMeshUrls(description)`.
- * @param {{ resources?: object, signal?: AbortSignal, concurrency?: number, onMeshLoaded?: (done: number) => void }} [options]
+ * @param {{ description?: object, resources?: object, signal?: AbortSignal, concurrency?: number, onMeshLoaded?: (done: number) => void }} [options]
  */
-export async function loadRobotMeshes(urls, { resources, signal, concurrency = DEFAULT_MESH_CONCURRENCY, onMeshLoaded } = {}) {
+export async function loadRobotMeshes(urls, { description, resources, signal, concurrency = DEFAULT_MESH_CONCURRENCY, onMeshLoaded } = {}) {
   const meshes = new Array(urls.length);
   let next = 0;
   let done = 0;
@@ -69,7 +90,11 @@ export async function loadRobotMeshes(urls, { resources, signal, concurrency = D
       const index = next;
       next += 1;
       signal?.throwIfAborted();
-      meshes[index] = await loadRenderMeshByUrl(urls[index], { signal, resources, fallback: "stl" });
+      try {
+        meshes[index] = await loadRenderMeshByUrl(urls[index], { signal, resources, fallback: "stl" });
+      } catch (error) {
+        throw meshFailure(error, description, urls[index], signal);
+      }
       done += 1;
       onMeshLoaded?.(done);
     }
@@ -99,5 +124,5 @@ export async function loadRobot(kind, { url, urdfUrl = "", resources, signal, co
   const description = await loadRobotDescription(kind, { url, urdfUrl, resources, signal });
   if (!description) throw new Error(`Robot description did not parse: ${url}`);
   const urls = robotMeshUrls(description);
-  return robotModel(description, urls, await loadRobotMeshes(urls, { resources, signal, concurrency }));
+  return robotModel(description, urls, await loadRobotMeshes(urls, { description, resources, signal, concurrency }));
 }

@@ -840,15 +840,21 @@ class CadApp:
         response.send_json(status, body)
 
     def _handle_asset(self, request, response, query):
-        candidate = asset_path(query.get("file") or "")
-        stat_result = None
-        if candidate:
-            try:
-                stat_result = os.stat(candidate)
-            except (OSError, ValueError):
-                stat_result = None
-        if not candidate or stat_result is None or not stat.S_ISREG(stat_result.st_mode):
-            response.send_json(404, {"error": "Not found"})
+        """A CAD file's bytes, by absolute path. A 404 names the path and why: the page shows the
+        sentence as the reason a model did not load (a robot's missing link mesh among them), and a
+        bare "Not found" left nothing to fix."""
+        ref = query.get("file") or ""
+        candidate = asset_path(ref)
+        if not candidate:
+            response.send_json(404, {"error": f"{ref} is not a file the viewer sends: it sends CAD files "
+                                              f"({_CAD_EXTENSIONS}) whose names are not hidden"})
+            return
+        try:
+            stat_result = os.stat(candidate)
+        except (OSError, ValueError):
+            stat_result = None
+        if stat_result is None or not stat.S_ISREG(stat_result.st_mode):
+            response.send_json(404, {"error": f"No file at {candidate}"})
             return
         content_type = content_type_for_path(candidate)
         response.stream_file(candidate, stat_result, content_type, RAW_FILE_HEADERS)

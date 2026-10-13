@@ -29,7 +29,7 @@ Checklist after export, before authoring:
 ## Reference Forms
 
 - **Local relative paths** (`3MF/forearm_link.3mf`) resolve from the `.urdf` file's directory. Preferred for a robot kept in a project tree — the bundled validator verifies these files exist.
-- **`package://name/path` URIs** are for ROS-package consumers. The validator checks syntax only and warns that resolution is consumer-specific; confirm the consuming environment resolves the package root as expected.
+- **`package://name/path` URIs** are for ROS-package consumers. The validator checks syntax only and warns that resolution is consumer-specific; confirm the consuming environment resolves the package root as expected. The CAD Viewer takes the nearest folder named `name` above the `.urdf` as the package root, so keep the description inside its package folder.
 - Remote URIs are accepted with warnings; avoid them for durable fixtures.
 
 Keep mesh files under the same model directory tree as the URDF, so the file and its assets move together.

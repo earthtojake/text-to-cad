@@ -186,8 +186,8 @@ function RobotSurface({ view, data }) {
   const handlePick = useCallback((hit, modifiers) => { pickSelection(hit, modifiers); if (hit) toSelect(); }, [pickSelection, toSelect]);
 
   // A mesh the description names, by the absolute path the host opens. It resolves against the
-  // opened file exactly as the mesh loader does (an SRDF's URDF is always beside it); a
-  // `package://` reference has no path here.
+  // opened file exactly as the mesh loader does (an SRDF's URDF is always beside it), a
+  // `package://` one against the folder named for its package above the file.
   const modelKey = document.modelKey;
   const hostPath = String(document.entry?.file || "").trim() || modelKey;
   const meshPath = useCallback((filename) => resolveLocalAssetFileRef(hostPath, filename), [hostPath]);

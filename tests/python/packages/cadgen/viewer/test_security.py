@@ -236,6 +236,17 @@ class OnlyCadBytesLeave(SecurityTestCase):
         status, _, _ = self.fixture.asset(system_file)
         self.assertEqual(status, 404)
 
+    def test_a_404_names_the_path_and_why(self):
+        # The page shows this sentence as the reason a model did not load (a robot's missing link
+        # mesh, #611): a bare "Not found" named nothing to fix.
+        missing = self.fixture.path("meshes/upper_arm.stl")
+        status, _, body = self.fixture.asset(missing)
+        self.assertEqual((status, json.loads(body)["error"]), (404, f"No file at {os.path.normpath(missing)}"))
+        refused = self.fixture.path("meshes/upper_arm.dae")
+        status, _, body = self.fixture.asset(refused)
+        self.assertEqual(status, 404)
+        self.assertTrue(json.loads(body)["error"].startswith(f"{refused} is not a file the viewer sends"), body)
+
     def test_a_directory_with_a_served_extension_is_404(self):
         status, _, body = self.fixture.asset(self.fixture.path("dir.step"))
         self.assertDenied(status, body, {404})

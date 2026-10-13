@@ -114,7 +114,7 @@ export function useRobotDocument({ entry, resources }) {
       const urls = robotMeshUrls(description);
       const counted = done => ({ progress: { phase: "meshes", label: "Loading meshes", done, total: urls.length, determinate: true } });
       if (urls.length) publish(counted(0));
-      const meshes = await loadRobotMeshes(urls, { resources: resourcesRef.current, signal, concurrency: meshConcurrency(),
+      const meshes = await loadRobotMeshes(urls, { description, resources: resourcesRef.current, signal, concurrency: meshConcurrency(),
         onMeshLoaded: done => publish(counted(done)) });
       signal.throwIfAborted();
       publish({ progress: { phase: "view", label: "Building robot", determinate: false } });
