@@ -6,7 +6,8 @@ set -euo pipefail
 #   scripts/test/test-python.sh [--keep-going] [--select GROUP] [--print-weights] [PATH...]
 #
 # --select picks one group instead of all of them:
-#   cadgen   the cadgen package suite, the CAD Viewer backend included (92% of the time)
+#   cadgen   the cadgen package suite, the CAD Viewer backend included (92% of the time), and
+#            usd-brep-build123d's, which judges its solids against build123d (cadgen's kernel)
 #   viewer   the CAD Viewer backend alone (tests/python/packages/cadgen/viewer)
 #   skills   every skill's suite
 #   all      cadgen + skills (the default)
@@ -73,6 +74,10 @@ export CADGEN_CACHE_DIR="$CADGEN_TEST_CACHE_DIR"
 # URLs are precisely the class of bug that has only ever shown up there.
 if [ "$SELECT" = "all" ] || [ "$SELECT" = "cadgen" ]; then
   run_suite "cadgen package Python tests" "tests/python/packages/cadgen" "packages/cadgen/src"
+  # build123d's language on NVIDIA's usd-brep kernel. It skips where usd-brep is not installed
+  # (its wheels are CPython 3.12, Linux and Windows) and fails in CI if the kernel is missing.
+  run_suite "usd-brep-build123d package Python tests" "tests/python/packages/usd_brep_build123d" \
+    "packages/usd-brep-build123d/src"
 fi
 
 # The backend alone, for a pull request that only moves the Viewer's client: nothing under

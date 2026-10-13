@@ -20,7 +20,7 @@ module's code would.
 
 Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs take:
 
-    cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
+    cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows): cadgen's suite and usd-brep-build123d's
     core_js                       core-js
     web  web_ui  web_client  web_viewer
     mcp
@@ -55,6 +55,10 @@ from typing import Callable, Iterable
 ROOT = Path(__file__).resolve().parents[2]
 
 CADGEN_SUITE = "tests/python/packages/cadgen"
+# build123d's language on NVIDIA's usd-brep kernel: judged against build123d, so it runs in the
+# cadgen jobs, where build123d is installed (and usd-brep with it, on request).
+USD_BREP_SUITE = "tests/python/packages/usd_brep_build123d"
+PACKAGE_SUITES = (CADGEN_SUITE, USD_BREP_SUITE)  # the suites `cadgen_tests` narrows
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
 FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging")
@@ -135,7 +139,7 @@ def _test_file(suite: str, whole: str | None = None) -> Callable[[str], Select]:
             target = whole
         else:
             target = "/".join(path.split("/")[: len(suite.split("/")) + 1])
-        if suite == CADGEN_SUITE:
+        if suite in PACKAGE_SUITES:
             return select(cadgen=[target])
         if suite == POLICY_SUITE:
             return select(policy=[target])
@@ -238,6 +242,8 @@ RULES: tuple[Rule, ...] = (
     Rule(VIEWER_CODE, _viewer_change, final=True),
     Rule(MCP_CODE, _mcp_change, final=True),
     Rule(("packages/cadgen/**", "scripts/bundle/**"), CADGEN_CONSUMERS),
+    # usd-brep-build123d: nothing else imports it, and it reads no cadgen code.
+    Rule(("packages/usd-brep-build123d/**",), select(cadgen=[USD_BREP_SUITE])),
 
     # The shared UI and the apps. The snapshot runtime is built from core alone, so ui
     # reaches the two hosts and the wheel, not cadgen's suites.
@@ -258,6 +264,7 @@ RULES: tuple[Rule, ...] = (
 
     # Tests: a test file runs itself.
     Rule((f"{CADGEN_SUITE}/**",), _test_file(CADGEN_SUITE, whole=CADGEN_SUITE)),
+    Rule((f"{USD_BREP_SUITE}/**",), _test_file(USD_BREP_SUITE, whole=USD_BREP_SUITE)),
     Rule((f"{POLICY_SUITE}/**",), _test_file(POLICY_SUITE, whole=POLICY_SUITE)),
     Rule((f"{SKILL_SUITES}/**",), _test_file(SKILL_SUITES)),
 
@@ -275,7 +282,7 @@ RULES: tuple[Rule, ...] = (
     Rule(("skills/*/scripts/packages/**",), policy("test_node_builder_bundles.py")),
 
     # The test runners and the gates each one feeds.
-    Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
+    Rule(("scripts/test/test-python.sh",), select(cadgen=list(PACKAGE_SUITES), skills=[SKILL_SUITES])),
     Rule(("scripts/test/test-global.sh",), select(policy=[POLICY_SUITE])),
     Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
     Rule(("scripts/test/test-api.sh",), select(flags=["api"])),
@@ -394,9 +401,10 @@ def _heavy(paths: list[str], suite: str) -> list[str]:
 def outputs(chosen: Select, *, changed: bool = True) -> dict[str, str]:
     """The step outputs for a selection. `changed` is false when nothing runs at all."""
     if chosen.full:
-        chosen = Select(frozenset(FLAGS), frozenset({CADGEN_SUITE}), frozenset({POLICY_SUITE}),
+        chosen = Select(frozenset(FLAGS), frozenset(PACKAGE_SUITES), frozenset({POLICY_SUITE}),
                         frozenset({SKILL_SUITES}), True)
-    cadgen = _narrow(chosen.cadgen, CADGEN_SUITE)
+    cadgen = [path for suite in PACKAGE_SUITES
+              for path in _narrow([p for p in chosen.cadgen if p == suite or p.startswith(suite + "/")], suite)]
     heavy_policy = _heavy(_narrow(chosen.policy, POLICY_SUITE), POLICY_SUITE)
     heavy_skills = _heavy(_narrow(chosen.skills, SKILL_SUITES), SKILL_SUITES)
     result = {flag: flag in chosen.flags for flag in FLAGS}

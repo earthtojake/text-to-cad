@@ -1,0 +1,15 @@
+/STEP/*
+!/STEP/imported/
+/DXF/*
+!/DXF/imported/
+/STL/*
+!/STL/imported/
+/GLB/*
+!/GLB/imported/
+/3MF/*
+!/3MF/imported/
+/PDF/*
+!/PDF/imported/
+/tmp/
+__pycache__/
+/USD/*

@@ -18,6 +18,10 @@ depends on React or UI. Shared packages never import application source, and
 applications never import one another. The root npm workspace and lockfile own
 JavaScript installation; `npm run build:packages` builds core before UI.
 
+One experiment sits beside them, outside every app, skill and release:
+[usd-brep-build123d](usd-brep-build123d/README.md), build123d's modeling language on
+NVIDIA's usd-brep kernel, writing OpenUSD.
+
 The Python wheel assembles built Node/browser runtimes and the built web client.
 That build dependency does not let Python engine code reach into app source.
 The wheel works outside this repository, so its own Markdown must also stand

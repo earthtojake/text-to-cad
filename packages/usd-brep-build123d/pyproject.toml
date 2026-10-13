@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "usd-brep-build123d"
+# An unpublished experiment, outside the release: not stamped from VERSION.
+version = "0.0.0"
+description = "build123d's modeling language on NVIDIA's usd-brep (SMLib) kernel, writing OpenUSD"
+readme = "README.md"
+license = "MIT"
+# usd-brep 1.0.0 ships CPython 3.12 wheels only (Linux x86_64/aarch64, Windows x64).
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "usd-brep==1.0.0",
+    "numpy",
+]
+
+[project.optional-dependencies]
+# usd_brep_build123d.occt: the exact conversion to OpenCascade (comparison with build123d, STEP).
+occt = ["build123d"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

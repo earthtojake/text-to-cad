@@ -71,6 +71,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^scripts/bench/viewer-memory/[^/]*\.test\.mjs$",          # test-js.sh --select core
             r"^scripts/test/check-(dependencies|kit-boundaries)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cadgen/(.*/)?test_[^/]*\.py$",      # test-python.sh cadgen
+            r"^tests/python/packages/usd_brep_build123d/test_[^/]*\.py$",  # test-python.sh cadgen
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
             r"^tests/browser/viewer-e2e\.mjs$",                          # test-viewer-browser.sh
@@ -83,7 +84,7 @@ class EveryTestRunsInCI(unittest.TestCase):
     def test_a_full_run_runs_every_job_and_every_suite_whole(self):
         selected = selector.outputs(selector.EVERYTHING)
         self.assertEqual(jobs_for("VERSION"), GATED)
-        self.assertEqual(selected["cadgen_tests"], CADGEN)
+        self.assertEqual(selected["cadgen_tests"].split(), list(selector.PACKAGE_SUITES))
         self.assertEqual(selector.scope(selected), "full")
         # Light tests run in the light phase, every other test in the heavy one: together, all.
         policy = set(selected["light_policy"].split()) | set(selected["skills_policy"].split())
@@ -315,6 +316,17 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                 self.assertEqual(jobs_for(path), expected)
         self.assertEqual(tests_for("scripts/test/test-global.sh")["skills_policy"],
                          [f"{POLICY}/{name}" for name in sorted(selector.HEAVY_POLICY)])
+
+    def test_usd_brep_build123d_runs_its_suite_in_the_cadgen_jobs(self):
+        suite = selector.USD_BREP_SUITE
+        chosen = tests_for("packages/usd-brep-build123d/src/usd_brep_build123d/topology.py")
+        self.assertEqual(chosen["cadgen_tests"], [suite])
+        self.assertEqual(jobs_for("packages/usd-brep-build123d/src/usd_brep_build123d/topology.py"),
+                         {"cadgen-linux", "cadgen-windows", "skills"})
+        self.assertEqual(tests_for(f"{suite}/test_parity.py")["cadgen_tests"], [f"{suite}/test_parity.py"])
+        self.assertEqual(tests_for(f"{suite}/parity.py")["cadgen_tests"], [suite])
+        self.assertIn('usd-brep: "true"', JOBS["cadgen-linux"])
+        self.assertIn('usd-brep: "true"', JOBS["cadgen-windows"])
 
     def test_a_deleted_test_file_has_nothing_left_to_run(self):
         self.assertEqual(jobs_for(f"{CADGEN}/test_gone_for_good.py"), {"skills"})

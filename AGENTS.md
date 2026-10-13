@@ -99,6 +99,8 @@ path, the rehearsal, and local/manual fallbacks.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
   the skill CLI parsers, the CAD Viewer backend + client, and the Node/browser
   runtimes it executes.
+- `packages/usd-brep-build123d`: EXPERIMENTAL, not shipped — build123d's modeling
+  language on NVIDIA's usd-brep kernel, writing OpenUSD; its README holds its laws.
 - `apps/docs/`: documentation site.
 - `apps/api/`: `api.texttocad.dev`, its own Vercel project: cadgen's version feed (read from PyPI) and the CAD app's consented analytics.
 - `tests/`: root-owned test suites for skills, packages, viewer services, and

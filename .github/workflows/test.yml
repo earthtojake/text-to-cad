@@ -148,8 +148,9 @@ jobs:
       - name: Check the tracked tree
         run: scripts/github-workflows/check-builds.sh --tree-only
 
-  # The cadgen package suite, CAD Viewer backend included, on both platforms -- or the
-  # files of it a change selected (a test edited, a document a test reads).
+  # The cadgen package suite, CAD Viewer backend included, and usd-brep-build123d's (which
+  # judges its solids against build123d, cadgen's kernel), on both platforms -- or the files of
+  # them a change selected (a test edited, a document a test reads).
   cadgen-linux:
     name: cadgen (Linux)
     needs: changes
@@ -170,6 +171,7 @@ jobs:
         uses: ./.github/actions/setup-deps
         with:
           npm: packages/core
+          usd-brep: "true"
 
       - name: Run the cadgen package suite
         env:
@@ -204,6 +206,7 @@ jobs:
         uses: ./.github/actions/setup-deps
         with:
           npm: packages/core
+          usd-brep: "true"
 
       # --keep-going: report every failing suite in one round trip rather than one per
       # run; the Linux job keeps the fail-fast default.

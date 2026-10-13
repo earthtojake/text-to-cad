@@ -11,6 +11,9 @@ inputs:
   ui-browser:
     description: Install the npm Playwright Chromium used by the shared UI, web and desktop browser tests.
     default: "false"
+  usd-brep:
+    description: Install NVIDIA's usd-brep kernel for packages/usd-brep-build123d's suite (requires python; CPython 3.12 wheels for Linux and Windows).
+    default: "false"
   npm:
     description: Space-separated root workspace paths, or "none". Include shared dependencies used by the job.
     default: "packages/core packages/ui apps/web apps/mcp apps/docs"
@@ -39,6 +42,13 @@ runs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install -r requirements-dev.txt
+
+    # 244 MB installed, so only the jobs that run packages/usd-brep-build123d's suite take it.
+    # The pin is the package's own (packages/usd-brep-build123d/pyproject.toml).
+    - name: Install the usd-brep kernel
+      if: inputs.python == 'true' && inputs.usd-brep == 'true'
+      shell: bash
+      run: python -m pip install usd-brep==1.0.0
 
     # zig compiles each target's C runtime once and keeps it in its global cache; the
     # Windows one is most of a cold tracer build. Keyed on the pinned zig version.

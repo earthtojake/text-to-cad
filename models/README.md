@@ -20,6 +20,7 @@ models/
 ├── tendon_hand/      tendon-driven research hand (source-only)
 ├── falcon_heavy/     SpaceX public-source reconstruction
 ├── juno/ lyra/       authored robot description packages (URDF/SRDF)
+├── usd-brep-demo/    EXPERIMENTAL: build123d scripts run on NVIDIA usd-brep, written as OpenUSD
 ```
 
 The demo corpus is split three ways on purpose — a part is one script, an
@@ -123,6 +124,13 @@ Models that need a **folder of their own** rather than a single loose script.
   sibling; regenerate that sibling first — a missing one is a build error
   naming its generator. `validation/` and `website/` carry its validation
   programs and standalone HTML presentation.
+
+### Kernel experiments
+
+- [usd-brep-demo/](usd-brep-demo/src/README.md): EXPERIMENTAL — build123d
+  scripts run on NVIDIA's usd-brep (SMLib) kernel through
+  `packages/usd-brep-build123d` and written as exact B-rep in OpenUSD; needs
+  CPython 3.12 with `usd-brep` installed (Linux/Windows).
 
 ### SpaceX reconstruction package
 
