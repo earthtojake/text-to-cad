@@ -1,0 +1,4 @@
+[submodule "apps/studio"]
+	path = apps/studio
+	url = https://github.com/amywork777/t3code.git
+	branch = amy/hardware

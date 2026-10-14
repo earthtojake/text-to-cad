@@ -220,6 +220,11 @@ RULES: tuple[Rule, ...] = (
     Rule(("apps/web/**/*.md",), select(flags=["web_client"]), final=True),  # its links must resolve
     Rule(("packages/**/*.md", "apps/**/*.md"), NOTHING, final=True),
 
+    # text-to-cad Studio is its own repository, pinned as a submodule that no job checks out.
+    # The text-bytes contract reads .gitmodules to leave a local checkout of it alone.
+    Rule(("apps/studio",), NOTHING, final=True),
+    Rule((".gitmodules",), select(policy=[f"{POLICY_SUITE}/test_source_text_bytes.py"]), final=True),
+
     # Shared by every job, or the selection itself: everything runs.
     Rule((
         "VERSION",                       # a release is tested whole
