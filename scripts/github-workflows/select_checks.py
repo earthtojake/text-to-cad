@@ -270,6 +270,8 @@ RULES: tuple[Rule, ...] = (
     Rule(("skills/dxf/**",), select(skills=[f"{SKILL_SUITES}/dxf/test_documented_commands.py"])),
     Rule(("skills/dfam-check/**",), select(skills=[f"{SKILL_SUITES}/dfam-check"])),
     Rule(("skills/dfm/**",), select(skills=[f"{SKILL_SUITES}/dfm"])),
+    # The cam skill's router table and pages are checked against what cadgen builds.
+    Rule(("skills/cam/**",), select(cadgen=[f"{CADGEN_SUITE}/cam/test_cam_skill.py"])),
     # Files that must never appear here: the test that refuses one runs when one does.
     Rule(("skills/**/node_runtime.py",), select(cadgen=[f"{CADGEN_SUITE}/test_node_resolve_bootstrap.py"])),
     Rule(("skills/*/scripts/packages/**",), policy("test_node_builder_bundles.py")),

@@ -12,7 +12,9 @@ an argument-parsing framework:
   they carry a default.
 * Keyword-only parameters become ``--kebab-case`` flags; ``bool`` becomes
   ``store_true`` (and must default to ``False``, since a flag can only turn
-  something on).
+  something on). A flag that takes a value takes the next token even when it
+  starts with a dash and a letter (``--direction -Z``), as argparse alone
+  would not.
 * The allowed annotation set is ``str, int, float, bool, Path`` and ``X | None``
   over those. Anything richer DISQUALIFIES the function from mirror status: it
   must be an ADAPTER instead — a hand-written parser plus an explicit
@@ -230,6 +232,55 @@ def _flag_metavars(names: Sequence[str]) -> dict[str, str]:
             depth[name] += 1
 
 
+# A value that starts with one dash and a letter (``-Z``, ``-X``): argparse reads
+# it as an option, though a generated parser has no one-dash option but -h.
+_DASH_VALUE_RE = re.compile(r"-[A-Za-z][^=\s]*")
+
+
+class _GeneratedParser(argparse.ArgumentParser):
+    """A generated command's parser: a flag that takes a value takes the next
+    token as that value even when it starts with a dash and a letter, so
+    ``--direction -Z`` works as ``--direction=-Z`` does.
+
+    argparse treats any token that starts with a dash (and is not a negative
+    number) as an option, and would refuse ``--direction -Z`` with "expected
+    one argument". Generated flags are all ``--long`` spellings, so a
+    one-dash token right after a value-taking flag can only be its value,
+    unless it is an option this parser knows (``-h``).
+    """
+
+    def parse_known_args(self, args=None, namespace=None):  # noqa: ANN001, ANN201 - argparse's own signature
+        tokens = list(sys.argv[1:] if args is None else args)
+        return super().parse_known_args(attach_dash_values(self, tokens), namespace)
+
+
+def attach_dash_values(parser: argparse.ArgumentParser, tokens: list[str]) -> list[str]:
+    """``tokens`` with each ``--flag -Z`` (a value-taking flag, then a value
+    that starts with one dash and a letter) written ``--flag=-Z``."""
+    out: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            return out + tokens[index:]
+        action = parser._option_string_actions.get(token)  # noqa: SLF001 - argparse exposes no public view
+        following = tokens[index + 1] if index + 1 < len(tokens) else None
+        if (
+            action is not None
+            and token.startswith("--")
+            and action.nargs is None
+            and following is not None
+            and _DASH_VALUE_RE.fullmatch(following)
+            and following not in parser._option_string_actions  # noqa: SLF001
+        ):
+            out.append(f"{token}={following}")
+            index += 2
+            continue
+        out.append(token)
+        index += 1
+    return out
+
+
 def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.ArgumentParser:
     """The argparse parser this function's signature implies."""
     summary, param_help = parse_docstring(func.__doc__)
@@ -237,7 +288,7 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
     # abbreviations would parse successfully but are not part of that surface,
     # and make it impossible to tell which canonical keyword was supplied
     # without reimplementing argparse's matching rules.
-    parser = argparse.ArgumentParser(prog=prog, description=summary, allow_abbrev=False)
+    parser = _GeneratedParser(prog=prog, description=summary, allow_abbrev=False)
     hints = _type_hints(func)
     where = func.__qualname__
     metavars = _flag_metavars([

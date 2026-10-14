@@ -106,25 +106,31 @@ export function ToolPanelClose({ className }) {
  * beside the chevron, and has no grip while folded: there is no height to set. Which panels are
  * folded is the person's (`ToolStack.jsx`), by `id`, across files.
  *
+ * `fitContent`: a resizable panel that opens at its content's height rather than its id's default cap
+ * (Study, short, its controls at its foot): it still gives way as its `fit` says when the stack is
+ * short, and a cap the person drags is kept as any other.
+ *
  * `closable`: the tree's. Its X (`ToolPanelClose`) puts the panel away — `hidden`, kept mounted —
  * and the tool it belongs to brings it back; whether it is closed is the person's too, by `id`,
  * starting closed on a phone and wherever the tool it belongs to says the file starts it closed
  * (a single part's: `toolPanelClosed`). `hidden` keeps a panel mounted while its tool is
  * not up, so a tree keeps its expansion, filter and scroll across a trip to another tool. `header`
  * never scrolls; the body under it does, for a panel that gives way; `footer` (a
- * `ToolPanelFooterButton`) is under the body and never scrolls either.
+ * `ToolPanelFooterButton`, or Study's What you see) is under the body and never scrolls either. While a body
+ * that gives way has more under its fold, its foot fades out (`data-tool-panel-more`), so a row cut by the fold
+ * never reads as the last one.
  *
  * @param {{ id: string, title?: import("react").ReactNode, name?: string, label: string, summary?: import("react").ReactNode,
  *   actions?: import("react").ReactNode,
  *   header?: import("react").ReactNode, footer?: import("react").ReactNode, collapsible?: boolean, closable?: boolean, onClose?: (() => void) | null, closeLabel?: string,
- *   fit?: "fixed" | "tree" | "details", resizable?: boolean, hidden?: boolean, defaultCollapsed?: boolean,
+ *   fit?: "fixed" | "tree" | "details", resizable?: boolean, fitContent?: boolean, hidden?: boolean, defaultCollapsed?: boolean,
  *   children?: import("react").ReactNode }} props
  *   `label` names the panel for assistive technology ("Clip controls"), with a heading or
  *   without; the chevron, the X and the grip take their names from it, unless the X says
  *   what it does itself (`closeLabel`, "Clear selection").
  */
 export default function ToolPanel({ id, title = null, name = "", label, summary = null, actions = null, header = null, footer = null, collapsible = true, closable = false, onClose = null, closeLabel = "",
-  fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, children }) {
+  fit = "fixed", resizable = false, fitContent = false, hidden = false, defaultCollapsed = false, children }) {
   const stack = useContext(ToolStackContext);
   const kept = Boolean(stack && id);
   // Folded: the person's, kept by the stack across files; a panel drawn alone keeps its own.
@@ -151,7 +157,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const clampWidth = value => clampToolPanelWidth(value, stack?.viewerWidth || window.innerWidth);
   const clampHeight = value => clampToolPanelHeight(value, stack?.room() || Infinity);
   const width = size.width ? clampWidth(size.width) : TOOL_PANEL_WIDTH;
-  const cap = sized ? size.height ?? stack?.defaultHeight(id) ?? null : null;
+  const cap = sized ? size.height ?? (fitContent ? null : stack?.defaultHeight(id)) ?? null : null;
   // One gesture's outcome, written once: a width, a cap, or both.
   const settle = change => {
     setDraft(null);
@@ -216,6 +222,20 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
     return () => observer.disconnect();
   }, [floored]);
   const minHeight = floored && natural !== null ? Math.min(natural, FLOOR[fit], cap === null ? Infinity : cap) : undefined;
+  // Whether the body has more under its fold: a body that gives way fades at its foot while it does.
+  const [more, setMore] = useState(false);
+  const senseMore = useCallback(() => {
+    const element = body.current;
+    setMore(Boolean(element) && element.scrollHeight - element.scrollTop - element.clientHeight > 1);
+  }, []);
+  useLayoutEffect(() => {
+    if (!floored || !body.current || typeof ResizeObserver === "undefined") return undefined;
+    senseMore();
+    const observer = new ResizeObserver(senseMore);
+    observer.observe(body.current);
+    if (content.current) observer.observe(content.current);
+    return () => observer.disconnect();
+  }, [floored, senseMore]);
 
   const heading = title ? <div className="flex min-h-7 shrink-0 items-center justify-end gap-0.5 pl-2 pr-1" data-tool-panel-heading="">
     <h3 className={cn("min-w-0 truncate", TOOL_PANEL_HEADING_TEXT_CLASS)}>{title}</h3>
@@ -243,9 +263,13 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
       {/* A panel that gives way scrolls in the chrome's one scroll region; a fixed one never scrolls. */}
       {fit === "fixed" ? <div ref={body} hidden={collapsed} data-tool-panel-body="" className="min-w-0 overflow-x-clip rounded-b-md">
         <div ref={content} className="flow-root">{children}</div>
-      </div> : <ScrollArea hidden={collapsed} className="min-w-0 flex-1 rounded-b-md" viewportRef={body} viewportProps={{ "data-tool-panel-body": "" }}>
-        <div ref={content} className="flow-root">{children}</div>
-      </ScrollArea>}
+      </div> : <div hidden={collapsed} className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <ScrollArea className="min-w-0 flex-1 rounded-b-md" viewportRef={body} viewportProps={{ "data-tool-panel-body": "", onScroll: senseMore }}>
+          <div ref={content} className="flow-root">{children}</div>
+        </ScrollArea>
+        {more ? <div aria-hidden="true" data-tool-panel-more=""
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-md bg-linear-to-t from-background/90 to-transparent" /> : null}
+      </div>}
       {footer && !collapsed ? footer : null}
     </ToolPanelContext.Provider>
     {/* The person's to size, from its bottom-right corner alone: Quick Edit's grip, inside the

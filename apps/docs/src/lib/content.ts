@@ -188,6 +188,12 @@ export const skillGroups = [
       "Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding.",
   },
   {
+    name: "CAM",
+    path: "skills/cam",
+    summary:
+      "Plans toolpaths and posts G-code for CNC mills, lathes, laser, plasma, waterjet and wire EDM, with a simulated cut, checks and cycle time.",
+  },
+  {
     name: "G-code",
     path: "skills/gcode",
     summary:

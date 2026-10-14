@@ -47,6 +47,8 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     # door of its own; `cadgen snapshot` still routes one by suffix.
     "cadgen.srdf": ("validate",),
     "cadgen.sdf": ("snapshot", "validate"),
+    # Not a format: a part and a job go in, a result GLB and G-code come out.
+    "cadgen.cam": ("features", "plan"),
 }
 
 # The format namespaces that are ALSO their declaration decorator. The robot
@@ -64,6 +66,8 @@ MIRRORS: dict[str, tuple[str, str]] = {
     "glb build": ("cadgen.glb", "build"),
     "sdf validate": ("cadgen.sdf", "validate"),
     "srdf validate": ("cadgen.srdf", "validate"),
+    "cam features": ("cadgen.cam", "features"),
+    "cam plan": ("cadgen.cam", "plan"),
     # Snapshot was the schema's LAST adapter. Its rich options are typed
     # `str | dict | None` — one string CLI-side, a real dict library-side — so
     # there is nothing left to declare: the structural check below is the whole

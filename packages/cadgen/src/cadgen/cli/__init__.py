@@ -62,6 +62,11 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cadgen.cli.sdf_validate", "validate an SDF world or model"),
     "sdf snapshot": ("cadgen.cli.sdf_snapshot", "render an SDF to an image"),
     "srdf validate": ("cadgen.cli.srdf_validate", "validate an SRDF against its URDF"),
+    # CAM. `features` lists what a job can name on a part; `plan` plans the
+    # job's toolpaths, simulates and checks them, and posts G-code per setup
+    # beside the result GLB the viewer draws.
+    "cam features": ("cadgen.cli.cam_features", "list the faces, holes and floors a CAM job can name"),
+    "cam plan": ("cadgen.cli.cam_plan", "plan toolpaths, simulate, check and post G-code"),
     # Generic / services
     "doctor": ("cadgen.cli.doctor", "print installed cadgen and verify a skill's pin"),
     # The store. `store why <model>` is the debugging surface STORE.md describes.

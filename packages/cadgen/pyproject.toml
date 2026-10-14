@@ -69,6 +69,9 @@ dependencies = [
   # (snapshot_core.install_browser), not by the install.
   "playwright==1.63.0",
   "shapely",
+  # `cadgen cam` plans, simulates and writes its GLB with numpy arrays. build123d brings it
+  # already; it is named here because cadgen imports it itself.
+  "numpy",
 ]
 
 [project.urls]

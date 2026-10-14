@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAM"
+  short_description: "Plan toolpaths and post G-code for CNC machines."
+  default_prompt: "Use $cam to plan toolpaths for a saved part on the named machine, check the verdict, post the G-code and show the result in CAD Viewer."

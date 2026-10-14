@@ -161,6 +161,10 @@ const NO_PREVIEW = () => {};
  *   the document I asked for" before this hook runs — a live preview deciding whether its own result has
  *   landed (`presentationIsPending` with `shellPresentationKey(modelKey, revisionKey)`). Omitted: the shell holds it.
  * @param {string} [options.sceneScaleMode]
+ * @param {object[] | null} [options.displaySections]  Display's sections of the renderer's own, after
+ *   Surfaces: each a feature gate (`{ id, title, enabled, onEnabledChange, content }`), what the renderer
+ *   draws of the file beyond its surfaces (an FEA result's loads and fixtures). Its state is the
+ *   renderer's slice of the file's view, not a view setting.
  */
 export function useRendererShell({
   view, services, resource, modelKey, revisionKey = "", features, toolModes = null, tool = null, previewable = false, preview = null, scene, load,
@@ -169,7 +173,7 @@ export function useRendererShell({
   escape = EMPTY, rendererState = null,
   onCameraSettled = null, preserveInteractionPixelRatio = false, runtimeLifecycle = null,
   onRuntimeAlert = null, presentationReport = null,
-  sceneScaleMode = VIEWER_SCENE_SCALE.CAD
+  sceneScaleMode = VIEWER_SCENE_SCALE.CAD, displaySections = null
 }) {
   const host = useViewerHost();
   const viewerElement = useContext(ViewerElementContext);
@@ -504,7 +508,7 @@ export function useRendererShell({
     features={features} viewSettings={displaySettings} hostAppearance={colorScheme} lightingQuality="preview"
     resolvedView={desiredScene.view} onViewSettingsPatch={viewSettingsStore.patch}
     onGroupEnabledChange={viewSettingsStore.setEnabled} onModeChange={viewSettingsStore.selectPreset}
-    onViewReset={viewSettingsStore.reset} close={<DisplayPopoverClose />} />;
+    onViewReset={viewSettingsStore.reset} close={<DisplayPopoverClose />} sections={displaySections} />;
   const stripTool = ({ id, label, icon, ...rest }) => ({
     id, label, icon, active: !previewing && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
   });

@@ -62,3 +62,20 @@ test('a delivery ledger delivers each operation once, bounds work in flight, and
   await ledger.deliver('a', () => { restarted += 1; return { status: 'copied', partIds: [] }; });
   assert.equal(restarted, 1, 'the oldest completed operation was evicted');
 });
+
+test('a selection with a summary reads its summary, then its references', () => {
+  const summarized = { resource: { kind: 'workspace-file', path: '/work/bracket.step' }, target: { kind: 'cad-selector', selectors: ['o1.f3', 'o1.f1'] },
+    summary: 'The peak stress, 120 MPa, is above the 100 MPa this material yields at' };
+  assert.equal(formatPromptMessage(createPromptContext([textPart('fix this'), referencePart(summarized)])),
+    'fix this\n\nReferences:\nThe peak stress, 120 MPa, is above the 100 MPa this material yields at · /work/bracket.step#o1.f1,o1.f3');
+});
+
+test('a part picked in a model keeps its message: a label alone is not written', () => {
+  const part = { resource: { kind: 'workspace-file', path: '/models/x.step' }, target: { kind: 'cad-selector', selectors: ['o1.2'] }, label: 'arm' };
+  assert.equal(formatPromptMessage(createPromptContext([textPart('fix this'), referencePart(part)])), 'fix this\n\nReferences:\n/models/x.step#o1.2');
+});
+
+test('a summary must be text', () => {
+  const bad = { resource: { kind: 'workspace-file', path: '/work/bracket.step' }, target: { kind: 'cad-selector', selectors: ['o1.f3'] }, summary: 4 };
+  assert.throws(() => validatePromptContext(createPromptContext([referencePart(bad)])), /summary must be text/);
+});

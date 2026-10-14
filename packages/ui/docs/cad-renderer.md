@@ -386,6 +386,20 @@ STEP renderer does not match `.glb`.
   acknowledged without changing the view.
 - **State**: the shell record under `[path, "glb"]`. Records written under
   `[path, "cad"]` are not migrated.
+- **A CAM result** (`<stem>.cam.glb`, `cadgen cam plan`): a GLB whose scene says
+  `generator: "cadgen cam"` and carries the job in its extras (`cam`, schema 1) loads
+  the CAM viewer, its own chunk (`glb/camView.jsx`; a plain GLB never fetches it), before
+  it is framed; should the chunk fail, it is drawn as a plain GLB. It adds Select, whose
+  panel is **Job** (`glb/CamJobPanel.jsx`, the tree's id): the verdict first, its errors
+  in plain words, then each setup and its operations (word, tool, time). A row isolates
+  its paths (the rest dimmed) until it is chosen again, and is Quick Edit's reference: the
+  part the job names (`document`), its faces as a selector or the whole part, and its
+  sentence as the reference's `summary`. The file's LINES (`_CAM_T`, `_CAM_OP`, which
+  GLTFLoader lowercases) are redrawn as screen-space lines, one per operation and kind
+  (`glb/cam/lines.js`): feed moves in the operation's colour, rapids thin and dashed.
+  Display gains Toolpaths, Rapids, Stock and Part (the renderer's one slice, `cam`);
+  Preview's playbar gains Simulate (and one per setup), which draws the paths up to the
+  moment and rides a tool along them (`glb/cam/playback.js`, `glb/cam/tool.js`).
 
 ## Mesh renderer
 

@@ -11,6 +11,7 @@
         "engineering-drawing",
         "step-parts",
         "dfm",
+        "cam",
         "dfam-check",
         "gcode",
         "bambu-labs",

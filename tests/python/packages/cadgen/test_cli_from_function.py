@@ -99,6 +99,29 @@ class Derivation(unittest.TestCase):
         self.assertIn("Do the thing to TARGET.", cli_from_function(verb, prog="t").format_help())
 
 
+class DashValues(unittest.TestCase):
+    """A value that starts with a dash and a letter (a tool direction, ``-Z``) is the flag's value, not an option."""
+
+    def parse(self, *tokens: str):
+        return cli_from_function(verb, prog="t").parse_args(["a.py", *tokens])
+
+    def test_a_dash_letter_value_follows_its_flag_as_it_does_after_an_equals_sign(self):
+        self.assertEqual(self.parse("--label", "-Z").label, "-Z")
+        self.assertEqual(self.parse("--label=-Z").label, "-Z")
+        self.assertEqual(self.parse("--label", "-Z", "--force").force, True)
+
+    def test_a_negative_number_still_parses_and_a_known_option_is_never_a_value(self):
+        self.assertEqual(self.parse("--mesh-tolerance", "-0.5").mesh_tolerance, -0.5)
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            self.parse("--label", "-h")
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            self.parse("--force", "-Z")   # a flag that takes no value leaves -Z an unknown option
+
+    def test_after_a_double_dash_nothing_is_attached(self):
+        args = cli_from_function(verb, prog="t").parse_args(["--label", "x", "--", "-Z"])
+        self.assertEqual((args.label, args.target), ("x", Path("-Z")))
+
+
 class Metavars(unittest.TestCase):
     """A flag's metavar is its parameter's last word -- until two flags of one
     command would share it; then each takes leading words until they differ."""

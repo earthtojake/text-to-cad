@@ -145,7 +145,7 @@ none.
 | --- | --- |
 | STEP | Select, Position (movable joints only), Draw, Measure, Explode (two or more parts), Clip |
 | URDF / SRDF / SDF | Select, Position (posable joints only) |
-| GLB / STL / 3MF | none |
+| GLB / STL / 3MF | none; a CAM result (`.cam.glb`): Select, with its **Job** (see [CAM results](#cam-results)) |
 | DXF | none: a 2D canvas |
 
 There is no separator or activity dot. There is no Animate tool: routines play in
@@ -737,6 +737,61 @@ finer STEP tessellation, a higher idle pixel ratio, and at High larger shadow
 and environment maps), its full pixel ratio kept while it orbits, and nothing
 of the tools view's (no picking, overlays, cube or tool effects). The profile
 never changes a Display setting.
+
+## CAM results
+
+A GLB written by `cadgen cam plan` carries its job in the scene's extras (`cam`). The GLB
+renderer loads the CAM viewer (`renderers/glb/camView.jsx`, a chunk of its own that a plain
+GLB never fetches) and draws the toolpaths, the tool, the simulated stock, the fixtures and
+the part. Select is its one tool, and its panel is **Job**, closable as the Features tree is
+and open when the result opens (except on a phone). The verdict is the status: Job has no
+findings card. Findings go to the agent, through the GLB's extras and the CLI's JSON; the
+panel shows only the errors, as rows under the verdict.
+
+- **Verdict.** First, in the theme's status tones: green "Ready to cut · 42 min · 3 tools",
+  or red "2 to fix". Under it, what the job takes: its tool changes ("No tool changes",
+  "1 tool change", "3 tool changes", from `cam.tool_changes` where cadgen writes it, else
+  counted from the operations in program order) and the controller its G-code is for
+  ("grbl controller"); then, muted, whether G-code was written and how many warnings went to
+  the agent; then each error in plain words, a row that chooses the operations it is about.
+- **Setups and operations.** Each setup is a parent row (its name, how many operations, its
+  time), its operations under it in the job's order: a swatch in the operation's own path
+  colour, its plain word, its tool and its time. An operation row's eye floats over its right
+  end as an assembly row's does, on hover and kept while it is on: **Hide** puts that
+  operation's paths away (feed moves and rapids), **Reveal** brings them back. Any number can be
+  hidden; hiding is not choosing.
+- **Tools.** Under a muted **Tools** heading, each tool once, in the order the program first
+  uses it: how the machine names it and what it is ("T1 6 mm flat"), then the spindle speed
+  and feed its operations run it at ("12,000 rpm · 1,440 mm/min"), a range where they differ.
+  Its hint adds the operations that use it.
+- **Choosing.** Every row is a choice: a press chooses it, a second press or Escape lets go.
+  The choice isolates its operations (the rest of the paths dimmed, not hidden) and is what
+  Quick Edit carries: the part the job was planned from, the faces the operations name (the
+  whole part where they name none), and the row's sentence. A setup chooses its operations,
+  a tool every operation that runs it, an error the operations it is about.
+
+**Display** adds a gate for each thing the file draws beyond its surfaces, after Surfaces,
+each only where the file has it: **Toolpaths** (each operation in its own colour), **Rapids**
+(moves between cuts, dashed), **Tool** (the tool on the path while Simulate plays),
+**Stock** (the stock as the job leaves it; off by default), **Fixtures** (the setup's
+fixture boxes as see-through, matte steel blue, so the part stands out; only for a file that
+has fixtures) and **Part**. The fixtures shown are those of the setup in view: the setup under
+way while a clip plays, the chosen row's setups, else the first setup's that has any. The gates and the hidden
+operations are the file's view (the renderer's `cam` slice), kept with it as Display's own
+settings are.
+
+**Simulate.** A result's routines are on Preview's playbar: **Simulate** plays the whole
+program, and a job with more than one setup adds **Simulate <setup>** for each, showing that
+setup's paths alone. The program plays at one pace for every clip, the whole job in at most
+30 seconds; the paths are drawn up to the moment, the tool rides them, and where the file
+stores the stock after each operation, the stock is the one the last finished operation
+left. With reduced motion (the system's `prefers-reduced-motion` or the host's
+`reducedMotion`) nothing sweeps: a clip steps one operation a second, each drawn whole with
+the tool at its end. While a clip plays, a small readout sits centred above the playbar: the
+operation under way, the program's time over its whole ("1:32 / 3:38") and how fast it plays
+("12× speed", "Real time", or "One operation a second"). It takes no pointer and is not read
+out as it changes. There is no Time row in Job: the playbar is the one way to move through
+the program.
 
 ## Keyboard
 

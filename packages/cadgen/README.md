@@ -396,6 +396,10 @@ src/cadgen/
                          #   cylindrical/fastened, couple, normalize)
   step_scene.py          # read_step and read_scene
   assembly.py            # label utilities and softly deprecated AssemblyHelper
+  cam.py                 # CAM: features (what a job can name) and plan
+                         #   (toolpaths, simulated cut, checks, G-code per
+                         #   setup, one result GLB); the engine is
+                         #   _internal/cam (operations/ and posts/ registries)
   results.py             # the typed Results every verb returns (stdlib-only)
   settings.py            # the person's settings: settings.json in the state
                          #   directory, a section per feature, shared by
@@ -447,7 +451,8 @@ src/cadgen/
 
 Verbs by format: `step` compile · build · snapshot;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
-validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
+validate · snapshot; `srdf` validate; `cam` features · plan (a part and a
+job in, a `.cam.glb` and G-code out). `cadgen snapshot` routes any suffix.
 `cadgen store|daemon|doctor` are status commands, `cadgen viewer
 [stop]` the CAD Viewer's launcher, and `cadgen mcp`
 the server an agent host starts — all deliberately outside the mirror pattern. `cadgen step compile` is internal tooling: skills never
