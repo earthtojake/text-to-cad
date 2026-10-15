@@ -294,6 +294,50 @@ def is_sound(shape: Shape) -> bool:
         raise GeometryError(f"soundness check failed: {exc}") from exc
 
 
+def _result_statuses(result) -> list:
+    """A ``BRepCheck_Result``'s own status list.
+
+    Raises ``TypeError`` where the kernel binding cannot hand the list over
+    (OCP 8 binds no ``NCollection_List<BRepCheck_Status>``); the caller then
+    asks the per-type checkers instead."""
+    return _items(result.Status())
+
+
+def _probed_statuses(entity) -> list:
+    """The ``BRepCheck_Status`` values the per-type checkers report for one entity.
+
+    Each checker answers one question with one status -- is the shell closed, are
+    the face's wires oriented, do they intersect -- so the faults it can name are
+    fewer than a result's status list, but every one of them is named exactly.
+    Edges and vertices have no such question: the analyzer still says they are
+    invalid, and the shell or face they belong to reports the fault."""
+    from OCP.BRepCheck import (
+        BRepCheck_Face,
+        BRepCheck_NoError,
+        BRepCheck_Shell,
+        BRepCheck_UnorientableShape,
+        BRepCheck_Wire,
+    )
+    from OCP.TopAbs import TopAbs_FACE, TopAbs_SHELL, TopAbs_WIRE
+    from cadgen._internal.ocp_compat import topods_face, topods_shell, topods_wire
+
+    kind = entity.ShapeType()
+    statuses = []
+    if kind == TopAbs_SHELL:
+        checker = BRepCheck_Shell(topods_shell(entity))
+        statuses += [checker.Closed(False), checker.Orientation(False)]
+        if checker.IsUnorientable():
+            statuses.append(BRepCheck_UnorientableShape)
+    elif kind == TopAbs_FACE:
+        checker = BRepCheck_Face(topods_face(entity))
+        statuses += [checker.IntersectWires(False), checker.ClassifyWires(False), checker.OrientationOfWires(False)]
+        if checker.IsUnorientable():
+            statuses.append(BRepCheck_UnorientableShape)
+    elif kind == TopAbs_WIRE:
+        statuses.append(BRepCheck_Wire(topods_wire(entity)).Closed(False))
+    return [status for status in statuses if status != BRepCheck_NoError]
+
+
 def topology_errors(shape: Shape) -> tuple[GeometryIssue, ...]:
     """BRepCheck topology/geometry faults, with affected owned entities.
 
@@ -303,7 +347,7 @@ def topology_errors(shape: Shape) -> tuple[GeometryIssue, ...]:
     """
     from OCP.BRepCheck import BRepCheck_Analyzer, BRepCheck_NoError
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
 
     wrapped = _wrapped(shape)
     try:
@@ -321,17 +365,25 @@ def topology_errors(shape: Shape) -> tuple[GeometryIssue, ...]:
                 continue
             seen = set()
             def collect(statuses, context=None):
-                for status in _items(statuses):
+                for status in statuses:
                     key = (int(status), entities.FindIndex(context) if context is not None else 0)
                     if status != BRepCheck_NoError and key not in seen:
                         seen.add(key)
                         affected = (entity,) if context is None else (entity, context)
                         issues.append(GeometryIssue(status.name, tuple(_cast(s) for s in affected)))
-            collect(result.Status())
+            try:
+                statuses = _result_statuses(result)
+            except TypeError:
+                # OCP 8 binds no NCollection_List<BRepCheck_Status>, so the result's
+                # lists are unreadable there. The per-type checkers answer one
+                # question each with one status, which is enough to name the fault.
+                collect(_probed_statuses(entity))
+                continue
+            collect(statuses)
             result.InitContextIterator()
             while result.MoreShapeInContext():
                 context = result.ContextualShape()
-                collect(result.StatusOnShape(context), context)
+                collect(_items(result.StatusOnShape(context)), context)
                 result.NextShapeInContext()
         if not issues:
             raise GeometryError("topology is invalid but the kernel provided no diagnostic")
@@ -350,7 +402,7 @@ def boundary_edges(shell: Shell) -> tuple[Edge, ...]:
     from OCP.ShapeAnalysis import ShapeAnalysis_Shell
     from OCP.TopAbs import TopAbs_EDGE
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
 
     wrapped = _wrapped(shell, Shell)
     try:

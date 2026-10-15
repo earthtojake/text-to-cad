@@ -44,8 +44,8 @@ class OverlapVolumeTests(unittest.TestCase):
             overlap_volume(self.a.faces()[0], self.a)
 
     def test_negative_orientation_is_not_reported_as_zero(self):
-        from OCP.TopoDS import TopoDS
-        reversed_solid = Solid(TopoDS.Solid_s(self.a.wrapped.Reversed()))
+        from cadgen._internal.ocp_compat import topods_solid
+        reversed_solid = Solid(topods_solid(self.a.wrapped.Reversed()))
         with self.assertRaisesRegex(ValueError, "positively oriented"):
             overlap_volume(reversed_solid, self.a)
 

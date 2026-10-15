@@ -3,7 +3,7 @@ import unittest
 from unittest import mock
 
 from build123d import Compound, Pos, Shell, Solid, Wire
-from OCP.TopoDS import TopoDS
+from cadgen._internal.ocp_compat import topods_solid
 from cadgen.geometry import GeometryError, boundary_edges, is_sound, self_intersections, topology_errors
 
 
@@ -36,7 +36,7 @@ class GeometryDiagnosticsTests(unittest.TestCase):
         self.assertEqual(topology_errors(self.box), ())
         opened = Shell(self.box.faces()[1:])
         self.assertEqual(topology_errors(opened), ())
-        reversed_solid = Solid(TopoDS.Solid_s(self.box.wrapped.Reversed()))
+        reversed_solid = Solid(topods_solid(self.box.wrapped.Reversed()))
         self.assertEqual(topology_errors(reversed_solid), ())
         self.assertLess(reversed_solid.volume, 0)
 
@@ -45,6 +45,19 @@ class GeometryDiagnosticsTests(unittest.TestCase):
         self.assertTrue(issues)
         self.assertTrue(all(issue.code.startswith("BRepCheck_") and issue.entities for issue in issues))
         self.assertTrue(any("NotClosed" in issue.code or "Unorientable" in issue.code for issue in issues))
+
+    def test_an_unreadable_status_list_still_names_the_fault(self):
+        """OCP 8 binds no NCollection_List<BRepCheck_Status>: BRepCheck_Result.Status()
+        raises TypeError there. The per-type checkers then name the fault, under the
+        same BRepCheck_* codes. Forced here so the fallback runs on every kernel."""
+        from cadgen import geometry
+
+        with mock.patch.object(geometry, "_result_statuses", side_effect=TypeError("unregistered type")):
+            issues = topology_errors(_open_solid())
+        self.assertTrue(issues)
+        self.assertTrue(all(issue.code.startswith("BRepCheck_") and issue.entities for issue in issues))
+        self.assertTrue(any("NotClosed" in issue.code for issue in issues))
+        self.assertEqual(topology_errors(self.box), (), "a valid solid never reaches the fallback")
 
     def test_free_edges_exclude_closed_shell_seams(self):
         self.assertEqual(boundary_edges(self.box.shell()), ())
@@ -79,7 +92,7 @@ class GeometryDiagnosticsTests(unittest.TestCase):
                 self_intersections(self.box)
         checker.HasErrors.return_value = False
         checker.IsValid.return_value = False
-        from OCP.BOPAlgo import BOPAlgo_ListOfCheckResult
+        from cadgen._internal.ocp_compat import BOPAlgo_ListOfCheckResult
         checker.Result.return_value = BOPAlgo_ListOfCheckResult()
         with mock.patch("OCP.BRepAlgoAPI.BRepAlgoAPI_Check", return_value=checker):
             with self.assertRaisesRegex(GeometryError, "without diagnostics"):
