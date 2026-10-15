@@ -77,3 +77,26 @@ test('with nothing read and PyPI failing there is no feed, and a hang is a failu
   const hung = pypiVersions({ fetch: hang, log: quiet, timeout: 1 });
   assert.equal(await hung(), null);
 });
+
+test('a failed first read waits before retrying PyPI, then recovers when the interval expires', async () => {
+  let clock = 0;
+  let answer = () => new Response('', { status: 503 });
+  const index = pypi(() => answer());
+  const versions = pypiVersions({ fetch: index.fetch, now: () => clock, log: quiet });
+  assert.deepEqual(await Promise.all([versions(), versions()]), [null, null]);
+  assert.equal(index.asked.length, 1);
+  assert.equal(await versions(), null);
+  clock = 5 * 60_000 - 1;
+  assert.equal(await versions(), null);
+  assert.equal(index.asked.length, 1, 'a cold failure observes the same retry interval as a warm one');
+
+  clock += 1;
+  assert.deepEqual(await Promise.all([versions(), versions()]), [null, null]);
+  assert.equal(index.asked.length, 2, 'concurrent callers share the retry');
+  // PyPI recovers; the failure is not permanent, and a good feed resumes normal caching.
+  answer = () => json(PAGE);
+  clock += 5 * 60_000;
+  assert.deepEqual(await versions(), { latest: '0.7.18' });
+  assert.deepEqual(await versions(), { latest: '0.7.18' });
+  assert.equal(index.asked.length, 3);
+});
