@@ -5,11 +5,17 @@ import { createRoot } from 'react-dom/client';
 import { createCrashReporter } from '@text-to-cad/core/client';
 import { ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
 import { createTabStore } from '@text-to-cad/ui/tab-store';
+import { translate } from '@text-to-cad/ui/i18n';
 import { createWebCadClient } from './host/cadClient.js';
 import App from './App';
 import { sessionTabRecord } from './persistence/tabRecord';
 import faviconUrl from './client/assets/favicon.png';
+import { initLocale } from './client/ui/locale';
 import './client/styles/globals.css';
+
+// The language, before the first paint: what was kept, else the browser's. The strings
+// under this read it (`translate`), and the `<html lang>` attribute is already right.
+initLocale();
 
 // The tab's one store, over this tab's sessionStorage: everything the viewer keeps lives in it,
 // survives a reload and goes with the tab (`docs/storage.md`).
@@ -18,7 +24,7 @@ const tabStore = createTabStore(sessionTabRecord(window.sessionStorage));
 /** What the page shows while it asks the server what it is, and if the server does not answer. */
 function StartingView({ error }: { error?: Error }) {
   return <div className="relative h-svh overflow-hidden bg-background">{error
-    ? <EmptyState icon={FileWarning} title="The CAD Viewer is not answering" description={error.message} tone="warn" />
+    ? <EmptyState icon={FileWarning} title={translate('app.start.notAnswering')} description={error.message} tone="warn" />
     : <ViewerLoadingOverlay viewerLoading />}</div>;
 }
 

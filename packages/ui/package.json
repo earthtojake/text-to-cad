@@ -54,6 +54,10 @@
       "types": "./dist/host/index.d.ts",
       "import": "./dist/host/index.js"
     },
+    "./i18n": {
+      "types": "./dist/i18n/index.d.ts",
+      "import": "./dist/i18n/index.js"
+    },
     "./consent": {
       "types": "./dist/consent/index.d.ts",
       "import": "./dist/consent/index.js"

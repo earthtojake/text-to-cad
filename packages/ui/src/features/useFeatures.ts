@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "../i18n/index.js";
 import type { AppSetting, ViewerFeatures } from "../file-viewer/types.js";
 
 /** Every feature as it starts: on, until the person turns it off. */
 export const DEFAULT_FEATURES: Readonly<Required<ViewerFeatures>> = Object.freeze({ quickEdit: true });
 
-/** The app menu's features: a row for each feature a person can turn off, in order. */
-const FEATURE_ROWS: readonly { id: keyof ViewerFeatures; label: string }[] = [{ id: "quickEdit", label: "Quick edit" }];
+/** The app menu's features: a row for each feature a person can turn off, in order — labeled in the locale. */
+const FEATURE_ROWS: readonly { id: keyof ViewerFeatures; labelKey: string }[] = [{ id: "quickEdit", labelKey: "features.quickEdit" }];
 
 /** What a server said, kept to the features this page knows, on or off. */
 function known(reply: unknown): Partial<ViewerFeatures> {
@@ -42,8 +43,10 @@ export function useFeatures(features: (change?: Partial<ViewerFeatures>) => Prom
     setState(previous => previous && { ...previous, ...next });
     read(next);
   }, [read]);
-  const appSettings = useMemo<AppSetting[] | undefined>(() => state ? FEATURE_ROWS.map(({ id, label }) => ({
-    id, label, checked: state[id], onCheckedChange: (checked: boolean) => change({ [id]: checked }),
-  })) : undefined, [state, change]);
+  // The rows' labels are the locale's: they recompute (and the menu re-renders) when it changes.
+  const { locale, t } = useI18n();
+  const appSettings = useMemo<AppSetting[] | undefined>(() => state ? FEATURE_ROWS.map(({ id, labelKey }) => ({
+    id, label: t(labelKey), checked: state[id], onCheckedChange: (checked: boolean) => change({ [id]: checked }),
+  })) : undefined, [state, change, locale, t]);
   return { features: state ?? DEFAULT_FEATURES, appSettings };
 }

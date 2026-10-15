@@ -2,6 +2,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import * as React from "react"
 import { Pipette } from "lucide-react"
 
+import { useI18n } from "@text-to-cad/ui/i18n"
 import { cn } from "@text-to-cad/ui/utils"
 import { capturePointer } from "../lib/pointerCapture.js"
 import { Button } from "@text-to-cad/ui/primitives/button"
@@ -237,6 +238,7 @@ function ColorPicker({
   disabled = false,
   ...props
 }) {
+  const { t } = useI18n();
   const normalizedValue = normalizeHexColor(value)
   const normalizedOpacity = Number.isFinite(Number(opacity)) ? clamp(Number(opacity), 0, 1) : 1
   const [format, setFormat] = React.useState("hex")
@@ -340,7 +342,7 @@ function ColorPicker({
           ref={svPlaneRef}
           role="slider"
           tabIndex={0}
-          aria-label="Saturation and brightness"
+          aria-label={t("colorPicker.saturationBrightness")}
           aria-valuetext={`${Math.round(colorNumbers.hsv.s)}% saturation, ${Math.round(colorNumbers.hsv.v)}% brightness`}
           className="relative h-32 touch-none overflow-hidden rounded-md border shadow-inner outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           style={{
@@ -368,7 +370,7 @@ function ColorPicker({
           ref={hueTrackRef}
           role="slider"
           tabIndex={0}
-          aria-label="Hue"
+          aria-label={t("colorPicker.hue")}
           aria-valuemin={0}
           aria-valuemax={360}
           aria-valuenow={Math.round(hue)}
@@ -407,7 +409,7 @@ function ColorPicker({
                   onOpacityChange?.(clamp(event.currentTarget.value, 0, 100) / 100)
                 }}
                 className="h-7 px-1.5 text-tiny"
-                aria-label="Color opacity"
+                aria-label={t("colorPicker.opacity")}
               />
               <span className="text-micro text-muted-foreground">%</span>
             </div>
@@ -441,15 +443,15 @@ function ColorPicker({
                 }
               }}
               className="h-7 px-1.5 text-tiny font-mono uppercase"
-              aria-label="Hex color"
+              aria-label={t("colorPicker.hex")}
             />
             {canUseEyeDropper ? (
-              <TooltipHint content="Eyedropper"><Button
+              <TooltipHint content={t("colorPicker.eyedropper")}><Button
                 type="button"
                 variant="outline"
                 size="icon-sm"
                 onClick={pickFromScreen}
-                aria-label="Pick color from screen"
+                aria-label={t("colorPicker.pickFromScreen")}
 
               >
                 <Pipette className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />

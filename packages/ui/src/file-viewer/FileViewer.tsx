@@ -4,6 +4,7 @@ import { Component, useCallback, useEffect, useMemo, useRef, useState } from "re
 import type { ErrorInfo, ReactNode } from "react";
 import { Button } from "../primitives/button.jsx";
 import { Spinner } from "../primitives/spinner.js";
+import { useI18n } from "../i18n/index.js";
 import { EmptyState, ViewerNavbar } from "./navigation/index.js";
 import type { EntryAction } from "./navigation/index.js";
 import { useFileDocument } from "./hooks/useFileDocument.js";
@@ -11,11 +12,11 @@ import type { FileNavigationAction, FileViewerProps, JsonValue, FileViewerState 
 import { ViewerMobileContext, useViewerMobileMeasure } from "./responsive.js";
 import { ViewerElementContext, ViewerHostContext } from '../host/context.js';
 
-class RenderBoundary extends Component<{ children: ReactNode; onError?: (error: Error) => void }, { error: Error | null }> {
+class RenderBoundary extends Component<{ children: ReactNode; errorTitle: string; onError?: (error: Error) => void }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error, _info: ErrorInfo) { this.props.onError?.(error); }
-  render() { return this.state.error ? <EmptyState icon={FileText} title="Could not display that file" description={this.state.error.message} tone="warn" /> : this.props.children; }
+  render() { return this.state.error ? <EmptyState icon={FileText} title={this.props.errorTitle} description={this.state.error.message} tone="warn" /> : this.props.children; }
 }
 
 /**
@@ -23,6 +24,7 @@ class RenderBoundary extends Component<{ children: ReactNode; onError?: (error: 
  * of formats comes from registrations. With no file it shows the host's home.
  */
 export function FileViewer({ file, host, renderers, state, onStateChange, displayActions, appSettings, update, fullSize, history, features, notice, onError, presentation }: FileViewerProps) {
+  const { locale, t } = useI18n();
   const source = host.files;
   const onOpenFile = host.navigation.openFile;
   const appearance = host.environment;
@@ -71,17 +73,19 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const rendererBody = useMemo(() => {
     if (!shown) return null;
     const Renderer = shown.prepared.Component;
-    return <RenderBoundary key={key} onError={onError}><Renderer displayActions={displayActions} notice={notice} features={features} key={key} file={shown.file} source={source}
+    return <RenderBoundary key={key} errorTitle={t("file.displayFailed")} onError={onError}><Renderer displayActions={displayActions} notice={notice} features={features} key={key} file={shown.file} source={source}
       navbarSlot={navbarSlot} onFullscreenChange={onFullscreenChange} onReady={onReady} onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={onOpenFile} appearance={appearance}
       state={rendererState} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
+  // Watches `locale`, not `t` — one function for the page's life — so the boundary's title is
+  // the current language's even when this memo stands.
   }, [shown, key, onError, displayActions, notice, features, source, navbarSlot, onFullscreenChange, onReady,
-    onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, reload]);
+    onNavigationActionsChange, onOpenFile, appearance, rendererState, setRendererState, reload, locale, t]);
 
   let body: ReactNode;
   if (loaded.status === "empty") body = presentation?.home ?? null;
-  else if (loaded.status === "loading") body = presentation?.loading ?? <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground" role="status"><Spinner className="size-3.5" />Opening…</div>;
-  else if (loaded.status === "error") body = presentation?.error?.({ message: loaded.message, missing: loaded.missing }) ?? <EmptyState icon={FileText} title="Could not open that file" description={loaded.message} tone="warn" />;
+  else if (loaded.status === "loading") body = presentation?.loading ?? <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground" role="status"><Spinner className="size-3.5" />{t("file.opening")}</div>;
+  else if (loaded.status === "error") body = presentation?.error?.({ message: loaded.message, missing: loaded.missing }) ?? <EmptyState icon={FileText} title={t("file.openFailed")} description={loaded.message} tone="warn" />;
   else body = rendererBody;
   const shownActions = navActions?.key === key && ready ? navActions.actions : [];
   const trailing = shownActions.length ? <>

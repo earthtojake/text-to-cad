@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "../i18n/index.js";
 import type { AppSetting } from "../file-viewer/types.js";
 
 /** What a CAD app's server says about the usage stats cadgen sends (its telemetry). */
@@ -39,11 +40,13 @@ export function useAnalyticsConsent(consent: (share?: boolean) => Promise<Analyt
     setState(previous => previous && { ...previous, sharing: share });
     read(share);
   }, [read]);
+  // The label is the locale's: it recomputes (and the menu re-renders) when the language changes.
+  const { locale, t } = useI18n();
   const appSettings = useMemo<AppSetting[] | undefined>(() => state ? [{
     id: "analytics", checked: state.sharing, onCheckedChange: (checked: boolean) => answer(checked),
     ...(state.reason === "environment"
-      ? { label: "Share usage stats (set by your environment)", disabled: true }
-      : { label: "Share usage stats" }),
-  }] : undefined, [state, answer]);
+      ? { label: t("consent.shareUsageEnvironment"), disabled: true }
+      : { label: t("consent.shareUsage") }),
+  }] : undefined, [state, answer, locale, t]);
   return { consent: state, appSettings };
 }

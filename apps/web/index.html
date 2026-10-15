@@ -26,6 +26,35 @@
         root.style.colorScheme = mode;
       })();
     </script>
+    <script>
+      // First paint in the person's language, read the same way `src/client/ui/locale.js` reads
+      // it: a kept choice wins — English included, so "en" is never a sentinel for "ask the
+      // browser" — and only an absent choice falls to the browser's languages, else English.
+      // The page ships as `lang="en"`; this names the document before any string is on screen,
+      // and `main.tsx` runs the app in the same answer.
+      (function () {
+        const known = ["en", "zh-CN"];
+        const preferred = (stored) => {
+          const wanted = String(stored || "").trim().toLowerCase();
+          return known.find((id) => id.toLowerCase() === wanted)
+            || known.find((id) => id.toLowerCase().split("-")[0] === wanted.split(/[-_]/)[0]);
+        };
+        let kept;
+        try {
+          kept = preferred(window.localStorage.getItem("text-to-cad:locale:v1"));
+        } catch {
+          kept = undefined;
+        }
+        let locale = kept;
+        if (!locale) {
+          for (const language of window.navigator.languages || [window.navigator.language]) {
+            const found = preferred(language);
+            if (found) { locale = found; break; }
+          }
+        }
+        document.documentElement.lang = locale || "en";
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

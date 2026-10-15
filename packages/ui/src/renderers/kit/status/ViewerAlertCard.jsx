@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { CircleAlert, X } from "lucide-react";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
+import { translate, useI18n } from "@text-to-cad/ui/i18n";
 import { cn } from "@text-to-cad/ui/utils";
 import { useFollow } from "../../../file-viewer/navigation/NavbarLinks.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
@@ -19,8 +20,8 @@ export function alertDismissible(alert, hasContent) {
 
 // The same failure raised again is the same alert, even as a new object.
 const alertKey = alert => JSON.stringify([alert.severity, alert.title, alert.message, alert.reason, alert.details]);
-/** What the card is headed, and what its icon in the navbar is called. */
-const alertTitle = alert => alert.title || alert.summary || "Couldn’t display the model";
+/** What the card is headed, and what its icon in the navbar is called. The fallback is the locale's. */
+const alertTitle = alert => alert.title || alert.summary || translate("alert.undisplayable");
 /** The card's icon colour: amber for a warning, the destructive red for an error. */
 const alertTone = alert => alert.severity === "warning" ? "text-amber-500" : "text-destructive";
 
@@ -47,6 +48,8 @@ const NO_ACTIONS = Object.freeze([]);
  * @returns {{ dismissed: boolean, dismiss(): void }}
  */
 export function useAlertDismissal(alert, { hasContent = false, scope = "", onNavigationActionsChange = null } = {}) {
+  // Subscribed for the navbar action's label: a locale change renames the icon in place.
+  useI18n();
   const key = alert ? alertKey(alert) : "";
   const [put, setPut] = useState(null);
   // The dismissal of the alert on screen alone: when it is not that alert any more, it is gone.
@@ -85,6 +88,7 @@ export function useAlertDismissal(alert, { hasContent = false, scope = "", onNav
 export default function ViewerAlertCard({ alert: shown, hasContent, onReload, file = "", dismissed = false, onDismiss = null }) {
   const mobile = useViewerMobile();
   const host = useContext(ViewerHostContext);
+  const { t } = useI18n();
   const follow = useFollow(host?.links);
   if (!shown || dismissed) return null;
   const dismissible = Boolean(onDismiss) && alertDismissible(shown, hasContent);
@@ -107,7 +111,7 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
               {title}
             </h2>
             {dismissible ? (
-              <Button type="button" variant="ghost" size="icon-xs" aria-label="Dismiss"  onClick={onDismiss}>
+              <Button type="button" variant="ghost" size="icon-xs" aria-label={t("alert.dismiss")} onClick={onDismiss}>
                 <X aria-hidden="true" />
               </Button>
             ) : null}
@@ -118,7 +122,7 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
             {shown.recovery ? <p className="break-words">{shown.recovery}</p> : null}
             {shown.details ? (
               <details className="text-xs">
-                <summary className="w-fit cursor-pointer rounded-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Details</summary>
+                <summary className="w-fit cursor-pointer rounded-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">{t("alert.details")}</summary>
                 <ScrollArea className="mt-2 max-h-48 rounded-md bg-muted">
                   <pre className="whitespace-pre-wrap break-words p-3 font-mono text-xs leading-5 select-text">{shown.details}</pre>
                 </ScrollArea>
@@ -128,12 +132,12 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
               <div className="flex flex-wrap gap-2">
                 {shown.reload ? (
                   <Button type="button" variant="outline" size="sm" onClick={onReload} disabled={!onReload}>
-                    Retry
+                    {t("alert.retry")}
                   </Button>
                 ) : null}
                 {report ? (
                   <Button asChild variant="outline" size="sm">
-                    <a href={report} target="_blank" rel="noreferrer" onClick={follow} data-report-issue="">Report Issue</a>
+                    <a href={report} target="_blank" rel="noreferrer" onClick={follow} data-report-issue="">{t("alert.reportIssue")}</a>
                   </Button>
                 ) : null}
               </div>

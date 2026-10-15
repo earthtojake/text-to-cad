@@ -2,6 +2,7 @@ import { ArrowLeft, MessageCircle } from "lucide-react";
 import { Fragment } from "react";
 
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
+import { useI18n } from "@text-to-cad/ui/i18n";
 import { cn } from "@text-to-cad/ui/utils";
 
 import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
@@ -24,15 +25,16 @@ const NONE = Object.freeze([]);
  *   platform?: string }} props
  */
 export function AppMenu({ trigger, onHome, links, appSettings = NONE, platform }) {
+  const { t } = useI18n();
   const follow = useFollow(links);
   const feedback = links ? feedbackUrl(links, platform) : "";
   const outward = [
-    feedback ? { id: "feedback", label: "Send feedback", href: feedback, icon: MessageCircle } : null,
-    links?.github ? { id: "github", label: "GitHub", href: links.github, icon: GitHubMark } : null,
-    links?.discord ? { id: "discord", label: "Discord", href: links.discord, icon: DiscordMark } : null,
+    feedback ? { id: "feedback", label: t("menu.feedback"), href: feedback, icon: MessageCircle } : null,
+    links?.github ? { id: "github", label: t("menu.github"), href: links.github, icon: GitHubMark } : null,
+    links?.discord ? { id: "discord", label: t("menu.discord"), href: links.discord, icon: DiscordMark } : null,
   ].filter(Boolean);
   const groups = [
-    onHome ? [<DropdownMenuItem key="home" onSelect={onHome} data-menu-home=""><ArrowLeft aria-hidden="true" />Back to files</DropdownMenuItem>] : [],
+    onHome ? [<DropdownMenuItem key="home" onSelect={onHome} data-menu-home=""><ArrowLeft aria-hidden="true" />{t("menu.backToFiles")}</DropdownMenuItem>] : [],
     appSettings.map(setting => <DropdownMenuCheckboxItem key={setting.id} checked={setting.checked} disabled={setting.disabled}
       onCheckedChange={checked => setting.onCheckedChange(checked === true)} onSelect={event => event.preventDefault()}
       data-app-setting={setting.id}>{setting.label}</DropdownMenuCheckboxItem>),
@@ -46,7 +48,7 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, platform }
   const madeBy = links?.x ? <MadeBy links={links} /> : null;
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-    <DropdownMenuContent align="start" sideOffset={6} collisionPadding={8} aria-label="Menu" data-app-menu=""
+    <DropdownMenuContent align="start" sideOffset={6} collisionPadding={8} aria-label={t("navbar.menu")} data-app-menu=""
       className={cn(FLOATING_SURFACE_CLASS, "w-60 data-[state=closed]:animate-none!")}>
       {groups.map((group, index) => <Fragment key={index}>{index ? <DropdownMenuSeparator /> : null}{group}</Fragment>)}
       {version || madeBy ? <>

@@ -3,8 +3,12 @@
  * shown in the desktop's file manager — each only where the host can do it, so an item that cannot
  * work is never offered. `ViewerNavbar.jsx` draws it; the host performs it.
  *
- * Pure, so `node --test` loads it without the bundler's aliases.
+ * Pure, so `node --test` loads it without the bundler's aliases: the labels read the i18n core's
+ * current locale directly (still no environment, no aliases), which is why they answer in the
+ * viewer's language however the host runs this module.
  */
+
+import { translate } from "../../i18n/core.js";
 
 /** Every action the menu can carry. */
 export const ENTRY_ACTIONS = Object.freeze(["copy-path", "reveal"]);
@@ -19,11 +23,11 @@ export const ENTRY_ACTIONS = Object.freeze(["copy-path", "reveal"]);
 export function revealLabel(platform) {
   switch (platform) {
     case "win32":
-      return "Show in Explorer";
+      return translate("file.revealExplorer");
     case "linux":
-      return "Show in file manager";
+      return translate("file.revealFileManager");
     default:
-      return "Reveal in Finder";
+      return translate("file.revealFinder");
   }
 }
 
@@ -35,6 +39,6 @@ export function revealLabel(platform) {
  * @returns {EntryMenuItem[]}
  */
 export function entryMenu(platform, capabilities) {
-  return [{ action: "copy-path", label: "Copy path" }, { action: "reveal", label: revealLabel(platform) }]
+  return [{ action: "copy-path", label: translate("file.copyPath") }, { action: "reveal", label: revealLabel(platform) }]
     .filter((item) => capabilities.has(item.action));
 }

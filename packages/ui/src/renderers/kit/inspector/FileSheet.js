@@ -1,6 +1,7 @@
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { Children, useEffect, useId, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
+import { useI18n } from "@text-to-cad/ui/i18n";
 import { cn } from "@text-to-cad/ui/utils";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { ColorPicker } from "@text-to-cad/ui/primitives/color-picker";
@@ -77,6 +78,7 @@ export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex min-h-7 items-center px-
  */
 export function FileSheetSettingsSection({ title, children, open = true, onOpenChange,
   gated = false, onReveal, headingAction = null, sectionId }) {
+  const { t } = useI18n();
   const titleId = useId();
   const contentId = useId();
   const collapsible = typeof onOpenChange === "function";
@@ -84,7 +86,7 @@ export function FileSheetSettingsSection({ title, children, open = true, onOpenC
     <div data-settings-section-heading="" className="relative h-7 shrink-0">
       {collapsible ? <FileSheetToggleHeading title={title} open={open} onOpenChange={onOpenChange}
         headingId={titleId} contentId={contentId} onTitleClick={onReveal}
-        verbs={gated ? ["Enable", "Disable"] : ["Expand", "Collapse"]} />
+        verbs={gated ? [t("fileSheet.enable"), t("fileSheet.disable")] : [t("fileSheet.expand"), t("fileSheet.collapse")]} />
         : <h2>{onReveal ? <button id={titleId} type="button" onClick={onReveal}
           className={`${FILE_SHEET_SECTION_HEADING_CLASSES} w-full text-left`}>{title}</button>
           : <span id={titleId} className={FILE_SHEET_SECTION_HEADING_CLASSES}>{title}</span>}</h2>}

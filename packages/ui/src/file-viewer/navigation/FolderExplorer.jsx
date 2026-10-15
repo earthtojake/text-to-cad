@@ -5,6 +5,7 @@ import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
 import { TREE_GLYPH_CLASS, TREE_GLYPH_STROKE, TREE_INDENT_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@text-to-cad/ui/primitives/tree-row";
+import { useI18n } from "@text-to-cad/ui/i18n";
 import { cn } from "@text-to-cad/ui/utils";
 import { FileIcon, FolderIcon } from "./icons.jsx";
 
@@ -111,6 +112,7 @@ function Row({ kind, path, detail = "", name, depth = 0, active = false, expande
  * @param {{ source: Pick<import("../types").FileSource, "list" | "search">, file: string, onOpen(path: string): void }} props
  */
 export function FolderExplorer({ source, file, onOpen }) {
+  const { t } = useI18n();
   const [folder, setFolder] = useState(() => parentFolder(file));
   const [listing, setListing] = useState({ folder: "", entries: null, error: null });
   const [query, setQuery] = useState("");
@@ -199,9 +201,9 @@ export function FolderExplorer({ source, file, onOpen }) {
   });
   const inside = (path, depth) => {
     const content = held.get(path);
-    if (!content) return <InlineNote depth={depth} busy>Loading…</InlineNote>;
-    if (content.error) return <InlineNote depth={depth}>Couldn't read this folder</InlineNote>;
-    if (!content.entries.length) return <InlineNote depth={depth}>No CAD files</InlineNote>;
+    if (!content) return <InlineNote depth={depth} busy>{t("explorer.loading")}</InlineNote>;
+    if (content.error) return <InlineNote depth={depth}>{t("explorer.readFailed")}</InlineNote>;
+    if (!content.entries.length) return <InlineNote depth={depth}>{t("explorer.noCadFiles")}</InlineNote>;
     return rowsOf(content.entries, depth);
   };
 
@@ -213,9 +215,9 @@ export function FolderExplorer({ source, file, onOpen }) {
   const result = term && found?.folder === folder && found.term === term ? found : null;
   let body;
   if (term) {
-    if (!result) body = <Note busy>Searching…</Note>;
-    else if (result.error) body = <Note>Couldn't search this folder</Note>;
-    else if (!result.paths.length) body = <Note>{result.truncated ? "No files match yet. Keep typing to narrow the search." : "No files match"}</Note>;
+    if (!result) body = <Note busy>{t("explorer.searching")}</Note>;
+    else if (result.error) body = <Note>{t("explorer.searchFailed")}</Note>;
+    else if (!result.paths.length) body = <Note>{result.truncated ? t("explorer.noMatchesYet") : t("explorer.noMatches")}</Note>;
     else body = <>
       {result.paths.map(path => {
         const relative = path.startsWith(prefix) ? path.slice(prefix.length) : path;
@@ -223,18 +225,18 @@ export function FolderExplorer({ source, file, onOpen }) {
         return <Row key={path} kind="file" path={path} active={path === file} detail={slash < 0 ? "" : relative.slice(0, slash + 1)}
           name={relative.slice(slash + 1)} onClick={() => onOpen(path)} />;
       })}
-      {result.truncated ? <Note>Stopped early. Keep typing to narrow the search.</Note> : null}
+      {result.truncated ? <Note>{t("explorer.stoppedEarly")}</Note> : null}
     </>;
-  } else if (current.error) body = <Note>Couldn't read this folder</Note>;
-  else if (!current.entries) body = <Note busy>Loading…</Note>;
-  else if (!current.entries.length) body = <Note>No CAD files here</Note>;
+  } else if (current.error) body = <Note>{t("explorer.readFailed")}</Note>;
+  else if (!current.entries) body = <Note busy>{t("explorer.loading")}</Note>;
+  else if (!current.entries.length) body = <Note>{t("explorer.noCadFilesHere")}</Note>;
   else body = rowsOf(current.entries, 0);
 
   return <div className="flex min-h-0 flex-1 flex-col" data-folder-explorer="">
-    <nav aria-label="Folders" ref={crumbRow} className="flex min-w-0 shrink-0 items-center gap-0.5 px-2 pt-2 pb-1 text-xs">
+    <nav aria-label={t("explorer.folders")} ref={crumbRow} className="flex min-w-0 shrink-0 items-center gap-0.5 px-2 pt-2 pb-1 text-xs">
       {above.length ? <>
         <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild><button type="button" className={cn(CRUMB, "flex items-center")} aria-label="Folders above">
+          <DropdownMenuTrigger asChild><button type="button" className={cn(CRUMB, "flex items-center")} aria-label={t("explorer.foldersAbove")}>
             <Ellipsis className="size-3.5" aria-hidden="true" />
           </button></DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-40">
@@ -253,7 +255,7 @@ export function FolderExplorer({ source, file, onOpen }) {
           : <button type="button" className={CRUMB} onClick={() => go(item.path)}>{item.name}</button>}
       </Fragment>)}
     </nav>
-    <TreeFilterInput label="Filter files" placeholder="Filter files..." value={query} onChange={setQuery} onKeyDown={event => walk(event, null)} />
+    <TreeFilterInput label={t("explorer.filterLabel")} placeholder={t("explorer.filterPlaceholder")} value={query} onChange={setQuery} onKeyDown={event => walk(event, null)} />
     <ScrollArea className="min-h-0 flex-1" viewportClassName="p-1" viewportRef={rows}
       viewportProps={{ onKeyDown: event => walk(event, event.target.closest?.("[data-explorer-row]") ?? null) }}>
       {body}

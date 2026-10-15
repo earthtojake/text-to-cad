@@ -3,6 +3,7 @@ import { Box, FolderOpen, LayoutGrid, List, Pin, Search, X } from "lucide-react"
 import { Button } from "../primitives/button.jsx";
 import { Input } from "../primitives/input.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
+import { translate, useI18n } from "../i18n/index.js";
 import type { LibraryLayout } from "../tab-store/tabRecord.js";
 import wordmark from "../assets/logo-texttocad.svg";
 import { HomeLinks } from "../file-viewer/navigation/NavbarLinks.jsx";
@@ -57,13 +58,13 @@ const MONTHS = { month: "short", day: "numeric" } as const;
 export function editedLabel(modified: number | null, now = Date.now()): string {
   if (modified === null || !Number.isFinite(modified)) return "";
   const seconds = Math.max(0, (now - modified * 1000) / 1000);
-  if (seconds < 60) return "Edited just now";
-  if (seconds < 3600) return `Edited ${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `Edited ${Math.floor(seconds / 3600)}h ago`;
-  if (seconds < 7 * 86400) return `Edited ${Math.floor(seconds / 86400)}d ago`;
+  if (seconds < 60) return translate("home.editedJustNow");
+  if (seconds < 3600) return translate("home.editedMinutesAgo", { n: Math.floor(seconds / 60) });
+  if (seconds < 86400) return translate("home.editedHoursAgo", { n: Math.floor(seconds / 3600) });
+  if (seconds < 7 * 86400) return translate("home.editedDaysAgo", { n: Math.floor(seconds / 86400) });
   const date = new Date(modified * 1000);
   const sameYear = date.getFullYear() === new Date(now).getFullYear();
-  return `Edited ${date.toLocaleDateString(undefined, sameYear ? MONTHS : { ...MONTHS, year: "numeric" })}`;
+  return translate("home.editedOn", { date: date.toLocaleDateString(undefined, sameYear ? MONTHS : { ...MONTHS, year: "numeric" }) });
 }
 
 const message = (failure: unknown) => failure instanceof Error ? failure.message : String(failure);
@@ -73,6 +74,7 @@ const LIST_MS = 2_000;
 
 // A card's picture, read once the card is on screen; and a card on screen that wants one (`seen`).
 function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false }: { item: Model; load(name: string): Promise<string | null>; seen(item: Model): void; opening?: boolean }) {
+  const { t } = useI18n();
   const element = useRef<HTMLSpanElement>(null);
   const [image, setImage] = useState<string | null>(null);
   const latest = useRef({ item, seen });
@@ -98,18 +100,19 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = fal
   }, [item.path, item.thumbnail, item.missing, item.modified, load]);
   return <span className="cad-library-thumbnail" ref={element}>
     {image ? <img src={image} alt="" /> : <Box strokeWidth={1} aria-hidden="true" />}
-    {opening ? <span className="cad-library-opening"><Spinner aria-label={`Opening ${item.name}`} /></span> : null}
+    {opening ? <span className="cad-library-opening"><Spinner aria-label={t("home.openingAria", { name: item.name })} /></span> : null}
   </span>;
 }
 
 /** Where the models will be while the list is read: cards (or rows) in their own places, pulsing. */
 function Placeholders({ layout }: { layout: LibraryLayout }) {
-  const status = <li className="sr-only" role="status">Loading files</li>;
+  const { t } = useI18n();
+  const status = <li className="sr-only" role="status">{t("home.loadingFiles")}</li>;
   return layout === "list"
-    ? <ul className="cad-library-list" aria-label="Files" aria-busy="true" data-loading="">{status}{[0, 1, 2].map(index => <li key={index} className="cad-library-row" aria-hidden="true">
+    ? <ul className="cad-library-list" aria-label={t("home.filesAria")} aria-busy="true" data-loading="">{status}{[0, 1, 2].map(index => <li key={index} className="cad-library-row" aria-hidden="true">
       <span className="cad-library-open"><span className="cad-library-thumbnail" /><span className="cad-library-placeholder" /></span>
     </li>)}</ul>
-    : <ul className="cad-library-grid" aria-label="Files" aria-busy="true" data-loading="">{status}{[0, 1, 2, 3].map(index => <li key={index} className="cad-library-card" aria-hidden="true">
+    : <ul className="cad-library-grid" aria-label={t("home.filesAria")} aria-busy="true" data-loading="">{status}{[0, 1, 2, 3].map(index => <li key={index} className="cad-library-card" aria-hidden="true">
       <span className="cad-library-open">
         <span className="cad-library-thumbnail" />
         <span className="cad-library-body"><span className="cad-library-placeholder" /><span className="cad-library-placeholder" data-short="" /></span>
@@ -151,6 +154,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const [items, setItems] = useState<readonly Model[] | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
+  const { t } = useI18n();
   // The host's library as it is now: a host may hand a new one each render.
   const current = useRef(library);
   current.current = library;
@@ -217,21 +221,21 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const now = Date.now();
   // A card pins; a row pins and removes.
   const actions = (item: Model, removable: boolean) => <div className="cad-library-actions" data-pinned={item.pinned || undefined}>
-    <Button variant="ghost" size="icon-xs" aria-label={`${item.pinned ? "Unpin" : "Pin"} ${item.name}`} aria-pressed={item.pinned} onClick={() => change(item.pinned ? "unpin" : "pin", item)}><Pin aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button>
-    {removable ? <Button variant="ghost" size="icon-xs" aria-label={`Remove ${item.name}`} onClick={() => change("remove", item)}><X aria-hidden="true" /></Button> : null}
+    <Button variant="ghost" size="icon-xs" aria-label={t(item.pinned ? "home.unpinAria" : "home.pinAria", { name: item.name })} aria-pressed={item.pinned} onClick={() => change(item.pinned ? "unpin" : "pin", item)}><Pin aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button>
+    {removable ? <Button variant="ghost" size="icon-xs" aria-label={t("home.removeAria", { name: item.name })} onClick={() => change("remove", item)}><X aria-hidden="true" /></Button> : null}
   </div>;
-  const status = (item: Model) => item.missing ? "File unavailable" : editedLabel(item.modified, now);
+  const status = (item: Model) => item.missing ? t("home.fileUnavailable") : editedLabel(item.modified, now);
   const models = layout === "list"
-    ? <ul className="cad-library-list" aria-label="Files">{shown.map(item => <li key={item.path} className="cad-library-row" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
-      <button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
+    ? <ul className="cad-library-list" aria-label={t("home.filesAria")}>{shown.map(item => <li key={item.path} className="cad-library-row" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
+      <button type="button" className="cad-library-open" disabled={item.missing} aria-label={t("home.openAria", { name: item.name })} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
         <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} />
         <span className="cad-library-name">{item.name}</span>
         <span className="cad-library-status">{status(item)}</span>
       </button>
       {actions(item, true)}
     </li>)}</ul>
-    : <ul className="cad-library-grid" aria-label="Files">{shown.map(item => <li key={item.path} className="cad-library-card" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
-      <button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
+    : <ul className="cad-library-grid" aria-label={t("home.filesAria")}>{shown.map(item => <li key={item.path} className="cad-library-card" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
+      <button type="button" className="cad-library-open" disabled={item.missing} aria-label={t("home.openAria", { name: item.name })} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
         <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} />
         <span className="cad-library-body">
           <span className="cad-library-name">{item.name}</span>
@@ -242,43 +246,43 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     </li>)}</ul>;
   // A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits.
   return <div className="cad-library h-full overflow-y-auto text-ui" data-library-layout={layout}>
-    <main className="cad-library-content" aria-label="CAD models">
+    <main className="cad-library-content" aria-label={t("home.modelsAria")}>
       <img className="cad-library-wordmark" src={wordmark} alt="text-to-cad" />
-      <p className="cad-library-byline">Build anything. <span>100% open source and free.</span></p>
+      <p className="cad-library-byline">{t("home.byline")} <span>{t("home.bylineOpenSource")}</span></p>
       {/* The update, when there is one, as a call to action of its own: the button, labeled, its card centred. */}
       {isValidElement(update) ? <div className="cad-library-update" data-library-update="">
         {cloneElement(update as ReactElement<{ labeled?: boolean; align?: string }>, { labeled: true, align: "center" })}
       </div> : null}
-      {links ? <nav className="cad-library-links" aria-label="CAD links">
+      {links ? <nav className="cad-library-links" aria-label={t("home.linksAria")}>
         <HomeLinks links={links} onError={onError} />
         {fullSize}
       </nav> : null}
       <div className="cad-library-toolbar">
-        <h1 className="cad-library-heading">Recent Files</h1>
+        <h1 className="cad-library-heading">{t("home.recentFiles")}</h1>
         <div className="cad-library-controls">
           {/* There with no models too: the toolbar keeps its shape from the first open to the hundredth. */}
           <div className="cad-library-search">
             <Search aria-hidden="true" />
-            <Input className="h-8" type="search" aria-label="Search models" placeholder="Search" value={query} onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} />
+            <Input className="h-8" type="search" aria-label={t("home.searchAria")} placeholder={t("home.searchPlaceholder")} value={query} onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} />
           </div>
-          {onLayoutChange ? <div className="cad-library-layout" role="group" aria-label="Layout">
-            <Button variant="ghost" size="icon-sm" aria-label="Grid" aria-pressed={layout === "grid"} onClick={() => onLayoutChange("grid")}><LayoutGrid aria-hidden="true" /></Button>
-            <Button variant="ghost" size="icon-sm" aria-label="List" aria-pressed={layout === "list"} onClick={() => onLayoutChange("list")}><List aria-hidden="true" /></Button>
+          {onLayoutChange ? <div className="cad-library-layout" role="group" aria-label={t("home.layout")}>
+            <Button variant="ghost" size="icon-sm" aria-label={t("home.grid")} aria-pressed={layout === "grid"} onClick={() => onLayoutChange("grid")}><LayoutGrid aria-hidden="true" /></Button>
+            <Button variant="ghost" size="icon-sm" aria-label={t("home.list")} aria-pressed={layout === "list"} onClick={() => onLayoutChange("list")}><List aria-hidden="true" /></Button>
           </div> : null}
-          {pick ? <Button size="sm" onClick={pick}><FolderOpen aria-hidden="true" />Open</Button> : null}
+          {pick ? <Button size="sm" onClick={pick}><FolderOpen aria-hidden="true" />{t("home.open")}</Button> : null}
         </div>
       </div>
       {error ? <div className="cad-library-error" role="alert"><p>{error}</p></div> : null}
       {items === null ? <Placeholders layout={layout} />
-        : searchQuery && !shown.length ? <p className="cad-library-empty" role="status">No matching models.</p>
+        : searchQuery && !shown.length ? <p className="cad-library-empty" role="status">{t("home.noMatchingModels")}</p>
           : !all.length ? (pick
-            ? <ul className="cad-library-grid" aria-label="Files"><li className="cad-library-card" data-empty="">
+            ? <ul className="cad-library-grid" aria-label={t("home.filesAria")}><li className="cad-library-card" data-empty="">
               <button type="button" className="cad-library-open" onClick={pick}>
                 <span className="cad-library-thumbnail"><Box strokeWidth={1} aria-hidden="true" /></span>
-                <span className="cad-library-body"><span className="cad-library-name">Open File</span></span>
+                <span className="cad-library-body"><span className="cad-library-name">{t("home.openFile")}</span></span>
               </button>
             </li></ul>
-            : <p className="cad-library-empty">Open a CAD file to see it here.</p>)
+            : <p className="cad-library-empty">{t("home.emptyNoPicker")}</p>)
             : models}
     </main>
   </div>;

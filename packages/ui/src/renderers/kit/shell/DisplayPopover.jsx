@@ -3,6 +3,7 @@ import { Button } from "@text-to-cad/ui/primitives/button";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
 import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { useI18n } from "@text-to-cad/ui/i18n";
 import { cn } from "@text-to-cad/ui/utils";
 import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
 import { PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
@@ -27,17 +28,18 @@ const COLLISION_PADDING = Object.freeze({ top: 0, right: 8, bottom: 8, left: 8 }
  *   children: import("react").ReactNode }} props
  */
 export default function DisplayPopover({ open, onOpenChange, disabled = false, boundary = null, children }) {
+  const { t } = useI18n();
   return <Popover open={open && !disabled} onOpenChange={onOpenChange} modal={false}>
-    <TooltipHint content="Display">
+    <TooltipHint content={t("display.label")}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-xs" aria-label="Display" aria-pressed={open} disabled={disabled}
+        <Button type="button" variant="ghost" size="icon-xs" aria-label={t("display.label")} aria-pressed={open} disabled={disabled}
           className={NAVBAR_CONTROL_CLASS}>
           <PerspectiveProjectionIcon className="size-3.5" />
         </Button>
       </PopoverTrigger>
     </TooltipHint>
     <PopoverContent side="bottom" align="end" sideOffset={6} collisionPadding={COLLISION_PADDING} collisionBoundary={boundary || undefined}
-      aria-label="Display settings" data-display-popover=""
+      aria-label={t("display.settings")} data-display-popover=""
       className={cn(FLOATING_SURFACE_CLASS, "flex w-76 max-h-[var(--radix-popover-content-available-height)] flex-col overflow-hidden p-0 text-tiny data-[state=closed]:animate-none!")}>
       <ScrollArea className="min-h-0 flex-1">{children}</ScrollArea>
     </PopoverContent>
@@ -46,7 +48,8 @@ export default function DisplayPopover({ open, onOpenChange, disabled = false, b
 
 /** The X at the end of Display's first heading, after its Reset: it closes the dropdown it is drawn in. */
 export function DisplayPopoverClose() {
-  return <PopoverClose aria-label="Close display settings" className={TOOL_PANEL_BUTTON_CLASS}>
+  const { t } = useI18n();
+  return <PopoverClose aria-label={t("display.close")} className={TOOL_PANEL_BUTTON_CLASS}>
     <X className="size-3" aria-hidden="true" />
   </PopoverClose>;
 }
