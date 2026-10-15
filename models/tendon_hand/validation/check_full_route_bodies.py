@@ -35,7 +35,7 @@ def placed_bounds(bodies):
         cached=next((entry for entry in bucket if entry[0].IsSame(local)),None)
         if cached is None:
             box=Bnd_Box();BRepBndLib.AddOptimal_s(local,box,False,False)
-            cached=(local,box.Get());bucket.append(cached)
+            cached=(local,(box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z()));bucket.append(cached)
         limits=cached[1];transform=wrapped.Location().Transformation()
         matrix=np.array([[transform.Value(r,c) for c in range(1,5)] for r in range(1,4)])
         corners=np.array([[*xyz,1.] for xyz in itertools.product(*[(limits[j],limits[j+3]) for j in range(3)])])

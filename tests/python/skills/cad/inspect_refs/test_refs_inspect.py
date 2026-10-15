@@ -95,7 +95,7 @@ class StepSceneTests(unittest.TestCase):
 
     def test_native_copies_cannot_mutate_scene_or_other_occurrences(self):
         from OCP.BRep import BRep_Builder
-        from OCP.TopoDS import TopoDS
+        from cadgen._internal.ocp_compat import topods_vertex
         from OCP.TopExp import TopExp_Explorer
         from OCP.TopAbs import TopAbs_VERTEX
         scene = read_scene(self.path)
@@ -103,13 +103,13 @@ class StepSceneTests(unittest.TestCase):
         first, second = a.shape(), a.shape()
         self.assertFalse(first.wrapped.IsPartner(second.wrapped))
         self.assertFalse(first.wrapped.IsPartner(b.shape().wrapped))
-        vertex = TopoDS.Vertex_s(TopExp_Explorer(first.wrapped, TopAbs_VERTEX).Current())
+        vertex = topods_vertex(TopExp_Explorer(first.wrapped, TopAbs_VERTEX).Current())
         BRep_Builder().UpdateVertex(vertex, 10.0)
         first.move(Pos(900, 0, 0))
         self.assertLess((a.shape().center() - Vector(105, 50, 7)).length, 1e-6)
         self.assertLess((b.shape().center() - Vector(125, 50, 7)).length, 1e-6)
         from OCP.BRep import BRep_Tool
-        untouched_vertex = TopoDS.Vertex_s(TopExp_Explorer(a.shape().wrapped, TopAbs_VERTEX).Current())
+        untouched_vertex = topods_vertex(TopExp_Explorer(a.shape().wrapped, TopAbs_VERTEX).Current())
         self.assertLess(BRep_Tool.Tolerance_s(untouched_vertex), 1e-3)
 
     def test_read_and_occurrence_lookup_decode_no_geometry_or_surfaces(self):

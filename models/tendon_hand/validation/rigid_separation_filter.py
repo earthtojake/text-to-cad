@@ -15,7 +15,7 @@ def simple_analytic(shape):
     explorer=TopExp_Explorer(local,TopAbs_FACE);count=0;qualified=True
     while explorer.More():
         count+=1
-        surface=BRepAdaptor_Surface(TopoDS.Face_s(explorer.Current()))
+        surface=BRepAdaptor_Surface(TopoDS.Face(explorer.Current()))
         if count>16 or surface.GetType() not in (GeomAbs_Plane,GeomAbs_Cylinder,GeomAbs_Cone,GeomAbs_Sphere,GeomAbs_Torus):
             qualified=False;break
         explorer.Next()

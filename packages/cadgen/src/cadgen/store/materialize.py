@@ -173,7 +173,7 @@ def _geometry_fingerprint(shape: Any, memo: dict | None = None) -> str | tuple |
     from OCP.TopExp import TopExp
     from OCP.TopAbs import TopAbs_COMPOUND
     from OCP.TopLoc import TopLoc_Location
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
     from cadgen._internal.component_package import _shape_brep_bytes
 
     if memo is None:

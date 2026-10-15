@@ -6,7 +6,7 @@ from OCP.TopLoc import TopLoc_Location
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
 from OCP.BRepGProp import BRepGProp
 from OCP.GProp import GProp_GProps
-from OCP.TopTools import TopTools_ListOfShape
+from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
 from check_full_route_bodies import integration_hardware,placed_bounds
 from rigid_pose_cache import relative_pose_key
 from rigid_separation_filter import separation

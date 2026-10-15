@@ -37,7 +37,7 @@ def relieved_palm(which):
             ts=[]
             for j in range(101):
                 p=edge.position_at(j/100)
-                if all(box.min.to_tuple()[a]-radius<=p.to_tuple()[a]<=box.max.to_tuple()[a]+radius for a in range(3)):ts.append(j/100)
+                if all(tuple(box.min)[a]-radius<=tuple(p)[a]<=tuple(box.max)[a]+radius for a in range(3)):ts.append(j/100)
             if not ts:continue
             lo=max(0,min(ts)-.02);hi=min(1,max(ts)+.02)
             wire=bd.Wire([edge.trim(lo,hi)])

@@ -38,7 +38,7 @@ def thumb_reaction_arm_clearance_r6():
     assert hit.solids() and hit.volume > 1e-7
     box = Bnd_Box()
     BRepBndLib.AddOptimal_s(hit.wrapped, box, False, True)
-    x0, y0, z0, x1, y1, z1 = box.Get()
+    x0, y0, z0, x1, y1, z1 = (box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z())
     margin = .025
     pocket = bd.Pos((x0+x1)/2, (y0+y1)/2, (z0+z1)/2) * bd.Box(
         x1-x0+2*margin, y1-y0+2*margin, z1-z0+2*margin)

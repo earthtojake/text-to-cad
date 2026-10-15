@@ -11,7 +11,7 @@ from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
 from OCP.BRepGProp import BRepGProp
 from OCP.GProp import GProp_GProps
 from OCP.BRepCheck import BRepCheck_Analyzer
-from OCP.TopTools import TopTools_ListOfShape
+from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
 for fuzzy in (1e-7,1e-6):
     aa=TopTools_ListOfShape();aa.Append(b.wrapped);bb=TopTools_ListOfShape();bb.Append(s.wrapped)
     op=BRepAlgoAPI_Common();op.SetArguments(aa);op.SetTools(bb);op.SetNonDestructive(True);op.SetFuzzyValue(fuzzy);op.Build()

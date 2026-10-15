@@ -20,7 +20,7 @@ for i,s in enumerate(manifest['rows']):
   cache.add(key)
   if i<start:continue
   placed=bd.Compound.cast(part.wrapped.Moved(matrix_location(m).wrapped));bb=placed.bounding_box(optimal=False)
-  if any(hb.max.to_tuple()[a]<bb.min.to_tuple()[a] or bb.max.to_tuple()[a]<hb.min.to_tuple()[a] for a in range(3)):continue
+  if any(tuple(hb.max)[a]<tuple(bb.min)[a] or tuple(bb.max)[a]<tuple(hb.min)[a] for a in range(3)):continue
   c=host&placed;volume=sum(x.volume for x in c.solids()) if c else 0
   if volume>1e-7:
    row={'sample':s['label'],'part':part.label,'volume':volume};rows.append(row);print(row,flush=True)

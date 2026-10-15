@@ -39,11 +39,14 @@ from OCP.TopAbs import (
     TopAbs_WIRE,
 )
 from OCP.TopExp import TopExp, TopExp_Explorer
-from OCP.TopTools import (
+from cadgen._internal.ocp_compat import (
     TopTools_IndexedDataMapOfShapeListOfShape,
     TopTools_IndexedMapOfShape,
+    bnd_box_limits,
+    topods_edge,
+    topods_face,
+    topods_wire,
 )
-from OCP.TopoDS import TopoDS
 
 SURF_MAGIC = b"SURF"
 # 2: shape membership, selector-table metadata (surfaceType/curveType/
@@ -101,7 +104,7 @@ def _bnd_box(topo) -> list[float] | None:
             BRepBndLib.Add_s(topo, box, False)
         if box.IsVoid():
             return None
-        xmin, ymin, zmin, xmax, ymax, zmax = box.Get()
+        xmin, ymin, zmin, xmax, ymax, zmax = bnd_box_limits(box)
         return [xmin, ymin, zmin, xmax, ymax, zmax]
     except Exception:
         return None
@@ -681,7 +684,7 @@ def _classify_surf_edge(edge, faces: list) -> dict[str, Any]:
         "adjacentFaceCount": count,
         "dihedralDeg": None,
     }
-    typed_faces = [TopoDS.Face_s(f) for f in faces]
+    typed_faces = [topods_face(f) for f in faces]
     if BRep_Tool.Degenerated_s(edge):
         result.update(cls=C["DEGENERATE"], continuity="degenerate",
                       flags=F["DEGENERATE"])
@@ -803,7 +806,7 @@ def extract_surface_component(
 
     faces: list[dict[str, Any]] = []
     for ordinal in range(1, face_map.Extent() + 1):
-        face = TopoDS.Face_s(face_map.FindKey(ordinal))
+        face = topods_face(face_map.FindKey(ordinal))
         # Clamp the recorded window into the surface's own domain: UVBounds_s
         # noise past a non-periodic domain edge (vendor STEPs: -0.0 vs 0.0,
         # or a few 1e-6 past a trimmed span) would otherwise fail the
@@ -840,7 +843,7 @@ def extract_surface_component(
                 entry["color"] = [float(c) for c in color]
         wire_explorer = TopExp_Explorer(face, TopAbs_WIRE)
         while wire_explorer.More():
-            wire = TopoDS.Wire_s(wire_explorer.Current())
+            wire = topods_wire(wire_explorer.Current())
             loop: list[dict[str, Any]] = []
             walker = BRepTools_WireExplorer(wire, face)
             while walker.More():
@@ -858,7 +861,7 @@ def extract_surface_component(
 
     edges: list[dict[str, Any]] = []
     for ordinal in range(1, edge_map.Extent() + 1):
-        edge = TopoDS.Edge_s(edge_map.FindKey(ordinal))
+        edge = topods_edge(edge_map.FindKey(ordinal))
         # NB: list(TopTools_ListOfShape) costs ~2ms/call in OCP (its Python
         # iteration protocol unwinds C++ exceptions); First/Last/iterator
         # access is ~1000x cheaper and this loop runs once per edge.

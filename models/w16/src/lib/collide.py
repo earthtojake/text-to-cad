@@ -38,7 +38,7 @@ def _bbox(shape):
 
     box = Bnd_Box()
     BRepBndLib.Add_s(shape.wrapped, box, False)
-    xmin, ymin, zmin, xmax, ymax, zmax = box.Get()
+    xmin, ymin, zmin, xmax, ymax, zmax = (box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z())
     return (xmin, ymin, zmin, xmax, ymax, zmax)
 
 
@@ -71,7 +71,7 @@ def _common_volume(a, b):
     try:
         from lib import geo
         from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
-        from OCP.TopTools import TopTools_ListOfShape
+        from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
         args = TopTools_ListOfShape(); args.Append(a.wrapped)
         tools = TopTools_ListOfShape(); tools.Append(b.wrapped)
         op = BRepAlgoAPI_Common(); op.SetArguments(args); op.SetTools(tools)

@@ -179,11 +179,13 @@ class LiveVertexHashTest(unittest.TestCase):
         from OCP.BRep import BRep_Builder
         from OCP.gp import gp_Pnt
 
+        # build123d 0.11 stored X/Y/Z at construction, so a native edit left them
+        # stale and the hash had to look past them; 0.12 reads them live. The
+        # contract is the same either way: the hash follows the native point.
         vertex = Vertex(1, 2, 3)
         alias = Vertex(vertex.wrapped)
         before = hash(vertex)
         BRep_Builder().UpdateVertex(vertex.wrapped, gp_Pnt(4, 2, 3), 1e-7)
-        self.assertEqual(vertex.X, 1, "the fixture must retain stale Python coordinates")
         self.assertNotEqual(hash(vertex), before)
         self.assertEqual(hash(vertex), hash(Vertex(4, 2, 3)))
         self.assert_same_bucket(vertex, alias)
@@ -193,7 +195,6 @@ class LiveVertexHashTest(unittest.TestCase):
 
         vertex = Vertex(1, 2, 3)
         vertex.wrapped.Location(Location((3, 4, 5)).wrapped)
-        self.assertEqual((vertex.X, vertex.Y, vertex.Z), (1, 2, 3))
         self.assertEqual(hash(vertex), hash(Vertex(4, 6, 8)))
 
 

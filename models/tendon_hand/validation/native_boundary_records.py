@@ -11,7 +11,7 @@ from OCP.BRep import BRep_Tool
 from OCP.BRepTools import BRepTools,BRepTools_WireExplorer
 from OCP.TopAbs import TopAbs_EDGE,TopAbs_FACE,TopAbs_VERTEX,TopAbs_WIRE
 from OCP.TopExp import TopExp,TopExp_Explorer
-from OCP.TopTools import TopTools_IndexedMapOfShape
+from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as TopTools_IndexedMapOfShape
 from OCP.TopoDS import TopoDS
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from cadgen._internal.surface_extract import _Bin,_surface_payload,_curve2d_payload,_curve3d_payload
@@ -31,7 +31,7 @@ def signature(shape):
     edges=TopTools_IndexedMapOfShape();TopExp.MapShapes_s(shape.wrapped,TopAbs_EDGE,edges)
     edge_data=[]
     for i in range(1,edges.Extent()+1):
-        edge=TopoDS.Edge_s(edges.FindKey(i))
+        edge=TopoDS.Edge(edges.FindKey(i))
         data=payload(_curve3d_payload,edge)
         assert data is not None or BRep_Tool.Degenerated_s(edge), 'Missing nondegenerate 3D curve'
         edge_data.append(data)
@@ -43,7 +43,7 @@ def signature(shape):
         periods=[surface.UPeriod() if surface.IsUPeriodic() else 0.,surface.VPeriod() if surface.IsVPeriodic() else 0.]
         loops=[];wire_exp=TopExp_Explorer(f,TopAbs_WIRE)
         while wire_exp.More():
-            wire=TopoDS.Wire_s(wire_exp.Current());walker=BRepTools_WireExplorer(wire,f);loop=[]
+            wire=TopoDS.Wire(wire_exp.Current());walker=BRepTools_WireExplorer(wire,f);loop=[]
             while walker.More():
                 e=walker.Current();data=payload(_curve2d_payload,e,f)
                 lo,hi=data['range'];span=hi-lo

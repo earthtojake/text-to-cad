@@ -207,7 +207,7 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
         if not face_colors or label.IsNull():
             return
         from OCP.TopExp import TopExp
-        from OCP.TopTools import TopTools_IndexedMapOfShape
+        from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
 
         face_map = TopTools_IndexedMapOfShape()
         TopExp.MapShapes_s(unlocated, ta.TopAbs_FACE, face_map)

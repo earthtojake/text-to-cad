@@ -15,7 +15,7 @@ from OCP.TopAbs import TopAbs_REVERSED
 from OCP.TopAbs import TopAbs_VERTEX
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
-from OCP.TopoDS import TopoDS
+from cadgen._internal.ocp_compat import bnd_box_limits, topods_vertex
 
 from cadgen._internal.glb_topology import STEP_EDGE_FLAGS
 from cadgen._internal.glb_topology import STEP_EDGE_VISIBILITY_CLASSES
@@ -145,7 +145,7 @@ def _bbox_from_shape(shape: Any, *, tight: bool = True) -> dict[str, Any]:
         BRepBndLib.Add_s(shape, box, False)
     if box.IsVoid():
         return _bbox_from_points([])
-    min_x, min_y, min_z, max_x, max_y, max_z = box.Get()
+    min_x, min_y, min_z, max_x, max_y, max_z = bnd_box_limits(box)
     return _bbox_from_points(
         [
             [min_x, min_y, min_z],
@@ -485,7 +485,7 @@ def _extract_edge_points_from_curve(edge: Any, deflection: float, max_points: in
         vertex_points = []
         explorer = TopExp_Explorer(edge, TopAbs_VERTEX)
         while explorer.More():
-            vertex = TopoDS.Vertex_s(explorer.Current())
+            vertex = topods_vertex(explorer.Current())
             vertex_points.append(_point_from_occ(BRep_Tool.Pnt_s(vertex)))
             explorer.Next()
         points = vertex_points

@@ -40,7 +40,7 @@ def prototypes(name):
 
 def common_volume(a,b):
  from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
- from OCP.TopTools import TopTools_ListOfShape
+ from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
  args=TopTools_ListOfShape();args.Append(a.wrapped)
  tools=TopTools_ListOfShape();tools.Append(b.wrapped)
  op=BRepAlgoAPI_Common();op.SetArguments(args);op.SetTools(tools)

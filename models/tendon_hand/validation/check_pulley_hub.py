@@ -15,7 +15,7 @@ from types import SimpleNamespace
 def placed_bounds(bodies):
     result={}
     for b in bodies:
-        box=Bnd_Box();BRepBndLib.Add_s(b.shape.wrapped,box,False);v=box.Get()
+        box=Bnd_Box();BRepBndLib.Add_s(b.shape.wrapped,box,False);v=(box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z())
         result[b.name]=SimpleNamespace(min=bd.Vector(*v[:3]),max=bd.Vector(*v[3:]))
     return result
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Common

@@ -24,8 +24,8 @@ def _sweep(segments,radius):
     # Removing redundant knot multiplicity changes neither the centerline nor
     # its reserved tendon-clearance envelope (1e-9 mm conversion tolerance).
     from OCP.Geom import Geom_BSplineCurve
-    from OCP.TColgp import TColgp_Array1OfPnt
-    from OCP.TColStd import TColStd_Array1OfReal,TColStd_Array1OfInteger
+    from OCP.collections import Array1_gp_Pnt as TColgp_Array1OfPnt
+    from OCP.collections import Array1_double as TColStd_Array1OfReal, Array1_int as TColStd_Array1OfInteger
     from OCP.gp import gp_Pnt
     from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge
     poles=list(segments[0])+[p for segment in segments[1:] for p in segment[1:]]

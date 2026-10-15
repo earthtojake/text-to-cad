@@ -302,14 +302,13 @@ class GeometryInputs(unittest.TestCase):
         from OCP.Geom import Geom_Line
         from OCP.TopAbs import TopAbs_VERTEX
         from OCP.TopExp import TopExp
-        from OCP.TopTools import TopTools_IndexedMapOfShape
-        from OCP.TopoDS import TopoDS
+        from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape, topods_vertex
         from OCP.TopLoc import TopLoc_Location
         from OCP.gp import gp_Ax1,gp_Dir,gp_Pnt
         shape=Solid.make_box(2,3,4)
         mapping=TopTools_IndexedMapOfShape();TopExp.MapShapes_s(shape.wrapped,TopAbs_VERTEX,mapping)
-        vertex=next(TopoDS.Vertex_s(mapping.FindKey(i)) for i in range(1,mapping.Extent()+1)
-                    if BRep_Tool.Pnt_s(TopoDS.Vertex_s(mapping.FindKey(i))).Coord()==(0.,0.,0.))
+        vertex=next(topods_vertex(mapping.FindKey(i)) for i in range(1,mapping.Extent()+1)
+                    if BRep_Tool.Pnt_s(topods_vertex(mapping.FindKey(i))).Coord()==(0.,0.,0.))
         curve=Geom_Line(gp_Ax1(gp_Pnt(-parameter,0,0),gp_Dir(1,0,0)))
         vertex.TShape().ChangePoints().Append(
             BRep_PointOnCurve(parameter,curve,TopLoc_Location() if location is None else location))
@@ -395,8 +394,7 @@ class GeometryInputs(unittest.TestCase):
         from OCP.Geom import Geom_Plane
         from OCP.TopAbs import TopAbs_VERTEX
         from OCP.TopExp import TopExp
-        from OCP.TopTools import TopTools_IndexedMapOfShape
-        from OCP.TopoDS import TopoDS
+        from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape, topods_vertex
         from OCP.TopLoc import TopLoc_Location
         from OCP.gp import gp_Pnt,gp_Dir
         from cadgen._internal.component_package import _ascii_v3_bytes as ascii_v3_bytes
@@ -404,8 +402,8 @@ class GeometryInputs(unittest.TestCase):
         from cadgen._internal.surface_extract import extract_surface_component
         shape=self.point_box(.125)
         mapping=TopTools_IndexedMapOfShape();TopExp.MapShapes_s(shape.wrapped,TopAbs_VERTEX,mapping)
-        vertex=next(TopoDS.Vertex_s(mapping.FindKey(i)) for i in range(1,mapping.Extent()+1)
-                    if BRep_Tool.Pnt_s(TopoDS.Vertex_s(mapping.FindKey(i))).Coord()==(0.,0.,0.))
+        vertex=next(topods_vertex(mapping.FindKey(i)) for i in range(1,mapping.Extent()+1)
+                    if BRep_Tool.Pnt_s(topods_vertex(mapping.FindKey(i))).Coord()==(0.,0.,0.))
         vertex.TShape().ChangePoints().Clear()
         surface=Geom_Plane(gp_Pnt(-.125,-.375,0),gp_Dir(0,0,1))
         vertex.TShape().ChangePoints().Append(BRep_PointOnSurface(.125,.375,surface,TopLoc_Location()))

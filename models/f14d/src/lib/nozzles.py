@@ -211,7 +211,7 @@ def _revolve(outer, inner, arc=360.0):
         explorer = TopExp_Explorer(builder.Shape(), TopAbs_SOLID)
         found = []
         while explorer.More():
-            found.append(TopoDS.Solid_s(explorer.Current()))
+            found.append(TopoDS.Solid(explorer.Current()))
             explorer.Next()
         if len(found) != 1:
             raise RuntimeError(

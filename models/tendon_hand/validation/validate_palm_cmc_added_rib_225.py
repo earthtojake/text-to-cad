@@ -21,7 +21,7 @@ for i,row in enumerate(M):
   m=inv@fk[frame];key=(p.label,tuple(np.round(m.flatten(),7)))
   if key in cache:continue
   cache.add(key);part=bd.Compound.cast(p.wrapped.Moved(matrix_location(m).wrapped));b=part.bounding_box(optimal=False)
-  if any(bb.max.to_tuple()[a]<b.min.to_tuple()[a] or b.max.to_tuple()[a]<bb.min.to_tuple()[a] for a in range(3)):continue
+  if any(tuple(bb.max)[a]<tuple(b.min)[a] or tuple(b.max)[a]<tuple(bb.min)[a] for a in range(3)):continue
   c=s&part;volume=sum(x.volume for x in c.solids()) if c else 0.;tests+=1
   if volume>1e-7:rows.append({'sample':row['label'],'part':p.label,'volume':volume});print('HIT',rows[-1],flush=True)
  report={'complete':i==224,'sample_count':i+1,'body_count':26,'unique_body_poses':len(cache),'native_intersections':tests,'failures':rows,'pass':i==224 and not rows};(V/'palm_cmc_added_rib_225_gate.json').write_text(json.dumps(report,indent=2))

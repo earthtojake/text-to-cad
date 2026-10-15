@@ -948,7 +948,7 @@ def _reread_component(
         return compound, None
     from OCP.TopAbs import TopAbs_ShapeEnum
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
 
     from cadgen._internal.step_scene_loader import _shape_hash
 

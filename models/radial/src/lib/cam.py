@@ -194,7 +194,7 @@ def path_min_concave_radius(v):
 def cam_edge(v, y):
     """Periodic BSpline edge of track v's lobe surface in the plane y."""
     from OCP.GeomAPI import GeomAPI_Interpolate
-    from OCP.TColgp import TColgp_HArray1OfPnt
+    from OCP.collections import HArray1_gp_Pnt as TColgp_HArray1OfPnt
     from OCP.gp import gp_Pnt
     from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge
 

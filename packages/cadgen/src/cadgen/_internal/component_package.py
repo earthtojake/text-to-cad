@@ -139,12 +139,13 @@ def optimal_box(wrapped: Any) -> list[float] | None:
     try:
         from OCP.Bnd import Bnd_Box
         from OCP.BRepBndLib import BRepBndLib
+        from cadgen._internal.ocp_compat import bnd_box_limits
 
         box = Bnd_Box()
         BRepBndLib.AddOptimal_s(wrapped, box, False, False)
         if box.IsVoid():
             return None
-        xmin, ymin, zmin, xmax, ymax, zmax = box.Get()
+        xmin, ymin, zmin, xmax, ymax, zmax = bnd_box_limits(box)
         return [float(xmin), float(ymin), float(zmin), float(xmax), float(ymax), float(zmax)]
     except Exception:  # noqa: BLE001 - OCP bounds reads can raise on odd shapes
         return None
@@ -649,7 +650,7 @@ def geometry_component_hash(codec: str, payload: bytes, face_colors: dict, *,
 def effective_face_colors(shape: Any, colors: Any) -> dict:
     from OCP.TopAbs import TopAbs_FACE
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
 
     normalized = _normalized_face_colors(colors)
     if not normalized:
@@ -673,7 +674,7 @@ def _point_signature(shape: Any) -> tuple:
     from OCP.TopAbs import TopAbs_VERTEX
     from OCP.TopExp import TopExp
     from OCP.TopLoc import TopLoc_Location
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
 
     local = getattr(shape, "wrapped", shape).Located(TopLoc_Location())
     vertices = TopTools_IndexedMapOfShape()
@@ -740,7 +741,8 @@ def _decode_brep(codec: str, payload: bytes) -> Any:
         raise ValueError(f"BREP header does not match declared codec {codec}")
     from OCP.BinTools import BinTools
     from OCP.TopAbs import TopAbs_VERTEX
-    from OCP.TopoDS import TopoDS, TopoDS_Shape
+    from OCP.TopoDS import TopoDS_Shape
+    from cadgen._internal.ocp_compat import topods_vertex
 
     shape = TopoDS_Shape()
     if codec == "breptools-ascii-v3":
@@ -753,7 +755,7 @@ def _decode_brep(codec: str, payload: bytes) -> Any:
     if shape.IsNull():
         raise RuntimeError("BREP payload deserialized to a null shape")
     if shape.ShapeType() == TopAbs_VERTEX:
-        shape = TopoDS.Vertex_s(shape)
+        shape = topods_vertex(shape)
     return _build123d_shape_from_topods(shape)
 
 def _encode_brep(shape: Any) -> dict[str, Any]:

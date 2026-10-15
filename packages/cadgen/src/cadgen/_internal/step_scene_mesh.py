@@ -8,8 +8,8 @@ from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.TopAbs import TopAbs_EDGE
 from OCP.TopAbs import TopAbs_FACE
 from OCP.TopExp import TopExp
-from OCP.TopTools import TopTools_IndexedMapOfShape
-from OCP.TopoDS import TopoDS
+from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
+from cadgen._internal.ocp_compat import topods_edge, topods_face
 
 from cadgen._internal.step_scene_package import load_step_scene_cached
 from cadgen._internal.step_scene_geometry import _bbox_from_points, _bbox_from_shape, _merge_bbox, _transform_bbox
@@ -47,7 +47,7 @@ def _face_colors_by_ordinal(prototype_shape: Any, face_colors: dict[int, tuple])
     """Convert the scene's hash-keyed per-face colors to MapShapes-ordinal keys."""
     from OCP.TopAbs import TopAbs_ShapeEnum
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
 
     from cadgen._internal.step_scene_loader import _shape_hash
 
@@ -191,7 +191,7 @@ def prototype_topology(shape: Any) -> dict[str, Any]:
     curved_faces = 0
     for face_index in range(1, face_map.Extent() + 1):
         try:
-            surface = BRepAdaptor_Surface(TopoDS.Face_s(face_map.FindKey(face_index)))
+            surface = BRepAdaptor_Surface(topods_face(face_map.FindKey(face_index)))
             if _enum_name(surface.GetType(), "GeomAbs_") != "plane":
                 curved_faces += 1
         except Exception:  # noqa: BLE001 - OCP surface reads can raise on odd faces; count them as curved
@@ -199,7 +199,7 @@ def prototype_topology(shape: Any) -> dict[str, Any]:
     curved_edges = 0
     for edge_index in range(1, edge_map.Extent() + 1):
         try:
-            curve = BRepAdaptor_Curve(TopoDS.Edge_s(edge_map.FindKey(edge_index)))
+            curve = BRepAdaptor_Curve(topods_edge(edge_map.FindKey(edge_index)))
             if _enum_name(curve.GetType(), "GeomAbs_") != "line":
                 curved_edges += 1
         except Exception:  # noqa: BLE001 - OCP curve reads can raise on odd edges; count them as curved

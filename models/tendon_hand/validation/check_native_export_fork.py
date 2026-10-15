@@ -14,7 +14,7 @@ import numpy as np
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
 from OCP.BRepGProp import BRepGProp
 from OCP.GProp import GProp_GProps
-from OCP.TopTools import TopTools_ListOfShape
+from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
 
 from check_native_reported_contacts import native_shapes
 from check_full_route_bodies import audit as route_audit, placed_bounds

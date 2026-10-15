@@ -280,7 +280,7 @@ class LifecycleTests(DescriptorFixture, unittest.TestCase):
         from OCP.BRep import BRep_Builder
         from OCP.TopAbs import TopAbs_VERTEX
         from OCP.TopExp import TopExp_Explorer
-        from OCP.TopoDS import TopoDS
+        from cadgen._internal.ocp_compat import topods_vertex
         from OCP.gp import gp_Pnt
         expected = self.result(ordinary_build, self.parent("nurbs"))
         shape = self.parent("nurbs")
@@ -289,7 +289,7 @@ class LifecycleTests(DescriptorFixture, unittest.TestCase):
                 child.label = "mutated"
                 child.color = (.2, .1, .8, .5)
                 child.cad_face_ordinal_colors = {1: (0., 1., 0., 1.)}
-                vertex = TopoDS.Vertex_s(TopExp_Explorer(child.wrapped, TopAbs_VERTEX).Current())
+                vertex = topods_vertex(TopExp_Explorer(child.wrapped, TopAbs_VERTEX).Current())
                 BRep_Builder().UpdateVertex(vertex, gp_Pnt(55., 66., 77.), 1e-7)
             shape.label = "changed root"
         actual = self.result(self.deferred, shape, callback=mutate)
@@ -321,7 +321,7 @@ class LifecycleTests(DescriptorFixture, unittest.TestCase):
         from OCP.BRep import BRep_Builder
         from OCP.TopAbs import TopAbs_VERTEX
         from OCP.TopExp import TopExp_Explorer
-        from OCP.TopoDS import TopoDS
+        from cadgen._internal.ocp_compat import topods_vertex
         from OCP.gp import gp_Pnt
         snapshot = self.snapshot(self.parent()).capture_appearance()
         original = snapshot.descriptor()
@@ -332,7 +332,7 @@ class LifecycleTests(DescriptorFixture, unittest.TestCase):
             second = snapshot.materialize("root")
         self.assertEqual(cp._shape_brep_bytes(first), cp._shape_brep_bytes(second))
         second_bytes = cp._shape_brep_bytes(second)
-        vertex = TopoDS.Vertex_s(TopExp_Explorer(first.children[0].wrapped, TopAbs_VERTEX).Current())
+        vertex = topods_vertex(TopExp_Explorer(first.children[0].wrapped, TopAbs_VERTEX).Current())
         BRep_Builder().UpdateVertex(vertex, gp_Pnt(90., 80., 70.), 1e-7)
         self.assertEqual(second_bytes, cp._shape_brep_bytes(second))
         first.children[0].cad_face_ordinal_colors[1] = (0., 0., 0., 1.)

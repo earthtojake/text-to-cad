@@ -19,7 +19,7 @@ from check_global_phalanges import frame_for,pair_key
 from OCP.BRepBndLib import BRepBndLib
 from OCP.Bnd import Bnd_Box
 def bounds(shape):
-    box=Bnd_Box();BRepBndLib.Add_s(shape,box,False);return box.Get()
+    box=Bnd_Box();BRepBndLib.Add_s(shape,box,False);return (box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z())
 from check_fingertip_pads import common_volume,transformed_box,overlap_boxes
 from phalanx_before_nail import make_phalanx as old_phalanx
 
@@ -82,7 +82,7 @@ for name,l,w in [(f.name,f.lengths[2],f.widths[2]) for f in FINGERS]+[('thumb',2
     new=make_phalanx(l,w,True);old=old_phalanx(l,w,True)
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
     from OCP.BOPAlgo import BOPAlgo_GlueEnum
-    from OCP.TopTools import TopTools_ListOfShape
+    from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
     from OCP.BRepGProp import BRepGProp
     from OCP.GProp import GProp_GProps
     args=TopTools_ListOfShape();args.Append(new.wrapped)

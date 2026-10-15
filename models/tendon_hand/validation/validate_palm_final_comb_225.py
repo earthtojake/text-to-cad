@@ -15,7 +15,7 @@ for i,s in enumerate(manifest['rows']):
   m=inv@fk[meta[part.label]['frame']];key=(part.label,tuple(np.round(m.flatten(),7)))
   if key in cache:continue
   cache.add(key);placed=bd.Compound.cast(part.wrapped.Moved(matrix_location(m).wrapped));bb=placed.bounding_box(optimal=False)
-  if any(hb.max.to_tuple()[a]<bb.min.to_tuple()[a] or bb.max.to_tuple()[a]<hb.min.to_tuple()[a] for a in range(3)):continue
+  if any(tuple(hb.max)[a]<tuple(bb.min)[a] or tuple(bb.max)[a]<tuple(hb.min)[a] for a in range(3)):continue
   d=host.distance_to(placed)
   if d>.001:continue
   c=host&placed;volume=sum(x.volume for x in c.solids()) if c else 0

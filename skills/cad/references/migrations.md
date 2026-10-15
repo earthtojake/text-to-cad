@@ -69,6 +69,11 @@ sources and do not delete unrelated artifacts to diagnose a version mismatch.
 
 ## Migration guides
 
+- **OpenCascade 7.9 → 8 (build123d 0.11 → 0.13)** — a model that imports `OCP`
+  directly may hit renamed collections (`OCP.collections`), downcasts without
+  `_s`, or `Bnd_Box.Get()`; the guide has the rename table and the error each
+  one raises.
+  https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-to-opencascade-8.md
 - **cadgen 0.4 → 0.5** — generator functions became decorated model scripts, the
   generation CLI was removed, sidecars and provenance moved, snapshot job JSON
   was re-keyed, and mesh tolerance became relative.

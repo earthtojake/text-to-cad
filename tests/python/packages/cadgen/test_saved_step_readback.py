@@ -61,13 +61,13 @@ class SavedStepReadbackTest(unittest.TestCase):
         from OCP.gp import gp_Pnt
         from OCP.TopAbs import TopAbs_VERTEX
         from OCP.TopExp import TopExp_Explorer
-        from OCP.TopoDS import TopoDS
+        from cadgen._internal.ocp_compat import topods_vertex
         from cadgen._internal.step_scene_loader import load_step_scene
         from cadgen._internal.step_scene_package import scene_from_render_package
 
         expected = self.seed()
         cached = scene_from_render_package(self.root / "part.step", step_hash=expected[3])
-        vertex = TopoDS.Vertex_s(TopExp_Explorer(next(iter(cached.prototype_shapes.values())), TopAbs_VERTEX).Current())
+        vertex = topods_vertex(TopExp_Explorer(next(iter(cached.prototype_shapes.values())), TopAbs_VERTEX).Current())
         BRep_Builder().UpdateVertex(vertex, gp_Pnt(50, 60, 70), 1e-7)
         with mock.patch("cadgen._internal.step_scene_loader.load_step_scene", side_effect=AssertionError("cache hit parsed STEP")):
             warm = self.build()

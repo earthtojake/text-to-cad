@@ -8,7 +8,7 @@ from OCP.Bnd import Bnd_Box
 from OCP.BRepBndLib import BRepBndLib
 from OCP.TopAbs import TopAbs_FACE
 from OCP.TopExp import TopExp_Explorer
-from OCP.TopoDS import TopoDS
+from cadgen._internal.ocp_compat import bnd_box_limits, topods_face
 
 from cadgen._internal import step_scene
 from cadgen._internal import step_scene_mesh
@@ -66,7 +66,7 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             temp_root = Path(temp_dir)
             shape = build123d.Box(1, 1, 1).wrapped
             explorer = TopExp_Explorer(shape, TopAbs_FACE)
-            face_hash = step_scene._shape_hash(TopoDS.Face_s(explorer.Current()))
+            face_hash = step_scene._shape_hash(topods_face(explorer.Current()))
             transform = (
                 1.0, 0.0, 0.0, 5.0,
                 0.0, 1.0, 0.0, 0.0,
@@ -135,7 +135,7 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             located = scene_occurrence_shape(restored, restored.roots[0])
             bounds = Bnd_Box()
             BRepBndLib.Add_s(located, bounds)
-            x_min, _y_min, _z_min, x_max, _y_max, _z_max = bounds.Get()
+            x_min, _y_min, _z_min, x_max, _y_max, _z_max = bnd_box_limits(bounds)
             self.assertGreater(x_min, 4.0)
             self.assertGreater(x_max, 5.0)
 

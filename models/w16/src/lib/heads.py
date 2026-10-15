@@ -367,7 +367,7 @@ SKIN_T = 0.45
 def _common_fuzzy(shape, tools, fuzzy: float = 1e-3):
     """Multi-tool intersection (the skin harvester), fuzzy like geo.cut_fuzzy."""
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
-    from OCP.TopTools import TopTools_ListOfShape
+    from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
 
     args = TopTools_ListOfShape()
     args.Append(shape.wrapped)

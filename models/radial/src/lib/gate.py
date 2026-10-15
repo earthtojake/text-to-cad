@@ -211,7 +211,7 @@ def _volume(shape):
 def _common_volume(a, b):
     """Boolean common volume; retried fuzzy; -1 when it cannot be decided."""
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
-    from OCP.TopTools import TopTools_ListOfShape
+    from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
     for fuzzy in (0.0, 1e-4):
         try:
             args, tools = TopTools_ListOfShape(), TopTools_ListOfShape()
@@ -288,7 +288,7 @@ def _mesh(shape):
     tris = []
     ex = TopExp_Explorer(shape, TopAbs_FACE)
     while ex.More():
-        face = TopoDS.Face_s(ex.Current())
+        face = TopoDS.Face(ex.Current())
         loc = TopLoc_Location()
         tri = BRep_Tool.Triangulation_s(face, loc)
         if tri is not None and tri.NbTriangles():

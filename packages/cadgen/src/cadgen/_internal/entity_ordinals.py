@@ -21,7 +21,7 @@ def shape_entities(shape):
 def entity_map(shape, kind):
     from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_VERTEX
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
 
     entities = TopTools_IndexedMapOfShape()
     TopExp.MapShapes_s(shape, {"face": TopAbs_FACE, "edge": TopAbs_EDGE, "vertex": TopAbs_VERTEX}[kind], entities)

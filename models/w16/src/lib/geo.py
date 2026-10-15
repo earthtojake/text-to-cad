@@ -92,7 +92,7 @@ def cut_fuzzy(shape, tools, fuzzy: float = 1e-3):
     """Boolean cut with an OCCT fuzzy value: absorbs near-tangent/coincident
     surface noise that makes an exact cut BOP-invalid. `tools` is a list."""
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
-    from OCP.TopTools import TopTools_ListOfShape
+    from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
 
     args = TopTools_ListOfShape()
     args.Append(shape.wrapped)
@@ -112,7 +112,7 @@ def cut_fuzzy(shape, tools, fuzzy: float = 1e-3):
 
 def fuse_fuzzy(shapes, fuzzy: float = 1e-3):
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
-    from OCP.TopTools import TopTools_ListOfShape
+    from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
 
     args = TopTools_ListOfShape()
     args.Append(shapes[0].wrapped)

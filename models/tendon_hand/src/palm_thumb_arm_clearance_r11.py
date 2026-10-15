@@ -27,7 +27,7 @@ def palm_thumb_arm_clearance_r11():
         seen.add(key);tool=matrix_location(relative)*arm;hit=common(source,tool)
         if not hit.solids() or sum(s.volume for s in hit.solids())<=1e-7:continue
         report('Machining palm at '+sample['label'])
-        box=Bnd_Box();BRepBndLib.AddOptimal_s(hit.wrapped,box,False,True);x0,y0,z0,x1,y1,z1=box.Get();d=.025
+        box=Bnd_Box();BRepBndLib.AddOptimal_s(hit.wrapped,box,False,True);x0,y0,z0,x1,y1,z1=(box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z());d=.025
         pocket=bd.Pos((x0+x1)/2,(y0+y1)/2,(z0+z1)/2)*bd.Box(x1-x0+2*d,y1-y0+2*d,z1-z0+2*d)
         candidate=cut(source,pocket)
         assert len(candidate.solids())==1 and candidate.is_valid and candidate.volume>0,('pocket disconnects palm',sample['label'])

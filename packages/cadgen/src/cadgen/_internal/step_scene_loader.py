@@ -18,13 +18,13 @@ from OCP.STEPControl import STEPControl_Reader
 from OCP.TCollection import TCollection_ExtendedString
 from OCP.TDF import TDF_ChildIterator
 from OCP.TDF import TDF_Label
-from OCP.TDF import TDF_LabelSequence
+from cadgen._internal.ocp_compat import TDF_LabelSequence
 from OCP.TDataStd import TDataStd_Name
 from OCP.TDocStd import TDocStd_Document
 from OCP.TopAbs import TopAbs_FACE
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
-from OCP.TopoDS import TopoDS
+from cadgen._internal.ocp_compat import topods_face
 from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import XCAFDoc_ColorCurv
 from OCP.XCAFDoc import XCAFDoc_ColorGen
@@ -277,7 +277,7 @@ def _face_color_map_from_label(shape_tool: Any, color_tool: Any, label: object) 
             if shape is not None and not shape.IsNull():
                 explorer = TopExp_Explorer(shape, TopAbs_FACE)
                 while explorer.More():
-                    face_colors[_shape_hash(TopoDS.Face_s(explorer.Current()))] = label_color
+                    face_colors[_shape_hash(topods_face(explorer.Current()))] = label_color
                     explorer.Next()
         iterator = TDF_ChildIterator(colored_label, False)
         while iterator.More():

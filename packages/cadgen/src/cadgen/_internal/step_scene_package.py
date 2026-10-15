@@ -66,7 +66,7 @@ def _face_colors_from_recipe(recipe: dict, shape: Any) -> dict[int, ColorRGBA]:
     """Map the geometry's intrinsic ordinal recipe onto its private topology."""
     from OCP.TopAbs import TopAbs_ShapeEnum
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
 
     face_map = TopTools_IndexedMapOfShape()
     TopExp.MapShapes_s(shape, TopAbs_ShapeEnum.TopAbs_FACE, face_map)

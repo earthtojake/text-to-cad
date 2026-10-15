@@ -6,7 +6,7 @@ from cadgen._internal.component_package import _build123d_shape_from_brep_bytes
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut,BRepAlgoAPI_Common
 from OCP.BRepGProp import BRepGProp
 from OCP.GProp import GProp_GProps
-from OCP.TopTools import TopTools_ListOfShape
+from OCP.collections import List_TopoDS_Shape as TopTools_ListOfShape
 from OCP.BRepCheck import BRepCheck_Analyzer
 record=json.load(open('models/tendon_hand/tmp/progress_viewer_store.json'))
 name=sys.argv[1] if len(sys.argv)>1 else 'little_middle_frame'

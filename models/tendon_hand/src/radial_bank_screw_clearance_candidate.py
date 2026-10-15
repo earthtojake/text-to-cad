@@ -22,7 +22,7 @@ def radial_bank_screw_clearance_candidate():
         shapes.update({s.label:s for s in leaves(bd.import_step(str(path))) if s.label==wanted})
     assert set(shapes)=={name,other};body,obstacle=shapes[name],shapes[other]
     hit=common(body,obstacle);assert hit.solids() and hit.volume>1e-7
-    box=Bnd_Box();BRepBndLib.AddOptimal_s(hit.wrapped,box,False,True);x0,y0,z0,x1,y1,z1=box.Get();d=.025
+    box=Bnd_Box();BRepBndLib.AddOptimal_s(hit.wrapped,box,False,True);x0,y0,z0,x1,y1,z1=(box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z());d=.025
     pocket=bd.Pos((x0+x1)/2,(y0+y1)/2,(z0+z1)/2)*bd.Box(x1-x0+2*d,y1-y0+2*d,z1-z0+2*d)
     pocket=bd.fillet(pocket.edges(),d*.99);result=cut(body,pocket)
     assert len(result.solids())==1 and result.is_valid and result.volume>0

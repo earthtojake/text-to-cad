@@ -855,12 +855,12 @@ class MaterializeCacheOwnership(unittest.TestCase):
         from OCP.TopAbs import TopAbs_ShapeEnum
         from OCP.TopExp import TopExp_Explorer
         from OCP.TopLoc import TopLoc_Location
-        from OCP.TopoDS import TopoDS
+        from cadgen._internal.ocp_compat import topods_face
 
         count = 0
         explorer = TopExp_Explorer(shape.wrapped, TopAbs_ShapeEnum.TopAbs_FACE)
         while explorer.More():
-            face = TopoDS.Face_s(explorer.Current())
+            face = topods_face(explorer.Current())
             if BRep_Tool.Triangulation_s(face, TopLoc_Location()) is not None:
                 count += 1
             explorer.Next()

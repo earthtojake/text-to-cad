@@ -24,12 +24,12 @@ def _floats(binbuf, ref):
 
 def _rebuild_bspline_surface(payload, binbuf):
     from OCP.Geom import Geom_BSplineSurface
-    from OCP.TColStd import (
+    from cadgen._internal.ocp_compat import (
         TColStd_Array1OfInteger,
         TColStd_Array1OfReal,
         TColStd_Array2OfReal,
     )
-    from OCP.TColgp import TColgp_Array2OfPnt
+    from cadgen._internal.ocp_compat import TColgp_Array2OfPnt
     from OCP.gp import gp_Pnt
 
     nu, nv = payload["nu"], payload["nv"]
@@ -73,8 +73,8 @@ def _rebuild_bspline_surface(payload, binbuf):
 
 def _rebuild_bspline_curve3(payload, binbuf):
     from OCP.Geom import Geom_BSplineCurve
-    from OCP.TColStd import TColStd_Array1OfInteger, TColStd_Array1OfReal
-    from OCP.TColgp import TColgp_Array1OfPnt
+    from cadgen._internal.ocp_compat import TColStd_Array1OfInteger, TColStd_Array1OfReal
+    from cadgen._internal.ocp_compat import TColgp_Array1OfPnt
     from OCP.gp import gp_Pnt
 
     n = payload["n"]
@@ -108,8 +108,8 @@ def _rebuild_bspline_curve3(payload, binbuf):
 
 def _rebuild_bspline_curve2d(payload, binbuf):
     from OCP.Geom2d import Geom2d_BSplineCurve
-    from OCP.TColStd import TColStd_Array1OfInteger, TColStd_Array1OfReal
-    from OCP.TColgp import TColgp_Array1OfPnt2d
+    from cadgen._internal.ocp_compat import TColStd_Array1OfInteger, TColStd_Array1OfReal
+    from cadgen._internal.ocp_compat import TColgp_Array1OfPnt2d
     from OCP.gp import gp_Pnt2d
 
     n = payload["n"]
@@ -215,7 +215,7 @@ class SurfaceExtractTest(unittest.TestCase):
 
         from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE
         from OCP.TopExp import TopExp
-        from OCP.TopTools import TopTools_IndexedMapOfShape
+        from cadgen._internal.ocp_compat import TopTools_IndexedMapOfShape
 
         cls.face_map = TopTools_IndexedMapOfShape()
         cls.edge_map = TopTools_IndexedMapOfShape()
@@ -238,7 +238,7 @@ class SurfaceExtractTest(unittest.TestCase):
         trim lands wrong). Evaluate the payload independently vs OCCT."""
         import numpy as np
         from OCP.BRep import BRep_Tool
-        from OCP.TopoDS import TopoDS
+        from cadgen._internal.ocp_compat import topods_face
 
         def profile_point(profile, t):
             kind = profile["kind"]
@@ -264,7 +264,7 @@ class SurfaceExtractTest(unittest.TestCase):
             payload = entry["surface"]
             if payload["kind"] not in ("revolution", "extrusion"):
                 continue
-            face = TopoDS.Face_s(self.face_map.FindKey(entry["ord"]))
+            face = topods_face(self.face_map.FindKey(entry["ord"]))
             geom = BRep_Tool.Surface_s(face)
             u0, u1, v0, v1 = entry["uv"]
             for s, t in ((0.1, 0.2), (0.5, 0.5), (0.9, 0.8)):
@@ -289,12 +289,12 @@ class SurfaceExtractTest(unittest.TestCase):
 
     def test_analytic_surfaces_match_occt(self) -> None:
         from OCP.BRep import BRep_Tool
-        from OCP.TopoDS import TopoDS
+        from cadgen._internal.ocp_compat import topods_face
 
         for entry in self.index["faces"]:
             if entry["surface"]["kind"] in ("nurbs", "revolution", "extrusion"):
                 continue
-            face = TopoDS.Face_s(self.face_map.FindKey(entry["ord"]))
+            face = topods_face(self.face_map.FindKey(entry["ord"]))
             geom = BRep_Tool.Surface_s(face)
             u0, u1, v0, v1 = entry["uv"]
             for s, t in ((0.1, 0.2), (0.5, 0.5), (0.9, 0.7)):
@@ -309,14 +309,14 @@ class SurfaceExtractTest(unittest.TestCase):
 
     def test_nurbs_surfaces_rebuild_bit_faithfully(self) -> None:
         from OCP.BRep import BRep_Tool
-        from OCP.TopoDS import TopoDS
+        from cadgen._internal.ocp_compat import topods_face
 
         checked = 0
         for entry in self.index["faces"]:
             payload = entry["surface"]
             if payload["kind"] != "nurbs":
                 continue
-            face = TopoDS.Face_s(self.face_map.FindKey(entry["ord"]))
+            face = topods_face(self.face_map.FindKey(entry["ord"]))
             geom = BRep_Tool.Surface_s(face)
             rebuilt = _rebuild_bspline_surface(payload, self.binbuf)
             u0, u1, v0, v1 = entry["uv"]
