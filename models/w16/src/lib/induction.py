@@ -739,7 +739,7 @@ def _bx(shape):
 
     box = Bnd_Box()
     BRepBndLib.Add_s(shape.wrapped, box, False)
-    return box.Get()
+    return (box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z())
 
 
 def _lid_rect(bank: int, x0: float, x1: float, y0: float, y1: float,

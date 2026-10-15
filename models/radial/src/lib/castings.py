@@ -132,7 +132,7 @@ def locate(shape, origin, z_dir, x_dir=None):
 def _is_closed(shape) -> bool:
     """Every non-degenerate edge bounded by exactly two faces."""
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+    from OCP.collections import IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher as TopTools_IndexedDataMapOfShapeListOfShape
     from OCP.BRep import BRep_Tool
     from OCP.TopAbs import TopAbs_ShapeEnum
     from OCP.TopoDS import TopoDS
@@ -148,7 +148,7 @@ def _is_closed(shape) -> bool:
             return False
         for i in range(1, m.Extent() + 1):
             edge = m.FindKey(i)
-            if BRep_Tool.Degenerated_s(TopoDS.Edge_s(edge)):
+            if BRep_Tool.Degenerated_s(TopoDS.Edge(edge)):
                 continue
             if m.FindFromIndex(i).Extent() != 2:
                 return False
