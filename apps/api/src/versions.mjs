@@ -43,7 +43,7 @@ export function latestOf(page) {
  * throws.
  */
 export function pypiVersions({ fetch = globalThis.fetch, now = Date.now, log = console.error, timeout = TIMEOUT_MS } = {}) {
-  let kept = null; // { feed, at }
+  let kept = null; // { feed, at }; a failed first read keeps a null feed until the next attempt
   let asking = null;
   async function ask() {
     try {
@@ -58,7 +58,7 @@ export function pypiVersions({ fetch = globalThis.fetch, now = Date.now, log = c
     } catch (error) {
       log('version feed: PyPI failed:', error?.code ?? error?.name ?? 'error');
       // What was read stands, and PyPI is asked again in a few minutes, not on every request meanwhile.
-      if (kept) kept = { ...kept, at: now() };
+      kept = { feed: kept?.feed ?? null, at: now() };
     }
   }
   return async function versions() {
