@@ -10,8 +10,8 @@ add_repo_path("packages/cadgen/src")
 
 from build123d import Box, Compound, Location  # noqa: E402
 
-from cadgen.step_export import build_build123d_step_scene  # noqa: E402
-from cadgen._internal.step_scene_loader import _normalize_label_name  # noqa: E402
+from cadgen.step_export import build_build123d_step_scene, export_build123d_step_file  # noqa: E402
+from cadgen._internal.step_scene_loader import _normalize_label_name, load_step_scene  # noqa: E402
 
 
 class UnnamedLabelSceneTests(unittest.TestCase):
@@ -58,6 +58,37 @@ class UnnamedLabelSceneTests(unittest.TestCase):
         self.assertEqual(_normalize_label_name(r"\X4\0001F680\X0\ mount"), "🚀 mount")
         self.assertEqual(_normalize_label_name("café Ã©"), "café Ã©")
         self.assertEqual(_normalize_label_name("bracket"), "bracket")
+
+    def test_an_xcaf_label_entry_is_no_name(self) -> None:
+        """OCCT names an unnamed label after its own address; that is not a name.
+
+        The spellings and the counter-examples are the viewer's (``productName.js``),
+        so a STEP reads the same on both sides."""
+        for entry in ("=>[0:1:1:2]", "=> [0:1:1:2]", "[0:1:1:2]", "0:1:1:2", "0:1", " =>[0:1:1:12] "):
+            self.assertIsNone(_normalize_label_name(entry), entry)
+        for name in ("l_bracket", "Panel:1", "M3x8:2", "base", "1:2 bracket", "=>bracket", "[bracket]"):
+            self.assertEqual(_normalize_label_name(name), name, name)
+
+    def test_single_part_file_reads_back_with_its_authored_name(self) -> None:
+        """A written single part is read back under the name its author gave it.
+
+        A part that carries a placement -- every occurrence a build materializes does,
+        at identity or not -- is written by XCAF as an assembly of one instance: the
+        instance label is named after its entry (``=>[0:1:1:2]``) and only the prototype
+        it refers to carries the label. Read back, the entry must give way to that name,
+        so ``#plain_box.f1`` resolves and an assembly that places this file through
+        ``read_step`` writes ``plain_box``, not the entry, as the product name."""
+        part = Box(20, 20, 10).moved(Location())
+        part.label = "plain_box"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "plain_box.step"
+            export_build123d_step_file(part, path)
+            scene = load_step_scene(path)
+        (root,) = scene.roots
+        (leaf,) = root.children
+        self.assertEqual((leaf.name, leaf.source_name), ("plain_box", "plain_box"))
+        self.assertIsNone(root.name, "the wrapper the writer added has no authored name")
+        self.assertEqual(scene.prototype_names[leaf.prototype_key], "plain_box")
 
 
 if __name__ == "__main__":

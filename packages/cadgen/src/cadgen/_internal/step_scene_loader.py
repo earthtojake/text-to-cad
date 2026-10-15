@@ -176,6 +176,18 @@ def _repair_utf8_mojibake(text: str) -> str:
     return repaired
 
 
+# What XCAF writes where it had no name for a product: the label's own address -- its
+# entry, ``0:1:1:2``, or ``=>[0:1:1:2]`` for a reference to another label -- which a
+# reader then hands back as the name. cadgen's own single-part STEP is one such file:
+# a part that carries a placement (every occurrence a build materializes does) is
+# written as an assembly of one instance, whose instance label is named this way
+# while the prototype it refers to carries the authored name. An entry
+# is an address, not a name somebody gave, so it reads as no name at all and what
+# names the thing otherwise takes its place: the referred label's name (``collect``),
+# else the occurrence id. The viewer's ``productName.js`` applies the same rule.
+_XCAF_ENTRY_RE = re.compile(r"^(?:=>\s*)?(?:\[\s*\d+(?::\d+)+\s*\]|\d+(?::\d+)+)$")
+
+
 def _normalize_label_name(raw_name: object) -> str | None:
     if raw_name is None:
         return None
@@ -183,6 +195,8 @@ def _normalize_label_name(raw_name: object) -> str | None:
     text = unicodedata.normalize("NFC", _repair_utf8_mojibake(text))
     text = " ".join(text.split())
     if not text:
+        return None
+    if _XCAF_ENTRY_RE.match(text):
         return None
     lowered = text.lower()
     if lowered.startswith("open cascade step translator"):
