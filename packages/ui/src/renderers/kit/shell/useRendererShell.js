@@ -10,17 +10,17 @@ import { sceneBackdropEdgeColor } from "../look/chromeBackdrop.js";
 import { useChromeBackdropColor } from "../look/useChromeBackdropColor.js";
 import { prefetchRenderStudio } from "../look/renderStudioChunk.js";
 import { CAD_DRAWING_DEFAULTS } from "../tools/draw/DrawingOverlay.jsx";
-import { normalizeToolStack } from "../tools/toolStackLayout.js";
 import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
+import { SHELL_TOOL } from "../tools/toolModes.js";
 import { DisplaySettingsSection } from "../view-settings/DisplaySettingsSection.js";
 import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.js";
 import { useViewSettings } from "../view-settings/useViewSettings.js";
 import { cameraForViewSettings, viewerDisplaySettingsForCamera } from "../view-settings/viewerDisplaySettings.js";
 import { DisplayPopoverClose } from "./DisplayPopover.jsx";
-import { attachLiveBinding } from "./liveBinding.js";
 import { shellLoadReport } from "./loadReport.js";
-import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
-import { fileViewsEqual, plainShellCamera, readFileView, readFileViewSlices, scopeShellCamera, shellPresentationKey, writeFileView } from "./fileView.js";
+import { createViewPromptContext, deliverPromptContext, promptDeliveryError } from "./promptContext.js";
+import { useCaptureRequest, useFileViewWriter, useLiveSurface, useToolStackLayout } from "./shellHooks.js";
+import { plainShellCamera, readFileView, readFileViewSlices, scopeShellCamera, shellPresentationKey, writeFileView } from "./fileView.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
 import { useWhenSettled } from "./useWhenSettled.js";
 
@@ -54,10 +54,8 @@ export function presentationIsPending(state, { modelKey, key, renderMode }) {
   return state?.file !== modelKey || state?.key !== key || state?.renderMode !== renderMode || state?.preparing === true;
 }
 
-/** The tool ids the shell itself understands. A renderer's own tools use any other id. */
-export const SHELL_TOOL = Object.freeze({ DRAW: "draw" });
+export { SHELL_TOOL };
 
-const SESSION_SAVE_DELAY_MS = 180;
 const EMPTY = Object.freeze({});
 // What asking for Preview does in a view that does not offer it: nothing.
 const NO_PREVIEW = () => {};
@@ -216,17 +214,16 @@ export function useRendererShell({
   const [ownToolMode, setOwnToolMode] = useState(() => (toolModes ? toolModes.defaultMode : ""));
   const toolMode = tool ? tool.mode : ownToolMode;
   const setToolMode = tool ? tool.set : setOwnToolMode;
-  const recordRef = useRef(null);
-  const onStateChangeRef = useRef(onStateChange);
-  onStateChangeRef.current = onStateChange;
   // Preview's settings — its Orbit (on or off, and its speed), and the playbar's Autoplay and the
   // routine's chosen speed and loop — are the file's: kept between leaving and re-entering preview, and in its view.
   const [playback, setPlaybackState] = useState(() => restored.playback);
   const setPlayback = useCallback(patch => setPlaybackState(current => normalizePlayback({ ...current, ...patch })), []);
   const rendererStateRef = useRef(rendererState);
   rendererStateRef.current = rendererState;
-  const latestRecord = useRef(null);
-  latestRecord.current = () => {
+  // A view that has gone writes nothing more: its last write is the flush as it unmounts, and a host
+  // that drops the view of a file it left (`CadViewer`) must not see it written again by a camera
+  // report or a slice that lands after that (`useFileViewWriter`).
+  const { schedule: scheduleSessionSave } = useFileViewWriter({ onStateChange, record: () => {
     const slices = rendererStateRef.current;
     // The camera is the last one the viewport reported for the tools view (`handlePerspectiveChange`):
     // never preview's, and never a runtime that has no model under it yet.
@@ -237,30 +234,7 @@ export function useRendererShell({
       renderer: slices ? slices.read() : storedSlices.values,
       signatures: slices ? slices.signatures : storedSlices.signatures
     });
-  };
-  const saveTimer = useRef(0);
-  // A view that has gone writes nothing more: its last write is the flush as it unmounts, and a host
-  // that drops the view of a file it left (`CadViewer`) must not see it written again by a camera
-  // report or a slice that lands after that.
-  const closed = useRef(false);
-  const flushSession = useCallback(() => {
-    window.clearTimeout(saveTimer.current);
-    saveTimer.current = 0;
-    if (closed.current) return;
-    const next = latestRecord.current();
-    if (fileViewsEqual(recordRef.current, next)) return;
-    recordRef.current = next;
-    onStateChangeRef.current?.(next);
-  }, []);
-  const scheduleSessionSave = useCallback(() => {
-    if (closed.current) return;
-    window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(flushSession, SESSION_SAVE_DELAY_MS);
-  }, [flushSession]);
-  useEffect(() => {
-    closed.current = false;
-    return () => { flushSession(); closed.current = true; };
-  }, [flushSession]);
+  } });
   // The display's and playback's every edit is saved soon after; the camera's on every move (below);
   // a renderer's slices when it says so. The tool in hand is not saved at all.
   useEffect(() => { scheduleSessionSave(); }, [displaySettings, playback, scheduleSessionSave]);
@@ -300,17 +274,8 @@ export function useRendererShell({
   const preferences = services.preferences;
   const previewOrbitSpeed = playback.orbitSpeed;
   const setPreviewOrbitSpeed = useCallback(speed => setPlayback({ orbitSpeed: speed }), [setPlayback]);
-  // The tool stack's layout — the sizes of the panels a person can size, the folded panels. A
-  // change is a patch over the layout as it last stood (or a function of it), so two panels
-  // written back in one turn both land.
-  const toolStack = useMemo(() => normalizeToolStack(preferences?.toolStack), [preferences?.toolStack]);
-  const toolStackRef = useRef(toolStack);
-  toolStackRef.current = toolStack;
-  const changeToolStack = useCallback(patch => {
-    const next = normalizeToolStack({ ...toolStackRef.current, ...(typeof patch === "function" ? patch(toolStackRef.current) : patch) });
-    toolStackRef.current = next;
-    services.onPreferenceChange({ toolStack: next });
-  }, [services.onPreferenceChange]);
+  // The tool stack's layout: the sizes of the panels a person can size, the folded panels.
+  const { toolStack, changeToolStack } = useToolStackLayout(services);
   const autoplay = playback.autoplay;
   const setAutoplay = useCallback(value => setPlayback({ autoplay: value === true }), [setPlayback]);
   const hostRef = useRef(null);
@@ -355,13 +320,8 @@ export function useRendererShell({
 
   // ---- prompt snapshots, clipboard ------------------------------------------
   const showPromptResult = useCallback((result) => reportActionError(promptDeliveryError(result)), [reportActionError]);
-  const deliverPrompt = useCallback((context) => {
-    let pending;
-    try { pending = host.promptContext.deliver(context); }
-    catch (error) { pending = Promise.reject(error); }
-    return Promise.resolve(pending).catch(error => ({ status: "failed", message: error instanceof Error ? error.message : String(error) }))
-      .then(result => { showPromptResult(result); return result; });
-  }, [host.promptContext, showPromptResult]);
+  const deliverPrompt = useCallback((context) => deliverPromptContext(host, context)
+    .then(result => { showPromptResult(result); return result; }), [host, showPromptResult]);
   const referencesRef = useRef(promptReferences);
   referencesRef.current = promptReferences;
   const promptContextRef = useRef(promptContext);
@@ -398,14 +358,7 @@ export function useRendererShell({
     if (!viewerRef.current?.captureScreenshotBlob) return Promise.reject(new Error("The viewer is not ready"));
     return viewerRef.current.captureScreenshotBlob();
   }, []);
-  const captureKey = services.captureRequest?.key ?? null;
-  const appliedCaptureKey = useRef(null);
-  useEffect(() => {
-    if (captureKey === null || appliedCaptureKey.current === captureKey || viewerLoading || !promptAvailable) return;
-    appliedCaptureKey.current = captureKey;
-    services.acknowledgeCommand?.("captureRequest", captureKey);
-    capture();
-  }, [captureKey, viewerLoading, promptAvailable, services.acknowledgeCommand, capture]);
+  useCaptureRequest({ services, ready: !viewerLoading && promptAvailable, capture });
 
   // ---- shortcuts ------------------------------------------------------------
   const escapeRef = useRef(escape.handle);
@@ -486,16 +439,7 @@ export function useRendererShell({
   };
   // Settled is what live state says: the file whole, on screen, drawn, and the renderer not busy.
   const whenSettled = useWhenSettled(() => !liveRuntimeRef.current.readState().loading);
-  const liveBinding = services.live;
-  const commandNames = Object.keys(live.commands || {}).sort().join("\n");
-  const declinedRef = useRef(live.declined);
-  declinedRef.current = live.declined;
-  useEffect(() => {
-    if (!liveBinding) return undefined;
-    return attachLiveBinding(liveBinding, () => liveRuntimeRef.current, {
-      commands: commandNames ? commandNames.split("\n") : [], declined: declinedRef.current || {}, ready: whenSettled
-    });
-  }, [liveBinding, commandNames, whenSettled]);
+  useLiveSurface({ binding: services.live, runtime: liveRuntimeRef, commands: Object.keys(live.commands || {}), declined: live.declined, ready: whenSettled });
 
   // ---- what the frame and the renderer read ---------------------------------
   // The content of Display's dropdown (`DisplayPopover.jsx`): every renderer's, built here from its

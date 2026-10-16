@@ -1,0 +1,24 @@
+{
+  "package": "kicad-python (kipy), vendored verbatim; see scripts/vendor/kipy.py",
+  "license": "MIT, Copyright The KiCad Developers (LICENSE beside this file)",
+  "pins": {
+    "kicad_python": "87b945a0d56b26a78bf547db9771ff9bf3a057ea",
+    "kicad": "dcadf9baa30d43d7d1b3d0342345f05ec0da26e1",
+    "kicad_api_version": "10.99.0"
+  },
+  "dates": {
+    "kicad_python": "2026-09-24",
+    "kicad": "2026-09-23"
+  },
+  "toolchain": {
+    "protoc-wheel-0": "29.4",
+    "mypy-protobuf": "3.6.0",
+    "protoletariat": "3.3.10",
+    "protobuf": "5.29.6"
+  },
+  "omitted": [
+    "kipy/packaging"
+  ],
+  "imports_rewritten": 131,
+  "generated": "2026-10-15"
+}

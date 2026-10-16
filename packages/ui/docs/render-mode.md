@@ -227,6 +227,7 @@ alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`
 | `mesh` | STL, 3MF | Yes |
 | `robot` | URDF, SRDF, SDF | Yes |
 | `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
+| `plot` | KiCad boards | Display alone, the board's own ([settings-ui.md](./settings-ui.md#a-kicad-board): Mode presets Board, Copper, Assembly, Placement over the layers drawn, View from, Copper pours, a checkbox per layer; core's `plot2d/boardDisplay.js`), not this contract; no Preview |
 
 A view without them has no Display or Preview control, not a disabled one, and a
 request for Preview leaves its normal view as it is.

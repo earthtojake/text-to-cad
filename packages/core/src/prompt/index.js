@@ -1,4 +1,5 @@
 import { buildCadRefToken, parseCadRefSelector } from '../lib/cadRefs.js';
+import { buildBoardRefToken, isBoardRefPath, parseBoardRefSelector } from '../lib/boardRefs.js';
 
 let operationSequence = 0;
 const operationNamespace = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
@@ -20,13 +21,18 @@ export function validatePromptReference(reference) {
   }
   requireValue(resource.revision === undefined || typeof resource.revision === 'string', 'revision must be a string');
   requireValue(reference.label === undefined || typeof reference.label === 'string', 'label must be text');
+  requireValue(reference.summary === undefined || typeof reference.summary === 'string', 'summary must be text');
   if (target.kind === 'text-range') {
     requireValue(position(target.start) && position(target.end), 'invalid text range');
     requireValue(target.end.line > target.start.line || (target.end.line === target.start.line && target.end.character >= target.start.character), 'range end precedes its start');
   } else if (target.kind === 'cad-selector') {
     requireValue(resource.kind === 'workspace-file', 'CAD selectors require a workspace file');
+    // A KiCad document's selectors are board references (#U3, #U3.9, #net:VIN, #@x1y2); a model's, STEP's.
+    const board = isBoardRefPath(resource.path);
     requireValue(Array.isArray(target.selectors) && target.selectors.length > 0 && target.selectors.every(selector => {
-      const parsed = typeof selector === 'string' && selector === selector.trim() ? parseCadRefSelector(selector) : null;
+      if (typeof selector !== 'string' || selector !== selector.trim()) return false;
+      if (board) return Boolean(parseBoardRefSelector(selector));
+      const parsed = parseCadRefSelector(selector);
       return parsed && parsed.selectorType !== 'opaque';
     }), 'invalid CAD selector');
   } else requireValue(target.kind === 'whole-resource', 'unknown reference target');
@@ -96,7 +102,10 @@ export function formatPromptReference(reference) {
   // A file by its absolute path, a URL as it is.
   const path = reference.resource.kind === 'url' ? reference.resource.url : reference.resource.path;
   requireValue(path.length > 0, 'a reference names its file or URL');
-  if (reference.target.kind === 'cad-selector') return buildCadRefToken({ cadPath: path, selectors: [...reference.target.selectors] });
+  if (reference.target.kind === 'cad-selector') {
+    const selectors = [...reference.target.selectors];
+    return isBoardRefPath(path) ? buildBoardRefToken({ path, selectors }) : buildCadRefToken({ cadPath: path, selectors });
+  }
   const quoted = /[\s#"\\]/.test(path) ? JSON.stringify(path) : path;
   if (reference.target.kind === 'text-range') {
     const { start, end } = reference.target;
@@ -120,7 +129,13 @@ export function formatPromptMessage(context, { attachmentPath } = {}) {
   const said = context.parts.filter(part => part.kind === 'text').map(part => part.text.trim()).filter(Boolean);
   const files = [], references = [], attachments = [];
   for (const part of context.parts) {
-    if (part.kind === 'reference') (part.reference.target.kind === 'whole-resource' ? files : references).push(formatPromptReference(part.reference));
+    if (part.kind === 'reference') {
+      const { reference } = part;
+      const token = formatPromptReference(reference);
+      if (reference.target.kind === 'whole-resource') files.push(token);
+      // A selection with a summary (a board's check) reads that sentence, then what it names.
+      else references.push(reference.target.kind === 'cad-selector' && reference.summary ? `${reference.summary} · ${token}` : token);
+    }
     else if (part.kind === 'attachment') {
       const path = attachmentPath?.(part);
       if (path) attachments.push(`${part.label || 'Attachment'}: ${path}`);

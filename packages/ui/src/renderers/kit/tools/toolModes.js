@@ -3,6 +3,9 @@
 // asks: which tool is a file's own to open in, and what does pressing a tool do.
 // The tool in hand is never saved: every open starts in the default tool.
 
+/** The tool ids the shells themselves understand. A renderer's own tools use any other id. */
+export const SHELL_TOOL = Object.freeze({ DRAW: "draw" });
+
 // Mode ids are compared exactly as recorded: no trimming, no case folding.
 const text = value => String(value ?? "");
 

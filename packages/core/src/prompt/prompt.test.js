@@ -32,6 +32,15 @@ test('a reference names its ids as a person reads them: each selector, a range f
   assert.deepEqual(promptReferenceIds({ ...range, target: { kind: 'whole-resource' } }), []);
 });
 
+test('a KiCad document names its references as board selectors, as the agent resolver reads them', () => {
+  const board = { resource: { kind: 'workspace-file', path: '/work/PCB/servo hat.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#U3', '#J4.A4', '#net:"a,b"', '#@x1.5y-2'] } };
+  assert.equal(formatPromptReference(referencePart(board).reference), '"/work/PCB/servo hat.kicad_pcb"#U3,J4.A4,net:"a,b",@x1.5y-2');
+  assert.deepEqual(promptReferenceIds(board), ['#U3', '#J4.A4', '#net:"a,b"', '#@x1.5y-2']);
+  // STEP's grammar is not a board's, and a board's is not STEP's.
+  assert.throws(() => referencePart({ ...board, target: { kind: 'cad-selector', selectors: ['o1.2.f45'] } }), /invalid CAD/);
+  assert.throws(() => referencePart({ ...reference, target: { kind: 'cad-selector', selectors: ['#U3.9'] } }), /invalid CAD/);
+});
+
 test('invalid bundles fail before delivery, including dangling relationships and unknown targets', () => {
   assert.throws(() => createPromptContext([textPart('a'), textPart('b')]), /unique/);
   assert.throws(() => createPromptContext([{ id: 'i', kind: 'attachment', name: 'a.pdf', mimeType: 'application/pdf', content: new Blob(), about: ['missing'] }]), /absent reference/);
@@ -61,4 +70,21 @@ test('a delivery ledger delivers each operation once, bounds work in flight, and
   let restarted = 0;
   await ledger.deliver('a', () => { restarted += 1; return { status: 'copied', partIds: [] }; });
   assert.equal(restarted, 1, 'the oldest completed operation was evicted');
+});
+
+test('a selection with a summary reads its summary, then its references', () => {
+  const summarized = { resource: { kind: 'workspace-file', path: '/work/board.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#U2.7', '#C4.1'] },
+    summary: "U2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm)" };
+  assert.equal(formatPromptMessage(createPromptContext([textPart('fix this'), referencePart(summarized)])),
+    "fix this\n\nReferences:\nU2's VDD: the nearest decoupling capacitor, C4, is 9.1 mm away (aim for under 3 mm) · /work/board.kicad_pcb#U2.7,C4.1");
+});
+
+test('a part picked in a model keeps its message: a label alone is not written', () => {
+  const part = { resource: { kind: 'workspace-file', path: '/models/x.step' }, target: { kind: 'cad-selector', selectors: ['o1.2'] }, label: 'arm' };
+  assert.equal(formatPromptMessage(createPromptContext([textPart('fix this'), referencePart(part)])), 'fix this\n\nReferences:\n/models/x.step#o1.2');
+});
+
+test('a summary must be text', () => {
+  const bad = { resource: { kind: 'workspace-file', path: '/work/board.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#U2'] }, summary: 4 };
+  assert.throws(() => validatePromptContext(createPromptContext([referencePart(bad)])), /summary must be text/);
 });

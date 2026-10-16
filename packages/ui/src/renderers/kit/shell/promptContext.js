@@ -20,3 +20,14 @@ export function promptDeliveryError(result) {
   if (result.status !== "failed" && result.status !== "partial") return null;
   return result.message || "Could not deliver prompt context";
 }
+
+/**
+ * Hand a prompt context to the host. Resolves with the host's result, a refusal or a throw read as
+ * a failed one, so a caller has one thing to show (`promptDeliveryError`).
+ */
+export function deliverPromptContext(host, context) {
+  let pending;
+  try { pending = host.promptContext.deliver(context); }
+  catch (error) { pending = Promise.reject(error); }
+  return Promise.resolve(pending).catch(error => ({ status: "failed", message: error instanceof Error ? error.message : String(error) }));
+}

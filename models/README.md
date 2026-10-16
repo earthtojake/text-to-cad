@@ -16,6 +16,7 @@ models/
 ├── examples/         standalone demo PARTS, one script each
 ├── assemblies/       demo ASSEMBLIES, one src/<assembly>/ group each
 ├── drawings/         2D `@dxf` drawings, one script each
+├── electronics/      a `@pcb` board built through KiCad's API (blinky)
 ├── f1/ f14d/ hypercar/ moonwatch/ motorbike/ qdd_actuator/ radial/ w16/
 ├── tendon_hand/      tendon-driven research hand (source-only)
 ├── falcon_heavy/     SpaceX public-source reconstruction
@@ -73,6 +74,11 @@ For manual edge-case checks and debugging, use [tests/](tests/README.md). Automa
   (`planetary_gear_assembly`, `mars_rover_concept`).
 - [drawings/](drawings/src/README.md): 2D `@dxf` drawings as one cad-project,
   one script each, artifacts in `DXF/`.
+- [electronics/blinky/](electronics/blinky/blinky.py): a `@pcb` board built
+  through KiCad's API: the script, the `fp-lib-table` naming the footprint
+  libraries it uses, and the `blinky.kicad_pcb` (with its `.kicad_pro` and
+  `.kicad_prl`) that KiCad wrote. `python blinky.py` rebuilds it;
+  `cadgen pcb drc blinky.kicad_pcb` checks it.
 
 Automated suites own their own fixtures and never read this tree — the viewer
 launch and browser gates, for instance, generate or commit their STEP fixture

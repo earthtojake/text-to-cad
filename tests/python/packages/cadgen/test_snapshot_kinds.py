@@ -42,14 +42,20 @@ DOOR_COMMANDS = {
     "3mf": "cadgen.cli.threemf_snapshot",
     "glb": "cadgen.cli.glb_snapshot",
     "dxf": "cadgen.cli.dxf_snapshot",
+    "pcb": "cadgen.cli.pcb_snapshot",
     "urdf": "cadgen.cli.urdf_snapshot",
     "sdf": "cadgen.cli.sdf_snapshot",
 }
 
 # Every door that stages a SCENE. A drawing is drawn flat, so `cadgen dxf
 # snapshot` has no display settings at all — `--appearance` alone decides its
-# background, and therefore the colour of its default pen.
-SCENE_DOORS = tuple(door for door in DOOR_COMMANDS if door != "dxf")
+# background, and therefore the colour of its default pen. A plot is as flat,
+# but a board has a Display of its own in the viewer (which layers, the pours,
+# the side), so `cadgen pcb snapshot` takes that as `--display` beside
+# `--appearance`, and no scene setting.
+FLAT_DOORS = ("dxf",)
+PLOT_DOORS = ("pcb",)
+SCENE_DOORS = tuple(door for door in DOOR_COMMANDS if door not in FLAT_DOORS + PLOT_DOORS)
 
 
 def door_help(door: str) -> str:
@@ -67,6 +73,7 @@ DOOR_KINDS = {
     "3mf": ("3mf",),
     "glb": ("glb",),
     "dxf": ("dxf",),
+    "pcb": ("kicad_pcb",),
     "urdf": ("urdf",),
     "srdf": ("srdf",),
     "sdf": ("sdf",),
@@ -84,9 +91,16 @@ class InputKindTests(unittest.TestCase):
             with self.subTest(sample=sample):
                 self.assertEqual("python", input_kind(Path(sample)))
 
+    def test_a_board_is_a_kind_and_the_files_beside_it_are_none(self):
+        # Only the board is drawn: its project and schematic are no input at all.
+        self.assertEqual("kicad_pcb", input_kind(Path("boards/Blinky.KICAD_PCB")))
+        for sample in ("blinky.kicad_pro", "blinky.kicad_sch", "config.yml"):
+            with self.subTest(sample=sample):
+                self.assertEqual("", input_kind(Path(sample)))
+
     def test_every_kind_it_names_has_a_resolver_or_is_a_generator(self):
         for sample in ("a.step", "a.stp", "a.glb", "a.stl", "a.3mf",
-                       "a.urdf", "a.srdf", "a.sdf", "a.dxf"):
+                       "a.urdf", "a.srdf", "a.sdf", "a.dxf", "a.kicad_pcb"):
             kind = input_kind(Path(sample))
             self.assertTrue(kind, f"{sample} resolved to no kind")
             self.assertIn(kind, set(KIND_RESOLVERS) | {"python", "dxf"}, sample)
@@ -110,6 +124,7 @@ class EnabledKindsTests(unittest.TestCase):
 
     def test_a_door_gets_only_what_it_declares(self):
         self.assertEqual({"dxf"}, set(enabled_kinds(DOOR_KINDS["dxf"])))
+        self.assertEqual({"kicad_pcb"}, set(enabled_kinds(DOOR_KINDS["pcb"])))
         self.assertEqual({"urdf"}, set(enabled_kinds(DOOR_KINDS["urdf"])))
         self.assertEqual({"stl"}, set(enabled_kinds(DOOR_KINDS["stl"])))
 
@@ -141,6 +156,11 @@ class KindGateTests(_Gate):
             ("step", "arm.urdf"),
             ("step", "panel.dxf"),
             ("dxf", "part.step"),
+            ("dxf", "board.kicad_pcb"),
+            ("pcb", "panel.dxf"),
+            ("pcb", "part.step"),
+            ("step", "board.kicad_pcb"),
+            ("pcb", "board.kicad_sch"),
             ("urdf", "panel.dxf"),
             ("sdf", "part.step"),
             ("stl", "part.step"),
@@ -243,14 +263,34 @@ class GeneratedHelpTests(unittest.TestCase):
                 self.assertNotIn("--theme", text)
                 self.assertNotIn("--appearance", text)
 
-    def test_the_drawing_door_takes_an_appearance_instead_of_a_display(self):
-        # The exception, and the only one: there is no scene to configure, so
-        # `--appearance` is not a second spelling of `--display` — it is what
-        # is left when everything else has no meaning.
-        text = door_help("dxf")
-        self.assertIn("--appearance", text)
-        for absent in ("--display", "--camera", "--mode", "--view-labels", "--render", "--theme"):
-            self.assertNotIn(absent, text, f"{absent} describes a scene a drawing does not have")
+    def test_the_flat_doors_take_an_appearance_instead_of_a_display(self):
+        # The exception: there is no scene to configure, so `--appearance` is
+        # not a second spelling of `--display` — it is what is left when
+        # everything else has no meaning.
+        for door in FLAT_DOORS:
+            with self.subTest(door=door):
+                text = door_help(door)
+                self.assertIn("--appearance", text)
+                for absent in ("--display", "--camera", "--mode", "--view-labels", "--render", "--theme"):
+                    self.assertNotIn(absent, text, f"{absent} describes a scene a flat picture does not have")
+
+    def test_the_plot_door_takes_the_boards_display_and_an_appearance_and_nothing_of_a_scene(self):
+        # A board is as flat as a drawing, but it has a Display of its own in the
+        # viewer — which layers are drawn, the pours, the side — and `--display`
+        # here is that same object, so a snapshot draws what the Display shows.
+        for door in PLOT_DOORS:
+            with self.subTest(door=door):
+                text = door_help(door)
+                self.assertIn("--appearance", text)
+                self.assertIn("--display", text)
+                for word in ("board", "copper", "assembly", "placement", "layers", "poured", "side"):
+                    self.assertIn(word, text)
+                for absent in ("--camera", "--mode", "--view-labels", "--render", "--theme", "lighting", "wireframe"):
+                    self.assertNotIn(absent, text, f"{absent} describes a scene a board's picture does not have")
+        pcb_help = door_help("pcb")
+        self.assertIn(".kicad_pcb", pcb_help)
+        for absent in (".kicad_sch", ".dxf", "KiCad installed"):
+            self.assertNotIn(absent, pcb_help)
 
     def test_every_door_takes_its_target_and_output_positionally(self):
         # One grammar across the schema: `cadgen <fmt> build TARGET [OUT]` and
@@ -271,7 +311,7 @@ class GeneratedHelpTests(unittest.TestCase):
         for door in ("urdf", "sdf"):
             with self.subTest(door=door):
                 self.assertIn("--joint-values", door_help(door))
-        for door in ("step", "stl", "3mf", "glb", "dxf"):
+        for door in ("step", "stl", "3mf", "glb", "dxf", "pcb"):
             with self.subTest(door=door):
                 self.assertNotIn("--joint-values", door_help(door))
 

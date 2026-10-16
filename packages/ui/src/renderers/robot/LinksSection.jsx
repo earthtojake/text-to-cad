@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ROW_NAME_UNDER_ACTIONS, TREE_INDENT_PX, TreeRowSurface, TreeRowChevron, TreeRowGuides, TreeRowLabel } from "@text-to-cad/ui/primitives/tree-row";
+import { TREE_INDENT_PX, TreeRowSurface, TreeRowChevron, TreeRowGuides, TreeRowLabel } from "@text-to-cad/ui/primitives/tree-row";
 import { TreeFilterHighlight, TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
 import { cn } from "@text-to-cad/ui/utils";
 import ToolPanel, { ToolPanelClose } from "../kit/tools/ToolPanel.jsx";
 import RobotComponentDetails, { RobotLinkDetails, RobotLinksSummary } from "./LinkDetails.jsx";
-import RobotVisibilityButton, { ROBOT_ROW_ACTIONS_WIDTH } from "./RobotVisibilityButton.jsx";
+import TreeRowEye, { treeRowEyeLayout } from "../kit/inspector/TreeRowEye.jsx";
 import { robotVisibilityState } from "./visibility.js";
 import { useTreeSearch } from "../kit/inspector/modelTreeSearch.js";
 import { buildRobotTree, robotComponentNodeId, robotLinkFacts, robotLinkNodeId, robotTreeAncestorIds } from "./robotTree.js";
@@ -33,12 +33,18 @@ function initialExpansion(tree) {
   return expanded;
 }
 
-// A row with geometry carries the eye (`RobotVisibilityButton`): it takes no width from the row;
-// the name fades out under it, always while it is on, otherwise on hover.
+// A row with geometry carries the Hide/Reveal eye (`kit/inspector/TreeRowEye.jsx`): it takes no
+// width from the row; the name fades out under it, always while it is on, otherwise on hover. A link
+// controls its own visuals, never the links below it, and a partly hidden link hides the rest. A row
+// that draws nothing has no eye.
 function rowActions(visibility) {
   if (!visibility.ids.length) return { style: null, name: "" };
-  return { style: { "--row-actions": ROBOT_ROW_ACTIONS_WIDTH },
-    name: visibility.allHidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover };
+  return treeRowEyeLayout(visibility.allHidden);
+}
+
+function VisibilityEye({ visibility, label, onChange }) {
+  if (!visibility.ids.length || typeof onChange !== "function") return null;
+  return <TreeRowEye on={visibility.allHidden} label={label} onToggle={() => onChange(visibility.ids, visibility.allHidden)}/>;
 }
 
 function rowHandlers(node, selection) {
@@ -77,7 +83,7 @@ function RobotRow({ node, depth = 0, pinned = false, highlighted, expanded, togg
         <TreeRowLabel className="max-w-full shrink-0">{node.label}</TreeRowLabel>
         {node.detail && <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{node.detail}</TreeRowLabel>}
       </button>
-      <RobotVisibilityButton state={visibility} label={node.label} onChange={onVisibilityChange}/>
+      <VisibilityEye visibility={visibility} label={node.label} onChange={onVisibilityChange}/>
     </TreeRowSurface>
     {branch && open && <ul>{node.children.map(child => <RobotRow key={child.id} {...{ node: child, depth: pinned ? depth : depth + 1, highlighted, expanded, toggle, selection, rowRefs, hiddenIds, onVisibilityChange }}/>)}</ul>}
   </li>;
@@ -99,7 +105,7 @@ function RobotSearchRow({ match, highlighted, cursor, selection, hiddenIds, onVi
           ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground"><TreeFilterHighlight indices={alias.indices} text={alias.text}/>{node.joint?.type ? ` · ${node.joint.type}` : ""}</TreeRowLabel>
           : owners && <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{owners}</TreeRowLabel>}
       </button>
-      <RobotVisibilityButton state={visibility} label={node.label} onChange={onVisibilityChange}/>
+      <VisibilityEye visibility={visibility} label={node.label} onChange={onVisibilityChange}/>
     </TreeRowSurface>
   </li>;
 }

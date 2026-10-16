@@ -1,0 +1,4 @@
+interface:
+  display_name: "PCB"
+  short_description: "Design circuit boards as Python scripts on KiCad's own API."
+  default_prompt: "Use $pcb to design or edit a printed circuit board as a Python @pcb script on KiCad's API: declare its footprint libraries, place and hand-route it, set its design rules, build it with the KiCad nightly (every build runs KiCad's DRC), script the checks DRC cannot measure, export what the fab needs, and launch CAD Viewer to show the board."

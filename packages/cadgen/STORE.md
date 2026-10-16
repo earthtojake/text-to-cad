@@ -722,6 +722,12 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   models its body called — a flat pattern of `bracket()` goes stale when
   bracket's geometry changes. The viewer and `dxf snapshot` read the `.dxf`
   file directly; there is no drawing-specific freshness anywhere.
+- A **board** (`@pcb`) is not a model of the store. Its script drives KiCad's own
+  API and KiCad writes the `.kicad_pcb`, `.kicad_pro` and `.kicad_prl` (and the
+  `.kicad_dru` of its custom rules) itself, from nothing, on every run: no record,
+  no gate, no freshness, no children, no closure, no daemon, and `cadgen store`
+  knows nothing of it. The viewer, `cadgen pcb snapshot` and `cadgen pcb drc` read
+  the board file directly.
 - A model's **outputs are whatever its decorators declare**. STEP is one
   output kind, not the primary: a model declared by `@stl`/`@glb`/`@threemf`
   alone has the same tree and record as any model, every stale declared mesh

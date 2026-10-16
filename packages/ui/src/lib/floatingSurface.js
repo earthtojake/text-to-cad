@@ -9,7 +9,10 @@
  * they are up, and opaque enough that their text never competes with the model.
  * `FLOATING_CHROME_SURFACE_CLASS`: the tool strip and each panel of the tool stack, which stay up
  * beside the model for as long as a file is open: the background at 45.5%, light enough, and barely
- * blurred, that the model behind them is easy to make out, with the same border.
+ * blurred, that the model behind them is easy to make out, with the same border. A view whose
+ * picture keeps its own colours against the theme (a KiCad schematic's light paper under the dark
+ * theme, a board's dark one under the light) raises it with `--cad-chrome-alpha` on an ancestor,
+ * or the panels would turn the picture's grey and their muted text would vanish into it.
  */
 export const FLOATING_SURFACE_CLASS = "border border-border bg-background/75 text-foreground shadow-sm backdrop-blur-md";
-export const FLOATING_CHROME_SURFACE_CLASS = "border border-border bg-background/[45.5%] text-foreground shadow-sm backdrop-blur-[2px]";
+export const FLOATING_CHROME_SURFACE_CLASS = "border border-border bg-background/[var(--cad-chrome-alpha,45.5%)] text-foreground shadow-sm backdrop-blur-[2px]";

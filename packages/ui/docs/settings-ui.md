@@ -119,15 +119,16 @@ none.
 - **View cube** at bottom-left, 2px from the left and 8px off the bottom so the
   axes drawn in its lower corner never touch the edge, in a 6rem area: enlarged
   face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
-- **Display and Preview** at the navbar's right end, its last two controls: for a 3D
+- **Display and Preview** at the navbar's right end, its last controls: for a 3D
   file, the view's own — **Display** (the perspective box: see
   [Display settings](#display-settings-and-section-primitives)) and **Preview** (a play
   icon). They are the navbar's 24px icon buttons with 14px icons, 4px apart, with hints
   below them, in the box FileViewer hands the renderer for them (`navbarSlot`,
   `data-view-controls`). Display's dropdown opens down from its button, end-aligned, and
-  never taller than the viewer below it. A view that is not 3D has neither, and neither
-  does a view drawn as a picture, one that is loading or failed to load, or preview, which
-  has the page to itself and draws its own in their place (see
+  never taller than the viewer below it. A KiCad board has Display alone, in the same
+  place (see [A KiCad board](#a-kicad-board)). Any other view that is not 3D has
+  neither, and neither does a view drawn as a picture, one that is loading or failed to
+  load, or preview, which has the page to itself and draws its own in their place (see
   [preview](#camera-animation-and-preview)).
 - **Playbar** (preview's, a file with routines only) sits at bottom-centre, on a
   line 1.75rem up (a host whose control floats over the view's bottom moves it
@@ -147,6 +148,7 @@ none.
 | URDF / SRDF / SDF | Select, Position (posable joints only) |
 | GLB / STL / 3MF | none |
 | DXF | none: a 2D canvas |
+| KiCad board | Select (see [A KiCad board](#a-kicad-board)) |
 
 There is no separator or activity dot. There is no Animate tool: routines play in
 [preview](#camera-animation-and-preview). Display is not a tool: every 3D view has
@@ -281,6 +283,77 @@ cuts deeper through the original bounding box; pose, animation and Explode never
 redefine the range. There is no Flip. With fewer than two parts Explode is not
 on the strip.
 
+## A KiCad board
+
+A board's tools are a STEP's Select, read for a flat picture (`renderers/plot/board`): Select
+alone on the strip, the board tree and the Reference in the stack, Quick Edit at the top-right, and
+the board's Display settings among the view's controls. Draw and Measure are not offered: a board is
+read, pointed at and referenced here; what a person wants changed, the agent changes in the script,
+and distances are the script's numbers. The flat shell keeps Draw for any picture that asks for it
+and a STEP keeps both; the plot renderer asks for neither. None of the board's tools edits the
+board. They come with the board's index (`payload.board`); a plot without one is the picture alone.
+The picture is the board drawn from its file, layer by layer in KiCad's default colours (core's
+[plot payload](../../core/docs/plot-payload.md)); no KiCad runs. The view frames the board's
+outline, and what the file draws past it (a fab note off the edge, as KiCad draws it) is drawn too,
+over the surround, never clipped away.
+
+- **Select**'s four modes are its mode menu in the tree's filter row, drawn as STEP's are:
+  **All** (the pointer: the most specific thing under it — a pad, a via or a track, then a
+  part; a press on bare board clears the selection, a pour included), **Parts** (a chip),
+  **Pads** (a pad) and **Nets** (two pads and a trace: any copper picks its whole net, pours
+  included, and the rest of the board steps back). Shift-click adds and removes. A
+  double-click on something copies its reference and leaves it selected; on bare board it fits
+  the view. Escape clears the selection. Select cannot be put down: it is the board's one tool.
+- **The board tree** is Select's panel, closable as Features is: **Parts** by kind (ICs,
+  Connectors, Capacitors…), each with its pads; and **Nets**, each with the pads on it (KiCad's
+  names for a pin on nothing are left out). The filter finds a part
+  by its reference, value, footprint or MPN, a pad by its pin's name, a net by its name, and a
+  pasted reference exactly. A row under the pointer (or in keyboard focus) lights what it names on
+  the board, as a robot's Links rows do. A part's or a net's eye isolates it: the rest of the board
+  steps back, as it does for a net in focus, and what is isolated is lit; a second press lets the
+  board back in. What is isolated is the file's, kept through a rebuild for whatever still names
+  something on the board.
+- **The Reference** is headed by the pick as a person names it (`C14 · 100n`,
+  `U3 · pad 9 VBUS`, `net VIN`, `VIN · track`) and reads it back in KiCad's millimetres (y
+  down, from the page origin, the frame a script's `Vector2.from_xy_mm` takes): a part's
+  footprint, side, position, rotation, pads, then its MPN, manufacturer, LCSC and
+  description fields; a pad's net, pin, type, side and position; a net's class, pads, parts,
+  tracks and their length, vias and pours; copper's layer, width or drill. What a row names on the
+  board is a link that selects it, as a robot's Reference selects the links it names: a pad's net
+  and part, a net's parts, copper's net. Its **Copy**
+  (**Copy All**) writes the references with the file's prefix, as the copy key does; a copy the
+  host refuses is the alert card "Couldn’t copy from the board".
+- **References** are board references, the language `cadgen.pcb.read_board(path).resolve(ref)`
+  reads: `#U3`, `#U3.9`, `#net:VIN`, `#net:VIN@x40.1y21.6` (that net's copper at a point) and
+  `#@x40.1y21.6` (a point). Quick Edit carries them as it carries a STEP's.
+- **Display** (its button where a 3D view's is, at the navbar's right end, after the alert
+  card's icon; a board has no Preview) is two sections, always open, with no gates. **Display**:
+  **Mode**, presets as a 3D view's are ([render-mode.md](./render-mode.md)) — **Board** (every
+  layer but the courtyards: copper, mask and paste, silkscreen, fabrication, vias and holes, the
+  outline, the ratsnest), **Copper** (copper, vias, holes, the outline, the ratsnest), **Assembly**
+  (silkscreen, fab and courtyards, holes, the outline, the ratsnest) and **Placement** — then
+  **View from** Top or Bottom (the board mirrored, its bottom layers drawn over its top) and,
+  where the layers drawn include a copper layer, **Copper pours** on or off — a pour hides the
+  tracks under it. **Layers**: a checkbox per layer the payload holds, by id, grouped **Front**
+  (`F.CrtYd` … `F.Cu`, outermost first), **Inner** (`In1.Cu` …, a board with inner layers only),
+  **Back** (`B.Cu` … `B.CrtYd`, the copper first) and **Other** (the outline, the user layers and
+  `Margin`, then **Vias**, **Ratsnest** and **Drills**: the payload's `vias`, `ratsnest` and
+  `drills` layers); a group with no layers is left out, and so is a layer the payload leaves out
+  (a routed board has no ratsnest row). A mode is a layer set with its pours:
+  choosing one sets every checkbox and the pours, and keeps the side, as a 3D preset keeps the
+  camera; a checkbox or the pours changed from the mode's reads as **Custom**, and the mode is
+  kept as what Reset returns to. Ticking the set back to the mode's reads as the mode again.
+  **Placement** is the board before it is wired: no copper and no drill layer (a via's hole is
+  routing), the overlay drawing the pads, their holes and the board's, and every connection as an
+  airwire, routed or not — each net's pins joined by their shortest tree (`board2d/airwires.js`).
+  A net a pour joins shows its airwires only while selected; a selected net's are highlighted.
+  The payload carries every layer; a mode or a checkbox only chooses among them. The contract is
+  core's (`plot2d/boardDisplay.js`), one object for the view, the stored file view and
+  `cadgen pcb snapshot --display`: `{ "mode", "side", "poured", "layers" }` — `layers` the ids
+  drawn, or absent for the mode's own set — so the headless snapshot draws exactly what the
+  Display shows. Kept with the file's view; one stored before modes (`layers` as a word) opens in
+  its mode, and one stored before the checkboxes opens on its mode's set.
+
 ## The tool stack
 
 Under the toolbar, in one column: the shell's tool's panel (**Drawing**) while
@@ -396,10 +469,11 @@ stack.
 - **Surfaces.** Two, defined once (`lib/floatingSurface.js`), with one border: the
   toolbar and the stack's panels, which stay up beside the model, share
   `FLOATING_CHROME_SURFACE_CLASS` — the background at 45.5% and barely blurred
-  (2px), so the model behind them is easy to make out; every menu and popover
-  over the viewport, the app menu and Display included, share
-  `FLOATING_SURFACE_CLASS` (the background at 75%, blurred), so their text never
-  competes with the model.
+  (2px), so the model behind them is easy to make out (a picture that keeps its
+  own colours against the theme, a KiCad board's dark sheet in the light,
+  raises it to 90% through `--cad-chrome-alpha`); every menu and popover over the
+  viewport, the app menu and Display included, share `FLOATING_SURFACE_CLASS` (the
+  background at 75%, blurred), so their text never competes with the model.
 - **Scrolling.** Every scroll region in the viewer's chrome — a panel's body,
   the stack's column, the explorer, a menu, the alert card — is the
   `ScrollArea` primitive (`primitives/scroll-area.jsx`, shadcn's): thin overlay
@@ -421,7 +495,9 @@ are; its filter row is a heading's 28px, the box 20px tall and close to the row'
 actions, shown on hover and kept while they are on, are **Isolate** then the **Hide/Reveal** eye; a part file has no
 Isolate. A Links row that draws something — a link with visuals, or one visual —
 has the eye alone, in its search hit too: a link's hides its own visuals, never its
-child links, and on a partly hidden link hides the rest. They float over the row's right end rather than taking width from it:
+child links, and on a partly hidden link hides the rest. A KiCad board's part and
+net rows have the eye as **Isolate** (`TreeRowEye`'s `isolate`: lit and pressed while on, "Exit
+isolate"); a pad or a group has none. They float over the row's right end rather than taking width from it:
 the name runs the row's full width and, while an action shows, fades out half a
 rem before them (a mask, `ROW_NAME_UNDER_ACTIONS`), so nothing is drawn behind the
 buttons and the row keeps its own colour.
@@ -661,7 +737,8 @@ Queue and Send clear the note and what it carries, and so close the box, once th
 note has gone. Copy Prompt keeps it all, since nothing has gone yet: its button
 shows a tick for a moment. A failure keeps the note and says why in the box. The message is
 one format, sent, queued or copied: what the person wrote; then `File: <path>`; then
-`References:` and one reference per line; then `Sketch: <path>` when the picture
+`References:` and one reference per line (a selection with a summary, a board's
+check, reads its sentence, then its references); then `Sketch: <path>` when the picture
 travels as a file (a picture sent beside the text is not named).
 
 ## Camera, animation and preview
@@ -747,8 +824,8 @@ pressed in while focus is on the page. Editable targets keep their own keys.
   included, a Select, a color picker, Display, the explorer) closes itself; then preview exits;
   then Draw's canvas spends its own Escape; then the renderer's (STEP: an
   unfinished measurement, then the Measure tool, then the selection, then
-  isolation; robots: the selection). The tool stack's panels are never Escape's to
-  close (a phone's sheet is dismissed like any sheet).
+  isolation; a KiCad board and robots: the selection). The tool stack's
+  panels are never Escape's to close (a phone's sheet is dismissed like any sheet).
 - **A panel's grip** (its bottom-right corner) is a separator in the tab
   order: Left/Right nudge its width and Up/Down its cap by 16px, and Home and
   End take both to their bounds.
@@ -790,7 +867,7 @@ model survives (a failed update, a warning beside the model) has an X, **Dismiss
 the card away for as long as that alert stands, and its icon, first of the navbar's
 right-hand controls after the update button, brings it back. The dismissal goes once the alert changes or clears, or
 another file opens; with the card back, so does the icon. Preview has no navbar, and so no
-icon.
+icon. A KiCad board that will not read has the card first (see [A KiCad board](#a-kicad-board)).
 
 ## Verification
 

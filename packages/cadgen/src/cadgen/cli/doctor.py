@@ -11,6 +11,10 @@ and a refused load is named for what it is: on Windows 11 that is Smart App
 Control blocking the unsigned ``.pyd``, which the bare ``ImportError`` never
 says (``cadgen._internal.kernel_load_hint``).
 
+It names the KiCad a ``@pcb`` build would drive, too: the ``kicad-cli`` found and
+its version, or what to install (``cadgen.kicad.install``). ``kicad-cli version``
+is the one process run for it; no server is started.
+
 Exit codes: 0 = installed cadgen matches the pin (or nothing claims a pin);
 3 = pin mismatch; 4 = the kernel is installed but cannot be loaded (the report
 says why when it can tell). A kernel that is simply not installed is reported,
@@ -65,6 +69,22 @@ def _sharing() -> str | None:
         return describe()
     except Exception:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return None
+
+
+def _kicad() -> str:
+    """The KiCad found for ``@pcb`` -- its version and kicad-cli -- or what to install.
+    While a kicad-cli is on PATH nothing beyond the stdlib is imported; the installers'
+    folders are kicad-python's to know, which needs protobuf, so even a broken dependency
+    set is a report line here, never a reason for the report to fail."""
+    from cadgen.kicad.install import KicadMissingError, check_version, find_kicad_cli, kicad_version
+
+    try:
+        cli = find_kicad_cli()
+        return f"OK — KiCad {check_version(cli, kicad_version(cli))} at {cli}"
+    except KicadMissingError as error:
+        return f"not usable — {error}"
+    except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        return f"not usable — {type(error).__name__}: {error}"
 
 
 def _editable_source() -> str | None:
@@ -173,6 +193,8 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
         sys.stderr.write(f"  kernel   FAILED — {detail}\n")
         for hint in kernel_load_hint(detail) or ():
             sys.stderr.write(f"           {hint}\n")
+    # KiCad is installed by the person, never by cadgen: missing is reported, not failed.
+    sys.stdout.write(f"  kicad    {_kicad()}\n")
 
     skill = _resolve_skill(args.skill)
     if skill is None:

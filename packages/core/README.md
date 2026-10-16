@@ -165,6 +165,9 @@ src/
                    #   parsing and loading; the robot parts and scene builder),
                    #   drawing2d/ (a GET /__cad/drawing payload -> Canvas 2D, text by fillText:
                    #   fit/pan/zoom maths, batched Path2D, hairline strokes),
+                   #   plot2d/ (a GET /__cad/plot payload -> Canvas 2D:
+                   #   KiCad's and WireViz's SVG sheets laid out and
+                   #   drawn, drawing2d's view maths),
                    #   export/ (packageMeshExport), cadRefs (grammar,
                    #   parity-tested against cad_ref_syntax.py)
 bin/               # node builders the bundler ships into _runtime/node:
@@ -187,6 +190,7 @@ Where the mechanism is written:
 | Document | Covers |
 |---|---|
 | [docs/render-pipeline.md](docs/render-pipeline.md) | The staged pipeline (`loadSource` → `buildModel` → `renderModel` → `captureModel`), the unified display state, the two lighting recipes, the photographic rig, display modes, CAD edges and per-component geometry sharing |
+| [docs/plot-payload.md](docs/plot-payload.md) | The plot payload (schema 3): a KiCad board drawn from its file as geometry per layer, the layer stack, the items and their flags, the board index's frame; what `lib/plot2d` draws and `cadgen.kicad.plot` writes |
 | [docs/resource-ownership.md](docs/resource-ownership.md) | Ownership and disposal, the selector/BVH demand boundary, recomposition and instancing reuse, the tessellation worker pool, mesh-cache admission |
 | [docs/tube-deformation.md](docs/tube-deformation.md) | Deforming a swept body's original STEP tessellation through analytic centerlines |
 
@@ -269,7 +273,8 @@ canonical release versions during normal development.
 `@text-to-cad/core/prompt` exports lightweight non-React bundle/reference types,
 runtime validation and canonical text serialization: `formatPromptContextText`, the
 parts as lines, and `formatPromptMessage`, the one message a Quick Edit is — what the
-person wrote, then `File:`, `References:` and, for a picture that travels as a file,
+person wrote, then `File:`, `References:` (a selection with a summary, a board's check,
+reads its sentence, then its references) and, for a picture that travels as a file,
 its label and path. Text, typed resource
 references and attachments travel in one ordered, immutable snapshot with an
 operation ID; attachment relationships name reference parts, and an attachment's

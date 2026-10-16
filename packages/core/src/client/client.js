@@ -294,6 +294,13 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         if (disposed) throw abortError();
       }
     },
+    plotPayload(file, { signal } = {}) {
+      // A KiCad board drawn from its file, on the SERVER: geometry per layer. Derived data
+      // cached by the document's bytes, so a reopen is a round trip — but a COLD plot reads and
+      // lays out the board, which on a large one takes seconds, hence a bound past the house 10 s.
+      if (!file) return Promise.reject(new Error('Missing file'));
+      return request('/__cad/plot', { file, signal, timeoutMs: 180_000, operation: 'plotting' });
+    },
     requestSurfaces(body, { signal } = {}) {
       return request('/__cad/surfaces', {
         body, signal, method: 'POST', operation: 'surfaces',

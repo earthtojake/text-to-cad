@@ -181,7 +181,7 @@ HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take
 UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply"})
 # A file's format, by extension: what the viewer opens (``cadgen.viewer.scanner.SOURCE_EXTENSIONS``).
 FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
-              ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf"}
+              ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf", ".kicad_pcb": "kicad_pcb"}
 KINDS = frozenset(FILE_KINDS.values())  # a format, as every event names it
 PROCESSES = frozenset({"app", "viewer", "daemon"})
 # Who asked for a build: a model script (``python model.py``) or a ``cadgen`` command (``cadgen step build``, ...).

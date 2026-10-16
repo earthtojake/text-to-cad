@@ -1,7 +1,8 @@
 # File renderers
 
-The viewer renderers, `cad` (STEP), `dxf`, `glb`, `mesh` (STL, 3MF) and `robot` (URDF, SRDF, SDF), and
-the kit and shell they are built on are in [CAD renderer](cad-renderer.md). They are
+The viewer renderers, `cad` (STEP), `dxf`, `plot` (KiCad boards and schematics, and WireViz
+wiring harnesses: a straight render of the tool's own plot, as a DXF is of its drawing), `glb`,
+`mesh` (STL, 3MF) and `robot` (URDF, SRDF, SDF), and the kit and shell they are built on are in [CAD renderer](cad-renderer.md). They are
 this package's renderers because every host registers them.
 
 A renderer only one host registers belongs to that host, with its own

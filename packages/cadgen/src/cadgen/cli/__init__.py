@@ -56,6 +56,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # the product, made by running its script (python <drawing>.py), and
     # `dxf snapshot` meshes it on demand.
     "dxf snapshot": ("cadgen.cli.dxf_snapshot", "render a DXF to an image"),
+    # Boards. A board is made by running its script (python <board>.py) through KiCad's
+    # API; these doors read a SAVED board: KiCad's DRC on it, and a picture of it.
+    "pcb drc": ("cadgen.cli.pcb_drc", "check a KiCad board with KiCad's DRC"),
+    "pcb snapshot": ("cadgen.cli.pcb_snapshot", "render a KiCad board to an image"),
     # Robot descriptions
     "urdf validate": ("cadgen.cli.urdf_validate", "validate a URDF robot description"),
     "urdf snapshot": ("cadgen.cli.urdf_snapshot", "render a URDF to an image"),
@@ -196,6 +200,32 @@ _RETIRED: dict[tuple[str, ...], str] = {
         "cadgen srdf snapshot does not exist: an SRDF's geometry comes from the URDF "
         "beside it, so it has no snapshot door of its own. Use cadgen snapshot "
         "<file>.srdf [OUT.png], which routes it by suffix."
+    ),
+    # Boards moved onto KiCad's API: a @pcb script fills a KiCad board through
+    # kicad-python, so KiCad's own jobs export it and there is no schematic to check.
+    ("pcb", "validate"): (
+        "cadgen pcb validate has been removed: a board has no schematic, so there is no ERC. "
+        "KiCad's DRC on a saved board is cadgen pcb drc <board>.kicad_pcb."
+    ),
+    ("pcb", "review"): (
+        "cadgen pcb review has been removed: nothing in cadgen reviews a board. KiCad's DRC is "
+        "cadgen pcb drc <board>.kicad_pcb; the pcb-dfm skill reads the board itself."
+    ),
+    ("pcb", "gerber"): (
+        "cadgen pcb gerber has been removed: exports are KiCad's own jobs, called by the board "
+        "script on its board -- board.export_gerbers(...) and board.export_drill(...) "
+        "(cadgen.kipy.board.Board)."
+    ),
+    ("pcb", "pos"): (
+        "cadgen pcb pos has been removed: the position file is KiCad's own job, called by the "
+        "board script on its board -- board.export_position(...) (cadgen.kipy.board.Board)."
+    ),
+    ("pcb", "bom"): (
+        "cadgen pcb bom has been removed: a bill of materials comes from a schematic, which "
+        "cadgen no longer writes. A board script's parts are its own list."
+    ),
+    ("harness",): (
+        "cadgen harness has been removed: cadgen draws no wiring harnesses."
     ),
 }
 

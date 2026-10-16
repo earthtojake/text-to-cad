@@ -17,8 +17,9 @@ export function alertDismissible(alert, hasContent) {
   return alert.blocking === false || (hasContent && alert.severity === "warning");
 }
 
-// The same failure raised again is the same alert, even as a new object.
-const alertKey = alert => JSON.stringify([alert.severity, alert.title, alert.message, alert.reason, alert.details]);
+// The same failure raised again is the same alert, even as a new object. `key` is what tells two
+// alerts apart that the card says alike (a board's errors, by their count, are its `title`).
+const alertKey = alert => JSON.stringify([alert.severity, alert.title, alert.message, alert.reason, alert.details, alert.key]);
 /** What the card is headed, and what its icon in the navbar is called. */
 const alertTitle = alert => alert.title || alert.summary || "Couldn’t display the model";
 /** The card's icon colour: amber for a warning, the destructive red for an error. */
@@ -48,13 +49,15 @@ const NO_ACTIONS = Object.freeze([]);
  */
 export function useAlertDismissal(alert, { hasContent = false, scope = "", onNavigationActionsChange = null } = {}) {
   const key = alert ? alertKey(alert) : "";
+  // What the person did with the alert on screen (`away`: put it away, or brought it back).
   const [put, setPut] = useState(null);
   // The dismissal of the alert on screen alone: when it is not that alert any more, it is gone.
   const stale = put !== null && (put.key !== key || put.scope !== scope);
   if (stale) setPut(null);
-  const dismissed = !stale && put !== null && Boolean(alert) && alertDismissible(alert, hasContent);
-  const dismiss = useCallback(() => { if (key) setPut({ key, scope }); }, [key, scope]);
-  const reopen = useCallback(() => setPut(null), []);
+  const away = !stale && put !== null && put.away;
+  const dismissed = away && Boolean(alert) && alertDismissible(alert, hasContent);
+  const dismiss = useCallback(() => { if (key) setPut({ key, scope, away: true }); }, [key, scope]);
+  const reopen = useCallback(() => setPut({ key, scope, away: false }), [key, scope]);
   const title = alert ? alertTitle(alert) : "";
   const warning = alert?.severity === "warning";
   const published = useRef(false);

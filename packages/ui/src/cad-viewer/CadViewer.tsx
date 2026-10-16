@@ -76,8 +76,8 @@ const reportError = (error: Error) => console.error(error);
 
 /**
  * The CAD viewer every app shows: the shared FileViewer over one file at a time, by absolute path,
- * with its five renderers (STEP, DXF, GLB, STL/3MF, URDF/SRDF/SDF), the host's home (the model
- * library) wherever no file is open, and the standard loading and "File does not exist" pages. It
+ * with its six renderers (STEP, DXF, KiCad, GLB, STL/3MF, URDF/SRDF/SDF), the host's home (the
+ * model library) wherever no file is open, and the standard loading and "File does not exist" pages. It
  * follows the catalog of the file on screen and refreshes it when the page is focused or shown
  * again. It keeps a picture of each model it shows for the library (`onThumbnail`), and on the home
  * draws one for a card that has none or an old one: out of sight, with its own client, one model at a

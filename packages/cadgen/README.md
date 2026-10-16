@@ -10,14 +10,23 @@ platform.
 
 **PURPOSE** — the engine and its command surface: model execution, the
 store, document assembly, kinematics, exports, validation, inspection,
-snapshots, the warm daemon and its build pool, the CAD Viewer
+snapshots, circuit boards (a `@pcb` script that fills a board through KiCad's
+own API, kicad-python vendored as `cadgen.kipy`: KiCad's headless server builds,
+fills and saves the board, KiCad's `kicad-cli pcb drc` checks it, and KiCad's
+export jobs write what a fab needs), the warm daemon and
+its build pool, the CAD Viewer
 (`cadgen viewer`: a local HTTP server over the built client, on port 3245 or the
 port `--port` names, serving every CAD file by its absolute path), and CAD beside an agent's chat (`cadgen mcp`: an MCP App server that
 an agent host starts, over the viewer's own routes: tabs in Codex, viewer cards
 in the chat for every other MCP Apps host).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily,
-never at namespace-import time) and the bundled runtime.
+never at namespace-import time) and the bundled runtime. Boards need the KiCad
+10.99 nightly (the KiCad 11 API) installed: a build starts its `kicad-cli
+api-server` and stops it, then every build and the DRC door run its `kicad-cli pcb
+drc` on the saved file, nothing of KiCad's is imported, and everything else works without it; importing
+`cadgen.pcb` or `cadgen.kipy` touches no KiCad. kicad-python's own dependencies
+(`protobuf`, `pynng`) are cadgen's, and the viewer reads a board from its file.
 Never app code, never JavaScript source at runtime.
 
 **DEPENDED ON BY** — every skill (as a pinned installed distribution). The
@@ -33,7 +42,7 @@ document and this one disagree, the mechanism document is right.
 | Document | What it is for | Go there when |
 |---|---|---|
 | [`STORE.md`](STORE.md) | The store's contract: layout, the two-sides law, tree/record shapes, the gate, invariants, link-vs-component, concurrency, GC, the daemon, lazy children, editing previews, debugging. Sectioned, with a table of contents | changing anything that writes to or reads from `~/.cache/cadgen`, or any build, door or reader that depends on it |
-| [`SNAPSHOTS.md`](SNAPSHOTS.md) | Snapshots: display presets, what a mesh, robot or drawing snapshot draws (the CAD Viewer's own scene for it), requests and OUT, sizes, and `--debug --json` — every measured browser stage, what each one covers, and which durations must not be added together | changing what a snapshot draws or accepts, or reading snapshot timings |
+| [`SNAPSHOTS.md`](SNAPSHOTS.md) | Snapshots: display presets, what a mesh, robot, drawing or KiCad board snapshot draws (the CAD Viewer's own scene for it), requests and OUT, sizes, and `--debug --json` — every measured browser stage, what each one covers, and which durations must not be added together | changing what a snapshot draws or accepts, or reading snapshot timings |
 
 ## The design laws
 
@@ -42,8 +51,8 @@ when it works. Each carries a pressure-test to apply before writing code.
 
 ### 1. Generated files are totally independent of their source code
 
-A generated file (STEP, DXF, STL, GLB, 3MF) and its sidecar
-(`<name>.step.json`) stand alone, forever.
+A generated file (STEP, DXF, STL, GLB, 3MF, a KiCad board)
+and its sidecar (`<name>.step.json`) stand alone, forever.
 
 *Pressure-test*: a generated file must be fully readable — viewer,
 snapshot, `read_scene` — by reading ONLY the generated file(s), the sidecar, and
@@ -279,8 +288,8 @@ to its source, a repo script, or a repo workflow does not.
 
 ### 16. Decorator inputs never change the geometry
 
-A `@step`/`@dxf`/`@stl`/`@glb`/`@threemf` decorator's arguments never change
-the geometry a model produces. They decide where the files land (`out=`),
+A `@step`/`@dxf`/`@stl`/`@glb`/`@threemf`/`@pcb` decorator's arguments never
+change the geometry a model produces. They decide where the files land (`out=`),
 how they are written (the mesh tolerances), and what the sidecar declares
 (`kinematics=`, `materials=`, `animation=`). The geometry is the function's return value and nothing
 else: a `Compound` placing children is packaged as occurrences, a single
@@ -387,11 +396,35 @@ waits on a request beyond the two waits above.
 src/cadgen/
   <format>.py            # public namespaces: step, stl, threemf, glb, dxf,
                          #   urdf, srdf, sdf — each binds its verbs
-  authoring.py           # @step/@dxf/@stl/@glb/@threemf decorators; a call
-                         #   builds at top level and composes (a lazy child)
-                         #   inside a body; a model's outputs are what they
-                         #   declare — a mesh decorator alone is a model that
-                         #   writes no STEP
+  pcb.py                 # @pcb, a board script's decorator, and the pcb
+                         #   verbs (drc, snapshot). A call starts KiCad's
+                         #   headless API server (kicad-cli api-server, the
+                         #   10.99 nightly) with an empty settings directory,
+                         #   creates the document, loads the footprint
+                         #   libraries the project's fp-lib-table declares,
+                         #   hands the board (kipy's Board) to the function,
+                         #   refills zones, counts unconnected pads, saves,
+                         #   stops the server and runs kicad-cli pcb drc on the
+                         #   saved file (counts in the report line, findings
+                         #   below; --no-drc skips). A board saved by anything
+                         #   but its script is refused unless --force (the
+                         #   CADGEN_BUILD text variable). Nothing of KiCad's is
+                         #   imported or re-implemented; no store, daemon or tracer
+  kipy/                  # kicad-python, vendored verbatim at a pinned commit
+                         #   with its generated protocol modules, its imports
+                         #   rewritten to cadgen.kipy; VENDOR.json names the
+                         #   pins and the upstream LICENSE ships beside it
+  authoring.py           # @step/@dxf/@stl/@glb/@threemf; a call builds at top
+                         #   level and composes (a lazy child) inside a body;
+                         #   a model's outputs are what they declare — a mesh
+                         #   decorator alone is a model that writes no STEP
+  kicad/                 # KiCad beside the API: where kicad-cli is (install),
+                         #   kicad-cli pcb drc on a saved board (cli), the
+                         #   s-expression reader (sexpr), board references and
+                         #   any board read back from its file (refs,
+                         #   board_index: read_board), and the viewer's
+                         #   picture of a board from the file (plot, geometry,
+                         #   naming) — no KiCad process in any of them
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
   step_scene.py          # read_step and read_scene
@@ -447,7 +480,8 @@ src/cadgen/
 
 Verbs by format: `step` compile · build · snapshot;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
-validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
+validate · snapshot; `srdf` validate; `pcb` drc · snapshot.
+`cadgen snapshot` routes any suffix.
 `cadgen store|daemon|doctor` are status commands, `cadgen viewer
 [stop]` the CAD Viewer's launcher, and `cadgen mcp`
 the server an agent host starts — all deliberately outside the mirror pattern. `cadgen step compile` is internal tooling: skills never

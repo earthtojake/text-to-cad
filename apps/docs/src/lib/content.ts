@@ -153,6 +153,18 @@ export const skillGroups = [
       "Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.",
   },
   {
+    name: "PCB",
+    path: "skills/pcb",
+    summary:
+      "Designs circuit boards as Python scripts on KiCad's own API: footprints, placement, hand routing, pours and design rules, built and DRC-checked by the KiCad nightly on every run, exported to Gerbers.",
+  },
+  {
+    name: "PCB DFM",
+    path: "skills/pcb-dfm",
+    summary:
+      "Reviews a KiCad board before ordering: KiCad's DRC, decoupling, track width for current, sourcing and the fab's limits.",
+  },
+  {
     name: "URDF",
     path: "skills/urdf",
     summary:

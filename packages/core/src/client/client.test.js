@@ -264,6 +264,32 @@ test('a drawing is one plain GET, and a refusal arrives with the server’s own 
   client.dispose();
 });
 
+test('a plot is one plain GET, and a machine without the tool answers with the server’s own sentence', async () => {
+  const calls = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options) => {
+    calls.push({ url, options });
+    if (calls.length > 1) {
+      return { ok: false, status: 400, statusText: 'Bad Request', json: async () => ({ error: 'KiCad is not installed: install KiCad 10.' }) };
+    }
+    return json({ schemaVersion: 1, kind: 'board', unrouted: 0, sheets: [] });
+  } });
+  const payload = await client.plotPayload('boards/blinky.kicad_pcb');
+  assert.equal(payload.kind, 'board');
+  assert.equal(new URL(calls[0].url).pathname, '/__cad/plot');
+  assert.equal(new URL(calls[0].url).searchParams.get('file'), 'boards/blinky.kicad_pcb');
+  assert.equal(calls[0].options.method, 'GET');
+  assert.equal(calls[0].options.headers['x-cadgen-viewer'], undefined);
+  await assert.rejects(client.plotPayload('boards/blinky.kicad_pcb'), (error) => {
+    assert.equal(error.failure.kind, 'http');
+    assert.equal(error.failure.status, 400);
+    assert.equal(error.failure.operation, 'plotting');
+    assert.equal(error.failure.detail, 'KiCad is not installed: install KiCad 10.');
+    return true;
+  });
+  await assert.rejects(client.plotPayload(''), /Missing file/);
+  client.dispose();
+});
+
 test('a drawing still rendering is asked for again after the server\'s retryMs, until its payload comes back', async () => {
   const replies = [{ state: 'drawing', retryMs: 0 }, { state: 'drawing', retryMs: 0 }, { schemaVersion: 2, primitives: [] }];
   let asked = 0;

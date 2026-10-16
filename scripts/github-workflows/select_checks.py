@@ -28,6 +28,7 @@ Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs t
     skills  light_policy  light_tests  skills_policy  skills_tests  skills_runtime
     docs
     packaging
+    kicad                         KiCad boards
     full
     record                        the artifact name recording what this run tests
 
@@ -57,7 +58,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages/cadgen"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging")
+# The suite that needs KiCad (the nightly's headless API server), its own job (`kicad`).
+TOOL_SUITES = {"kicad": "tests/python/packages/kicad"}
+FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging", *TOOL_SUITES)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -102,6 +105,7 @@ NOTHING = select()
 HEAVY_POLICY = {
     "test_cache_root_sync.py",              # cadgen's cache paths against core's tessellation cache
     "test_cli_stream_contract.py",          # cadgen CLIs, run
+    "test_kipy_vendor.py",                  # the vendored kicad-python, imported (protobuf, pynng)
     "test_node_builder_bundles.py",         # the emitted Node builders (scripts/bundle)
     "test_sidecar_and_package_layering.py",  # cadgen's import layering, imported
     "test_snapshot_viewer_theme_parity.py",  # cadgen's snapshot against core's view settings
@@ -117,9 +121,10 @@ LIGHT_SKILL_TESTS = (
 CADGEN_SKILL_SUITES = (f"{SKILL_SUITES}/cad", f"{SKILL_SUITES}/dxf")
 
 # Whatever runs cadgen: its suites on both platforms, the skill suites that drive it, the
-# policy tests that load it, the viewer gates that serve and build through it, the wheel.
+# policy tests that load it, the viewer gates that serve and build through it, the wheel, and
+# the boards built end to end through KiCad.
 CADGEN_CONSUMERS = select(
-    flags=["web_viewer", "packaging"], cadgen=[CADGEN_SUITE], skills=CADGEN_SKILL_SUITES,
+    flags=["web_viewer", "packaging", "kicad"], cadgen=[CADGEN_SUITE], skills=CADGEN_SKILL_SUITES,
     policy=[f"{POLICY_SUITE}/{name}" for name in sorted(HEAVY_POLICY)],
 )
 
@@ -162,12 +167,18 @@ _READS_ALL = (r"_COMMANDS|walk_packages|iter_modules|r?glob\(\s*[\"'](?:\*\*/)?\
               r"|import_module\(\s*(?![\"'])|__import__\(\s*(?![\"'])")
 
 
+def _naming(names: str) -> re.Pattern[str]:
+    """What a test that reaches a leaf says: the leaf's names, a support module that names it,
+    or a read of all of cadgen."""
+    support = [path.stem for path in sorted((ROOT / "tests/python/support").glob("*.py"))
+               if re.search(names, path.read_text(encoding="utf-8", errors="replace"))]
+    return re.compile("|".join([names, _READS_ALL] + [rf"\b{re.escape(stem)}\b" for stem in support]))
+
+
 def _cadgen_tests_naming(names: str, directories: tuple[str, ...]) -> list[str]:
     """The cadgen tests a change to a leaf can reach: those in `directories`, and those whose
     text names it, names a support module that does, or reads all of cadgen."""
-    support = [path.stem for path in sorted((ROOT / "tests/python/support").glob("*.py"))
-               if re.search(names, path.read_text(encoding="utf-8", errors="replace"))]
-    pattern = re.compile("|".join([names, _READS_ALL] + [rf"\b{re.escape(stem)}\b" for stem in support]))
+    pattern = _naming(names)
     found = []
     for path in sorted((ROOT / CADGEN_SUITE).rglob("test*.py")):
         relative = path.relative_to(ROOT).as_posix()
@@ -177,12 +188,22 @@ def _cadgen_tests_naming(names: str, directories: tuple[str, ...]) -> list[str]:
     return found
 
 
+def _tool_jobs_naming(names: str) -> list[str]:
+    """The KiCad job a change to a leaf can reach: when a test of its suite names the leaf, as
+    `_cadgen_tests_naming` finds the cadgen tests."""
+    pattern = _naming(names)
+    return [flag for flag, suite in TOOL_SUITES.items()
+            if any(pattern.search(path.read_text(encoding="utf-8", errors="replace"))
+                   for path in sorted((ROOT / suite).rglob("test*.py")))]
+
+
 def _viewer_change(path: str) -> Select:
-    return select(flags=["web_viewer", "packaging"], cadgen=_cadgen_tests_naming(_NAMES_VIEWER, ("viewer", "mcp")))
+    return select(flags=["web_viewer", "packaging", *_tool_jobs_naming(_NAMES_VIEWER)],
+                  cadgen=_cadgen_tests_naming(_NAMES_VIEWER, ("viewer", "mcp")))
 
 
 def _mcp_change(path: str) -> Select:
-    return select(flags=["packaging"], cadgen=_cadgen_tests_naming(_NAMES_MCP, ("mcp",)))
+    return select(flags=["packaging", *_tool_jobs_naming(_NAMES_MCP)], cadgen=_cadgen_tests_naming(_NAMES_MCP, ("mcp",)))
 
 
 _MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
@@ -282,6 +303,10 @@ RULES: tuple[Rule, ...] = (
     Rule(("scripts/test/test-docs.sh", "scripts/brand/**"), select(flags=["docs"])),
     Rule(("scripts/test/test-viewer-launch.sh", "scripts/test/test-viewer-browser.sh"), select(flags=["web_viewer"])),
     Rule(("scripts/test/test-installed.sh",), select(flags=["packaging"])),
+    # The vendoring script writes cadgen/kipy; what it can break is the tree's integrity test.
+    Rule(("scripts/vendor/**",), policy("test_kipy_vendor.py")),
+    # The suite that needs KiCad installed, and its runner: its own job.
+    Rule((f"{TOOL_SUITES['kicad']}/**", "scripts/test/test-kicad.sh"), select(flags=["kicad"])),
     Rule(("scripts/test/test.sh",), NOTHING),  # chains the runners for a local run; CI calls them itself
     Rule(("scripts/bench/viewer-memory/**",), select(flags=["core_js"])),
 

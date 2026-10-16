@@ -1,4 +1,4 @@
-import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
+import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
@@ -12,25 +12,14 @@ import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { VIEWER_RENDER_PROFILE, renderProfileKeepsPixelRatio, sceneForRenderProfile } from "../viewport/renderProfile.js";
 import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
 import DisplayPopover from "./DisplayPopover.jsx";
-import { DrawingToolbar } from "../../../drawing/toolbar.jsx";
-import ToolPanel, { ToolPanelFooterButton } from "../tools/ToolPanel.jsx";
+import DrawingPanel from "../tools/draw/DrawingPanel.jsx";
 import PlaybackMenu, { OrbitMenu, RoutineMenu } from "../tools/PlaybackMenu.jsx";
-import FloatingToolBar from "../tools/FloatingToolBar.js";
-import ToolStack from "../tools/ToolStack.jsx";
-import { toolPanelClosed } from "../tools/toolStackLayout.js";
 import { ViewportAnimationBar, animationControlsHaveContent } from "../tools/playbar/ViewportAnimationBar.js";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
 import { ViewportTopRight } from "./ViewportTopRight.jsx";
 import ShellViewport from "./ShellViewport.jsx";
+import ToolColumn from "./ToolColumn.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
-
-// The strip and the panels under it share one column, inset from the viewer's top and left
-// edges and stopping above the cube in the bottom-left corner: the column is exactly the height
-// the stack may take, so however many panels are up, it never runs past the viewer or under the
-// cube (`ToolPanel.jsx` decides which of them gives way).
-const INSET = `${VIEWPORT_INSET_PX}px`;
-// The strip and its stack stop short of Quick Edit's button at the top-right.
-const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
 
 /** One of the view's controls: an icon button, the navbar's, with its name on hover, below it. */
 function NavbarControl({ label, disabled = false, onClick, children }) {
@@ -163,31 +152,11 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
     if (wasPreviewing.current && !previewing) releaseRef.current?.();
     wasPreviewing.current = previewing;
   }, [previewing]);
-  // Every tool's panel but Select's has an X that puts the tool down, back to Select (the default
-  // tool, which cannot be put down). Select's tree has an X of its own that closes the tree alone:
-  // the tool it belongs to then carries the strip's corner mark, and a press on that tool while it
-  // is up opens the tree again; from another tool, a press only takes it up, the tree still closed.
-  // Until the person has closed or opened it, the tree starts as the tool says this file starts it
-  // (`panel.startsClosed`: a single part's) and closed on a phone.
-  // One object while those starts stay the same: the stack's panels read it.
-  const panelStarts = JSON.stringify(tools.filter(tool => tool.panel).map(tool => [tool.panel.id, Boolean(tool.panel.startsClosed)]));
-  const startsClosed = useMemo(() => Object.fromEntries(JSON.parse(panelStarts)), [panelStarts]);
-  const stripTools = tools.map(tool => {
-    if (!tool.panel || !toolPanelClosed(frame.toolStack, tool.panel.id, { mobile, startsClosed: startsClosed[tool.panel.id] })) return tool;
-    const reopen = () => frame.changeToolStack(current => ({ closed: { ...current.closed, [tool.panel.id]: false } }));
-    return { ...tool, panelClosed: true, description: tool.description || `${tool.panel.label} closed`,
-      onSelect: () => { if (tool.active) reopen(); tool.onSelect(); } };
-  });
   // The shell's own tool's panel leads the stack while its tool is up: Draw's tools, color and
   // history. The renderer's follow.
   // Draw's controls, and once there is ink, Copy Drawing (the view with its ink) at their foot.
-  const shellPanels = <>
-    {frame.drawToolActive ? <ToolPanel id="drawing" label="Drawing controls" collapsible={false}
-      footer={frame.drawing.hasContent ? <ToolPanelFooterButton label="Copy Drawing" shortcut={mobile ? "" : frame.copyShortcut}
-        disabled={viewerLoading || !scene} onClick={frame.copyDrawing} /> : null}>
-      <DrawingToolbar drawing={frame.drawing} layout="panel" className="p-1" />
-    </ToolPanel> : null}
-  </>;
+  const shellPanels = frame.drawToolActive ? <DrawingPanel drawing={frame.drawing} onCopy={frame.copyDrawing}
+    copyShortcut={mobile ? "" : frame.copyShortcut} disabled={viewerLoading || !scene} /> : null;
 
   const hasContent = Boolean(scene) && !viewerLoading;
   // A load the model did not survive: an alert that cannot be put away (a failed update that
@@ -320,11 +289,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                     autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay} />} /> : null}>
 
               {/* The file explorer floats over this corner, above the tools, which stay drawn under it. */}
-              {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2" style={TOOLBAR_POSITION}
-                data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
-                <FloatingToolBar tools={stripTools} />
-                <ToolStack hidden={previewing} mobile={mobile} startsClosed={startsClosed} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>
-              </div>}
+              {toolsHidden ? null : <ToolColumn tools={tools} layout={frame.toolStack} onLayoutChange={frame.changeToolStack} mobile={mobile}
+                hidden={previewing}>{shellPanels}{toolPanels}</ToolColumn>}
               {/* The top-right: the host's notice once a model is on screen (`view.notice`), and Quick Edit
                   under it -- hidden, not unmounted, while the view loads: a note being written outlives a
                   reload of the model. */}

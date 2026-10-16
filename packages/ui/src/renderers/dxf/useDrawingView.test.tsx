@@ -53,15 +53,17 @@ it('a press whose pointer can no longer be captured still drags, and nothing esc
   const { container } = render(<DraggableSurface />);
   const canvas = container.querySelector('canvas')!;
   const dragging = () => container.firstElementChild!.getAttribute('data-dragging');
-  const press = (type: string) => {
+  const press = (type: string, at = 4) => {
     const event = new Event(type, { bubbles: true, cancelable: true });
-    Object.assign(event, { pointerId: 7, pointerType: 'touch', button: 0, clientX: 4, clientY: 4 });
+    Object.assign(event, { pointerId: 7, pointerType: 'touch', button: 0, clientX: at, clientY: at });
     act(() => { canvas.dispatchEvent(event); });
   };
   try {
     press('pointerdown');
+    // A press is a tap until it travels past the slop (kit/plane/usePlaneView.js); then it drags.
+    press('pointermove', 24);
     expect(dragging()).toBe('true');
-    press('pointerup');
+    press('pointerup', 24);
     expect(dragging()).toBe('false');
     expect(escaped).not.toHaveBeenCalled();
   } finally {

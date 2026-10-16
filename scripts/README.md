@@ -76,6 +76,11 @@ where those files ship, so these scripts are what produces them.
   missing file.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, then the animated brand
   marks' tests. Called by `test.yml`.
+- `test-kicad.sh` — `tests/python/packages/kicad`, the board suite that needs
+  KiCad's `kicad-cli` from the 10.99 nightly (the KiCad 11 API): boards built end
+  to end through its headless API server and checked with its DRC. A missing or
+  older KiCad fails the run rather than skipping it. Called by `test.yml` (the
+  `kicad` job).
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
   telemetry receiver's tests, which need no install. Called by `test.yml` and
   `deploy-api.yml`.
@@ -94,6 +99,14 @@ where those files ship, so these scripts are what produces them.
 - `common.sh`, `unittest_files.py` — shared runner pieces (interpreter
   resolution, path narrowing, fail-closed unittest loading, the per-file
   parallel run). Sourced by the runners.
+
+`vendor/` — third-party code cadgen ships inside its own tree.
+
+- `kipy.py [--check]` — regenerates `packages/cadgen/src/cadgen/kipy` (kicad-python,
+  vendored because no PyPI release targets the KiCad 11 API) from the pins in its
+  `VENDOR.json`: the kicad-python commit, the KiCad commit whose protos it uses, and an
+  exact protoc/mypy-protobuf/protoletariat toolchain installed into a uv scratch
+  environment. `--check` regenerates into scratch and diffs it against the tree.
 
 `release/` — the version and the release identity.
 

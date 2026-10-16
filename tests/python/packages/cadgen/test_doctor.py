@@ -78,6 +78,25 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("kernel   OK", out)
         self.assertIn("/site/OCP.pyd", out)
 
+    def test_the_report_names_the_kicad_found_or_what_to_install(self) -> None:
+        # KiCad is the person's install, so a missing or too-old one is a line, not a failure.
+        cli = Path("/opt/kicad/bin/kicad-cli")
+        for version, expected in (("10.99.0", f"kicad    OK — KiCad 10.99.0 at {cli}"),
+                                  ("10.0.7", f"kicad    not usable — {cli} is KiCad 10.0.7; cadgen needs KiCad 10.99")):
+            with self.subTest(version=version), \
+                    mock.patch("cadgen.kicad.install.find_kicad_cli", return_value=cli), \
+                    mock.patch("cadgen.kicad.install.kicad_version", return_value=version), TemporaryDirectory() as tmp:
+                code, out, _ = _run([tmp])
+            self.assertEqual(code, 0)
+            self.assertIn(expected, out)
+        from cadgen.kicad.install import KicadMissingError, install_hint
+
+        with mock.patch("cadgen.kicad.install.find_kicad_cli", side_effect=KicadMissingError(f"none found: {install_hint()}")), \
+                TemporaryDirectory() as tmp:
+            code, out, _ = _run([tmp])
+        self.assertEqual(code, 0)
+        self.assertIn(f"kicad    not usable — none found: {install_hint()}", out)
+
     def test_a_missing_kernel_is_reported_and_is_not_a_failure(self) -> None:
         # The release workflow installs the wheel --no-deps and runs doctor: no OCP
         # there is a correct install, and the pin is what brings the kernel.

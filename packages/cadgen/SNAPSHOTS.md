@@ -63,7 +63,8 @@ snapshot's own.
 ## Drawings
 
 A `.dxf` is not rendered in a scene at all, so `cadgen dxf snapshot` is the
-narrowest door of the seven. It draws the whole drawing, fitted to the image and
+narrowest door, a shape only the other plot door, `cadgen pcb snapshot`,
+shares. It draws the whole drawing, fitted to the image and
 head on, in the pens the file declares — the same picture the CAD Viewer's DXF
 pane shows, from the same server-side payload, through the same drawing code.
 What the viewer cannot show, the CLI does not render.
@@ -89,6 +90,44 @@ any `display` key but `appearance`, `mode` other than `view`, `section`,
 `scale`, an output `label`/`viewLabel`, or `output.padding`, `output.viewLabels`
 or `output.tightFrame` is refused by name with what a drawing is — in the same
 words, because the flag and the job key are one request arriving two ways.
+
+## KiCad boards
+
+A `.kicad_pcb` is drawn from the file by cadgen's own reader, no KiCad process
+anywhere: footprints with their pads as the padstacks shape them, tracks and vias,
+the pours as KiCad filled them when the board was saved (every build refills
+before saving), holes and the outline, silkscreen and fabrication graphics, and
+text in a permissive stroke font (the same positions as KiCad's, different
+glyphs). Like a drawing it is flat: `cadgen pcb snapshot` takes the drawing's
+narrow shape. A board is one picture, every layer stacked back to front, with a
+straight ratsnest line for each connection copper does not make. The whole plot
+is fitted to the image with the viewer's gutter, on the appearance's background:
+the same payload the CAD Viewer's board pane shows (`GET /__cad/plot`), drawn by
+the same code. The picture is cadgen's reading of the file, not KiCad's plotter's:
+KiCad's own SVG and PNG of a board are its export jobs, one API call away in the
+board's script. There is no schematic view: a board script has no schematic.
+
+```bash
+cadgen pcb snapshot board.kicad_pcb review.png
+cadgen pcb snapshot board.kicad_pcb review.png --display copper --appearance dark --width 2400 --height 1600
+cadgen pcb snapshot board.kicad_pcb review.png --display '{"mode":"copper","side":"bottom","poured":false,"layers":["B.Cu","Edge.Cuts","vias"]}'
+```
+
+It takes what the drawing door takes: `TARGET`, `OUT`, `--job`, `--appearance`
+(the surround the board sits on), `--width`/`--height`, `--size-profile`,
+`--debug` and `--json`, plus `output.renderScale` and `output.transparent` in a
+job; and `--display`, the board's Display as the viewer shows it: a mode word
+(`board`, the default, every layer but the courtyards; `copper`; `assembly`;
+`placement`), or a JSON object or file with `mode`, `side` (`top` or `bottom`),
+`poured` and `layers`, the ids drawn (KiCad's layer names plus `vias`,
+`ratsnest` and `drills`; omitted, the mode's own set). It is the one object the
+viewer's Display keeps with the file's view, so the picture is what the Display
+shows; in a job it is `"display": {"appearance": "dark", "mode": "copper",
+"layers": ["F.Cu", "Edge.Cuts"]}`. A layer the board does not have is refused
+with the board's layers named. A job (or `cadgen snapshot` routing a board) that
+asks for a camera, a display key outside those, a mode outside the four, a
+section, a scale, a view label or an output setting that frames a camera is
+refused by name with what a plot is.
 
 ## Requests and OUT
 

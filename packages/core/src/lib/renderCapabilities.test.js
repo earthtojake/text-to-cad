@@ -13,10 +13,12 @@ import {
   supportsTool
 } from "./renderCapabilities.js";
 
-// Every format drawn in a 3D viewport. DXF is the one that is not: its pane is a 2D
-// canvas with no scene and no toolbar, so the viewport rules below do not reach it.
+// Every format drawn in a 3D viewport. The flat formats are not: a DXF's pane and a KiCad
+// board's are 2D canvases with no scene and no toolbar, so the viewport rules below do not
+// reach them.
+const FLAT_FORMATS = [RENDER_FORMAT.DXF, RENDER_FORMAT.KICAD_PCB];
 const VIEWPORT_FORMATS = Object.values(RENDER_FORMAT).filter(
-  (format) => format !== RENDER_FORMAT.DXF
+  (format) => !FLAT_FORMATS.includes(format)
 );
 
 test("every render format has a capability row", () => {
@@ -60,6 +62,8 @@ test("asset kinds are known", () => {
   assert.equal(assetKindForRenderFormat(RENDER_FORMAT.URDF), ASSET_KIND.ROBOT);
   // A drawing is not a mesh and never was one: a DXF loads the backend's 2D payload.
   assert.equal(assetKindForRenderFormat(RENDER_FORMAT.DXF), ASSET_KIND.DRAWING);
+  // Nor is a plot: a KiCad board loads its layers, drawn from its file.
+  assert.equal(assetKindForRenderFormat(RENDER_FORMAT.KICAD_PCB), ASSET_KIND.PLOT);
 });
 
 test("orbit and screenshot are available to every format with a viewport", () => {
@@ -133,10 +137,12 @@ test("every viewport format gets the whole toolbar: the tools act on the viewpor
       assert.equal(supportsTool(format, tool), true, `${format} is missing the ${tool} tool`);
     }
   }
-  // ...and the one format that is not a viewport claims none of them, rather than
-  // advertising four buttons its pane does not have.
-  for (const tool of ["select", "draw", "orbit", "screenshot"]) {
-    assert.equal(supportsTool(RENDER_FORMAT.DXF, tool), false, `DXF still claims ${tool}`);
+  // ...and the formats that are not a viewport claim none of them, rather than
+  // advertising four buttons their pane does not have.
+  for (const format of FLAT_FORMATS) {
+    for (const tool of ["select", "draw", "orbit", "screenshot"]) {
+      assert.equal(supportsTool(format, tool), false, `${format} still claims ${tool}`);
+    }
   }
   // An unrecognised format still gets the viewport tools: they cannot misbehave without
   // geometry-level capabilities behind them.

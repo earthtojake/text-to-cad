@@ -57,6 +57,17 @@ REQUIRED=(
   "cadgen/viewer/collation.json"
   "cadgen/authoring.py"
   "cadgen/build123d.py"
+  # Boards: the decorator, KiCad discovery, the DRC run, its door, and the vendored
+  # kicad-python (its license, pins and stubs ship with it).
+  "cadgen/pcb.py"
+  "cadgen/kicad/install.py"
+  "cadgen/kicad/cli.py"
+  "cadgen/cli/pcb_drc.py"
+  "cadgen/kipy/__init__.py"
+  "cadgen/kipy/LICENSE"
+  "cadgen/kipy/VENDOR.json"
+  "cadgen/kipy/py.typed"
+  "cadgen/kipy/proto/board/board_pb2.pyi"
   # The robot validators moved out of skills/{sdf,srdf,urdf}/scripts into cadgen, so a
   # packaging regression here would ship a cadgen whose `cadgen urdf validate` cannot import.
   "cadgen/cli/urdf_validate.py"

@@ -77,6 +77,7 @@ jobs:
       skills_runtime: ${{ steps.select.outputs.skills_runtime }}
       docs: ${{ steps.select.outputs.docs }}
       packaging: ${{ steps.select.outputs.packaging }}
+      kicad: ${{ steps.select.outputs.kicad }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -323,6 +324,47 @@ jobs:
 
       - name: Run the CAD app tests and build it
         run: scripts/test/test-js.sh --select mcp
+
+  # Boards (@pcb, cadgen.kicad, the vendored cadgen.kipy) end to end through a real KiCad:
+  # the nightly's `kicad-cli api-server` builds every board these tests write and its
+  # `kicad-cli pcb drc` checks them. The nightly (KiCad 10.99, the KiCad 11 API) is the one
+  # KiCad with a headless API server; cadgen refuses 10.0. Linux only: what can break here
+  # is cadgen's use of KiCad's API, which is the same on every platform. The PPA's packages
+  # are the programs and the footprint library; the symbols and the 3D models (over a
+  # gigabyte) are not needed. No browser and no Node: the suite builds and checks boards.
+  kicad:
+    name: KiCad boards
+    needs: changes
+    if: needs.changes.outputs.kicad == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install the KiCad nightly
+        # Launchpad answers 503 under load, sometimes for minutes on end (a 65 MB package):
+        # apt retries each fetch, and the install is tried again after a pause, resuming
+        # what was fetched, before the job gives up.
+        run: |
+          sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly
+          sudo apt-get -o Acquire::Retries=5 update
+          for attempt in 1 2 3 4 5 6; do
+            sudo apt-get -o Acquire::Retries=5 install --yes --no-install-recommends kicad-nightly kicad-nightly-footprints && break
+            [ "$attempt" = 6 ] && exit 1
+            sleep 30
+          done
+          kicad-cli-nightly version
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: none
+
+      - name: Run the KiCad suite
+        run: scripts/test/test-kicad.sh
 
   # api.texttocad.dev (apps/api): the version feed's and the telemetry receiver's tests. It has no
   # dependencies, so Node is all it installs.

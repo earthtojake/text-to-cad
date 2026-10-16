@@ -498,13 +498,75 @@ def display_modes_for_kind(kind: str) -> frozenset[str]:
     An error that lists modes lists THESE, so a mesh door never offers a preset it
     is about to refuse. An unknown kind gets the full set: its own refusal comes
     first and says what the file is. A DRAWING gets none: it has no scene for a
-    preset to configure, and its whole display is ``appearance``.
+    preset to configure, and its whole display is ``appearance``. A PLOT (a KiCad
+    board) gets the board's own: the viewer's Display modes.
     """
+    if kind in PLOT_INPUT_KINDS:
+        return PLOT_DISPLAY_MODES
     if kind in DRAWING_KINDS:
         return frozenset()
     if not kind or kind in CAD_MODEL_KINDS:
         return DISPLAY_MODES
     return DISPLAY_MODES - CAD_MODEL_DISPLAY_MODES
+
+
+# ---- a board's display: the viewer's Display, one contract with the snapshot ----
+# A KiCad board is drawn flat from its file, so its display is not a scene's: it is
+# which layers are drawn, with or without the copper pours, from which side, and the
+# surround's appearance. The vocabulary is the viewer's (`@text-to-cad/core`'s
+# `plot2d/boardDisplay.js`), mirrored here so a bad request is refused by name
+# before the board is read, and `layers` is checked against the board's own layer
+# ids once its payload exists (`cadgen.snapshot_cli.resolve_plot_render_job`).
+PLOT_INPUT_KINDS = frozenset({"kicad_pcb"})
+PLOT_DISPLAY_MODES = frozenset({"board", "copper", "assembly", "placement"})
+PLOT_DISPLAY_SIDES = frozenset({"top", "bottom"})
+PLOT_DISPLAY_KEYS = frozenset({"mode", "side", "poured", "layers", "appearance"})
+PLOT_DISPLAY_HINT = (
+    "a board's display is the viewer's Display: mode (board, copper, assembly or placement), "
+    "side (top or bottom), poured (true or false), layers (the layer ids drawn, e.g. "
+    '["F.Cu", "Edge.Cuts"]) and appearance; pass --appearance light|dark for the surround '
+    '(in a job, "display": {"appearance": "dark", "layers": ["F.Cu"]})'
+)
+
+
+def validate_plot_display_values(payload: Mapping[str, object], *, source_label: str) -> None:
+    """A board's display, checked against the viewer's Display vocabulary.
+
+    ``layers`` is checked here for shape alone (ids, each once); which ids the
+    board has is known only once it is read, and is checked then.
+    """
+    if not is_plain_object(payload):
+        raise SnapshotError(f"display must be a display settings object ({source_label})")
+    unknown = sorted(set(payload) - PLOT_DISPLAY_KEYS)
+    if unknown:
+        scene = [key for key in unknown if key in DISPLAY_OPTION_KEYS]
+        why = (
+            f"display.{', display.'.join(scene)} {'describes' if len(scene) == 1 else 'describe'} a 3D scene, "
+            "and a KiCad board is drawn from its file, flat; "
+            if scene else ""
+        )
+        raise SnapshotError(
+            f"display has unknown key(s): {', '.join(unknown)} ({source_label}); {why}{PLOT_DISPLAY_HINT}"
+        )
+    if "mode" in payload:
+        _display_enum(payload["mode"], "display.mode", PLOT_DISPLAY_MODES)
+    if "side" in payload:
+        _display_enum(payload["side"], "display.side", PLOT_DISPLAY_SIDES)
+    if "poured" in payload:
+        _render_boolean(payload["poured"], "display.poured")
+    if "appearance" in payload:
+        _display_enum(payload["appearance"], "display.appearance", DISPLAY_APPEARANCES)
+    if "layers" in payload:
+        layers = payload["layers"]
+        if not isinstance(layers, list) or not all(isinstance(layer, str) and layer for layer in layers):
+            raise SnapshotError(
+                f"display.layers must be a list of layer ids, KiCad's names ({source_label}): "
+                '["F.Cu", "B.Cu", "F.SilkS", "Edge.Cuts", ...], with "vias", "ratsnest" and "drills" '
+                "for what goes through the board"
+            )
+        repeated = sorted({layer for layer in layers if layers.count(layer) > 1})
+        if repeated:
+            raise SnapshotError(f"display.layers names {', '.join(repeated)} more than once ({source_label})")
 
 
 def validate_display_settings_values(
@@ -599,11 +661,12 @@ CAD_MODEL_DISPLAY_MODES = frozenset({"xray", "hidden-line", "wireframe"})
 # "hidden" and "off" let the edges carry the picture; without edges they draw nothing.
 CAD_MODEL_SURFACE_STYLES = frozenset({"hidden", "off"})
 CAD_MODEL_KINDS = frozenset({"step", "stp"})
-# Inputs that are DRAWN rather than staged. Nothing in `display` but
-# ``appearance`` reaches them, which is a stricter rule than the one below and is
-# stated where a drawing's rules live
-# (:func:`cadgen.snapshot_cli.check_drawing_render_job`).
+# Inputs that are DRAWN rather than staged: a DXF drawing. Nothing in `display` but
+# ``appearance`` reaches it, which is a stricter rule than the one below and is stated
+# where a drawing's rules live (:func:`cadgen.snapshot_cli.check_drawing_render_job`).
+# A KiCad board is drawn too (:data:`PLOT_INPUT_KINDS`), with a display of its own.
 DRAWING_KINDS = frozenset({"dxf"})
+FLAT_KINDS = DRAWING_KINDS | PLOT_INPUT_KINDS
 
 
 def validate_display_for_kind(display: Mapping[str, object], *, kind: str, input_label: str) -> None:
@@ -616,8 +679,9 @@ def validate_display_for_kind(display: Mapping[str, object], *, kind: str, input
     A drawing is skipped, not exempt: its own check refuses the whole of
     ``display`` but ``appearance``, and would otherwise be pre-empted here by a
     message offering it the 'solid' and 'render' presets it cannot take either.
+    A board's display is its own vocabulary, checked as it is loaded.
     """
-    if kind in CAD_MODEL_KINDS or kind in DRAWING_KINDS or not is_plain_object(display):
+    if kind in CAD_MODEL_KINDS or kind in FLAT_KINDS or not is_plain_object(display):
         return
     requested = [f"display.{name}" for name in CAD_MODEL_DISPLAY_GROUPS if name in display]
     mode = display.get("mode")
@@ -672,7 +736,7 @@ def _find_display_object(
             raise SnapshotError("--display requires a JSON object, JSON file path, or display mode")
         # Preset names are unambiguous even when the working directory contains a
         # folder with the same name (for example an output folder called render).
-        if display in DISPLAY_MODES:
+        if display in DISPLAY_MODES or (modes and display in modes):
             return {"mode": display}
         if display.startswith("{"):
             parsed, source_label = load_json_text(display, "--display"), "--display"
@@ -713,16 +777,22 @@ def load_display_option(
     *,
     cwd: Path,
     modes: frozenset[str] | None = None,
+    kind: str = "",
 ) -> ValidatedDisplay:
     """The validated display object for one job: found, then checked ONCE.
 
     ``modes`` is the preset vocabulary errors list — the input kind's, when the
-    caller knows it (:func:`display_modes_for_kind`).
+    caller knows it (:func:`display_modes_for_kind`). ``kind`` is the input's,
+    when known: a board's display (:data:`PLOT_INPUT_KINDS`) is checked against
+    the viewer's Display vocabulary, not a scene's.
     """
     if isinstance(raw_display, ValidatedDisplay):
         return raw_display
     payload = _find_display_object(raw_display, cwd=cwd, modes=modes)
-    validate_display_settings_values(payload, source_label="display settings", modes=modes)
+    if kind in PLOT_INPUT_KINDS:
+        validate_plot_display_values(payload, source_label="display settings")
+    else:
+        validate_display_settings_values(payload, source_label="display settings", modes=modes)
     return ValidatedDisplay(payload)
 def _render_number(value: object, field: str, minimum: float, maximum: float) -> None:
     if (
