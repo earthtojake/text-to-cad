@@ -16,12 +16,12 @@ SCENE.py is plain Python run top to bottom. It must bind the object to
 export -- an SDF from `cadjoint` -- to a module-level name, `scene` by
 default. Code under `if __name__ == "__main__":` does not run.
 
-The meshing grid is fitted to the object. A coarse scan at growing scales
-(cubes of half-width 1, 4, 16, ... 4096 model units) finds the smallest one
-that contains the whole part, and the samples inside or next to the
-surface, padded by one and a half scan cells, become the grid. `--bounds`
-replaces the scan, for an object that is unbounded on purpose or to mesh
-only part of one.
+The meshing grid is fitted to the object by cadjoint's own
+`cadjoint.meshing.bounds.fit_bounds`, which scans at growing scales, so any
+part size works. `--bounds` replaces the fit, for an object that is
+unbounded on purpose or to mesh only part of one. Clipping is checked with
+`boundary_inside`, and cadjoint's writers drop the zero-area slivers a
+sharp concave corner can produce; this script adds the report.
 
 `--resolution` counts cells along the longest axis; the other axes take
 proportionally fewer, so cells stay cubic. The smallest feature the mesh
@@ -51,8 +51,6 @@ import warnings
 from pathlib import Path
 
 FORMATS = {".stl": "stl", ".obj": "obj", ".step": "step", ".stp": "step"}
-SCAN_HALF_WIDTHS = (1.0, 4.0, 16.0, 64.0, 256.0, 1024.0, 4096.0)
-SCAN_CELLS = 48
 
 
 def load_object(scene: Path, name: str):
@@ -74,78 +72,6 @@ def load_object(scene: Path, name: str):
     )
 
 
-def scan_bounds(sdf) -> tuple[list[float], list[float]]:
-    """The padded box around the part, from the smallest scan cube that holds it.
-
-    A sample counts when it is inside or within half a cell diagonal of the
-    surface. The field never overestimates the distance to the surface, so
-    every surface point has a counted sample within that half diagonal: a
-    plate thinner than the scan spacing is found even when no sample lands
-    inside it.
-    """
-    import numpy as np
-
-    axis = (np.arange(SCAN_CELLS + 1) / SCAN_CELLS) * 2.0 - 1.0
-    unit = np.stack(np.meshgrid(axis, axis, axis, indexing="ij"), axis=-1).reshape(-1, 3)
-    for half in SCAN_HALF_WIDTHS:
-        spacing = 2.0 * half / SCAN_CELLS
-        points = unit * half
-        near = np.asarray(sdf(points.astype(np.float32))) < 0.5 * np.sqrt(3.0) * spacing
-        if not near.any():
-            continue
-        low = points[near].min(axis=0)
-        high = points[near].max(axis=0)
-        if (low <= -half + 0.5 * spacing).any() or (high >= half - 0.5 * spacing).any():
-            continue  # the part reaches the scan boundary: look wider
-        pad = 1.5 * spacing
-        return refine_bounds(sdf, low - pad, high + pad)
-    raise ValueError(
-        "no closed part found inside a cube of half-width "
-        f"{SCAN_HALF_WIDTHS[-1]:g}: the object is empty or unbounded (an infinite "
-        "plane, a missing Intersection). Pass --bounds."
-    )
-
-
-def refine_bounds(sdf, low, high) -> tuple[list[float], list[float]]:
-    """Tighten a coarse box with one finer scan inside it.
-
-    The coarse cube can be four times the part's size with a pad of a
-    sixteenth of the cube, which would spend a quarter of the export's cells
-    on empty space. The same near-surface rule on 48 cells across the box
-    itself bounds the part to within a few percent of its size.
-    """
-    import numpy as np
-
-    axes = [np.linspace(a, b, SCAN_CELLS + 1) for a, b in zip(low, high)]
-    points = np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, 3)
-    spacing = (np.asarray(high) - np.asarray(low)) / SCAN_CELLS
-    near = np.asarray(sdf(points.astype(np.float32))) < 0.5 * np.linalg.norm(spacing)
-    if not near.any():
-        return list(low), list(high)
-    pad = 1.5 * spacing
-    return (points[near].min(axis=0) - pad).tolist(), (points[near].max(axis=0) + pad).tolist()
-
-
-def boundary_inside(sdf, grid) -> bool:
-    """Whether any lattice vertex on the grid's six faces lies inside the part."""
-    import numpy as np
-
-    axes = [
-        origin + spacing * np.arange(count + 1)
-        for origin, spacing, count in zip(grid.origin, grid.spacing, grid.cells)
-    ]
-    for fixed in range(3):
-        for end in (axes[fixed][0], axes[fixed][-1]):
-            free = [axes[i] for i in range(3) if i != fixed]
-            a, b = np.meshgrid(*free, indexing="ij")
-            columns = [a.ravel(), b.ravel()]
-            columns.insert(fixed, np.full(a.size, end))
-            face = np.stack(columns, axis=-1).astype(np.float32)
-            if (np.asarray(sdf(face)) < 0.0).any():
-                return True
-    return False
-
-
 def count_bodies(faces) -> int:
     """Connected pieces of the mesh, joined through shared vertices."""
     import numpy as np
@@ -161,25 +87,6 @@ def count_bodies(faces) -> int:
     used[faces.ravel()] = True
     _, labels = connected_components(graph, directed=False)
     return int(np.unique(labels[used]).size)
-
-
-def merged_faces(vertices, faces):
-    """Faces re-indexed onto vertices merged by position, zero-area slivers dropped.
-
-    An STL has no vertex indices, so every reader merges coincident points.
-    At a sharp concave corner the mesher can emit triangles whose corners are
-    distinct rows but the same point (1e-15 apart); after the merge they have
-    no area and use their edges a third and fourth time, which is what makes
-    a reader call the file non-manifold. Returns (merged faces, kept mask).
-    """
-    import numpy as np
-
-    vertices = np.asarray(vertices, dtype=np.float64)
-    tolerance = 1e-9 * max(float(np.ptp(vertices, axis=0).max()), 1e-12)
-    _, merged = np.unique(np.round(vertices / tolerance), axis=0, return_inverse=True)
-    faces = merged.reshape(-1)[np.asarray(faces)]
-    keep = (faces[:, 0] != faces[:, 1]) & (faces[:, 1] != faces[:, 2]) & (faces[:, 0] != faces[:, 2])
-    return faces[keep], keep
 
 
 def bad_edges(faces) -> int:
@@ -230,7 +137,10 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
     import jax.numpy as jnp
     import numpy as np
 
-    from cadjoint.meshing import GridSpec, extract_mesh, save_obj, save_step, save_stl
+    from cadjoint.meshing import (
+        GridSpec, extract_mesh, remove_slivers, save_obj, save_step, save_stl,
+    )
+    from cadjoint.meshing.bounds import boundary_inside, fit_bounds
 
     fmt = FORMATS.get(out.suffix.lower())
     if fmt is None:
@@ -240,7 +150,12 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
     sdf = lambda points: jnp.asarray(obj(jnp.asarray(points)))  # noqa: E731
 
     if bounds is None:
-        low, high = scan_bounds(sdf)
+        try:
+            origin, extent = fit_bounds(sdf)
+        except ValueError as error:
+            raise ValueError(f"{error} Pass --bounds X0 Y0 Z0 X1 Y1 Z1.") from None
+        low = list(origin)
+        high = [o + e for o, e in zip(origin, extent)]
     else:
         low, high = list(bounds[:3]), list(bounds[3:])
     extent = np.asarray(high) - np.asarray(low)
@@ -250,9 +165,8 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
     grid = GridSpec.from_bounds(tuple(low), tuple(extent.tolist()), cells)
 
     with warnings.catch_warnings():
-        # Clipping is measured below, on the field itself: the kernel's own
-        # warning only fires when the surface crosses the boundary, not when
-        # the whole box sits inside the part.
+        # Clipping is measured below with boundary_inside: the extractor's
+        # warning only fires when the surface crosses the boundary.
         warnings.filterwarnings("ignore", message=".*extraction boundary")
         mesh = extract_mesh(sdf, grid)
     clipped = boundary_inside(sdf, grid)
@@ -263,10 +177,9 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
             + " the part. Widen or move --bounds."
         )
 
-    welded, keep = merged_faces(mesh.vertices, mesh.faces)
-    slivers = int((~keep).sum())
-    if slivers:
-        mesh = mesh._replace(faces=np.asarray(mesh.faces)[keep])
+    # The writers drop slivers themselves; doing it here first gives the
+    # count for the report and the welded faces the edge check needs.
+    mesh, slivers = remove_slivers(mesh)
 
     out.parent.mkdir(parents=True, exist_ok=True)
     if fmt == "stl":
@@ -279,7 +192,7 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
     size = (vertices.max(axis=0) - vertices.min(axis=0)).tolist()
     spacing = float(extent.max()) / resolution
     bodies = count_bodies(mesh.faces)
-    open_edges = bad_edges(welded)
+    open_edges = bad_edges(np.asarray(mesh.faces))
     return {
         "ok": True,
         "path": str(out.resolve()),

@@ -17,10 +17,10 @@ this skill for the first kind of part and `$cad` for the second.
 
 ## Setup
 
-cadjoint needs Python 3.11 or newer, and macOS's `python3` is 3.9: the
-install succeeds there and the first import fails. Create the environment
-with uv, which fetches a managed interpreter, and install the skill's
-`requirements.txt` into it once. The file pins cadjoint to a commit because
+cadjoint needs Python 3.11 or newer, and macOS's `python3` is 3.9, where
+the install is refused. Create the environment with uv, which fetches a
+managed interpreter, and install the skill's `requirements.txt` into it
+once. The file pins cadjoint to a commit because
 cadjoint's API is not yet stable:
 
 ```bash
@@ -108,10 +108,6 @@ faceted.
   cuts (or use `through=`), never flush with it.
 - **No infinite solids in a scene.** `Plane` and an unbounded intersection
   make the scan fail; the error says to pass `--bounds`.
-- **Revolve profiles must not touch the axis.** An edge on the axis is a
-  false surface in the field, and a `Shell` of the result grows a thin tube
-  along the axis. Mirror the profile across x = 0 instead, so the axis lies
-  inside the polygon rather than on its edge.
 - **Thin walls need cells.** `--resolution` counts cells along the longest
   axis and stops at 512, so the spacing is at least the part's length / 512:
   0.6 mm for a 300 mm part. A 1 mm wall there still meshes closed but its

@@ -18,7 +18,7 @@ everything is from it. Read wall thickness as twice the deepest blue
 contour inside a wall, see how far a blend reaches from a seam, and find a
 feature that vanished below the mesh resolution, all without meshing.
 
-The plane's extent comes from the same scan the export uses, unless
+The plane's extent comes from cadjoint's `fit_bounds`, as the export's does, unless
 `--bounds` gives it in the slice's own across/up coordinates. Prints one
 JSON object with the extent, the pixel size and the field's range in the
 slice; exits 1 with `{"ok": false, "error": ...}` on failure.
@@ -95,14 +95,16 @@ def slice_field(scene: Path, out: Path, name: str, axis: str, at: float, step, p
     import jax.numpy as jnp
     import numpy as np
 
-    from cadjoint_export import load_object, scan_bounds
+    from cadjoint.meshing.bounds import fit_bounds
+    from cadjoint_export import load_object
 
     obj = load_object(scene, name)
     sdf = lambda points: jnp.asarray(obj(jnp.asarray(points)))  # noqa: E731
     across, up = AXES[axis]
     if bounds is None:
-        low, high = scan_bounds(sdf)
-        u0, v0, u1, v1 = low[across], low[up], high[across], high[up]
+        origin, extent = fit_bounds(sdf)
+        u0, v0 = origin[across], origin[up]
+        u1, v1 = u0 + extent[across], v0 + extent[up]
     else:
         u0, v0, u1, v1 = bounds
     if u1 <= u0 or v1 <= v0:

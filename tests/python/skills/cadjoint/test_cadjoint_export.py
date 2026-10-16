@@ -75,13 +75,15 @@ class DocumentedExamplesTest(unittest.TestCase):
         self.assertLess(np.linalg.norm(mesh.vertices, axis=1).max(), 40.0 + 0.3)
         self.assertAlmostEqual(mesh.bounds[1][2], (40.0**2 - 9.0**2) ** 0.5, delta=0.3)
 
-    def test_revolve_profile_on_the_axis_grows_a_false_wall_and_mirrored_does_not(self) -> None:
-        """The SKILL.md rule: an axis edge is a surface; mirror the profile.
+    def test_a_revolve_profile_closed_along_the_axis_shells_like_a_mirrored_one(self) -> None:
+        """cadjoint#50: an axis edge is interior, not a surface.
 
         Shelled, a cup is hollow, so the point on its axis halfway up lies in
-        the cavity: outside the material. A profile closed along the axis
-        makes that axis a surface, and the shell puts material there.
+        the cavity. Before the fix a profile closed along the axis made the
+        axis a surface and the shell put material there.
         """
+        import numpy as np
+
         def field_on_axis(points: str) -> float:
             source = (
                 "from cadjoint.construction import PolygonProfile, SketchPlane, revolve\n"
@@ -96,10 +98,10 @@ class DocumentedExamplesTest(unittest.TestCase):
                 obj = cadjoint_export.load_object(scene, "scene")
             return float(obj(np.array([[0.0, 0.0, 25.0]], dtype=np.float32))[0])
 
-        import numpy as np
-
-        self.assertLess(field_on_axis("[(0, 0), (30, 0), (40, 50), (0, 50)]"), 0.0)
-        self.assertGreater(field_on_axis("[(-30, 0), (30, 0), (40, 50), (-40, 50)]"), 20.0)
+        on_axis = field_on_axis("[(0, 0), (30, 0), (40, 50), (0, 50)]")
+        mirrored = field_on_axis("[(-30, 0), (30, 0), (40, 50), (-40, 50)]")
+        self.assertGreater(on_axis, 20.0)
+        self.assertAlmostEqual(on_axis, mirrored, delta=1e-3)
 
 
 class BoundsTest(unittest.TestCase):
@@ -216,21 +218,28 @@ class WarningsTest(unittest.TestCase):
             self.assertAlmostEqual(measured, expected, delta=0.05)
 
 
-class SliverTest(unittest.TestCase):
-    """A triangle whose corners coincide in position must not reach the file."""
+class EdgeCheckTest(unittest.TestCase):
+    """The report's watertight flag counts edges after cadjoint welds slivers."""
 
-    def test_coincident_corners_are_merged_and_the_sliver_dropped(self) -> None:
+    def test_a_closed_surface_passes_and_an_extra_triangle_fails(self) -> None:
         import numpy as np
 
-        # A tetrahedron, plus a fifth vertex at the same point as vertex 0
-        # and a zero-area triangle that uses it.
+        tetrahedron = np.array([[0, 2, 1], [0, 1, 3], [1, 2, 3], [0, 3, 2]])
+        self.assertEqual(cadjoint_export.bad_edges(tetrahedron), 0)
+        self.assertGreater(cadjoint_export.bad_edges(np.vstack([tetrahedron, [[0, 1, 2]]])), 0)
+
+    def test_cadjoints_weld_drops_a_sliver_whose_corners_coincide(self) -> None:
+        """cadjoint#52: the sliver goes before the edge check sees it."""
+        import numpy as np
+        from cadjoint.meshing import remove_slivers
+        from cadjoint.meshing.dual_contouring import Mesh
+
         vertices = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 1e-16]], float)
         faces = np.array([[0, 2, 1], [0, 1, 3], [1, 2, 3], [0, 3, 2], [4, 0, 1]])
-        welded, keep = cadjoint_export.merged_faces(vertices, faces)
-        self.assertEqual(keep.tolist(), [True, True, True, True, False])
-        self.assertEqual(cadjoint_export.bad_edges(welded), 0)
-        # Kept, the sliver would use edge (0, 1) a third and fourth time.
-        self.assertGreater(cadjoint_export.bad_edges(np.vstack([welded, [[0, 0, 1]]])), 0)
+        mesh = Mesh(vertices=vertices, faces=faces, quads=None, normals=None, cells=None)
+        welded, removed = remove_slivers(mesh)
+        self.assertEqual(removed, 1)
+        self.assertEqual(cadjoint_export.bad_edges(np.asarray(welded.faces)), 0)
 
 
 class StepSizeTest(unittest.TestCase):

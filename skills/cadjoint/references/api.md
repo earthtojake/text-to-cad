@@ -102,8 +102,7 @@ A profile point `(x, y)` lands at `origin + x*u + y*v`. Without `x_axis`:
 | +X | -Z | +Y |
 
 So a profile on a `normal=(0, 1, 0)` plane revolves about world Z, with
-profile x as the radius. Keep the profile off the axis: mirror it across
-x = 0 rather than closing it along the axis.
+profile x as the radius; a profile may close along the axis (x = 0).
 
 Polygons must be simple, with at least three vertices and no zero-length
 edge. Curves are polylines: `circle` uses 32 segments by default; raise
