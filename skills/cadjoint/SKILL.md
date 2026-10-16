@@ -34,16 +34,19 @@ with that environment's interpreter, `cadjoint-env/bin/python` (on Windows
 
 ## Workflow
 
-1. **Write a scene file**, e.g. `src/knob.py`: plain Python that builds the
+1. **Write a scene file**, e.g. `src/bracket.py`: plain Python that builds the
    part and binds it to a module-level name `scene`. Model in millimetres.
    Read [references/api.md](references/api.md) before writing the first
    line; its conventions (half-extents, half-heights, radians, default blend)
-   differ from build123d's. Start from the closest example in
-   [references/examples/](references/examples/).
+   differ from build123d's. Start from the closer of the two examples in
+   [references/examples/](references/examples/): `clevis_bracket.py`, a
+   machined bracket with blended roots, sharp holes and rounded cutouts, or
+   `space_frame_node.py`, six tubes blended into a hub and hollowed to a
+   constant wall.
 2. **Export:**
 
    ```bash
-   python <skill-dir>/scripts/cadjoint_export.py src/knob.py STL/knob.stl --resolution 160
+   python <skill-dir>/scripts/cadjoint_export.py src/bracket.py STL/bracket.stl --resolution 160
    ```
 
    The suffix selects STL, OBJ or STEP. The script fits the meshing grid to
@@ -56,10 +59,23 @@ with that environment's interpreter, `cadjoint-env/bin/python` (on Windows
    reports several has a wall or bridge thinner than about two cells.
    `spacing` is the cell size: raise `--resolution` until the thinnest wall
    spans at least four cells, and report the spacing with the file.
-4. **Review an image** with `$cad`'s snapshot workflow on the exported STL,
+4. **Look inside the field when a dimension matters.** A mesh shows where
+   the surface is; a slice of the field shows how far every point is from
+   it:
+
+   ```bash
+   python <skill-dir>/scripts/cadjoint_slice.py src/bracket.py tmp/bracket-x0.png --axis x --at 0 --step 1
+   ```
+
+   Inside is blue, outside orange, the surface is the black line and the
+   thin lines are contours every `--step` millimetres. The report's
+   `field_range` gives the deepest point inside: twice that is the
+   thickness of the thickest wall the slice cuts. Use it to confirm a wall
+   or a blend's reach before exporting at high resolution.
+5. **Review an image** with `$cad`'s snapshot workflow on the exported STL,
    and compare it with the request before showing anything. Fix the scene
    and export again rather than describing a defect.
-5. **Show the model** with `$cad`'s viewer workflow, given the absolute path
+6. **Show the model** with `$cad`'s viewer workflow, given the absolute path
    from the report's `path`.
 
 ## Outputs
@@ -93,8 +109,9 @@ faceted.
 - **No infinite solids in a scene.** `Plane` and an unbounded intersection
   make the scan fail; the error says to pass `--bounds`.
 - **Revolve profiles must not touch the axis.** An edge on the axis is a
-  false surface in the field; mirror the profile across x = 0 instead (see
-  `references/examples/planter.py`).
+  false surface in the field, and a `Shell` of the result grows a thin tube
+  along the axis. Mirror the profile across x = 0 instead, so the axis lies
+  inside the polygon rather than on its edge.
 - **Thin walls need cells.** `--resolution` counts cells along the longest
   axis and stops at 512, so the spacing is at least the part's length / 512:
   0.6 mm for a 300 mm part. A 1 mm wall there still meshes closed but its

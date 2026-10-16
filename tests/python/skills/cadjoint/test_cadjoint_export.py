@@ -3,9 +3,9 @@
 """Export tests for the cadjoint skill's mesher.
 
 The documented examples are exported as a user would export them and read
-back with trimesh. Each assertion is a fact of the construction: the knob's
-body is a 20 mm radius cylinder 16 mm tall, the planter's revolved profile
-spans 0 to 70 mm in Z, so a mesh that disagrees is wrong, not merely
+back with trimesh. Each assertion is a fact of the construction: the clevis
+bracket is drawn 120 x 60 x 52, the node is cut by a 40 mm ball and its
+wall is 2 mm, so a mesh or a field that disagrees is wrong, not merely
 different from a recorded run.
 """
 
@@ -46,20 +46,6 @@ class DocumentedExamplesTest(unittest.TestCase):
             mesh = trimesh.load(out)
         return report, mesh
 
-    def test_knob_is_one_closed_body_of_the_constructed_size(self) -> None:
-        report, mesh = self._export("knob")
-        self.assertFalse(report["clipped"])
-        self.assertTrue(mesh.is_watertight)
-        self.assertEqual(len(mesh.split(only_watertight=False)), 1)
-        # 40 mm across less the knurl and the 1 mm rim blend; 16 mm tall
-        # less the dome blend.
-        x, y, z = mesh.extents
-        self.assertAlmostEqual(x, y, delta=0.5)
-        self.assertGreater(x, 38.0)
-        self.assertLess(x, 40.5)
-        self.assertGreater(z, 15.0)
-        self.assertLess(z, 16.5)
-
     def test_clevis_bracket_holds_the_drawn_envelope(self) -> None:
         """120 x 60 x 52 as drawn: blends round the roots without bulging faces."""
         report, mesh = self._export("clevis_bracket", resolution=128)
@@ -75,15 +61,45 @@ class DocumentedExamplesTest(unittest.TestCase):
         self.assertAlmostEqual(width, 60.0 + 2 * 0.15, delta=0.2)
         self.assertAlmostEqual(height, 52.0, delta=0.15)
 
-    def test_planter_has_no_body_on_its_axis(self) -> None:
-        """A revolve profile closed along the axis puts a false wall there."""
-        report, mesh = self._export("planter")
-        self.assertFalse(report["clipped"])
+    def test_space_frame_node_is_one_open_shell_inside_its_cutting_ball(self) -> None:
+        """Six blended, hollowed tubes cut by a 40 mm ball stay one piece."""
+        import numpy as np
+
+        report, mesh = self._export("space_frame_node", resolution=128)
+        self.assertTrue(report["watertight"])
         self.assertTrue(mesh.is_watertight)
-        self.assertEqual(len(mesh.split(only_watertight=False)), 1)
-        low, high = mesh.bounds
-        self.assertGreater(high[2], 68.0)  # rim
-        self.assertLess(low[2], -3.0)      # feet below the floor
+        self.assertEqual(report["bodies"], 1)
+        self.assertEqual(report["warnings"], [])
+        # The ball of radius 40 bounds everything; the up tube's 2 mm wall
+        # (radii 9 to 11) meets it at z = sqrt(40^2 - 9^2).
+        self.assertLess(np.linalg.norm(mesh.vertices, axis=1).max(), 40.0 + 0.3)
+        self.assertAlmostEqual(mesh.bounds[1][2], (40.0**2 - 9.0**2) ** 0.5, delta=0.3)
+
+    def test_revolve_profile_on_the_axis_grows_a_false_wall_and_mirrored_does_not(self) -> None:
+        """The SKILL.md rule: an axis edge is a surface; mirror the profile.
+
+        Shelled, a cup is hollow, so the point on its axis halfway up lies in
+        the cavity: outside the material. A profile closed along the axis
+        makes that axis a surface, and the shell puts material there.
+        """
+        def field_on_axis(points: str) -> float:
+            source = (
+                "from cadjoint.construction import PolygonProfile, SketchPlane, revolve\n"
+                "from cadjoint.sdf import Shell\n"
+                f"profile = PolygonProfile({points}, "
+                "plane=SketchPlane(origin=(0, 0, 0), normal=(0, 1, 0)), name='cup')\n"
+                "scene = Shell(revolve(profile), 2.0)\n"
+            )
+            with tempfile.TemporaryDirectory() as td:
+                scene = Path(td) / "cup.py"
+                scene.write_text(source, encoding="utf-8")
+                obj = cadjoint_export.load_object(scene, "scene")
+            return float(obj(np.array([[0.0, 0.0, 25.0]], dtype=np.float32))[0])
+
+        import numpy as np
+
+        self.assertLess(field_on_axis("[(0, 0), (30, 0), (40, 50), (0, 50)]"), 0.0)
+        self.assertGreater(field_on_axis("[(-30, 0), (30, 0), (40, 50), (-40, 50)]"), 20.0)
 
 
 class BoundsTest(unittest.TestCase):
@@ -219,14 +235,14 @@ class SliverTest(unittest.TestCase):
 
 class ErrorsTest(unittest.TestCase):
     def test_a_missing_object_lists_the_ones_that_exist(self) -> None:
-        code, report = _run(str(EXAMPLES / "knob.py"), "/nonexistent/x.stl", "--object", "lid")
+        code, report = _run(str(EXAMPLES / "clevis_bracket.py"), "/nonexistent/x.stl", "--object", "lid")
         self.assertEqual(code, 1)
         self.assertIn("'lid'", report["error"])
         self.assertIn("scene", report["error"])
-        self.assertIn("knurl", report["error"])
+        self.assertIn("pin", report["error"])
 
     def test_an_unknown_suffix_is_refused(self) -> None:
-        code, report = _run(str(EXAMPLES / "knob.py"), "/tmp/knob.ply")
+        code, report = _run(str(EXAMPLES / "clevis_bracket.py"), "/tmp/clevis.ply")
         self.assertEqual(code, 1)
         self.assertIn(".ply", report["error"])
 
