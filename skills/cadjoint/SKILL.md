@@ -84,7 +84,7 @@ with that environment's interpreter, `cadjoint-env/bin/python` (on Windows
 | --- | --- | --- |
 | STL (binary) | printing: `$dfam-check`, `$gcode` | none beyond the mesh spacing |
 | OBJ | rendering, other mesh tools | coplanar triangles merged into polygons |
-| STEP (`.step`) | handing a solid to B-rep tools | faceted: one planar face per triangle; no cylinder or plane can be selected as such, and radius measurements read chords |
+| STEP (`.step`) | handing a solid to B-rep tools | faceted: one planar face per triangle, 500-900 bytes each, so about 140 MB at 160,000 triangles; no cylinder or plane can be selected as such, and radius measurements read chords. Export STEP at a lower `--resolution` than STL |
 
 A 3MF or GLB comes from the STL through `$cad`. Never hand a faceted STEP to
 a check that needs exact radii (`$dfm`, `$sendcutsend`) without saying it is

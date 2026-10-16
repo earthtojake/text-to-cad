@@ -233,6 +233,16 @@ class SliverTest(unittest.TestCase):
         self.assertGreater(cadjoint_export.bad_edges(np.vstack([welded, [[0, 0, 1]]])), 0)
 
 
+class StepSizeTest(unittest.TestCase):
+    def test_an_oversized_faceted_step_is_flagged_and_an_stl_is_not(self) -> None:
+        big = 225_000_000  # the size $cad's viewer failed on
+        step = cadjoint_export.review_warnings([60, 60, 60], 1, 0.3, 0, "step", big)
+        stl = cadjoint_export.review_warnings([60, 60, 60], 1, 0.3, 0, "stl", big)
+        self.assertEqual(len(step), 1)
+        self.assertIn("225 MB", step[0])
+        self.assertEqual(stl, [])
+
+
 class ErrorsTest(unittest.TestCase):
     def test_a_missing_object_lists_the_ones_that_exist(self) -> None:
         code, report = _run(str(EXAMPLES / "clevis_bracket.py"), "/nonexistent/x.stl", "--object", "lid")

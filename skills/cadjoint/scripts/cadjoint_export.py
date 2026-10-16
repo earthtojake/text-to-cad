@@ -191,9 +191,22 @@ def bad_edges(faces) -> int:
     return int((counts != 2).sum())
 
 
-def review_warnings(size: list[float], bodies: int, spacing: float, open_edges: int) -> list[str]:
+# A faceted STEP writes every triangle as its own planar face, 500-900 bytes
+# each. $cad's viewer opened a 143 MB file and failed on a 225 MB one.
+STEP_WARN_BYTES = 150_000_000
+
+
+def review_warnings(
+    size: list[float], bodies: int, spacing: float, open_edges: int, fmt: str = "stl",
+    nbytes: int = 0,
+) -> list[str]:
     """Facts about the mesh that usually mean the scene or the resolution is wrong."""
     notes = []
+    if fmt == "step" and nbytes > STEP_WARN_BYTES:
+        notes.append(
+            f"the faceted STEP is {nbytes / 1e6:.0f} MB, one face per triangle; viewers fail "
+            "around 200 MB: export STEP at a lower --resolution, or hand over the STL"
+        )
     if open_edges:
         notes.append(
             f"{open_edges} edges are not shared by exactly two triangles, so the mesh is not "
@@ -282,7 +295,8 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
         "vertices": int(mesh.vertices.shape[0]),
         "triangles": int(mesh.faces.shape[0]),
         "clipped": clipped,
-        "warnings": review_warnings(size, bodies, spacing, open_edges),
+        "bytes": out.stat().st_size,
+        "warnings": review_warnings(size, bodies, spacing, open_edges, fmt, out.stat().st_size),
         "seconds": round(time.perf_counter() - started, 2),
     }
 
