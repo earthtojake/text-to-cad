@@ -140,6 +140,51 @@ class BoundsTest(unittest.TestCase):
         self.assertIn("--bounds", report["error"])
 
 
+class WarningsTest(unittest.TestCase):
+    """The two mistakes a valid mesh hides: wrong units and a shattered wall."""
+
+    def _report(self, source: str, *argv: str) -> dict:
+        with tempfile.TemporaryDirectory() as td:
+            scene = Path(td) / "scene.py"
+            scene.write_text(source, encoding="utf-8")
+            code, report = _run(str(scene), str(Path(td) / "out.stl"), *argv)
+        self.assertEqual(code, 0, report)
+        return report
+
+    def test_a_scene_written_in_metres_is_flagged(self) -> None:
+        report = self._report(
+            "from cadjoint.construction import Solid\n"
+            "scene = Solid.box(size=(0.02, 0.01, 0.003), name='block')\n",
+            "--resolution", "64",
+        )
+        self.assertEqual(report["bodies"], 1)
+        self.assertAlmostEqual(max(report["size"]), 0.04, delta=1e-3)
+        self.assertEqual(len(report["warnings"]), 1)
+        self.assertIn("metres", report["warnings"][0])
+
+    def test_a_wall_thinner_than_the_cells_is_flagged_not_passed(self) -> None:
+        # A 0.2 mm shell meshed at ~0.9 mm cells falls apart into fragments.
+        report = self._report(
+            "from cadjoint.construction import Solid\n"
+            "from cadjoint.sdf import Shell\n"
+            "scene = Shell(Solid.sphere(radius=30.0, name='ball'), 0.2)\n",
+            "--resolution", "64",
+        )
+        self.assertGreater(report["bodies"], 1)
+        self.assertTrue(any("raise --resolution" in note for note in report["warnings"]))
+
+    def test_a_clean_part_has_no_warnings(self) -> None:
+        report = self._report(
+            "from cadjoint.construction import Solid\n"
+            "scene = Solid.box(size=(20.0, 10.0, 3.0), name='block')\n",
+            "--resolution", "64",
+        )
+        self.assertEqual(report["bodies"], 1)
+        self.assertEqual(report["warnings"], [])
+        for measured, expected in zip(report["size"], (40.0, 20.0, 6.0)):
+            self.assertAlmostEqual(measured, expected, delta=0.05)
+
+
 class ErrorsTest(unittest.TestCase):
     def test_a_missing_object_lists_the_ones_that_exist(self) -> None:
         code, report = _run(str(EXAMPLES / "knob.py"), "/nonexistent/x.stl", "--object", "lid")

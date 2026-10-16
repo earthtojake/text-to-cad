@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mesh one SDF object of a cadjoint scene file and write STL, OBJ or STEP.
 
-Requires: cadjoint, jax (pip install -r requirements.txt)
+Requires: Python 3.11+, cadjoint, jax (install requirements.txt)
 
 Usage:
     python cadjoint_export.py SCENE.py OUT.stl [--object scene] [--resolution 160]
@@ -27,7 +27,11 @@ only part of one.
 proportionally fewer, so cells stay cubic. The smallest feature the mesh
 resolves is about two cells.
 
-Prints one JSON object. `clipped: true` means part of the solid lies on or
+Prints one JSON object. `size` is the mesh's extent per axis and `bodies`
+its count of separate pieces; `warnings` names the two facts that usually
+mean a mistake: a part under one unit across (a scene in metres) and more
+than one body (a wall thinner than the cells, or parts that do not touch).
+`clipped: true` means part of the solid lies on or
 beyond the grid boundary and the mesh is cut open there: widen `--bounds`.
 Exits 1 with `{"ok": false, "error": ...}` when the scene fails to run, the
 object is missing, the scan finds no closed part, or the grid holds no
@@ -120,6 +124,39 @@ def boundary_inside(sdf, grid) -> bool:
     return False
 
 
+def count_bodies(faces) -> int:
+    """Connected pieces of the mesh, joined through shared vertices."""
+    import numpy as np
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    faces = np.asarray(faces)
+    count = int(faces.max()) + 1
+    rows = np.concatenate([faces[:, 0], faces[:, 1]])
+    cols = np.concatenate([faces[:, 1], faces[:, 2]])
+    graph = coo_matrix((np.ones(rows.size, dtype=np.int8), (rows, cols)), shape=(count, count))
+    used = np.zeros(count, dtype=bool)
+    used[faces.ravel()] = True
+    _, labels = connected_components(graph, directed=False)
+    return int(np.unique(labels[used]).size)
+
+
+def review_warnings(size: list[float], bodies: int, spacing: float) -> list[str]:
+    """Facts about the mesh that usually mean the scene or the resolution is wrong."""
+    notes = []
+    if max(size) < 1.0:
+        notes.append(
+            f"the part is {max(size):.3g} units across: the export reads model units as "
+            "millimetres, so a scene written in metres must be scaled by 1000"
+        )
+    if bodies > 1:
+        notes.append(
+            f"{bodies} separate bodies: if the part should be one piece, a wall or bridge is "
+            f"thinner than about two cells ({2 * spacing:.3g} units); raise --resolution"
+        )
+    return notes
+
+
 def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: bool) -> dict:
     import jax.numpy as jnp
     import numpy as np
@@ -164,6 +201,10 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
         save_obj(mesh, out)
     else:
         save_step(mesh, out)
+    vertices = np.asarray(mesh.vertices)
+    size = (vertices.max(axis=0) - vertices.min(axis=0)).tolist()
+    spacing = float(extent.max()) / resolution
+    bodies = count_bodies(mesh.faces)
     return {
         "ok": True,
         "path": str(out.resolve()),
@@ -171,15 +212,25 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
         "object": name,
         "bounds": [low, high],
         "cells": list(cells),
-        "spacing": float(extent.max()) / resolution,
+        "spacing": spacing,
+        "size": size,
+        "bodies": bodies,
         "vertices": int(mesh.vertices.shape[0]),
         "triangles": int(mesh.faces.shape[0]),
         "clipped": clipped,
+        "warnings": review_warnings(size, bodies, spacing),
         "seconds": round(time.perf_counter() - started, 2),
     }
 
 
 def main(argv: list[str] | None = None) -> int:
+    if sys.version_info < (3, 11):
+        print(json.dumps({
+            "ok": False,
+            "error": f"Python {sys.version.split()[0]} is too old; cadjoint needs 3.11 or newer "
+            "(create the environment with `uv venv --managed-python --python 3.12`).",
+        }))
+        return 1
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("scene", type=Path, help="cadjoint scene file (.py)")
     parser.add_argument("out", type=Path, help="output file: .stl, .obj, .step or .stp")

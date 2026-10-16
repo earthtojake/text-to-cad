@@ -1,6 +1,6 @@
 ---
 name: cadjoint
-description: Implicit (signed-distance) CAD with cadjoint, a differentiable JAX kernel - smooth blended booleans, shells, patterns, sketches extruded, revolved or lofted, constrained parameters - meshed to a watertight STL, OBJ or faceted STEP. Use when the user wants organic or blended forms, smooth unions and fillet-like blends, hollow shells, radial or linear patterns of features, implicit or SDF modeling, or a part whose parameters will later be optimized by gradient. For prismatic parts that need exact B-rep faces, threads or chamfers, use $cad.
+description: Implicit (signed-distance) CAD with cadjoint, a differentiable JAX kernel - smooth blended booleans, shells, patterns, sketches extruded, revolved or lofted, constrained parameters - meshed to a watertight STL, OBJ or faceted STEP. Signed distance fields here are geometry, not the SDFormat robot files of $sdf. Use when the user wants organic or blended forms, smooth unions and fillet-like blends, hollow shells, radial or linear patterns of features, implicit or signed-distance-field modeling, or a part whose parameters will later be optimized by gradient. For prismatic parts that need exact B-rep faces, threads or chamfers, use $cad.
 license: MIT
 ---
 
@@ -17,17 +17,20 @@ this skill for the first kind of part and `$cad` for the second.
 
 ## Setup
 
-Python 3.11 or newer. Install the skill's `requirements.txt` into its own
-environment once; it pins cadjoint to a commit because cadjoint's API is not
-yet stable:
+cadjoint needs Python 3.11 or newer, and macOS's `python3` is 3.9: the
+install succeeds there and the first import fails. Create the environment
+with uv, which fetches a managed interpreter, and install the skill's
+`requirements.txt` into it once. The file pins cadjoint to a commit because
+cadjoint's API is not yet stable:
 
 ```bash
-python3 -m venv cadjoint-env
-cadjoint-env/bin/python -m pip install -r <skill-dir>/requirements.txt
+uv venv --managed-python --python 3.12 cadjoint-env
+uv pip install --python cadjoint-env -r <skill-dir>/requirements.txt
 ```
 
 `<skill-dir>` is the directory holding this file. Run every command below
-with that environment's `python`.
+with that environment's interpreter, `cadjoint-env/bin/python` (on Windows
+`cadjoint-env\Scripts\python.exe`).
 
 ## Workflow
 
@@ -45,12 +48,14 @@ with that environment's `python`.
 
    The suffix selects STL, OBJ or STEP. The script fits the meshing grid to
    the part, so any scale works. It prints one JSON object.
-3. **Read the report.** `ok` must be true and `clipped` false; `clipped`
-   means part of the solid lies on or beyond the grid boundary and the mesh
-   is cut open there.
-   `spacing` is the cell size: a feature thinner than about two cells is
-   lost or thickened, so raise `--resolution` until the thinnest wall spans
-   at least four. Report the spacing to the user alongside the file.
+3. **Read the report.** `ok` must be true, `clipped` false and `warnings`
+   empty, or each warning explained. `clipped` means part of the solid lies
+   on or beyond the grid boundary and the mesh is cut open there. `size` is
+   the mesh's extent in millimetres and `bodies` its count of separate
+   pieces: check both against the request. A part meant as one piece that
+   reports several has a wall or bridge thinner than about two cells.
+   `spacing` is the cell size: raise `--resolution` until the thinnest wall
+   spans at least four cells, and report the spacing with the file.
 4. **Review an image** with `$cad`'s snapshot workflow on the exported STL,
    and compare it with the request before showing anything. Fix the scene
    and export again rather than describing a defect.
