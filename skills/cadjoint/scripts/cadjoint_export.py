@@ -27,10 +27,12 @@ only part of one.
 proportionally fewer, so cells stay cubic. The smallest feature the mesh
 resolves is about two cells.
 
-Prints one JSON object. `size` is the mesh's extent per axis and `bodies`
-its count of separate pieces; `warnings` names the two facts that usually
-mean a mistake: a part under one unit across (a scene in metres) and more
-than one body (a wall thinner than the cells, or parts that do not touch).
+Prints one JSON object. `size` is the mesh's extent per axis, `bodies` its
+count of separate pieces and `watertight` whether every edge is shared by
+exactly two triangles; `warnings` names the facts that usually mean a
+mistake: a part under one unit across (a scene in metres), more than one
+body (a wall thinner than the cells, or parts that do not touch), and a mesh
+that is not watertight (a sharp concave corner the cells cannot resolve).
 `clipped: true` means part of the solid lies on or
 beyond the grid boundary and the mesh is cut open there: widen `--bounds`.
 Exits 1 with `{"ok": false, "error": ...}` when the scene fails to run, the
@@ -96,12 +98,32 @@ def scan_bounds(sdf) -> tuple[list[float], list[float]]:
         if (low <= -half + 0.5 * spacing).any() or (high >= half - 0.5 * spacing).any():
             continue  # the part reaches the scan boundary: look wider
         pad = 1.5 * spacing
-        return (low - pad).tolist(), (high + pad).tolist()
+        return refine_bounds(sdf, low - pad, high + pad)
     raise ValueError(
         "no closed part found inside a cube of half-width "
         f"{SCAN_HALF_WIDTHS[-1]:g}: the object is empty or unbounded (an infinite "
         "plane, a missing Intersection). Pass --bounds."
     )
+
+
+def refine_bounds(sdf, low, high) -> tuple[list[float], list[float]]:
+    """Tighten a coarse box with one finer scan inside it.
+
+    The coarse cube can be four times the part's size with a pad of a
+    sixteenth of the cube, which would spend a quarter of the export's cells
+    on empty space. The same near-surface rule on 48 cells across the box
+    itself bounds the part to within a few percent of its size.
+    """
+    import numpy as np
+
+    axes = [np.linspace(a, b, SCAN_CELLS + 1) for a, b in zip(low, high)]
+    points = np.stack(np.meshgrid(*axes, indexing="ij"), axis=-1).reshape(-1, 3)
+    spacing = (np.asarray(high) - np.asarray(low)) / SCAN_CELLS
+    near = np.asarray(sdf(points.astype(np.float32))) < 0.5 * np.linalg.norm(spacing)
+    if not near.any():
+        return list(low), list(high)
+    pad = 1.5 * spacing
+    return (points[near].min(axis=0) - pad).tolist(), (points[near].max(axis=0) + pad).tolist()
 
 
 def boundary_inside(sdf, grid) -> bool:
@@ -141,9 +163,43 @@ def count_bodies(faces) -> int:
     return int(np.unique(labels[used]).size)
 
 
-def review_warnings(size: list[float], bodies: int, spacing: float) -> list[str]:
+def merged_faces(vertices, faces):
+    """Faces re-indexed onto vertices merged by position, zero-area slivers dropped.
+
+    An STL has no vertex indices, so every reader merges coincident points.
+    At a sharp concave corner the mesher can emit triangles whose corners are
+    distinct rows but the same point (1e-15 apart); after the merge they have
+    no area and use their edges a third and fourth time, which is what makes
+    a reader call the file non-manifold. Returns (merged faces, kept mask).
+    """
+    import numpy as np
+
+    vertices = np.asarray(vertices, dtype=np.float64)
+    tolerance = 1e-9 * max(float(np.ptp(vertices, axis=0).max()), 1e-12)
+    _, merged = np.unique(np.round(vertices / tolerance), axis=0, return_inverse=True)
+    faces = merged.reshape(-1)[np.asarray(faces)]
+    keep = (faces[:, 0] != faces[:, 1]) & (faces[:, 1] != faces[:, 2]) & (faces[:, 0] != faces[:, 2])
+    return faces[keep], keep
+
+
+def bad_edges(faces) -> int:
+    """Edges not shared by exactly two triangles: holes or non-manifold seams."""
+    import numpy as np
+
+    edges = np.sort(np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]]), axis=1)
+    _, counts = np.unique(edges, axis=0, return_counts=True)
+    return int((counts != 2).sum())
+
+
+def review_warnings(size: list[float], bodies: int, spacing: float, open_edges: int) -> list[str]:
     """Facts about the mesh that usually mean the scene or the resolution is wrong."""
     notes = []
+    if open_edges:
+        notes.append(
+            f"{open_edges} edges are not shared by exactly two triangles, so the mesh is not "
+            "watertight: usually a sharp concave corner sharper than the cells resolve (round "
+            "it, or raise --resolution)"
+        )
     if max(size) < 1.0:
         notes.append(
             f"the part is {max(size):.3g} units across: the export reads model units as "
@@ -194,6 +250,11 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
             + " the part. Widen or move --bounds."
         )
 
+    welded, keep = merged_faces(mesh.vertices, mesh.faces)
+    slivers = int((~keep).sum())
+    if slivers:
+        mesh = mesh._replace(faces=np.asarray(mesh.faces)[keep])
+
     out.parent.mkdir(parents=True, exist_ok=True)
     if fmt == "stl":
         save_stl(mesh, out, binary=binary)
@@ -205,6 +266,7 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
     size = (vertices.max(axis=0) - vertices.min(axis=0)).tolist()
     spacing = float(extent.max()) / resolution
     bodies = count_bodies(mesh.faces)
+    open_edges = bad_edges(welded)
     return {
         "ok": True,
         "path": str(out.resolve()),
@@ -215,10 +277,12 @@ def export(scene: Path, out: Path, name: str, resolution: int, bounds, binary: b
         "spacing": spacing,
         "size": size,
         "bodies": bodies,
+        "watertight": open_edges == 0,
+        "slivers_removed": slivers,
         "vertices": int(mesh.vertices.shape[0]),
         "triangles": int(mesh.faces.shape[0]),
         "clipped": clipped,
-        "warnings": review_warnings(size, bodies, spacing),
+        "warnings": review_warnings(size, bodies, spacing, open_edges),
         "seconds": round(time.perf_counter() - started, 2),
     }
 

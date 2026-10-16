@@ -48,8 +48,8 @@ with that environment's interpreter, `cadjoint-env/bin/python` (on Windows
 
    The suffix selects STL, OBJ or STEP. The script fits the meshing grid to
    the part, so any scale works. It prints one JSON object.
-3. **Read the report.** `ok` must be true, `clipped` false and `warnings`
-   empty, or each warning explained. `clipped` means part of the solid lies
+3. **Read the report.** `ok` and `watertight` must be true, `clipped` false
+   and `warnings` empty, or each warning explained. `clipped` means part of the solid lies
    on or beyond the grid boundary and the mesh is cut open there. `size` is
    the mesh's extent in millimetres and `bodies` its count of separate
    pieces: check both against the request. A part meant as one piece that
@@ -79,9 +79,12 @@ faceted.
 - **Scale.** Model in millimetres; the field has no units, the export keeps
   the numbers, and the viewer and slicers read millimetres.
 - **Blends are in model units and change the size.** Every boolean blends by
-  default (`smoothness=0.1`). Pass `smoothness=0` for a sharp edge. A blend of
-  `k` moves the surface by up to `k` where operands meet, so a dimension that
-  must hold exactly may not sit inside a blend.
+  default (`smoothness=0.1`). Pass `smoothness=0` for a sharp edge. A blend
+  of `k` acts wherever two operands come within `4k` of each other and pushes
+  the surface out (union) or in (difference) by up to `k` there, by exactly
+  `k` along faces that coincide, and chained blends add up. Join parts sharp
+  and blend once; keep other faces more than `4k` from a blended seam when
+  their position matters; never blend two coincident faces.
 - **Give every `Solid` a unique name.** Its parameters are named after it,
   and two solids with the same name collide when parameters are extracted.
 - **Holes and pockets are tools.** `face.hole(...)` and `face.pocket(...)`

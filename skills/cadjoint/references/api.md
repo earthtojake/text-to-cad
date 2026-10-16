@@ -13,7 +13,7 @@ imports what it uses; nothing is injected.
 | `rotation=` on `Solid`, `Rotate(...)` | radians; `Solid` applies X, then Y, then Z |
 | `extrude(draft=, twist=)`, `PolygonProfile.regular(start_angle=)` | degrees |
 | `extrude(depth=)` | symmetric: spans plus and minus depth/2 about the sketch plane |
-| boolean `smoothness` | blend half-width in model units; default 0.1, so pass 0 for sharp |
+| boolean `smoothness` | `k` in model units, default 0.1 (pass 0 for sharp); acts within `4k` of a seam, shifts the surface by up to `k` |
 
 ## Primitives
 
@@ -32,7 +32,7 @@ Raw primitives, centred at the origin and placed with `Translate`/`Rotate`:
 ```python
 from cadjoint.sdf import Box, RoundBox, Sphere, Cylinder, Capsule, Torus
 
-RoundBox(size=(hx, hy, hz), radius=r)    # half-extents, rounded edges
+RoundBox(size=(hx, hy, hz), radius=r)    # grows by r: outer half-extents are hx+r, hy+r, hz+r
 Capsule(radius=r, height=half_len)       # Z axis; half-length of the straight part
 Torus(major_radius, minor_radius)        # in the XY plane
 ```
@@ -48,8 +48,13 @@ Intersection(a, b, smoothness=1.0)
 ```
 
 Operators `a | b`, `a - b`, `a & b` exist but always blend by 0.1; prefer the
-explicit forms. A blend of `k` moves the surface by up to `k` where the
-operands meet, and by exactly `k` where their surfaces coincide.
+explicit forms. The blend is Quilez's polynomial smooth minimum: it acts
+wherever two operands' distances differ by less than `4k`, moves the surface
+by up to `k` there and by exactly `k` along faces that coincide, and a chained
+`Union(a, b, c, ...)` applies it once per operand, so shifts accumulate. The
+rounded profile is a parabola, not a constant-radius fillet. To fillet
+several features onto one body, join them sharp and blend that group with
+the body once (see `examples/clevis_bracket.py`).
 
 ## Transforms and field operations
 

@@ -60,6 +60,21 @@ class DocumentedExamplesTest(unittest.TestCase):
         self.assertGreater(z, 15.0)
         self.assertLess(z, 16.5)
 
+    def test_clevis_bracket_holds_the_drawn_envelope(self) -> None:
+        """120 x 60 x 52 as drawn: blends round the roots without bulging faces."""
+        report, mesh = self._export("clevis_bracket", resolution=128)
+        self.assertTrue(report["watertight"])
+        self.assertTrue(mesh.is_watertight)
+        self.assertEqual(report["bodies"], 1)
+        self.assertEqual(report["warnings"], [])
+        # Width: the root blend under each rib foot reaches 0.15 mm past the
+        # plate edge (measured on the field), plus up to a fifth of a cell of
+        # mesh error at this resolution; length and height do not move.
+        length, width, height = mesh.extents
+        self.assertAlmostEqual(length, 120.0, delta=0.15)
+        self.assertAlmostEqual(width, 60.0 + 2 * 0.15, delta=0.2)
+        self.assertAlmostEqual(height, 52.0, delta=0.15)
+
     def test_planter_has_no_body_on_its_axis(self) -> None:
         """A revolve profile closed along the axis puts a false wall there."""
         report, mesh = self._export("planter")
@@ -183,6 +198,23 @@ class WarningsTest(unittest.TestCase):
         self.assertEqual(report["warnings"], [])
         for measured, expected in zip(report["size"], (40.0, 20.0, 6.0)):
             self.assertAlmostEqual(measured, expected, delta=0.05)
+
+
+class SliverTest(unittest.TestCase):
+    """A triangle whose corners coincide in position must not reach the file."""
+
+    def test_coincident_corners_are_merged_and_the_sliver_dropped(self) -> None:
+        import numpy as np
+
+        # A tetrahedron, plus a fifth vertex at the same point as vertex 0
+        # and a zero-area triangle that uses it.
+        vertices = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 1e-16]], float)
+        faces = np.array([[0, 2, 1], [0, 1, 3], [1, 2, 3], [0, 3, 2], [4, 0, 1]])
+        welded, keep = cadjoint_export.merged_faces(vertices, faces)
+        self.assertEqual(keep.tolist(), [True, True, True, True, False])
+        self.assertEqual(cadjoint_export.bad_edges(welded), 0)
+        # Kept, the sliver would use edge (0, 1) a third and fourth time.
+        self.assertGreater(cadjoint_export.bad_edges(np.vstack([welded, [[0, 0, 1]]])), 0)
 
 
 class ErrorsTest(unittest.TestCase):
