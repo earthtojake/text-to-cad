@@ -1,0 +1,3 @@
+# cadjoint is not on PyPI; pinned to a commit because its API is not yet
+# stable. Python 3.11 or newer (current JAX).
+cadjoint @ git+https://github.com/andrinr/cadjoint@2310b3655716dbf907bbf98fd57c3682abded2de
