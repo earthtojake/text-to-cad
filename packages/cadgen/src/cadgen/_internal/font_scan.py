@@ -99,15 +99,41 @@ _GLOB_PATTERN_SUFFIXES = ("ttf", "otf", "ttc")
 
 _ENV_DISABLE = "CADGEN_FONT_GUARD"
 
+# What OCCT raises when build123d hands its Font_SystemFont an empty name (#636).
+_EMPTY_NAME_TEXT = "Font_SystemFont constructor called with empty font name"
+
 skipped_fonts: list[str] = []
 
 
+def family_name(font) -> str:
+    """The family name build123d registers a font under, or "" when it has none.
+
+    Follows ``_get_font_faces`` in build123d/text.py: the first decodable, non-empty
+    nameID 16 (preferred family), else the first decodable, non-empty nameID 1. The empty
+    check runs on the raw value and the strip comes last, as there, so a blank preferred
+    name is "" even when nameID 1 has one. OCCT refuses an empty name, which is #636.
+    """
+    family = ""
+    preferred = ""
+    for record in font["name"].names:
+        try:
+            value = record.toUnicode()
+        except UnicodeDecodeError:
+            continue
+        if record.nameID == 1 and family == "":
+            family = value
+        elif record.nameID == 16 and preferred == "":
+            preferred = value
+    return (preferred if preferred != "" else family).strip()
+
+
 def _font_parses(path: str) -> bool:
-    """Whether build123d could read this file.
+    """Whether build123d could register this file: it parses, and every face has a name.
 
     The name table is read, not just the file opened: ``TTFont`` is lazy, so a broken
     table directory behind a valid sfnt header constructs fine and fails later, inside
-    ``_get_font_faces``, whose first act is ``ft_font["name"].names``.
+    ``_get_font_faces``, whose first act is ``ft_font["name"].names``. A face with no
+    family name fails there too, when OCCT is handed its empty name.
     """
     try:
         from fontTools.ttLib import TTFont, ttCollection
@@ -120,14 +146,15 @@ def _font_parses(path: str) -> bool:
         else:
             fonts = [TTFont(path)]
         for font in fonts:
-            font["name"].names
+            if not family_name(font):
+                return False
     except Exception:  # noqa: BLE001 - any parse failure is one build123d would hit
         return False
     return True
 
 
 def install_font_guard() -> bool:
-    """Hide fonts build123d cannot parse from the scan it runs at import time.
+    """Hide fonts build123d cannot register from the scan it runs at import time.
 
     ``register_folder`` lists a folder with ``glob.glob`` and hands every result
     straight to ``fontTools``. ``glob`` is resolved on the module object at call time,
@@ -185,16 +212,21 @@ def skipped_fonts_warning() -> str:
 
 
 def is_font_scan_failure(exc: BaseException) -> bool:
-    """True when this exception came out of fontTools during a font scan.
+    """True when this exception came out of fontTools, or OCCT refused an empty font name.
 
     Matched on the exception's defining module rather than by importing fontTools to
     compare classes: this runs on an error path, and importing to diagnose an import
-    failure is how a diagnostic becomes a second traceback.
+    failure is how a diagnostic becomes a second traceback. OCCT's error is matched on
+    its text, since it does not come from fontTools.
     """
     for error in (exc, *_causes(exc)):
         if type(error).__module__.split(".")[0] == "fontTools":
             return True
-    return False
+    return _names_an_empty_font(exc)
+
+
+def _names_an_empty_font(exc: BaseException) -> bool:
+    return any(_EMPTY_NAME_TEXT in str(error) for error in (exc, *_causes(exc)))
 
 
 def _causes(exc: BaseException) -> list[BaseException]:
@@ -211,6 +243,21 @@ def font_scan_failure_message(exc: BaseException, dirs: list[str] | None = None)
     """An actionable message for a font-scan import failure, or "" for anything else."""
     if not is_font_scan_failure(exc):
         return ""
+
+    if _names_an_empty_font(exc):
+        return "\n".join([
+            "cadgen could not import build123d: a font file on this machine has no family name.",
+            "",
+            f"  {type(exc).__name__}: {exc}",
+            "",
+            "OCCT refuses a font with an empty name, so the import fails with it.",
+            "",
+            "Run this to list the file(s) with no family name:",
+            "",
+            "  python -m cadgen.check_fonts",
+            "",
+            "Move them out of the font folder and rerun.",
+        ])
 
     lines = [
         "cadgen could not import build123d: a font file on this machine failed to parse.",

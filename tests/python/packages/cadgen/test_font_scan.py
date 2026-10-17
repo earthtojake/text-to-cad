@@ -2,7 +2,8 @@
 
 build123d parses every font in the system font folders at import time with no
 per-file guard, so one malformed file aborts the import and every cadgen command with
-it, raising a fontTools error that names no file.
+it, raising a fontTools error that names no file. A font with no family name aborts it
+the same way, with OCCT's error (`EmptyFamily`, #636).
 
 cadgen filters that one folder listing so the bad file is never opened (`GlobGuard`).
 The rest is what happens when the guard is off or did not catch it: a message naming
@@ -47,6 +48,59 @@ class _FontDir:
         target = self.path / name
         target.write_bytes(data)
         return str(target)
+
+
+def _font_file(
+    fonts: _FontDir,
+    name: str,
+    *,
+    family: str | None = "Test Family",
+    preferred: str | None = None,
+    undecodable_family: bool = False,
+) -> str:
+    """Write a real, tiny TrueType font into `fonts` and return its path.
+
+    `family` is nameID 1 and `preferred` is nameID 16. Leaving both out is the shape of a
+    font build123d registers with an empty name, which OCCT refuses (#636).
+    `undecodable_family` puts a lone UTF-16 surrogate in nameID 1, which `toUnicode()`
+    cannot decode.
+    """
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+    from fontTools.ttLib.tables._n_a_m_e import NameRecord
+
+    builder = FontBuilder(1000, isTTF=True)
+    builder.setupGlyphOrder([".notdef", "A"])
+    builder.setupCharacterMap({65: "A"})
+    pen = TTGlyphPen(None)
+    pen.moveTo((0, 0))
+    pen.lineTo((0, 500))
+    pen.lineTo((500, 500))
+    pen.closePath()
+    glyph = pen.glyph()
+    builder.setupGlyf({".notdef": glyph, "A": glyph})
+    builder.setupHorizontalMetrics({".notdef": (500, 0), "A": (500, 0)})
+    builder.setupHorizontalHeader(ascent=800, descent=-200)
+    builder.setupNameTable({"familyName": "Scratch", "styleName": "Regular"})
+    builder.setupOS2()
+    builder.setupPost()
+
+    names = builder.font["name"]
+    names.removeNames(nameID=1)
+    names.removeNames(nameID=16)
+    if undecodable_family:
+        record = NameRecord()
+        record.nameID, record.platformID, record.platEncID, record.langID = 1, 3, 1, 0x409
+        record.string = b"\xd8\x00"  # a lone high surrogate is not valid UTF-16BE
+        names.names.append(record)
+    elif family is not None:
+        names.setName(family, 1, 3, 1, 0x409)
+    if preferred is not None:
+        names.setName(preferred, 16, 3, 1, 0x409)
+
+    target = fonts.path / name
+    builder.save(str(target))
+    return str(target)
 
 
 class HeaderScan(unittest.TestCase):
@@ -131,6 +185,72 @@ class GlobGuard(unittest.TestCase):
         self.assertIn("/fonts/broken.ttf", font_scan.skipped_fonts_warning())
 
 
+class EmptyFamily(unittest.TestCase):
+    """#636: a font with no family name passes every parse check, then OCCT refuses its
+    empty name and `import build123d` fails. The guard must skip it."""
+
+    def setUp(self):
+        import glob
+
+        self._real_glob = glob.glob
+        font_scan.skipped_fonts.clear()
+        self.addCleanup(setattr, glob, "glob", self._real_glob)
+        self.addCleanup(font_scan.skipped_fonts.clear)
+
+    def test_build123d_itself_refuses_a_font_with_no_family_name(self):
+        # Pins the cause to build123d's own code, so the fixture cannot drift from what
+        # it models. If a build123d release stops raising here, the guard can go.
+        from build123d.text import FontManager
+        from fontTools.ttLib import TTFont
+
+        with _FontDir() as fonts:
+            path = _font_file(fonts, "nofamily.ttf", family=None)
+            with self.assertRaisesRegex(Exception, "empty font name"):
+                FontManager.__new__(FontManager)._get_font_faces(TTFont(path), path)
+
+    def test_a_font_with_no_family_name_is_skipped(self):
+        import glob
+
+        with _FontDir() as fonts:
+            bad = _font_file(fonts, "nofamily.ttf", family=None)
+            font_scan.install_font_guard()
+            kept = glob.glob(os.path.join(str(fonts.path), "*ttf"))
+        self.assertEqual(kept, [])
+        self.assertEqual(font_scan.skipped_fonts, [bad])
+
+    def test_a_family_name_that_cannot_be_decoded_is_skipped(self):
+        import glob
+
+        with _FontDir() as fonts:
+            bad = _font_file(fonts, "undecodable.ttf", undecodable_family=True)
+            font_scan.install_font_guard()
+            kept = glob.glob(os.path.join(str(fonts.path), "*ttf"))
+        self.assertEqual(kept, [])
+        self.assertEqual(font_scan.skipped_fonts, [bad])
+
+    def test_a_blank_preferred_name_is_empty_as_build123d_sees_it(self):
+        # build123d takes nameID 16 over nameID 1 and strips only at the end, so a blank
+        # preferred name is an empty name even when nameID 1 has a real one.
+        import glob
+
+        with _FontDir() as fonts:
+            bad = _font_file(fonts, "blank.ttf", family="Good Family", preferred="   ")
+            font_scan.install_font_guard()
+            kept = glob.glob(os.path.join(str(fonts.path), "*ttf"))
+        self.assertEqual(kept, [])
+        self.assertEqual(font_scan.skipped_fonts, [bad])
+
+    def test_a_font_with_a_family_name_is_kept(self):
+        import glob
+
+        with _FontDir() as fonts:
+            good = _font_file(fonts, "good.ttf", family="Good Family")
+            font_scan.install_font_guard()
+            kept = glob.glob(os.path.join(str(fonts.path), "*ttf"))
+        self.assertEqual(kept, [good])
+        self.assertEqual(font_scan.skipped_fonts, [])
+
+
 class FailureRecognition(unittest.TestCase):
     def test_a_fonttools_error_is_recognised(self):
         from fontTools.ttLib import TTLibError
@@ -164,6 +284,14 @@ class FailureRecognition(unittest.TestCase):
         self.assertIn("build123d bug", message)
         self.assertIn("Move or rename", message)
 
+    def test_the_empty_name_refusal_is_recognised_and_explained(self):
+        # OCCT's error is not a fontTools error, so it is recognised by its text.
+        error = RuntimeError("Font_SystemFont constructor called with empty font name")
+        self.assertTrue(font_scan.is_font_scan_failure(error))
+        message = font_scan.font_scan_failure_message(error, dirs=[])
+        self.assertIn("family name", message)
+        self.assertIn("check_fonts", message)
+
 
 class CheckFontsCommand(unittest.TestCase):
     def test_it_catches_a_font_that_only_fails_once_a_table_is_read(self):
@@ -182,6 +310,13 @@ class CheckFontsCommand(unittest.TestCase):
             bad = fonts.write("broken.ttf", b"not a font")
             failures = check_fonts.check([str(fonts.path)])
         self.assertEqual([path for path, _ in failures], [bad])
+
+    def test_it_reports_a_font_with_no_family_name(self):
+        with _FontDir() as fonts:
+            nameless = _font_file(fonts, "nofamily.ttf", family=None)
+            failures = check_fonts.check([str(fonts.path)])
+        self.assertEqual([path for path, _ in failures], [nameless])
+        self.assertIn("family name", failures[0][1])
 
 
     def test_a_bad_font_exits_nonzero_and_names_it(self):

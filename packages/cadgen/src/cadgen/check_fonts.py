@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import sys
 
-from cadgen._internal.font_scan import system_font_dirs
+from cadgen._internal.font_scan import family_name, system_font_dirs
 
 
 def _font_paths(directory: str) -> list[str]:
@@ -40,7 +40,9 @@ def _font_paths(directory: str) -> list[str]:
 
 
 def check(dirs: list[str] | None = None) -> list[tuple[str, str]]:
-    """Parse every font in `dirs`; return (path, error) for each one that fails.
+    """Parse every font in `dirs`; return (path, error) for each one build123d cannot use.
+
+    A font with no family name is one too (#636).
 
     The name table is read, not just the file opened. ``TTFont(path)`` is lazy: it
     validates the sfnt header and defers the tables, so a file with a plausible
@@ -60,7 +62,9 @@ def check(dirs: list[str] | None = None) -> list[tuple[str, str]]:
                 else:
                     fonts = [TTFont(path)]
                 for font in fonts:
-                    font["name"].names
+                    if not family_name(font):
+                        failures.append((path, "no family name, which OCCT refuses"))
+                        break
             except Exception as exc:  # noqa: BLE001 - reporting, not handling
                 failures.append((path, f"{type(exc).__name__}: {exc}"))
     return failures
@@ -81,10 +85,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sys.stdout.write(f"Checked fonts in: {', '.join(dirs)}\n")
     if not failures:
-        sys.stdout.write("Every font parsed. None of them is breaking the import.\n")
+        sys.stdout.write("Every font is usable by build123d; none of them breaks the import.\n")
         return 0
 
-    sys.stdout.write(f"\n{len(failures)} font file(s) failed to parse:\n")
+    sys.stdout.write(f"\n{len(failures)} font file(s) build123d cannot use:\n")
     for path, error in failures:
         sys.stdout.write(f"  {path}\n      {error}\n")
     sys.stdout.write(
